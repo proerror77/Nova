@@ -65,24 +65,29 @@ struct UserProfile: Codable, Identifiable {
 
 // MARK: - Gender Enum
 enum Gender: String, Codable, CaseIterable {
+    case notSet = "not_set"
     case male = "male"
     case female = "female"
     case other = "other"
-    case preferNotToSay = "prefer_not_to_say"
 
     var displayName: String {
         switch self {
+        case .notSet: return "Enter your gender"
         case .male: return "Male"
         case .female: return "Female"
         case .other: return "Other"
-        case .preferNotToSay: return "Prefer not to say"
         }
+    }
+
+    // 用于选择器显示的选项（不包含 notSet）
+    static var selectableCases: [Gender] {
+        return [.male, .female, .other]
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         let rawValue = try container.decode(String.self)
-        self = Gender(rawValue: rawValue.lowercased()) ?? .preferNotToSay
+        self = Gender(rawValue: rawValue.lowercased()) ?? .notSet
     }
 }
 

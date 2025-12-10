@@ -37,7 +37,7 @@ struct MyChannelsView: View {
 
                     // 居中标题（参考 NewPost 页面样式）
                     Text(LocalizedStringKey("My_Channels_Title"))
-                        .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                        .font(.system(size: 18, weight: .medium))
                         .lineSpacing(20)
                         .foregroundColor(DesignTokens.textPrimary)
 
@@ -132,7 +132,7 @@ struct MyChannelsView: View {
                     currentPage = .setting
                 }) {
                     Text("Confirm")
-                        .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
+                        .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.white)
                         .frame(width: 343, height: 46)
                         .background(Color(red: 0.87, green: 0.11, blue: 0.26))

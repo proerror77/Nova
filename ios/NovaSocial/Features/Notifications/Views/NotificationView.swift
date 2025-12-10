@@ -41,7 +41,7 @@ struct NotificationView: View {
 
                     // 标题
                     Text("Notification")
-                        .font(Font.custom("Helvetica Neue", size: 24).weight(.medium))
+                        .font(.system(size: 24, weight: .medium))
                         .foregroundColor(DesignTokens.textPrimary)
 
                     Spacer()
@@ -65,7 +65,7 @@ struct NotificationView: View {
                         // Today Section
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Today")
-                                .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
+                                .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(DesignTokens.textPrimary)
                                 .padding(.horizontal, 16)
 
@@ -86,7 +86,7 @@ struct NotificationView: View {
                         // Last 7 Days Section
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Last 7 Days")
-                                .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
+                                .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(DesignTokens.textPrimary)
                                 .padding(.horizontal, 16)
 
@@ -122,7 +122,7 @@ struct NotificationView: View {
                         // Last 30 Days Section
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Last 30 Days")
-                                .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
+                                .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(DesignTokens.textPrimary)
                                 .padding(.horizontal, 16)
 
@@ -196,16 +196,16 @@ struct NotificationListItem: View {
             // 内容
             VStack(alignment: .leading, spacing: 1) {
                 Text(userName)
-                    .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundColor(DesignTokens.textPrimary)
 
                 HStack(spacing: 4) {
                     Text(action)
-                        .font(Font.custom("Helvetica Neue", size: 14))
+                        .font(.system(size: 14))
                         .foregroundColor(DesignTokens.textPrimary)
 
                     Text(time)
-                        .font(Font.custom("Helvetica Neue", size: 14))
+                        .font(.system(size: 14))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
             }
@@ -219,7 +219,7 @@ struct NotificationListItem: View {
                     onMessageTap?()
                 }) {
                     Text("Message")
-                        .font(Font.custom("Helvetica Neue", size: 12).weight(.medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundColor(DesignTokens.textPrimary)
                 }
                 .frame(width: 85, height: 24)
@@ -234,7 +234,7 @@ struct NotificationListItem: View {
                     isFollowing.toggle()
                 }) {
                     Text(isFollowing ? "Following" : "Follow")
-                        .font(Font.custom("Helvetica Neue", size: 12))
+                        .font(.system(size: 12))
                         .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                 }
                 .frame(width: 85, height: 24)
@@ -249,7 +249,7 @@ struct NotificationListItem: View {
                     isFollowing.toggle()
                 }) {
                     Text(isFollowing ? "Following" : "Follow back")
-                        .font(Font.custom("Helvetica Neue", size: 12))
+                        .font(.system(size: 12))
                         .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                 }
                 .frame(width: 85, height: 24)

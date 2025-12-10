@@ -25,7 +25,7 @@ struct NewChatView: View {
                     Spacer()
 
                     Text("New Chat")
-                        .font(Font.custom("Helvetica Neue", size: 24).weight(.medium))
+                        .font(.system(size: 24, weight: .medium))
                         .foregroundColor(.black)
 
                     Spacer()
@@ -36,7 +36,7 @@ struct NewChatView: View {
                         }
                     }) {
                         Text(selectedContacts.isEmpty ? "Save" : "Save(\(selectedContacts.count))")
-                            .font(Font.custom("Helvetica Neue", size: 14))
+                            .font(.system(size: 14))
                             .foregroundColor(selectedContacts.isEmpty ? Color(red: 0.53, green: 0.53, blue: 0.53) : Color(red: 0.87, green: 0.11, blue: 0.26))
                     }
                     .frame(width: 60, alignment: .trailing)
@@ -60,7 +60,7 @@ struct NewChatView: View {
                         .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
 
                     Text("Search")
-                        .font(Font.custom("Helvetica Neue", size: 15))
+                        .font(.system(size: 15))
                         .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
 
                     Spacer()
@@ -74,7 +74,7 @@ struct NewChatView: View {
                 // MARK: - Select an existing group
                 HStack {
                     Text("Select an existing group")
-                        .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
+                        .font(.system(size: 16, weight: .bold))
                         .lineSpacing(20)
                         .foregroundColor(.black)
                     Spacer()
@@ -91,7 +91,7 @@ struct NewChatView: View {
                 // MARK: - Starred Friends 标题
                 HStack {
                     Text("Starred Friends")
-                        .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
+                        .font(.system(size: 16, weight: .bold))
                         .lineSpacing(20)
                         .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                     Spacer()
@@ -111,7 +111,7 @@ struct NewChatView: View {
                         // A section
                         HStack {
                             Text("A")
-                                .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
+                                .font(.system(size: 16, weight: .bold))
                                 .lineSpacing(20)
                                 .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                             Spacer()
@@ -169,7 +169,7 @@ struct ContactRow: View {
             // 名字
             VStack(alignment: .leading, spacing: 1) {
                 Text(name)
-                    .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
+                    .font(.system(size: 16, weight: .bold))
                     .lineSpacing(20)
                     .foregroundColor(.black)
             }

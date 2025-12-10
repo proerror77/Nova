@@ -38,7 +38,7 @@ struct WriteView: View {
                         ZStack(alignment: .topLeading) {
                             if textContent.isEmpty {
                                 Text("Write something...")
-                                    .font(Font.custom("Helvetica Neue", size: 25).weight(.medium))
+                                    .font(.system(size: 25, weight: .medium))
                                     .lineSpacing(20)
                                     .italic()
                                     .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
@@ -47,7 +47,7 @@ struct WriteView: View {
                             }
 
                             TextEditor(text: $textContent)
-                                .font(Font.custom("Helvetica Neue", size: 25).weight(.medium))
+                                .font(.system(size: 25, weight: .medium))
                                 .lineSpacing(20)
                                 .foregroundColor(.black)
                                 .scrollContentBackground(.hidden)
@@ -72,7 +72,7 @@ struct WriteView: View {
                 }) {
                     HStack(spacing: 8) {
                         Text("Text to Image")
-                            .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
+                            .font(.system(size: 16, weight: .medium))
                             .lineSpacing(20)
                             .foregroundColor(.white)
                     }
@@ -117,7 +117,7 @@ struct WriteView: View {
 
             // 标题
             Text("Write")
-                .font(Font.custom("Helvetica Neue", size: 20).weight(.bold))
+                .font(.system(size: 20, weight: .bold))
                 .foregroundColor(.black)
 
             Spacer()

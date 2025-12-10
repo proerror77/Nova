@@ -35,7 +35,7 @@ struct GroupChatView: View {
                     Spacer()
 
                     Text("\(groupName)(\(memberCount))")
-                        .font(Font.custom("Helvetica Neue", size: 20).weight(.medium))
+                        .font(.system(size: 20, weight: .medium))
                         .foregroundColor(.black)
 
                     Spacer()
@@ -64,7 +64,7 @@ struct GroupChatView: View {
                 ScrollView {
                     VStack(spacing: 16) {
                         Text(currentDateString())
-                            .font(Font.custom("Helvetica Neue", size: 12))
+                            .font(.system(size: 12))
                             .foregroundColor(Color(red: 0.59, green: 0.59, blue: 0.59))
                             .padding(.top, 16)
 
@@ -117,7 +117,7 @@ struct GroupChatView: View {
                         .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
 
                     TextField("Type a message...", text: $messageText)
-                        .font(Font.custom("Helvetica Neue", size: 16))
+                        .font(.system(size: 16))
                         .foregroundColor(Color(red: 0.34, green: 0.34, blue: 0.34))
                         .focused($isInputFocused)
                         .onSubmit {
@@ -232,7 +232,7 @@ private struct GroupChatAttachmentButton: View {
                         .foregroundColor(.black)
                 )
             Text(title)
-                .font(Font.custom("Helvetica Neue", size: 12))
+                .font(.system(size: 12))
                 .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
         }
         .frame(width: 60)
@@ -268,7 +268,7 @@ struct GroupMessageBubbleView: View {
             Spacer()
 
             Text(message.text)
-                .font(Font.custom("Helvetica Neue", size: 18))
+                .font(.system(size: 18))
                 .foregroundColor(Color(red: 0.34, green: 0.34, blue: 0.34))
                 .padding(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
                 .background(Color(red: 0.85, green: 0.85, blue: 0.85))
@@ -289,11 +289,11 @@ struct GroupMessageBubbleView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(message.senderName)
-                    .font(Font.custom("Helvetica Neue", size: 14).weight(.bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
 
                 Text(message.text)
-                    .font(Font.custom("Helvetica Neue", size: 18))
+                    .font(.system(size: 18))
                     .foregroundColor(Color(red: 0.34, green: 0.34, blue: 0.34))
                     .padding(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
                     .background(Color(red: 0.85, green: 0.85, blue: 0.85))

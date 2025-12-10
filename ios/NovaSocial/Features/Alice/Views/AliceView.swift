@@ -89,7 +89,7 @@ struct AliceView: View {
                 // MARK: - 顶部导航栏
                 HStack(spacing: 5) {
                     Text(selectedModel)
-                        .font(Font.custom("Helvetica Neue", size: 20).weight(.bold))
+                        .font(.system(size: 20, weight: .bold))
                         .foregroundColor(DesignTokens.textPrimary)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 16, weight: .bold))
@@ -166,7 +166,7 @@ struct AliceView: View {
                                     .font(.system(size: 18))
                                     .foregroundColor(DesignTokens.textPrimary)
                                 Text("Get Super alice")
-                                    .font(Font.custom("Inter", size: 16).weight(.medium))
+                                    .font(.system(size: 16, weight: .medium))
                                     .foregroundColor(DesignTokens.textPrimary)
                             }
                             .padding(.horizontal, 16)
@@ -181,7 +181,7 @@ struct AliceView: View {
 
                             // Voice Mode 按钮
                             Text("Voice Mode")
-                                .font(Font.custom("Inter", size: 16).weight(.medium))
+                                .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(DesignTokens.textPrimary)
                                 .frame(width: 131, height: 42)
                                 .background(DesignTokens.surface)
@@ -203,7 +203,7 @@ struct AliceView: View {
                             .foregroundColor(DesignTokens.textPrimary)
 
                         TextField("Ask any questions", text: $inputText)
-                            .font(Font.custom("Inter", size: 16))
+                            .font(.system(size: 16))
                             .foregroundColor(DesignTokens.textPrimary)
                             .submitLabel(.send)
                             .onSubmit {
@@ -382,7 +382,7 @@ struct AliceChatMessageView: View {
                 Spacer()
                 // 用户消息气泡
                 Text(message.content)
-                    .font(Font.custom("Helvetica Neue", size: 14))
+                    .font(.system(size: 14))
                     .foregroundColor(DesignTokens.textPrimary)
                     .padding(EdgeInsets(top: 10, leading: 13, bottom: 10, trailing: 13))
                     .background(DesignTokens.surface)
@@ -397,7 +397,7 @@ struct AliceChatMessageView: View {
                 // AI响应消息
                 VStack(alignment: .leading, spacing: 8) {
                     Text(message.content)
-                        .font(Font.custom("Helvetica Neue", size: 14))
+                        .font(.system(size: 14))
                         .foregroundColor(DesignTokens.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -419,11 +419,11 @@ struct ModelRowView: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(model.name)
-                        .font(Font.custom("Helvetica Neue", size: 16))
+                        .font(.system(size: 16))
                         .foregroundColor(DesignTokens.textPrimary)
 
                     Text(model.description)
-                        .font(Font.custom("Helvetica Neue", size: 14))
+                        .font(.system(size: 14))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

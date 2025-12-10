@@ -23,7 +23,7 @@ struct SearchView: View {
                                 .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
 
                             TextField("Search", text: $searchText)
-                                .font(Font.custom("Helvetica Neue", size: 15))
+                                .font(.system(size: 15))
                                 .foregroundColor(.black)
                                 .focused($isSearchFocused)
                         }
@@ -37,7 +37,7 @@ struct SearchView: View {
                             showSearch = false
                         }) {
                             Text("Cancel")
-                                .font(Font.custom("Helvetica Neue", size: 14))
+                                .font(.system(size: 14))
                                 .foregroundColor(.black)
                         }
                         .frame(width: 44)
@@ -99,11 +99,11 @@ struct SearchResultItem: View {
             // 内容
             VStack(alignment: .leading, spacing: 4) {
                 Text("Search Result")
-                    .font(Font.custom("Helvetica Neue", size: 15).weight(.semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(.black)
 
                 Text("Description")
-                    .font(Font.custom("Helvetica Neue", size: 13))
+                    .font(.system(size: 13))
                     .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
             }
 

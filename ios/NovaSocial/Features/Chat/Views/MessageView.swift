@@ -194,7 +194,7 @@ struct MessageView: View {
                     Spacer()
 
                     Text(LocalizedStringKey("Message"))
-                        .font(Font.custom("Helvetica Neue", size: 24).weight(.medium))
+                        .font(.system(size: 24, weight: .medium))
                         .foregroundColor(DesignTokens.textPrimary)
 
                     Spacer()
@@ -224,7 +224,7 @@ struct MessageView: View {
                         .foregroundColor(DesignTokens.textSecondary)
 
                     Text(LocalizedStringKey("Search"))
-                        .font(Font.custom("Helvetica Neue", size: 15))
+                        .font(.system(size: 15))
                         .foregroundColor(DesignTokens.textSecondary)
 
                     Spacer()
@@ -245,7 +245,7 @@ struct MessageView: View {
                                     .progressViewStyle(CircularProgressViewStyle())
                                     .scaleEffect(1.2)
                                 Text(LocalizedStringKey("Loading messages..."))
-                                    .font(Font.custom("Helvetica Neue", size: 14))
+                                    .font(.system(size: 14))
                                     .foregroundColor(DesignTokens.textSecondary)
                             }
                             .frame(maxWidth: .infinity)
@@ -258,7 +258,7 @@ struct MessageView: View {
                                     .font(.system(size: 40))
                                     .foregroundColor(DesignTokens.accentColor)
                                 Text(error)
-                                    .font(Font.custom("Helvetica Neue", size: 14))
+                                    .font(.system(size: 14))
                                     .foregroundColor(DesignTokens.textSecondary)
                                 Button(action: {
                                     Task {
@@ -266,7 +266,7 @@ struct MessageView: View {
                                     }
                                 }) {
                                 Text(LocalizedStringKey("Retry"))
-                                        .font(Font.custom("Helvetica Neue", size: 14).weight(.medium))
+                                        .font(.system(size: 14, weight: .medium))
                                         .foregroundColor(DesignTokens.textOnAccent)
                                         .padding(.horizontal, 24)
                                         .padding(.vertical, 8)
@@ -284,10 +284,10 @@ struct MessageView: View {
                                     .font(.system(size: 40))
                                     .foregroundColor(DesignTokens.textSecondary)
                                 Text(LocalizedStringKey("No messages yet"))
-                                    .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
+                                    .font(.system(size: 16, weight: .medium))
                                     .foregroundColor(DesignTokens.textSecondary)
                                 Text(LocalizedStringKey("Start a conversation with friends"))
-                                    .font(Font.custom("Helvetica Neue", size: 14))
+                                    .font(.system(size: 14))
                                     .foregroundColor(DesignTokens.textSecondary)
                             }
                             .frame(maxWidth: .infinity)
@@ -367,7 +367,7 @@ struct MessageView: View {
                                         .scaledToFit()
                                         .frame(width: 28, height: 28)
                                     Text(LocalizedStringKey("Add Friends"))
-                                        .font(Font.custom("Helvetica Neue", size: 14))
+                                        .font(.system(size: 14))
                                         .foregroundColor(DesignTokens.textPrimary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
@@ -392,7 +392,7 @@ struct MessageView: View {
                                         .scaledToFit()
                                         .frame(width: 28, height: 28)
                                     Text(LocalizedStringKey("Start Group Chat"))
-                                        .font(Font.custom("Helvetica Neue", size: 14))
+                                        .font(.system(size: 14))
                                         .foregroundColor(DesignTokens.textPrimary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
@@ -417,7 +417,7 @@ struct MessageView: View {
                                         .scaledToFit()
                                         .frame(width: 28, height: 28)
                                     Text(LocalizedStringKey("Scan QR Code"))
-                                        .font(Font.custom("Helvetica Neue", size: 14))
+                                        .font(.system(size: 14))
                                         .foregroundColor(DesignTokens.textPrimary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
@@ -463,12 +463,12 @@ struct MessageListItem: View {
             // 消息内容
             VStack(alignment: .leading, spacing: 5) {
                 Text(name)
-                    .font(Font.custom("Helvetica Neue", size: 19).weight(.bold))
+                    .font(.system(size: 19, weight: .bold))
                     .foregroundColor(DesignTokens.textPrimary)
 
                 // 消息预览 - 使用动态消息
                 Text(messagePreview)
-                    .font(Font.custom("Helvetica Neue", size: 15))
+                    .font(.system(size: 15))
                     .foregroundColor(DesignTokens.textSecondary)
                     .opacity(showMessagePreview ? 1 : 0)
             }
@@ -479,7 +479,7 @@ struct MessageListItem: View {
             if showTimeAndBadge {
                 VStack(alignment: .trailing, spacing: 6) {
                     Text(time)
-                        .font(Font.custom("Helvetica Neue", size: 13))
+                        .font(.system(size: 13))
                         .foregroundColor(DesignTokens.textMuted)
 
                     ZStack {
@@ -488,7 +488,7 @@ struct MessageListItem: View {
                             .frame(width: 17, height: 17)
 
                         Text(LocalizedStringKey("\(unreadCount)"))
-                            .font(Font.custom("Helvetica Neue", size: 12).weight(.medium))
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundColor(.white)
                     }
                 }

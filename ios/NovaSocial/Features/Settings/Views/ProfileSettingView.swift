@@ -19,8 +19,8 @@ struct ProfileSettingView: View {
     private let cardShadowRadius: CGFloat = 4
     private let cardShadowY: CGFloat = 2
     private let labelColor = Color(red: 0.38, green: 0.37, blue: 0.37)
-    private let labelFont = Font.custom("Helvetica Neue", size: 14.30).weight(.medium)
-    private let valueFont = Font.custom("Helvetica Neue", size: 14).weight(.medium)
+    private let labelFont: Font = .system(size: 14.30, weight: .medium)
+    private let valueFont: Font = .system(size: 14, weight: .medium)
 
     var body: some View {
         ZStack {
@@ -45,12 +45,9 @@ struct ProfileSettingView: View {
                                 .padding(.bottom, 10)
 
                             // MARK: - Form Fields
-                            VStack(spacing: 12) {
+                            VStack(spacing: 20) {
                                 // First name & Last name
                                 nameCard
-
-                                // Username
-                                usernameCard
 
                                 // Date of Birth
                                 dateOfBirthCard
@@ -58,8 +55,11 @@ struct ProfileSettingView: View {
                                 // Gender
                                 genderCard
 
-                                // Profession & Identity
-                                professionIdentityCard
+                                // Profession
+                                professionCard
+
+                                // Identity
+                                identityCard
 
                                 // Location
                                 locationCard
@@ -134,7 +134,7 @@ struct ProfileSettingView: View {
             Spacer()
 
             Text("Profile settings")
-                .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                .font(.system(size: 18, weight: .medium))
                 .lineSpacing(19)
                 .foregroundColor(.black)
 
@@ -153,7 +153,7 @@ struct ProfileSettingView: View {
                         .scaleEffect(0.8)
                 } else {
                     Text("Save")
-                        .font(Font.custom("Helvetica Neue", size: 14))
+                        .font(.system(size: 14))
                         .lineSpacing(20)
                         .foregroundColor(viewModel.canSave ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.53, green: 0.53, blue: 0.53))
                 }
@@ -273,28 +273,6 @@ struct ProfileSettingView: View {
         .shadow(color: cardShadowColor, radius: cardShadowRadius, x: 0, y: cardShadowY)
     }
 
-    // MARK: - Username Card
-    private var usernameCard: some View {
-        HStack {
-            Text("Username")
-                .font(labelFont)
-                .lineSpacing(19)
-                .foregroundColor(labelColor)
-                .frame(width: 100, alignment: .leading)
-
-            TextField("", text: $viewModel.username)
-                .font(valueFont)
-                .foregroundColor(.black)
-
-            Spacer()
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(.white)
-        .cornerRadius(cardCornerRadius)
-        .shadow(color: cardShadowColor, radius: cardShadowRadius, x: 0, y: cardShadowY)
-    }
-
     // MARK: - Date of Birth Card
     private var dateOfBirthCard: some View {
         Button(action: {
@@ -351,52 +329,51 @@ struct ProfileSettingView: View {
         .shadow(color: cardShadowColor, radius: cardShadowRadius, x: 0, y: cardShadowY)
     }
 
-    // MARK: - Profession & Identity Card
-    private var professionIdentityCard: some View {
-        VStack(spacing: 0) {
-            // Profession row
-            HStack {
-                Text("Profession")
-                    .font(labelFont)
-                    .lineSpacing(19)
-                    .foregroundColor(labelColor)
-                    .frame(width: 100, alignment: .leading)
+    // MARK: - Profession Card
+    private var professionCard: some View {
+        HStack {
+            Text("Profession")
+                .font(labelFont)
+                .lineSpacing(19)
+                .foregroundColor(labelColor)
+                .frame(width: 100, alignment: .leading)
 
-                TextField("", text: $viewModel.profession)
-                    .font(valueFont)
-                    .foregroundColor(.black)
+            TextField("", text: $viewModel.profession)
+                .font(valueFont)
+                .foregroundColor(.black)
 
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 14)
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(.white)
+        .cornerRadius(cardCornerRadius)
+        .shadow(color: Color(red: 0, green: 0, blue: 0, opacity: 0.15), radius: 5.9, x: 0, y: 0)
+    }
 
-            // Separator
-            Rectangle()
-                .fill(Color(red: 0.90, green: 0.90, blue: 0.90))
-                .frame(height: 0.5)
-                .padding(.horizontal, 20)
-
-            // Identity row
+    // MARK: - Identity Card
+    private var identityCard: some View {
+        Button(action: {
+            currentPage = .getVerified
+        }) {
             HStack {
                 Text("Identity")
                     .font(labelFont)
                     .lineSpacing(19)
                     .foregroundColor(labelColor)
-                    .frame(width: 100, alignment: .leading)
-
-                TextField("", text: $viewModel.identity)
-                    .font(valueFont)
-                    .foregroundColor(.black)
 
                 Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 14)
+            .padding(.vertical, 12)
         }
         .background(.white)
         .cornerRadius(cardCornerRadius)
-        .shadow(color: cardShadowColor, radius: cardShadowRadius, x: 0, y: cardShadowY)
+        .shadow(color: Color(red: 0, green: 0, blue: 0, opacity: 0.15), radius: 5.9, x: 0, y: 0)
     }
 
     // MARK: - Location Card

@@ -15,9 +15,13 @@ struct ProfileView: View {
     @State private var showWrite = false
     @State private var showShareSheet = false
     @State private var localAvatarImage: UIImage? = nil  // 本地选择的头像
+    @State private var showAccountSwitcher = false  // 账户切换弹窗
 
     // Access AvatarManager
     @StateObject private var avatarManager = AvatarManager.shared
+
+    // Access UserPostsManager for real-time post sync
+    private var userPostsManager: UserPostsManager { UserPostsManager.shared }
 
 
     // Computed property for user display
@@ -38,7 +42,14 @@ struct ProfileView: View {
         ZStack {
             // 条件渲染：根据状态切换视图
             if showNewPost {
-                NewPostView(showNewPost: $showNewPost, initialImage: selectedImage)
+                NewPostView(
+                    showNewPost: $showNewPost,
+                    initialImage: selectedImage,
+                    onPostSuccess: { post in
+                        // 实时同步新帖子到 UserPostsManager
+                        userPostsManager.addNewPost(post)
+                    }
+                )
                     .transition(.identity)
             } else if showGenerateImage {
                 GenerateImage01View(showGenerateImage: $showGenerateImage)
@@ -109,11 +120,38 @@ struct ProfileView: View {
                     }
                 )
             }
+
+            // MARK: - 账户切换弹窗
+            if showAccountSwitcher {
+                AccountSwitcherSheet(
+                    isPresented: $showAccountSwitcher,
+                    onAccountSelected: { accountType in
+                        // 处理账户切换
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            showAccountSwitcher = false
+                        }
+                    },
+                    onAddAliasAccount: {
+                        // 添加匿名账户
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            showAccountSwitcher = false
+                        }
+                    },
+                    onGoToAccountCenter: {
+                        // 前往账户中心
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            showAccountSwitcher = false
+                        }
+                    }
+                )
+            }
         }
         .task {
             // Use current user from AuthenticationManager
             if let userId = authManager.currentUser?.id {
                 await profileData.loadUserProfile(userId: userId)
+                // 同时加载用户帖子到 UserPostsManager
+                await userPostsManager.loadUserPosts(userId: userId)
             }
         }
         .sheet(isPresented: $showShareSheet) {
@@ -182,7 +220,11 @@ struct ProfileView: View {
                     layout: navBarLayout,
                     onShareTapped: { showShareSheet = true },
                     onSettingsTapped: { currentPage = .setting },
-                    onUsernameTapped: { /* 用户名点击事件 */ }
+                    onUsernameTapped: {
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            showAccountSwitcher = true
+                        }
+                    }
                 )
 
                 // MARK: - 用户信息区域（独立组件）
@@ -271,27 +313,46 @@ struct ProfileView: View {
 
                 // MARK: - 帖子网格
                 ScrollView {
-                    if profileData.isLoading {
-                        ProgressView()
-                            .padding(.top, 40)
-                    } else if profileData.hasContent {
-                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                            ForEach(profileData.currentTabPosts) { post in
-                                PostGridCard(post: post)
+                    if profileData.selectedTab == .posts {
+                        // Posts 标签 - 使用 UserPostsManager 实时同步
+                        if userPostsManager.isLoading {
+                            ProgressView()
+                                .padding(.top, 40)
+                        } else if userPostsManager.hasPosts {
+                            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                                ForEach(userPostsManager.userPosts) { post in
+                                    ProfilePostCard(
+                                        post: post,
+                                        username: displayUser?.displayName ?? displayUser?.username ?? "User",
+                                        avatarUrl: displayUser?.avatarUrl
+                                    )
+                                }
                             }
+                            .padding(.horizontal, 8)
+                            .padding(.top, 8)
+                        } else {
+                            emptyStateView
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.top, 8)
                     } else {
-                        VStack(spacing: 12) {
-                            Image(systemName: "tray")
-                                .font(.system(size: 48))
-                                .foregroundColor(.gray)
-                            Text("No posts yet")
-                                .font(.system(size: 16))
-                                .foregroundColor(.gray)
+                        // Saved/Liked 标签 - 使用 profileData
+                        if profileData.isLoading {
+                            ProgressView()
+                                .padding(.top, 40)
+                        } else if profileData.hasContent {
+                            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                                ForEach(profileData.currentTabPosts) { post in
+                                    ProfilePostCard(
+                                        post: post,
+                                        username: displayUser?.displayName ?? displayUser?.username ?? "User",
+                                        avatarUrl: displayUser?.avatarUrl
+                                    )
+                                }
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.top, 8)
+                        } else {
+                            emptyStateView
                         }
-                        .padding(.top, 60)
                     }
 
                     Color.clear
@@ -299,6 +360,19 @@ struct ProfileView: View {
                 }
                 .background(DesignTokens.backgroundColor)
         }
+    }
+
+    // MARK: - 空状态视图
+    private var emptyStateView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "tray")
+                .font(.system(size: 48))
+                .foregroundColor(.gray)
+            Text("No posts yet")
+                .font(.system(size: 16))
+                .foregroundColor(.gray)
+        }
+        .padding(.top, 60)
     }
 
     // MARK: - 底部导航栏

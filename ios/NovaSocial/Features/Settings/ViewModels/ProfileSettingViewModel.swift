@@ -8,7 +8,7 @@ final class ProfileSettingViewModel: ObservableObject {
     @Published var lastName = ""
     @Published var username = ""
     @Published var dateOfBirth = ""
-    @Published var gender: Gender = .preferNotToSay
+    @Published var gender: Gender = .notSet
     @Published var profession = ""
     @Published var identity = ""
     @Published var location = ""
@@ -66,7 +66,7 @@ final class ProfileSettingViewModel: ObservableObject {
                lastName != (user.lastName ?? "") ||
                username != user.username ||
                dateOfBirth != (user.dateOfBirth ?? "") ||
-               gender != (user.gender ?? .preferNotToSay) ||
+               gender != (user.gender ?? .notSet) ||
                profession != (user.bio ?? "") ||  // profession maps to bio
                identity != "" ||  // identity is local only for now
                location != (user.location ?? "") ||
@@ -175,7 +175,7 @@ final class ProfileSettingViewModel: ObservableObject {
         lastName = user.lastName ?? ""
         username = user.username
         dateOfBirth = user.dateOfBirth ?? ""
-        gender = user.gender ?? .preferNotToSay
+        gender = user.gender ?? .notSet
         profession = user.bio ?? ""  // profession maps to bio
         // identity is local only for now
         location = user.location ?? ""

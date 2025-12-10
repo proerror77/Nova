@@ -42,7 +42,7 @@ struct PhotoOptionsModal: View {
                         isPresented = false
                     } label: {
                         Text("Choose Photo")
-                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                            .font(.system(size: 18, weight: .medium))
                             .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)
@@ -62,7 +62,7 @@ struct PhotoOptionsModal: View {
                         isPresented = false
                     } label: {
                         Text("Take Photo")
-                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                            .font(.system(size: 18, weight: .medium))
                             .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)
@@ -82,7 +82,7 @@ struct PhotoOptionsModal: View {
                         isPresented = false
                     } label: {
                         Text("Generate Image")
-                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                            .font(.system(size: 18, weight: .medium))
                             .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)
@@ -102,7 +102,7 @@ struct PhotoOptionsModal: View {
                         isPresented = false
                     } label: {
                         Text("Write")
-                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                            .font(.system(size: 18, weight: .medium))
                             .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)
@@ -121,7 +121,7 @@ struct PhotoOptionsModal: View {
                         isPresented = false
                     } label: {
                         Text("Cancel")
-                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                            .font(.system(size: 18, weight: .medium))
                             .foregroundColor(.black)
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)

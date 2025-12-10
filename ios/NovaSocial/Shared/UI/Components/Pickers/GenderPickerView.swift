@@ -6,7 +6,7 @@ struct GenderPickerView: View {
 
     var body: some View {
         NavigationView {
-            List(Gender.allCases, id: \.self) { gender in
+            List(Gender.selectableCases, id: \.self) { gender in
                 Button(action: {
                     selectedGender = gender
                     isPresented = false

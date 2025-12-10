@@ -37,7 +37,7 @@ struct GenerateImage01View: View {
 
                     // 标题
                     Text("Create images")
-                        .font(Font.custom("Helvetica Neue", size: 20).weight(.bold))
+                        .font(.system(size: 20, weight: .bold))
                         .foregroundColor(.black)
 
                     Spacer()
@@ -63,7 +63,7 @@ struct GenerateImage01View: View {
                                     Spacer()
                                     HStack(spacing: 8) {
                                         Text(text)
-                                            .font(Font.custom("Helvetica Neue", size: 14))
+                                            .font(.system(size: 14))
                                             .foregroundColor(.black)
                                     }
                                     .padding(EdgeInsets(top: 10, leading: 13, bottom: 10, trailing: 13))
@@ -104,7 +104,7 @@ struct GenerateImage01View: View {
                                     .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
 
                                 TextField("Describe the image to generate", text: $promptText)
-                                    .font(Font.custom("Helvetica Neue", size: 16))
+                                    .font(.system(size: 16))
                                     .foregroundColor(Color(red: 0.34, green: 0.34, blue: 0.34))
                                     .focused($isInputFocused)
                                     .onSubmit {
@@ -156,12 +156,12 @@ struct GenerateImage01View: View {
             // Alice 标题和标签
             HStack(spacing: 8) {
                 Text("Alice")
-                    .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundColor(.black)
 
                 HStack(spacing: 6) {
                     Text("AI agent")
-                        .font(Font.custom("Helvetica Neue", size: 10))
+                        .font(.system(size: 10))
                         .lineSpacing(14.55)
                         .foregroundColor(.black)
                 }
@@ -178,7 +178,7 @@ struct GenerateImage01View: View {
 
             // Loading 或 生成完成文本
             Text(isGenerating ? "Loading..." : "Generated 2 images")
-                .font(Font.custom("Helvetica Neue", size: 12))
+                .font(.system(size: 12))
                 .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                 .padding(.leading, 16)
 

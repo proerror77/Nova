@@ -13,19 +13,19 @@ struct FeedPostCard: View {
     @State private var currentImageIndex = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(spacing: 8) {
             // MARK: - User Info Header
             HStack {
                 HStack(spacing: 10) {
                     // Avatar - 显示用户头像或默认头像
-                    AvatarView(image: nil, url: post.authorAvatar, size: 32)
+                    AvatarView(image: nil, url: post.authorAvatar, size: 30)
 
                     // User Info
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
                             Text(post.authorName)
-                                .font(Font.custom("Helvetica Neue", size: 14).weight(.medium))
-                                .foregroundColor(DesignTokens.textPrimary)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(Color(red: 0.02, green: 0, blue: 0))
 
                             // 认证标记 (可选)
                             Image(systemName: "checkmark.seal.fill")
@@ -35,14 +35,14 @@ struct FeedPostCard: View {
 
                         HStack(spacing: 9) {
                             Text(post.createdAt.timeAgoDisplay())
-                                .font(Font.custom("Helvetica Neue", size: 10))
+                                .font(.system(size: 10))
                                 .lineSpacing(13)
-                                .foregroundColor(DesignTokens.textTertiary)
+                                .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
 
                             Text("Location")
-                                .font(Font.custom("Helvetica Neue", size: 10))
+                                .font(.system(size: 10))
                                 .lineSpacing(13)
-                                .foregroundColor(DesignTokens.textTertiary)
+                                .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
                         }
                     }
                 }
@@ -54,16 +54,15 @@ struct FeedPostCard: View {
                     Image("card-share-icon")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 20, height: 20)
+                        .frame(width: 24, height: 24)
                 }
                 .accessibilityLabel("Share")
             }
-            .padding(.horizontal, 17)
-            .padding(.top, 14)
+            .padding(.horizontal, 16)
 
-            // MARK: - Post Images (3:4 比例)
+            // MARK: - Post Images (375x500)
             if !post.displayMediaUrls.isEmpty {
-                VStack(spacing: 7) {
+                VStack(spacing: 8) {
                     TabView(selection: $currentImageIndex) {
                         ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
                             AsyncImage(url: URL(string: imageUrl)) { phase in
@@ -91,16 +90,13 @@ struct FeedPostCard: View {
                                     EmptyView()
                                 }
                             }
-                            .frame(maxWidth: .infinity)
-                            .aspectRatio(3/4, contentMode: .fill)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .clipped()
                             .tag(index)
                         }
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
-                    .frame(height: UIScreen.main.bounds.width * 4 / 3 - 68) // 3:4 比例
-                    .clipShape(RoundedRectangle(cornerRadius: 5))
-                    .padding(.horizontal, 17)
+                    .frame(height: 500)
 
                     // 自定义页面指示器
                     if post.displayMediaUrls.count > 1 {
@@ -117,60 +113,71 @@ struct FeedPostCard: View {
                 }
             }
 
-            // MARK: - Interaction Buttons
-            HStack(spacing: 20) {
-                // Like button
-                Button(action: onLike) {
-                    HStack(spacing: 6) {
-                        Image("card-heart-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
-                        Text("\(post.likeCount)")
-                            .font(Font.custom("Helvetica Neue", size: 10))
-                            .lineSpacing(20)
-                            .foregroundColor(DesignTokens.textSecondary)
-                    }
+            // MARK: - Post Content & Interaction
+            VStack(alignment: .leading, spacing: 10) {
+                // Post Content Text
+                if !post.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(post.content)
+                        .font(.system(size: 16, weight: .medium))
+                        .lineSpacing(20)
+                        .foregroundColor(.black)
                 }
-                .accessibilityLabel("Like, \(post.likeCount) likes")
 
-                // Comment button
-                Button(action: onComment) {
-                    HStack(spacing: 6) {
-                        Image("card-comment-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
-                        Text("\(post.commentCount)")
-                            .font(Font.custom("Helvetica Neue", size: 10))
-                            .lineSpacing(20)
-                            .foregroundColor(DesignTokens.textSecondary)
+                // Interaction Buttons
+                HStack(spacing: 20) {
+                    // Like button
+                    Button(action: onLike) {
+                        HStack(spacing: 6) {
+                            Image("card-heart-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                            Text("\(post.likeCount)")
+                                .font(.system(size: 10))
+                                .lineSpacing(20)
+                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        }
                     }
-                }
-                .accessibilityLabel("Comments, \(post.commentCount)")
+                    .accessibilityLabel("Like, \(post.likeCount) likes")
 
-                // Bookmark/Star button
-                Button(action: onBookmark) {
-                    HStack(spacing: 6) {
-                        Image("card-star-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
-                        Text("\(post.shareCount)")
-                            .font(Font.custom("Helvetica Neue", size: 10))
-                            .lineSpacing(20)
-                            .foregroundColor(DesignTokens.textSecondary)
+                    // Comment button
+                    Button(action: onComment) {
+                        HStack(spacing: 6) {
+                            Image("card-comment-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                            Text("\(post.commentCount)")
+                                .font(.system(size: 10))
+                                .lineSpacing(20)
+                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        }
                     }
-                }
-                .accessibilityLabel("Bookmark")
+                    .accessibilityLabel("Comments, \(post.commentCount)")
 
-                Spacer()
+                    // Bookmark/Star button
+                    Button(action: onBookmark) {
+                        HStack(spacing: 6) {
+                            Image("card-star-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                            Text("\(post.shareCount)")
+                                .font(.system(size: 10))
+                                .lineSpacing(20)
+                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        }
+                    }
+                    .accessibilityLabel("Bookmark")
+
+                    Spacer()
+                }
             }
-            .padding(.horizontal, 17)
+            .padding(.horizontal, 16)
             .padding(.bottom, 14)
         }
-        .background(DesignTokens.surface)
-        .cornerRadius(5)
+        .padding(.top, 14)
+        .background(.white)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Post by \(post.authorName)")
     }

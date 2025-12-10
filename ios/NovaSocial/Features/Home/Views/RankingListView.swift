@@ -26,10 +26,10 @@ struct RankingListView: View {
 
                     VStack(spacing: 5) {
                         Text("Hottest Banker in H.K.")
-                            .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
                         Text("Corporate Poll")
-                            .font(Font.custom("Helvetica Neue", size: 12).weight(.medium))
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
                     }
 
@@ -63,7 +63,7 @@ struct RankingListView: View {
                                 .font(.system(size: 15))
                                 .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
                             Text("Search")
-                                .font(Font.custom("Helvetica Neue", size: 15))
+                                .font(.system(size: 15))
                                 .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
                             Spacer()
                         }
@@ -185,7 +185,7 @@ struct RankingListView: View {
                                 .background(Color(red: 0.74, green: 0.74, blue: 0.74))
                                 .cornerRadius(99)
                             Text("Comfire you may vote again on 24h")
-                                .font(Font.custom("Helvetica Neue", size: 13))
+                                .font(.system(size: 13))
                                 .foregroundColor(.white)
                         }
                         .frame(maxWidth: 280)
@@ -216,7 +216,7 @@ struct RankingListItem: View {
         HStack(spacing: 12) {
             // Rank number - smaller font
             Text(rank)
-                .font(Font.custom("Helvetica Neue", size: 40).weight(.medium))
+                .font(.system(size: 40, weight: .medium))
                 .foregroundColor(rankColor)
                 .frame(width: 45, alignment: .center)
 
@@ -228,11 +228,11 @@ struct RankingListItem: View {
             // Name, company, and progress
             VStack(alignment: .leading, spacing: 3) {
                 Text(name)
-                    .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
 
                 Text(company)
-                    .font(Font.custom("Helvetica Neue", size: 10).weight(.medium))
+                    .font(.system(size: 10, weight: .medium))
                     .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
 
                 // Progress indicators - overlapping circles
@@ -260,7 +260,7 @@ struct RankingListItem: View {
                     }
 
                     Text(votes)
-                        .font(Font.custom("Helvetica Neue", size: 8).weight(.medium))
+                        .font(.system(size: 8, weight: .medium))
                         .foregroundColor(Color(red: 0.68, green: 0.68, blue: 0.68))
                         .padding(.leading, 7)
                 }
@@ -274,7 +274,7 @@ struct RankingListItem: View {
                     .font(.system(size: 24))
                     .foregroundColor(Color(red: 0.2, green: 0.2, blue: 0.2))
                 Text(percentage)
-                    .font(Font.custom("Inter", size: 9))
+                    .font(.system(size: 9))
                     .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
             }
         }
