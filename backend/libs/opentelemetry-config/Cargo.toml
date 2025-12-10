@@ -11,9 +11,6 @@ opentelemetry = { version = "0.22", features = ["trace", "metrics"] }
 opentelemetry_sdk = { version = "0.22", features = ["trace", "metrics", "rt-tokio"] }
 opentelemetry-otlp = { version = "0.15", features = ["trace", "metrics", "grpc-tonic"] }
 
-# Jaeger exporter (legacy, for compatibility)
-opentelemetry-jaeger = { version = "0.21", features = ["rt-tokio"] }
-
 # Tracing integration
 tracing = "0.1"
 tracing-opentelemetry = "0.23"

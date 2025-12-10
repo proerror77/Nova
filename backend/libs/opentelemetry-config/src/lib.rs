@@ -1,7 +1,8 @@
 //! OpenTelemetry Configuration Library
 //!
 //! Provides centralized configuration for distributed tracing across all Nova backend services.
-//! Supports both OTLP (OpenTelemetry Protocol) and Jaeger exporters.
+//! Uses OTLP (OpenTelemetry Protocol) exporter which is the modern standard supported by
+//! Jaeger, Tempo, and other observability backends.
 
 use opentelemetry::{global, KeyValue};
 use opentelemetry_otlp::WithExportConfig;
@@ -38,9 +39,8 @@ pub use interceptors::{grpc_tracing_interceptor, http_tracing_layer};
 /// async fn main() {
 ///     let config = TracingConfig {
 ///         enabled: true,
-///         exporter: ExporterType::Jaeger,
-///         jaeger_endpoint: "http://jaeger:14268/api/traces".to_string(),
-///         otlp_endpoint: None,
+///         exporter: ExporterType::Otlp,
+///         otlp_endpoint: Some("http://jaeger:4317".to_string()),
 ///         sample_rate: 0.1,
 ///         service_version: "1.0.0".to_string(),
 ///         environment: "production".to_string(),
@@ -69,18 +69,15 @@ pub fn init_tracing(
         KeyValue::new("deployment.environment", config.environment.clone()),
     ]);
 
-    // Create tracer based on exporter type
-    let tracer = match config.exporter {
-        ExporterType::Jaeger => init_jaeger_tracer(service_name, &config, resource)?,
-        ExporterType::Otlp => init_otlp_tracer(service_name, &config, resource)?,
-    };
+    // Create tracer using OTLP exporter (modern standard, works with Jaeger, Tempo, etc.)
+    let tracer = init_otlp_tracer(service_name, &config, resource)?;
 
     // Set up tracing subscriber with OpenTelemetry layer
     let telemetry_layer = tracing_opentelemetry::layer().with_tracer(tracer.clone());
 
     let env_filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info"))
-        .add_directive("user_service=debug".parse().expect("Invalid filter directive"))
+        .add_directive("identity_service=debug".parse().expect("Invalid filter directive"))
         .add_directive("auth_service=debug".parse().expect("Invalid filter directive"))
         .add_directive("content_service=debug".parse().expect("Invalid filter directive"));
 
@@ -92,7 +89,7 @@ pub fn init_tracing(
 
     tracing::info!(
         service = service_name,
-        exporter = ?config.exporter,
+        exporter = "otlp",
         sample_rate = config.sample_rate,
         "OpenTelemetry tracing initialized"
     );
@@ -100,28 +97,7 @@ pub fn init_tracing(
     Ok(tracer)
 }
 
-/// Initialize Jaeger exporter
-fn init_jaeger_tracer(
-    service_name: &str,
-    config: &TracingConfig,
-    resource: Resource,
-) -> Result<Tracer, Box<dyn std::error::Error>> {
-    let tracer = opentelemetry_jaeger::new_agent_pipeline()
-        .with_service_name(service_name)
-        .with_endpoint(&config.jaeger_endpoint)
-        .with_trace_config(
-            opentelemetry_sdk::trace::config()
-                .with_sampler(Sampler::TraceIdRatioBased(config.sample_rate))
-                .with_id_generator(RandomIdGenerator::default())
-                .with_resource(resource),
-        )
-        .install_batch(runtime::Tokio)
-        .expect("Failed to install Jaeger tracer");
-
-    Ok(tracer)
-}
-
-/// Initialize OTLP exporter (for modern collectors like Jaeger with OTLP support)
+/// Initialize OTLP exporter (works with Jaeger, Tempo, and other OTLP-compatible backends)
 fn init_otlp_tracer(
     _service_name: &str,
     config: &TracingConfig,
@@ -166,9 +142,8 @@ mod tests {
     fn test_tracing_config_creation() {
         let config = TracingConfig {
             enabled: true,
-            exporter: ExporterType::Jaeger,
-            jaeger_endpoint: "http://localhost:14268/api/traces".to_string(),
-            otlp_endpoint: None,
+            exporter: ExporterType::Otlp,
+            otlp_endpoint: Some("http://localhost:4317".to_string()),
             sample_rate: 0.1,
             service_version: "1.0.0".to_string(),
             environment: "test".to_string(),
@@ -183,7 +158,6 @@ mod tests {
         let config = TracingConfig {
             enabled: true,
             exporter: ExporterType::Otlp,
-            jaeger_endpoint: String::new(),
             otlp_endpoint: Some("http://localhost:4317".to_string()),
             sample_rate: 1.0,
             service_version: "1.0.0".to_string(),

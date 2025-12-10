@@ -3,12 +3,15 @@
 use serde::{Deserialize, Serialize};
 
 /// Type of trace exporter to use
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// Currently only OTLP is supported as `opentelemetry-jaeger` is deprecated.
+/// Modern Jaeger installations support OTLP natively on port 4317.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ExporterType {
-    /// Jaeger native protocol (legacy)
-    Jaeger,
     /// OpenTelemetry Protocol (OTLP) - modern standard
+    /// Works with Jaeger, Tempo, and other OTLP-compatible backends
+    #[default]
     Otlp,
 }
 
@@ -18,15 +21,12 @@ pub struct TracingConfig {
     /// Enable tracing (default: false in development, true in production)
     pub enabled: bool,
 
-    /// Type of exporter to use
+    /// Type of exporter to use (currently only OTLP supported)
     pub exporter: ExporterType,
 
-    /// Jaeger agent endpoint (for Jaeger exporter)
-    /// Example: "http://jaeger:14268/api/traces"
-    pub jaeger_endpoint: String,
-
-    /// OTLP collector endpoint (for OTLP exporter)
+    /// OTLP collector endpoint
     /// Example: "http://jaeger:4317" (Jaeger with OTLP support)
+    /// Example: "http://tempo:4317" (Grafana Tempo)
     pub otlp_endpoint: Option<String>,
 
     /// Sample rate (0.0 to 1.0)
@@ -47,7 +47,6 @@ impl Default for TracingConfig {
         Self {
             enabled: false,
             exporter: ExporterType::Otlp,
-            jaeger_endpoint: String::new(),
             otlp_endpoint: Some("http://jaeger:4317".to_string()),
             sample_rate: 0.1,
             service_version: "dev".to_string(),
@@ -61,9 +60,7 @@ impl TracingConfig {
     ///
     /// Environment variables:
     /// - `TRACING_ENABLED`: Enable tracing (true/false)
-    /// - `TRACING_EXPORTER`: Exporter type (jaeger/otlp)
-    /// - `JAEGER_ENDPOINT`: Jaeger agent endpoint
-    /// - `OTLP_ENDPOINT`: OTLP collector endpoint
+    /// - `OTLP_ENDPOINT`: OTLP collector endpoint (default: http://jaeger:4317)
     /// - `TRACING_SAMPLE_RATE`: Sample rate (0.0-1.0)
     /// - `SERVICE_VERSION`: Service version
     /// - `APP_ENV`: Environment (development/staging/production)
@@ -73,19 +70,9 @@ impl TracingConfig {
             .and_then(|v| v.parse().ok())
             .unwrap_or(false);
 
-        let exporter = std::env::var("TRACING_EXPORTER")
+        let otlp_endpoint = std::env::var("OTLP_ENDPOINT")
             .ok()
-            .and_then(|v| match v.to_lowercase().as_str() {
-                "jaeger" => Some(ExporterType::Jaeger),
-                "otlp" => Some(ExporterType::Otlp),
-                _ => None,
-            })
-            .unwrap_or(ExporterType::Otlp);
-
-        let jaeger_endpoint = std::env::var("JAEGER_ENDPOINT")
-            .unwrap_or_else(|_| "http://jaeger:14268/api/traces".to_string());
-
-        let otlp_endpoint = std::env::var("OTLP_ENDPOINT").ok();
+            .or_else(|| Some("http://jaeger:4317".to_string()));
 
         let sample_rate = std::env::var("TRACING_SAMPLE_RATE")
             .ok()
@@ -107,8 +94,7 @@ impl TracingConfig {
 
         Self {
             enabled,
-            exporter,
-            jaeger_endpoint,
+            exporter: ExporterType::Otlp,
             otlp_endpoint,
             sample_rate,
             service_version,
@@ -121,7 +107,6 @@ impl TracingConfig {
         Self {
             enabled: true,
             exporter: ExporterType::Otlp,
-            jaeger_endpoint: String::new(),
             otlp_endpoint: Some("http://jaeger-collector:4317".to_string()),
             sample_rate: 0.1, // Sample 10% in production
             service_version: service_version.to_string(),
@@ -134,7 +119,6 @@ impl TracingConfig {
         Self {
             enabled: true,
             exporter: ExporterType::Otlp,
-            jaeger_endpoint: String::new(),
             otlp_endpoint: Some("http://jaeger-collector:4317".to_string()),
             sample_rate: 0.5, // Sample 50% in staging
             service_version: service_version.to_string(),
@@ -147,7 +131,6 @@ impl TracingConfig {
         Self {
             enabled: true,
             exporter: ExporterType::Otlp,
-            jaeger_endpoint: String::new(),
             otlp_endpoint: Some("http://localhost:4317".to_string()),
             sample_rate: 1.0, // Sample 100% in development
             service_version: "dev".to_string(),
