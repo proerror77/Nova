@@ -23,7 +23,7 @@ use aes_gcm::{
     aead::{generic_array::GenericArray, Aead, KeyInit},
     Aes256Gcm,
 };
-use sqlx::{PgPool, Row};
+use deadpool_postgres::Pool;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, warn};
@@ -48,7 +48,7 @@ use crate::error::AppError;
 #[derive(Debug, Error)]
 pub enum MegolmError {
     #[error("Database error: {0}")]
-    Database(#[from] sqlx::Error),
+    Database(#[from] tokio_postgres::Error),
 
     #[error("Application error: {0}")]
     App(#[from] AppError),
@@ -116,7 +116,7 @@ impl AccountEncryptionKey {
 }
 
 pub struct MegolmService {
-    pool: PgPool,
+    pool: Pool,
     encryption_key: Arc<AccountEncryptionKey>,
 }
 
@@ -127,7 +127,7 @@ impl MegolmService {
     ///
     /// * `pool` - PostgreSQL connection pool
     /// * `encryption_key` - Master key for encrypting pickled sessions at rest
-    pub fn new(pool: PgPool, encryption_key: AccountEncryptionKey) -> Self {
+    pub fn new(pool: Pool, encryption_key: AccountEncryptionKey) -> Self {
         Self {
             pool,
             encryption_key: Arc::new(encryption_key),
@@ -161,7 +161,8 @@ impl MegolmService {
         let (encrypted, nonce) = self.encrypt_pickle(&pickled_bytes)?;
 
         // Store in database with default rotation settings
-        sqlx::query(
+        let client = self.pool.get().await.map_err(|e| MegolmError::App(AppError::Database(e.to_string())))?;
+        client.execute(
             r#"
             INSERT INTO megolm_outbound_sessions
             (room_id, device_id, session_id, pickled_session, pickle_nonce, message_count, max_messages, max_age_seconds, created_at)
@@ -173,13 +174,8 @@ impl MegolmService {
                 message_count = 0,
                 created_at = NOW()
             "#,
+            &[&room_id, &device_id, &session_id, &encrypted, &nonce]
         )
-        .bind(room_id)
-        .bind(device_id)
-        .bind(&session_id)
-        .bind(&encrypted)
-        .bind(&nonce)
-        .execute(&self.pool)
         .await?;
 
         info!(
@@ -240,16 +236,15 @@ impl MegolmService {
             .await?;
 
         // Increment message count
-        sqlx::query(
+        let client = self.pool.get().await.map_err(|e| MegolmError::App(AppError::Database(e.to_string())))?;
+        client.execute(
             r#"
             UPDATE megolm_outbound_sessions
             SET message_count = message_count + 1
             WHERE room_id = $1 AND device_id = $2
             "#,
+            &[&room_id, &device_id]
         )
-        .bind(room_id)
-        .bind(device_id)
-        .execute(&self.pool)
         .await?;
 
         debug!(
@@ -288,7 +283,8 @@ impl MegolmService {
         let (encrypted, nonce) = self.encrypt_pickle(&pickled_bytes)?;
 
         // Store inbound session
-        sqlx::query(
+        let client = self.pool.get().await.map_err(|e| MegolmError::App(AppError::Database(e.to_string())))?;
+        client.execute(
             r#"
             INSERT INTO megolm_inbound_sessions
             (room_id, our_device_id, session_id, sender_identity_key, pickled_session, pickle_nonce, first_known_index, created_at)
@@ -298,15 +294,8 @@ impl MegolmService {
                 pickle_nonce = $6,
                 first_known_index = $7
             "#,
+            &[&room_id, &our_device_id, &session_id, &sender_identity_key.to_base64(), &encrypted, &nonce, &(first_known_index as i32)]
         )
-        .bind(room_id)
-        .bind(our_device_id)
-        .bind(session_id)
-        .bind(sender_identity_key.to_base64())
-        .bind(&encrypted)
-        .bind(&nonce)
-        .bind(first_known_index as i32)
-        .execute(&self.pool)
         .await?;
 
         info!(
@@ -382,16 +371,15 @@ impl MegolmService {
         target_device_ids: &[String],
     ) -> Result<(), MegolmError> {
         // Get the current outbound session
-        let row = sqlx::query(
+        let client = self.pool.get().await.map_err(|e| MegolmError::App(AppError::Database(e.to_string())))?;
+        let row = client.query_opt(
             r#"
             SELECT session_id, pickled_session, pickle_nonce
             FROM megolm_outbound_sessions
             WHERE room_id = $1 AND device_id = $2
             "#,
+            &[&room_id, &our_device_id]
         )
-        .bind(room_id)
-        .bind(our_device_id)
-        .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| MegolmError::NoOutboundSession(room_id))?;
 
@@ -452,16 +440,15 @@ impl MegolmService {
         room_id: Uuid,
         device_id: &str,
     ) -> Result<bool, MegolmError> {
-        let row = sqlx::query(
+        let client = self.pool.get().await.map_err(|e| MegolmError::App(AppError::Database(e.to_string())))?;
+        let row = client.query_opt(
             r#"
             SELECT message_count, max_messages, created_at, max_age_seconds
             FROM megolm_outbound_sessions
             WHERE room_id = $1 AND device_id = $2
             "#,
+            &[&room_id, &device_id]
         )
-        .bind(room_id)
-        .bind(device_id)
-        .fetch_optional(&self.pool)
         .await?;
 
         if let Some(row) = row {
@@ -490,16 +477,15 @@ impl MegolmService {
         room_id: Uuid,
         device_id: &str,
     ) -> Result<(i32, i32), MegolmError> {
-        let row = sqlx::query(
+        let client = self.pool.get().await.map_err(|e| MegolmError::App(AppError::Database(e.to_string())))?;
+        let row = client.query_opt(
             r#"
             SELECT message_count, max_messages
             FROM megolm_outbound_sessions
             WHERE room_id = $1 AND device_id = $2
             "#,
+            &[&room_id, &device_id]
         )
-        .bind(room_id)
-        .bind(device_id)
-        .fetch_optional(&self.pool)
         .await?;
 
         match row {
@@ -517,16 +503,15 @@ impl MegolmService {
         room_id: Uuid,
         device_id: &str,
     ) -> Result<GroupSession, MegolmError> {
-        let row = sqlx::query(
+        let client = self.pool.get().await.map_err(|e| MegolmError::App(AppError::Database(e.to_string())))?;
+        let row = client.query_opt(
             r#"
             SELECT pickled_session, pickle_nonce
             FROM megolm_outbound_sessions
             WHERE room_id = $1 AND device_id = $2
             "#,
+            &[&room_id, &device_id]
         )
-        .bind(room_id)
-        .bind(device_id)
-        .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| MegolmError::NoOutboundSession(room_id))?;
 
@@ -550,18 +535,15 @@ impl MegolmService {
             .map_err(|e| MegolmError::PickleError(e.to_string()))?;
         let (encrypted, nonce) = self.encrypt_pickle(&pickled_bytes)?;
 
-        sqlx::query(
+        let client = self.pool.get().await.map_err(|e| MegolmError::App(AppError::Database(e.to_string())))?;
+        client.execute(
             r#"
             UPDATE megolm_outbound_sessions
             SET pickled_session = $1, pickle_nonce = $2
             WHERE room_id = $3 AND device_id = $4
             "#,
+            &[&encrypted, &nonce, &room_id, &device_id]
         )
-        .bind(&encrypted)
-        .bind(&nonce)
-        .bind(room_id)
-        .bind(device_id)
-        .execute(&self.pool)
         .await?;
 
         Ok(())
@@ -572,16 +554,15 @@ impl MegolmService {
         our_device_id: &str,
         session_id: &str,
     ) -> Result<InboundGroupSession, MegolmError> {
-        let row = sqlx::query(
+        let client = self.pool.get().await.map_err(|e| MegolmError::App(AppError::Database(e.to_string())))?;
+        let row = client.query_opt(
             r#"
             SELECT room_id, pickled_session, pickle_nonce
             FROM megolm_inbound_sessions
             WHERE our_device_id = $1 AND session_id = $2
             "#,
+            &[&our_device_id, &session_id]
         )
-        .bind(our_device_id)
-        .bind(session_id)
-        .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| MegolmError::SessionNotFound {
             room_id: Uuid::nil(),
@@ -608,18 +589,15 @@ impl MegolmService {
             .map_err(|e| MegolmError::PickleError(e.to_string()))?;
         let (encrypted, nonce) = self.encrypt_pickle(&pickled_bytes)?;
 
-        sqlx::query(
+        let client = self.pool.get().await.map_err(|e| MegolmError::App(AppError::Database(e.to_string())))?;
+        client.execute(
             r#"
             UPDATE megolm_inbound_sessions
             SET pickled_session = $1, pickle_nonce = $2
             WHERE our_device_id = $3 AND session_id = $4
             "#,
+            &[&encrypted, &nonce, &our_device_id, &session_id]
         )
-        .bind(&encrypted)
-        .bind(&nonce)
-        .bind(our_device_id)
-        .bind(session_id)
-        .execute(&self.pool)
         .await?;
 
         Ok(())
@@ -637,14 +615,11 @@ impl MegolmService {
         content: &[u8],
     ) -> Result<(), MegolmError> {
         // Get user IDs from device IDs
-        let sender = sqlx::query("SELECT user_id FROM user_devices WHERE device_id = $1")
-            .bind(sender_device_id)
-            .fetch_optional(&self.pool)
+        let client = self.pool.get().await.map_err(|e| MegolmError::App(AppError::Database(e.to_string())))?;
+        let sender = client.query_opt("SELECT user_id FROM user_devices WHERE device_id = $1", &[&sender_device_id])
             .await?;
 
-        let recipient = sqlx::query("SELECT user_id FROM user_devices WHERE device_id = $1")
-            .bind(recipient_device_id)
-            .fetch_optional(&self.pool)
+        let recipient = client.query_opt("SELECT user_id FROM user_devices WHERE device_id = $1", &[&recipient_device_id])
             .await?;
 
         // If device not found, log warning but don't fail
@@ -664,20 +639,14 @@ impl MegolmService {
             }
         };
 
-        sqlx::query(
+        client.execute(
             r#"
             INSERT INTO to_device_messages
             (sender_user_id, sender_device_id, recipient_user_id, recipient_device_id, message_type, content, created_at)
             VALUES ($1, $2, $3, $4, $5, $6, NOW())
             "#,
+            &[&sender_user_id, &sender_device_id, &recipient_user_id, &recipient_device_id, &message_type, &content]
         )
-        .bind(sender_user_id)
-        .bind(sender_device_id)
-        .bind(recipient_user_id)
-        .bind(recipient_device_id)
-        .bind(message_type)
-        .bind(content)
-        .execute(&self.pool)
         .await?;
 
         Ok(())

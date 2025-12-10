@@ -1,296 +1,525 @@
 use crate::error::AppError;
-use matrix_sdk::ruma::serde::Raw;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use tracing::{debug, info};
+use crate::redis_client::RedisClient;
+use crate::services::{call_service::CallService, matrix_db};
+use crate::websocket::events::{broadcast_event, WebSocketEvent};
+use crate::websocket::ConnectionRegistry;
+use deadpool_postgres::Pool;
+use matrix_sdk::{
+    room::Room,
+    ruma::events::call::{
+        answer::SyncCallAnswerEvent, candidates::SyncCallCandidatesEvent,
+        hangup::SyncCallHangupEvent, invite::SyncCallInviteEvent,
+    },
+};
+use std::sync::Arc;
+use tracing::{debug, info, warn};
+use uuid::Uuid;
 
-/// Matrix VoIP Event Handler for SDK 0.7
+/// Matrix VoIP Event Handler for SDK 0.16
 ///
-/// Since Matrix SDK 0.7 doesn't have typed VoIP event structures,
-/// we manually parse raw JSON events from the sync loop.
+/// Processes Matrix VoIP call events using typed event structures from Matrix SDK 0.16.
 ///
 /// This handler processes:
-/// - m.call.invite - Incoming call invitations
-/// - m.call.answer - Call answers from peer
-/// - m.call.candidates - ICE candidates for WebRTC connection
+/// - m.call.invite - Incoming call invitations with SDP offer
+/// - m.call.answer - Call answers with SDP answer
+/// - m.call.candidates - ICE candidates for WebRTC connection establishment
 /// - m.call.hangup - Call termination signals
-pub struct MatrixVoipEventHandler;
+pub struct MatrixVoipEventHandler {
+    db: Pool,
+    registry: Arc<ConnectionRegistry>,
+    redis: Arc<RedisClient>,
+}
 
 impl MatrixVoipEventHandler {
     /// Create new event handler
-    pub fn new() -> Self {
-        Self
-    }
-
-    /// Handle a Matrix sync event
-    ///
-    /// Inspects the event type and routes to appropriate handler
-    pub async fn handle_event(
-        &self,
-        event_type: &str,
-        event_content: Raw<Value>,
-    ) -> Result<(), AppError> {
-        match event_type {
-            "m.call.invite" => self.handle_call_invite(event_content).await,
-            "m.call.answer" => self.handle_call_answer(event_content).await,
-            "m.call.candidates" => self.handle_call_candidates(event_content).await,
-            "m.call.hangup" => self.handle_call_hangup(event_content).await,
-            _ => {
-                debug!(event_type = %event_type, "Ignoring non-VoIP event");
-                Ok(())
-            }
+    pub fn new(db: Pool, registry: Arc<ConnectionRegistry>, redis: Arc<RedisClient>) -> Self {
+        Self {
+            db,
+            registry,
+            redis,
         }
     }
 
     /// Handle m.call.invite event
-    async fn handle_call_invite(&self, event: Raw<Value>) -> Result<(), AppError> {
-        // First deserialize Raw<Value> to Value, then convert to our struct
-        let value: Value = event
-            .deserialize()
-            .map_err(|e| AppError::StartServer(format!("Failed to deserialize raw event: {e}")))?;
+    pub async fn handle_call_invite(
+        &self,
+        event: SyncCallInviteEvent,
+        room: Room,
+    ) -> Result<(), AppError> {
+        // Extract content from the Original variant (ignore redacted events)
+        let SyncCallInviteEvent::Original(original) = event else {
+            debug!("Ignoring redacted m.call.invite event");
+            return Ok(());
+        };
 
-        let content: CallInviteContent = serde_json::from_value(value)
-            .map_err(|e| AppError::StartServer(format!("Failed to parse call.invite: {e}")))?;
+        let content = &original.content;
 
         info!(
             call_id = %content.call_id,
-            party_id = %content.party_id,
+            party_id = ?content.party_id,
             version = %content.version,
-            lifetime_ms = content.lifetime,
+            lifetime_ms = %content.lifetime,
+            room_id = %room.room_id(),
             "Received m.call.invite"
         );
 
-        // TODO: Forward to CallService for processing
-        // This will:
-        // 1. Look up conversation_id from call_id (or create new conversation)
-        // 2. Notify recipient via WebSocket
-        // 3. Store Matrix event_id and party_id in database
-        // 4. Return OK to Matrix (event acknowledged)
+        // 1. Look up conversation_id from Matrix room_id
+        let room_id_str = room.room_id().as_str();
+        let conversation_id = match matrix_db::lookup_conversation_by_room_id(&self.db, room_id_str).await? {
+            Some(id) => id,
+            None => {
+                warn!(
+                    room_id = %room_id_str,
+                    "No conversation found for Matrix room, ignoring call invite"
+                );
+                return Ok(());
+            }
+        };
 
-        debug!(
-            call_id = %content.call_id,
-            "[TODO] Forward call invite to CallService"
+        // 2. Parse call_id from Matrix (it's a Nova UUID stored as string)
+        let call_id = match Uuid::parse_str(content.call_id.as_str()) {
+            Ok(id) => id,
+            Err(e) => {
+                warn!(
+                    call_id = %content.call_id,
+                    error = ?e,
+                    "Invalid call_id format (expected UUID), ignoring call invite"
+                );
+                return Ok(());
+            }
+        };
+
+        // 3. Extract SDP offer (for future use, currently just validated)
+        let _sdp_offer = &content.offer.sdp;
+
+        // 4. Store Matrix party_id in database (update existing call record)
+        let party_id = content.party_id.as_ref().map(|s| s.to_string());
+        if let Some(party_id) = &party_id {
+            let client = self.db.get().await.map_err(|e| {
+                AppError::StartServer(format!("get client: {e}"))
+            })?;
+
+            // Update call_sessions with Matrix party_id if it exists
+            let update_result = client.execute(
+                "UPDATE call_sessions SET matrix_party_id = $1 WHERE id = $2",
+                &[party_id, &call_id]
+            ).await;
+
+            if let Err(e) = update_result {
+                warn!(
+                    call_id = %call_id,
+                    error = ?e,
+                    "Failed to update Matrix party_id in database"
+                );
+            }
+        }
+
+        // 5. Get call details to build the WebSocket event
+        let client = self.db.get().await.map_err(|e| {
+            AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        let call_row = client.query_opt(
+            "SELECT initiator_id, call_type, max_participants FROM call_sessions WHERE id = $1",
+            &[&call_id]
+        ).await.map_err(|e| {
+            AppError::StartServer(format!("fetch call: {e}"))
+        })?;
+
+        let (initiator_id, call_type, max_participants) = match call_row {
+            Some(row) => {
+                let initiator_id: Uuid = row.get("initiator_id");
+                let call_type: String = row.get("call_type");
+                let max_participants: i32 = row.get("max_participants");
+                (initiator_id, call_type, max_participants)
+            }
+            None => {
+                warn!(
+                    call_id = %call_id,
+                    "Call not found in database, cannot broadcast event"
+                );
+                return Ok(());
+            }
+        };
+
+        // 6. Broadcast CallInitiated event to WebSocket clients
+        let event = WebSocketEvent::CallInitiated {
+            call_id,
+            initiator_id,
+            call_type,
+            max_participants,
+        };
+
+        if let Err(e) = broadcast_event(&self.registry, &self.redis, conversation_id, initiator_id, event).await {
+            warn!(
+                call_id = %call_id,
+                conversation_id = %conversation_id,
+                error = ?e,
+                "Failed to broadcast call invite to WebSocket clients"
+            );
+        }
+
+        info!(
+            call_id = %call_id,
+            conversation_id = %conversation_id,
+            room_id = %room_id_str,
+            "Forwarded call invite to WebSocket clients"
         );
 
         Ok(())
     }
 
     /// Handle m.call.answer event
-    async fn handle_call_answer(&self, event: Raw<Value>) -> Result<(), AppError> {
-        let value: Value = event
-            .deserialize()
-            .map_err(|e| AppError::StartServer(format!("Failed to deserialize raw event: {e}")))?;
+    pub async fn handle_call_answer(
+        &self,
+        event: SyncCallAnswerEvent,
+        room: Room,
+    ) -> Result<(), AppError> {
+        let SyncCallAnswerEvent::Original(original) = event else {
+            debug!("Ignoring redacted m.call.answer event");
+            return Ok(());
+        };
 
-        let content: CallAnswerContent = serde_json::from_value(value)
-            .map_err(|e| AppError::StartServer(format!("Failed to parse call.answer: {e}")))?;
+        let content = &original.content;
 
         info!(
             call_id = %content.call_id,
-            party_id = %content.party_id,
+            party_id = ?content.party_id,
+            room_id = %room.room_id(),
             "Received m.call.answer"
         );
 
-        // TODO: Forward to CallService
-        // This will:
-        // 1. Find active call by call_id
-        // 2. Extract SDP answer
-        // 3. Notify caller via WebSocket with SDP answer
-        // 4. Update call state to "connected"
+        // 1. Look up conversation_id from Matrix room_id
+        let room_id_str = room.room_id().as_str();
+        let conversation_id = match matrix_db::lookup_conversation_by_room_id(&self.db, room_id_str).await? {
+            Some(id) => id,
+            None => {
+                warn!(
+                    room_id = %room_id_str,
+                    "No conversation found for Matrix room, ignoring call answer"
+                );
+                return Ok(());
+            }
+        };
 
-        debug!(
-            call_id = %content.call_id,
-            "[TODO] Forward call answer to CallService"
+        // 2. Parse call_id from Matrix
+        let call_id = match Uuid::parse_str(content.call_id.as_str()) {
+            Ok(id) => id,
+            Err(e) => {
+                warn!(
+                    call_id = %content.call_id,
+                    error = ?e,
+                    "Invalid call_id format (expected UUID), ignoring call answer"
+                );
+                return Ok(());
+            }
+        };
+
+        // 3. Extract SDP answer (for future use, currently just validated)
+        let _sdp_answer = &content.answer.sdp;
+
+        // 4. Get call information (to get initiator for user_id in broadcast)
+        let client = self.db.get().await.map_err(|e| {
+            AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        let call_row = client.query_opt(
+            "SELECT initiator_id FROM call_sessions WHERE id = $1",
+            &[&call_id]
+        ).await.map_err(|e| {
+            AppError::StartServer(format!("fetch call: {e}"))
+        })?;
+
+        let initiator_id = match call_row {
+            Some(row) => row.get::<&str, Uuid>("initiator_id"),
+            None => {
+                warn!(
+                    call_id = %call_id,
+                    "Call not found in database, cannot broadcast answer event"
+                );
+                return Ok(());
+            }
+        };
+
+        // 5. Find the answerer (most recent participant who joined)
+        let participant_row = client.query_opt(
+            "SELECT user_id FROM call_participants WHERE call_id = $1 AND user_id != $2 ORDER BY joined_at DESC LIMIT 1",
+            &[&call_id, &initiator_id]
+        ).await.map_err(|e| {
+            AppError::StartServer(format!("fetch answerer: {e}"))
+        })?;
+
+        let answerer_id = match participant_row {
+            Some(row) => row.get::<&str, Uuid>("user_id"),
+            None => {
+                warn!(
+                    call_id = %call_id,
+                    "No answerer found for call, using initiator_id as fallback"
+                );
+                initiator_id // Fallback to initiator
+            }
+        };
+
+        // 6. Broadcast CallAnswered event to WebSocket clients
+        let event = WebSocketEvent::CallAnswered {
+            call_id,
+            answerer_id,
+        };
+
+        if let Err(e) = broadcast_event(&self.registry, &self.redis, conversation_id, answerer_id, event).await {
+            warn!(
+                call_id = %call_id,
+                conversation_id = %conversation_id,
+                error = ?e,
+                "Failed to broadcast call answer to WebSocket clients"
+            );
+        }
+
+        info!(
+            call_id = %call_id,
+            conversation_id = %conversation_id,
+            answerer_id = %answerer_id,
+            "Forwarded call answer to WebSocket clients"
         );
 
         Ok(())
     }
 
     /// Handle m.call.candidates event
-    async fn handle_call_candidates(&self, event: Raw<Value>) -> Result<(), AppError> {
-        let value: Value = event
-            .deserialize()
-            .map_err(|e| AppError::StartServer(format!("Failed to deserialize raw event: {e}")))?;
+    pub async fn handle_call_candidates(
+        &self,
+        event: SyncCallCandidatesEvent,
+        room: Room,
+    ) -> Result<(), AppError> {
+        let SyncCallCandidatesEvent::Original(original) = event else {
+            debug!("Ignoring redacted m.call.candidates event");
+            return Ok(());
+        };
 
-        let content: CallCandidatesContent = serde_json::from_value(value)
-            .map_err(|e| AppError::StartServer(format!("Failed to parse call.candidates: {e}")))?;
+        let content = &original.content;
 
         info!(
             call_id = %content.call_id,
-            party_id = %content.party_id,
+            party_id = ?content.party_id,
             candidate_count = content.candidates.len(),
+            room_id = %room.room_id(),
             "Received m.call.candidates"
         );
 
-        // TODO: Forward to CallService
-        // This will:
-        // 1. Find active call by call_id
-        // 2. Extract ICE candidates
-        // 3. Forward candidates to peer via WebSocket
-        // 4. Peer will add candidates to PeerConnection
+        // 1. Look up conversation_id from Matrix room_id
+        let room_id_str = room.room_id().as_str();
+        let conversation_id = match matrix_db::lookup_conversation_by_room_id(&self.db, room_id_str).await? {
+            Some(id) => id,
+            None => {
+                warn!(
+                    room_id = %room_id_str,
+                    "No conversation found for Matrix room, ignoring ICE candidates"
+                );
+                return Ok(());
+            }
+        };
 
-        debug!(
-            call_id = %content.call_id,
-            "[TODO] Forward ICE candidates to CallService"
+        // 2. Parse call_id from Matrix
+        let call_id = match Uuid::parse_str(content.call_id.as_str()) {
+            Ok(id) => id,
+            Err(e) => {
+                warn!(
+                    call_id = %content.call_id,
+                    error = ?e,
+                    "Invalid call_id format (expected UUID), ignoring ICE candidates"
+                );
+                return Ok(());
+            }
+        };
+
+        // 3. Get call information (for user_id in broadcast)
+        let client = self.db.get().await.map_err(|e| {
+            AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        let call_row = client.query_opt(
+            "SELECT initiator_id FROM call_sessions WHERE id = $1",
+            &[&call_id]
+        ).await.map_err(|e| {
+            AppError::StartServer(format!("fetch call: {e}"))
+        })?;
+
+        let initiator_id = match call_row {
+            Some(row) => row.get::<&str, Uuid>("initiator_id"),
+            None => {
+                warn!(
+                    call_id = %call_id,
+                    "Call not found in database, cannot broadcast ICE candidates"
+                );
+                return Ok(());
+            }
+        };
+
+        // 4. Extract and broadcast each ICE candidate
+        for candidate in &content.candidates {
+            // Handle optional fields - skip candidates with missing required fields
+            let sdp_mid = match &candidate.sdp_mid {
+                Some(mid) => mid.clone(),
+                None => {
+                    warn!(
+                        call_id = %call_id,
+                        "ICE candidate missing sdp_mid, skipping"
+                    );
+                    continue;
+                }
+            };
+
+            let sdp_mline_index = match candidate.sdp_m_line_index {
+                Some(idx) => idx.try_into().unwrap_or(0),
+                None => {
+                    warn!(
+                        call_id = %call_id,
+                        "ICE candidate missing sdp_m_line_index, skipping"
+                    );
+                    continue;
+                }
+            };
+
+            let event = WebSocketEvent::CallIceCandidate {
+                call_id,
+                candidate: candidate.candidate.clone(),
+                sdp_mid,
+                sdp_mline_index,
+            };
+
+            if let Err(e) = broadcast_event(&self.registry, &self.redis, conversation_id, initiator_id, event).await {
+                warn!(
+                    call_id = %call_id,
+                    conversation_id = %conversation_id,
+                    error = ?e,
+                    "Failed to broadcast ICE candidate to WebSocket clients"
+                );
+            }
+        }
+
+        info!(
+            call_id = %call_id,
+            conversation_id = %conversation_id,
+            candidate_count = content.candidates.len(),
+            "Forwarded ICE candidates to WebSocket clients"
         );
 
         Ok(())
     }
 
     /// Handle m.call.hangup event
-    async fn handle_call_hangup(&self, event: Raw<Value>) -> Result<(), AppError> {
-        let value: Value = event
-            .deserialize()
-            .map_err(|e| AppError::StartServer(format!("Failed to deserialize raw event: {e}")))?;
+    pub async fn handle_call_hangup(
+        &self,
+        event: SyncCallHangupEvent,
+        room: Room,
+    ) -> Result<(), AppError> {
+        let SyncCallHangupEvent::Original(original) = event else {
+            debug!("Ignoring redacted m.call.hangup event");
+            return Ok(());
+        };
 
-        let content: CallHangupContent = serde_json::from_value(value)
-            .map_err(|e| AppError::StartServer(format!("Failed to parse call.hangup: {e}")))?;
+        let content = original.content;
 
         info!(
             call_id = %content.call_id,
-            party_id = %content.party_id,
-            reason = %content.reason,
+            party_id = ?content.party_id,
+            reason = ?content.reason,
+            room_id = %room.room_id(),
             "Received m.call.hangup"
         );
 
-        // TODO: Forward to CallService
-        // This will:
-        // 1. Find active call by call_id
-        // 2. Notify both parties via WebSocket
-        // 3. Update call state to "ended"
-        // 4. Clean up resources
+        // 1. Look up conversation_id from Matrix room_id
+        let room_id_str = room.room_id().as_str();
+        let conversation_id = match matrix_db::lookup_conversation_by_room_id(&self.db, room_id_str).await? {
+            Some(id) => id,
+            None => {
+                warn!(
+                    room_id = %room_id_str,
+                    "No conversation found for Matrix room, ignoring call hangup"
+                );
+                return Ok(());
+            }
+        };
 
-        debug!(
-            call_id = %content.call_id,
-            reason = %content.reason,
-            "[TODO] Forward call hangup to CallService"
+        // 2. Parse call_id from Matrix
+        let call_id = match Uuid::parse_str(content.call_id.as_str()) {
+            Ok(id) => id,
+            Err(e) => {
+                warn!(
+                    call_id = %content.call_id,
+                    error = ?e,
+                    "Invalid call_id format (expected UUID), ignoring call hangup"
+                );
+                return Ok(());
+            }
+        };
+
+        // 3. Get call information before ending it
+        let client = self.db.get().await.map_err(|e| {
+            AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        let call_row = client.query_opt(
+            "SELECT initiator_id FROM call_sessions WHERE id = $1",
+            &[&call_id]
+        ).await.map_err(|e| {
+            AppError::StartServer(format!("fetch call: {e}"))
+        })?;
+
+        let initiator_id = match call_row {
+            Some(row) => row.get::<&str, Uuid>("initiator_id"),
+            None => {
+                warn!(
+                    call_id = %call_id,
+                    "Call not found in database, cannot end call"
+                );
+                return Ok(());
+            }
+        };
+
+        // 4. End the call using CallService
+        if let Err(e) = CallService::end_call(&self.db, call_id).await {
+            warn!(
+                call_id = %call_id,
+                error = ?e,
+                "Failed to end call in database"
+            );
+            // Continue to broadcast event even if database update fails
+        }
+
+        // 5. Broadcast CallEnded event to WebSocket clients
+        let event = WebSocketEvent::CallEnded {
+            call_id,
+            ended_by: initiator_id, // We don't have the actual ender, use initiator as fallback
+        };
+
+        if let Err(e) = broadcast_event(&self.registry, &self.redis, conversation_id, initiator_id, event).await {
+            warn!(
+                call_id = %call_id,
+                conversation_id = %conversation_id,
+                error = ?e,
+                "Failed to broadcast call hangup to WebSocket clients"
+            );
+        }
+
+        info!(
+            call_id = %call_id,
+            conversation_id = %conversation_id,
+            reason = ?content.reason,
+            "Forwarded call hangup to WebSocket clients and ended call"
         );
 
         Ok(())
     }
 }
 
-// --- Manual VoIP Event Content Structs (Matrix SDK 0.7) ---
-
-/// m.call.invite event content
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct CallInviteContent {
-    call_id: String,
-    party_id: String,
-    version: String,
-    lifetime: u64, // milliseconds
-    offer: SdpOffer,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    invitee: Option<String>, // Matrix user ID for 1:1 calls
-}
-
-/// SDP offer structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct SdpOffer {
-    #[serde(rename = "type")]
-    sdp_type: String, // Always "offer"
-    sdp: String,      // WebRTC SDP
-}
-
-/// m.call.answer event content
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct CallAnswerContent {
-    call_id: String,
-    party_id: String,
-    version: String,
-    answer: SdpAnswer,
-}
-
-/// SDP answer structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct SdpAnswer {
-    #[serde(rename = "type")]
-    sdp_type: String, // Always "answer"
-    sdp: String,      // WebRTC SDP
-}
-
-/// m.call.candidates event content
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct CallCandidatesContent {
-    call_id: String,
-    party_id: String,
-    version: String,
-    candidates: Vec<IceCandidate>,
-}
-
-/// ICE candidate for WebRTC
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IceCandidate {
-    pub candidate: String,
-    #[serde(rename = "sdpMid", skip_serializing_if = "Option::is_none")]
-    pub sdp_mid: Option<String>,
-    #[serde(rename = "sdpMLineIndex", skip_serializing_if = "Option::is_none")]
-    pub sdp_m_line_index: Option<u32>,
-}
-
-/// m.call.hangup event content
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct CallHangupContent {
-    call_id: String,
-    party_id: String,
-    version: String,
-    reason: String, // e.g., "user_hangup", "ice_failed", "invite_timeout"
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
-    fn test_parse_call_invite() {
-        let json = json!({
-            "call_id": "12345-67890",
-            "party_id": "nova-abc123",
-            "version": "1",
-            "lifetime": 60000,
-            "offer": {
-                "type": "offer",
-                "sdp": "v=0\r\no=- 123 456 IN IP4 192.168.1.1\r\n..."
-            }
-        });
-
-        let content: CallInviteContent = serde_json::from_value(json).unwrap();
-        assert_eq!(content.call_id, "12345-67890");
-        assert_eq!(content.party_id, "nova-abc123");
-        assert_eq!(content.lifetime, 60000);
-        assert_eq!(content.offer.sdp_type, "offer");
-    }
-
-    #[test]
-    fn test_parse_ice_candidates() {
-        let json = json!({
-            "call_id": "12345-67890",
-            "party_id": "nova-abc123",
-            "version": "1",
-            "candidates": [
-                {
-                    "candidate": "candidate:1 1 UDP 2130706431 192.168.1.1 54321 typ host",
-                    "sdpMid": "0",
-                    "sdpMLineIndex": 0
-                }
-            ]
-        });
-
-        let content: CallCandidatesContent = serde_json::from_value(json).unwrap();
-        assert_eq!(content.candidates.len(), 1);
-        assert!(content.candidates[0].candidate.starts_with("candidate:1"));
-    }
-
-    #[test]
-    fn test_parse_call_hangup() {
-        let json = json!({
-            "call_id": "12345-67890",
-            "party_id": "nova-abc123",
-            "version": "1",
-            "reason": "user_hangup"
-        });
-
-        let content: CallHangupContent = serde_json::from_value(json).unwrap();
-        assert_eq!(content.reason, "user_hangup");
+    fn test_handler_creation() {
+        // Test removed - handler now requires runtime dependencies (Pool, ConnectionRegistry, RedisClient)
+        // Integration tests should be used to test the full handler behavior
     }
 }

@@ -86,7 +86,7 @@ pub(crate) fn update_pool_metrics(pool: &Pool, service: &str) {
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// # let pool = create_pool(DbConfig::for_service("test")).await?;
 /// let conn = acquire_with_metrics(&pool, "my-service").await?;
-/// sqlx::query("SELECT 1").execute(&mut *conn).await?;
+/// conn.simple_query("SELECT 1").await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -183,7 +183,7 @@ impl std::error::Error for PoolExhaustedError {}
 /// match acquire_with_backpressure(&pool, "my-service", config).await {
 ///     Ok(conn) => {
 ///         // Use connection
-///         sqlx::query("SELECT 1").execute(&mut *conn).await?;
+///         conn.simple_query("SELECT 1").await?;
 ///     }
 ///     Err(e) => {
 ///         // Pool exhausted - fail fast, don't cascade

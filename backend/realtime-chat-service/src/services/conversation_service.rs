@@ -2,7 +2,7 @@ use crate::services::relationship_service::{CanMessageResult, RelationshipServic
 use chrono::{DateTime, Utc};
 use grpc_clients::AuthClient;
 use serde::{Deserialize, Serialize};
-use sqlx::{Pool, Postgres, Row};
+use deadpool_postgres::Pool;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -51,7 +51,7 @@ impl ConversationService {
     /// Create a direct (1:1) conversation between two users
     /// Performs authorization checks based on recipient's DM settings and block status
     pub async fn create_direct_conversation(
-        db: &Pool<Postgres>,
+        db: &Pool,
         auth_client: &AuthClient,
         initiator: Uuid,
         recipient: Uuid,
@@ -114,9 +114,10 @@ impl ConversationService {
         }
 
         let id = Uuid::new_v4();
-        let mut tx = db
-            .begin()
-            .await
+        let mut client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+        let tx = client.transaction().await
             .map_err(|e| crate::error::AppError::StartServer(format!("tx: {e}")))?;
 
         // Note: Do not attempt to upsert into the canonical users table here.
@@ -126,23 +127,19 @@ impl ConversationService {
 
         // Insert conversation
         // conversations(id, kind, member_count, privacy_mode)
-        sqlx::query(
+        tx.execute(
             "INSERT INTO conversations (id, kind, member_count, privacy_mode) VALUES ($1, 'direct'::conversation_type, 2, 'strict_e2e'::privacy_mode)",
+            &[&id]
         )
-        .bind(id)
-        .execute(&mut *tx)
         .await
         .map_err(|e| {
             crate::error::AppError::StartServer(format!("insert conversation: {e}"))
         })?;
 
-        sqlx::query(
-            "INSERT INTO conversation_members (conversation_id, user_id, role) VALUES ($1, $2, 'member'), ($1, $3, 'member') ON CONFLICT DO NOTHING"
+        tx.execute(
+            "INSERT INTO conversation_members (conversation_id, user_id, role) VALUES ($1, $2, 'member'), ($1, $3, 'member') ON CONFLICT DO NOTHING",
+            &[&id, &initiator, &recipient]
         )
-        .bind(id)
-        .bind(initiator)
-        .bind(recipient)
-        .execute(&mut *tx)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("insert members: {e}")))?;
 
@@ -155,11 +152,15 @@ impl ConversationService {
 
     /// Find existing direct conversation between two users
     async fn find_existing_direct_conversation(
-        db: &Pool<Postgres>,
+        db: &Pool,
         user_a: Uuid,
         user_b: Uuid,
     ) -> Result<Option<Uuid>, crate::error::AppError> {
-        let result: Option<(Uuid,)> = sqlx::query_as(
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        let result = client.query_opt(
             r#"
             SELECT c.id
             FROM conversations c
@@ -168,22 +169,24 @@ impl ConversationService {
               AND EXISTS (SELECT 1 FROM conversation_members WHERE conversation_id = c.id AND user_id = $2)
             LIMIT 1
             "#,
+            &[&user_a, &user_b]
         )
-        .bind(user_a)
-        .bind(user_b)
-        .fetch_optional(db)
         .await
         .map_err(|e| crate::error::AppError::Database(format!("find_existing_conversation: {e}")))?;
 
-        Ok(result.map(|(id,)| id))
+        Ok(result.map(|row| row.get(0)))
     }
 
     pub async fn get_conversation_db(
-        db: &Pool<Postgres>,
+        db: &Pool,
         id: Uuid,
     ) -> Result<ConversationDetails, crate::error::AppError> {
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
         // Compute derived fields against user-service schema
-        let r = sqlx::query(
+        let r = client.query_one(
             r#"
             SELECT
               $1::uuid AS id,
@@ -194,15 +197,14 @@ impl ConversationService {
                 SELECT m.id FROM messages m WHERE m.conversation_id = $1 ORDER BY m.created_at DESC LIMIT 1
               ) AS last_message_id
             "#,
+            &[&id]
         )
-        .bind(id)
-        .fetch_one(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("get conversation: {e}")))?;
 
         let id: Uuid = r.get("id");
         let member_count: i32 = r.get("member_count");
-        let last_message_id: Option<Uuid> = r.try_get("last_message_id").ok();
+        let last_message_id: Option<Uuid> = r.get("last_message_id");
 
         Ok(ConversationDetails {
             id,
@@ -215,11 +217,15 @@ impl ConversationService {
     /// Returns conversation IDs sorted by most recent update (conversations.updated_at DESC)
     /// Security: Only returns conversations where user is a member
     pub async fn list_conversations(
-        db: &Pool<Postgres>,
+        db: &Pool,
         user_id: Uuid,
     ) -> Result<Vec<ConversationDetails>, crate::error::AppError> {
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
         // Query conversations where user is a member, ordered by most recent first
-        let rows = sqlx::query(
+        let rows = client.query(
             r#"
             SELECT c.id, c.member_count, c.last_message_id
             FROM conversations c
@@ -228,9 +234,8 @@ impl ConversationService {
             ORDER BY c.updated_at DESC
             LIMIT 100
             "#,
+            &[&user_id]
         )
-        .bind(user_id)
-        .fetch_all(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("list conversations: {e}")))?;
 
@@ -239,7 +244,7 @@ impl ConversationService {
             .map(|row| {
                 let id: Uuid = row.get("id");
                 let member_count: i32 = row.get("member_count");
-                let last_message_id: Option<Uuid> = row.try_get("last_message_id").ok();
+                let last_message_id: Option<Uuid> = row.get("last_message_id");
                 ConversationDetails {
                     id,
                     member_count,
@@ -252,16 +257,18 @@ impl ConversationService {
     }
 
     pub async fn is_member(
-        db: &Pool<Postgres>,
+        db: &Pool,
         conversation_id: Uuid,
         user_id: Uuid,
     ) -> Result<bool, crate::error::AppError> {
-        let rec = sqlx::query(
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        let rec = client.query_opt(
             "SELECT 1 FROM conversation_members WHERE conversation_id=$1 AND user_id=$2 LIMIT 1",
+            &[&conversation_id, &user_id]
         )
-        .bind(conversation_id)
-        .bind(user_id)
-        .fetch_optional(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("is_member: {e}")))?;
         Ok(rec.is_some())
@@ -270,7 +277,7 @@ impl ConversationService {
     /// Get conversation with full member details
     /// Security: Validates that requesting user is a member before returning data
     pub async fn get_conversation_with_members(
-        db: &Pool<Postgres>,
+        db: &Pool,
         conversation_id: Uuid,
         requesting_user_id: Uuid,
     ) -> Result<ConversationWithMembers, crate::error::AppError> {
@@ -282,8 +289,12 @@ impl ConversationService {
             ));
         }
 
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
         // Get conversation details (derived fields)
-        let conv_row = sqlx::query(
+        let conv_row = client.query_one(
             r#"
             SELECT
               $1::uuid AS id,
@@ -294,27 +305,25 @@ impl ConversationService {
                 SELECT m.id FROM messages m WHERE m.conversation_id = $1 ORDER BY m.created_at DESC LIMIT 1
               ) AS last_message_id
             "#,
+            &[&conversation_id]
         )
-        .bind(conversation_id)
-        .fetch_one(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("get conversation: {e}")))?;
 
         let id: Uuid = conv_row.get("id");
         let member_count: i32 = conv_row.get("member_count");
-        let last_message_id: Option<Uuid> = conv_row.try_get("last_message_id").ok();
+        let last_message_id: Option<Uuid> = conv_row.get("last_message_id");
 
         // Get all members of the conversation
-        let member_rows = sqlx::query(
+        let member_rows = client.query(
             r#"
             SELECT user_id, role, joined_at, last_read_at, is_muted
             FROM conversation_members
             WHERE conversation_id = $1
             ORDER BY joined_at ASC
             "#,
+            &[&conversation_id]
         )
-        .bind(conversation_id)
-        .fetch_all(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("get members: {e}")))?;
 
@@ -324,7 +333,7 @@ impl ConversationService {
                 let user_id: Uuid = row.get("user_id");
                 let role: String = row.get("role");
                 let joined_at: DateTime<Utc> = row.get("joined_at");
-                let last_read_at: Option<DateTime<Utc>> = row.try_get("last_read_at").ok();
+                let last_read_at: Option<DateTime<Utc>> = row.get("last_read_at");
                 let is_muted: bool = row.get("is_muted");
                 ConversationMember {
                     user_id,
@@ -346,7 +355,7 @@ impl ConversationService {
 
     /// Mark conversation as read by user (update last_read_at timestamp)
     pub async fn mark_as_read(
-        db: &Pool<Postgres>,
+        db: &Pool,
         conversation_id: Uuid,
         user_id: Uuid,
     ) -> Result<(), crate::error::AppError> {
@@ -355,12 +364,14 @@ impl ConversationService {
             return Err(crate::error::AppError::Forbidden);
         }
 
-        sqlx::query(
-            "UPDATE conversation_members SET last_read_at = NOW() WHERE conversation_id = $1 AND user_id = $2"
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        client.execute(
+            "UPDATE conversation_members SET last_read_at = NOW() WHERE conversation_id = $1 AND user_id = $2",
+            &[&conversation_id, &user_id]
         )
-        .bind(conversation_id)
-        .bind(user_id)
-        .execute(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("mark read: {e}")))?;
 
@@ -377,7 +388,7 @@ impl ConversationService {
     ///   - privacy_mode: Privacy mode (default: strict_e2e)
     #[allow(clippy::too_many_arguments)]
     pub async fn create_group_conversation(
-        db: &Pool<Postgres>,
+        db: &Pool,
         auth_client: &AuthClient,
         creator_id: Uuid,
         name: String,
@@ -437,26 +448,21 @@ impl ConversationService {
             PrivacyMode::SearchEnabled => "search_enabled",
         };
 
-        let mut tx = db
-            .begin()
-            .await
+        let mut client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+        let tx = client.transaction().await
             .map_err(|e| crate::error::AppError::StartServer(format!("tx: {e}")))?;
         let member_count = all_members.len() as i32;
 
         // Create conversation
-        sqlx::query(
+        tx.execute(
             r#"
             INSERT INTO conversations (id, kind, name, description, avatar_url, member_count, privacy_mode, admin_key_version)
             VALUES ($1, 'group', $2, $3, $4, $5, $6::privacy_mode, 1)
-            "#
+            "#,
+            &[&conversation_id, &name, &description, &avatar_url, &member_count, &privacy_str]
         )
-        .bind(conversation_id)
-        .bind(name)
-        .bind(description)
-        .bind(avatar_url)
-        .bind(member_count)
-        .bind(privacy_str)
-        .execute(&mut *tx)
         .await
         .map_err(|e| {
             crate::error::AppError::StartServer(format!("create group conversation: {e}"))
@@ -470,13 +476,10 @@ impl ConversationService {
                 "member"
             };
 
-            sqlx::query(
-                "INSERT INTO conversation_members (conversation_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING"
+            tx.execute(
+                "INSERT INTO conversation_members (conversation_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+                &[&conversation_id, member_id, &role]
             )
-            .bind(conversation_id)
-            .bind(member_id)
-            .bind(role)
-            .execute(&mut *tx)
             .await
             .map_err(|e| {
                 crate::error::AppError::StartServer(format!("add member {}: {e}", member_id))
@@ -494,14 +497,16 @@ impl ConversationService {
     /// Only group conversations can be deleted
     /// Removes all members and deletes the conversation
     pub async fn delete_group_conversation(
-        db: &Pool<Postgres>,
+        db: &Pool,
         conversation_id: Uuid,
         requester_id: Uuid,
     ) -> Result<(), crate::error::AppError> {
+        let mut client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
         // Get conversation kind to ensure it's a group
-        let conv_row = sqlx::query("SELECT kind FROM conversations WHERE id = $1")
-            .bind(conversation_id)
-            .fetch_optional(db)
+        let conv_row = client.query_opt("SELECT kind FROM conversations WHERE id = $1", &[&conversation_id])
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("get conversation: {e}")))?
             .ok_or_else(|| crate::error::AppError::Config("Conversation not found".into()))?;
@@ -515,12 +520,10 @@ impl ConversationService {
         }
 
         // Verify requester is owner
-        let member_row = sqlx::query(
+        let member_row = client.query_opt(
             "SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2",
+            &[&conversation_id, &requester_id]
         )
-        .bind(conversation_id)
-        .bind(requester_id)
-        .fetch_optional(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("get member: {e}")))?
         .ok_or(crate::error::AppError::Forbidden)?;
@@ -530,22 +533,16 @@ impl ConversationService {
             return Err(crate::error::AppError::Forbidden);
         }
 
-        let mut tx = db
-            .begin()
-            .await
+        let tx = client.transaction().await
             .map_err(|e| crate::error::AppError::StartServer(format!("tx: {e}")))?;
 
         // Delete all members
-        sqlx::query("DELETE FROM conversation_members WHERE conversation_id = $1")
-            .bind(conversation_id)
-            .execute(&mut *tx)
+        tx.execute("DELETE FROM conversation_members WHERE conversation_id = $1", &[&conversation_id])
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("delete members: {e}")))?;
 
         // Delete the conversation
-        sqlx::query("DELETE FROM conversations WHERE id = $1")
-            .bind(conversation_id)
-            .execute(&mut *tx)
+        tx.execute("DELETE FROM conversations WHERE id = $1", &[&conversation_id])
             .await
             .map_err(|e| {
                 crate::error::AppError::StartServer(format!("delete conversation: {e}"))
@@ -562,15 +559,17 @@ impl ConversationService {
     /// If removing self and conversation is a group, user leaves
     /// If removing other user from group, requires admin/owner permission
     pub async fn remove_member(
-        db: &Pool<Postgres>,
+        db: &Pool,
         conversation_id: Uuid,
         member_id: Uuid,
         requester_id: Uuid,
     ) -> Result<(), crate::error::AppError> {
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
         // Get conversation kind
-        let conv_row = sqlx::query("SELECT kind FROM conversations WHERE id = $1")
-            .bind(conversation_id)
-            .fetch_optional(db)
+        let conv_row = client.query_opt("SELECT kind FROM conversations WHERE id = $1", &[&conversation_id])
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("get conversation: {e}")))?
             .ok_or_else(|| crate::error::AppError::Config("Conversation not found".into()))?;
@@ -584,12 +583,10 @@ impl ConversationService {
         // If removing someone else, need permission check
         if member_id != requester_id {
             // Get requester's role
-            let requester_row = sqlx::query(
+            let requester_row = client.query_opt(
                 "SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2",
+                &[&conversation_id, &requester_id]
             )
-            .bind(conversation_id)
-            .bind(requester_id)
-            .fetch_optional(db)
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("get requester: {e}")))?
             .ok_or(crate::error::AppError::Forbidden)?;
@@ -601,12 +598,10 @@ impl ConversationService {
             }
 
             // Cannot remove owner
-            let member_row = sqlx::query(
+            let member_row = client.query_opt(
                 "SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2",
+                &[&conversation_id, &member_id]
             )
-            .bind(conversation_id)
-            .bind(member_id)
-            .fetch_optional(db)
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("get member: {e}")))?
             .ok_or_else(|| crate::error::AppError::Config("Member not found".into()))?;
@@ -620,25 +615,22 @@ impl ConversationService {
         }
 
         // Remove member
-        let result = sqlx::query(
+        let result = client.execute(
             "DELETE FROM conversation_members WHERE conversation_id = $1 AND user_id = $2",
+            &[&conversation_id, &member_id]
         )
-        .bind(conversation_id)
-        .bind(member_id)
-        .execute(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("delete member: {e}")))?;
 
-        if result.rows_affected() == 0 {
+        if result == 0 {
             return Err(crate::error::AppError::Config("Member not found".into()));
         }
 
         // Update member count
-        sqlx::query(
-            "UPDATE conversations SET member_count = member_count - 1 WHERE id = $1 AND member_count > 0"
+        client.execute(
+            "UPDATE conversations SET member_count = member_count - 1 WHERE id = $1 AND member_count > 0",
+            &[&conversation_id]
         )
-        .bind(conversation_id)
-        .execute(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("update count: {e}")))?;
 
@@ -647,12 +639,14 @@ impl ConversationService {
 
     /// Get conversation type and basic info
     pub async fn get_conversation_type(
-        db: &Pool<Postgres>,
+        db: &Pool,
         conversation_id: Uuid,
     ) -> Result<String, crate::error::AppError> {
-        let row = sqlx::query("SELECT kind FROM conversations WHERE id = $1")
-            .bind(conversation_id)
-            .fetch_optional(db)
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        let row = client.query_opt("SELECT kind FROM conversations WHERE id = $1", &[&conversation_id])
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("get conversation: {e}")))?
             .ok_or_else(|| crate::error::AppError::Config("Conversation not found".into()))?;
@@ -661,15 +655,18 @@ impl ConversationService {
     }
 
     pub async fn get_privacy_mode(
-        db: &Pool<Postgres>,
+        db: &Pool,
         conversation_id: Uuid,
     ) -> Result<PrivacyMode, crate::error::AppError> {
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
         let value: Option<String> =
-            sqlx::query_scalar("SELECT privacy_mode::text FROM conversations WHERE id = $1")
-                .bind(conversation_id)
-                .fetch_optional(db)
+            client.query_opt("SELECT privacy_mode::text FROM conversations WHERE id = $1", &[&conversation_id])
                 .await
-                .map_err(|e| crate::error::AppError::StartServer(format!("get privacy: {e}")))?;
+                .map_err(|e| crate::error::AppError::StartServer(format!("get privacy: {e}")))?
+                .map(|row| row.get(0));
 
         value
             .map(|v| PrivacyMode::from_str(&v))

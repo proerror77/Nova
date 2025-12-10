@@ -113,17 +113,19 @@ pub async fn add_member(
     }
 
     // Add member to conversation (ON CONFLICT DO NOTHING prevents duplicate errors)
-    sqlx::query(
-        "INSERT INTO conversation_members (conversation_id, user_id, role)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (conversation_id, user_id) DO NOTHING",
-    )
-    .bind(conversation_id)
-    .bind(body.user_id)
-    .bind(role.to_db())
-    .execute(&state.db)
-    .await
-    .map_err(|e| crate::error::AppError::StartServer(format!("add member: {e}")))?;
+    state
+        .db
+        .get()
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("get connection: {e}")))?
+        .execute(
+            "INSERT INTO conversation_members (conversation_id, user_id, role)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (conversation_id, user_id) DO NOTHING",
+            &[&conversation_id, &body.user_id, &role.to_db()],
+        )
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("add member: {e}")))?;
 
     // Phase 1: Spec 007 - Fetch username via auth-service gRPC instead of shadow users table
     let username = state
@@ -178,14 +180,19 @@ pub async fn remove_member(
 
         // Prevent removing last owner (business rule)
         if member.role == MemberRole::Owner {
-            let owner_count: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM conversation_members
-                 WHERE conversation_id = $1 AND role = 'owner'",
-            )
-            .bind(conversation_id)
-            .fetch_one(&state.db)
-            .await
-            .map_err(|e| crate::error::AppError::StartServer(format!("count owners: {e}")))?;
+            let owner_count: i64 = state
+                .db
+                .get()
+                .await
+                .map_err(|e| crate::error::AppError::StartServer(format!("get connection: {e}")))?
+                .query_one(
+                    "SELECT COUNT(*) FROM conversation_members
+                     WHERE conversation_id = $1 AND role = 'owner'",
+                    &[&conversation_id],
+                )
+                .await
+                .map_err(|e| crate::error::AppError::StartServer(format!("count owners: {e}")))?
+                .get(0);
 
             if owner_count <= 1 {
                 return Err(crate::error::AppError::BadRequest(
@@ -200,16 +207,21 @@ pub async fn remove_member(
         admin.inner.require_group()?;
 
         // Get target user's role
-        let target_role: String = sqlx::query_scalar(
-            "SELECT role FROM conversation_members
-             WHERE conversation_id = $1 AND user_id = $2",
-        )
-        .bind(conversation_id)
-        .bind(target_user_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("get target role: {e}")))?
-        .ok_or(crate::error::AppError::NotFound)?;
+        let target_role: Option<String> = state
+            .db
+            .get()
+            .await
+            .map_err(|e| crate::error::AppError::StartServer(format!("get connection: {e}")))?
+            .query_opt(
+                "SELECT role FROM conversation_members
+                 WHERE conversation_id = $1 AND user_id = $2",
+                &[&conversation_id, &target_user_id],
+            )
+            .await
+            .map_err(|e| crate::error::AppError::StartServer(format!("get target role: {e}")))?
+            .map(|row| row.get(0));
+
+        let target_role = target_role.ok_or(crate::error::AppError::NotFound)?;
 
         let target_role = MemberRole::from_db(&target_role).ok_or_else(|| {
             crate::error::AppError::StartServer("Invalid role in database".into())
@@ -222,10 +234,15 @@ pub async fn remove_member(
     }
 
     // Remove member from conversation
-    sqlx::query("DELETE FROM conversation_members WHERE conversation_id = $1 AND user_id = $2")
-        .bind(conversation_id)
-        .bind(target_user_id)
-        .execute(&state.db)
+    state
+        .db
+        .get()
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("get connection: {e}")))?
+        .execute(
+            "DELETE FROM conversation_members WHERE conversation_id = $1 AND user_id = $2",
+            &[&conversation_id, &target_user_id],
+        )
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("remove member: {e}")))?;
 
@@ -267,16 +284,21 @@ pub async fn update_member_role(
         .ok_or_else(|| crate::error::AppError::BadRequest("Invalid role".into()))?;
 
     // Get target user's current role
-    let current_role: String = sqlx::query_scalar(
-        "SELECT role FROM conversation_members
-         WHERE conversation_id = $1 AND user_id = $2",
-    )
-    .bind(conversation_id)
-    .bind(target_user_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| crate::error::AppError::StartServer(format!("get current role: {e}")))?
-    .ok_or(crate::error::AppError::NotFound)?;
+    let current_role: Option<String> = state
+        .db
+        .get()
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("get connection: {e}")))?
+        .query_opt(
+            "SELECT role FROM conversation_members
+             WHERE conversation_id = $1 AND user_id = $2",
+            &[&conversation_id, &target_user_id],
+        )
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("get current role: {e}")))?
+        .map(|row| row.get(0));
+
+    let current_role = current_role.ok_or(crate::error::AppError::NotFound)?;
 
     let current_role = MemberRole::from_db(&current_role)
         .ok_or_else(|| crate::error::AppError::StartServer("Invalid role in database".into()))?;
@@ -287,16 +309,18 @@ pub async fn update_member_role(
     }
 
     // Update member role
-    sqlx::query(
-        "UPDATE conversation_members SET role = $1
-         WHERE conversation_id = $2 AND user_id = $3",
-    )
-    .bind(new_role.to_db())
-    .bind(conversation_id)
-    .bind(target_user_id)
-    .execute(&state.db)
-    .await
-    .map_err(|e| crate::error::AppError::StartServer(format!("update member role: {e}")))?;
+    state
+        .db
+        .get()
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("get connection: {e}")))?
+        .execute(
+            "UPDATE conversation_members SET role = $1
+             WHERE conversation_id = $2 AND user_id = $3",
+            &[&new_role.to_db(), &conversation_id, &target_user_id],
+        )
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("update member role: {e}")))?;
 
     // Broadcast member.role_changed event using unified event system
     let event = WebSocketEvent::MemberRoleChanged {
@@ -333,8 +357,13 @@ pub async fn list_members(
     member.require_group()?;
 
     // Fetch members with user info
-    let members = sqlx::query_as::<_, (Uuid, String, Option<String>, String, DateTime<Utc>)>(
-        r#"
+    let rows = state
+        .db
+        .get()
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("get connection: {e}")))?
+        .query(
+            r#"
         SELECT
             cm.user_id,
             u.username,
@@ -354,21 +383,29 @@ pub async fn list_members(
             cm.joined_at ASC
         LIMIT $2 OFFSET $3
         "#,
-    )
-    .bind(conversation_id)
-    .bind(query.limit)
-    .bind(query.offset)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| crate::error::AppError::StartServer(format!("fetch members: {e}")))?;
+            &[&conversation_id, &query.limit, &query.offset],
+        )
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("fetch members: {e}")))?;
+
+    let members: Vec<(Uuid, String, Option<String>, String, DateTime<Utc>)> = rows
+        .iter()
+        .map(|row| (row.get(0), row.get(1), row.get(2), row.get(3), row.get(4)))
+        .collect();
 
     // Get total count
-    let total: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM conversation_members WHERE conversation_id = $1")
-            .bind(conversation_id)
-            .fetch_one(&state.db)
-            .await
-            .map_err(|e| crate::error::AppError::StartServer(format!("count members: {e}")))?;
+    let total: i64 = state
+        .db
+        .get()
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("get connection: {e}")))?
+        .query_one(
+            "SELECT COUNT(*) FROM conversation_members WHERE conversation_id = $1",
+            &[&conversation_id],
+        )
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("count members: {e}")))?
+        .get(0);
 
     let member_list: Vec<MemberInfo> = members
         .into_iter()
@@ -414,35 +451,43 @@ pub async fn update_group_settings(
     // Build dynamic UPDATE query
     let mut query = String::from("UPDATE conversations SET updated_at = NOW()");
     let mut bind_count = 1;
-    let mut bindings: Vec<String> = vec![];
+    let mut bindings: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = vec![&conversation_id];
 
-    if let Some(name) = &body.name {
+    if body.name.is_some() {
         bind_count += 1;
         query.push_str(&format!(", name = ${}", bind_count));
-        bindings.push(name.clone());
     }
 
-    if let Some(description) = &body.description {
+    if body.description.is_some() {
         bind_count += 1;
         query.push_str(&format!(", description = ${}", bind_count));
-        bindings.push(description.clone());
     }
 
-    if let Some(avatar_url) = &body.avatar_url {
+    if body.avatar_url.is_some() {
         bind_count += 1;
         query.push_str(&format!(", avatar_url = ${}", bind_count));
-        bindings.push(avatar_url.clone());
     }
 
     query.push_str(" WHERE id = $1");
 
-    // Execute update
-    let mut q = sqlx::query(&query).bind(conversation_id);
-    for binding in &bindings {
-        q = q.bind(binding);
+    // Build the bindings vector in the correct order
+    if let Some(ref name) = body.name {
+        bindings.push(name);
+    }
+    if let Some(ref description) = body.description {
+        bindings.push(description);
+    }
+    if let Some(ref avatar_url) = body.avatar_url {
+        bindings.push(avatar_url);
     }
 
-    q.execute(&state.db)
+    // Execute update
+    state
+        .db
+        .get()
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("get connection: {e}")))?
+        .execute(&query, &bindings[..])
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("update settings: {e}")))?;
 

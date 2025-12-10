@@ -11,7 +11,7 @@ pub use metrics::{
 
 use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
 use deadpool_postgres::tokio_postgres::{Config as PgConfig, NoTls};
-use deadpool_postgres::PoolError;
+pub use deadpool_postgres::PoolError;
 use deadpool::managed::TimeoutType;
 use std::time::Duration;
 use tracing::{debug, error, info};
@@ -194,7 +194,7 @@ pub async fn create_pool(config: DbConfig) -> Result<PgPool, PoolError> {
     let pg_config: PgConfig = config
         .database_url
         .parse()
-        .map_err(|e| PoolError::Backend(e.into()))?;
+        .map_err(|e: tokio_postgres::Error| PoolError::Backend(e))?;
 
     let mgr_config = ManagerConfig {
         recycling_method: RecyclingMethod::Fast,
@@ -209,8 +209,13 @@ pub async fn create_pool(config: DbConfig) -> Result<PgPool, PoolError> {
     match tokio::time::timeout(
         Duration::from_secs(config.connect_timeout_secs),
         async {
-            let client = pool.get().await?;
-            client.simple_query("SELECT 1").await.map(|_| ())
+            let client = pool.get().await.map_err(|e| match e {
+                deadpool::managed::PoolError::Backend(e) => PoolError::Backend(e),
+                deadpool::managed::PoolError::Timeout(t) => PoolError::Timeout(t),
+                _ => PoolError::Timeout(TimeoutType::Wait),
+            })?;
+            client.simple_query("SELECT 1").await.map_err(PoolError::Backend)?;
+            Ok::<(), PoolError>(())
         },
     )
     .await
@@ -245,7 +250,7 @@ pub async fn create_pool(config: DbConfig) -> Result<PgPool, PoolError> {
                 error = %e,
                 "Database connection verification failed"
             );
-            Err(PoolError::Backend(e))
+            Err(e)
         }
         Err(_) => {
             error!(

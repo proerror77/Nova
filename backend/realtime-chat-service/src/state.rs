@@ -8,12 +8,12 @@ use crate::{
     websocket::ConnectionRegistry,
 };
 use grpc_clients::AuthClient;
-use sqlx::{Pool, Postgres};
+use deadpool_postgres::Pool;
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub db: Pool<Postgres>,
+    pub db: Pool,
     pub registry: ConnectionRegistry,
     pub redis: RedisClient,
     pub config: Arc<Config>,

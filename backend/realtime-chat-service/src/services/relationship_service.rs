@@ -1,8 +1,9 @@
 use crate::error::AppError;
 use crate::services::graph_client::GraphClient;
 use chrono::{DateTime, Utc};
+use deadpool_postgres::Pool;
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, Pool, Postgres};
+use tokio_postgres::Row;
 use uuid::Uuid;
 
 /// Result of checking if a user can message another user
@@ -29,13 +30,25 @@ pub struct DmSettings {
 }
 
 /// Block record
-#[derive(Debug, Clone, FromRow, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct BlockRecord {
     pub id: Uuid,
     pub blocker_id: Uuid,
     pub blocked_id: Uuid,
     pub reason: Option<String>,
     pub created_at: DateTime<Utc>,
+}
+
+impl BlockRecord {
+    fn from_row(row: &Row) -> Result<Self, AppError> {
+        Ok(Self {
+            id: row.get("id"),
+            blocker_id: row.get("blocker_id"),
+            blocked_id: row.get("blocked_id"),
+            reason: row.get("reason"),
+            created_at: row.get("created_at"),
+        })
+    }
 }
 
 /// Relationship status between two users
@@ -49,7 +62,7 @@ pub struct RelationshipStatus {
 }
 
 /// Message request record
-#[derive(Debug, Clone, FromRow, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct MessageRequest {
     pub id: Uuid,
     pub requester_id: Uuid,
@@ -61,17 +74,32 @@ pub struct MessageRequest {
     pub responded_at: Option<DateTime<Utc>>,
 }
 
+impl MessageRequest {
+    fn from_row(row: &Row) -> Result<Self, AppError> {
+        Ok(Self {
+            id: row.get("id"),
+            requester_id: row.get("requester_id"),
+            recipient_id: row.get("recipient_id"),
+            conversation_id: row.get("conversation_id"),
+            status: row.get("status"),
+            message_preview: row.get("message_preview"),
+            created_at: row.get("created_at"),
+            responded_at: row.get("responded_at"),
+        })
+    }
+}
+
 pub struct RelationshipService;
 
 /// P0 Migration: RelationshipServiceV2 uses gRPC for block/follow operations
 /// This is the target state - block/follow queries go through graph-service
 pub struct RelationshipServiceV2 {
     graph_client: GraphClient,
-    db: Pool<Postgres>,
+    db: Pool,
 }
 
 impl RelationshipServiceV2 {
-    pub fn new(graph_client: GraphClient, db: Pool<Postgres>) -> Self {
+    pub fn new(graph_client: GraphClient, db: Pool) -> Self {
         Self { graph_client, db }
     }
 
@@ -193,7 +221,7 @@ impl RelationshipServiceV2 {
 impl RelationshipService {
     /// Check if sender can message recipient based on blocks and privacy settings
     pub async fn can_message(
-        db: &Pool<Postgres>,
+        db: &Pool,
         sender_id: Uuid,
         recipient_id: Uuid,
     ) -> Result<CanMessageResult, AppError> {
@@ -235,16 +263,15 @@ impl RelationshipService {
 
     /// Check if user_a is blocked by user_b
     pub async fn is_blocked_by(
-        db: &Pool<Postgres>,
+        db: &Pool,
         user_a: Uuid,
         user_b: Uuid,
     ) -> Result<bool, AppError> {
-        let result: Option<(i32,)> = sqlx::query_as(
+        let client = db.get().await?;
+        let result = client.query_opt(
             "SELECT 1 FROM blocks WHERE blocker_id = $1 AND blocked_id = $2 LIMIT 1",
+            &[&user_b, &user_a], // user_b blocked user_a
         )
-        .bind(user_b) // user_b blocked user_a
-        .bind(user_a)
-        .fetch_optional(db)
         .await
         .map_err(|e| AppError::Database(format!("is_blocked_by check failed: {}", e)))?;
 
@@ -253,21 +280,20 @@ impl RelationshipService {
 
     /// Check if either user has blocked the other
     pub async fn has_block_between(
-        db: &Pool<Postgres>,
+        db: &Pool,
         user_a: Uuid,
         user_b: Uuid,
     ) -> Result<bool, AppError> {
-        let result: Option<(i32,)> = sqlx::query_as(
+        let client = db.get().await?;
+        let result = client.query_opt(
             r#"
             SELECT 1 FROM blocks
             WHERE (blocker_id = $1 AND blocked_id = $2)
                OR (blocker_id = $2 AND blocked_id = $1)
             LIMIT 1
             "#,
+            &[&user_a, &user_b],
         )
-        .bind(user_a)
-        .bind(user_b)
-        .fetch_optional(db)
         .await
         .map_err(|e| AppError::Database(format!("has_block_between check failed: {}", e)))?;
 
@@ -276,16 +302,15 @@ impl RelationshipService {
 
     /// Check if user_a follows user_b
     pub async fn is_following(
-        db: &Pool<Postgres>,
+        db: &Pool,
         follower_id: Uuid,
         following_id: Uuid,
     ) -> Result<bool, AppError> {
-        let result: Option<(i32,)> = sqlx::query_as(
+        let client = db.get().await?;
+        let result = client.query_opt(
             "SELECT 1 FROM follows WHERE follower_id = $1 AND following_id = $2 LIMIT 1",
+            &[&follower_id, &following_id],
         )
-        .bind(follower_id)
-        .bind(following_id)
-        .fetch_optional(db)
         .await
         .map_err(|e| AppError::Database(format!("is_following check failed: {}", e)))?;
 
@@ -294,48 +319,48 @@ impl RelationshipService {
 
     /// Check if two users follow each other (mutual follows = friends)
     pub async fn are_mutuals(
-        db: &Pool<Postgres>,
+        db: &Pool,
         user_a: Uuid,
         user_b: Uuid,
     ) -> Result<bool, AppError> {
-        let count: i64 = sqlx::query_scalar(
+        let client = db.get().await?;
+        let count: i64 = client.query_one(
             r#"
             SELECT COUNT(*) FROM follows
             WHERE (follower_id = $1 AND following_id = $2)
                OR (follower_id = $2 AND following_id = $1)
             "#,
+            &[&user_a, &user_b],
         )
-        .bind(user_a)
-        .bind(user_b)
-        .fetch_one(db)
         .await
-        .map_err(|e| AppError::Database(format!("are_mutuals check failed: {}", e)))?;
+        .map_err(|e| AppError::Database(format!("are_mutuals check failed: {}", e)))?
+        .get(0);
 
         Ok(count == 2) // Two records = mutual follow
     }
 
     /// Get DM permission settings for a user
     pub async fn get_dm_settings(
-        db: &Pool<Postgres>,
+        db: &Pool,
         user_id: Uuid,
     ) -> Result<DmSettings, AppError> {
-        let result: Option<(String,)> =
-            sqlx::query_as("SELECT dm_permission FROM user_settings WHERE user_id = $1")
-                .bind(user_id)
-                .fetch_optional(db)
-                .await
-                .map_err(|e| AppError::Database(format!("get_dm_settings failed: {}", e)))?;
+        let client = db.get().await?;
+        let result: Option<String> = client.query_opt(
+            "SELECT dm_permission FROM user_settings WHERE user_id = $1",
+            &[&user_id],
+        )
+        .await
+        .map_err(|e| AppError::Database(format!("get_dm_settings failed: {}", e)))?
+        .map(|row| row.get(0));
 
         Ok(DmSettings {
-            dm_permission: result
-                .map(|(p,)| p)
-                .unwrap_or_else(|| "mutuals".to_string()),
+            dm_permission: result.unwrap_or_else(|| "mutuals".to_string()),
         })
     }
 
     /// Update DM permission settings for a user
     pub async fn update_dm_settings(
-        db: &Pool<Postgres>,
+        db: &Pool,
         user_id: Uuid,
         dm_permission: &str,
     ) -> Result<(), AppError> {
@@ -347,16 +372,15 @@ impl RelationshipService {
             )));
         }
 
-        sqlx::query(
+        let client = db.get().await?;
+        client.execute(
             r#"
             INSERT INTO user_settings (user_id, dm_permission)
             VALUES ($1, $2)
             ON CONFLICT (user_id) DO UPDATE SET dm_permission = $2, updated_at = NOW()
             "#,
+            &[&user_id, &dm_permission],
         )
-        .bind(user_id)
-        .bind(dm_permission)
-        .execute(db)
         .await
         .map_err(|e| AppError::Database(format!("update_dm_settings failed: {}", e)))?;
 
@@ -365,7 +389,7 @@ impl RelationshipService {
 
     /// Block a user
     pub async fn block_user(
-        db: &Pool<Postgres>,
+        db: &Pool,
         blocker_id: Uuid,
         blocked_id: Uuid,
         reason: Option<String>,
@@ -374,48 +398,48 @@ impl RelationshipService {
             return Err(AppError::BadRequest("Cannot block yourself".to_string()));
         }
 
-        let result = sqlx::query(
+        let client = db.get().await?;
+        let rows_affected = client.execute(
             r#"
             INSERT INTO blocks (blocker_id, blocked_id, reason)
             VALUES ($1, $2, $3)
             ON CONFLICT (blocker_id, blocked_id) DO NOTHING
             "#,
+            &[&blocker_id, &blocked_id, &reason],
         )
-        .bind(blocker_id)
-        .bind(blocked_id)
-        .bind(reason)
-        .execute(db)
         .await
         .map_err(|e| AppError::Database(format!("block_user failed: {}", e)))?;
 
         // Note: The trigger trg_remove_follows_on_block handles removing follows
-        Ok(result.rows_affected() > 0)
+        Ok(rows_affected > 0)
     }
 
     /// Unblock a user
     pub async fn unblock_user(
-        db: &Pool<Postgres>,
+        db: &Pool,
         blocker_id: Uuid,
         blocked_id: Uuid,
     ) -> Result<bool, AppError> {
-        let result = sqlx::query("DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2")
-            .bind(blocker_id)
-            .bind(blocked_id)
-            .execute(db)
-            .await
-            .map_err(|e| AppError::Database(format!("unblock_user failed: {}", e)))?;
+        let client = db.get().await?;
+        let rows_affected = client.execute(
+            "DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2",
+            &[&blocker_id, &blocked_id],
+        )
+        .await
+        .map_err(|e| AppError::Database(format!("unblock_user failed: {}", e)))?;
 
-        Ok(result.rows_affected() > 0)
+        Ok(rows_affected > 0)
     }
 
     /// Get list of blocked users
     pub async fn get_blocked_users(
-        db: &Pool<Postgres>,
+        db: &Pool,
         user_id: Uuid,
         limit: i64,
         offset: i64,
     ) -> Result<Vec<BlockRecord>, AppError> {
-        let records = sqlx::query_as::<_, BlockRecord>(
+        let client = db.get().await?;
+        let rows = client.query(
             r#"
             SELECT id, blocker_id, blocked_id, reason, created_at
             FROM blocks
@@ -423,20 +447,22 @@ impl RelationshipService {
             ORDER BY created_at DESC
             LIMIT $2 OFFSET $3
             "#,
+            &[&user_id, &limit, &offset],
         )
-        .bind(user_id)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(db)
         .await
         .map_err(|e| AppError::Database(format!("get_blocked_users failed: {}", e)))?;
+
+        let records: Vec<BlockRecord> = rows
+            .iter()
+            .map(|row| BlockRecord::from_row(row))
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(records)
     }
 
     /// Get full relationship status between two users
     pub async fn get_relationship_status(
-        db: &Pool<Postgres>,
+        db: &Pool,
         user_id: Uuid,
         target_id: Uuid,
     ) -> Result<RelationshipStatus, AppError> {
@@ -458,7 +484,7 @@ impl RelationshipService {
 
     /// Create a message request
     pub async fn create_message_request(
-        db: &Pool<Postgres>,
+        db: &Pool,
         requester_id: Uuid,
         recipient_id: Uuid,
         message_preview: Option<String>,
@@ -475,7 +501,8 @@ impl RelationshipService {
         }
 
         let id = Uuid::new_v4();
-        sqlx::query(
+        let client = db.get().await?;
+        client.execute(
             r#"
             INSERT INTO message_requests (id, requester_id, recipient_id, message_preview)
             VALUES ($1, $2, $3, $4)
@@ -484,12 +511,8 @@ impl RelationshipService {
                 status = 'pending',
                 created_at = NOW()
             "#,
+            &[&id, &requester_id, &recipient_id, &message_preview],
         )
-        .bind(id)
-        .bind(requester_id)
-        .bind(recipient_id)
-        .bind(message_preview)
-        .execute(db)
         .await
         .map_err(|e| AppError::Database(format!("create_message_request failed: {}", e)))?;
 
@@ -498,12 +521,13 @@ impl RelationshipService {
 
     /// Get pending message requests for a user
     pub async fn get_pending_message_requests(
-        db: &Pool<Postgres>,
+        db: &Pool,
         recipient_id: Uuid,
         limit: i64,
         offset: i64,
     ) -> Result<Vec<MessageRequest>, AppError> {
-        let requests = sqlx::query_as::<_, MessageRequest>(
+        let client = db.get().await?;
+        let rows = client.query(
             r#"
             SELECT id, requester_id, recipient_id, conversation_id, status,
                    message_preview, created_at, responded_at
@@ -512,24 +536,27 @@ impl RelationshipService {
             ORDER BY created_at DESC
             LIMIT $2 OFFSET $3
             "#,
+            &[&recipient_id, &limit, &offset],
         )
-        .bind(recipient_id)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(db)
         .await
         .map_err(|e| AppError::Database(format!("get_pending_message_requests failed: {}", e)))?;
+
+        let requests: Vec<MessageRequest> = rows
+            .iter()
+            .map(|row| MessageRequest::from_row(row))
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(requests)
     }
 
     /// Accept a message request
     pub async fn accept_message_request(
-        db: &Pool<Postgres>,
+        db: &Pool,
         request_id: Uuid,
         recipient_id: Uuid,
     ) -> Result<MessageRequest, AppError> {
-        let request = sqlx::query_as::<_, MessageRequest>(
+        let client = db.get().await?;
+        let row = client.query_opt(
             r#"
             UPDATE message_requests
             SET status = 'accepted', responded_at = NOW()
@@ -537,37 +564,34 @@ impl RelationshipService {
             RETURNING id, requester_id, recipient_id, conversation_id, status,
                       message_preview, created_at, responded_at
             "#,
+            &[&request_id, &recipient_id],
         )
-        .bind(request_id)
-        .bind(recipient_id)
-        .fetch_optional(db)
         .await
         .map_err(|e| AppError::Database(format!("accept_message_request failed: {}", e)))?
         .ok_or(AppError::NotFound)?;
 
-        Ok(request)
+        Ok(MessageRequest::from_row(&row)?)
     }
 
     /// Reject a message request
     pub async fn reject_message_request(
-        db: &Pool<Postgres>,
+        db: &Pool,
         request_id: Uuid,
         recipient_id: Uuid,
     ) -> Result<(), AppError> {
-        let result = sqlx::query(
+        let client = db.get().await?;
+        let rows_affected = client.execute(
             r#"
             UPDATE message_requests
             SET status = 'rejected', responded_at = NOW()
             WHERE id = $1 AND recipient_id = $2 AND status = 'pending'
             "#,
+            &[&request_id, &recipient_id],
         )
-        .bind(request_id)
-        .bind(recipient_id)
-        .execute(db)
         .await
         .map_err(|e| AppError::Database(format!("reject_message_request failed: {}", e)))?;
 
-        if result.rows_affected() == 0 {
+        if rows_affected == 0 {
             return Err(AppError::NotFound);
         }
 

@@ -1,20 +1,16 @@
 use chrono::Utc;
-use sqlx::{Pool, Postgres, Row};
+use deadpool_postgres::Pool;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 pub struct CallService;
 
 /// Call status enum
-#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type)]
-#[sqlx(type_name = "varchar")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CallStatus {
-    #[sqlx(rename = "ringing")]
     Ringing,
-    #[sqlx(rename = "connected")]
     Connected,
-    #[sqlx(rename = "ended")]
     Ended,
-    #[sqlx(rename = "failed")]
     Failed,
 }
 
@@ -27,23 +23,26 @@ impl CallStatus {
             Self::Failed => "failed",
         }
     }
+
+    pub fn from_str(s: &str) -> Result<Self, String> {
+        match s {
+            "ringing" => Ok(Self::Ringing),
+            "connected" => Ok(Self::Connected),
+            "ended" => Ok(Self::Ended),
+            "failed" => Ok(Self::Failed),
+            _ => Err(format!("Invalid call status: {}", s)),
+        }
+    }
 }
 
 /// WebRTC connection state enum
-#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type)]
-#[sqlx(type_name = "varchar")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConnectionState {
-    #[sqlx(rename = "new")]
     New,
-    #[sqlx(rename = "connecting")]
     Connecting,
-    #[sqlx(rename = "connected")]
     Connected,
-    #[sqlx(rename = "disconnected")]
     Disconnected,
-    #[sqlx(rename = "failed")]
     Failed,
-    #[sqlx(rename = "closed")]
     Closed,
 }
 
@@ -58,6 +57,18 @@ impl ConnectionState {
             Self::Closed => "closed",
         }
     }
+
+    pub fn from_str(s: &str) -> Result<Self, String> {
+        match s {
+            "new" => Ok(Self::New),
+            "connecting" => Ok(Self::Connecting),
+            "connected" => Ok(Self::Connected),
+            "disconnected" => Ok(Self::Disconnected),
+            "failed" => Ok(Self::Failed),
+            "closed" => Ok(Self::Closed),
+            _ => Err(format!("Invalid connection state: {}", s)),
+        }
+    }
 }
 
 impl CallService {
@@ -66,7 +77,7 @@ impl CallService {
     /// Creates a new call session and adds the initiator as the first participant.
     /// The call starts in "ringing" status until other participants join.
     pub async fn initiate_call(
-        db: &Pool<Postgres>,
+        db: &Pool,
         conversation_id: Uuid,
         initiator_id: Uuid,
         initiator_sdp: &str,
@@ -76,36 +87,28 @@ impl CallService {
         let call_id = Uuid::new_v4();
 
         // Start transaction
-        let mut tx = db
-            .begin()
-            .await
+        let mut client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+        let tx = client.transaction().await
             .map_err(|e| crate::error::AppError::StartServer(format!("tx begin: {e}")))?;
 
         // Insert call session
-        sqlx::query(
+        tx.execute(
             "INSERT INTO call_sessions (id, conversation_id, initiator_id, status, initiator_sdp, max_participants, call_type) \
-             VALUES ($1, $2, $3, 'ringing', $4, $5, $6)"
+             VALUES ($1, $2, $3, 'ringing', $4, $5, $6)",
+            &[&call_id, &conversation_id, &initiator_id, &initiator_sdp, &max_participants, &call_type]
         )
-        .bind(call_id)
-        .bind(conversation_id)
-        .bind(initiator_id)
-        .bind(initiator_sdp)
-        .bind(max_participants)
-        .bind(call_type)
-        .execute(&mut *tx)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("insert call: {e}")))?;
 
         // Add initiator as participant
         let participant_id = Uuid::new_v4();
-        sqlx::query(
+        tx.execute(
             "INSERT INTO call_participants (id, call_id, user_id, connection_state) \
              VALUES ($1, $2, $3, 'new')",
+            &[&participant_id, &call_id, &initiator_id]
         )
-        .bind(participant_id)
-        .bind(call_id)
-        .bind(initiator_id)
-        .execute(&mut *tx)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("insert participant: {e}")))?;
 
@@ -120,15 +123,17 @@ impl CallService {
     ///
     /// Adds the answering participant to the call and transitions to "connected" state.
     pub async fn answer_call(
-        db: &Pool<Postgres>,
+        db: &Pool,
         call_id: Uuid,
         answerer_id: Uuid,
         answer_sdp: &str,
     ) -> Result<Uuid, crate::error::AppError> {
+        let mut client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
         // Verify call exists and is in ringing state
-        let call_row = sqlx::query("SELECT id, status FROM call_sessions WHERE id = $1")
-            .bind(call_id)
-            .fetch_optional(db)
+        let call_row = client.query_opt("SELECT id, status FROM call_sessions WHERE id = $1", &[&call_id])
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?;
 
@@ -143,29 +148,21 @@ impl CallService {
         }
 
         // Start transaction
-        let mut tx = db
-            .begin()
-            .await
+        let tx = client.transaction().await
             .map_err(|e| crate::error::AppError::StartServer(format!("tx begin: {e}")))?;
 
         // Add answerer as participant
         let participant_id = Uuid::new_v4();
-        sqlx::query(
+        tx.execute(
             "INSERT INTO call_participants (id, call_id, user_id, answer_sdp, connection_state) \
              VALUES ($1, $2, $3, $4, 'new')",
+            &[&participant_id, &call_id, &answerer_id, &answer_sdp]
         )
-        .bind(participant_id)
-        .bind(call_id)
-        .bind(answerer_id)
-        .bind(answer_sdp)
-        .execute(&mut *tx)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("insert answerer: {e}")))?;
 
         // Update call status to connected
-        sqlx::query("UPDATE call_sessions SET status = 'connected', started_at = CURRENT_TIMESTAMP WHERE id = $1")
-            .bind(call_id)
-            .execute(&mut *tx)
+        tx.execute("UPDATE call_sessions SET status = 'connected', started_at = CURRENT_TIMESTAMP WHERE id = $1", &[&call_id])
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("update call: {e}")))?;
 
@@ -180,13 +177,15 @@ impl CallService {
     ///
     /// Marks the call as ended and records the duration.
     pub async fn end_call(
-        db: &Pool<Postgres>,
+        db: &Pool,
         call_id: Uuid,
     ) -> Result<(), crate::error::AppError> {
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
         // Get call start time
-        let call_row = sqlx::query("SELECT started_at FROM call_sessions WHERE id = $1")
-            .bind(call_id)
-            .fetch_optional(db)
+        let call_row = client.query_opt("SELECT started_at FROM call_sessions WHERE id = $1", &[&call_id])
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?;
 
@@ -202,19 +201,15 @@ impl CallService {
         });
 
         // Update call status
-        sqlx::query(
-            "UPDATE call_sessions SET status = 'ended', ended_at = CURRENT_TIMESTAMP, duration_ms = $2 WHERE id = $1"
+        client.execute(
+            "UPDATE call_sessions SET status = 'ended', ended_at = CURRENT_TIMESTAMP, duration_ms = $2 WHERE id = $1",
+            &[&call_id, &duration_ms]
         )
-        .bind(call_id)
-        .bind(duration_ms)
-        .execute(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("update call: {e}")))?;
 
         // Mark all participants as left
-        sqlx::query("UPDATE call_participants SET left_at = CURRENT_TIMESTAMP WHERE call_id = $1 AND left_at IS NULL")
-            .bind(call_id)
-            .execute(db)
+        client.execute("UPDATE call_participants SET left_at = CURRENT_TIMESTAMP WHERE call_id = $1 AND left_at IS NULL", &[&call_id])
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("update participants: {e}")))?;
 
@@ -225,12 +220,14 @@ impl CallService {
     ///
     /// Marks the call as failed without accepting it.
     pub async fn reject_call(
-        db: &Pool<Postgres>,
+        db: &Pool,
         call_id: Uuid,
     ) -> Result<(), crate::error::AppError> {
-        sqlx::query("UPDATE call_sessions SET status = 'failed', ended_at = CURRENT_TIMESTAMP WHERE id = $1")
-            .bind(call_id)
-            .execute(db)
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        client.execute("UPDATE call_sessions SET status = 'failed', ended_at = CURRENT_TIMESTAMP WHERE id = $1", &[&call_id])
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("update call: {e}")))?;
 
@@ -241,16 +238,18 @@ impl CallService {
     ///
     /// Tracks WebRTC connection state transitions for debugging and monitoring.
     pub async fn update_participant_state(
-        db: &Pool<Postgres>,
+        db: &Pool,
         participant_id: Uuid,
         connection_state: &str,
     ) -> Result<(), crate::error::AppError> {
-        sqlx::query(
-            "UPDATE call_participants SET connection_state = $2, last_ice_candidate_timestamp = CURRENT_TIMESTAMP WHERE id = $1"
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        client.execute(
+            "UPDATE call_participants SET connection_state = $2, last_ice_candidate_timestamp = CURRENT_TIMESTAMP WHERE id = $1",
+            &[&participant_id, &connection_state]
         )
-        .bind(participant_id)
-        .bind(connection_state)
-        .execute(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("update participant: {e}")))?;
 
@@ -261,15 +260,18 @@ impl CallService {
     ///
     /// Returns all calls that are currently ringing or connected.
     pub async fn get_active_calls(
-        db: &Pool<Postgres>,
+        db: &Pool,
         conversation_id: Uuid,
     ) -> Result<Vec<(Uuid, String)>, crate::error::AppError> {
-        let rows = sqlx::query(
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        let rows = client.query(
             "SELECT id, status FROM call_sessions \
-             WHERE conversation_id = $1 AND status IN ('ringing', 'connected') AND deleted_at IS NULL"
+             WHERE conversation_id = $1 AND status IN ('ringing', 'connected') AND deleted_at IS NULL",
+            &[&conversation_id]
         )
-        .bind(conversation_id)
-        .fetch_all(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("fetch calls: {e}")))?;
 
@@ -283,14 +285,17 @@ impl CallService {
     ///
     /// Returns all participants in a call including their SDP offers/answers.
     pub async fn get_call_participants(
-        db: &Pool<Postgres>,
+        db: &Pool,
         call_id: Uuid,
     ) -> Result<Vec<(Uuid, Uuid, Option<String>)>, crate::error::AppError> {
-        let rows = sqlx::query(
-            "SELECT id, user_id, answer_sdp FROM call_participants WHERE call_id = $1 ORDER BY joined_at ASC"
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        let rows = client.query(
+            "SELECT id, user_id, answer_sdp FROM call_participants WHERE call_id = $1 ORDER BY joined_at ASC",
+            &[&call_id]
         )
-        .bind(call_id)
-        .fetch_all(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("fetch participants: {e}")))?;
 
@@ -304,12 +309,14 @@ impl CallService {
     ///
     /// Used by answering participant to get the original offer.
     pub async fn get_initiator_sdp(
-        db: &Pool<Postgres>,
+        db: &Pool,
         call_id: Uuid,
     ) -> Result<String, crate::error::AppError> {
-        let row = sqlx::query("SELECT initiator_sdp FROM call_sessions WHERE id = $1")
-            .bind(call_id)
-            .fetch_optional(db)
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        let row = client.query_opt("SELECT initiator_sdp FROM call_sessions WHERE id = $1", &[&call_id])
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?;
 
@@ -324,25 +331,24 @@ impl CallService {
     /// Adds a participant to an active call and returns all existing participants with their SDPs.
     /// For P2P mesh architecture, new participants need SDP from all existing participants.
     pub async fn join_call(
-        db: &Pool<Postgres>,
+        db: &Pool,
         call_id: Uuid,
         user_id: Uuid,
         sdp: &str,
         max_participants: i32,
     ) -> Result<(Uuid, Vec<crate::routes::calls::ParticipantSdpInfo>), crate::error::AppError> {
         // Start transaction
-        let mut tx = db
-            .begin()
-            .await
+        let mut client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+        let tx = client.transaction().await
             .map_err(|e| crate::error::AppError::StartServer(format!("tx begin: {e}")))?;
 
         // Check if user is already in the call
-        let existing = sqlx::query(
-            "SELECT id FROM call_participants WHERE call_id = $1 AND user_id = $2 AND left_at IS NULL"
+        let existing = tx.query_opt(
+            "SELECT id FROM call_participants WHERE call_id = $1 AND user_id = $2 AND left_at IS NULL",
+            &[&call_id, &user_id]
         )
-        .bind(call_id)
-        .bind(user_id)
-        .fetch_optional(&mut *tx)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("check participant: {e}")))?;
 
@@ -353,13 +359,13 @@ impl CallService {
         }
 
         // Check participant count
-        let count: i64 = sqlx::query_scalar(
+        let count_row = tx.query_one(
             "SELECT COUNT(*) FROM call_participants WHERE call_id = $1 AND left_at IS NULL",
+            &[&call_id]
         )
-        .bind(call_id)
-        .fetch_one(&mut *tx)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("count participants: {e}")))?;
+        let count: i64 = count_row.get(0);
 
         if count >= max_participants as i64 {
             return Err(crate::error::AppError::Config(
@@ -368,15 +374,14 @@ impl CallService {
         }
 
         // Get all existing participants with SDPs
-        let rows = sqlx::query(
+        let rows = tx.query(
             "SELECT cp.id, cp.user_id, cp.answer_sdp, cp.joined_at, cp.connection_state, cs.initiator_id, cs.initiator_sdp \
              FROM call_participants cp \
              JOIN call_sessions cs ON cp.call_id = cs.id \
              WHERE cp.call_id = $1 AND cp.left_at IS NULL \
-             ORDER BY cp.joined_at ASC"
+             ORDER BY cp.joined_at ASC",
+            &[&call_id]
         )
-        .bind(call_id)
-        .fetch_all(&mut *tx)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("fetch participants: {e}")))?;
 
@@ -410,25 +415,20 @@ impl CallService {
 
         // Add new participant
         let participant_id = Uuid::new_v4();
-        sqlx::query(
+        tx.execute(
             "INSERT INTO call_participants (id, call_id, user_id, answer_sdp, connection_state) \
              VALUES ($1, $2, $3, $4, 'new')",
+            &[&participant_id, &call_id, &user_id, &sdp]
         )
-        .bind(participant_id)
-        .bind(call_id)
-        .bind(user_id)
-        .bind(sdp)
-        .execute(&mut *tx)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("insert participant: {e}")))?;
 
         // Update call status to connected if it was ringing
-        sqlx::query(
+        tx.execute(
             "UPDATE call_sessions SET status = 'connected', started_at = COALESCE(started_at, CURRENT_TIMESTAMP) \
-             WHERE id = $1 AND status = 'ringing'"
+             WHERE id = $1 AND status = 'ringing'",
+            &[&call_id]
         )
-        .bind(call_id)
-        .execute(&mut *tx)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("update call: {e}")))?;
 
@@ -443,17 +443,19 @@ impl CallService {
     ///
     /// Marks the participant as left by setting left_at timestamp.
     pub async fn leave_call(
-        db: &Pool<Postgres>,
+        db: &Pool,
         call_id: Uuid,
         user_id: Uuid,
     ) -> Result<Uuid, crate::error::AppError> {
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
         // Find the participant
-        let row = sqlx::query(
-            "SELECT id FROM call_participants WHERE call_id = $1 AND user_id = $2 AND left_at IS NULL"
+        let row = client.query_opt(
+            "SELECT id FROM call_participants WHERE call_id = $1 AND user_id = $2 AND left_at IS NULL",
+            &[&call_id, &user_id]
         )
-        .bind(call_id)
-        .bind(user_id)
-        .fetch_optional(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("fetch participant: {e}")))?;
 
@@ -462,9 +464,7 @@ impl CallService {
             .get("id");
 
         // Mark as left
-        sqlx::query("UPDATE call_participants SET left_at = CURRENT_TIMESTAMP WHERE id = $1")
-            .bind(participant_id)
-            .execute(db)
+        client.execute("UPDATE call_participants SET left_at = CURRENT_TIMESTAMP WHERE id = $1", &[&participant_id])
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("update participant: {e}")))?;
 
@@ -475,17 +475,20 @@ impl CallService {
     ///
     /// Returns participant information including their join/leave times and connection state.
     pub async fn get_participants(
-        db: &Pool<Postgres>,
+        db: &Pool,
         call_id: Uuid,
     ) -> Result<Vec<crate::routes::calls::ParticipantInfo>, crate::error::AppError> {
-        let rows = sqlx::query(
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        let rows = client.query(
             "SELECT id, user_id, joined_at, left_at, connection_state, has_audio, has_video \
              FROM call_participants \
              WHERE call_id = $1 \
              ORDER BY joined_at ASC",
+            &[&call_id]
         )
-        .bind(call_id)
-        .fetch_all(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("fetch participants: {e}")))?;
 
@@ -494,9 +497,9 @@ impl CallService {
             .map(|r| crate::routes::calls::ParticipantInfo {
                 id: r.get("id"),
                 user_id: r.get("user_id"),
-                joined_at: r.get::<chrono::DateTime<Utc>, _>("joined_at").to_rfc3339(),
+                joined_at: r.get::<&str, chrono::DateTime<Utc>>("joined_at").to_rfc3339(),
                 left_at: r
-                    .get::<Option<chrono::DateTime<Utc>>, _>("left_at")
+                    .get::<&str, Option<chrono::DateTime<Utc>>>("left_at")
                     .map(|dt| dt.to_rfc3339()),
                 connection_state: r.get("connection_state"),
                 has_audio: r.get("has_audio"),
@@ -509,24 +512,25 @@ impl CallService {
     ///
     /// Returns all calls a user participated in with duration and participants.
     pub async fn get_call_history(
-        db: &Pool<Postgres>,
+        db: &Pool,
         user_id: Uuid,
         limit: i64,
         offset: i64,
     ) -> Result<Vec<(Uuid, String, i32, i64)>, crate::error::AppError> {
-        let rows = sqlx::query(
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        let rows = client.query(
             "SELECT cs.id, cs.status, COALESCE(cs.duration_ms, 0), COUNT(cp.id) as participant_count \
              FROM call_sessions cs \
              JOIN call_participants cp ON cs.id = cp.call_id \
              WHERE cp.user_id = $1 AND cs.deleted_at IS NULL \
              GROUP BY cs.id, cs.status, cs.duration_ms \
              ORDER BY cs.created_at DESC \
-             LIMIT $2 OFFSET $3"
+             LIMIT $2 OFFSET $3",
+            &[&user_id, &limit.min(100), &offset]
         )
-        .bind(user_id)
-        .bind(limit.min(100)) // Cap at 100
-        .bind(offset)
-        .fetch_all(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("fetch history: {e}")))?;
 
@@ -534,10 +538,10 @@ impl CallService {
             .into_iter()
             .map(|r| {
                 (
-                    r.get::<Uuid, _>("id"),
-                    r.get::<String, _>("status"),
-                    r.get::<i32, _>("duration_ms"),
-                    r.get::<i64, _>("participant_count"),
+                    r.get::<&str, Uuid>("id"),
+                    r.get::<&str, String>("status"),
+                    r.get::<&str, i32>("duration_ms"),
+                    r.get::<&str, i64>("participant_count"),
                 )
             })
             .collect())
@@ -570,7 +574,7 @@ impl CallService {
     /// - Matrix room not found for conversation
     /// - Matrix event sending fails (logged as warning, not returned as error)
     pub async fn initiate_call_with_matrix(
-        db: &Pool<Postgres>,
+        db: &Pool,
         matrix_voip_service: &crate::services::matrix_voip_service::MatrixVoipService,
         matrix_client: &crate::services::matrix_client::MatrixClient,
         conversation_id: Uuid,
@@ -640,15 +644,15 @@ impl CallService {
         );
 
         // Step 5: Update call_sessions with Matrix event IDs
-        let update_result = sqlx::query(
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+        let update_result = client.execute(
             "UPDATE call_sessions
              SET matrix_invite_event_id = $1, matrix_party_id = $2
              WHERE id = $3",
+            &[&matrix_invite_event_id, &party_id, &call_id]
         )
-        .bind(&matrix_invite_event_id)
-        .bind(&party_id)
-        .bind(call_id)
-        .execute(db)
         .await;
 
         if let Err(e) = update_result {
@@ -684,7 +688,7 @@ impl CallService {
     /// - Call not found
     /// - Matrix event sending fails (logged as warning, not returned as error)
     pub async fn answer_call_with_matrix(
-        db: &Pool<Postgres>,
+        db: &Pool,
         matrix_voip_service: &crate::services::matrix_voip_service::MatrixVoipService,
         matrix_client: &crate::services::matrix_client::MatrixClient,
         call_id: Uuid,
@@ -694,11 +698,13 @@ impl CallService {
         use tracing::{info, warn};
 
         // Step 1: Get call's matrix_party_id and conversation_id from DB
-        let call_row = sqlx::query(
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+        let call_row = client.query_opt(
             "SELECT matrix_party_id, conversation_id FROM call_sessions WHERE id = $1",
+            &[&call_id]
         )
-        .bind(call_id)
-        .fetch_optional(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?
         .ok_or(crate::error::AppError::NotFound)?;
@@ -758,15 +764,12 @@ impl CallService {
         );
 
         // Step 6: Update call_participants with Matrix event IDs
-        let update_result = sqlx::query(
+        let update_result = client.execute(
             "UPDATE call_participants
              SET matrix_answer_event_id = $1, matrix_party_id = $2
              WHERE id = $3",
+            &[&matrix_answer_event_id, &answerer_party_id, &participant_id]
         )
-        .bind(&matrix_answer_event_id)
-        .bind(&answerer_party_id)
-        .bind(participant_id)
-        .execute(db)
         .await;
 
         if let Err(e) = update_result {
@@ -798,7 +801,7 @@ impl CallService {
     /// - Call not found
     /// - Matrix event sending fails (logged as warning, not returned as error)
     pub async fn end_call_with_matrix(
-        db: &Pool<Postgres>,
+        db: &Pool,
         matrix_voip_service: &crate::services::matrix_voip_service::MatrixVoipService,
         matrix_client: &crate::services::matrix_client::MatrixClient,
         call_id: Uuid,
@@ -807,11 +810,13 @@ impl CallService {
         use tracing::{info, warn};
 
         // Step 1: Get call's matrix_party_id and conversation_id from DB
-        let call_row = sqlx::query(
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+        let call_row = client.query_opt(
             "SELECT matrix_party_id, conversation_id FROM call_sessions WHERE id = $1",
+            &[&call_id]
         )
-        .bind(call_id)
-        .fetch_optional(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?
         .ok_or(crate::error::AppError::NotFound)?;

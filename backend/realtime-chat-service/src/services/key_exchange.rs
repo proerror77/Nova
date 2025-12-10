@@ -1,5 +1,6 @@
 use crate::error::AppError;
 use base64::{engine::general_purpose, Engine as _};
+use deadpool_postgres::Pool;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -20,11 +21,11 @@ pub struct DeviceKeyPair {
 
 /// ECDH Key Exchange service for end-to-end encryption
 pub struct KeyExchangeService {
-    db: Arc<sqlx::PgPool>,
+    db: Arc<Pool>,
 }
 
 impl KeyExchangeService {
-    pub fn new(db: Arc<sqlx::PgPool>) -> Self {
+    pub fn new(db: Arc<Pool>) -> Self {
         Self { db }
     }
 
@@ -98,22 +99,24 @@ impl KeyExchangeService {
         let public_key_b64 = general_purpose::STANDARD.encode(&public_key);
         let private_key_encrypted_b64 = general_purpose::STANDARD.encode(&private_key_encrypted);
 
-        sqlx::query(
-            r#"
-            INSERT INTO device_keys (user_id, device_id, public_key, private_key_encrypted)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (user_id, device_id) DO UPDATE SET
-                public_key = EXCLUDED.public_key,
-                private_key_encrypted = EXCLUDED.private_key_encrypted,
-                updated_at = NOW()
-            "#,
-        )
-        .bind(user_id)
-        .bind(&device_id)
-        .bind(&public_key_b64)
-        .bind(&private_key_encrypted_b64)
-        .execute(&*self.db)
-        .await?;
+        let client = self.db.get().await.map_err(|e| {
+            AppError::Database(format!("Failed to get database connection: {}", e))
+        })?;
+
+        client
+            .execute(
+                r#"
+                INSERT INTO device_keys (user_id, device_id, public_key, private_key_encrypted)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (user_id, device_id) DO UPDATE SET
+                    public_key = EXCLUDED.public_key,
+                    private_key_encrypted = EXCLUDED.private_key_encrypted,
+                    updated_at = NOW()
+                "#,
+                &[&user_id, &device_id, &public_key_b64, &private_key_encrypted_b64],
+            )
+            .await
+            .map_err(|e| AppError::Database(format!("Failed to store device key: {}", e)))?;
 
         Ok(())
     }
@@ -124,16 +127,21 @@ impl KeyExchangeService {
         user_id: Uuid,
         device_id: String,
     ) -> Result<Option<Vec<u8>>, AppError> {
-        let row = sqlx::query_scalar::<_, String>(
-            "SELECT public_key FROM device_keys WHERE user_id = $1 AND device_id = $2",
-        )
-        .bind(user_id)
-        .bind(device_id)
-        .fetch_optional(&*self.db)
-        .await?;
+        let client = self.db.get().await.map_err(|e| {
+            AppError::Database(format!("Failed to get database connection: {}", e))
+        })?;
+
+        let row = client
+            .query_opt(
+                "SELECT public_key FROM device_keys WHERE user_id = $1 AND device_id = $2",
+                &[&user_id, &device_id],
+            )
+            .await
+            .map_err(|e| AppError::Database(format!("Failed to fetch device key: {}", e)))?;
 
         match row {
-            Some(key_b64) => {
+            Some(r) => {
+                let key_b64: String = r.get("public_key");
                 let key = general_purpose::STANDARD
                     .decode(&key_b64)
                     .map_err(|e| AppError::Encryption(format!("Base64 decode failed: {}", e)))?;
@@ -151,18 +159,20 @@ impl KeyExchangeService {
         peer_id: Uuid,
         shared_secret_hash: Vec<u8>,
     ) -> Result<(), AppError> {
-        sqlx::query(
-            r#"
-            INSERT INTO key_exchanges (conversation_id, initiator_id, peer_id, shared_secret_hash)
-            VALUES ($1, $2, $3, $4)
-            "#,
-        )
-        .bind(conversation_id)
-        .bind(initiator_id)
-        .bind(peer_id)
-        .bind(shared_secret_hash)
-        .execute(&*self.db)
-        .await?;
+        let client = self.db.get().await.map_err(|e| {
+            AppError::Database(format!("Failed to get database connection: {}", e))
+        })?;
+
+        client
+            .execute(
+                r#"
+                INSERT INTO key_exchanges (conversation_id, initiator_id, peer_id, shared_secret_hash)
+                VALUES ($1, $2, $3, $4)
+                "#,
+                &[&conversation_id, &initiator_id, &peer_id, &shared_secret_hash],
+            )
+            .await
+            .map_err(|e| AppError::Database(format!("Failed to record key exchange: {}", e)))?;
 
         Ok(())
     }
@@ -172,19 +182,29 @@ impl KeyExchangeService {
         &self,
         conversation_id: Uuid,
     ) -> Result<Vec<KeyExchangeRecord>, AppError> {
-        let records = sqlx::query_as::<_, KeyExchangeRecord>(
-            "SELECT * FROM key_exchanges WHERE conversation_id = $1 ORDER BY created_at DESC",
-        )
-        .bind(conversation_id)
-        .fetch_all(&*self.db)
-        .await?;
+        let client = self.db.get().await.map_err(|e| {
+            AppError::Database(format!("Failed to get database connection: {}", e))
+        })?;
+
+        let rows = client
+            .query(
+                "SELECT id, conversation_id, initiator_id, peer_id, shared_secret_hash, created_at FROM key_exchanges WHERE conversation_id = $1 ORDER BY created_at DESC",
+                &[&conversation_id],
+            )
+            .await
+            .map_err(|e| AppError::Database(format!("Failed to list key exchanges: {}", e)))?;
+
+        let records = rows
+            .iter()
+            .map(|row| KeyExchangeRecord::from_row(row))
+            .collect();
 
         Ok(records)
     }
 }
 
 /// Key exchange record for audit trail
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeyExchangeRecord {
     pub id: Uuid,
     pub conversation_id: Uuid,
@@ -192,6 +212,19 @@ pub struct KeyExchangeRecord {
     pub peer_id: Uuid,
     pub shared_secret_hash: Vec<u8>,
     pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl KeyExchangeRecord {
+    pub fn from_row(row: &tokio_postgres::Row) -> Self {
+        Self {
+            id: row.get("id"),
+            conversation_id: row.get("conversation_id"),
+            initiator_id: row.get("initiator_id"),
+            peer_id: row.get("peer_id"),
+            shared_secret_hash: row.get("shared_secret_hash"),
+            created_at: row.get("created_at"),
+        }
+    }
 }
 
 #[cfg(test)]

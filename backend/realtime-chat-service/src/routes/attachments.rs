@@ -2,7 +2,6 @@ use crate::{error::AppError, middleware::guards::User, state::AppState};
 use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
 use uuid::Uuid;
 
 #[derive(Deserialize)]
@@ -63,9 +62,10 @@ pub async fn upload_attachment(
             .await?;
 
     // Verify message exists and user has permission to attach
-    let message_row = sqlx::query("SELECT sender_id, conversation_id FROM messages WHERE id = $1")
-        .bind(message_id)
-        .fetch_optional(&state.db)
+    let client = state.db.get().await
+        .map_err(|e| AppError::StartServer(format!("Failed to verify message: {e}")))?;
+
+    let message_row = client.query_opt("SELECT sender_id, conversation_id FROM messages WHERE id = $1", &[&message_id])
         .await
         .map_err(|e| AppError::StartServer(format!("Failed to verify message: {e}")))?
         .ok_or(AppError::NotFound)?;
@@ -88,20 +88,13 @@ pub async fn upload_attachment(
     let id = Uuid::new_v4();
     let now = Utc::now();
 
-    sqlx::query(
+    client.execute(
         r#"
         INSERT INTO message_attachments (id, message_id, file_name, file_type, file_size, s3_key, created_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-        "#
+        "#,
+        &[&id, &message_id, &body.file_name, &body.file_type, &body.file_size, &body.s3_key, &now]
     )
-    .bind(id)
-    .bind(message_id)
-    .bind(&body.file_name)
-    .bind(&body.file_type)
-    .bind(body.file_size)
-    .bind(&body.s3_key)
-    .bind(now)
-    .execute(&state.db)
     .await
     .map_err(|e| AppError::StartServer(format!("Failed to create attachment: {e}")))?;
 
@@ -127,9 +120,10 @@ pub async fn get_attachments(
 ) -> Result<HttpResponse, AppError> {
     let message_id = message_id.into_inner();
     // Get message's conversation to verify user access
-    let message_row = sqlx::query("SELECT conversation_id FROM messages WHERE id = $1")
-        .bind(message_id)
-        .fetch_optional(&state.db)
+    let client = state.db.get().await
+        .map_err(|e| AppError::StartServer(format!("Failed to fetch message: {e}")))?;
+
+    let message_row = client.query_opt("SELECT conversation_id FROM messages WHERE id = $1", &[&message_id])
         .await
         .map_err(|e| AppError::StartServer(format!("Failed to fetch message: {e}")))?
         .ok_or(AppError::NotFound)?;
@@ -141,45 +135,31 @@ pub async fn get_attachments(
         crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
             .await?;
 
-    let attachments = sqlx::query_as::<
-        _,
-        (
-            Uuid,
-            Uuid,
-            String,
-            Option<String>,
-            i32,
-            String,
-            DateTime<Utc>,
-        ),
-    >(
+    let attachments = client.query(
         r#"
         SELECT id, message_id, file_name, file_type, file_size, s3_key, created_at
         FROM message_attachments
         WHERE message_id = $1
         ORDER BY created_at DESC
         "#,
+        &[&message_id]
     )
-    .bind(message_id)
-    .fetch_all(&state.db)
     .await
     .map_err(|e| AppError::StartServer(format!("Failed to fetch attachments: {e}")))?;
 
     let attachment_list: Vec<AttachmentResponse> = attachments
         .into_iter()
-        .map(
-            |(id, msg_id, file_name, file_type, file_size, s3_key, created_at)| {
-                AttachmentResponse {
-                    id,
-                    message_id: msg_id,
-                    file_name,
-                    file_type,
-                    file_size,
-                    s3_key,
-                    created_at,
-                }
-            },
-        )
+        .map(|row| {
+            AttachmentResponse {
+                id: row.get("id"),
+                message_id: row.get("message_id"),
+                file_name: row.get("file_name"),
+                file_type: row.get("file_type"),
+                file_size: row.get("file_size"),
+                s3_key: row.get("s3_key"),
+                created_at: row.get("created_at"),
+            }
+        })
         .collect();
 
     let count = attachment_list.len();
@@ -203,13 +183,13 @@ pub async fn delete_attachment(
     let (message_id, attachment_id) = path.into_inner();
 
     // Get attachment and message details for authorization
-    let attachment_row =
-        sqlx::query("SELECT ma.message_id FROM message_attachments ma WHERE ma.id = $1")
-            .bind(attachment_id)
-            .fetch_optional(&state.db)
-            .await
-            .map_err(|e| AppError::StartServer(format!("Failed to fetch attachment: {e}")))?
-            .ok_or(AppError::NotFound)?;
+    let client = state.db.get().await
+        .map_err(|e| AppError::StartServer(format!("Failed to fetch attachment: {e}")))?;
+
+    let attachment_row = client.query_opt("SELECT ma.message_id FROM message_attachments ma WHERE ma.id = $1", &[&attachment_id])
+        .await
+        .map_err(|e| AppError::StartServer(format!("Failed to fetch attachment: {e}")))?
+        .ok_or(AppError::NotFound)?;
 
     // Verify message matches
     let msg_id: Uuid = attachment_row.get("message_id");
@@ -218,9 +198,7 @@ pub async fn delete_attachment(
     }
 
     // Get message details to verify user permission
-    let message_row = sqlx::query("SELECT sender_id, conversation_id FROM messages WHERE id = $1")
-        .bind(message_id)
-        .fetch_optional(&state.db)
+    let message_row = client.query_opt("SELECT sender_id, conversation_id FROM messages WHERE id = $1", &[&message_id])
         .await
         .map_err(|e| AppError::StartServer(format!("Failed to fetch message: {e}")))?
         .ok_or(AppError::NotFound)?;
@@ -239,12 +217,9 @@ pub async fn delete_attachment(
         return Err(AppError::Forbidden);
     }
 
-    let affected = sqlx::query("DELETE FROM message_attachments WHERE id = $1")
-        .bind(attachment_id)
-        .execute(&state.db)
+    let affected = client.execute("DELETE FROM message_attachments WHERE id = $1", &[&attachment_id])
         .await
-        .map_err(|e| AppError::StartServer(format!("Failed to delete attachment: {e}")))?
-        .rows_affected();
+        .map_err(|e| AppError::StartServer(format!("Failed to delete attachment: {e}")))?;
 
     if affected == 0 {
         return Err(AppError::NotFound);

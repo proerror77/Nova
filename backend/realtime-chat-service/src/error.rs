@@ -72,8 +72,14 @@ pub enum AppError {
     },
 }
 
-impl From<sqlx::Error> for AppError {
-    fn from(e: sqlx::Error) -> Self {
+impl From<tokio_postgres::Error> for AppError {
+    fn from(e: tokio_postgres::Error) -> Self {
+        AppError::Database(e.to_string())
+    }
+}
+
+impl From<deadpool_postgres::PoolError> for AppError {
+    fn from(e: deadpool_postgres::PoolError) -> Self {
         AppError::Database(e.to_string())
     }
 }

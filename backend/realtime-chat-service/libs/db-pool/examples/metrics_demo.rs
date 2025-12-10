@@ -49,15 +49,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Iteration {}: Acquiring connection...", i + 1);
 
         // Use acquire_with_metrics to track acquisition latency
-        let mut conn = acquire_with_metrics(&pool, "metrics-demo").await?;
+        let conn = acquire_with_metrics(&pool, "metrics-demo").await?;
 
-        // Simulate some work
-        let result = sqlx::query("SELECT 1 as value")
-            .fetch_one(&mut *conn)
-            .await?;
+        // Simulate some work with tokio-postgres
+        let rows = conn.simple_query("SELECT 1 as value").await?;
 
-        let value: i32 = result.get("value");
-        println!("  Query result: {}", value);
+        println!("  Query executed, rows: {:?}", rows.len());
 
         // Hold connection for a bit to show active connections
         sleep(Duration::from_millis(500)).await;

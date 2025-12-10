@@ -1,16 +1,17 @@
 use crate::error::AppError;
+use deadpool_postgres::Pool;
 use matrix_sdk::ruma::{OwnedRoomId, RoomId};
-use sqlx::{Pool, Postgres};
 use tracing::{debug, warn};
 use uuid::Uuid;
 
 /// Save conversation -> Matrix room mapping to database
 pub async fn save_room_mapping(
-    db: &Pool<Postgres>,
+    db: &Pool,
     conversation_id: Uuid,
     room_id: &RoomId,
 ) -> Result<(), AppError> {
-    sqlx::query(
+    let client = db.get().await.map_err(|e| AppError::StartServer(format!("save room mapping pool: {e}")))?;
+    client.execute(
         r#"
         INSERT INTO matrix_room_mapping (conversation_id, matrix_room_id)
         VALUES ($1, $2)
@@ -19,10 +20,8 @@ pub async fn save_room_mapping(
             matrix_room_id = EXCLUDED.matrix_room_id,
             updated_at = CURRENT_TIMESTAMP
         "#,
+        &[&conversation_id, &room_id.as_str()],
     )
-    .bind(conversation_id)
-    .bind(room_id.as_str())
-    .execute(db)
     .await
     .map_err(|e| AppError::StartServer(format!("save room mapping: {e}")))?;
 
@@ -37,16 +36,17 @@ pub async fn save_room_mapping(
 
 /// Load Matrix room ID for a conversation
 pub async fn load_room_mapping(
-    db: &Pool<Postgres>,
+    db: &Pool,
     conversation_id: Uuid,
 ) -> Result<Option<OwnedRoomId>, AppError> {
-    let room_id: Option<String> = sqlx::query_scalar(
+    let client = db.get().await.map_err(|e| AppError::StartServer(format!("load room mapping pool: {e}")))?;
+    let room_id: Option<String> = client.query_opt(
         "SELECT matrix_room_id FROM matrix_room_mapping WHERE conversation_id = $1",
+        &[&conversation_id],
     )
-    .bind(conversation_id)
-    .fetch_optional(db)
     .await
-    .map_err(|e| AppError::StartServer(format!("load room mapping: {e}")))?;
+    .map_err(|e| AppError::StartServer(format!("load room mapping: {e}")))?
+    .map(|row| row.get(0));
 
     match room_id {
         Some(id_str) => {
@@ -61,38 +61,41 @@ pub async fn load_room_mapping(
 
 /// Reverse lookup: Matrix room -> conversation
 pub async fn lookup_conversation_by_room_id(
-    db: &Pool<Postgres>,
+    db: &Pool,
     room_id: &str,
 ) -> Result<Option<Uuid>, AppError> {
-    let conversation_id = sqlx::query_scalar(
+    let client = db.get().await.map_err(|e| AppError::StartServer(format!("lookup conversation pool: {e}")))?;
+    let conversation_id = client.query_opt(
         "SELECT conversation_id FROM matrix_room_mapping WHERE matrix_room_id = $1",
+        &[&room_id],
     )
-    .bind(room_id)
-    .fetch_optional(db)
     .await
-    .map_err(|e| AppError::StartServer(format!("lookup conversation by room: {e}")))?;
+    .map_err(|e| AppError::StartServer(format!("lookup conversation by room: {e}")))?
+    .map(|row| row.get(0));
 
     Ok(conversation_id)
 }
 
 /// Get Matrix event_id and room_id for a message
 pub async fn get_matrix_info(
-    db: &Pool<Postgres>,
+    db: &Pool,
     message_id: Uuid,
 ) -> Result<(Option<String>, Option<OwnedRoomId>), AppError> {
-    let row: Option<(Option<String>, Uuid)> = sqlx::query_as(
+    let client = db.get().await.map_err(|e| AppError::StartServer(format!("get matrix info pool: {e}")))?;
+    let row = client.query_opt(
         r#"
         SELECT m.matrix_event_id, m.conversation_id
         FROM messages m
         WHERE m.id = $1
         "#,
+        &[&message_id],
     )
-    .bind(message_id)
-    .fetch_optional(db)
     .await
     .map_err(|e| AppError::StartServer(format!("get matrix info: {e}")))?;
 
-    if let Some((event_id, conversation_id)) = row {
+    if let Some(row) = row {
+        let event_id: Option<String> = row.get(0);
+        let conversation_id: Uuid = row.get(1);
         let room_id = load_room_mapping(db, conversation_id).await?;
         Ok((event_id, room_id))
     } else {
@@ -102,16 +105,17 @@ pub async fn get_matrix_info(
 
 /// Update message with Matrix event ID
 pub async fn update_message_matrix_event_id(
-    db: &Pool<Postgres>,
+    db: &Pool,
     message_id: Uuid,
     event_id: &str,
 ) -> Result<(), AppError> {
-    sqlx::query("UPDATE messages SET matrix_event_id = $1 WHERE id = $2")
-        .bind(event_id)
-        .bind(message_id)
-        .execute(db)
-        .await
-        .map_err(|e| AppError::StartServer(format!("update matrix event id: {e}")))?;
+    let client = db.get().await.map_err(|e| AppError::StartServer(format!("update matrix event id pool: {e}")))?;
+    client.execute(
+        "UPDATE messages SET matrix_event_id = $1 WHERE id = $2",
+        &[&event_id, &message_id],
+    )
+    .await
+    .map_err(|e| AppError::StartServer(format!("update matrix event id: {e}")))?;
 
     debug!(
         "Updated message {} with matrix_event_id={}",
@@ -123,32 +127,38 @@ pub async fn update_message_matrix_event_id(
 
 /// Get conversation participants (for room creation)
 pub async fn get_conversation_participants(
-    db: &Pool<Postgres>,
+    db: &Pool,
     conversation_id: Uuid,
 ) -> Result<Vec<Uuid>, AppError> {
-    let participant_ids = sqlx::query_scalar(
+    let client = db.get().await.map_err(|e| AppError::StartServer(format!("get conversation participants pool: {e}")))?;
+    let rows = client.query(
         "SELECT user_id FROM conversation_members WHERE conversation_id = $1",
+        &[&conversation_id],
     )
-    .bind(conversation_id)
-    .fetch_all(db)
     .await
     .map_err(|e| AppError::StartServer(format!("get conversation participants: {e}")))?;
+
+    let participant_ids: Vec<Uuid> = rows.iter().map(|row| row.get(0)).collect();
 
     Ok(participant_ids)
 }
 
 /// Load all room mappings into memory (for startup cache warming)
 pub async fn load_all_room_mappings(
-    db: &Pool<Postgres>,
+    db: &Pool,
 ) -> Result<Vec<(Uuid, OwnedRoomId)>, AppError> {
-    let rows: Vec<(Uuid, String)> =
-        sqlx::query_as("SELECT conversation_id, matrix_room_id FROM matrix_room_mapping")
-            .fetch_all(db)
-            .await
-            .map_err(|e| AppError::StartServer(format!("load all room mappings: {e}")))?;
+    let client = db.get().await.map_err(|e| AppError::StartServer(format!("load all room mappings pool: {e}")))?;
+    let rows = client.query(
+        "SELECT conversation_id, matrix_room_id FROM matrix_room_mapping",
+        &[],
+    )
+    .await
+    .map_err(|e| AppError::StartServer(format!("load all room mappings: {e}")))?;
 
     let mut mappings = Vec::new();
-    for (conversation_id, room_id_str) in rows {
+    for row in rows {
+        let conversation_id: Uuid = row.get(0);
+        let room_id_str: String = row.get(1);
         match OwnedRoomId::try_from(room_id_str.clone()) {
             Ok(room_id) => {
                 mappings.push((conversation_id, room_id));

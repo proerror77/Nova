@@ -1,6 +1,5 @@
 use actix_web::{delete, get, post, put, web, HttpResponse};
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
 use uuid::Uuid;
 
 use crate::error::AppError;
@@ -286,19 +285,19 @@ pub async fn update_message(
     let message_id = message_id.into_inner();
 
     // Start transaction for atomic operation
-    let mut tx = state.db.begin().await?;
+    let mut client = state.db.get().await?;
+    let tx = client.transaction().await?;
 
     // 1. Get message with FOR UPDATE lock (prevents concurrent modifications)
-    let msg_row = sqlx::query(
+    let msg_row = tx.query_opt(
         "SELECT m.conversation_id, m.sender_id, m.version_number, m.created_at, m.content,
                 m.content_encrypted, m.content_nonce, c.privacy_mode::text AS privacy_mode
          FROM messages m
          JOIN conversations c ON c.id = m.conversation_id
          WHERE m.id = $1
          FOR UPDATE",
+        &[&message_id]
     )
-    .bind(message_id)
-    .fetch_optional(&mut *tx)
     .await?
     .ok_or(AppError::NotFound)?;
 
@@ -313,10 +312,7 @@ pub async fn update_message(
     };
 
     let mut old_content: String = msg_row.get("content");
-    let ciphertext: Option<Vec<u8>> = msg_row
-        .try_get::<Option<Vec<u8>>, _>("content_encrypted")
-        .ok()
-        .flatten();
+    let ciphertext: Option<Vec<u8>> = msg_row.get("content_encrypted");
 
     if matches!(
         privacy_mode,
@@ -362,12 +358,13 @@ pub async fn update_message(
     .await?;
 
     // Get new version number for broadcast event
-    let new_version: i32 = sqlx::query_scalar(
-        "SELECT version_number FROM messages WHERE id = $1"
+    let client = state.db.get().await?;
+    let new_version: i32 = client.query_one(
+        "SELECT version_number FROM messages WHERE id = $1",
+        &[&message_id]
     )
-    .bind(message_id)
-    .fetch_one(&state.db)
-    .await?;
+    .await?
+    .get(0);
 
     // 9. Broadcast message.edited event
     let event = WebSocketEvent::MessageEdited {
@@ -396,12 +393,11 @@ pub async fn delete_message(
 ) -> Result<HttpResponse, AppError> {
     let message_id = message_id.into_inner();
     // TOCTOU fix: Use atomic transaction for permission check + delete
-    let mut tx = state.db.begin().await?;
+    let mut client = state.db.get().await?;
+    let tx = client.transaction().await?;
 
     // Get message details to verify permissions and find conversation
-    let msg_row = sqlx::query("SELECT conversation_id, sender_id FROM messages WHERE id = $1")
-        .bind(message_id)
-        .fetch_optional(&mut *tx)
+    let msg_row = tx.query_opt("SELECT conversation_id, sender_id FROM messages WHERE id = $1", &[&message_id])
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("get message: {e}")))?
         .ok_or(crate::error::AppError::NotFound)?;
@@ -539,12 +535,11 @@ pub async fn recall_message(
             .await?;
 
     // 2. Get message and verify it belongs to this conversation
-    let msg_row = sqlx::query(
-        "SELECT sender_id, created_at, recalled_at FROM messages WHERE id = $1 AND conversation_id = $2"
+    let client = state.db.get().await?;
+    let msg_row = client.query_opt(
+        "SELECT sender_id, created_at, recalled_at FROM messages WHERE id = $1 AND conversation_id = $2",
+        &[&message_id, &conversation_id]
     )
-    .bind(message_id)
-    .bind(conversation_id)
-    .fetch_optional(&state.db)
     .await
     .map_err(|e| crate::error::AppError::StartServer(format!("fetch message: {e}")))?
     .ok_or(crate::error::AppError::NotFound)?;
@@ -577,23 +572,18 @@ pub async fn recall_message(
     }
 
     // 6. Execute recall in transaction (update message + insert audit log)
-    let mut tx = state.db.begin().await?;
+    let mut client = state.db.get().await?;
+    let tx = client.transaction().await?;
 
     // Update message to mark as recalled
-    sqlx::query("UPDATE messages SET recalled_at = $1 WHERE id = $2")
-        .bind(now)
-        .bind(message_id)
-        .execute(&mut *tx)
+    tx.execute("UPDATE messages SET recalled_at = $1 WHERE id = $2", &[&now, &message_id])
         .await?;
 
     // Insert audit log entry
-    sqlx::query(
-        "INSERT INTO message_recalls (message_id, recalled_by_user_id, recalled_at) VALUES ($1, $2, $3)"
+    tx.execute(
+        "INSERT INTO message_recalls (message_id, recalled_by_user_id, recalled_at) VALUES ($1, $2, $3)",
+        &[&message_id, &user.id, &now]
     )
-    .bind(message_id)
-    .bind(user.id)
-    .bind(now)
-    .execute(&mut *tx)
     .await?;
 
     tx.commit().await?;
@@ -659,15 +649,15 @@ pub async fn forward_message(
     .await?;
 
     // 3) Fetch original message content (plaintext)
-    let original_content: String = sqlx::query_scalar(
+    let client = state.db.get().await?;
+    let original_content: String = client.query_opt(
         "SELECT content FROM messages WHERE id = $1 AND conversation_id = $2 AND deleted_at IS NULL",
+        &[&message_id, &conversation_id]
     )
-    .bind(message_id)
-    .bind(conversation_id)
-    .fetch_optional(&state.db)
     .await
     .map_err(|e| crate::error::AppError::StartServer(format!("fetch original message: {e}")))?
-    .ok_or(crate::error::AppError::NotFound)?;
+    .ok_or(crate::error::AppError::NotFound)?
+    .get(0);
 
     // 4) Create new message in target conversation with same content
     let new_message = crate::services::message_service::MessageService::send_message_db(

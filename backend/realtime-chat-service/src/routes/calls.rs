@@ -4,7 +4,6 @@ use crate::services::call_service::CallService;
 use crate::state::AppState;
 use actix_web::{get, post, web, HttpResponse};
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
 use uuid::Uuid;
 
 // ============================================================================
@@ -220,12 +219,12 @@ pub async fn answer_call(
 ) -> Result<HttpResponse, AppError> {
     let call_id = call_id.into_inner();
     // Get the call to verify it exists and get conversation_id
-    let call_row =
-        sqlx::query("SELECT id, conversation_id, status FROM call_sessions WHERE id = $1")
-            .bind(call_id)
-            .fetch_optional(&state.db)
-            .await
-            .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?;
+    let client = state.db.get().await
+        .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?;
+
+    let call_row = client.query_opt("SELECT id, conversation_id, status FROM call_sessions WHERE id = $1", &[&call_id])
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?;
 
     let call_row =
         call_row.ok_or_else(|| crate::error::AppError::Config("Call not found".into()))?;
@@ -282,9 +281,10 @@ pub async fn reject_call(
 ) -> Result<HttpResponse, AppError> {
     let call_id = call_id.into_inner();
     // Get the call to verify it exists and get conversation_id
-    let call_row = sqlx::query("SELECT conversation_id FROM call_sessions WHERE id = $1")
-        .bind(call_id)
-        .fetch_optional(&state.db)
+    let client = state.db.get().await
+        .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?;
+
+    let call_row = client.query_opt("SELECT conversation_id FROM call_sessions WHERE id = $1", &[&call_id])
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?;
 
@@ -336,9 +336,10 @@ pub async fn end_call(
 ) -> Result<HttpResponse, AppError> {
     let call_id = call_id.into_inner();
     // Get the call to verify it exists and get conversation_id
-    let call_row = sqlx::query("SELECT conversation_id FROM call_sessions WHERE id = $1")
-        .bind(call_id)
-        .fetch_optional(&state.db)
+    let client = state.db.get().await
+        .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?;
+
+    let call_row = client.query_opt("SELECT conversation_id FROM call_sessions WHERE id = $1", &[&call_id])
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?;
 
@@ -390,11 +391,13 @@ pub async fn join_call(
 ) -> Result<HttpResponse, AppError> {
     let call_id = call_id.into_inner();
     // Get call details
-    let call_row = sqlx::query(
+    let client = state.db.get().await
+        .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?;
+
+    let call_row = client.query_opt(
         "SELECT conversation_id, status, max_participants, call_type FROM call_sessions WHERE id = $1",
+        &[&call_id]
     )
-    .bind(call_id)
-    .fetch_optional(&state.db)
     .await
     .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?;
 
@@ -485,9 +488,10 @@ pub async fn leave_call(
 ) -> Result<HttpResponse, AppError> {
     let call_id = call_id.into_inner();
     // Get call details
-    let call_row = sqlx::query("SELECT conversation_id FROM call_sessions WHERE id = $1")
-        .bind(call_id)
-        .fetch_optional(&state.db)
+    let client = state.db.get().await
+        .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?;
+
+    let call_row = client.query_opt("SELECT conversation_id FROM call_sessions WHERE id = $1", &[&call_id])
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?;
 
@@ -539,9 +543,10 @@ pub async fn get_participants(
 ) -> Result<HttpResponse, AppError> {
     let call_id = call_id.into_inner();
     // Get call details to verify conversation membership
-    let call_row = sqlx::query("SELECT conversation_id FROM call_sessions WHERE id = $1")
-        .bind(call_id)
-        .fetch_optional(&state.db)
+    let client = state.db.get().await
+        .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?;
+
+    let call_row = client.query_opt("SELECT conversation_id FROM call_sessions WHERE id = $1", &[&call_id])
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?;
 

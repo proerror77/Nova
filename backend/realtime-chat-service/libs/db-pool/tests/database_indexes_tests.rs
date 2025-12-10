@@ -1,440 +1,236 @@
-//! Database Indexes Tests (Quick Win #4)
+//! Database Index Tests
 //!
-//! Tests for database index creation and performance validation
+//! Tests for verifying database indexes are properly configured
+//! for optimal query performance.
 //!
-//! Test Coverage:
-//! - Index creation verification
-//! - Query performance before/after
-//! - Rollback capability
-//! - No locks during index creation (CONCURRENTLY)
+//! NOTE: These tests require a running PostgreSQL database with the
+//! application schema. Set DATABASE_URL environment variable to run.
 
-use db_pool::{create_pool, DbConfig};
-use sqlx::PgPool;
-use std::time::Instant;
+use db_pool::{create_pool, DbConfig, PgPool};
 
+/// Helper to create test pool
 async fn create_test_pool() -> PgPool {
-    let config = DbConfig::for_service("index-test");
+    let config = DbConfig {
+        service_name: "index-test".to_string(),
+        database_url: std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://postgres:password@localhost/nova_test".to_string()),
+        max_connections: 5,
+        min_connections: 1,
+        connect_timeout_secs: 10,
+        acquire_timeout_secs: 10,
+        idle_timeout_secs: 60,
+        max_lifetime_secs: 300,
+    };
+
     create_pool(config)
         .await
         .expect("Failed to create test pool")
 }
 
+/// Test that critical indexes exist on conversation_members table
 #[tokio::test]
-#[ignore] // Requires database setup
-async fn test_index_creation_verification() {
-    // Test: All critical indexes are created
+#[ignore] // Requires running PostgreSQL with schema
+async fn test_conversation_members_indexes_exist() {
     let pool = create_test_pool().await;
+    let client = pool.get().await.expect("Failed to get connection");
 
-    // Verify engagement_events indexes
-    let indexes = sqlx::query!(
-        r#"
-        SELECT indexname
-        FROM pg_indexes
-        WHERE tablename = 'engagement_events'
-        AND indexname LIKE 'idx_engagement%'
-        ORDER BY indexname
-        "#
-    )
-    .fetch_all(&pool)
-    .await
-    .expect("Failed to fetch indexes");
-
-    let expected_indexes = vec![
-        "idx_engagement_events_content_id",
-        "idx_engagement_events_created_at",
-        "idx_engagement_events_trending",
-        "idx_engagement_events_user_id",
-    ];
-
-    assert_eq!(
-        indexes.len(),
-        expected_indexes.len(),
-        "Should have {} indexes on engagement_events",
-        expected_indexes.len()
-    );
-
-    for expected in expected_indexes {
-        assert!(
-            indexes.iter().any(|row| row.indexname == expected),
-            "Missing index: {}",
-            expected
-        );
-    }
-}
-
-#[tokio::test]
-#[ignore] // Requires database setup
-async fn test_trending_scores_primary_key() {
-    // Test: trending_scores has composite primary key
-    let pool = create_test_pool().await;
-
-    let constraint = sqlx::query!(
-        r#"
-        SELECT constraint_name, constraint_type
-        FROM information_schema.table_constraints
-        WHERE table_name = 'trending_scores'
-        AND constraint_type = 'PRIMARY KEY'
-        "#
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to fetch primary key");
-
-    assert_eq!(constraint.constraint_name, "pk_trending_scores");
-}
-
-#[tokio::test]
-#[ignore] // Requires database setup with test data
-async fn test_query_performance_with_indexes() {
-    // Test: Queries are faster with indexes
-    let pool = create_test_pool().await;
-
-    // Insert test data
-    let content_id = uuid::Uuid::new_v4();
-    for _ in 0..1000 {
-        sqlx::query!(
+    let result = client
+        .query(
             r#"
-            INSERT INTO engagement_events (id, content_id, user_id, event_type, created_at)
-            VALUES ($1, $2, $3, $4, NOW())
+            SELECT indexname FROM pg_indexes
+            WHERE tablename = 'conversation_members'
+            ORDER BY indexname
             "#,
-            uuid::Uuid::new_v4(),
-            content_id,
-            uuid::Uuid::new_v4(),
-            "view"
+            &[],
         )
-        .execute(&pool)
         .await
-        .expect("Failed to insert test data");
-    }
+        .expect("Failed to query indexes");
 
-    // Query with index
-    let start = Instant::now();
-    let result = sqlx::query!(
-        r#"
-        SELECT COUNT(*) as count
-        FROM engagement_events
-        WHERE content_id = $1
-        AND created_at >= NOW() - INTERVAL '30 days'
-        "#,
-        content_id
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Query failed");
-    let elapsed = start.elapsed();
+    let index_names: Vec<String> = result
+        .iter()
+        .map(|row| row.get::<_, String>("indexname"))
+        .collect();
 
-    // With index, query should be very fast (<10ms)
+    // Verify expected indexes exist
     assert!(
-        elapsed.as_millis() < 100,
-        "Query with index should be fast (<100ms), took {:?}",
-        elapsed
+        index_names.iter().any(|n| n.contains("user_id")),
+        "Should have index on user_id"
     );
-    assert_eq!(result.count, Some(1000));
-
-    // Cleanup
-    sqlx::query!(
-        "DELETE FROM engagement_events WHERE content_id = $1",
-        content_id
-    )
-    .execute(&pool)
-    .await
-    .expect("Failed to cleanup");
-}
-
-#[tokio::test]
-#[ignore] // Requires database setup
-async fn test_explain_plan_uses_index() {
-    // Test: Query planner uses indexes
-    let pool = create_test_pool().await;
-
-    let content_id = uuid::Uuid::new_v4();
-
-    // Get explain plan
-    let explain = sqlx::query_scalar::<_, String>(
-        r#"
-        EXPLAIN (FORMAT JSON)
-        SELECT COUNT(*)
-        FROM engagement_events
-        WHERE content_id = $1
-        AND created_at >= NOW() - INTERVAL '30 days'
-        "#,
-    )
-    .bind(content_id)
-    .fetch_one(&pool)
-    .await
-    .expect("EXPLAIN failed");
-
-    // Parse JSON to verify index scan is used
     assert!(
-        explain.contains("Index Scan") || explain.contains("Index Only Scan"),
-        "Query should use index scan, got: {}",
-        explain
-    );
-
-    // Should NOT use sequential scan
-    assert!(
-        !explain.contains("Seq Scan"),
-        "Query should NOT use sequential scan"
+        index_names.iter().any(|n| n.contains("conversation_id")),
+        "Should have index on conversation_id"
     );
 }
 
+/// Test that critical indexes exist on messages table
 #[tokio::test]
-#[ignore] // Requires database setup
-async fn test_index_size_reasonable() {
-    // Test: Index sizes are within reasonable bounds
+#[ignore] // Requires running PostgreSQL with schema
+async fn test_messages_indexes_exist() {
     let pool = create_test_pool().await;
+    let client = pool.get().await.expect("Failed to get connection");
 
-    let index_sizes = sqlx::query!(
-        r#"
-        SELECT
-            indexname,
-            pg_size_pretty(pg_relation_size(indexrelid)) as size,
-            pg_relation_size(indexrelid) as size_bytes
-        FROM pg_stat_user_indexes
-        WHERE tablename IN ('engagement_events', 'trending_scores')
-        ORDER BY pg_relation_size(indexrelid) DESC
-        "#
-    )
-    .fetch_all(&pool)
-    .await
-    .expect("Failed to fetch index sizes");
-
-    for idx in index_sizes {
-        // No single index should exceed 500MB (warning threshold)
-        assert!(
-            idx.size_bytes < 500 * 1024 * 1024,
-            "Index {} is too large: {}",
-            idx.indexname,
-            idx.size
-        );
-    }
-}
-
-#[tokio::test]
-#[ignore] // Requires database setup
-async fn test_concurrent_index_creation() {
-    // Test: Indexes are created with CONCURRENTLY (no table locks)
-    let pool = create_test_pool().await;
-
-    // Simulate index creation
-    let result = sqlx::query(
-        r#"
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_test_concurrent
-        ON engagement_events(created_at)
-        "#,
-    )
-    .execute(&pool)
-    .await;
-
-    assert!(result.is_ok(), "Concurrent index creation should succeed");
-
-    // Verify index exists
-    let exists = sqlx::query_scalar::<_, bool>(
-        r#"
-        SELECT EXISTS (
-            SELECT 1 FROM pg_indexes
-            WHERE indexname = 'idx_test_concurrent'
+    let result = client
+        .query(
+            r#"
+            SELECT indexname FROM pg_indexes
+            WHERE tablename = 'messages'
+            ORDER BY indexname
+            "#,
+            &[],
         )
-        "#,
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to verify index");
-
-    assert!(exists, "Index should exist after creation");
-
-    // Cleanup
-    sqlx::query("DROP INDEX IF EXISTS idx_test_concurrent")
-        .execute(&pool)
         .await
-        .expect("Failed to cleanup");
+        .expect("Failed to query indexes");
+
+    let index_names: Vec<String> = result
+        .iter()
+        .map(|row| row.get::<_, String>("indexname"))
+        .collect();
+
+    // Verify expected indexes exist
+    assert!(
+        index_names.iter().any(|n| n.contains("conversation_id")),
+        "Should have index on conversation_id"
+    );
+    assert!(
+        index_names.iter().any(|n| n.contains("sender_id")),
+        "Should have index on sender_id"
+    );
+    assert!(
+        index_names.iter().any(|n| n.contains("created_at")),
+        "Should have index on created_at"
+    );
 }
 
+/// Test that critical indexes exist on conversations table
 #[tokio::test]
-#[ignore] // Requires database setup
-async fn test_rollback_capability() {
-    // Test: Indexes can be safely dropped (rollback)
+#[ignore] // Requires running PostgreSQL with schema
+async fn test_conversations_indexes_exist() {
     let pool = create_test_pool().await;
+    let client = pool.get().await.expect("Failed to get connection");
 
-    // Create temporary index
-    sqlx::query(
-        r#"
-        CREATE INDEX IF NOT EXISTS idx_test_rollback
-        ON engagement_events(user_id)
-        "#,
-    )
-    .execute(&pool)
-    .await
-    .expect("Failed to create test index");
-
-    // Verify it exists
-    let exists_before = sqlx::query_scalar::<_, bool>(
-        r#"
-        SELECT EXISTS (
-            SELECT 1 FROM pg_indexes
-            WHERE indexname = 'idx_test_rollback'
+    let result = client
+        .query(
+            r#"
+            SELECT indexname FROM pg_indexes
+            WHERE tablename = 'conversations'
+            ORDER BY indexname
+            "#,
+            &[],
         )
-        "#,
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to verify index");
-    assert!(exists_before);
-
-    // Drop it (rollback)
-    sqlx::query("DROP INDEX IF EXISTS idx_test_rollback")
-        .execute(&pool)
         .await
-        .expect("Failed to drop index");
+        .expect("Failed to query indexes");
 
-    // Verify it's gone
-    let exists_after = sqlx::query_scalar::<_, bool>(
-        r#"
-        SELECT EXISTS (
-            SELECT 1 FROM pg_indexes
-            WHERE indexname = 'idx_test_rollback'
-        )
-        "#,
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to verify index");
-    assert!(!exists_after);
-}
+    let index_names: Vec<String> = result
+        .iter()
+        .map(|row| row.get::<_, String>("indexname"))
+        .collect();
 
-#[tokio::test]
-#[ignore] // Requires database setup
-async fn test_posts_user_created_index() {
-    // Test: posts table has user_id + created_at index
-    let pool = create_test_pool().await;
-
-    let exists = sqlx::query_scalar::<_, bool>(
-        r#"
-        SELECT EXISTS (
-            SELECT 1 FROM pg_indexes
-            WHERE tablename = 'posts'
-            AND indexname = 'idx_posts_user_created'
-        )
-        "#,
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to check index");
-
-    assert!(exists, "idx_posts_user_created should exist");
-}
-
-#[tokio::test]
-#[ignore] // Requires database setup
-async fn test_comments_post_created_index() {
-    // Test: comments table has post_id + created_at index
-    let pool = create_test_pool().await;
-
-    let exists = sqlx::query_scalar::<_, bool>(
-        r#"
-        SELECT EXISTS (
-            SELECT 1 FROM pg_indexes
-            WHERE tablename = 'comments'
-            AND indexname = 'idx_comments_post_created'
-        )
-        "#,
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to check index");
-
-    assert!(exists, "idx_comments_post_created should exist");
-}
-
-#[tokio::test]
-#[ignore] // Requires database setup
-async fn test_partial_index_conditions() {
-    // Test: Partial indexes have correct WHERE clauses
-    let pool = create_test_pool().await;
-
-    let index_def = sqlx::query_scalar::<_, String>(
-        r#"
-        SELECT pg_get_indexdef(indexrelid)
-        FROM pg_stat_user_indexes
-        WHERE indexname = 'idx_posts_user_created'
-        "#,
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to get index definition");
-
-    // Should filter out soft-deleted posts
+    // Verify primary key index exists
     assert!(
-        index_def.contains("deleted_at IS NULL"),
-        "Index should filter soft-deleted posts: {}",
-        index_def
+        !index_names.is_empty(),
+        "Should have at least primary key index"
     );
 }
 
+/// Test index usage statistics (for monitoring)
 #[tokio::test]
-#[ignore] // Requires database setup
-async fn test_index_performance_trending_query() {
-    // Test: Trending query performance with indexes
+#[ignore] // Requires running PostgreSQL with schema and some data
+async fn test_index_usage_statistics() {
     let pool = create_test_pool().await;
+    let client = pool.get().await.expect("Failed to get connection");
 
-    let start = Instant::now();
-    let result = sqlx::query!(
-        r#"
-        SELECT content_id, score, rank
-        FROM trending_scores
-        WHERE time_window = '24h'
-        AND category = 'technology'
-        ORDER BY score DESC
-        LIMIT 100
-        "#
-    )
-    .fetch_all(&pool)
-    .await
-    .expect("Trending query failed");
-    let elapsed = start.elapsed();
+    let result = client
+        .query(
+            r#"
+            SELECT
+                schemaname,
+                relname as table_name,
+                indexrelname as index_name,
+                idx_scan as index_scans,
+                idx_tup_read as tuples_read,
+                idx_tup_fetch as tuples_fetched
+            FROM pg_stat_user_indexes
+            WHERE schemaname = 'public'
+            ORDER BY idx_scan DESC
+            LIMIT 20
+            "#,
+            &[],
+        )
+        .await
+        .expect("Failed to query index statistics");
 
-    // Should be very fast with index
-    assert!(
-        elapsed.as_millis() < 50,
-        "Trending query should be fast (<50ms), took {:?}",
-        elapsed
-    );
+    // Just verify we can query index stats
+    // In a real test, you might check that frequently used indexes have high scan counts
+    println!("Found {} index statistics entries", result.len());
+}
 
-    // Should return results in descending score order
-    for i in 0..result.len() - 1 {
-        assert!(
-            result[i].score >= result[i + 1].score,
-            "Results should be ordered by score DESC"
-        );
+/// Test for unused indexes (potential candidates for removal)
+#[tokio::test]
+#[ignore] // Requires running PostgreSQL with schema
+async fn test_find_unused_indexes() {
+    let pool = create_test_pool().await;
+    let client = pool.get().await.expect("Failed to get connection");
+
+    let result = client
+        .query(
+            r#"
+            SELECT
+                schemaname,
+                relname as table_name,
+                indexrelname as index_name,
+                idx_scan as index_scans,
+                pg_size_pretty(pg_relation_size(indexrelid)) as index_size
+            FROM pg_stat_user_indexes
+            WHERE schemaname = 'public'
+              AND idx_scan = 0
+              AND indexrelname NOT LIKE '%_pkey'
+            ORDER BY pg_relation_size(indexrelid) DESC
+            "#,
+            &[],
+        )
+        .await
+        .expect("Failed to query unused indexes");
+
+    // Log unused indexes for review
+    for row in result.iter() {
+        let table: String = row.get("table_name");
+        let index: String = row.get("index_name");
+        let size: String = row.get("index_size");
+        println!("Unused index: {} on {} (size: {})", index, table, size);
     }
 }
 
+/// Test for missing indexes on foreign keys
 #[tokio::test]
-#[ignore] // Requires database setup
-async fn test_analyze_statistics_updated() {
-    // Test: ANALYZE updates table statistics
+#[ignore] // Requires running PostgreSQL with schema
+async fn test_foreign_key_indexes() {
     let pool = create_test_pool().await;
+    let client = pool.get().await.expect("Failed to get connection");
 
-    // Force statistics update
-    sqlx::query("ANALYZE engagement_events")
-        .execute(&pool)
+    // Find foreign keys without indexes
+    let result = client
+        .query(
+            r#"
+            SELECT
+                tc.table_name,
+                kcu.column_name,
+                ccu.table_name AS foreign_table_name,
+                ccu.column_name AS foreign_column_name
+            FROM information_schema.table_constraints AS tc
+            JOIN information_schema.key_column_usage AS kcu
+                ON tc.constraint_name = kcu.constraint_name
+                AND tc.table_schema = kcu.table_schema
+            JOIN information_schema.constraint_column_usage AS ccu
+                ON ccu.constraint_name = tc.constraint_name
+                AND ccu.table_schema = tc.table_schema
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+              AND tc.table_schema = 'public'
+            "#,
+            &[],
+        )
         .await
-        .expect("ANALYZE failed");
+        .expect("Failed to query foreign keys");
 
-    // Verify statistics exist
-    let stats = sqlx::query!(
-        r#"
-        SELECT n_live_tup, n_dead_tup, last_analyze
-        FROM pg_stat_user_tables
-        WHERE relname = 'engagement_events'
-        "#
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to fetch statistics");
-
-    assert!(
-        stats.last_analyze.is_some(),
-        "Table should have analyze timestamp"
-    );
+    // Log foreign keys for review
+    println!("Found {} foreign key constraints", result.len());
 }

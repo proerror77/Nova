@@ -10,7 +10,7 @@ use actix::{Actor, ActorContext, AsyncContext, Handler, Message as ActixMessage,
 use actix_web::{get, web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use serde::Deserialize;
-use sqlx::{Pool, Postgres};
+use deadpool_postgres::Pool;
 use std::time::{Duration, Instant};
 use tracing::{error, warn};
 use uuid::Uuid;
@@ -41,7 +41,7 @@ struct WsSession {
     registry: ConnectionRegistry,
     redis: RedisClient,
     #[allow(dead_code)] // Reserved for database operations in event handlers
-    db: Pool<Postgres>,
+    db: Pool,
     hb: Instant,
     // Store full AppState for event handling
     app_state: AppState,
@@ -52,7 +52,7 @@ async fn handle_ws_event_async(
     user_id: Uuid,
     conversation_id: Uuid,
     evt: &WsInboundEvent,
-    _db: &sqlx::Pool<sqlx::Postgres>,
+    _db: &deadpool_postgres::Pool,
     registry: &ConnectionRegistry,
     redis: &RedisClient,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -171,7 +171,7 @@ impl WsSession {
         subscriber_id: crate::websocket::SubscriberId,
         registry: ConnectionRegistry,
         redis: RedisClient,
-        db: Pool<Postgres>,
+        db: Pool,
         app_state: AppState,
     ) -> Self {
         Self {
@@ -603,7 +603,7 @@ async fn validate_ws_token(
 }
 
 // Membership verification
-async fn verify_conversation_membership(db: &Pool<Postgres>, params: &WsParams) -> Result<(), ()> {
+async fn verify_conversation_membership(db: &Pool, params: &WsParams) -> Result<(), ()> {
     match ConversationService::is_member(db, params.conversation_id, params.user_id).await {
         Ok(true) => {
             tracing::debug!(

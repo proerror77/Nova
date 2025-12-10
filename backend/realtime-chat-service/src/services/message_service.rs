@@ -3,7 +3,7 @@ use crate::services::conversation_service::PrivacyMode;
 use crate::services::encryption::EncryptionService;
 use base64::{engine::general_purpose, Engine as _};
 use chrono::Utc;
-use sqlx::{Pool, Postgres, Row};
+use deadpool_postgres::Pool;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -11,19 +11,23 @@ pub struct MessageService;
 
 impl MessageService {
     async fn fetch_conversation_privacy(
-        db: &Pool<Postgres>,
+        db: &Pool,
         conversation_id: Uuid,
     ) -> Result<PrivacyMode, crate::error::AppError> {
-        let mode: Option<String> =
-            sqlx::query_scalar("SELECT privacy_mode::text FROM conversations WHERE id = $1")
-                .bind(conversation_id)
-                .fetch_optional(db)
-                .await
-                .map_err(|e| {
-                    crate::error::AppError::StartServer(format!("fetch privacy mode: {e}"))
-                })?;
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("fetch privacy mode: {e}"))
+        })?;
 
-        let mode = mode.ok_or(crate::error::AppError::NotFound)?;
+        let row = client
+            .query_opt("SELECT privacy_mode::text FROM conversations WHERE id = $1", &[&conversation_id])
+            .await
+            .map_err(|e| {
+                crate::error::AppError::StartServer(format!("fetch privacy mode: {e}"))
+            })?;
+
+        let mode: String = row
+            .ok_or(crate::error::AppError::NotFound)?
+            .get(0);
         let privacy = match mode.as_str() {
             "strict_e2e" => PrivacyMode::StrictE2e,
             "search_enabled" => PrivacyMode::SearchEnabled,
@@ -39,7 +43,7 @@ impl MessageService {
     // This simplifies the architecture and eliminates potential data inconsistencies
 
     pub async fn send_message_db(
-        db: &Pool<Postgres>,
+        db: &Pool,
         encryption: &EncryptionService,
         conversation_id: Uuid,
         sender_id: Uuid,
@@ -63,7 +67,11 @@ impl MessageService {
         let encrypted_slice = content_encrypted.as_deref();
         let nonce_slice = content_nonce.as_deref();
 
-        let row = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, Option<Vec<u8>>, Option<Vec<u8>>, i32, i64, Option<String>, chrono::DateTime<Utc>)>(
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        let row = client.query_one(
             r#"
             WITH next AS (
                 INSERT INTO conversation_counters (conversation_id, last_seq)
@@ -96,30 +104,22 @@ impl MessageService {
             FROM next
             RETURNING id, conversation_id, sender_id, content, content_encrypted, content_nonce, encryption_version, sequence_number, idempotency_key, created_at
             "#,
+            &[&id, &conversation_id, &sender_id, &content, &encrypted_slice, &nonce_slice, &encryption_version, &idempotency_key]
         )
-        .bind(id)
-        .bind(conversation_id)
-        .bind(sender_id)
-        .bind(&content)
-        .bind(encrypted_slice)
-        .bind(nonce_slice)
-        .bind(encryption_version)
-        .bind(idempotency_key)
-        .fetch_one(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("insert msg: {e}")))?;
 
         Ok(MessageRow {
-            id: row.0,
-            conversation_id: row.1,
-            sender_id: row.2,
-            content: row.3,
-            content_encrypted: row.4,
-            content_nonce: row.5,
-            encryption_version: row.6,
-            sequence_number: row.7,
-            idempotency_key: row.8,
-            created_at: row.9,
+            id: row.get(0),
+            conversation_id: row.get(1),
+            sender_id: row.get(2),
+            content: row.get(3),
+            content_encrypted: row.get(4),
+            content_nonce: row.get(5),
+            encryption_version: row.get(6),
+            sequence_number: row.get(7),
+            idempotency_key: row.get(8),
+            created_at: row.get(9),
             updated_at: None,
             edited_at: None,
             deleted_at: None,
@@ -130,7 +130,7 @@ impl MessageService {
     /// Note: This is a simplified version. Use send_message_db directly for full control.
     /// Returns: message ID
     pub async fn send_message(
-        db: &Pool<Postgres>,
+        db: &Pool,
         encryption: &EncryptionService,
         conversation_id: Uuid,
         sender_id: Uuid,
@@ -170,7 +170,7 @@ impl MessageService {
     /// Returns: (message_id, sequence_number)
     #[allow(clippy::too_many_arguments)]
     pub async fn send_audio_message_db(
-        db: &Pool<Postgres>,
+        db: &Pool,
         encryption: &EncryptionService,
         conversation_id: Uuid,
         sender_id: Uuid,
@@ -194,7 +194,11 @@ impl MessageService {
                 (audio_url.to_string(), None, None, 0)
             };
 
-        let seq: i64 = sqlx::query_scalar(
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        let seq: i64 = client.query_one(
             r#"
             WITH next AS (
                 INSERT INTO conversation_counters (conversation_id, last_seq)
@@ -233,20 +237,11 @@ impl MessageService {
             FROM next
             RETURNING sequence_number
             "#,
+            &[&id, &conversation_id, &sender_id, &content, &(duration_ms as i32), &audio_codec, &content_encrypted.as_deref(), &content_nonce.as_deref(), &encryption_version, &idempotency_key]
         )
-        .bind(id)
-        .bind(conversation_id)
-        .bind(sender_id)
-        .bind(&content)
-        .bind(duration_ms as i32)
-        .bind(audio_codec)
-        .bind(content_encrypted.as_deref())
-        .bind(content_nonce.as_deref())
-        .bind(encryption_version)
-        .bind(idempotency_key)
-        .fetch_one(db)
         .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("insert audio msg: {e}")))?;
+        .map_err(|e| crate::error::AppError::StartServer(format!("insert audio msg: {e}")))?
+        .get(0);
 
         Ok((id, seq))
     }
@@ -255,7 +250,7 @@ impl MessageService {
     /// Sends to Nova DB first, then optionally to Matrix homeserver
     /// Matrix failures are logged but do not block the message send
     pub async fn send_message_with_matrix(
-        db: &Pool<Postgres>,
+        db: &Pool,
         encryption: &EncryptionService,
         matrix_client: Option<Arc<super::matrix_client::MatrixClient>>,
         conversation_id: Uuid,
@@ -351,7 +346,7 @@ impl MessageService {
     /// Matrix failures are logged but do not block the message send
     #[allow(clippy::too_many_arguments)]
     pub async fn send_audio_message_with_matrix(
-        db: &Pool<Postgres>,
+        db: &Pool,
         encryption: &EncryptionService,
         matrix_client: Option<Arc<super::matrix_client::MatrixClient>>,
         conversation_id: Uuid,
@@ -415,8 +410,10 @@ impl MessageService {
             // Send audio as media to Matrix
             // Use audio_url as the media URL, extract filename
             let filename = audio_url.split('/').next_back().unwrap_or("audio.opus");
+            // Set upload_to_matrix to true to enable full Matrix media upload
+            // This uploads the media to Matrix server and sends as proper media message
             match matrix
-                .send_media(conversation_id, &room_id, audio_url, "audio", filename)
+                .send_media(conversation_id, &room_id, audio_url, "audio", filename, true)
                 .await
             {
                 Ok(event_id) => {
@@ -460,7 +457,7 @@ impl MessageService {
     /// Updates Nova DB first, then sends edit event to Matrix
     /// Matrix failures are logged but do not block the update
     pub async fn update_message_with_matrix(
-        db: &Pool<Postgres>,
+        db: &Pool,
         encryption: &EncryptionService,
         matrix_client: Option<Arc<super::matrix_client::MatrixClient>>,
         message_id: Uuid,
@@ -513,7 +510,7 @@ impl MessageService {
     /// Deletes from Nova DB first, then sends redaction to Matrix
     /// Matrix failures are logged but do not block the deletion
     pub async fn soft_delete_message_with_matrix(
-        db: &Pool<Postgres>,
+        db: &Pool,
         matrix_client: Option<Arc<super::matrix_client::MatrixClient>>,
         message_id: Uuid,
         reason: Option<&str>,
@@ -561,10 +558,14 @@ impl MessageService {
     }
 
     pub async fn get_message_history_db(
-        db: &Pool<Postgres>,
+        db: &Pool,
         conversation_id: Uuid,
     ) -> Result<Vec<super::super::routes::messages::MessageDto>, crate::error::AppError> {
-        let rows = sqlx::query(
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        let rows = client.query(
             r#"SELECT id,
                       sender_id,
                       m.sequence_number AS sequence_number,
@@ -580,9 +581,8 @@ impl MessageService {
                WHERE conversation_id = $1 AND deleted_at IS NULL
                ORDER BY created_at ASC
                LIMIT 200"#,
+            &[&conversation_id]
         )
-        .bind(conversation_id)
-        .fetch_all(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("history: {e}")))?;
         let privacy_mode = Self::fetch_conversation_privacy(db, conversation_id).await?;
@@ -600,12 +600,8 @@ impl MessageService {
             let message_type: Option<String> = r.get("message_type");
 
             if use_encryption {
-                let ciphertext: Option<Vec<u8>> = r
-                    .try_get::<Option<Vec<u8>>, _>("content_encrypted")
-                    .unwrap_or(None);
-                let nonce: Option<Vec<u8>> = r
-                    .try_get::<Option<Vec<u8>>, _>("content_nonce")
-                    .unwrap_or(None);
+                let ciphertext: Option<Vec<u8>> = r.get("content_encrypted");
+                let nonce: Option<Vec<u8>> = r.get("content_nonce");
                 out.push(super::super::routes::messages::MessageDto {
                     id,
                     sender_id,
@@ -649,7 +645,7 @@ impl MessageService {
 
     /// Get message history with full details (reactions, attachments)
     pub async fn get_message_history_with_details(
-        db: &Pool<Postgres>,
+        db: &Pool,
         _encryption: &EncryptionService,
         conversation_id: Uuid,
         user_id: Uuid,
@@ -691,11 +687,11 @@ impl MessageService {
             where_clause
         );
 
-        let messages = sqlx::query(&query_sql)
-            .bind(conversation_id)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(db)
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        let messages = client.query(&query_sql, &[&conversation_id, &limit, &offset])
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("fetch messages: {e}")))?;
 
@@ -706,7 +702,7 @@ impl MessageService {
         let message_ids: Vec<Uuid> = messages.iter().map(|r| r.get("id")).collect();
 
         // 2. Fetch reactions for all messages (aggregated by emoji)
-        let reactions_query = sqlx::query(
+        let reactions_query = client.query(
             r#"
             SELECT
                 message_id,
@@ -717,10 +713,8 @@ impl MessageService {
             WHERE message_id = ANY($2)
             GROUP BY message_id, emoji
             "#,
+            &[&user_id, &message_ids]
         )
-        .bind(user_id)
-        .bind(&message_ids)
-        .fetch_all(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("fetch reactions: {e}")))?;
 
@@ -743,13 +737,12 @@ impl MessageService {
         }
 
         // 3. Fetch attachments for all messages
-        let attachments_query = sqlx::query(
+        let attachments_query = client.query(
             "SELECT message_id, id, file_name, file_type, file_size, s3_key \
              FROM message_attachments \
              WHERE message_id = ANY($1)",
+            &[&message_ids]
         )
-        .bind(&message_ids)
-        .fetch_all(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("fetch attachments: {e}")))?;
 
@@ -789,12 +782,8 @@ impl MessageService {
                 let message_type: Option<String> = r.get("message_type");
 
                 if use_encryption {
-                    let ciphertext: Option<Vec<u8>> = r
-                        .try_get::<Option<Vec<u8>>, _>("content_encrypted")
-                        .unwrap_or(None);
-                    let nonce: Option<Vec<u8>> = r
-                        .try_get::<Option<Vec<u8>>, _>("content_nonce")
-                        .unwrap_or(None);
+                    let ciphertext: Option<Vec<u8>> = r.get("content_encrypted");
+                    let nonce: Option<Vec<u8>> = r.get("content_nonce");
                     MessageDto {
                         id,
                         sender_id,
@@ -839,7 +828,7 @@ impl MessageService {
     }
 
     pub async fn update_message_db(
-        db: &Pool<Postgres>,
+        db: &Pool,
         encryption: &EncryptionService,
         message_id: Uuid,
         plaintext: &[u8],
@@ -847,10 +836,12 @@ impl MessageService {
         let content_plain = String::from_utf8(plaintext.to_vec())
             .map_err(|e| crate::error::AppError::Config(format!("invalid utf8: {e}")))?;
 
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
         // Get conversation_id and sender_id before updating
-        let msg_info = sqlx::query("SELECT conversation_id FROM messages WHERE id = $1")
-            .bind(message_id)
-            .fetch_one(db)
+        let msg_info = client.query_one("SELECT conversation_id FROM messages WHERE id = $1", &[&message_id])
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("get message info: {e}")))?;
         let conversation_id: Uuid = msg_info.get("conversation_id");
@@ -859,23 +850,17 @@ impl MessageService {
 
         if matches!(privacy_mode, PrivacyMode::StrictE2e) {
             let (ciphertext, nonce) = encryption.encrypt(conversation_id, plaintext)?;
-            sqlx::query(
+            client.execute(
                 "UPDATE messages SET content = $1, content_encrypted = $2, content_nonce = $3, encryption_version = 1, version_number = version_number + 1, updated_at = NOW() WHERE id = $4",
+                &[&"", &ciphertext, &nonce.to_vec(), &message_id]
             )
-            .bind("")
-            .bind(ciphertext)
-            .bind(nonce.to_vec())
-            .bind(message_id)
-            .execute(db)
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("update msg: {e}")))?;
         } else {
-            sqlx::query(
+            client.execute(
                 "UPDATE messages SET content = $1, content_encrypted = NULL, content_nonce = NULL, encryption_version = 0, version_number = version_number + 1, updated_at = NOW() WHERE id = $2",
+                &[&content_plain, &message_id]
             )
-                .bind(&content_plain)
-                .bind(message_id)
-                .execute(db)
                 .await
                 .map_err(|e| crate::error::AppError::StartServer(format!("update msg: {e}")))?;
         }
@@ -884,12 +869,14 @@ impl MessageService {
     }
 
     pub async fn soft_delete_message_db(
-        db: &Pool<Postgres>,
+        db: &Pool,
         message_id: Uuid,
     ) -> Result<(), crate::error::AppError> {
-        sqlx::query("UPDATE messages SET deleted_at=NOW() WHERE id=$1")
-            .bind(message_id)
-            .execute(db)
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
+        client.execute("UPDATE messages SET deleted_at=NOW() WHERE id=$1", &[&message_id])
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("delete msg: {e}")))?;
 
@@ -907,7 +894,7 @@ impl MessageService {
     /// * `offset` - Number of results to skip for pagination
     /// * `sort_by` - Sort order: 'recent' (default), 'oldest', 'relevance'
     pub async fn search_messages(
-        db: &Pool<Postgres>,
+        db: &Pool,
         conversation_id: Uuid,
         query: &str,
         limit: i64,
@@ -929,17 +916,19 @@ impl MessageService {
         // Requires GIN index on content_tsv (generated column with to_tsvector)
         // See: backend/messaging-service/migrations/0011_add_search_index.sql
 
+        let client = db.get().await.map_err(|e| {
+            crate::error::AppError::StartServer(format!("get client: {e}"))
+        })?;
+
         // Get total count for pagination metadata
-        let count_result = sqlx::query(
+        let count_result = client.query_one(
             "SELECT COUNT(*) as total FROM messages m
              WHERE m.conversation_id = $1
                AND m.deleted_at IS NULL
                AND m.content IS NOT NULL
                AND m.content_tsv @@ plainto_tsquery('english', $2)",
+            &[&conversation_id, &query]
         )
-        .bind(conversation_id)
-        .bind(query)
-        .fetch_one(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("count search results: {e}")))?;
         let total: i64 = count_result.get("total");
@@ -978,12 +967,7 @@ impl MessageService {
             search_condition, sort_clause
         );
 
-        let rows = sqlx::query(&query_sql)
-            .bind(conversation_id)
-            .bind(query)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(db)
+        let rows = client.query(&query_sql, &[&conversation_id, &query, &limit, &offset])
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("search: {e}")))?;
 
@@ -995,10 +979,10 @@ impl MessageService {
                 let seq: i64 = r.get("sequence_number");
                 let created_at: chrono::DateTime<Utc> = r.get("created_at");
                 let content: String = r.get("content");
-                let recalled_at: Option<chrono::DateTime<Utc>> = r.try_get("recalled_at").ok();
-                let edited_at: Option<chrono::DateTime<Utc>> = r.try_get("edited_at").ok();
-                let version_number: i32 = r.try_get("version_number").unwrap_or(1);
-                let message_type: Option<String> = r.try_get("message_type").ok();
+                let recalled_at: Option<chrono::DateTime<Utc>> = r.get("recalled_at");
+                let edited_at: Option<chrono::DateTime<Utc>> = r.get("edited_at");
+                let version_number: i32 = r.get("version_number");
+                let message_type: Option<String> = r.get("message_type");
 
                 super::super::routes::messages::MessageDto {
                     id,

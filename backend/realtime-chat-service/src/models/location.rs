@@ -54,7 +54,7 @@ impl LocationCoordinates {
 }
 
 /// User location in a conversation
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserLocation {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -73,6 +73,27 @@ pub struct UserLocation {
     pub updated_at: DateTime<Utc>,
     pub stopped_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<DateTime<Utc>>,
+}
+
+impl UserLocation {
+    pub fn from_row(row: &tokio_postgres::Row) -> Self {
+        Self {
+            id: row.get("id"),
+            user_id: row.get("user_id"),
+            conversation_id: row.get("conversation_id"),
+            latitude: row.get("latitude"),
+            longitude: row.get("longitude"),
+            accuracy_meters: row.get("accuracy_meters"),
+            altitude_meters: row.get("altitude_meters"),
+            heading_degrees: row.get("heading_degrees"),
+            speed_mps: row.get("speed_mps"),
+            is_active: row.get("is_active"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+            stopped_at: row.get("stopped_at"),
+            deleted_at: row.get("deleted_at"),
+        }
+    }
 }
 
 /// Location sharing event
@@ -193,7 +214,7 @@ pub struct LocationStoppedPayload {
 }
 
 /// Location permission settings
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocationPermission {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -202,6 +223,20 @@ pub struct LocationPermission {
     pub blur_location: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+impl LocationPermission {
+    pub fn from_row(row: &tokio_postgres::Row) -> Self {
+        Self {
+            id: row.get("id"),
+            user_id: row.get("user_id"),
+            allow_conversations: row.get("allow_conversations"),
+            allow_search: row.get("allow_search"),
+            blur_location: row.get("blur_location"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        }
+    }
 }
 
 /// API Request: Update location permissions

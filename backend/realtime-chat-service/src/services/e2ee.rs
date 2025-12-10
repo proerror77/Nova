@@ -8,10 +8,10 @@
 /// - Shared secrets are derived via ECDH (Elliptic Curve Diffie-Hellman)
 use crate::error::AppError;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use deadpool_postgres::Pool;
 use hkdf::Hkdf;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
-use sqlx::{Pool, Postgres, Row};
 use uuid::Uuid;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -169,7 +169,7 @@ impl E2eeService {
     /// Private key is encrypted at rest using master key
     pub async fn store_device_key(
         &self,
-        pool: &Pool<Postgres>,
+        pool: &Pool,
         user_id: Uuid,
         device_id: &str,
         public_key: &[u8],
@@ -189,19 +189,16 @@ impl E2eeService {
         let public_key_b64 = BASE64.encode(public_key);
         let secret_key_b64 = BASE64.encode(&stored_secret);
 
-        let result = sqlx::query(
+        let client = pool.get().await.map_err(|e| AppError::Database(e.to_string()))?;
+        let result = client.execute(
             "INSERT INTO device_keys (user_id, device_id, public_key, private_key_encrypted, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, NOW(), NOW())"
+             VALUES ($1, $2, $3, $4, NOW(), NOW())",
+            &[&user_id, &device_id, &public_key_b64, &secret_key_b64]
         )
-        .bind(user_id)
-        .bind(device_id)
-        .bind(public_key_b64)
-        .bind(secret_key_b64)
-        .execute(pool)
         .await
         .map_err(|e| AppError::Database(e.to_string()))?;
 
-        if result.rows_affected() == 0 {
+        if result == 0 {
             return Err(AppError::Encryption(
                 "device key already exists for this user/device".to_string(),
             ));
@@ -213,17 +210,17 @@ impl E2eeService {
     /// Retrieve device public key from database
     pub async fn get_device_public_key(
         &self,
-        pool: &Pool<Postgres>,
+        pool: &Pool,
         user_id: Uuid,
         device_id: &str,
     ) -> Result<Option<Vec<u8>>, AppError> {
-        let row =
-            sqlx::query("SELECT public_key FROM device_keys WHERE user_id = $1 AND device_id = $2")
-                .bind(user_id)
-                .bind(device_id)
-                .fetch_optional(pool)
-                .await
-                .map_err(|e| AppError::Database(e.to_string()))?;
+        let client = pool.get().await.map_err(|e| AppError::Database(e.to_string()))?;
+        let row = client.query_opt(
+                "SELECT public_key FROM device_keys WHERE user_id = $1 AND device_id = $2",
+                &[&user_id, &device_id]
+            )
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
 
         match row {
             Some(row) => {
@@ -240,16 +237,15 @@ impl E2eeService {
     /// Retrieve device secret key from database (decrypts with master key)
     pub async fn get_device_secret_key(
         &self,
-        pool: &Pool<Postgres>,
+        pool: &Pool,
         user_id: Uuid,
         device_id: &str,
     ) -> Result<Option<Vec<u8>>, AppError> {
-        let row = sqlx::query(
+        let client = pool.get().await.map_err(|e| AppError::Database(e.to_string()))?;
+        let row = client.query_opt(
             "SELECT private_key_encrypted FROM device_keys WHERE user_id = $1 AND device_id = $2",
+            &[&user_id, &device_id]
         )
-        .bind(user_id)
-        .bind(device_id)
-        .fetch_optional(pool)
         .await
         .map_err(|e| AppError::Database(e.to_string()))?;
 
@@ -286,7 +282,7 @@ impl E2eeService {
     /// Stores hash of shared secret for verification without storing the secret itself
     pub async fn record_key_exchange(
         &self,
-        pool: &Pool<Postgres>,
+        pool: &Pool,
         conversation_id: Uuid,
         initiator_id: Uuid,
         peer_id: Uuid,
@@ -298,15 +294,12 @@ impl E2eeService {
         mac.update(shared_secret);
         let shared_secret_hash = mac.finalize().into_bytes();
 
-        sqlx::query(
+        let client = pool.get().await.map_err(|e| AppError::Database(e.to_string()))?;
+        client.execute(
             "INSERT INTO key_exchanges (conversation_id, initiator_id, peer_id, shared_secret_hash, created_at)
-             VALUES ($1, $2, $3, $4, NOW())"
+             VALUES ($1, $2, $3, $4, NOW())",
+            &[&conversation_id, &initiator_id, &peer_id, &shared_secret_hash.as_slice()]
         )
-        .bind(conversation_id)
-        .bind(initiator_id)
-        .bind(peer_id)
-        .bind(&shared_secret_hash[..])
-        .execute(pool)
         .await
         .map_err(|e| AppError::Database(e.to_string()))?;
 

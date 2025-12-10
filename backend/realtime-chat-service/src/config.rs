@@ -32,6 +32,9 @@ pub struct MatrixConfig {
     pub service_user: String,
     pub access_token: Option<String>,
     pub device_name: String,
+    /// Recovery key for E2EE key backup (Base58-encoded)
+    /// Set this to enable automatic key recovery on service restart
+    pub recovery_key: Option<String>,
 }
 
 /// VoIP configuration combining ICE servers and Matrix settings
@@ -251,6 +254,7 @@ impl Config {
             access_token: env::var("MATRIX_ACCESS_TOKEN").ok(),
             device_name: env::var("MATRIX_DEVICE_NAME")
                 .unwrap_or_else(|_| "nova-realtime-chat-service".to_string()),
+            recovery_key: env::var("MATRIX_RECOVERY_KEY").ok(),
         };
 
         Ok(Self {

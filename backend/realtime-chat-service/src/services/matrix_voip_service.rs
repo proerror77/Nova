@@ -1,13 +1,14 @@
 use crate::error::AppError;
 use crate::services::matrix_client::MatrixClient;
+use matrix_sdk::ruma::serde::Raw;
 use matrix_sdk::ruma::{RoomId, UserId};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
-// Matrix SDK 0.7 doesn't have full VoIP event types, so we define them manually
+// Matrix SDK 0.16 supports VoIP events via raw JSON events
 // Based on Matrix VoIP spec: https://spec.matrix.org/v1.1/client-server-api/#voice-over-ip
 
 /// ICE candidate for WebRTC
@@ -235,53 +236,80 @@ impl MatrixVoipService {
         Ok(())
     }
 
-    /// Helper function to send custom Matrix events using SDK 0.7 API
+    /// Send custom Matrix events using SDK 0.16 raw event API
     ///
-    /// **STATUS**: Placeholder implementation for MVP
+    /// This implementation uses `room.send_raw()` to send custom VoIP events
+    /// that are not yet fully typed in Matrix SDK 0.16.
     ///
-    /// Matrix SDK 0.7 has limited support for custom event types. Proper implementation requires:
-    /// 1. Creating custom EventContent structs that implement MessageLikeEventContent trait
-    /// 2. Using room.send() with typed events, OR
-    /// 3. Using Client's low-level HTTP client directly with raw requests
+    /// # Arguments
+    /// * `room_id` - Matrix room to send event to
+    /// * `event_type` - Matrix event type (e.g., "m.call.invite")
+    /// * `content` - Event content as JSON
     ///
-    /// For MVP, VoIP signaling will be implemented via WebSocket direct signaling.
-    /// This Matrix integration will be completed in Phase 2 after upgrading to SDK 0.16.
-    ///
-    /// TODO (SDK 0.16 upgrade):
-    /// - Implement using typed CallInviteEventContent from matrix-sdk 0.16
-    /// - Or use Raw<AnyMessageLikeEventContent> with proper serialization
-    /// - Test with actual Matrix homeserver
+    /// # Returns
+    /// Matrix event ID of the sent event
     async fn send_custom_event(
         &self,
         room_id: &RoomId,
         event_type: &str,
-        _content: serde_json::Value,
+        content: serde_json::Value,
     ) -> Result<String, AppError> {
-        // Verify room exists
-        let _room = self
+        // Get room from client
+        let room = self
             .matrix_client
             .inner()
             .get_room(room_id)
-            .ok_or(AppError::NotFound)?;
+            .ok_or_else(|| {
+                error!(room_id = %room_id, "Room not found");
+                AppError::NotFound
+            })?;
 
         debug!(
             room_id = %room_id,
             event_type = %event_type,
-            "[PLACEHOLDER] Would send custom Matrix event (SDK 0.7 limitation)"
+            "Sending custom Matrix event"
         );
 
-        // Return placeholder event ID
-        // In production, this will be replaced with actual Matrix event sending
-        let placeholder_event_id = format!("$placeholder_{}", Uuid::new_v4());
+        // Convert JSON content to Raw format for Matrix SDK
+        // First serialize to string, then parse as Raw
+        let json_string = serde_json::to_string(&content)
+            .map_err(|e| {
+                error!(error = %e, "Failed to serialize event content");
+                AppError::BadRequest(format!("Invalid event content: {}", e))
+            })?;
+
+        let raw_content = Raw::from_json(
+            serde_json::value::RawValue::from_string(json_string)
+                .map_err(|e| {
+                    error!(error = %e, "Failed to create raw JSON value");
+                    AppError::BadRequest(format!("Invalid JSON format: {}", e))
+                })?
+        );
+
+        // Send raw event using Matrix SDK 0.16 API
+        let response = room
+            .send_raw(event_type, raw_content)
+            .await
+            .map_err(|e| {
+                error!(
+                    error = %e,
+                    room_id = %room_id,
+                    event_type = %event_type,
+                    "Failed to send Matrix event"
+                );
+                AppError::StartServer(format!("Matrix send event failed: {}", e))
+            })?;
+
+        let event_id = response.event_id.to_string();
 
         info!(
             room_id = %room_id,
             event_type = %event_type,
-            event_id = %placeholder_event_id,
-            "[PLACEHOLDER] Matrix VoIP event sending deferred to SDK 0.16 upgrade"
+            event_id = %event_id,
+            "Custom Matrix event sent successfully"
         );
 
-        Ok(placeholder_event_id)
+        Ok(event_id)
     }
 
     /// Get the underlying Matrix client

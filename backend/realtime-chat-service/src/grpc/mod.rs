@@ -10,8 +10,6 @@ use crate::nova::realtime_chat::v1::{
 };
 use crate::services::conversation_service::ConversationService;
 use crate::state::AppState;
-use chrono::Utc;
-use sqlx::Row;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
@@ -81,25 +79,29 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
         };
 
         // Fetch metadata for response
-        let meta_row =
-            sqlx::query("SELECT created_at, updated_at FROM conversations WHERE id = $1")
-                .bind(conversation_id)
-                .fetch_one(&self.state.db)
-                .await
-                .map_err(|e| Status::internal(format!("load conversation meta failed: {e}")))?;
+        let client = self.state.db.get().await
+            .map_err(|e| Status::internal(format!("db pool error: {e}")))?;
 
-        let created_at: chrono::DateTime<chrono::Utc> =
-            meta_row.try_get("created_at").unwrap_or(Utc::now());
-        let updated_at: chrono::DateTime<chrono::Utc> =
-            meta_row.try_get("updated_at").unwrap_or(created_at);
+        let meta_row = client
+            .query_one(
+                "SELECT created_at, updated_at FROM conversations WHERE id = $1",
+                &[&conversation_id],
+            )
+            .await
+            .map_err(|e| Status::internal(format!("load conversation meta failed: {e}")))?;
 
-        let members = sqlx::query_scalar::<_, Uuid>(
-            "SELECT user_id FROM conversation_members WHERE conversation_id = $1",
-        )
-        .bind(conversation_id)
-        .fetch_all(&self.state.db)
-        .await
-        .map_err(|e| Status::internal(format!("load members failed: {e}")))?;
+        let created_at: chrono::DateTime<chrono::Utc> = meta_row.get("created_at");
+        let updated_at: chrono::DateTime<chrono::Utc> = meta_row.get("updated_at");
+
+        let member_rows = client
+            .query(
+                "SELECT user_id FROM conversation_members WHERE conversation_id = $1",
+                &[&conversation_id],
+            )
+            .await
+            .map_err(|e| Status::internal(format!("load members failed: {e}")))?;
+
+        let members: Vec<Uuid> = member_rows.iter().map(|row| row.get("user_id")).collect();
 
         let conversation = Conversation {
             id: conversation_id.to_string(),
@@ -187,46 +189,45 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
             ));
         }
 
-        let meta_row = sqlx::query(
-            "SELECT id, conversation_type, name, created_at, updated_at FROM conversations WHERE id = $1",
-        )
-        .bind(conversation_id)
-        .fetch_optional(&self.state.db)
-        .await
-        .map_err(|e| Status::internal(format!("fetch conversation failed: {e}")))?;
+        let client = self.state.db.get().await
+            .map_err(|e| Status::internal(format!("db pool error: {e}")))?;
+
+        let meta_row = client
+            .query_opt(
+                "SELECT id, conversation_type, name, created_at, updated_at FROM conversations WHERE id = $1",
+                &[&conversation_id],
+            )
+            .await
+            .map_err(|e| Status::internal(format!("fetch conversation failed: {e}")))?;
 
         let row = match meta_row {
             Some(r) => r,
             None => return Err(Status::not_found("conversation not found")),
         };
 
-        let conv_type_str: String = row
-            .try_get("conversation_type")
-            .unwrap_or_else(|_| "direct".into());
+        let conv_type_str: String = row.get("conversation_type");
         let proto_type = match conv_type_str.as_str() {
             "group" => ConversationType::Group as i32,
             _ => ConversationType::Direct as i32,
         };
 
-        let members = sqlx::query_scalar::<_, Uuid>(
-            "SELECT user_id FROM conversation_members WHERE conversation_id = $1",
-        )
-        .bind(conversation_id)
-        .fetch_all(&self.state.db)
-        .await
-        .map_err(|e| Status::internal(format!("load members failed: {e}")))?;
+        let member_rows = client
+            .query(
+                "SELECT user_id FROM conversation_members WHERE conversation_id = $1",
+                &[&conversation_id],
+            )
+            .await
+            .map_err(|e| Status::internal(format!("load members failed: {e}")))?;
 
-        let created_at: chrono::DateTime<chrono::Utc> =
-            row.try_get("created_at").unwrap_or(Utc::now());
-        let updated_at: chrono::DateTime<chrono::Utc> =
-            row.try_get("updated_at").unwrap_or(created_at);
+        let members: Vec<Uuid> = member_rows.iter().map(|r| r.get("user_id")).collect();
+
+        let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
+        let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
+        let name: Option<String> = row.get("name");
 
         let conversation = Conversation {
             id: conversation_id.to_string(),
-            name: row
-                .try_get::<Option<String>, _>("name")
-                .unwrap_or(None)
-                .unwrap_or_default(),
+            name: name.unwrap_or_default(),
             conversation_type: proto_type,
             participant_ids: members.into_iter().map(|u| u.to_string()).collect(),
             created_at: created_at.timestamp(),
@@ -248,14 +249,18 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
             .map_err(|_| Status::invalid_argument("invalid user id"))?;
         let limit = req.limit.clamp(1, 50) as i64;
 
-        let conv_ids: Vec<Uuid> = sqlx::query_scalar(
-            "SELECT conversation_id FROM conversation_members WHERE user_id = $1 ORDER BY joined_at DESC LIMIT $2",
-        )
-        .bind(user_id)
-        .bind(limit + 1)
-        .fetch_all(&self.state.db)
-        .await
-        .map_err(|e| Status::internal(format!("fetch conversations failed: {e}")))?;
+        let client = self.state.db.get().await
+            .map_err(|e| Status::internal(format!("db pool error: {e}")))?;
+
+        let conv_id_rows = client
+            .query(
+                "SELECT conversation_id FROM conversation_members WHERE user_id = $1 ORDER BY joined_at DESC LIMIT $2",
+                &[&user_id, &(limit + 1)],
+            )
+            .await
+            .map_err(|e| Status::internal(format!("fetch conversations failed: {e}")))?;
+
+        let conv_ids: Vec<Uuid> = conv_id_rows.iter().map(|row| row.get("conversation_id")).collect();
 
         if conv_ids.is_empty() {
             return Ok(Response::new(ListConversationsResponse {
@@ -268,54 +273,48 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
         let has_more = conv_ids.len() as i64 > limit;
         let conv_ids: Vec<Uuid> = conv_ids.into_iter().take(limit as usize).collect();
 
-        let rows = sqlx::query(
-            "SELECT id, name, conversation_type, created_at, updated_at FROM conversations WHERE id = ANY($1::uuid[]) ORDER BY updated_at DESC",
-        )
-        .bind(&conv_ids)
-        .fetch_all(&self.state.db)
-        .await
-        .map_err(|e| Status::internal(format!("load conversation rows failed: {e}")))?;
+        let rows = client
+            .query(
+                "SELECT id, name, conversation_type, created_at, updated_at FROM conversations WHERE id = ANY($1::uuid[]) ORDER BY updated_at DESC",
+                &[&conv_ids],
+            )
+            .await
+            .map_err(|e| Status::internal(format!("load conversation rows failed: {e}")))?;
 
         // Load members for all conversations in one go
-        let member_rows = sqlx::query(
-            "SELECT conversation_id, user_id FROM conversation_members WHERE conversation_id = ANY($1::uuid[])",
-        )
-        .bind(&conv_ids)
-        .fetch_all(&self.state.db)
-        .await
-        .map_err(|e| Status::internal(format!("load conversation members failed: {e}")))?;
+        let member_rows = client
+            .query(
+                "SELECT conversation_id, user_id FROM conversation_members WHERE conversation_id = ANY($1::uuid[])",
+                &[&conv_ids],
+            )
+            .await
+            .map_err(|e| Status::internal(format!("load conversation members failed: {e}")))?;
 
         use std::collections::HashMap;
         let mut members_map: HashMap<Uuid, Vec<String>> = HashMap::new();
         for row in member_rows {
-            let cid: Uuid = row.try_get("conversation_id").unwrap_or_default();
-            let uid: Uuid = row.try_get("user_id").unwrap_or_default();
+            let cid: Uuid = row.get("conversation_id");
+            let uid: Uuid = row.get("user_id");
             members_map.entry(cid).or_default().push(uid.to_string());
         }
 
         let conversations: Vec<Conversation> = rows
             .into_iter()
             .map(|row| {
-                let cid: Uuid = row.try_get("id").unwrap_or_default();
-                let conv_type_str: String = row
-                    .try_get("conversation_type")
-                    .unwrap_or_else(|_| "direct".into());
+                let cid: Uuid = row.get("id");
+                let conv_type_str: String = row.get("conversation_type");
                 let proto_type = match conv_type_str.as_str() {
                     "group" => ConversationType::Group as i32,
                     _ => ConversationType::Direct as i32,
                 };
 
-                let created_at: chrono::DateTime<chrono::Utc> =
-                    row.try_get("created_at").unwrap_or(Utc::now());
-                let updated_at: chrono::DateTime<chrono::Utc> =
-                    row.try_get("updated_at").unwrap_or(created_at);
+                let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
+                let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
+                let name: Option<String> = row.get("name");
 
                 Conversation {
                     id: cid.to_string(),
-                    name: row
-                        .try_get::<Option<String>, _>("name")
-                        .unwrap_or(None)
-                        .unwrap_or_default(),
+                    name: name.unwrap_or_default(),
                     conversation_type: proto_type,
                     participant_ids: members_map.remove(&cid).unwrap_or_default(),
                     created_at: created_at.timestamp(),
@@ -355,51 +354,48 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
             ));
         }
 
+        let client = self.state.db.get().await
+            .map_err(|e| Status::internal(format!("db pool error: {e}")))?;
+
         let before_ts = if req.before_message_id.is_empty() {
             None
         } else {
             let mid = Uuid::parse_str(&req.before_message_id)
                 .map_err(|_| Status::invalid_argument("invalid before_message_id"))?;
-            sqlx::query_scalar::<_, Option<chrono::DateTime<chrono::Utc>>>(
-                "SELECT created_at FROM messages WHERE id = $1",
-            )
-            .bind(mid)
-            .fetch_optional(&self.state.db)
-            .await
-            .map_err(|e| Status::internal(format!("lookup message failed: {e}")))?
-            .flatten()
+
+            let ts_row = client
+                .query_opt("SELECT created_at FROM messages WHERE id = $1", &[&mid])
+                .await
+                .map_err(|e| Status::internal(format!("lookup message failed: {e}")))?;
+
+            ts_row.map(|r| r.get::<_, chrono::DateTime<chrono::Utc>>("created_at"))
         };
 
-        let rows = sqlx::query(
-            "SELECT id, sender_id, content, content_encrypted, content_nonce, encryption_version, created_at, updated_at, message_type, media_url, reply_to_message_id, status FROM messages WHERE conversation_id = $1 AND ($2::timestamptz IS NULL OR created_at < $2) ORDER BY created_at DESC LIMIT $3",
-        )
-        .bind(conversation_id)
-        .bind(before_ts)
-        .bind((limit + 1) as i64)
-        .fetch_all(&self.state.db)
-        .await
-        .map_err(|e| Status::internal(format!("fetch messages failed: {e}")))?;
+        let rows = client
+            .query(
+                "SELECT id, sender_id, content, content_encrypted, content_nonce, encryption_version, created_at, updated_at, message_type, media_url, reply_to_message_id, status FROM messages WHERE conversation_id = $1 AND ($2::timestamptz IS NULL OR created_at < $2) ORDER BY created_at DESC LIMIT $3",
+                &[&conversation_id, &before_ts, &((limit + 1) as i64)],
+            )
+            .await
+            .map_err(|e| Status::internal(format!("fetch messages failed: {e}")))?;
 
         let has_more = rows.len() > limit;
-        let mut rows = rows.into_iter().take(limit).collect::<Vec<_>>();
+        let rows = rows.into_iter().take(limit).collect::<Vec<_>>();
 
         let mut messages: Vec<Message> = Vec::with_capacity(rows.len());
-        for row in rows.drain(..) {
-            let mid: Uuid = row.try_get("id").unwrap_or_default();
-            let sender: Uuid = row.try_get("sender_id").unwrap_or_default();
-            let content: String = row.try_get("content").unwrap_or_default();
-            let content_encrypted: Option<Vec<u8>> = row.try_get("content_encrypted").ok();
-            let content_nonce: Option<Vec<u8>> = row.try_get("content_nonce").ok();
-            let encryption_version: i32 = row.try_get("encryption_version").unwrap_or(0);
-            let created_at: chrono::DateTime<chrono::Utc> =
-                row.try_get("created_at").unwrap_or(Utc::now());
-            let updated_at: chrono::DateTime<chrono::Utc> =
-                row.try_get("updated_at").unwrap_or(created_at);
-            let message_type_str: Option<String> = row.try_get("message_type").unwrap_or(None);
-            let media_url: String = row.try_get("media_url").unwrap_or_default();
-            let reply_to_message_id: String =
-                row.try_get("reply_to_message_id").unwrap_or_default();
-            let status: String = row.try_get("status").unwrap_or_else(|_| "sent".into());
+        for row in rows {
+            let mid: Uuid = row.get("id");
+            let sender: Uuid = row.get("sender_id");
+            let content: String = row.get("content");
+            let content_encrypted: Option<Vec<u8>> = row.get("content_encrypted");
+            let content_nonce: Option<Vec<u8>> = row.get("content_nonce");
+            let encryption_version: i32 = row.get("encryption_version");
+            let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
+            let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
+            let message_type_str: Option<String> = row.get("message_type");
+            let media_url: String = row.get("media_url");
+            let reply_to_message_id: String = row.get("reply_to_message_id");
+            let status: String = row.get("status");
 
             let message_type = match message_type_str.as_deref() {
                 Some("image") => MessageType::Image as i32,

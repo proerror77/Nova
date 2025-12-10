@@ -170,6 +170,20 @@ async fn main() -> Result<(), error::AppError> {
         match realtime_chat_service::services::matrix_client::MatrixClient::new(cfg.matrix.clone()).await {
             Ok(client) => {
                 tracing::info!("✅ Matrix client initialized for homeserver: {}", cfg.matrix.homeserver_url);
+
+                // Try to recover encryption keys from server-side backup
+                if let Some(ref recovery_key) = cfg.matrix.recovery_key {
+                    if !recovery_key.is_empty() {
+                        match client.recover_keys(recovery_key).await {
+                            Ok(()) => tracing::info!("✅ Matrix E2EE keys recovered from backup"),
+                            Err(e) => tracing::warn!(error = %e, "Failed to recover Matrix E2EE keys (may be first run)"),
+                        }
+                    }
+                } else {
+                    tracing::info!("Matrix E2EE key backup not configured (MATRIX_RECOVERY_KEY not set)");
+                    tracing::info!("  To enable: call enable_key_backup() and store the returned recovery key");
+                }
+
                 Some(Arc::new(client))
             }
             Err(e) => {
@@ -210,6 +224,15 @@ async fn main() -> Result<(), error::AppError> {
         let db_clone = db.clone();
         let registry_clone = Arc::new(state.registry.clone());
         let redis_clone = Arc::new(state.redis.clone());
+
+        // Register VoIP event handler for Matrix call signaling
+        let voip_handler = Arc::new(handlers::MatrixVoipEventHandler::new(
+            db.clone(),
+            registry_clone.clone(),
+            redis_clone.clone(),
+        ));
+        matrix.register_voip_handler(voip_handler);
+        tracing::info!("✅ Matrix VoIP event handler registered");
 
         let _matrix_sync_task: JoinHandle<()> = tokio::spawn(async move {
             tracing::info!("Starting Matrix sync loop");

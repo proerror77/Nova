@@ -29,7 +29,7 @@ use aes_gcm::{
     aead::{generic_array::GenericArray, Aead, KeyInit},
     Aes256Gcm,
 };
-use sqlx::{PgPool, Row};
+use deadpool_postgres::Pool;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::{debug, info, instrument};
@@ -43,7 +43,10 @@ use zeroize::Zeroize;
 #[derive(Debug, Error)]
 pub enum OlmError {
     #[error("Database error: {0}")]
-    Database(#[from] sqlx::Error),
+    Database(#[from] tokio_postgres::Error),
+
+    #[error("Connection pool error: {0}")]
+    PoolError(String),
 
     #[error("Encryption error: {0}")]
     Encryption(String),
@@ -135,12 +138,12 @@ pub struct DeviceKeys {
 /// - Session establishment (inbound/outbound)
 /// - Message encryption/decryption
 pub struct OlmService {
-    pool: PgPool,
+    pool: Pool,
     encryption_key: Arc<AccountEncryptionKey>,
 }
 
 impl OlmService {
-    pub fn new(pool: PgPool, encryption_key: AccountEncryptionKey) -> Self {
+    pub fn new(pool: Pool, encryption_key: AccountEncryptionKey) -> Self {
         Self {
             pool,
             encryption_key: Arc::new(encryption_key),
@@ -181,27 +184,23 @@ impl OlmService {
         let (encrypted_pickle, nonce) = self.encrypt_pickle(&pickle_bytes)?;
 
         // Store device and account in transaction
-        let mut tx = self.pool.begin().await?;
+        let mut client = self.pool.get().await.map_err(|e| OlmError::PoolError(e.to_string()))?;
+        let tx = client.transaction().await?;
 
         // Insert device
-        sqlx::query(
+        tx.execute(
             r#"
             INSERT INTO user_devices (user_id, device_id, device_name, identity_key, signing_key)
             VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (device_id) DO UPDATE SET
                 last_seen_at = NOW()
             "#,
+            &[&user_id, &device_id, &device_name, &identity_key.to_base64(), &signing_key.to_base64()]
         )
-        .bind(user_id)
-        .bind(device_id)
-        .bind(device_name)
-        .bind(identity_key.to_base64())
-        .bind(signing_key.to_base64())
-        .execute(&mut *tx)
         .await?;
 
         // Insert Olm account
-        sqlx::query(
+        tx.execute(
             r#"
             INSERT INTO olm_accounts (device_id, pickled_account, pickle_nonce)
             VALUES ($1, $2, $3)
@@ -210,11 +209,8 @@ impl OlmService {
                 pickle_nonce = $3,
                 updated_at = NOW()
             "#,
+            &[&device_id, &encrypted_pickle, &nonce]
         )
-        .bind(device_id)
-        .bind(&encrypted_pickle)
-        .bind(&nonce)
-        .execute(&mut *tx)
         .await?;
 
         tx.commit().await?;
@@ -258,24 +254,23 @@ impl OlmService {
         account.generate_one_time_keys(count);
         let otks = account.one_time_keys();
 
-        let mut tx = self.pool.begin().await?;
+        let mut client = self.pool.get().await.map_err(|e| OlmError::PoolError(e.to_string()))?;
+        let tx = client.transaction().await?;
 
         // Store each one-time key
         let mut stored_count = 0;
         for (key_id, public_key) in otks.iter() {
-            let result = sqlx::query(
+            let result = tx.query_opt(
                 r#"
                 INSERT INTO olm_one_time_keys (device_id, key_id, public_key)
                 VALUES ($1, $2, $3)
                 ON CONFLICT (device_id, key_id) DO NOTHING
                 RETURNING id
                 "#,
+                &[&device_id, &key_id.to_base64(), &public_key.to_base64()]
             )
-            .bind(device_id)
-            .bind(key_id.to_base64())
-            .bind(public_key.to_base64())
-            .fetch_optional(&mut *tx)
-            .await?;
+            .await
+            .map_err(|e| OlmError::Database(e.into()))?;
 
             if result.is_some() {
                 stored_count += 1;
@@ -286,22 +281,20 @@ impl OlmService {
         account.mark_keys_as_published();
 
         // Save updated account
-        self.save_account(device_id, &account, &mut tx).await?;
+        self.save_account(device_id, &account, &tx).await?;
 
         // Update uploaded count
-        sqlx::query(
+        tx.execute(
             r#"
             UPDATE olm_accounts
             SET uploaded_otk_count = uploaded_otk_count + $1, updated_at = NOW()
             WHERE device_id = $2
             "#,
+            &[&(stored_count as i32), &device_id]
         )
-        .bind(stored_count as i32)
-        .bind(device_id)
-        .execute(&mut *tx)
         .await?;
 
-        tx.commit().await?;
+        tx.commit().await.map_err(|e| OlmError::Database(e.into()))?;
 
         debug!(
             device_id = %device_id,
@@ -331,7 +324,8 @@ impl OlmService {
         target_device_id: &str,
         claimer_device_id: &str,
     ) -> Result<(String, Curve25519PublicKey), OlmError> {
-        let row = sqlx::query(
+        let client = self.pool.get().await.map_err(|e| OlmError::PoolError(e.to_string()))?;
+        let row = client.query_opt(
             r#"
             UPDATE olm_one_time_keys
             SET claimed = true, claimed_by_device_id = $1, claimed_at = NOW()
@@ -344,10 +338,8 @@ impl OlmService {
             )
             RETURNING key_id, public_key
             "#,
+            &[&claimer_device_id, &target_device_id]
         )
-        .bind(claimer_device_id)
-        .bind(target_device_id)
-        .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| OlmError::NoOneTimeKey(target_device_id.to_string()))?;
 
@@ -434,9 +426,10 @@ impl OlmService {
         };
 
         // Save updated account (one-time key removed)
-        let mut tx = self.pool.begin().await?;
-        self.save_account(our_device_id, &account, &mut tx).await?;
-        tx.commit().await?;
+        let mut client = self.pool.get().await.map_err(|e| OlmError::PoolError(e.to_string()))?;
+        let tx = client.transaction().await?;
+        self.save_account(our_device_id, &account, &tx).await?;
+        tx.commit().await.map_err(|e| OlmError::Database(e.into()))?;
 
         // Save new session
         self.save_session(our_device_id, their_identity_key, &result.session)
@@ -526,15 +519,15 @@ impl OlmService {
     /// Used for key distribution - returns all devices and their
     /// public identity keys for a given user.
     pub async fn get_device_keys(&self, user_id: Uuid) -> Result<Vec<DeviceKeys>, OlmError> {
-        let rows = sqlx::query(
+        let client = self.pool.get().await.map_err(|e| OlmError::PoolError(e.to_string()))?;
+        let rows = client.query(
             r#"
             SELECT device_id, identity_key, signing_key
             FROM user_devices
             WHERE user_id = $1
             "#,
+            &[&user_id]
         )
-        .bind(user_id)
-        .fetch_all(&self.pool)
         .await?;
 
         let mut keys = Vec::new();
@@ -562,14 +555,14 @@ impl OlmService {
     ///
     /// Used to monitor when new keys need to be generated
     pub async fn get_one_time_key_count(&self, device_id: &str) -> Result<i64, OlmError> {
-        let row = sqlx::query(
+        let client = self.pool.get().await.map_err(|e| OlmError::PoolError(e.to_string()))?;
+        let row = client.query_one(
             r#"
             SELECT COUNT(*) as count FROM olm_one_time_keys
             WHERE device_id = $1 AND NOT claimed
             "#,
+            &[&device_id]
         )
-        .bind(device_id)
-        .fetch_one(&self.pool)
         .await?;
 
         let count: i64 = row.get("count");
@@ -582,15 +575,15 @@ impl OlmService {
 
     /// Load and decrypt Olm account from database
     async fn load_account(&self, device_id: &str) -> Result<Account, OlmError> {
-        let row = sqlx::query(
+        let client = self.pool.get().await.map_err(|e| OlmError::PoolError(e.to_string()))?;
+        let row = client.query_opt(
             r#"
             SELECT pickled_account, pickle_nonce
             FROM olm_accounts
             WHERE device_id = $1
             "#,
+            &[&device_id]
         )
-        .bind(device_id)
-        .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| OlmError::AccountNotFound(device_id.to_string()))?;
 
@@ -609,24 +602,21 @@ impl OlmService {
         &self,
         device_id: &str,
         account: &Account,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tx: &tokio_postgres::Transaction<'_>,
     ) -> Result<(), OlmError> {
         let pickled = account.pickle();
         let pickle_bytes = serde_json::to_vec(&pickled)
             .map_err(|e| OlmError::PickleError(format!("Failed to serialize pickle: {}", e)))?;
         let (encrypted, nonce) = self.encrypt_pickle(&pickle_bytes)?;
 
-        sqlx::query(
+        tx.execute(
             r#"
             UPDATE olm_accounts
             SET pickled_account = $1, pickle_nonce = $2, updated_at = NOW()
             WHERE device_id = $3
             "#,
+            &[&encrypted, &nonce, &device_id]
         )
-        .bind(&encrypted)
-        .bind(&nonce)
-        .bind(device_id)
-        .execute(&mut **tx)
         .await?;
 
         Ok(())
@@ -640,16 +630,15 @@ impl OlmService {
     ) -> Result<Session, OlmError> {
         let their_key_b64 = their_identity_key.to_base64();
 
-        let row = sqlx::query(
+        let client = self.pool.get().await.map_err(|e| OlmError::PoolError(e.to_string()))?;
+        let row = client.query_opt(
             r#"
             SELECT pickled_session, pickle_nonce
             FROM olm_sessions
             WHERE our_device_id = $1 AND their_identity_key = $2
             "#,
+            &[&our_device_id, &their_key_b64]
         )
-        .bind(our_device_id)
-        .bind(&their_key_b64)
-        .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| OlmError::SessionNotFound(their_key_b64.clone()))?;
 
@@ -678,7 +667,8 @@ impl OlmService {
         let (encrypted, nonce) = self.encrypt_pickle(&pickle_bytes)?;
         let their_key_b64 = their_identity_key.to_base64();
 
-        sqlx::query(
+        let client = self.pool.get().await.map_err(|e| OlmError::PoolError(e.to_string()))?;
+        client.execute(
             r#"
             INSERT INTO olm_sessions (our_device_id, their_identity_key, pickled_session, pickle_nonce)
             VALUES ($1, $2, $3, $4)
@@ -686,13 +676,9 @@ impl OlmService {
                 pickled_session = $3,
                 pickle_nonce = $4,
                 last_used_at = NOW()
-            "#
+            "#,
+            &[&our_device_id, &their_key_b64, &encrypted, &nonce]
         )
-        .bind(our_device_id)
-        .bind(their_key_b64)
-        .bind(&encrypted)
-        .bind(&nonce)
-        .execute(&self.pool)
         .await?;
 
         Ok(())
@@ -774,7 +760,8 @@ impl OlmService {
         message_type: &str,
         content: &[u8],
     ) -> Result<Uuid, OlmError> {
-        let row = sqlx::query(
+        let client = self.pool.get().await.map_err(|e| OlmError::PoolError(e.to_string()))?;
+        let row = client.query_one(
             r#"
             INSERT INTO to_device_messages (
                 sender_user_id, sender_device_id,
@@ -784,14 +771,8 @@ impl OlmService {
             VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id
             "#,
+            &[&sender_user_id, &sender_device_id, &recipient_user_id, &recipient_device_id, &message_type, &content]
         )
-        .bind(sender_user_id)
-        .bind(sender_device_id)
-        .bind(recipient_user_id)
-        .bind(recipient_device_id)
-        .bind(message_type)
-        .bind(content)
-        .fetch_one(&self.pool)
         .await?;
 
         let id: Uuid = row.get("id");
@@ -819,7 +800,8 @@ impl OlmService {
         recipient_device_id: &str,
         limit: i32,
     ) -> Result<Vec<ToDeviceMessageRecord>, OlmError> {
-        let rows = sqlx::query(
+        let client = self.pool.get().await.map_err(|e| OlmError::PoolError(e.to_string()))?;
+        let rows = client.query(
             r#"
             SELECT id, sender_user_id, sender_device_id, message_type, content, created_at
             FROM to_device_messages
@@ -830,11 +812,8 @@ impl OlmService {
             ORDER BY created_at ASC
             LIMIT $3
             "#,
+            &[&recipient_user_id, &recipient_device_id, &limit]
         )
-        .bind(recipient_user_id)
-        .bind(recipient_device_id)
-        .bind(limit)
-        .fetch_all(&self.pool)
         .await?;
 
         let messages: Vec<ToDeviceMessageRecord> = rows
@@ -869,18 +848,18 @@ impl OlmService {
             return Ok(0);
         }
 
-        let result = sqlx::query(
+        let client = self.pool.get().await.map_err(|e| OlmError::PoolError(e.to_string()))?;
+        let result = client.execute(
             r#"
             UPDATE to_device_messages
             SET delivered = true, delivered_at = NOW()
             WHERE id = ANY($1) AND NOT delivered
             "#,
+            &[&message_ids]
         )
-        .bind(message_ids)
-        .execute(&self.pool)
         .await?;
 
-        let count = result.rows_affected() as usize;
+        let count = result as usize;
 
         debug!(
             message_count = message_ids.len(),
@@ -901,7 +880,8 @@ impl OlmService {
         recipient_user_id: Uuid,
         recipient_device_id: &str,
     ) -> Result<bool, OlmError> {
-        let result = sqlx::query(
+        let client = self.pool.get().await.map_err(|e| OlmError::PoolError(e.to_string()))?;
+        let result = client.execute(
             r#"
             UPDATE to_device_messages
             SET delivered = true, delivered_at = NOW()
@@ -910,14 +890,11 @@ impl OlmService {
               AND recipient_device_id = $3
               AND NOT delivered
             "#,
+            &[&message_id, &recipient_user_id, &recipient_device_id]
         )
-        .bind(message_id)
-        .bind(recipient_user_id)
-        .bind(recipient_device_id)
-        .execute(&self.pool)
         .await?;
 
-        let deleted = result.rows_affected() > 0;
+        let deleted = result > 0;
 
         if deleted {
             debug!(message_id = %message_id, "Acknowledged to-device message");
@@ -941,7 +918,8 @@ impl OlmService {
         exported_key: &[u8],
         from_index: i32,
     ) -> Result<Uuid, OlmError> {
-        let row = sqlx::query(
+        let client = self.pool.get().await.map_err(|e| OlmError::PoolError(e.to_string()))?;
+        let row = client.query_one(
             r#"
             INSERT INTO room_key_history (room_id, session_id, for_device_id, exported_key, from_index)
             VALUES ($1, $2, $3, $4, $5)
@@ -950,13 +928,8 @@ impl OlmService {
                 from_index = LEAST(room_key_history.from_index, $5)
             RETURNING id
             "#,
+            &[&room_id, &session_id, &for_device_id, &exported_key, &from_index]
         )
-        .bind(room_id)
-        .bind(session_id)
-        .bind(for_device_id)
-        .bind(exported_key)
-        .bind(from_index)
-        .fetch_one(&self.pool)
         .await?;
 
         let id: Uuid = row.get("id");
@@ -977,16 +950,17 @@ impl OlmService {
     /// Returns the number of messages deleted.
     #[instrument(skip(self))]
     pub async fn cleanup_expired_messages(&self) -> Result<usize, OlmError> {
-        let result = sqlx::query(
+        let client = self.pool.get().await.map_err(|e| OlmError::PoolError(e.to_string()))?;
+        let result = client.execute(
             r#"
             DELETE FROM to_device_messages
             WHERE expires_at < NOW() OR delivered = true
             "#,
+            &[]
         )
-        .execute(&self.pool)
         .await?;
 
-        let count = result.rows_affected() as usize;
+        let count = result as usize;
 
         if count > 0 {
             info!(

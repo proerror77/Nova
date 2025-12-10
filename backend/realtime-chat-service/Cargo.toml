@@ -120,6 +120,7 @@ vodozemac = "0.7"
 # Using memory-only store (no sqlite persistence) to avoid libsqlite3-sys version mismatch
 # Note: e2e-encryption uses in-memory crypto store when sqlite feature is disabled
 matrix-sdk = { version = "0.16", default-features = false, features = ["e2e-encryption", "rustls-tls"] }
+matrix-sdk-base = { version = "0.16", default-features = false }
 ruma = { version = "0.10", features = ["client-api"] }
 # Keep for password hashing and other non-E2EE crypto
 hkdf = { workspace = true }
@@ -148,9 +149,10 @@ actix-web = { workspace = true }
 actix-rt = { workspace = true }
 actix-cors = { workspace = true }
 
-# Database - tokio-postgres (sqlx removed)
+# Database - tokio-postgres + deadpool (sqlx removed to avoid libsqlite3-sys conflict with matrix-sdk)
 tokio-postgres = { workspace = true }
 deadpool-postgres = { version = "0.14", features = ["rt_tokio_1"] }
+postgres-types = { workspace = true }
 uuid = { workspace = true }
 
 # Redis
@@ -198,9 +200,9 @@ aws-config = "1.1"
 # Tokio stream
 tokio-stream = "0.1"
 
-[patch.crates-io]
-sqlx = { path = "vendor/sqlx-pg" }
-sqlx-sqlite = { path = "vendor/sqlx-sqlite" }
+# HTTP client for media upload
+reqwest = { version = "0.12", features = ["json"] }
+mime = "0.3"
 
 [profile.release]
 codegen-units = 1

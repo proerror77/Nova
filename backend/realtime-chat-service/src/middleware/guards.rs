@@ -1,7 +1,7 @@
 //! Authorization guards that enforce permission checks at the type level
 //! This prevents developers from accidentally bypassing authorization
 
-use sqlx::PgPool;
+use deadpool_postgres::Pool;
 use std::future::Future;
 use std::pin::Pin;
 use uuid::Uuid;
@@ -48,43 +48,52 @@ impl ConversationMember {
     /// Factory method to create and verify a conversation member
     /// This performs ONE database query to check all permissions AND conversation type
     pub async fn verify(
-        db: &PgPool,
+        db: &Pool,
         user_id: Uuid,
         conversation_id: Uuid,
     ) -> Result<Self, AppError> {
-        let member = sqlx::query_as::<_, ConversationMemberRecord>(
-            r#"
-            SELECT
-                cm.user_id,
-                cm.conversation_id,
-                cm.role,
-                cm.is_muted,
-                c.conversation_type,
-                (c.id IS NOT NULL) AS conversation_exists,
-                (cm.role IN ('admin', 'owner')) AS is_admin
-            FROM conversation_members cm
-            LEFT JOIN conversations c ON c.id = cm.conversation_id
-            WHERE cm.user_id = $1 AND cm.conversation_id = $2
-            "#,
-        )
-        .bind(user_id)
-        .bind(conversation_id)
-        .fetch_optional(db)
-        .await
-        .map_err(|_| AppError::Database("Row not found".to_string()))?
-        .ok_or(AppError::Unauthorized)?;
+        let client = db.get().await?;
 
-        let role = MemberRole::from_db(&member.role)
+        let row = client
+            .query_opt(
+                r#"
+                SELECT
+                    cm.user_id,
+                    cm.conversation_id,
+                    cm.role,
+                    cm.is_muted,
+                    c.conversation_type,
+                    (c.id IS NOT NULL) AS conversation_exists,
+                    (cm.role IN ('admin', 'owner')) AS is_admin
+                FROM conversation_members cm
+                LEFT JOIN conversations c ON c.id = cm.conversation_id
+                WHERE cm.user_id = $1 AND cm.conversation_id = $2
+                "#,
+                &[&user_id, &conversation_id],
+            )
+            .await
+            .map_err(|_| AppError::Database("Row not found".to_string()))?
+            .ok_or(AppError::Unauthorized)?;
+
+        let member_user_id: Uuid = row.get("user_id");
+        let member_conversation_id: Uuid = row.get("conversation_id");
+        let role_str: String = row.get("role");
+        let is_muted: bool = row.get("is_muted");
+        let conversation_type: String = row.get("conversation_type");
+        let conversation_exists: bool = row.get("conversation_exists");
+        let is_admin: bool = row.get("is_admin");
+
+        let role = MemberRole::from_db(&role_str)
             .ok_or_else(|| AppError::StartServer("Invalid role in database".into()))?;
 
         Ok(ConversationMember {
-            user_id: member.user_id,
-            conversation_id: member.conversation_id,
+            user_id: member_user_id,
+            conversation_id: member_conversation_id,
             role,
-            conversation_type: member.conversation_type,
-            is_muted: member.is_muted,
-            can_send_messages: member.conversation_exists && !member.is_muted,
-            can_delete_others_messages: member.is_admin,
+            conversation_type,
+            is_muted,
+            can_send_messages: conversation_exists && !is_muted,
+            can_delete_others_messages: is_admin,
         })
     }
 
@@ -130,18 +139,6 @@ impl ConversationMember {
     }
 }
 
-// Helper struct for querying (similar to ConversationMember but with DB fields)
-#[derive(sqlx::FromRow)]
-struct ConversationMemberRecord {
-    user_id: Uuid,
-    conversation_id: Uuid,
-    role: String,
-    is_muted: bool,
-    conversation_type: String,
-    conversation_exists: bool,
-    is_admin: bool,
-}
-
 /// Represents an admin of a conversation
 /// This is a stricter guard than ConversationMember
 #[derive(Debug, Clone)]
@@ -152,7 +149,7 @@ pub struct ConversationAdmin {
 impl ConversationAdmin {
     /// Factory method to create and verify a conversation admin
     pub async fn verify(
-        db: &PgPool,
+        db: &Pool,
         user_id: Uuid,
         conversation_id: Uuid,
     ) -> Result<Self, AppError> {

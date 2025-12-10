@@ -11,8 +11,8 @@
 //! 5. Recipients decrypt locally with their copy of the session key
 
 use chrono::{DateTime, Utc};
+use deadpool_postgres::Pool;
 use serde::{Deserialize, Serialize};
-use sqlx::{PgPool, Row};
 use thiserror::Error;
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
@@ -20,7 +20,10 @@ use uuid::Uuid;
 #[derive(Debug, Error)]
 pub enum E2eeMessageError {
     #[error("Database error: {0}")]
-    Database(#[from] sqlx::Error),
+    Database(String),
+
+    #[error("Pool error: {0}")]
+    Pool(#[from] deadpool_postgres::PoolError),
 
     #[error("Message not found: {0}")]
     NotFound(Uuid),
@@ -74,7 +77,7 @@ impl E2eeMessageService {
     /// This is TRUE E2EE - the server is a dumb storage layer.
     #[instrument(skip(db, request))]
     pub async fn store_message(
-        db: &PgPool,
+        db: &Pool,
         sender_id: Uuid,
         request: SendE2eeMessageRequest,
     ) -> Result<E2eeMessage, E2eeMessageError> {
@@ -90,7 +93,8 @@ impl E2eeMessageService {
         }
 
         // Store the encrypted message with atomic sequence number
-        let row = sqlx::query(
+        let client = db.get().await?;
+        let row = client.query_one(
             r#"
             WITH next AS (
                 INSERT INTO conversation_counters (conversation_id, last_seq)
@@ -130,18 +134,10 @@ impl E2eeMessageService {
             FROM next
             RETURNING id, conversation_id, sender_id, sequence_number, created_at, message_type
             "#,
+            &[&id, &request.conversation_id, &sender_id, &request.message_type, &request.idempotency_key, &request.sender_device_id, &request.session_id, &request.ciphertext, &(request.message_index as i32)]
         )
-        .bind(id)
-        .bind(request.conversation_id)
-        .bind(sender_id)
-        .bind(&request.message_type)
-        .bind(&request.idempotency_key)
-        .bind(&request.sender_device_id)
-        .bind(&request.session_id)
-        .bind(&request.ciphertext)
-        .bind(request.message_index as i32)
-        .fetch_one(db)
-        .await?;
+        .await
+        .map_err(|e| E2eeMessageError::Database(e.to_string()))?;
 
         let message = E2eeMessage {
             id: row.get("id"),
@@ -171,7 +167,7 @@ impl E2eeMessageService {
     /// Returns encrypted blobs that must be decrypted client-side.
     #[instrument(skip(db))]
     pub async fn get_messages(
-        db: &PgPool,
+        db: &Pool,
         conversation_id: Uuid,
         user_id: Uuid,
         limit: i64,
@@ -187,8 +183,9 @@ impl E2eeMessageService {
 
         let limit = limit.min(200);
 
+        let client = db.get().await?;
         let rows = if let Some(before_seq) = before_sequence {
-            sqlx::query(
+            client.query(
                 r#"
                 SELECT
                     id, conversation_id, sender_id, sender_device_id,
@@ -202,14 +199,12 @@ impl E2eeMessageService {
                 ORDER BY sequence_number DESC
                 LIMIT $3
                 "#,
+                &[&conversation_id, &before_seq, &limit]
             )
-            .bind(conversation_id)
-            .bind(before_seq)
-            .bind(limit)
-            .fetch_all(db)
-            .await?
+            .await
+            .map_err(|e| E2eeMessageError::Database(e.to_string()))?
         } else {
-            sqlx::query(
+            client.query(
                 r#"
                 SELECT
                     id, conversation_id, sender_id, sender_device_id,
@@ -222,34 +217,31 @@ impl E2eeMessageService {
                 ORDER BY sequence_number DESC
                 LIMIT $2
                 "#,
+                &[&conversation_id, &limit]
             )
-            .bind(conversation_id)
-            .bind(limit)
-            .fetch_all(db)
-            .await?
+            .await
+            .map_err(|e| E2eeMessageError::Database(e.to_string()))?
         };
 
         let messages: Vec<E2eeMessage> = rows
             .into_iter()
-            .map(|row| E2eeMessage {
-                id: row.get("id"),
-                conversation_id: row.get("conversation_id"),
-                sender_id: row.get("sender_id"),
-                sender_device_id: row
-                    .get::<Option<String>, _>("sender_device_id")
-                    .unwrap_or_default(),
-                session_id: row
-                    .get::<Option<String>, _>("megolm_session_id")
-                    .unwrap_or_default(),
-                ciphertext: row
-                    .get::<Option<String>, _>("megolm_ciphertext")
-                    .unwrap_or_default(),
-                message_index: row
-                    .get::<Option<i32>, _>("megolm_message_index")
-                    .unwrap_or(0) as u32,
-                sequence_number: row.get("sequence_number"),
-                created_at: row.get("created_at"),
-                message_type: row.get("message_type"),
+            .map(|row| {
+                let sender_device_id: Option<String> = row.get("sender_device_id");
+                let session_id: Option<String> = row.get("megolm_session_id");
+                let ciphertext: Option<String> = row.get("megolm_ciphertext");
+                let message_index: Option<i32> = row.get("megolm_message_index");
+                E2eeMessage {
+                    id: row.get("id"),
+                    conversation_id: row.get("conversation_id"),
+                    sender_id: row.get("sender_id"),
+                    sender_device_id: sender_device_id.unwrap_or_default(),
+                    session_id: session_id.unwrap_or_default(),
+                    ciphertext: ciphertext.unwrap_or_default(),
+                    message_index: message_index.unwrap_or(0) as u32,
+                    sequence_number: row.get("sequence_number"),
+                    created_at: row.get("created_at"),
+                    message_type: row.get("message_type"),
+                }
             })
             .collect();
 
@@ -265,7 +257,7 @@ impl E2eeMessageService {
     /// Get messages since a specific sequence number (for sync)
     #[instrument(skip(db))]
     pub async fn get_messages_since(
-        db: &PgPool,
+        db: &Pool,
         conversation_id: Uuid,
         user_id: Uuid,
         since_sequence: i64,
@@ -280,7 +272,8 @@ impl E2eeMessageService {
 
         let limit = limit.min(500);
 
-        let rows = sqlx::query(
+        let client = db.get().await?;
+        let rows = client.query(
             r#"
             SELECT
                 id, conversation_id, sender_id, sender_device_id,
@@ -294,34 +287,30 @@ impl E2eeMessageService {
             ORDER BY sequence_number ASC
             LIMIT $3
             "#,
+            &[&conversation_id, &since_sequence, &limit]
         )
-        .bind(conversation_id)
-        .bind(since_sequence)
-        .bind(limit)
-        .fetch_all(db)
-        .await?;
+        .await
+        .map_err(|e| E2eeMessageError::Database(e.to_string()))?;
 
         let messages: Vec<E2eeMessage> = rows
             .into_iter()
-            .map(|row| E2eeMessage {
-                id: row.get("id"),
-                conversation_id: row.get("conversation_id"),
-                sender_id: row.get("sender_id"),
-                sender_device_id: row
-                    .get::<Option<String>, _>("sender_device_id")
-                    .unwrap_or_default(),
-                session_id: row
-                    .get::<Option<String>, _>("megolm_session_id")
-                    .unwrap_or_default(),
-                ciphertext: row
-                    .get::<Option<String>, _>("megolm_ciphertext")
-                    .unwrap_or_default(),
-                message_index: row
-                    .get::<Option<i32>, _>("megolm_message_index")
-                    .unwrap_or(0) as u32,
-                sequence_number: row.get("sequence_number"),
-                created_at: row.get("created_at"),
-                message_type: row.get("message_type"),
+            .map(|row| {
+                let sender_device_id: Option<String> = row.get("sender_device_id");
+                let session_id: Option<String> = row.get("megolm_session_id");
+                let ciphertext: Option<String> = row.get("megolm_ciphertext");
+                let message_index: Option<i32> = row.get("megolm_message_index");
+                E2eeMessage {
+                    id: row.get("id"),
+                    conversation_id: row.get("conversation_id"),
+                    sender_id: row.get("sender_id"),
+                    sender_device_id: sender_device_id.unwrap_or_default(),
+                    session_id: session_id.unwrap_or_default(),
+                    ciphertext: ciphertext.unwrap_or_default(),
+                    message_index: message_index.unwrap_or(0) as u32,
+                    sequence_number: row.get("sequence_number"),
+                    created_at: row.get("created_at"),
+                    message_type: row.get("message_type"),
+                }
             })
             .collect();
 
@@ -331,23 +320,23 @@ impl E2eeMessageService {
     /// Soft delete an E2EE message
     #[instrument(skip(db))]
     pub async fn delete_message(
-        db: &PgPool,
+        db: &Pool,
         message_id: Uuid,
         user_id: Uuid,
     ) -> Result<(), E2eeMessageError> {
         // Verify user is the sender
-        let result = sqlx::query(
+        let client = db.get().await?;
+        let result = client.query_opt(
             r#"
             UPDATE messages
             SET deleted_at = NOW()
             WHERE id = $1 AND sender_id = $2
             RETURNING id
             "#,
+            &[&message_id, &user_id]
         )
-        .bind(message_id)
-        .bind(user_id)
-        .fetch_optional(db)
-        .await?;
+        .await
+        .map_err(|e| E2eeMessageError::Database(e.to_string()))?;
 
         if result.is_none() {
             return Err(E2eeMessageError::NotFound(message_id));
@@ -360,23 +349,24 @@ impl E2eeMessageService {
 
     /// Check if a user is a member of a conversation
     async fn is_conversation_member(
-        db: &PgPool,
+        db: &Pool,
         conversation_id: Uuid,
         user_id: Uuid,
     ) -> Result<bool, E2eeMessageError> {
-        let result = sqlx::query_scalar::<_, bool>(
+        let client = db.get().await?;
+        let row = client.query_one(
             r#"
             SELECT EXISTS(
                 SELECT 1 FROM conversation_members
                 WHERE conversation_id = $1 AND user_id = $2
             )
             "#,
+            &[&conversation_id, &user_id]
         )
-        .bind(conversation_id)
-        .bind(user_id)
-        .fetch_one(db)
-        .await?;
+        .await
+        .map_err(|e| E2eeMessageError::Database(e.to_string()))?;
 
+        let result: bool = row.get(0);
         Ok(result)
     }
 
@@ -384,13 +374,14 @@ impl E2eeMessageService {
     /// Useful for clients to know which room keys they need
     #[instrument(skip(db))]
     pub async fn get_required_session_ids(
-        db: &PgPool,
+        db: &Pool,
         conversation_id: Uuid,
         since_sequence: Option<i64>,
     ) -> Result<Vec<String>, E2eeMessageError> {
         let since = since_sequence.unwrap_or(0);
 
-        let rows = sqlx::query_scalar::<_, String>(
+        let client = db.get().await?;
+        let rows = client.query(
             r#"
             SELECT DISTINCT megolm_session_id
             FROM messages
@@ -400,13 +391,13 @@ impl E2eeMessageService {
               AND megolm_session_id IS NOT NULL
               AND sequence_number > $2
             "#,
+            &[&conversation_id, &since]
         )
-        .bind(conversation_id)
-        .bind(since)
-        .fetch_all(db)
-        .await?;
+        .await
+        .map_err(|e| E2eeMessageError::Database(e.to_string()))?;
 
-        Ok(rows)
+        let session_ids: Vec<String> = rows.into_iter().map(|row| row.get(0)).collect();
+        Ok(session_ids)
     }
 }
 

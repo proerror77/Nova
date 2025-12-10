@@ -2,12 +2,12 @@ use crate::error::AppError;
 use crate::redis_client::RedisClient;
 use crate::websocket::events::{broadcast_event, WebSocketEvent};
 use crate::websocket::ConnectionRegistry;
+use deadpool_postgres::Pool;
 use matrix_sdk::ruma::events::room::message::{
     MessageType, RoomMessageEventContent, SyncRoomMessageEvent,
 };
 use matrix_sdk::ruma::{OwnedEventId, OwnedUserId};
 use matrix_sdk::Room;
-use sqlx::{Pool, Postgres};
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -15,7 +15,7 @@ use uuid::Uuid;
 /// Handle incoming Matrix room message events
 /// This function is called by the Matrix sync loop for each new message
 pub async fn handle_matrix_message_event(
-    db: &Pool<Postgres>,
+    db: &Pool,
     registry: &Arc<ConnectionRegistry>,
     redis: &Arc<RedisClient>,
     room: Room,
@@ -70,13 +70,14 @@ pub async fn handle_matrix_message_event(
 
     // 3. Check if this message already exists in our DB (by matrix_event_id)
     // This prevents duplicate processing
-    let existing: Option<Uuid> = sqlx::query_scalar(
+    let client = db.get().await.map_err(|e| AppError::StartServer(format!("handle matrix message pool: {e}")))?;
+    let existing: Option<Uuid> = client.query_opt(
         "SELECT id FROM messages WHERE matrix_event_id = $1",
+        &[&event_id.as_str()],
     )
-    .bind(event_id.as_str())
-    .fetch_optional(db)
     .await
-    .map_err(|e| AppError::StartServer(format!("check existing message: {e}")))?;
+    .map_err(|e| AppError::StartServer(format!("check existing message: {e}")))?
+    .map(|row| row.get(0));
 
     if existing.is_some() {
         debug!(
@@ -173,7 +174,7 @@ fn extract_user_id_from_matrix(matrix_user: &OwnedUserId) -> Option<Uuid> {
 
 /// Handle Matrix room redaction events (message deletion)
 pub async fn handle_matrix_redaction_event(
-    db: &Pool<Postgres>,
+    db: &Pool,
     registry: &Arc<ConnectionRegistry>,
     redis: &Arc<RedisClient>,
     _room: Room,
@@ -185,16 +186,20 @@ pub async fn handle_matrix_redaction_event(
     );
 
     // 1. Find message by Matrix event_id
-    let message: Option<(Uuid, Uuid)> = sqlx::query_as(
+    let client = db.get().await.map_err(|e| AppError::StartServer(format!("handle redaction pool: {e}")))?;
+    let message = client.query_opt(
         "SELECT id, conversation_id FROM messages WHERE matrix_event_id = $1",
+        &[&redacted_event_id.as_str()],
     )
-    .bind(redacted_event_id.as_str())
-    .fetch_optional(db)
     .await
     .map_err(|e| AppError::StartServer(format!("find redacted message: {e}")))?;
 
     let (message_id, conversation_id) = match message {
-        Some(m) => m,
+        Some(row) => {
+            let message_id: Uuid = row.get(0);
+            let conversation_id: Uuid = row.get(1);
+            (message_id, conversation_id)
+        }
         None => {
             warn!(
                 redacted_event_id = %redacted_event_id,
@@ -222,11 +227,13 @@ pub async fn handle_matrix_redaction_event(
     };
 
     // Get sender_id from DB (we need it for broadcast)
-    let sender_id: Uuid = sqlx::query_scalar("SELECT sender_id FROM messages WHERE id = $1")
-        .bind(message_id)
-        .fetch_one(db)
-        .await
-        .map_err(|e| AppError::StartServer(format!("get sender_id: {e}")))?;
+    let sender_id: Uuid = client.query_one(
+        "SELECT sender_id FROM messages WHERE id = $1",
+        &[&message_id],
+    )
+    .await
+    .map_err(|e| AppError::StartServer(format!("get sender_id: {e}")))?
+    .get(0);
 
     if let Err(e) = broadcast_event(registry, redis, conversation_id, sender_id, ws_event).await {
         error!(
@@ -241,7 +248,7 @@ pub async fn handle_matrix_redaction_event(
 
 /// Handle Matrix room message edit/replacement events
 pub async fn handle_matrix_replacement_event(
-    db: &Pool<Postgres>,
+    db: &Pool,
     registry: &Arc<ConnectionRegistry>,
     redis: &Arc<RedisClient>,
     _room: Room,
@@ -254,16 +261,21 @@ pub async fn handle_matrix_replacement_event(
     );
 
     // 1. Find message by original Matrix event_id
-    let message: Option<(Uuid, Uuid, Uuid)> = sqlx::query_as(
+    let client = db.get().await.map_err(|e| AppError::StartServer(format!("handle replacement pool: {e}")))?;
+    let message = client.query_opt(
         "SELECT id, conversation_id, sender_id FROM messages WHERE matrix_event_id = $1",
+        &[&original_event_id.as_str()],
     )
-    .bind(original_event_id.as_str())
-    .fetch_optional(db)
     .await
     .map_err(|e| AppError::StartServer(format!("find edited message: {e}")))?;
 
     let (message_id, conversation_id, sender_id) = match message {
-        Some(m) => m,
+        Some(row) => {
+            let message_id: Uuid = row.get(0);
+            let conversation_id: Uuid = row.get(1);
+            let sender_id: Uuid = row.get(2);
+            (message_id, conversation_id, sender_id)
+        }
         None => {
             warn!(
                 original_event_id = %original_event_id,
@@ -302,12 +314,13 @@ pub async fn handle_matrix_replacement_event(
     );
 
     // 4. Get new version number
-    let version_number: i32 =
-        sqlx::query_scalar("SELECT version_number FROM messages WHERE id = $1")
-            .bind(message_id)
-            .fetch_one(db)
-            .await
-            .map_err(|e| AppError::StartServer(format!("get version: {e}")))?;
+    let version_number: i32 = client.query_one(
+        "SELECT version_number FROM messages WHERE id = $1",
+        &[&message_id],
+    )
+    .await
+    .map_err(|e| AppError::StartServer(format!("get version: {e}")))?
+    .get(0);
 
     // 5. Broadcast edit to WebSocket clients
     let ws_event = WebSocketEvent::MessageEdited {

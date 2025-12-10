@@ -6,7 +6,6 @@ use crate::{
 };
 use actix_web::{delete, get, post, web, HttpResponse};
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -46,9 +45,10 @@ pub async fn add_reaction(
     }
 
     // Get conversation_id for the message (for broadcasting on conversation channel)
-    let message_row = sqlx::query("SELECT conversation_id FROM messages WHERE id = $1")
-        .bind(message_id)
-        .fetch_optional(&state.db)
+    let client = state.db.get().await
+        .map_err(|e| AppError::StartServer(format!("fetch message: {e}")))?;
+
+    let message_row = client.query_opt("SELECT conversation_id FROM messages WHERE id = $1", &[&message_id])
         .await
         .map_err(|e| AppError::StartServer(format!("fetch message: {e}")))?
         .ok_or(AppError::NotFound)?;
@@ -56,17 +56,14 @@ pub async fn add_reaction(
     let conversation_id: Uuid = message_row.get("conversation_id");
 
     // Add or update reaction (ON CONFLICT updates the reaction)
-    sqlx::query(
+    client.execute(
         r#"
         INSERT INTO message_reactions (message_id, user_id, emoji)
         VALUES ($1, $2, $3)
         ON CONFLICT (message_id, user_id, emoji) DO NOTHING
         "#,
+        &[&message_id, &user_id, &body.emoji]
     )
-    .bind(message_id)
-    .bind(user_id)
-    .bind(&body.emoji)
-    .execute(&state.db)
     .await
     .map_err(|e| AppError::StartServer(format!("Failed to add reaction: {e}")))?;
 
@@ -100,7 +97,10 @@ pub async fn get_reactions(
     let user_id = user.id;
 
     // Fetch all reactions with counts for this message
-    let reactions = sqlx::query_as::<_, (String, i64)>(
+    let client = state.db.get().await
+        .map_err(|e| AppError::StartServer(format!("Failed to fetch reactions: {e}")))?;
+
+    let reactions = client.query(
         r#"
         SELECT emoji, COUNT(*) as count
         FROM message_reactions
@@ -108,29 +108,30 @@ pub async fn get_reactions(
         GROUP BY emoji
         ORDER BY count DESC
         "#,
+        &[&message_id]
     )
-    .bind(message_id)
-    .fetch_all(&state.db)
     .await
     .map_err(|e| AppError::StartServer(format!("Failed to fetch reactions: {e}")))?;
 
+    let reactions: Vec<(String, i64)> = reactions.iter()
+        .map(|row| (row.get(0), row.get(1)))
+        .collect();
+
     // Fetch reactions by current user for this message
-    let user_reactions = sqlx::query_as::<_, (String,)>(
+    let user_reactions = client.query(
         r#"
         SELECT DISTINCT emoji
         FROM message_reactions
         WHERE message_id = $1 AND user_id = $2
         "#,
+        &[&message_id, &user_id]
     )
-    .bind(message_id)
-    .bind(user_id)
-    .fetch_all(&state.db)
     .await
     .map_err(|e| AppError::StartServer(format!("Failed to fetch user reactions: {e}")))?;
 
     // Convert to HashSet for O(1) lookup
     let user_reactions_set: std::collections::HashSet<String> =
-        user_reactions.into_iter().map(|(emoji,)| emoji).collect();
+        user_reactions.iter().map(|row| row.get::<_, String>(0)).collect();
 
     // Build response with user_reacted flag
     let reaction_counts: Vec<ReactionCount> = reactions
@@ -164,9 +165,10 @@ pub async fn remove_reaction(
     let (message_id, target_user_id) = path.into_inner();
 
     // 1. Get message and conversation_id to check admin status
-    let message_row = sqlx::query("SELECT conversation_id FROM messages WHERE id = $1")
-        .bind(message_id)
-        .fetch_optional(&state.db)
+    let client = state.db.get().await
+        .map_err(|e| AppError::StartServer(format!("fetch message: {e}")))?;
+
+    let message_row = client.query_opt("SELECT conversation_id FROM messages WHERE id = $1", &[&message_id])
         .await
         .map_err(|e| AppError::StartServer(format!("fetch message: {e}")))?
         .ok_or(AppError::NotFound)?;
@@ -193,13 +195,10 @@ pub async fn remove_reaction(
     // 3. Delete reaction(s)
     if let Some(emoji) = params.get("emoji") {
         // Delete specific emoji reaction
-        let result = sqlx::query(
-            "DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3 RETURNING id"
+        let result = client.query_opt(
+            "DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3 RETURNING id",
+            &[&message_id, &target_user_id, emoji]
         )
-        .bind(message_id)
-        .bind(target_user_id)
-        .bind(emoji)
-        .fetch_optional(&state.db)
         .await
         .map_err(|e| AppError::StartServer(format!("Failed to remove reaction: {e}")))?;
 
@@ -223,10 +222,7 @@ pub async fn remove_reaction(
         .await;
     } else {
         // Delete all reactions by this user for this message
-        sqlx::query("DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2")
-            .bind(message_id)
-            .bind(target_user_id)
-            .execute(&state.db)
+        client.execute("DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2", &[&message_id, &target_user_id])
             .await
             .map_err(|e| AppError::StartServer(format!("Failed to remove reactions: {e}")))?;
 
