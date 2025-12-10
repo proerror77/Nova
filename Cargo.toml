@@ -13,7 +13,6 @@ members = [
     "backend/graph-service",
     "backend/ranking-service",
     "backend/feature-store",
-    "backend/realtime-chat-service",
     "backend/trust-safety-service",
     # Shared Libraries
     "backend/libs/actix-middleware",

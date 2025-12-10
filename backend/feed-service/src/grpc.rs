@@ -430,6 +430,18 @@ impl RecommendationServiceImpl {
         // media_urls were not backfilled correctly in content-service.
         let default_image_url = std::env::var("FEED_DEFAULT_IMAGE_URL").unwrap_or_default();
 
+        // Optional CDN rewrite configuration. When FEED_MEDIA_CDN_BASE_URL is set, any
+        // media URLs that match the configured GCS prefix will be rewritten to go
+        // through the CDN front (e.g., Cloud CDN HTTP LB) instead of hitting
+        // storage.googleapis.com directly.
+        let cdn_base_url = std::env::var("FEED_MEDIA_CDN_BASE_URL")
+            .ok()
+            .filter(|v| !v.is_empty());
+        let gcs_prefix = std::env::var("FEED_MEDIA_GCS_PREFIX")
+            .ok()
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| "https://storage.googleapis.com/nova-media-staging/".to_string());
+
         // Step 4: Convert to CachedFeedPost format with social stats
         let posts: Vec<CachedFeedPost> = get_response
             .posts
@@ -448,6 +460,11 @@ impl RecommendationServiceImpl {
                 if thumbnail_urls.is_empty() {
                     thumbnail_urls = media_urls.clone();
                 }
+
+                // If configured, rewrite storage.googleapis.com URLs to the CDN front.
+                let media_urls = rewrite_media_urls_for_cdn(media_urls, &cdn_base_url, &gcs_prefix);
+                let thumbnail_urls =
+                    rewrite_media_urls_for_cdn(thumbnail_urls, &cdn_base_url, &gcs_prefix);
 
                 CachedFeedPost {
                     id: post.id.clone(),
@@ -471,6 +488,32 @@ impl RecommendationServiceImpl {
         );
         Ok(posts)
     }
+}
+
+/// Rewrite media URLs to pass through a CDN front instead of directly hitting
+/// the GCS public endpoint. Only URLs starting with `gcs_prefix` are rewritten;
+/// all others are left unchanged.
+fn rewrite_media_urls_for_cdn(
+    urls: Vec<String>,
+    cdn_base_url: &Option<String>,
+    gcs_prefix: &str,
+) -> Vec<String> {
+    let Some(cdn_base) = cdn_base_url else {
+        return urls;
+    };
+
+    let cdn_base = cdn_base.trim_end_matches('/');
+
+    urls.into_iter()
+        .map(|url| {
+            if url.starts_with(gcs_prefix) {
+                let suffix = &url[gcs_prefix.len()..];
+                format!("{}/{}", cdn_base, suffix)
+            } else {
+                url
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
