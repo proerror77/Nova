@@ -23,6 +23,7 @@
 		2A1B3C4D5E6F7081928A3B4C /* FormRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C5B4A3D2E1F0A9B8C7D6E5F /* FormRow.swift */; };
 		2C1AE65CD1BCEE877390EA52 /* CommentSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935F737074559D05F95D4EF0 /* CommentSheetView.swift */; };
 		30D1CB05B4B8E0DF2394DA20 /* MediaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B53881EFE11477A9FE157D2 /* MediaService.swift */; };
+		30D1CB05B4B8E0DF2394DA21 /* AudioRecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B53881EFE11477B9FE157D3 /* AudioRecorderService.swift */; };
 		33A5FB652C0009D96FB844A5 /* CommunicationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4665602C144B266807588223 /* CommunicationService.swift */; };
 		3B16469BB575B25D41009540 /* DeviceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2424779A1927539262BD71B /* DeviceService.swift */; };
 		3B922C165B02B1BBF3A2E4AA /* HottestBankerSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1D9E94C2E6A53AF1B2F316E /* HottestBankerSection.swift */; };
@@ -155,6 +156,7 @@
 		3458B914CACC60BDB462C58D /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		3880EF1CA343B17A09E2209E /* APIError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIError.swift; sourceTree = "<group>"; };
 		3B53881EFE11477A9FE157D2 /* MediaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaService.swift; sourceTree = "<group>"; };
+		3B53881EFE11477B9FE157D3 /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
 		3E3708D4D59DBF11CF77C3DF /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		3EBFE6879F150AA4EC08471A /* InviteFriendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteFriendsView.swift; sourceTree = "<group>"; };
 		45DA960EAF1BBBBC18F81EC3 /* MessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageView.swift; sourceTree = "<group>"; };
@@ -389,6 +391,7 @@
 			isa = PBXGroup;
 			children = (
 				3B53881EFE11477A9FE157D2 /* MediaService.swift */,
+				3B53881EFE11477B9FE157D3 /* AudioRecorderService.swift */,
 			);
 			path = Media;
 			sourceTree = "<group>";
@@ -1100,6 +1103,7 @@
 				6AA9EFC925E3EBA8CC533592 /* LocationView.swift in Sources */,
 				D9010C810B0698935B15E119 /* LoginView.swift in Sources */,
 				30D1CB05B4B8E0DF2394DA20 /* MediaService.swift in Sources */,
+				30D1CB05B4B8E0DF2394DA21 /* AudioRecorderService.swift in Sources */,
 				9E4619C894887F2F80288283 /* MessageView.swift in Sources */,
 				23B21EC6989A36B1659044A4 /* MyChannelsView.swift in Sources */,
 				DA5146CD4EA5529311C25F18 /* NavigationManager.swift in Sources */,

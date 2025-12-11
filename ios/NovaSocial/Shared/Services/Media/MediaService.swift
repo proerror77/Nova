@@ -176,6 +176,77 @@ class MediaService {
         }
     }
 
+    /// Upload audio (voice message) using multipart/form-data
+    /// - Parameters:
+    ///   - audioData: Audio data to upload (M4A format)
+    ///   - filename: Original filename (e.g., "voice.m4a")
+    /// - Returns: Media URL or upload ID for the uploaded audio
+    func uploadAudio(audioData: Data, filename: String = "voice.m4a") async throws -> String {
+        let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.uploadStart)")!
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 120  // 2 minutes timeout for audio uploads
+
+        if let token = client.getAuthToken() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: audio/mp4\r\n\r\n".data(using: .utf8)!)  // M4A is audio/mp4
+        body.append(audioData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        request.httpBody = body
+
+        #if DEBUG
+        print("[Media] Starting audio upload: \(audioData.count / 1024) KB")
+        #endif
+
+        let (data, response) = try await uploadSession.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+
+        #if DEBUG
+        print("[Media] Audio upload response - Status: \(httpResponse.statusCode)")
+        if let responseStr = String(data: data, encoding: .utf8) {
+            print("[Media] Audio upload response body: \(responseStr)")
+        }
+        #endif
+
+        switch httpResponse.statusCode {
+        case 200...299:
+            let decoder = JSONDecoder()
+            let uploadResponse = try decoder.decode(UploadResponse.self, from: data)
+
+            if let mediaUrl = uploadResponse.mediaUrl, !mediaUrl.isEmpty {
+                return mediaUrl
+            } else if let presignedUrl = uploadResponse.presignedUrl, !presignedUrl.isEmpty {
+                // Content-Type must match what was used when generating the presigned URL
+                try await uploadToPresignedUrl(presignedUrl, data: audioData, contentType: "audio/mp4")
+                return presignedUrl.components(separatedBy: "?").first ?? presignedUrl
+            } else if let uploadId = uploadResponse.uploadId, !uploadId.isEmpty {
+                return uploadId
+            }
+
+            throw APIError.serverError(statusCode: 200, message: "Upload response missing required fields (media_url, presigned_url, or upload_id)")
+        case 401:
+            throw APIError.unauthorized
+        case 413:
+            throw APIError.serverError(statusCode: 413, message: "File too large (max 20MB)")
+        default:
+            let message = String(data: data, encoding: .utf8) ?? "Upload failed"
+            throw APIError.serverError(statusCode: httpResponse.statusCode, message: message)
+        }
+    }
+
     // MARK: - Private Methods
 
     /// Upload data to S3/GCS presigned URL

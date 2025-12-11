@@ -6,7 +6,7 @@ import Combine
 import AVFoundation
 
 // MARK: - 消息UI模型
-/// UI层的消息模型，包含后端Message + UI特定字段（图片、位置）
+/// UI层的消息模型，包含后端Message + UI特定字段（图片、位置、语音）
 struct ChatMessage: Identifiable, Equatable {
     let id: String  // 改为String以匹配后端Message.id
     let backendMessage: Message?  // 后端消息对象（可选，本地消息可能还没发送）
@@ -15,6 +15,9 @@ struct ChatMessage: Identifiable, Equatable {
     let timestamp: Date
     var image: UIImage?
     var location: CLLocationCoordinate2D?
+    var audioData: Data?  // 语音消息数据
+    var audioDuration: TimeInterval?  // 语音时长（秒）
+    var audioUrl: URL?  // 语音文件 URL
 
     static func == (lhs: ChatMessage, rhs: ChatMessage) -> Bool {
         lhs.id == rhs.id
@@ -29,10 +32,13 @@ struct ChatMessage: Identifiable, Equatable {
         self.timestamp = message.createdAt
         self.image = nil  // 图片需要单独加载
         self.location = nil  // TODO: 解析location类型消息
+        self.audioData = nil
+        self.audioDuration = nil
+        self.audioUrl = nil
     }
 
     /// 创建本地消息（发送前）
-    init(localText: String, isFromMe: Bool = true, image: UIImage? = nil, location: CLLocationCoordinate2D? = nil) {
+    init(localText: String, isFromMe: Bool = true, image: UIImage? = nil, location: CLLocationCoordinate2D? = nil, audioData: Data? = nil, audioDuration: TimeInterval? = nil, audioUrl: URL? = nil) {
         self.id = UUID().uuidString
         self.backendMessage = nil
         self.text = localText
@@ -40,6 +46,9 @@ struct ChatMessage: Identifiable, Equatable {
         self.timestamp = Date()
         self.image = image
         self.location = location
+        self.audioData = audioData
+        self.audioDuration = audioDuration
+        self.audioUrl = audioUrl
     }
 }
 
@@ -149,6 +158,87 @@ struct LocationMessageView: View {
     }
 }
 
+// MARK: - 语音消息视图
+struct VoiceMessageView: View {
+    let message: ChatMessage
+    let isFromMe: Bool
+    let audioPlayer: AudioPlayerService
+
+    @State private var isPlaying = false
+
+    private var duration: TimeInterval {
+        message.audioDuration ?? 0
+    }
+
+    private var formattedDuration: String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            // Play/Pause button
+            Button(action: {
+                togglePlayback()
+            }) {
+                Circle()
+                    .fill(isFromMe ? Color.white.opacity(0.3) : Color(red: 0.91, green: 0.18, blue: 0.30))
+                    .frame(width: 36, height: 36)
+                    .overlay(
+                        Image(systemName: isCurrentlyPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(isFromMe ? .white : .white)
+                    )
+            }
+
+            // Waveform visualization (static)
+            HStack(spacing: 2) {
+                ForEach(0..<12, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(isFromMe ? Color.white.opacity(0.7) : DesignTokens.textMuted)
+                        .frame(width: 3, height: CGFloat.random(in: 8...20))
+                }
+            }
+            .frame(height: 24)
+
+            // Duration
+            Text(isCurrentlyPlaying ? formatCurrentTime() : formattedDuration)
+                .font(Font.custom("Helvetica Neue", size: 12).monospacedDigit())
+                .foregroundColor(isFromMe ? Color.white.opacity(0.8) : DesignTokens.textMuted)
+        }
+        .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 16))
+        .background(isFromMe ? Color(red: 0.91, green: 0.18, blue: 0.30) : DesignTokens.chatBubbleOther)
+        .cornerRadius(20)
+    }
+
+    private var isCurrentlyPlaying: Bool {
+        audioPlayer.playingMessageId == message.id && audioPlayer.isPlaying
+    }
+
+    private func formatCurrentTime() -> String {
+        let time = audioPlayer.currentTime
+        let minutes = Int(time) / 60
+        let seconds = Int(time) % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    private func togglePlayback() {
+        if isCurrentlyPlaying {
+            audioPlayer.pause()
+        } else if audioPlayer.playingMessageId == message.id {
+            audioPlayer.resume()
+        } else {
+            // Start new playback
+            if let url = message.audioUrl {
+                audioPlayer.play(url: url, messageId: message.id)
+            } else if let data = message.audioData {
+                audioPlayer.play(data: data, messageId: message.id)
+            }
+        }
+    }
+}
+
 // MARK: - 消息气泡视图
 // MARK: - Typing Dots Animation
 struct TypingDotsView: View {
@@ -177,6 +267,7 @@ struct TypingDotsView: View {
 
 struct MessageBubbleView: View {
     let message: ChatMessage
+    var audioPlayer: AudioPlayerService? = nil
 
     var body: some View {
         if message.isFromMe {
@@ -201,12 +292,7 @@ struct MessageBubbleView: View {
         HStack(spacing: 6) {
             DefaultAvatarView(size: 50)
 
-            Text(message.text)
-                .font(.system(size: 18))
-                .foregroundColor(DesignTokens.textPrimary)
-                .padding(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
-                .background(DesignTokens.chatBubbleOther)
-                .cornerRadius(23)
+            otherMessageContent
 
             Spacer()
         }
@@ -223,6 +309,30 @@ struct MessageBubbleView: View {
                 .cornerRadius(12)
         } else if let location = message.location {
             LocationMessageView(location: location)
+        } else if message.audioData != nil || message.audioUrl != nil, let player = audioPlayer {
+            VoiceMessageView(message: message, isFromMe: true, audioPlayer: player)
+        } else {
+            Text(message.text)
+                .font(Font.custom("Helvetica Neue", size: 18))
+                .foregroundColor(DesignTokens.textPrimary)
+                .padding(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+                .background(DesignTokens.chatBubbleOther)
+                .cornerRadius(23)
+        }
+    }
+
+    @ViewBuilder
+    private var otherMessageContent: some View {
+        if let image = message.image {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: 200, maxHeight: 200)
+                .cornerRadius(12)
+        } else if let location = message.location {
+            LocationMessageView(location: location)
+        } else if message.audioData != nil || message.audioUrl != nil, let player = audioPlayer {
+            VoiceMessageView(message: message, isFromMe: false, audioPlayer: player)
         } else {
             Text(message.text)
                 .font(.system(size: 18))
@@ -318,6 +428,12 @@ struct ChatView: View {
 
     // 位置相关
     @StateObject private var locationManager = ChatLocationManager()
+
+    // 语音录制相关
+    @State private var audioRecorder = AudioRecorderService()
+    @State private var audioPlayer = AudioPlayerService()
+    @State private var isRecordingVoice = false
+    @State private var showMicrophonePermissionAlert = false
     @State private var showLocationAlert = false
 
     // 当前用户ID（从Keychain获取）
@@ -377,6 +493,16 @@ struct ChatView: View {
             }
         } message: {
             Text("Please enable camera access in Settings to take photos.")
+        }
+        .alert("Microphone Access Required", isPresented: $showMicrophonePermissionAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Settings") {
+                if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(settingsUrl)
+                }
+            }
+        } message: {
+            Text("Please enable microphone access in Settings to record voice messages.")
         }
         .transaction { transaction in
             transaction.disablesAnimations = true
@@ -469,7 +595,7 @@ struct ChatView: View {
                         .padding(.top, 16)
 
                     ForEach(messages) { message in
-                        MessageBubbleView(message: message)
+                        MessageBubbleView(message: message, audioPlayer: audioPlayer)
                             .id(message.id)
                     }
 
@@ -555,51 +681,102 @@ struct ChatView: View {
                     }
                 }
 
-                HStack(spacing: 8) {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 14))
-                        .foregroundColor(DesignTokens.textMuted)
+                // Voice Recording UI or Text Input
+                if isRecordingVoice {
+                    // Recording indicator
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 10, height: 10)
+                            .opacity(audioRecorder.isRecording ? 1.0 : 0.3)
+                            .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: audioRecorder.isRecording)
 
-                    TextField("Type a message...", text: $messageText)
-                        .font(.system(size: 16))
-                        .foregroundColor(DesignTokens.textPrimary)
-                        .focused($isInputFocused)
-                        .onSubmit {
-                            sendMessage()
-                        }
-                        .onChange(of: messageText) { oldValue, newValue in
-                            // Send typing indicator when user starts typing
-                            if oldValue.isEmpty && !newValue.isEmpty {
-                                chatService.sendTypingStart(conversationId: conversationId)
-                            }
-                            // Send typing stop when text is cleared
-                            if !oldValue.isEmpty && newValue.isEmpty {
-                                chatService.sendTypingStop(conversationId: conversationId)
+                        Text(formatDuration(audioRecorder.recordingDuration))
+                            .font(Font.custom("Helvetica Neue", size: 16).monospacedDigit())
+                            .foregroundColor(DesignTokens.textPrimary)
+
+                        // Audio level visualization
+                        HStack(spacing: 2) {
+                            ForEach(0..<8, id: \.self) { index in
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(Color.red.opacity(0.7))
+                                    .frame(width: 3, height: max(4, CGFloat(audioRecorder.audioLevel) * 20 * CGFloat.random(in: 0.5...1.5)))
+                                    .animation(.easeInOut(duration: 0.1), value: audioRecorder.audioLevel)
                             }
                         }
-                }
-                .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-                .background(DesignTokens.inputBackground)
-                .cornerRadius(26)
-                .onChange(of: isInputFocused) { _, focused in
-                    if focused && showAttachmentOptions {
-                        showAttachmentOptions = false
+                        .frame(height: 20)
+
+                        Spacer()
+
+                        // Cancel recording button
+                        Button(action: {
+                            cancelVoiceRecording()
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(DesignTokens.textMuted)
+                        }
+                    }
+                    .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                    .background(Color.red.opacity(0.1))
+                    .cornerRadius(26)
+                } else {
+                    HStack(spacing: 8) {
+                        // Microphone button for voice recording
+                        Button(action: {
+                            startVoiceRecording()
+                        }) {
+                            Image(systemName: "waveform")
+                                .font(.system(size: 14))
+                                .foregroundColor(DesignTokens.textMuted)
+                        }
+
+                        TextField("Type a message...", text: $messageText)
+                            .font(Font.custom("Helvetica Neue", size: 16))
+                            .foregroundColor(DesignTokens.textPrimary)
+                            .focused($isInputFocused)
+                            .onSubmit {
+                                sendMessage()
+                            }
+                            .onChange(of: messageText) { oldValue, newValue in
+                                // Send typing indicator when user starts typing
+                                if oldValue.isEmpty && !newValue.isEmpty {
+                                    chatService.sendTypingStart(conversationId: conversationId)
+                                }
+                                // Send typing stop when text is cleared
+                                if !oldValue.isEmpty && newValue.isEmpty {
+                                    chatService.sendTypingStop(conversationId: conversationId)
+                                }
+                            }
+                    }
+                    .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                    .background(DesignTokens.inputBackground)
+                    .cornerRadius(26)
+                    .onChange(of: isInputFocused) { _, focused in
+                        if focused && showAttachmentOptions {
+                            showAttachmentOptions = false
+                        }
                     }
                 }
 
+                // Send button (text message or voice message)
                 Button(action: {
-                    sendMessage()
+                    if isRecordingVoice {
+                        stopAndSendVoiceMessage()
+                    } else {
+                        sendMessage()
+                    }
                 }) {
                     Circle()
-                        .fill(messageText.isEmpty ? Color.gray : Color(red: 0.91, green: 0.18, blue: 0.30))
+                        .fill(isRecordingVoice ? Color.red : (messageText.isEmpty ? Color.gray : Color(red: 0.91, green: 0.18, blue: 0.30)))
                         .frame(width: 33, height: 33)
                         .overlay(
-                            Image(systemName: "paperplane.fill")
+                            Image(systemName: isRecordingVoice ? "stop.fill" : "paperplane.fill")
                                 .font(.system(size: 14))
                                 .foregroundColor(.white)
                         )
                 }
-                .disabled(messageText.isEmpty)
+                .disabled(!isRecordingVoice && messageText.isEmpty)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -994,6 +1171,125 @@ struct ChatView: View {
         @unknown default:
             showCameraPermissionAlert = true
         }
+    }
+
+    // MARK: - 语音录制功能
+
+    /// 开始录制语音消息
+    private func startVoiceRecording() {
+        Task {
+            let started = await audioRecorder.startRecording()
+            if started {
+                isRecordingVoice = true
+                #if DEBUG
+                print("[ChatView] Voice recording started")
+                #endif
+            } else {
+                // Show permission alert if needed
+                if !audioRecorder.permissionGranted {
+                    showMicrophonePermissionAlert = true
+                } else if let errorMsg = audioRecorder.errorMessage {
+                    error = errorMsg
+                }
+            }
+        }
+    }
+
+    /// 取消录制
+    private func cancelVoiceRecording() {
+        audioRecorder.cancelRecording()
+        isRecordingVoice = false
+        #if DEBUG
+        print("[ChatView] Voice recording cancelled")
+        #endif
+    }
+
+    /// 停止录制并发送语音消息
+    private func stopAndSendVoiceMessage() {
+        guard let result = audioRecorder.stopRecording() else {
+            isRecordingVoice = false
+            error = "Failed to save recording"
+            return
+        }
+
+        isRecordingVoice = false
+
+        // 检查录音时长（太短的录音不发送）
+        guard result.duration >= 1.0 else {
+            #if DEBUG
+            print("[ChatView] Recording too short: \(result.duration)s")
+            #endif
+            error = "Recording too short"
+            audioRecorder.cleanupTempFiles()
+            return
+        }
+
+        sendVoiceMessage(audioData: result.data, duration: result.duration, url: result.url)
+    }
+
+    /// 发送语音消息
+    private func sendVoiceMessage(audioData: Data, duration: TimeInterval, url: URL) {
+        // 立即添加到本地 UI（乐观更新）
+        let localMessage = ChatMessage(
+            localText: "",
+            isFromMe: true,
+            audioData: audioData,
+            audioDuration: duration,
+            audioUrl: url
+        )
+        messages.append(localMessage)
+        showAttachmentOptions = false
+
+        Task {
+            isSending = true
+
+            do {
+                // 1. 上传音频到 MediaService
+                let filename = "voice_\(UUID().uuidString).m4a"
+                let mediaUrl = try await mediaService.uploadAudio(audioData: audioData, filename: filename)
+
+                #if DEBUG
+                print("[ChatView] Voice uploaded: \(mediaUrl)")
+                #endif
+
+                // 2. 发送带 mediaUrl 的消息到聊天服务
+                let sentMessage = try await chatService.sendMessage(
+                    conversationId: conversationId,
+                    content: String(format: "%.1f", duration),  // 时长作为内容（用于预览）
+                    type: .audio,
+                    mediaUrl: mediaUrl
+                )
+
+                // 3. 替换本地消息为服务器返回的消息
+                if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
+                    var updatedMessage = ChatMessage(from: sentMessage, currentUserId: currentUserId)
+                    updatedMessage.audioData = audioData
+                    updatedMessage.audioDuration = duration
+                    updatedMessage.audioUrl = url
+                    messages[index] = updatedMessage
+                }
+
+                #if DEBUG
+                print("[ChatView] Voice message sent: \(sentMessage.id)")
+                #endif
+
+            } catch {
+                #if DEBUG
+                print("[ChatView] Failed to send voice: \(error)")
+                #endif
+                self.error = "Failed to send voice message"
+            }
+
+            isSending = false
+            audioRecorder.cleanupTempFiles()
+        }
+    }
+
+    /// 格式化时长显示
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
     }
 }
 
