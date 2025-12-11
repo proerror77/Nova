@@ -242,7 +242,7 @@ async fn test_public_endpoint_accessible_without_auth() {
 }
 
 #[test]
-fn test_token_validation_fails_without_secret() {
+async fn test_token_validation_fails_without_secret() {
     let token = create_valid_token(123, 3600);
 
     // Try to decode with wrong secret
@@ -256,7 +256,7 @@ fn test_token_validation_fails_without_secret() {
 }
 
 #[test]
-fn test_token_with_no_expiration_is_invalid() {
+async fn test_token_with_no_expiration_is_invalid() {
     // Create token with exp = 0 (should be rejected)
     let claims = Claims {
         sub: "user-123".to_string(),
