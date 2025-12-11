@@ -150,6 +150,31 @@ struct LocationMessageView: View {
 }
 
 // MARK: - 消息气泡视图
+// MARK: - Typing Dots Animation
+struct TypingDotsView: View {
+    @State private var animationPhase = 0
+    
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<3) { index in
+                Circle()
+                    .fill(DesignTokens.textMuted)
+                    .frame(width: 6, height: 6)
+                    .scaleEffect(animationPhase == index ? 1.2 : 0.8)
+                    .animation(
+                        .easeInOut(duration: 0.4)
+                        .repeatForever(autoreverses: true)
+                        .delay(Double(index) * 0.15),
+                        value: animationPhase
+                    )
+            }
+        }
+        .onAppear {
+            animationPhase = 2
+        }
+    }
+}
+
 struct MessageBubbleView: View {
     let message: ChatMessage
 
@@ -264,10 +289,19 @@ struct ChatView: View {
     @State private var showAttachmentOptions = false
     @FocusState private var isInputFocused: Bool
 
-    // 加载状态
+    // Loading states
     @State private var isLoadingHistory = false
     @State private var isSending = false
     @State private var error: String?
+    
+    // Typing indicator state
+    @State private var isOtherUserTyping = false
+    @State private var typingUserName: String = ""
+    @State private var typingTimer: Timer?
+    
+    // Pagination
+    @State private var hasMoreMessages = true
+    @State private var nextCursor: String?
 
 
     // 相册相关
@@ -435,7 +469,7 @@ struct ChatView: View {
                             .id(message.id)
                     }
 
-                    // 发送中指示器
+                    // Sending indicator
                     if isSending {
                         HStack {
                             Spacer()
@@ -447,6 +481,31 @@ struct ChatView: View {
                             Spacer()
                         }
                         .padding(.horizontal)
+                    }
+                    
+                    // Typing indicator
+                    if isOtherUserTyping {
+                        HStack(spacing: 6) {
+                            DefaultAvatarView(size: 30)
+                            
+                            HStack(spacing: 4) {
+                                Text("\(typingUserName.isEmpty ? userName : typingUserName) is typing")
+                                    .font(Font.custom("Helvetica Neue", size: 14))
+                                    .foregroundColor(DesignTokens.textMuted)
+                                    .italic()
+                                
+                                // Animated dots
+                                TypingDotsView()
+                            }
+                            .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                            .background(DesignTokens.chatBubbleOther.opacity(0.5))
+                            .cornerRadius(16)
+                            
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16)
+                        .transition(.opacity)
+                        .animation(.easeInOut(duration: 0.2), value: isOtherUserTyping)
                     }
                 }
                 .padding(.bottom, 16)
@@ -503,6 +562,16 @@ struct ChatView: View {
                         .focused($isInputFocused)
                         .onSubmit {
                             sendMessage()
+                        }
+                        .onChange(of: messageText) { oldValue, newValue in
+                            // Send typing indicator when user starts typing
+                            if oldValue.isEmpty && !newValue.isEmpty {
+                                chatService.sendTypingStart(conversationId: conversationId)
+                            }
+                            // Send typing stop when text is cleared
+                            if !oldValue.isEmpty && newValue.isEmpty {
+                                chatService.sendTypingStop(conversationId: conversationId)
+                            }
                         }
                 }
                 .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
@@ -619,29 +688,34 @@ struct ChatView: View {
         }
     }
 
-    // MARK: - API调用
+    // MARK: - API Calls
 
-    /// 加载聊天数据（消息历史 + WebSocket连接）
+    /// Load chat data (message history + WebSocket connection)
     private func loadChatData() async {
         isLoadingHistory = true
         error = nil
 
         do {
-            // 1. 获取消息历史
+            // 1. Get message history
             let response = try await chatService.getMessages(conversationId: conversationId, limit: 50)
 
-            // 2. 转换为UI消息
+            // 2. Convert to UI messages
             messages = response.messages.map { ChatMessage(from: $0, currentUserId: currentUserId) }
+            
+            // 3. Store pagination info
+            hasMoreMessages = response.hasMore
+            nextCursor = response.nextCursor
 
-            // 3. 连接WebSocket接收实时消息
-            chatService.onMessageReceived = { newMessage in
-                Task { @MainActor in
-                    // 避免重复添加（如果消息已存在）
-                    guard !self.messages.contains(where: { $0.id == newMessage.id }) else { return }
-                    self.messages.append(ChatMessage(from: newMessage, currentUserId: self.currentUserId))
-                }
-            }
+            // 4. Setup WebSocket callbacks
+            setupWebSocketCallbacks()
+            
+            // 5. Connect WebSocket
             chatService.connectWebSocket()
+            
+            // 6. Mark messages as read
+            if let lastMessage = messages.last {
+                try? await chatService.markAsRead(conversationId: conversationId, messageId: lastMessage.id)
+            }
 
             #if DEBUG
             print("[ChatView] Loaded \(messages.count) messages for conversation \(conversationId)")
@@ -656,20 +730,108 @@ struct ChatView: View {
 
         isLoadingHistory = false
     }
+    
+    /// Setup WebSocket event callbacks
+    private func setupWebSocketCallbacks() {
+        // New message received
+        chatService.onMessageReceived = { newMessage in
+            Task { @MainActor in
+                // Avoid duplicates
+                guard !self.messages.contains(where: { $0.id == newMessage.id }) else { return }
+                self.messages.append(ChatMessage(from: newMessage, currentUserId: self.currentUserId))
+                
+                // Clear typing indicator when message is received
+                self.isOtherUserTyping = false
+                
+                // Mark as read
+                try? await self.chatService.markAsRead(
+                    conversationId: self.conversationId,
+                    messageId: newMessage.id
+                )
+            }
+        }
+        
+        // Typing indicator received
+        chatService.onTypingIndicator = { typingData in
+            Task { @MainActor in
+                // Only show if it's for this conversation and not from me
+                guard typingData.conversationId == self.conversationId,
+                      typingData.userId != self.currentUserId else { return }
+                
+                self.isOtherUserTyping = typingData.isTyping
+                self.typingUserName = typingData.username
+                
+                // Auto-hide typing indicator after 3 seconds (server TTL)
+                if typingData.isTyping {
+                    self.typingTimer?.invalidate()
+                    self.typingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+                        Task { @MainActor in
+                            self.isOtherUserTyping = false
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Read receipt received
+        chatService.onReadReceipt = { readData in
+            Task { @MainActor in
+                guard readData.conversationId == self.conversationId else { return }
+                
+                // Update message status to "read" for messages up to lastReadMessageId
+                // This enables showing double checkmarks in the UI
+                #if DEBUG
+                print("[ChatView] Read receipt: \(readData.userId) read up to \(readData.lastReadMessageId)")
+                #endif
+            }
+        }
+    }
+    
+    /// Load more messages (pagination)
+    private func loadMoreMessages() async {
+        guard hasMoreMessages, let cursor = nextCursor, !isLoadingHistory else { return }
+        
+        isLoadingHistory = true
+        
+        do {
+            let response = try await chatService.getMessages(
+                conversationId: conversationId,
+                limit: 50,
+                cursor: cursor
+            )
+            
+            // Prepend older messages
+            let olderMessages = response.messages.map { ChatMessage(from: $0, currentUserId: currentUserId) }
+            messages.insert(contentsOf: olderMessages, at: 0)
+            
+            hasMoreMessages = response.hasMore
+            nextCursor = response.nextCursor
+            
+        } catch {
+            #if DEBUG
+            print("[ChatView] Load more error: \(error)")
+            #endif
+        }
+        
+        isLoadingHistory = false
+    }
 
-    // MARK: - 发送文字消息
+    // MARK: - Send Text Message
     private func sendMessage() {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty, !isSending else { return }
 
-        // 立即添加到UI（乐观更新）
+        // Stop typing indicator
+        chatService.sendTypingStop(conversationId: conversationId)
+        
+        // Add to UI immediately (optimistic update)
         let localMessage = ChatMessage(localText: trimmedText, isFromMe: true)
         messages.append(localMessage)
 
         messageText = ""
         showAttachmentOptions = false
 
-        // 异步发送到服务器
+        // Send to server asynchronously
         Task {
             isSending = true
             do {
@@ -679,7 +841,7 @@ struct ChatView: View {
                     type: .text
                 )
 
-                // 替换本地消息为服务器返回的消息
+                // Replace local message with server response
                 if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
                     messages[index] = ChatMessage(from: sentMessage, currentUserId: currentUserId)
                 }
@@ -689,11 +851,11 @@ struct ChatView: View {
                 #endif
 
             } catch {
-                // 发送失败 - 标记消息为失败状态（TODO: 添加重试UI）
+                // Send failed - mark message as failed (TODO: add retry UI)
                 #if DEBUG
                 print("[ChatView] Failed to send message: \(error)")
                 #endif
-                // 可以在这里移除失败的消息或添加重试按钮
+                // Could remove failed message or add retry button here
             }
             isSending = false
         }

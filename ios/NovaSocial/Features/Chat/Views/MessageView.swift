@@ -49,9 +49,27 @@ struct MessageView: View {
 
             print("✅ [MessageView] Loaded \(apiConversations.count) conversations from API")
 
-            // 转换为UI模型
+            // Convert to UI model
+            let currentUserId = KeychainService.shared.get(.userId) ?? ""
             let previews = apiConversations.map { conv -> ConversationPreview in
-                let userName = conv.name ?? "User \(conv.id.prefix(4))"
+                // For direct conversations, show the other user's name
+                // For group conversations, show the group name
+                let userName: String
+                if conv.type == .direct {
+                    // Find the other member (not current user)
+                    if let otherMember = conv.members.first(where: { $0.userId != currentUserId }) {
+                        userName = otherMember.username
+                    } else if let firstMember = conv.members.first {
+                        userName = firstMember.username
+                    } else {
+                        userName = "User \(conv.id.prefix(4))"
+                    }
+                } else {
+                    // Group conversation - use group name
+                    userName = conv.name ?? "Group \(conv.id.prefix(4))"
+                }
+                
+                // Get last message content (may need decryption)
                 let lastMsg = conv.lastMessage?.content ?? "Start chatting!"
                 let timeStr = formatTime(conv.lastMessage?.timestamp ?? conv.updatedAt)
 

@@ -59,7 +59,7 @@ class StartGroupChatViewModel {
         do {
             let conversation = try await chatService.createConversation(
                 type: ConversationType.group,
-                participants: Array(selectedUsers),
+                participantIds: Array(selectedUsers),
                 name: groupName.trimmingCharacters(in: .whitespaces)
             )
 

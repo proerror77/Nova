@@ -193,21 +193,24 @@ final class ChatService {
 
     // MARK: - REST API - Conversations
 
-    /// 创建新会话
+    /// Create a new conversation (1:1 or group)
+    /// Maps to API: POST /api/v1/conversations
     /// - Parameters:
-    ///   - type: 会话类型（单聊/群聊）
-    ///   - participants: 参与者用户ID列表
-    ///   - name: 会话名称（群聊时必填）
-    /// - Returns: 创建的会话对象
+    ///   - type: Conversation type (direct/group)
+    ///   - participantIds: User IDs to add to the conversation
+    ///   - name: Conversation name (required for groups, null for direct)
+    /// - Returns: Created conversation object
+    /// - Note: For direct conversations, if one already exists between the same users, 
+    ///         the existing conversation is returned (idempotent)
     @MainActor
     func createConversation(
         type: ConversationType,
-        participants: [String],
+        participantIds: [String],
         name: String? = nil
     ) async throws -> Conversation {
         let request = CreateConversationRequest(
             type: type,
-            participants: participants,
+            participantIds: participantIds,
             name: name
         )
 
@@ -223,24 +226,123 @@ final class ChatService {
 
         return conversation
     }
-
-    /// 获取所有会话列表
-    /// - Returns: 会话列表
+    
+    /// Legacy method for backwards compatibility
     @MainActor
-    func getConversations() async throws -> [Conversation] {
+    func createConversation(
+        type: ConversationType,
+        participants: [String],
+        name: String? = nil
+    ) async throws -> Conversation {
+        try await createConversation(type: type, participantIds: participants, name: name)
+    }
+
+    /// Get all conversations for current user
+    /// Maps to API: GET /api/v1/conversations
+    /// - Parameters:
+    ///   - limit: Items per page (max 100, default 20)
+    ///   - offset: Pagination offset
+    ///   - archived: Include archived conversations
+    /// - Returns: List of conversations
+    @MainActor
+    func getConversations(
+        limit: Int = 20,
+        offset: Int = 0,
+        archived: Bool = false
+    ) async throws -> [Conversation] {
         print("🔍 [ChatService] getConversations() called")
 
         do {
-            let conversations: [Conversation] = try await client.get(
-                endpoint: APIConfig.Chat.getConversations
+            let response: ListConversationsResponse = try await client.get(
+                endpoint: APIConfig.Chat.getConversations,
+                queryParams: [
+                    "limit": String(limit),
+                    "offset": String(offset),
+                    "archived": String(archived)
+                ]
             )
 
-            print("✅ [ChatService] Fetched \(conversations.count) conversations")
-            return conversations
+            print("✅ [ChatService] Fetched \(response.conversations.count) of \(response.total) conversations")
+            return response.conversations
         } catch {
-            print("❌ [ChatService] Failed to fetch conversations: \(error)")
-            throw error
+            // Fallback: try decoding as array directly (for backwards compatibility)
+            do {
+                let conversations: [Conversation] = try await client.get(
+                    endpoint: APIConfig.Chat.getConversations,
+                    queryParams: [
+                        "limit": String(limit),
+                        "offset": String(offset),
+                        "archived": String(archived)
+                    ]
+                )
+                print("✅ [ChatService] Fetched \(conversations.count) conversations (legacy format)")
+                return conversations
+            } catch {
+                print("❌ [ChatService] Failed to fetch conversations: \(error)")
+                throw error
+            }
         }
+    }
+    
+    /// Convenience overload without parameters
+    @MainActor
+    func getConversations() async throws -> [Conversation] {
+        try await getConversations(limit: 20, offset: 0, archived: false)
+    }
+    
+    /// Update conversation settings (mute/archive)
+    /// Maps to API: PATCH /api/v1/conversations/:id/settings
+    /// - Parameters:
+    ///   - conversationId: Conversation ID
+    ///   - isMuted: Mute notifications (optional)
+    ///   - isArchived: Archive conversation (optional)
+    /// - Returns: Updated settings
+    @MainActor
+    func updateConversationSettings(
+        conversationId: String,
+        isMuted: Bool? = nil,
+        isArchived: Bool? = nil
+    ) async throws -> ConversationSettingsResponse {
+        let request = UpdateConversationSettingsRequest(
+            isMuted: isMuted,
+            isArchived: isArchived
+        )
+        
+        let response: ConversationSettingsResponse = try await client.request(
+            endpoint: "\(APIConfig.Chat.getConversation(conversationId))/settings",
+            method: "PATCH",
+            body: request
+        )
+        
+        #if DEBUG
+        print("[ChatService] Conversation settings updated: \(conversationId)")
+        #endif
+        
+        return response
+    }
+    
+    /// Mark messages as read in a conversation
+    /// Maps to API: POST /api/v1/conversations/:id/read
+    /// - Parameters:
+    ///   - conversationId: Conversation ID
+    ///   - messageId: ID of the last read message
+    @MainActor
+    func markAsRead(conversationId: String, messageId: String) async throws {
+        struct MessageResponse: Codable {
+            let message: String
+        }
+        
+        let request = MarkAsReadRequest(messageId: messageId)
+        
+        let _: MessageResponse = try await client.request(
+            endpoint: "\(APIConfig.Chat.getConversation(conversationId))/read",
+            method: "POST",
+            body: request
+        )
+        
+        #if DEBUG
+        print("[ChatService] Marked as read: conversation=\(conversationId), message=\(messageId)")
+        #endif
     }
 
     /// 获取指定会话详情
@@ -541,13 +643,19 @@ final class ChatService {
         }
     }
 
-    /// 处理接收到的WebSocket消息
+    /// WebSocket typing indicator callback
+    @MainActor var onTypingIndicator: ((WebSocketTypingData) -> Void)?
+    
+    /// WebSocket read receipt callback
+    @MainActor var onReadReceipt: ((WebSocketReadReceiptData) -> Void)?
+    
+    /// Handle incoming WebSocket message
+    /// Supports events: message.new, typing.indicator, message.read, connection.established
     private func handleWebSocketMessage(_ text: String) async {
         #if DEBUG
-        print("[ChatService] WebSocket message received: \(text.prefix(100))")
+        print("[ChatService] WebSocket message received: \(text.prefix(200))")
         #endif
 
-        // 解析JSON消息
         guard let data = text.data(using: .utf8) else { return }
 
         do {
@@ -555,15 +663,132 @@ final class ChatService {
             decoder.keyDecodingStrategy = .convertFromSnakeCase
             decoder.dateDecodingStrategy = .iso8601
 
-            let message = try decoder.decode(Message.self, from: data)
-
-            // 回调通知新消息
-            await MainActor.run {
-                self.onMessageReceived?(message)
+            // First, try to decode as a typed event with "type" field
+            struct EventWrapper: Codable {
+                let type: String
+            }
+            
+            if let wrapper = try? decoder.decode(EventWrapper.self, from: data) {
+                switch wrapper.type {
+                case "message.new":
+                    // New message event
+                    struct NewMessageEvent: Codable {
+                        let type: String
+                        let data: WebSocketNewMessageData
+                    }
+                    let event = try decoder.decode(NewMessageEvent.self, from: data)
+                    let message = Message(
+                        id: event.data.id,
+                        conversationId: event.data.conversationId,
+                        senderId: event.data.senderId,
+                        content: "", // Encrypted content needs decryption
+                        type: ChatMessageType(rawValue: event.data.messageType) ?? .text,
+                        createdAt: event.data.createdAt,
+                        status: .delivered,
+                        encryptedContent: event.data.encryptedContent,
+                        nonce: event.data.nonce
+                    )
+                    await MainActor.run {
+                        self.onMessageReceived?(message)
+                    }
+                    
+                case "typing.indicator":
+                    // Typing indicator event
+                    struct TypingEvent: Codable {
+                        let type: String
+                        let data: WebSocketTypingData
+                    }
+                    let event = try decoder.decode(TypingEvent.self, from: data)
+                    await MainActor.run {
+                        self.onTypingIndicator?(event.data)
+                    }
+                    
+                case "message.read":
+                    // Read receipt event
+                    struct ReadEvent: Codable {
+                        let type: String
+                        let data: WebSocketReadReceiptData
+                    }
+                    let event = try decoder.decode(ReadEvent.self, from: data)
+                    await MainActor.run {
+                        self.onReadReceipt?(event.data)
+                    }
+                    
+                case "connection.established":
+                    // Connection established - no action needed
+                    #if DEBUG
+                    print("[ChatService] WebSocket connection established")
+                    #endif
+                    
+                default:
+                    #if DEBUG
+                    print("[ChatService] Unknown WebSocket event type: \(wrapper.type)")
+                    #endif
+                }
+            } else {
+                // Fallback: try to decode as a Message directly (legacy format)
+                let message = try decoder.decode(Message.self, from: data)
+                await MainActor.run {
+                    self.onMessageReceived?(message)
+                }
             }
         } catch {
             #if DEBUG
             print("[ChatService] Failed to decode WebSocket message: \(error)")
+            #endif
+        }
+    }
+    
+    /// Send typing start event
+    /// - Parameter conversationId: Conversation ID
+    func sendTypingStart(conversationId: String) {
+        guard isConnected, let task = webSocketTask else { return }
+        
+        let event = TypingStartEvent(data: TypingEventData(conversationId: conversationId))
+        
+        do {
+            let encoder = JSONEncoder()
+            encoder.keyEncodingStrategy = .convertToSnakeCase
+            let data = try encoder.encode(event)
+            if let text = String(data: data, encoding: .utf8) {
+                task.send(.string(text)) { error in
+                    if let error = error {
+                        #if DEBUG
+                        print("[ChatService] Failed to send typing.start: \(error)")
+                        #endif
+                    }
+                }
+            }
+        } catch {
+            #if DEBUG
+            print("[ChatService] Failed to encode typing.start: \(error)")
+            #endif
+        }
+    }
+    
+    /// Send typing stop event
+    /// - Parameter conversationId: Conversation ID
+    func sendTypingStop(conversationId: String) {
+        guard isConnected, let task = webSocketTask else { return }
+        
+        let event = TypingStopEvent(data: TypingEventData(conversationId: conversationId))
+        
+        do {
+            let encoder = JSONEncoder()
+            encoder.keyEncodingStrategy = .convertToSnakeCase
+            let data = try encoder.encode(event)
+            if let text = String(data: data, encoding: .utf8) {
+                task.send(.string(text)) { error in
+                    if let error = error {
+                        #if DEBUG
+                        print("[ChatService] Failed to send typing.stop: \(error)")
+                        #endif
+                    }
+                }
+            }
+        } catch {
+            #if DEBUG
+            print("[ChatService] Failed to encode typing.stop: \(error)")
             #endif
         }
     }
