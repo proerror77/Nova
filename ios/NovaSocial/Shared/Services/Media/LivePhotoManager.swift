@@ -212,18 +212,6 @@ class LivePhotoManager: ObservableObject {
     }
 }
 
-// MARK: - PHLivePhoto Transferable Conformance
-
-extension PHLivePhoto: @retroactive Transferable {
-    public static var transferRepresentation: some TransferRepresentation {
-        DataRepresentation(importedContentType: .livePhoto) { data in
-            // This is a simplified representation
-            // In practice, PHLivePhoto loading is more complex
-            throw LivePhotoError.directTransferNotSupported
-        }
-    }
-}
-
 // MARK: - Live Photo Errors
 
 enum LivePhotoError: LocalizedError {
