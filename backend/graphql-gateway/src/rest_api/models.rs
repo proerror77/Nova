@@ -111,6 +111,13 @@ pub struct FeedPost {
     pub share_count: u32,
     pub media_urls: Vec<String>,
     pub media_type: String,
+    // Author information
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_avatar: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

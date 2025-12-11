@@ -96,17 +96,19 @@ pub async fn create_user(
     email: &str,
     username: &str,
     password_hash: &str,
+    display_name: Option<&str>,
 ) -> Result<User> {
     let user = sqlx::query_as::<_, User>(
         r#"
-        INSERT INTO users (id, email, username, password_hash, email_verified, totp_enabled, totp_verified, created_at, updated_at)
-        VALUES (uuid_generate_v4(), $1, $2, $3, false, false, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        INSERT INTO users (id, email, username, password_hash, display_name, email_verified, totp_enabled, totp_verified, created_at, updated_at)
+        VALUES (uuid_generate_v4(), $1, $2, $3, $4, false, false, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         RETURNING *
         "#
     )
     .bind(email)
     .bind(username)
     .bind(password_hash)
+    .bind(display_name)
     .fetch_one(pool)
     .await?;
 

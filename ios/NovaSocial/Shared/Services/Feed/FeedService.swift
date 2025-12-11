@@ -269,6 +269,11 @@ struct FeedPostRaw: Codable {
     let mediaUrls: [String]?
     let thumbnailUrls: [String]?
     let mediaType: String?
+
+    // Author information (optional for backward compatibility)
+    let authorUsername: String?
+    let authorDisplayName: String?
+    let authorAvatar: String?
 }
 
 /// Response from feed-service /api/v2/feed endpoint
@@ -299,6 +304,41 @@ struct FeedWithDetailsResponse {
     let totalCount: Int?
 }
 
+// MARK: - Media Type
+
+/// Media type for feed posts
+enum FeedMediaType: String, Codable {
+    case image = "image"
+    case video = "video"
+    case mixed = "mixed"  // Post contains both images and videos
+    
+    /// Determine media type from URL extension
+    static func from(url: String) -> FeedMediaType {
+        let lowercased = url.lowercased()
+        if lowercased.contains(".mp4") || lowercased.contains(".mov") || 
+           lowercased.contains(".m4v") || lowercased.contains(".webm") {
+            return .video
+        }
+        return .image
+    }
+    
+    /// Determine media type from array of URLs
+    static func from(urls: [String]) -> FeedMediaType {
+        guard !urls.isEmpty else { return .image }
+        
+        let types = urls.map { FeedMediaType.from(url: $0) }
+        let hasVideo = types.contains(.video)
+        let hasImage = types.contains(.image)
+        
+        if hasVideo && hasImage {
+            return .mixed
+        } else if hasVideo {
+            return .video
+        }
+        return .image
+    }
+}
+
 /// Feed post with full details for UI display
 /// Note: Uses APIClient's convertFromSnakeCase for automatic key mapping
 struct FeedPost: Identifiable, Codable {
@@ -309,6 +349,7 @@ struct FeedPost: Identifiable, Codable {
     let content: String
     let mediaUrls: [String]
     let thumbnailUrls: [String]
+    let mediaType: FeedMediaType
     let createdAt: Date
     let likeCount: Int
     let commentCount: Int
@@ -323,16 +364,51 @@ struct FeedPost: Identifiable, Codable {
         }
         return mediaUrls
     }
+    
+    /// Check if this post contains video content
+    var hasVideo: Bool {
+        mediaType == .video || mediaType == .mixed
+    }
+    
+    /// Get the first video URL if available
+    var firstVideoUrl: URL? {
+        guard hasVideo else { return nil }
+        return mediaUrls.first { FeedMediaType.from(url: $0) == .video }
+            .flatMap { URL(string: $0) }
+    }
+    
+    /// Get thumbnail URL for video (first thumbnail or nil)
+    var videoThumbnailUrl: URL? {
+        guard hasVideo else { return nil }
+        return thumbnailUrls.first.flatMap { URL(string: $0) }
+    }
 
     /// Create FeedPost from raw backend response
     init(from raw: FeedPostRaw) {
         self.id = raw.id
         self.authorId = raw.userId
-        self.authorName = "User \(raw.userId.prefix(8))"  // Placeholder until user profile fetch
-        self.authorAvatar = nil
+
+        // Use real author information from backend with graceful fallback
+        // Priority: display_name > username > placeholder
+        if let displayName = raw.authorDisplayName, !displayName.isEmpty {
+            self.authorName = displayName
+        } else if let username = raw.authorUsername, !username.isEmpty {
+            self.authorName = username
+        } else {
+            // Fallback to placeholder for backward compatibility
+            self.authorName = "User \(raw.userId.prefix(8))"
+        }
+
+        self.authorAvatar = raw.authorAvatar
         self.content = raw.content
         self.mediaUrls = raw.mediaUrls ?? []
         self.thumbnailUrls = raw.thumbnailUrls ?? self.mediaUrls
+        // Determine media type from backend or infer from URLs
+        if let rawType = raw.mediaType {
+            self.mediaType = FeedMediaType(rawValue: rawType) ?? FeedMediaType.from(urls: self.mediaUrls)
+        } else {
+            self.mediaType = FeedMediaType.from(urls: self.mediaUrls)
+        }
         self.createdAt = Date(timeIntervalSince1970: Double(raw.createdAt))
         self.likeCount = raw.likeCount ?? 0
         self.commentCount = raw.commentCount ?? 0
@@ -341,9 +417,9 @@ struct FeedPost: Identifiable, Codable {
         self.isBookmarked = false
     }
 
-    // Keep existing init for Codable conformance
+    // Keep existing init for Codable conformance and manual creation
     init(id: String, authorId: String, authorName: String, authorAvatar: String?,
-        content: String, mediaUrls: [String], createdAt: Date,
+        content: String, mediaUrls: [String], mediaType: FeedMediaType? = nil, createdAt: Date,
          likeCount: Int, commentCount: Int, shareCount: Int,
          isLiked: Bool, isBookmarked: Bool) {
         self.id = id
@@ -353,6 +429,8 @@ struct FeedPost: Identifiable, Codable {
         self.content = content
         self.mediaUrls = mediaUrls
         self.thumbnailUrls = mediaUrls
+        // Use provided type or infer from URLs
+        self.mediaType = mediaType ?? FeedMediaType.from(urls: mediaUrls)
         self.createdAt = createdAt
         self.likeCount = likeCount
         self.commentCount = commentCount
@@ -376,6 +454,7 @@ struct FeedPost: Identifiable, Codable {
             authorAvatar: self.authorAvatar,
             content: self.content,
             mediaUrls: self.mediaUrls,
+            mediaType: self.mediaType,
             createdAt: self.createdAt,
             likeCount: likeCount ?? self.likeCount,
             commentCount: commentCount ?? self.commentCount,

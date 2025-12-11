@@ -31,7 +31,7 @@ pub async fn register(
         username: req.username.clone(),
         password: req.password.clone(),
         invite_code: req.invite_code.clone(),
-        // Note: display_name is not in gRPC RegisterRequest - user must update profile separately
+        display_name: Some(req.display_name.clone()),
     });
 
     match auth_client.register(request).await {

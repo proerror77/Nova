@@ -2,12 +2,94 @@
 ///
 /// GET /api/v2/feed - Get personalized feed for current user
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
-use tracing::{error, info};
+use std::collections::HashMap;
+use tracing::{error, info, warn};
 
 use super::models::{ErrorResponse, FeedPost, GetFeedResponse};
+use crate::clients::proto::auth::GetUserProfilesByIdsRequest;
 use crate::clients::proto::feed::GetFeedRequest as ProtoGetFeedRequest;
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
+
+/// Helper function to enrich feed posts with author information
+///
+/// Batch fetches user profiles from auth-service and merges them into FeedPost responses.
+/// Gracefully handles missing profiles by leaving author fields as None.
+async fn enrich_posts_with_authors(
+    posts: Vec<crate::clients::proto::feed::FeedPost>,
+    clients: &ServiceClients,
+) -> Vec<FeedPost> {
+    // Collect unique user IDs
+    let user_ids: Vec<String> = posts
+        .iter()
+        .map(|p| p.user_id.clone())
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    // Batch fetch user profiles
+    let profiles = if !user_ids.is_empty() {
+        let mut auth_client = clients.auth_client();
+        let request = tonic::Request::new(GetUserProfilesByIdsRequest {
+            user_ids: user_ids.clone(),
+        });
+
+        match auth_client.get_user_profiles_by_ids(request).await {
+            Ok(response) => {
+                let profiles_list = response.into_inner().profiles;
+                // Create a HashMap for O(1) lookup
+                profiles_list
+                    .into_iter()
+                    .map(|p| (p.user_id.clone(), p))
+                    .collect::<HashMap<_, _>>()
+            }
+            Err(status) => {
+                warn!(
+                    error = %status,
+                    "Failed to fetch user profiles from auth-service, continuing without author info"
+                );
+                HashMap::new()
+            }
+        }
+    } else {
+        HashMap::new()
+    };
+
+    // Merge profiles into posts
+    posts
+        .into_iter()
+        .map(|post| {
+            let profile = profiles.get(&post.user_id);
+
+            // Fallback: if display_name is empty/None, use username
+            let author_display_name = profile.and_then(|p| {
+                let display_name = p.display_name.clone().unwrap_or_default();
+                if display_name.is_empty() {
+                    Some(p.username.clone())
+                } else {
+                    Some(display_name)
+                }
+            });
+
+            FeedPost {
+                id: post.id,
+                user_id: post.user_id.clone(),
+                content: post.content,
+                created_at: post.created_at,
+                ranking_score: post.ranking_score,
+                like_count: post.like_count,
+                comment_count: post.comment_count,
+                share_count: post.share_count,
+                media_urls: post.media_urls,
+                media_type: post.media_type,
+                // Author information
+                author_username: profile.map(|p| p.username.clone()),
+                author_display_name,
+                author_avatar: profile.and_then(|p| p.avatar_url.clone()),
+            }
+        })
+        .collect()
+}
 
 /// GET /api/v2/feed
 /// Returns personalized feed for the authenticated user
@@ -55,23 +137,8 @@ pub async fn get_feed(
             let next_cursor = grpc_response.next_cursor;
             let has_more = grpc_response.has_more;
 
-            // Convert gRPC FeedPost to REST FeedPost
-            let posts = grpc_response
-                .posts
-                .into_iter()
-                .map(|post| FeedPost {
-                    id: post.id,
-                    user_id: post.user_id,
-                    content: post.content,
-                    created_at: post.created_at,
-                    ranking_score: post.ranking_score,
-                    like_count: post.like_count,
-                    comment_count: post.comment_count,
-                    share_count: post.share_count,
-                    media_urls: post.media_urls,
-                    media_type: post.media_type,
-                })
-                .collect();
+            // Enrich posts with author information from auth-service
+            let posts = enrich_posts_with_authors(grpc_response.posts, &clients).await;
 
             info!(
                 user_id = %user_id,
@@ -143,23 +210,10 @@ pub async fn get_feed_by_user(
     match feed_client.get_feed(grpc_request).await {
         Ok(resp) => {
             let inner = resp.into_inner();
+            let posts = enrich_posts_with_authors(inner.posts, &clients).await;
+
             Ok(HttpResponse::Ok().json(GetFeedResponse {
-                posts: inner
-                    .posts
-                    .into_iter()
-                    .map(|p| FeedPost {
-                        id: p.id,
-                        user_id: p.user_id,
-                        content: p.content,
-                        created_at: p.created_at,
-                        ranking_score: p.ranking_score,
-                        like_count: p.like_count,
-                        comment_count: p.comment_count,
-                        share_count: p.share_count,
-                        media_urls: p.media_urls,
-                        media_type: p.media_type,
-                    })
-                    .collect(),
+                posts,
                 next_cursor: if inner.next_cursor.is_empty() {
                     None
                 } else {
@@ -193,23 +247,10 @@ pub async fn get_explore_feed(
     match feed_client.get_feed(grpc_request).await {
         Ok(resp) => {
             let inner = resp.into_inner();
+            let posts = enrich_posts_with_authors(inner.posts, &clients).await;
+
             Ok(HttpResponse::Ok().json(GetFeedResponse {
-                posts: inner
-                    .posts
-                    .into_iter()
-                    .map(|p| FeedPost {
-                        id: p.id,
-                        user_id: p.user_id,
-                        content: p.content,
-                        created_at: p.created_at,
-                        ranking_score: p.ranking_score,
-                        like_count: p.like_count,
-                        comment_count: p.comment_count,
-                        share_count: p.share_count,
-                        media_urls: p.media_urls,
-                        media_type: p.media_type,
-                    })
-                    .collect(),
+                posts,
                 next_cursor: if inner.next_cursor.is_empty() {
                     None
                 } else {
@@ -242,23 +283,10 @@ pub async fn get_trending_feed(
     match feed_client.get_feed(grpc_request).await {
         Ok(resp) => {
             let inner = resp.into_inner();
+            let posts = enrich_posts_with_authors(inner.posts, &clients).await;
+
             Ok(HttpResponse::Ok().json(GetFeedResponse {
-                posts: inner
-                    .posts
-                    .into_iter()
-                    .map(|p| FeedPost {
-                        id: p.id,
-                        user_id: p.user_id,
-                        content: p.content,
-                        created_at: p.created_at,
-                        ranking_score: p.ranking_score,
-                        like_count: p.like_count,
-                        comment_count: p.comment_count,
-                        share_count: p.share_count,
-                        media_urls: p.media_urls,
-                        media_type: p.media_type,
-                    })
-                    .collect(),
+                posts,
                 next_cursor: if inner.next_cursor.is_empty() {
                     None
                 } else {
@@ -296,23 +324,10 @@ pub async fn get_guest_trending_feed(
     match feed_client.get_feed(grpc_request).await {
         Ok(resp) => {
             let inner = resp.into_inner();
+            let posts = enrich_posts_with_authors(inner.posts, &clients).await;
+
             Ok(HttpResponse::Ok().json(GetFeedResponse {
-                posts: inner
-                    .posts
-                    .into_iter()
-                    .map(|p| FeedPost {
-                        id: p.id,
-                        user_id: p.user_id,
-                        content: p.content,
-                        created_at: p.created_at,
-                        ranking_score: p.ranking_score,
-                        like_count: p.like_count,
-                        comment_count: p.comment_count,
-                        share_count: p.share_count,
-                        media_urls: p.media_urls,
-                        media_type: p.media_type,
-                    })
-                    .collect(),
+                posts,
                 next_cursor: if inner.next_cursor.is_empty() {
                     None
                 } else {

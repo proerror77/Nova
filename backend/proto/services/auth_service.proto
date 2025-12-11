@@ -203,6 +203,19 @@ message UpdateUserProfileResponse {
 }
 
 // ============================================================================
+// Get Multiple User Profiles by IDs (batch operation)
+// ============================================================================
+
+message GetUserProfilesByIdsRequest {
+  repeated string user_ids = 1;  // List of user UUIDs
+}
+
+message GetUserProfilesByIdsResponse {
+  repeated UserProfile profiles = 1;
+  optional .nova.common.v2.ErrorStatus error = 2;
+}
+
+// ============================================================================
 // Public Key Management (E2EE messaging support)
 // ============================================================================
 
@@ -235,6 +248,7 @@ message RegisterRequest {
   string username = 2;     // User username (3-32 chars, alphanumeric + underscore)
   string password = 3;     // User password (validated by zxcvbn score >= 3)
   string invite_code = 4;  // Required: valid invite code for registration
+  optional string display_name = 5;  // Optional display name (defaults to username if not provided)
 }
 
 message RegisterResponse {
@@ -714,6 +728,14 @@ service AuthService {
   rpc UpdateUserProfile(UpdateUserProfileRequest) returns (UpdateUserProfileResponse) {
     option (google.api.http) = {
       put: "/api/v2/auth/users/{user_id}/profile"
+      body: "*"
+    };
+  }
+
+  // Get multiple user profiles in a single batch request
+  rpc GetUserProfilesByIds(GetUserProfilesByIdsRequest) returns (GetUserProfilesByIdsResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/users/profiles/batch"
       body: "*"
     };
   }

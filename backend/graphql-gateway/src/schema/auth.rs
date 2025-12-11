@@ -84,6 +84,7 @@ impl AuthMutation {
             password,
             username,
             invite_code,
+            display_name: None, // Optional field, defaults to username in auth-service
         });
 
         let response = client

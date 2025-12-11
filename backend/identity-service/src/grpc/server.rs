@@ -158,10 +158,17 @@ impl AuthService for IdentityServiceServer {
         // 4. Hash password (includes strength validation)
         let password_hash = hash_password(&req.password).map_err(to_status)?;
 
-        // 5. Create user
-        let user = db::users::create_user(&self.db, &req.email, &req.username, &password_hash)
-            .await
-            .map_err(to_status)?;
+        // 5. Create user with display_name (use username as fallback if not provided)
+        let display_name = req.display_name.as_ref().filter(|s| !s.is_empty());
+        let user = db::users::create_user(
+            &self.db,
+            &req.email,
+            &req.username,
+            &password_hash,
+            display_name.map(|s| s.as_str()),
+        )
+        .await
+        .map_err(to_status)?;
 
         // 6. Redeem the invite code (this triggers referral chain setup via DB trigger)
         let redeemed = db::invitations::redeem_invite(&self.db, &req.invite_code, user.id)
@@ -617,6 +624,64 @@ impl AuthService for IdentityServiceServer {
 
         Ok(Response::new(GetUsersByIdsResponse {
             users: users.into_iter().map(|u| user_model_to_proto(&u)).collect(),
+            error: None,
+        }))
+    }
+
+    /// Get multiple user profiles by IDs (batch operation)
+    async fn get_user_profiles_by_ids(
+        &self,
+        request: Request<GetUserProfilesByIdsRequest>,
+    ) -> std::result::Result<Response<GetUserProfilesByIdsResponse>, Status> {
+        let req = request.into_inner();
+
+        let user_ids: Vec<Uuid> = req
+            .user_ids
+            .iter()
+            .filter_map(|id| Uuid::parse_str(id).ok())
+            .collect();
+
+        if user_ids.is_empty() {
+            return Ok(Response::new(GetUserProfilesByIdsResponse {
+                profiles: vec![],
+                error: None,
+            }));
+        }
+
+        // Fetch users from database
+        let users = db::users::find_by_ids(&self.db, &user_ids)
+            .await
+            .map_err(to_status)?;
+
+        // Convert to UserProfile proto messages
+        let profiles: Vec<UserProfile> = users
+            .into_iter()
+            .map(|user| UserProfile {
+                user_id: user.id.to_string(),
+                username: user.username.clone(),
+                email: Some(user.email.clone()),
+                display_name: user.display_name.clone(),
+                bio: user.bio.clone(),
+                avatar_url: user.avatar_url.clone(),
+                cover_photo_url: user.cover_photo_url.clone(),
+                location: user.location.clone(),
+                private_account: user.private_account,
+                created_at: user.created_at.timestamp(),
+                updated_at: user.updated_at.timestamp(),
+                first_name: user.first_name.clone(),
+                last_name: user.last_name.clone(),
+                date_of_birth: user.date_of_birth.map(|d| d.format("%Y-%m-%d").to_string()),
+                gender: user.gender.map(|g| match g {
+                    crate::models::user::Gender::Male => "male".to_string(),
+                    crate::models::user::Gender::Female => "female".to_string(),
+                    crate::models::user::Gender::Other => "other".to_string(),
+                    crate::models::user::Gender::PreferNotToSay => "prefer_not_to_say".to_string(),
+                }),
+            })
+            .collect();
+
+        Ok(Response::new(GetUserProfilesByIdsResponse {
+            profiles,
             error: None,
         }))
     }
