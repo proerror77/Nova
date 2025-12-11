@@ -12,6 +12,7 @@ class FeedViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var isLoadingMore = false
     @Published var error: String?
+    @Published var toastError: String?  // Transient error for toast notifications
     @Published var hasMore = true
 
     // MARK: - Private Properties
@@ -285,9 +286,30 @@ class FeedViewModel: ObservableObject {
             } else {
                 try await socialService.createLike(postId: postId, userId: userId)
             }
+        } catch let error as APIError {
+            // Revert on failure
+            posts[index] = post
+
+            // Handle specific error cases
+            switch error {
+            case .unauthorized:
+                // Session expired - notify user to re-login
+                self.toastError = "Session expired. Please log in again."
+                #if DEBUG
+                print("[Feed] Toggle like error: Session expired, user needs to re-login")
+                #endif
+            case .noConnection:
+                self.toastError = "No internet connection. Please try again."
+            default:
+                self.toastError = "Failed to like post. Please try again."
+                #if DEBUG
+                print("[Feed] Toggle like error: \(error)")
+                #endif
+            }
         } catch {
             // Revert on failure
             posts[index] = post
+            self.toastError = "Failed to like post. Please try again."
             #if DEBUG
             print("[Feed] Toggle like error: \(error)")
             #endif

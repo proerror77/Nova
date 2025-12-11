@@ -24,6 +24,7 @@ struct HomeView: View {
     @State private var selectedPostForDetail: FeedPost?
     @State private var showPostDetail = false
     @State private var selectedChannel: String = "Fashion"  // 当前选中的 Channel
+    @State private var showToast = false
 
     // Channel 列表
     private let channels = ["Fashion", "Travel", "Fitness", "Pets", "Study", "Career", "Tech"]
@@ -54,10 +55,23 @@ struct HomeView: View {
                 WriteView(showWrite: $showWrite, currentPage: $currentPage)
                     .transition(.identity)
             } else if showPostDetail, let post = selectedPostForDetail {
-                PostDetailView(post: post, onDismiss: {
-                    showPostDetail = false
-                    selectedPostForDetail = nil
-                })
+                PostDetailView(
+                    post: post,
+                    onDismiss: {
+                        showPostDetail = false
+                        selectedPostForDetail = nil
+                    },
+                    onLike: {
+                        Task { await feedViewModel.toggleLike(postId: post.id) }
+                    },
+                    onComment: {
+                        selectedPostForComment = post
+                        showComments = true
+                    },
+                    onBookmark: {
+                        feedViewModel.toggleBookmark(postId: post.id)
+                    }
+                )
                 .transition(.identity)
             } else {
                 homeContent
@@ -80,6 +94,28 @@ struct HomeView: View {
                         showWrite = true
                     }
                 )
+            }
+
+            // MARK: - Toast Notification for Transient Errors
+            if showToast, let toastMessage = feedViewModel.toastError {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .foregroundColor(.white)
+                        Text(toastMessage)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Color.black.opacity(0.85))
+                    .cornerRadius(8)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 100) // Above tab bar
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(999)
             }
         }
         .animation(.none, value: showNotification)
@@ -107,6 +143,21 @@ struct HomeView: View {
             // 选择/拍摄照片后，自动跳转到NewPostView
             if newValue != nil {
                 showNewPost = true
+            }
+        }
+        .onChange(of: feedViewModel.toastError) { oldValue, newValue in
+            // Show toast when error appears, auto-dismiss after 3 seconds
+            if newValue != nil {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showToast = true
+                }
+                // Auto-dismiss after 3 seconds
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showToast = false
+                        feedViewModel.toastError = nil
+                    }
+                }
             }
         }
         .onAppear {

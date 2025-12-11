@@ -5,6 +5,9 @@ import SwiftUI
 struct PostDetailView: View {
     let post: FeedPost
     var onDismiss: (() -> Void)?
+    var onLike: (() -> Void)?
+    var onComment: (() -> Void)?
+    var onBookmark: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var currentImageIndex = 0
     @State private var isFollowing = false
@@ -292,38 +295,47 @@ struct PostDetailView: View {
                 .background(Color(red: 0.77, green: 0.77, blue: 0.77))
 
             HStack(spacing: 10) {
-                // Like
-                HStack(spacing: 6) {
-                    Image("card-heart-icon")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 20, height: 20)
-                    Text("\(post.likeCount)")
-                        .font(.system(size: 14))
-                        .foregroundColor(DesignTokens.textSecondary)
+                // Like Button
+                Button(action: { onLike?() }) {
+                    HStack(spacing: 6) {
+                        Image(post.isLiked ? "card-heart-icon-filled" : "card-heart-icon")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20)
+                        Text("\(post.likeCount)")
+                            .font(.system(size: 14))
+                            .foregroundColor(post.isLiked ? DesignTokens.accentColor : DesignTokens.textSecondary)
+                    }
                 }
+                .accessibilityLabel("Like, \(post.likeCount) likes")
 
-                // Comment
-                HStack(spacing: 6) {
-                    Image("card-comment-icon")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 20, height: 20)
-                    Text("\(post.commentCount)")
-                        .font(.system(size: 14))
-                        .foregroundColor(DesignTokens.textSecondary)
+                // Comment Button
+                Button(action: { onComment?() }) {
+                    HStack(spacing: 6) {
+                        Image("card-comment-icon")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20)
+                        Text("\(post.commentCount)")
+                            .font(.system(size: 14))
+                            .foregroundColor(DesignTokens.textSecondary)
+                    }
                 }
+                .accessibilityLabel("Comments, \(post.commentCount)")
 
-                // Bookmark
-                HStack(spacing: 6) {
-                    Image("card-star-icon")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 20, height: 20)
-                    Text("\(post.shareCount)")
-                        .font(.system(size: 14))
-                        .foregroundColor(DesignTokens.textSecondary)
+                // Bookmark Button
+                Button(action: { onBookmark?() }) {
+                    HStack(spacing: 6) {
+                        Image(post.isBookmarked ? "card-star-icon-filled" : "card-star-icon")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20)
+                        Text("\(post.shareCount)")
+                            .font(.system(size: 14))
+                            .foregroundColor(post.isBookmarked ? DesignTokens.accentColor : DesignTokens.textSecondary)
+                    }
                 }
+                .accessibilityLabel("Bookmark")
 
                 Spacer()
             }
