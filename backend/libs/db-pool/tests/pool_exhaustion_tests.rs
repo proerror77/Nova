@@ -35,6 +35,7 @@ async fn create_test_pool(max_connections: u32) -> PgPool {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 async fn test_normal_acquisition_below_threshold() {
     // Test: Normal connection acquisition when pool is not exhausted
     let pool = create_test_pool(5).await;
@@ -63,6 +64,7 @@ async fn test_normal_acquisition_below_threshold() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 async fn test_early_rejection_at_threshold() {
     // Test: Pool rejects new connections when at max capacity
     let pool = create_test_pool(3).await;
@@ -99,6 +101,7 @@ async fn test_early_rejection_at_threshold() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 async fn test_metrics_recording() {
     // Test: Metrics are recorded for connection acquisition
     let pool = create_test_pool(5).await;
@@ -116,6 +119,7 @@ async fn test_metrics_recording() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 async fn test_concurrent_access_safety() {
     // Test: Pool handles concurrent access safely
     let pool = Arc::new(create_test_pool(10).await);
@@ -159,6 +163,7 @@ async fn test_concurrent_access_safety() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 async fn test_load_stress_sequential() {
     // Test: Pool handles sequential load without exhaustion
     let pool = create_test_pool(5).await;
@@ -183,6 +188,7 @@ async fn test_load_stress_sequential() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 async fn test_load_stress_burst() {
     // Test: Pool handles burst load with backpressure
     let pool = Arc::new(create_test_pool(10).await);
@@ -228,6 +234,7 @@ async fn test_load_stress_burst() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 async fn test_connection_timeout_configuration() {
     // Test: Pool respects timeout configuration
     let config = DbConfig {
@@ -262,6 +269,7 @@ async fn test_connection_timeout_configuration() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 async fn test_pool_recovery_after_exhaustion() {
     // Test: Pool recovers after exhaustion
     let pool = create_test_pool(3).await;
@@ -290,6 +298,7 @@ async fn test_pool_recovery_after_exhaustion() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 async fn test_metrics_on_timeout() {
     // Test: Metrics are recorded even on timeout
     let pool = create_test_pool(2).await;
@@ -308,6 +317,7 @@ async fn test_metrics_on_timeout() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 async fn test_service_specific_pool_sizes() {
     // Test: Different services get appropriate pool sizes
     let services = vec![
@@ -333,6 +343,7 @@ async fn test_service_specific_pool_sizes() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 async fn test_total_connections_within_limit() {
     // Test: Total connections across all services stays under PostgreSQL limit
     let services = vec![

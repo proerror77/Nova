@@ -20,6 +20,7 @@ async fn create_test_pool() -> PgPool {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 #[ignore] // Requires database setup
 async fn test_index_creation_verification() {
     // Test: All critical indexes are created
@@ -63,6 +64,7 @@ async fn test_index_creation_verification() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 #[ignore] // Requires database setup
 async fn test_trending_scores_primary_key() {
     // Test: trending_scores has composite primary key
@@ -84,6 +86,7 @@ async fn test_trending_scores_primary_key() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 #[ignore] // Requires database setup with test data
 async fn test_query_performance_with_indexes() {
     // Test: Queries are faster with indexes
@@ -140,6 +143,7 @@ async fn test_query_performance_with_indexes() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 #[ignore] // Requires database setup
 async fn test_explain_plan_uses_index() {
     // Test: Query planner uses indexes
@@ -177,6 +181,7 @@ async fn test_explain_plan_uses_index() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 #[ignore] // Requires database setup
 async fn test_index_size_reasonable() {
     // Test: Index sizes are within reasonable bounds
@@ -209,6 +214,7 @@ async fn test_index_size_reasonable() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 #[ignore] // Requires database setup
 async fn test_concurrent_index_creation() {
     // Test: Indexes are created with CONCURRENTLY (no table locks)
@@ -249,6 +255,7 @@ async fn test_concurrent_index_creation() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 #[ignore] // Requires database setup
 async fn test_rollback_capability() {
     // Test: Indexes can be safely dropped (rollback)
@@ -301,6 +308,7 @@ async fn test_rollback_capability() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 #[ignore] // Requires database setup
 async fn test_posts_user_created_index() {
     // Test: posts table has user_id + created_at index
@@ -323,6 +331,7 @@ async fn test_posts_user_created_index() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 #[ignore] // Requires database setup
 async fn test_comments_post_created_index() {
     // Test: comments table has post_id + created_at index
@@ -345,6 +354,7 @@ async fn test_comments_post_created_index() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 #[ignore] // Requires database setup
 async fn test_partial_index_conditions() {
     // Test: Partial indexes have correct WHERE clauses
@@ -370,6 +380,7 @@ async fn test_partial_index_conditions() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 #[ignore] // Requires database setup
 async fn test_index_performance_trending_query() {
     // Test: Trending query performance with indexes
@@ -408,6 +419,7 @@ async fn test_index_performance_trending_query() {
 }
 
 #[tokio::test]
+#[ignore = "Requires PostgreSQL database"]
 #[ignore] // Requires database setup
 async fn test_analyze_statistics_updated() {
     // Test: ANALYZE updates table statistics
