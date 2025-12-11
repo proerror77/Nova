@@ -58,7 +58,7 @@ actix-web-actors = "4.3"
 tokio = { version = "1.36", features = ["full"] }
 
 # Database
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "migrate", "json"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "migrate", "macros", "json"] }
 
 # Redis
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager", "streams"] }
@@ -181,7 +181,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rdkafka = { version = "0.36", features = ["tokio", "cmake-build"] }
 clickhouse = { version = "0.12" }
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono"] }
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
 reqwest = { version = "0.12", features = ["json"] }
 chrono = { version = "0.4", features = ["serde"] }
