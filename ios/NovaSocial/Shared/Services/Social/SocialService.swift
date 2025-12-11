@@ -129,8 +129,9 @@ class SocialService {
 
     func getComments(postId: String, limit: Int = 20, offset: Int = 0) async throws -> (comments: [SocialComment], totalCount: Int) {
         let response: GetCommentsResponse = try await client.get(
-            endpoint: APIConfig.Social.getComments(postId),
+            endpoint: APIConfig.Social.getComments,
             queryParams: [
+                "post_id": postId,
                 "limit": String(limit),
                 "offset": String(offset)
             ]
