@@ -332,7 +332,8 @@ impl PollRepository {
             return Ok(false);
         }
 
-        let vote = vote.unwrap();
+        // SAFETY: We checked is_none() above and returned early
+        let vote = vote.expect("vote checked above");
 
         // Delete vote and update counts
         let mut tx = self.pool.begin().await?;

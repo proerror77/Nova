@@ -490,14 +490,15 @@ impl ReelTranscodePipeline {
             let use_gcp = !enable_mock && gcs_bucket.is_some() && gcp_project_id.is_some();
 
             let result = if use_gcp {
+                // SAFETY: We checked is_some() above for gcs_bucket and gcp_project_id
                 Self::process_reel_with_gcp(
                     pool,
                     reel_id,
                     upload_id,
                     profiles,
                     cdn_base_url,
-                    gcs_bucket.unwrap(),
-                    gcp_project_id.unwrap(),
+                    gcs_bucket.expect("gcs_bucket checked above"),
+                    gcp_project_id.expect("gcp_project_id checked above"),
                     gcp_location.unwrap_or_else(|| "us-central1".to_string()),
                 )
                 .await
