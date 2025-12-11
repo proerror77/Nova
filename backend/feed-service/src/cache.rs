@@ -456,6 +456,7 @@ mod tests {
                     share_count: 1,
                     media_urls: vec![],
                     media_type: String::new(),
+                    thumbnail_urls: vec![],
                 },
                 CachedFeedPost {
                     id: "post-2".to_string(),
@@ -468,6 +469,7 @@ mod tests {
                     share_count: 3,
                     media_urls: vec![],
                     media_type: String::new(),
+                    thumbnail_urls: vec![],
                 },
             ],
             cursor: Some("cursor-123".to_string()),

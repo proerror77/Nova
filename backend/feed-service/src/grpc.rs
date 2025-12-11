@@ -665,6 +665,7 @@ mod tests {
             share_count: 2,
             media_urls: vec![],
             media_type: String::new(),
+            thumbnail_urls: vec![],
         };
 
         // Verify all proto fields are set correctly
@@ -693,6 +694,7 @@ mod tests {
                 share_count: 1,
                 media_urls: vec![],
                 media_type: String::new(),
+                thumbnail_urls: vec![],
             },
             FeedPost {
                 id: "post-2".to_string(),
@@ -705,6 +707,7 @@ mod tests {
                 share_count: 3,
                 media_urls: vec![],
                 media_type: String::new(),
+                thumbnail_urls: vec![],
             },
         ];
 
@@ -877,6 +880,7 @@ mod tests {
             share_count: 75,
             media_urls: vec![],
             media_type: String::new(),
+            thumbnail_urls: vec![],
         };
 
         // Measure construction time
@@ -893,6 +897,7 @@ mod tests {
                 share_count: post.share_count,
                 media_urls: vec![],
                 media_type: String::new(),
+                thumbnail_urls: vec![],
             };
         }
         let elapsed = start.elapsed();
@@ -977,6 +982,7 @@ mod tests {
                 share_count: (i % 3) as u32,
                 media_urls: vec![],
                 media_type: String::new(),
+                thumbnail_urls: vec![],
             })
             .collect();
 
@@ -1040,6 +1046,7 @@ mod tests {
                         share_count: 5,
                         media_urls: vec![],
                         media_type: String::new(),
+                        thumbnail_urls: vec![],
                     })
                     .collect(),
                 next_cursor: cursor.clone(),
