@@ -232,6 +232,8 @@ struct Message: Identifiable, Codable, Sendable {
         type: ChatMessageType,
         createdAt: Date,
         status: MessageStatus = .sent,
+        mediaUrl: String? = nil,
+        replyToId: String? = nil,
         encryptedContent: String? = nil,
         nonce: String? = nil,
         sessionId: String? = nil,
@@ -247,6 +249,8 @@ struct Message: Identifiable, Codable, Sendable {
         self.isEdited = false
         self.isDeleted = false
         self.status = status
+        self.mediaUrl = mediaUrl
+        self.replyToId = replyToId
         self.encryptedContent = encryptedContent
         self.nonce = nonce
         self.sessionId = sessionId

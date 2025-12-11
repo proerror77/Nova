@@ -407,6 +407,9 @@ struct ChatView: View {
     @State private var isSending = false
     @State private var isUploadingImage = false
     @State private var error: String?
+
+    // Matrix E2EE status
+    @State private var isMatrixE2EEEnabled = false
     
     // Typing indicator state
     @State private var isOtherUserTyping = false
@@ -540,9 +543,23 @@ struct ChatView: View {
                     DefaultAvatarView(size: 50)
                 }
 
-                Text(userName)
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(DesignTokens.textPrimary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(userName)
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(DesignTokens.textPrimary)
+
+                    // Matrix E2EE 狀態指示器
+                    if isMatrixE2EEEnabled {
+                        HStack(spacing: 4) {
+                            Image(systemName: "lock.shield.fill")
+                                .font(.system(size: 10))
+                                .foregroundColor(.green)
+                            Text("End-to-end encrypted")
+                                .font(.system(size: 10))
+                                .foregroundColor(.green)
+                        }
+                    }
+                }
             }
             .contentShape(Rectangle())
             .onTapGesture {
@@ -877,25 +894,38 @@ struct ChatView: View {
         error = nil
 
         do {
+            // 0. 檢查並啟用 Matrix E2EE
+            chatService.enableMatrixE2EE()
+            isMatrixE2EEEnabled = MatrixBridgeService.shared.isInitialized
+
+            #if DEBUG
+            print("[ChatView] Matrix E2EE enabled: \(isMatrixE2EEEnabled)")
+            #endif
+
             // 1. Get message history
             let response = try await chatService.getMessages(conversationId: conversationId, limit: 50)
 
             // 2. Convert to UI messages
             messages = response.messages.map { ChatMessage(from: $0, currentUserId: currentUserId) }
-            
+
             // 3. Store pagination info
             hasMoreMessages = response.hasMore
             nextCursor = response.nextCursor
 
             // 4. Setup WebSocket callbacks
             setupWebSocketCallbacks()
-            
+
             // 5. Connect WebSocket
             chatService.connectWebSocket()
-            
+
             // 6. Mark messages as read
             if let lastMessage = messages.last {
                 try? await chatService.markAsRead(conversationId: conversationId, messageId: lastMessage.id)
+            }
+
+            // 7. Setup Matrix message handler (如果已啟用)
+            if isMatrixE2EEEnabled {
+                setupMatrixMessageHandler()
             }
 
             #if DEBUG
@@ -967,6 +997,59 @@ struct ChatView: View {
             }
         }
     }
+
+    /// Setup Matrix Bridge message handler for E2EE messages
+    private func setupMatrixMessageHandler() {
+        MatrixBridgeService.shared.onMatrixMessage = { [self] conversationId, matrixMessage in
+            Task { @MainActor in
+                // 只處理當前會話的訊息
+                guard conversationId == self.conversationId else { return }
+
+                // 避免重複
+                guard !self.messages.contains(where: { $0.id == matrixMessage.id }) else { return }
+
+                // 轉換 Matrix 訊息為 Nova 訊息格式
+                let novaMessage = MatrixBridgeService.shared.convertToNovaMessage(
+                    matrixMessage,
+                    conversationId: conversationId
+                )
+
+                // 添加到 UI
+                self.messages.append(ChatMessage(from: novaMessage, currentUserId: self.currentUserId))
+
+                // 清除打字指示器
+                self.isOtherUserTyping = false
+
+                #if DEBUG
+                print("[ChatView] Matrix E2EE message received: \(matrixMessage.id)")
+                #endif
+            }
+        }
+
+        // Matrix 打字指示器
+        MatrixBridgeService.shared.onTypingIndicator = { [self] conversationId, userIds in
+            Task { @MainActor in
+                guard conversationId == self.conversationId else { return }
+                guard !userIds.contains(self.currentUserId) else { return }
+
+                self.isOtherUserTyping = !userIds.isEmpty
+
+                // 3 秒後自動隱藏
+                if !userIds.isEmpty {
+                    self.typingTimer?.invalidate()
+                    self.typingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+                        Task { @MainActor in
+                            self.isOtherUserTyping = false
+                        }
+                    }
+                }
+            }
+        }
+
+        #if DEBUG
+        print("[ChatView] Matrix message handler setup complete")
+        #endif
+    }
     
     /// Load more messages (pagination)
     private func loadMoreMessages() async {
@@ -998,13 +1081,14 @@ struct ChatView: View {
     }
 
     // MARK: - Send Text Message
+    /// 發送文字訊息，優先使用 Matrix E2EE（如果可用）
     private func sendMessage() {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty, !isSending else { return }
 
         // Stop typing indicator
         chatService.sendTypingStop(conversationId: conversationId)
-        
+
         // Add to UI immediately (optimistic update)
         let localMessage = ChatMessage(localText: trimmedText, isFromMe: true)
         messages.append(localMessage)
@@ -1016,10 +1100,13 @@ struct ChatView: View {
         Task {
             isSending = true
             do {
-                let sentMessage = try await chatService.sendMessage(
+                // 使用 sendSecureMessage，自動嘗試 Matrix E2EE
+                // 如果 Matrix 不可用，會自動 fallback 到 REST API
+                let sentMessage = try await chatService.sendSecureMessage(
                     conversationId: conversationId,
                     content: trimmedText,
-                    type: .text
+                    type: .text,
+                    preferE2EE: true  // 優先使用端到端加密
                 )
 
                 // Replace local message with server response
@@ -1028,7 +1115,8 @@ struct ChatView: View {
                 }
 
                 #if DEBUG
-                print("[ChatView] Message sent successfully: \(sentMessage.id)")
+                let encryptionStatus = sentMessage.encryptionVersion == 3 ? "Matrix E2EE" : "REST API"
+                print("[ChatView] Message sent via \(encryptionStatus): \(sentMessage.id)")
                 #endif
 
             } catch {

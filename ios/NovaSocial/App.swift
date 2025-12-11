@@ -16,6 +16,9 @@ struct ICEREDApp: App {
     @State private var resetPasswordToken: String?
     @State private var showResetPasswordView = false
 
+    // Matrix 初始化狀態
+    @State private var isMatrixInitialized = false
+
     // Check if running in UI testing mode
     private var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains("--uitesting")
@@ -34,6 +37,67 @@ struct ICEREDApp: App {
         } else {
             _currentPage = State(initialValue: .splash)
         }
+
+        // 設置登入通知監聽器以初始化 Matrix
+        setupMatrixInitialization()
+    }
+
+    // MARK: - Matrix Integration
+
+    /// 設置 Matrix 初始化 - 在用戶登入後觸發
+    private func setupMatrixInitialization() {
+        // 監聽認證狀態變化
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("UserDidLogin"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in
+                await initializeMatrixBridge()
+            }
+        }
+    }
+
+    /// 初始化 Matrix Bridge 服務
+    @MainActor
+    private func initializeMatrixBridge() async {
+        guard !isMatrixInitialized else { return }
+
+        #if DEBUG
+        print("[App] 正在初始化 Matrix Bridge...")
+        #endif
+
+        do {
+            try await MatrixBridgeService.shared.initialize()
+            isMatrixInitialized = true
+
+            #if DEBUG
+            print("[App] ✅ Matrix Bridge 初始化成功")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[App] ❌ Matrix Bridge 初始化失敗: \(error)")
+            #endif
+            // Matrix 初始化失敗不影響 App 正常使用
+            // 聊天功能會回退到 REST API
+        }
+    }
+
+    /// 關閉 Matrix Bridge - 在用戶登出時調用
+    @MainActor
+    private func shutdownMatrixBridge() async {
+        guard isMatrixInitialized else { return }
+
+        #if DEBUG
+        print("[App] 正在關閉 Matrix Bridge...")
+        #endif
+
+        await MatrixBridgeService.shared.shutdown()
+        isMatrixInitialized = false
+
+        #if DEBUG
+        print("[App] Matrix Bridge 已關閉")
+        #endif
     }
 
     var body: some Scene {
@@ -129,11 +193,34 @@ struct ICEREDApp: App {
                 // 当 App 进入后台时，标记已进入后台
                 if newPhase == .background {
                     hasEnteredBackground = true
+                    // Matrix: 進入後台時停止同步以節省電量
+                    MatrixService.shared.stopSync()
                 }
                 // 当 App 从后台返回到活跃状态时，显示 Splash Screen
                 if newPhase == .active && hasEnteredBackground {
                     hasEnteredBackground = false
                     currentPage = .splash
+
+                    // Matrix: 返回前台時重新啟動同步
+                    if isMatrixInitialized {
+                        Task {
+                            try? await MatrixService.shared.startSync()
+                        }
+                    }
+                }
+            }
+            // 監聽認證狀態變化
+            .onChange(of: authManager.isAuthenticated) { wasAuthenticated, isAuthenticated in
+                if isAuthenticated && !wasAuthenticated {
+                    // 用戶剛登入 - 初始化 Matrix
+                    Task { @MainActor in
+                        await initializeMatrixBridge()
+                    }
+                } else if !isAuthenticated && wasAuthenticated {
+                    // 用戶登出 - 關閉 Matrix
+                    Task { @MainActor in
+                        await shutdownMatrixBridge()
+                    }
                 }
             }
             // Handle deep links for password reset

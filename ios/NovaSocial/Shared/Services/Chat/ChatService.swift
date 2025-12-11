@@ -8,6 +8,7 @@ import Foundation
 /// - 实时消息推送（WebSocket）
 /// - 消息历史管理
 /// - 会话管理
+/// - Matrix E2EE integration (when enabled)
 @Observable
 final class ChatService {
     // MARK: - Properties
@@ -32,11 +33,29 @@ final class ChatService {
     /// Keychain for device ID storage
     private let keychain = KeychainService.shared
 
+    /// Feature flag: Use Matrix for E2EE messaging
+    /// When enabled, messages are routed through Matrix Rust SDK for true E2EE
+    private var useMatrixE2EE: Bool = false
+
     // MARK: - Initialization
 
     init() {
         // Initialize E2EE service
         self.e2eeService = E2EEService()
+
+        // Check if Matrix E2EE is available
+        // This will be true when MatrixBridgeService is initialized
+        self.useMatrixE2EE = false  // Will be updated by enableMatrixE2EE()
+    }
+
+    /// Enable Matrix E2EE for this chat service instance
+    /// Called after MatrixBridgeService is initialized
+    @MainActor
+    func enableMatrixE2EE() {
+        self.useMatrixE2EE = MatrixBridgeService.shared.isInitialized
+        #if DEBUG
+        print("[ChatService] Matrix E2EE enabled: \(useMatrixE2EE)")
+        #endif
     }
 
     // MARK: - REST API - Messages
@@ -98,6 +117,68 @@ final class ChatService {
         #endif
 
         return message
+    }
+
+    /// Send message with automatic E2EE via Matrix (if available)
+    /// Falls back to regular API if Matrix bridge is not initialized
+    /// - Parameters:
+    ///   - conversationId: 会话ID
+    ///   - content: 消息内容
+    ///   - type: 消息类型（默认为文本）
+    ///   - mediaUrl: 媒体URL（可选）
+    ///   - replyToId: 回复的消息ID（可选）
+    ///   - preferE2EE: Prefer E2EE if available (default true)
+    /// - Returns: 发送后的消息对象
+    @MainActor
+    func sendSecureMessage(
+        conversationId: String,
+        content: String,
+        type: ChatMessageType = .text,
+        mediaUrl: String? = nil,
+        replyToId: String? = nil,
+        preferE2EE: Bool = true
+    ) async throws -> Message {
+        // Use Matrix E2EE if enabled and bridge is initialized
+        if preferE2EE && useMatrixE2EE && MatrixBridgeService.shared.isInitialized {
+            #if DEBUG
+            print("[ChatService] Sending message via Matrix E2EE")
+            #endif
+
+            do {
+                // Send via Matrix bridge
+                let eventId = try await MatrixBridgeService.shared.sendMessage(
+                    conversationId: conversationId,
+                    content: content
+                )
+
+                // Create local message object
+                let senderId = AuthenticationManager.shared.currentUser?.id ?? ""
+                return Message(
+                    id: eventId,
+                    conversationId: conversationId,
+                    senderId: senderId,
+                    content: content,
+                    type: type,
+                    createdAt: Date(),
+                    status: .sent,
+                    encryptionVersion: 3  // Matrix E2EE
+                )
+            } catch {
+                #if DEBUG
+                print("[ChatService] Matrix E2EE failed, falling back to REST: \(error)")
+                #endif
+                // Fall through to regular send
+            }
+        }
+
+        // Fallback to regular REST API
+        return try await sendMessage(
+            conversationId: conversationId,
+            content: content,
+            type: type,
+            mediaUrl: mediaUrl,
+            replyToId: replyToId
+        )
     }
 
     /// 获取会话消息历史

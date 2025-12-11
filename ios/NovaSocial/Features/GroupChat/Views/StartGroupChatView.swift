@@ -7,9 +7,11 @@ import SwiftUI
 class StartGroupChatViewModel {
     var searchQuery: String = ""
     var searchResults: [UserProfile] = []
-    var selectedUsers: Set<String> = []
+    var friends: [UserProfile] = []
+    var selectedUsers: [UserProfile] = []
     var groupName: String = ""
     var isSearching: Bool = false
+    var isLoadingFriends: Bool = false
     var isCreating: Bool = false
     var errorMessage: String?
 
@@ -18,6 +20,27 @@ class StartGroupChatViewModel {
 
     var canCreateGroup: Bool {
         selectedUsers.count >= 2 && !groupName.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Load friends list on view appear
+    func loadFriends() async {
+        isLoadingFriends = true
+        errorMessage = nil
+
+        do {
+            let (friendProfiles, _) = try await friendsService.getFriendsList(limit: 100)
+            friends = friendProfiles
+            #if DEBUG
+            print("✅ [StartGroupChat] Loaded \(friends.count) friends")
+            #endif
+        } catch {
+            errorMessage = NSLocalizedString("group_chat.error.load_friends_failed", comment: "")
+            #if DEBUG
+            print("❌ [StartGroupChat] Failed to load friends: \(error)")
+            #endif
+        }
+
+        isLoadingFriends = false
     }
 
     func searchUsers() async {
@@ -32,24 +55,34 @@ class StartGroupChatViewModel {
         do {
             searchResults = try await friendsService.searchUsers(query: searchQuery, limit: 20)
         } catch {
-            errorMessage = "搜索失败: \(error.localizedDescription)"
-            print("❌ Search failed: \(error)")
+            errorMessage = NSLocalizedString("group_chat.error.search_failed", comment: "")
+            #if DEBUG
+            print("❌ [StartGroupChat] Search failed: \(error)")
+            #endif
         }
 
         isSearching = false
     }
 
-    func toggleUserSelection(userId: String) {
-        if selectedUsers.contains(userId) {
-            selectedUsers.remove(userId)
+    func toggleUserSelection(_ user: UserProfile) {
+        if let index = selectedUsers.firstIndex(where: { $0.id == user.id }) {
+            selectedUsers.remove(at: index)
         } else {
-            selectedUsers.insert(userId)
+            selectedUsers.append(user)
         }
+    }
+
+    func isSelected(_ user: UserProfile) -> Bool {
+        selectedUsers.contains(where: { $0.id == user.id })
+    }
+
+    func removeSelectedUser(_ user: UserProfile) {
+        selectedUsers.removeAll { $0.id == user.id }
     }
 
     func createGroupChat() async -> Conversation? {
         guard canCreateGroup else {
-            errorMessage = "请至少选择2位成员并输入群组名称"
+            errorMessage = NSLocalizedString("group_chat.error.validation", comment: "")
             return nil
         }
 
@@ -57,18 +90,23 @@ class StartGroupChatViewModel {
         errorMessage = nil
 
         do {
+            let participantIds = selectedUsers.map { $0.id }
             let conversation = try await chatService.createConversation(
                 type: ConversationType.group,
-                participantIds: Array(selectedUsers),
+                participantIds: participantIds,
                 name: groupName.trimmingCharacters(in: .whitespaces)
             )
 
-            print("✅ Group chat created: \(conversation.id)")
+            #if DEBUG
+            print("✅ [StartGroupChat] Group chat created: \(conversation.id)")
+            #endif
             return conversation
 
         } catch {
-            errorMessage = "创建群聊失败: \(error.localizedDescription)"
-            print("❌ Failed to create group chat: \(error)")
+            errorMessage = NSLocalizedString("group_chat.error.create_failed", comment: "")
+            #if DEBUG
+            print("❌ [StartGroupChat] Failed to create group chat: \(error)")
+            #endif
             isCreating = false
             return nil
         }
@@ -83,7 +121,7 @@ struct StartGroupChatView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.97, green: 0.97, blue: 0.97)
+            DesignTokens.backgroundColor
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -94,45 +132,62 @@ struct StartGroupChatView: View {
                     }) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 20))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
 
                     Spacer()
 
-                    Text("Start Group Chat")
+                    Text(NSLocalizedString("group_chat.title", comment: ""))
                         .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
 
                     Spacer()
 
-                    Color.clear.frame(width: 20, height: 20)
+                    // Create button
+                    Button(action: {
+                        Task {
+                            if await viewModel.createGroupChat() != nil {
+                                currentPage = .message
+                            }
+                        }
+                    }) {
+                        if viewModel.isCreating {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        } else {
+                            Text(NSLocalizedString("group_chat.create", comment: ""))
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(viewModel.canCreateGroup ? DesignTokens.accentColor : DesignTokens.textMuted)
+                        }
+                    }
+                    .disabled(!viewModel.canCreateGroup || viewModel.isCreating)
                 }
                 .frame(height: 56)
                 .padding(.horizontal, 16)
-                .background(Color.white)
+                .background(DesignTokens.surface)
 
                 Divider()
 
                 // MARK: - Group Name Input
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("群组名称")
+                    Text(NSLocalizedString("group_chat.group_name", comment: ""))
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        .foregroundColor(DesignTokens.textSecondary)
 
                     HStack(spacing: 10) {
                         Image(systemName: "person.3.fill")
                             .font(.system(size: 15))
-                            .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                            .foregroundColor(DesignTokens.textSecondary)
 
-                        TextField("Enter group name", text: $viewModel.groupName)
+                        TextField(NSLocalizedString("group_chat.group_name_placeholder", comment: ""), text: $viewModel.groupName)
                             .font(.system(size: 15))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.textPrimary)
 
                         Spacer()
                     }
                     .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
                     .frame(maxWidth: .infinity, minHeight: 32)
-                    .background(Color(red: 0.91, green: 0.91, blue: 0.91))
+                    .background(DesignTokens.tileBackground)
                     .cornerRadius(32)
                 }
                 .padding(.horizontal, 16)
@@ -142,11 +197,11 @@ struct StartGroupChatView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 15))
-                        .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        .foregroundColor(DesignTokens.textSecondary)
 
-                    TextField("Search friends", text: $viewModel.searchQuery)
+                    TextField(NSLocalizedString("group_chat.search_placeholder", comment: ""), text: $viewModel.searchQuery)
                         .font(.system(size: 15))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
                         .onChange(of: viewModel.searchQuery) { _, newValue in
                             if !newValue.isEmpty {
                                 Task {
@@ -155,6 +210,8 @@ struct StartGroupChatView: View {
                                         await viewModel.searchUsers()
                                     }
                                 }
+                            } else {
+                                viewModel.searchResults = []
                             }
                         }
 
@@ -166,104 +223,181 @@ struct StartGroupChatView: View {
                 }
                 .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
                 .frame(maxWidth: .infinity, minHeight: 32)
-                .background(Color(red: 0.91, green: 0.91, blue: 0.91))
+                .background(DesignTokens.tileBackground)
                 .cornerRadius(32)
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
 
-                // MARK: - Selected Users Badge
+                // MARK: - Selected Users Preview (Horizontal Scroll)
                 if !viewModel.selectedUsers.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(viewModel.selectedUsers) { user in
+                                GroupSelectedUserChip(user: user) {
+                                    viewModel.removeSelectedUser(user)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                    .frame(height: 50)
+                    .padding(.top, 12)
+
+                    // Selection info
                     HStack {
-                        Text("已选择 \(viewModel.selectedUsers.count) 人")
+                        Text(String(format: NSLocalizedString("group_chat.selected_count", comment: ""), viewModel.selectedUsers.count))
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
+                            .foregroundColor(DesignTokens.textSecondary)
 
                         Spacer()
 
                         Button(action: {
                             viewModel.selectedUsers.removeAll()
                         }) {
-                            Text("清除")
+                            Text(NSLocalizedString("group_chat.clear", comment: ""))
                                 .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(.blue)
+                                .foregroundColor(DesignTokens.accentColor)
                         }
                     }
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, 16)
                     .padding(.top, 8)
                 }
 
                 // MARK: - Error Message
                 if let errorMessage = viewModel.errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 8)
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundColor(.orange)
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
                 }
 
+                // MARK: - User List
                 ScrollView {
-                    VStack(spacing: 16) {
-                        // MARK: - Search Results
-                        if !viewModel.searchResults.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("搜索结果")
-                                    .font(.system(size: 17.50, weight: .bold))
-                                    .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
-                                    .padding(.horizontal, 24)
+                    VStack(spacing: 0) {
+                        if viewModel.isLoadingFriends {
+                            ProgressView()
+                                .padding(.top, 40)
+                        } else if !viewModel.searchQuery.isEmpty {
+                            // Search Results
+                            if viewModel.searchResults.isEmpty && !viewModel.isSearching {
+                                Text(NSLocalizedString("group_chat.no_results", comment: ""))
+                                    .font(.system(size: 14))
+                                    .foregroundColor(DesignTokens.textSecondary)
+                                    .padding(.top, 40)
+                            } else {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text(NSLocalizedString("group_chat.search_results", comment: ""))
+                                        .font(.system(size: 17, weight: .bold))
+                                        .foregroundColor(DesignTokens.textSecondary)
+                                        .padding(.horizontal, 16)
 
-                                ForEach(viewModel.searchResults) { user in
-                                    SelectableUserCardView(
-                                        user: user,
-                                        isSelected: viewModel.selectedUsers.contains(user.id),
-                                        onToggle: {
-                                            viewModel.toggleUserSelection(userId: user.id)
-                                        }
-                                    )
-                                    .padding(.horizontal, 16)
+                                    ForEach(viewModel.searchResults) { user in
+                                        GroupSelectableUserCardView(
+                                            user: user,
+                                            isSelected: viewModel.isSelected(user),
+                                            onToggle: {
+                                                viewModel.toggleUserSelection(user)
+                                            }
+                                        )
+                                        .padding(.horizontal, 16)
+                                    }
                                 }
+                                .padding(.top, 20)
                             }
-                            .padding(.top, 20)
-                        }
+                        } else {
+                            // Friends List
+                            if viewModel.friends.isEmpty {
+                                VStack(spacing: 16) {
+                                    Image(systemName: "person.2.slash")
+                                        .font(.system(size: 48))
+                                        .foregroundColor(DesignTokens.textMuted)
 
-                        // MARK: - Create Button
-                        Button(action: {
-                            Task {
-                                if await viewModel.createGroupChat() != nil {
-                                    // Navigate back to message view
-                                    // The new conversation will appear in the list
-                                    currentPage = .message
+                                    Text(NSLocalizedString("group_chat.no_friends", comment: ""))
+                                        .font(.system(size: 14))
+                                        .foregroundColor(DesignTokens.textSecondary)
+                                        .multilineTextAlignment(.center)
                                 }
-                            }
-                        }) {
-                            HStack {
-                                if viewModel.isCreating {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                        .scaleEffect(0.8)
-                                } else {
-                                    Text("创建群聊")
-                                        .font(.system(size: 16, weight: .bold))
-                                        .foregroundColor(.white)
+                                .padding(.top, 60)
+                            } else {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text(NSLocalizedString("group_chat.friends_section", comment: ""))
+                                        .font(.system(size: 17, weight: .bold))
+                                        .foregroundColor(DesignTokens.textSecondary)
+                                        .padding(.horizontal, 16)
+
+                                    ForEach(viewModel.friends) { user in
+                                        GroupSelectableUserCardView(
+                                            user: user,
+                                            isSelected: viewModel.isSelected(user),
+                                            onToggle: {
+                                                viewModel.toggleUserSelection(user)
+                                            }
+                                        )
+                                        .padding(.horizontal, 16)
+                                    }
                                 }
+                                .padding(.top, 20)
                             }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 44)
-                            .background(viewModel.canCreateGroup ? Color.blue : Color.gray)
-                            .cornerRadius(22)
                         }
-                        .disabled(!viewModel.canCreateGroup || viewModel.isCreating)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 16)
                     }
                 }
             }
         }
+        .task {
+            await viewModel.loadFriends()
+        }
+    }
+}
+
+// MARK: - Selected User Chip Component
+
+struct GroupSelectedUserChip: View {
+    let user: UserProfile
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            // Small avatar
+            if let avatarUrl = user.avatarUrl, !avatarUrl.isEmpty, let url = URL(string: avatarUrl) {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    DefaultAvatarView(size: 24)
+                }
+                .frame(width: 24, height: 24)
+                .clipShape(Circle())
+            } else {
+                DefaultAvatarView(size: 24)
+            }
+
+            Text(user.displayName ?? user.username)
+                .font(.system(size: 14))
+                .foregroundColor(DesignTokens.textPrimary)
+                .lineLimit(1)
+
+            Button(action: onRemove) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(DesignTokens.textMuted)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(DesignTokens.tileBackground)
+        .cornerRadius(20)
     }
 }
 
 // MARK: - Selectable User Card Component
 
-struct SelectableUserCardView: View {
+struct GroupSelectableUserCardView: View {
     let user: UserProfile
     let isSelected: Bool
     let onToggle: () -> Void
@@ -271,58 +405,62 @@ struct SelectableUserCardView: View {
     var body: some View {
         Button(action: onToggle) {
             HStack(spacing: 13) {
+                // Selection circle
+                ZStack {
+                    Circle()
+                        .stroke(DesignTokens.textMuted, lineWidth: 0.50)
+                        .frame(width: 20, height: 20)
+
+                    if isSelected {
+                        Circle()
+                            .fill(DesignTokens.accentColor)
+                            .frame(width: 12, height: 12)
+                    }
+                }
+
                 // Avatar
                 if let avatarUrl = user.avatarUrl, let url = URL(string: avatarUrl) {
                     AsyncImage(url: url) { image in
                         image.resizable().scaledToFill()
                     } placeholder: {
-                        Circle().fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                        DefaultAvatarView(size: 50)
                     }
                     .frame(width: 50, height: 50)
                     .clipShape(Circle())
                 } else {
-                    Circle()
-                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                        .frame(width: 50, height: 50)
+                    DefaultAvatarView(size: 50)
                 }
 
                 // User Info
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(user.displayName ?? user.username)
                         .font(.system(size: 16, weight: .bold))
-                        .lineSpacing(20)
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
 
-                    if let bio = user.bio, !bio.isEmpty {
-                        Text(bio)
-                            .font(.system(size: 11.50, weight: .medium))
-                            .lineSpacing(20)
-                            .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
-                            .lineLimit(1)
-                    } else {
-                        Text("@\(user.username)")
-                            .font(.system(size: 11.50, weight: .medium))
-                            .lineSpacing(20)
-                            .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
-                    }
+                    Text("@\(user.username)")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(DesignTokens.textSecondary)
+                        .lineLimit(1)
                 }
 
                 Spacer()
 
-                // Selection Indicator
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 24))
-                    .foregroundColor(isSelected ? .blue : Color(red: 0.75, green: 0.75, blue: 0.75))
+                // Checkmark for selected state
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(DesignTokens.accentColor)
+                }
             }
             .padding(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
             .frame(maxWidth: .infinity)
             .frame(height: 67)
-            .background(isSelected ? Color.blue.opacity(0.05) : Color(red: 0.97, green: 0.96, blue: 0.96))
+            .background(isSelected ? DesignTokens.accentColor.opacity(0.05) : DesignTokens.tileBackground)
             .cornerRadius(12)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
                     .inset(by: 0.50)
-                    .stroke(isSelected ? Color.blue : Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: isSelected ? 2 : 0.50)
+                    .stroke(isSelected ? DesignTokens.accentColor : DesignTokens.borderColor, lineWidth: isSelected ? 2 : 0.50)
             )
         }
         .buttonStyle(PlainButtonStyle())
