@@ -87,7 +87,7 @@ struct APIConfig {
         static func checkLiked(_ postId: String) -> String { "/api/v2/social/check-liked/\(postId)" }
         static let createComment = "/api/v2/social/comment"
         static func deleteComment(_ commentId: String) -> String { "/api/v2/social/comment/\(commentId)" }
-        static func getComments(_ postId: String) -> String { "/api/v2/social/comments/\(postId)" }
+        static let getComments = "/api/v2/social/comments"
         static let createShare = "/api/v2/social/share"
         static func getShareCount(_ postId: String) -> String { "/api/v2/social/shares/count/\(postId)" }
         static let batchGetStats = "/api/v2/social/stats/batch"
