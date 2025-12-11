@@ -116,3 +116,20 @@
 "Password_Reset_Success" = "Your password has been reset successfully. You can now log in with your new password.";
 "Invalid_Reset_Token" = "This password reset link is invalid or has expired. Please request a new one.";
 "Password_Too_Short" = "Password must be at least 8 characters";
+
+// MARK: - Group Chat
+"group_chat.title" = "New Group Chat";
+"group_chat.create" = "Create";
+"group_chat.group_name" = "Group Name";
+"group_chat.group_name_placeholder" = "Enter group name";
+"group_chat.search_placeholder" = "Search friends...";
+"group_chat.selected_count" = "%d selected";
+"group_chat.clear" = "Clear";
+"group_chat.search_results" = "Search Results";
+"group_chat.friends_section" = "Friends";
+"group_chat.no_results" = "No users found";
+"group_chat.no_friends" = "No friends yet.\nAdd friends to start a group chat.";
+"group_chat.error.load_friends_failed" = "Failed to load friends";
+"group_chat.error.search_failed" = "Search failed";
+"group_chat.error.validation" = "Please select at least 2 members and enter a group name";
+"group_chat.error.create_failed" = "Failed to create group chat";
