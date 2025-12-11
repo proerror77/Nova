@@ -40,8 +40,41 @@ pub async fn create_like(
     }
 }
 
-#[delete("/api/v2/social/unlike")]
+/// Delete like - supports path parameter for iOS compatibility
+#[delete("/api/v2/social/unlike/{post_id}")]
 pub async fn delete_like(
+    http_req: HttpRequest,
+    clients: web::Data<ServiceClients>,
+    path: web::Path<String>,
+) -> HttpResponse {
+    let user_id = match http_req.extensions().get::<AuthenticatedUser>().copied() {
+        Some(AuthenticatedUser(id)) => id.to_string(),
+        None => return HttpResponse::Unauthorized().finish(),
+    };
+
+    let post_id = path.into_inner();
+    let req = DeleteLikeRequest {
+        user_id,
+        post_id,
+    };
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.delete_like(req).await }
+        })
+        .await
+    {
+        Ok(_) => HttpResponse::Ok().json(serde_json::json!({"success": true})),
+        Err(e) => {
+            error!("delete_like failed: {}", e);
+            HttpResponse::ServiceUnavailable().finish()
+        }
+    }
+}
+
+/// Delete like - legacy endpoint with body (for backward compatibility)
+#[delete("/api/v2/social/unlike")]
+pub async fn delete_like_legacy(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
     body: web::Json<LikeBody>,
@@ -267,8 +300,32 @@ pub async fn create_share(
     }
 }
 
-#[get("/api/v2/social/shares/count")]
+/// Get share count - supports path parameter for iOS compatibility
+#[get("/api/v2/social/shares/count/{post_id}")]
 pub async fn get_share_count(
+    clients: web::Data<ServiceClients>,
+    path: web::Path<String>,
+) -> HttpResponse {
+    let post_id = path.into_inner();
+    let req = GetShareCountRequest { post_id };
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.get_share_count(req).await }
+        })
+        .await
+    {
+        Ok(resp) => HttpResponse::Ok().json(resp),
+        Err(e) => {
+            error!("get_share_count failed: {}", e);
+            HttpResponse::ServiceUnavailable().finish()
+        }
+    }
+}
+
+/// Get share count - legacy endpoint with query parameter (for backward compatibility)
+#[get("/api/v2/social/shares/count")]
+pub async fn get_share_count_legacy(
     clients: web::Data<ServiceClients>,
     query: web::Query<ShareCountQuery>,
 ) -> HttpResponse {

@@ -16,7 +16,8 @@ use crate::rest_api::search::{
 use crate::rest_api::settings::{get_settings, update_settings};
 use crate::rest_api::social_likes::{
     check_liked, create_comment, create_like, create_share, delete_comment, delete_comment_v2,
-    delete_like, get_comments, get_likes, get_share_count,
+    delete_like, delete_like_legacy, get_comments, get_likes, get_share_count,
+    get_share_count_legacy,
 };
 use actix_web::{middleware::Logger, web, App, HttpServer};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
@@ -446,6 +447,7 @@ async fn main() -> std::io::Result<()> {
             // ✅ Social interactions
             .service(create_like)
             .service(delete_like)
+            .service(delete_like_legacy)
             .service(get_likes)
             .service(check_liked)
             .service(create_comment)
@@ -454,6 +456,7 @@ async fn main() -> std::io::Result<()> {
             .service(get_comments)
             .service(create_share)
             .service(get_share_count)
+            .service(get_share_count_legacy)
             // ✅ Device Management API
             .route("/api/v2/devices", web::get().to(rest_api::get_devices))
             .route(
