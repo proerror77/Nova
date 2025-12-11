@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::{debug, error, warn};
@@ -49,6 +50,7 @@ impl FeedCandidate {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RankedPost {
     pub post_id: Uuid,
+    pub author_id: Uuid,
     pub combined_score: f64,
     #[serde(serialize_with = "serialize_reason")]
     pub reason: &'static str,
@@ -73,6 +75,8 @@ pub struct FeedRankingService {
     max_feed_candidates: usize,
     candidate_prefetch_multiplier: usize,
     fallback_cache_ttl_secs: u64,
+    max_consecutive_same_author: usize,
+    filter_seen_posts: bool,
 }
 
 impl FeedRankingService {
@@ -98,6 +102,8 @@ impl FeedRankingService {
             max_feed_candidates: config.max_candidates,
             candidate_prefetch_multiplier: config.candidate_prefetch_multiplier,
             fallback_cache_ttl_secs: config.fallback_cache_ttl_secs,
+            max_consecutive_same_author: config.max_consecutive_same_author,
+            filter_seen_posts: config.filter_seen_posts,
         }
     }
 
@@ -193,20 +199,50 @@ impl FeedRankingService {
             .rank_candidates(candidates, self.max_feed_candidates)
             .await?;
 
-        let all_posts: Vec<Uuid> = ranked.iter().map(|p| p.post_id).collect();
-        let total_count = all_posts.len();
+        // Apply diversity constraints (limit consecutive posts from same author)
+        let diverse_ranked = self.apply_diversity(ranked);
 
+        // Filter out seen posts if enabled
+        let filtered_posts: Vec<Uuid> = if self.filter_seen_posts {
+            let all_post_ids: Vec<Uuid> = diverse_ranked.iter().map(|p| p.post_id).collect();
+            match self.cache.filter_unseen_posts(user_id, &all_post_ids).await {
+                Ok(unseen) => {
+                    debug!(
+                        "Filtered seen posts for user {}: {} -> {} posts",
+                        user_id,
+                        all_post_ids.len(),
+                        unseen.len()
+                    );
+                    unseen
+                }
+                Err(e) => {
+                    warn!("Failed to filter seen posts for user {}: {}", user_id, e);
+                    all_post_ids // Fall back to showing all posts
+                }
+            }
+        } else {
+            diverse_ranked.iter().map(|p| p.post_id).collect()
+        };
+
+        let total_count = filtered_posts.len();
         let start_index = offset.min(total_count);
         let end = (start_index + limit).min(total_count);
-        let page_posts = all_posts[start_index..end].to_vec();
+        let page_posts = filtered_posts[start_index..end].to_vec();
         let has_more = end < total_count;
+
+        // Mark returned posts as seen
+        if self.filter_seen_posts && !page_posts.is_empty() {
+            if let Err(e) = self.cache.mark_posts_seen(user_id, &page_posts).await {
+                warn!("Failed to mark posts as seen for user {}: {}", user_id, e);
+            }
+        }
 
         if total_count > 0 {
             self.cache
-                .write_feed_cache(user_id, all_posts.clone(), None)
+                .write_feed_cache(user_id, filtered_posts.clone(), None)
                 .await?;
             // Also persist a snapshot without TTL for CH-down fallback
-            let _ = self.cache.write_snapshot(user_id, all_posts.clone()).await;
+            let _ = self.cache.write_snapshot(user_id, filtered_posts.clone()).await;
         } else {
             self.cache.invalidate_feed(user_id).await?;
         }
@@ -338,9 +374,11 @@ impl FeedRankingService {
         let mut ranked = Vec::with_capacity(candidates.len());
         for candidate in candidates {
             let post_id = candidate.post_id_uuid()?;
+            let author_id = candidate.author_id_uuid()?;
             let combined_score = self.compute_score(&candidate);
             ranked.push(RankedPost {
                 post_id,
+                author_id,
                 combined_score,
                 reason: "combined_score",
             });
@@ -365,6 +403,46 @@ impl FeedRankingService {
             }
         });
         Ok(ranked.into_iter().take(max_items).collect())
+    }
+
+    /// Apply diversity constraints: limit consecutive posts from the same author
+    fn apply_diversity(&self, posts: Vec<RankedPost>) -> Vec<RankedPost> {
+        if self.max_consecutive_same_author == 0 {
+            return posts; // Diversity disabled
+        }
+
+        let mut result = Vec::with_capacity(posts.len());
+        let mut author_consecutive: HashMap<Uuid, usize> = HashMap::new();
+        let mut deferred: Vec<RankedPost> = Vec::new();
+
+        for post in posts {
+            let consecutive = author_consecutive.get(&post.author_id).copied().unwrap_or(0);
+
+            if consecutive < self.max_consecutive_same_author {
+                // Reset other authors' consecutive counts when we add a new post
+                for (author, count) in author_consecutive.iter_mut() {
+                    if *author != post.author_id {
+                        *count = 0;
+                    }
+                }
+                *author_consecutive.entry(post.author_id).or_insert(0) += 1;
+                result.push(post);
+            } else {
+                // Defer this post for later insertion
+                deferred.push(post);
+            }
+        }
+
+        // Append deferred posts at the end (they still appear, just not consecutively)
+        result.extend(deferred);
+
+        debug!(
+            "Applied diversity: {} posts processed, max_consecutive={}",
+            result.len(),
+            self.max_consecutive_same_author
+        );
+
+        result
     }
 
     fn compute_score(&self, candidate: &FeedCandidate) -> f64 {
@@ -537,6 +615,8 @@ pub struct FeedRankingConfig {
     pub max_candidates: usize,
     pub candidate_prefetch_multiplier: usize,
     pub fallback_cache_ttl_secs: u64,
+    pub max_consecutive_same_author: usize,
+    pub filter_seen_posts: bool,
 }
 
 impl From<FeedConfig> for FeedRankingConfig {
@@ -549,6 +629,8 @@ impl From<FeedConfig> for FeedRankingConfig {
             max_candidates: config.max_candidates.max(1),
             candidate_prefetch_multiplier: config.candidate_prefetch_multiplier.max(1),
             fallback_cache_ttl_secs: config.fallback_cache_ttl_secs.max(1),
+            max_consecutive_same_author: config.max_consecutive_same_author,
+            filter_seen_posts: config.filter_seen_posts,
         }
     }
 }
@@ -563,6 +645,8 @@ impl From<&FeedConfig> for FeedRankingConfig {
             max_candidates: config.max_candidates.max(1),
             candidate_prefetch_multiplier: config.candidate_prefetch_multiplier.max(1),
             fallback_cache_ttl_secs: config.fallback_cache_ttl_secs.max(1),
+            max_consecutive_same_author: config.max_consecutive_same_author,
+            filter_seen_posts: config.filter_seen_posts,
         }
     }
 }

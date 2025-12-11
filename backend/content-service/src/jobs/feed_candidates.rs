@@ -126,10 +126,10 @@ SELECT
         toUInt32(ifNull(comments.comments_count, 0)) * 10 + 10,
         toUInt32(1)
     ) AS impressions,
-    exp(-0.0025 * dateDiff('minute', p.created_at, now())) AS freshness_score,
+    exp(-0.001 * dateDiff('minute', p.created_at, now())) AS freshness_score,
     log1p(ifNull(likes.likes_count, 0) + 2 * ifNull(comments.comments_count, 0)) AS engagement_score,
     ifNull(affinity.affinity_score, 0.0) AS affinity_score,
-    0.35 * exp(-0.0025 * dateDiff('minute', p.created_at, now())) + 0.40 * log1p(ifNull(likes.likes_count, 0) + 2 * ifNull(comments.comments_count, 0)) + 0.25 * ifNull(affinity.affinity_score, 0.0) AS combined_score,
+    0.30 * exp(-0.001 * dateDiff('minute', p.created_at, now())) + 0.40 * log1p(ifNull(likes.likes_count, 0) + 2 * ifNull(comments.comments_count, 0)) + 0.30 * ifNull(affinity.affinity_score, 0.0) AS combined_score,
     p.created_at,
     now()
 FROM posts_cdc AS p
@@ -199,10 +199,10 @@ SELECT
         toUInt32(ifNull(comments.comments_count, 0)) * 10 + 10,
         toUInt32(1)
     ) AS impressions,
-    exp(-0.0025 * dateDiff('minute', p.created_at, now())) AS freshness_score,
+    exp(-0.001 * dateDiff('minute', p.created_at, now())) AS freshness_score,
     log1p(ifNull(likes.likes_count, 0) + 2 * ifNull(comments.comments_count, 0)) AS engagement_score,
     toFloat64(0) AS affinity_score,
-    0.50 * exp(-0.0025 * dateDiff('minute', p.created_at, now())) + 0.50 * log1p(ifNull(likes.likes_count, 0) + 2 * ifNull(comments.comments_count, 0)) AS combined_score,
+    0.40 * exp(-0.001 * dateDiff('minute', p.created_at, now())) + 0.60 * log1p(ifNull(likes.likes_count, 0) + 2 * ifNull(comments.comments_count, 0)) AS combined_score,
     p.created_at,
     now()
 FROM posts_cdc AS p
@@ -240,10 +240,10 @@ SELECT
         toUInt32(ifNull(comments.comments_count, 0)) * 10 + 10,
         toUInt32(1)
     ) AS impressions,
-    exp(-0.0025 * dateDiff('minute', p.created_at, now())) AS freshness_score,
+    exp(-0.001 * dateDiff('minute', p.created_at, now())) AS freshness_score,
     log1p(ifNull(likes.likes_count, 0) + 2 * ifNull(comments.comments_count, 0)) AS engagement_score,
     affinity.affinity_score AS affinity_score,
-    0.20 * exp(-0.0025 * dateDiff('minute', p.created_at, now())) + 0.40 * log1p(ifNull(likes.likes_count, 0) + 2 * ifNull(comments.comments_count, 0)) + 0.40 * affinity.affinity_score AS combined_score,
+    0.20 * exp(-0.001 * dateDiff('minute', p.created_at, now())) + 0.40 * log1p(ifNull(likes.likes_count, 0) + 2 * ifNull(comments.comments_count, 0)) + 0.40 * affinity.affinity_score AS combined_score,
     p.created_at,
     now()
 FROM posts_cdc AS p

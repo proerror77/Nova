@@ -101,6 +101,10 @@ pub struct FeedConfig {
     pub max_candidates: usize,
     pub candidate_prefetch_multiplier: usize,
     pub fallback_cache_ttl_secs: u64,
+    /// Maximum consecutive posts from the same author (diversity control)
+    pub max_consecutive_same_author: usize,
+    /// Whether to filter out posts the user has already seen
+    pub filter_seen_posts: bool,
 }
 
 impl Config {
@@ -210,6 +214,13 @@ impl Config {
                     .ok()
                     .and_then(|v| v.parse().ok())
                     .unwrap_or(60),
+                max_consecutive_same_author: std::env::var("FEED_MAX_CONSECUTIVE_SAME_AUTHOR")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(2),
+                filter_seen_posts: std::env::var("FEED_FILTER_SEEN_POSTS")
+                    .map(|v| v == "true" || v == "1")
+                    .unwrap_or(true),
             },
         })
     }
