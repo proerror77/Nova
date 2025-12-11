@@ -7,11 +7,13 @@ struct PostDetailView: View {
     var onDismiss: (() -> Void)?
     var onLike: (() -> Void)?
     var onComment: (() -> Void)?
+    var onShare: (() -> Void)?
     var onBookmark: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var currentImageIndex = 0
     @State private var isFollowing = false
     @State private var showComments = false
+    @State private var showShareSheet = false
 
     // Sample comments data (will be replaced with API data)
     private let sampleComments: [CommentData] = [
@@ -148,7 +150,10 @@ struct PostDetailView: View {
                 }
 
                 // Share Button
-                Button(action: {}) {
+                Button(action: {
+                    onShare?()
+                    showShareSheet = true
+                }) {
                     Image("card-share-icon")
                         .resizable()
                         .scaledToFit()
@@ -158,6 +163,18 @@ struct PostDetailView: View {
             .padding(.horizontal, 16)
             .frame(height: 56)
             .background(DesignTokens.surface)
+            .sheet(isPresented: $showShareSheet) {
+                ActivityShareSheet(
+                    activityItems: ShareContentBuilder.buildShareItems(for: post),
+                    onComplete: { completed in
+                        showShareSheet = false
+                        #if DEBUG
+                        print("[Share] PostDetailView share completed: \(completed)")
+                        #endif
+                    }
+                )
+                .presentationDetents([.medium, .large])
+            }
 
             // Divider
             Divider()
@@ -298,10 +315,9 @@ struct PostDetailView: View {
                 // Like Button
                 Button(action: { onLike?() }) {
                     HStack(spacing: 6) {
-                        Image(post.isLiked ? "card-heart-icon-filled" : "card-heart-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
+                        Image(systemName: post.isLiked ? "heart.fill" : "heart")
+                            .font(.system(size: 18))
+                            .foregroundColor(post.isLiked ? DesignTokens.accentColor : DesignTokens.textSecondary)
                         Text("\(post.likeCount)")
                             .font(.system(size: 14))
                             .foregroundColor(post.isLiked ? DesignTokens.accentColor : DesignTokens.textSecondary)
@@ -312,10 +328,9 @@ struct PostDetailView: View {
                 // Comment Button
                 Button(action: { onComment?() }) {
                     HStack(spacing: 6) {
-                        Image("card-comment-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
+                        Image(systemName: "bubble.right")
+                            .font(.system(size: 18))
+                            .foregroundColor(DesignTokens.textSecondary)
                         Text("\(post.commentCount)")
                             .font(.system(size: 14))
                             .foregroundColor(DesignTokens.textSecondary)
@@ -326,10 +341,9 @@ struct PostDetailView: View {
                 // Bookmark Button
                 Button(action: { onBookmark?() }) {
                     HStack(spacing: 6) {
-                        Image(post.isBookmarked ? "card-star-icon-filled" : "card-star-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
+                        Image(systemName: post.isBookmarked ? "bookmark.fill" : "bookmark")
+                            .font(.system(size: 18))
+                            .foregroundColor(post.isBookmarked ? DesignTokens.accentColor : DesignTokens.textSecondary)
                         Text("\(post.shareCount)")
                             .font(.system(size: 14))
                             .foregroundColor(post.isBookmarked ? DesignTokens.accentColor : DesignTokens.textSecondary)

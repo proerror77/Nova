@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		MATRIXSERVICE_BLD /* MatrixService.swift in Sources */ = {isa = PBXBuildFile; fileRef = MATRIXSERVICE_REF /* MatrixService.swift */; };
+		MATRIXBRIDGE_BLD /* MatrixBridgeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = MATRIXBRIDGE_REF /* MatrixBridgeService.swift */; };
 		FORGOTPWD_BLD /* ForgotPasswordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FORGOTPWD_REF /* ForgotPasswordView.swift */; };
 		RESETPWD_BLD /* ResetPasswordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RESETPWD_REF /* ResetPasswordView.swift */; };
 		MYQRCODE_BLD /* MyQRCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MYQRCODE_REF /* MyQRCodeView.swift */; };
@@ -33,6 +35,9 @@
 		3B922C165B02B1BBF3A2E4AA /* HottestBankerSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1D9E94C2E6A53AF1B2F316E /* HottestBankerSection.swift */; };
 		3DB7A7D8B8AABE2D2B5E9F30 /* ProfileSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA030D4D06E717B5C40967BE /* ProfileSettingView.swift */; };
 		3F6648708367596A84E3227F /* FeedPostCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A657E4D4D9CECEAE742EC4F7 /* FeedPostCard.swift */; };
+		FEEDVIDEOPLAYER_BLD /* FeedVideoPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEEDVIDEOPLAYER_REF /* FeedVideoPlayer.swift */; };
+		LIVEPHOTOMGR_BLD /* LivePhotoManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = LIVEPHOTOMGR_REF /* LivePhotoManager.swift */; };
+		LIVEPHOTOVIEW_BLD /* LivePhotoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LIVEPHOTOVIEW_REF /* LivePhotoView.swift */; };
 		3F9AF5D38B3BE095A987F3B4 /* NotificationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E15BEB981BECF002DACF86E /* NotificationView.swift */; };
 		45D7CF62B70956001C70B101 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA1551A659F460A621C63645 /* HomeView.swift */; };
 		4A09C7CE82196707BAB194FB /* SocialService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DC01C12BC58AA2D98CDC03F /* SocialService.swift */; };
@@ -195,6 +200,9 @@
 		A1D4C1D1D45F4BBFAAC1E8B4 /* SettingsRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsRow.swift; sourceTree = "<group>"; };
 		A2424779A1927539262BD71B /* DeviceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DeviceService.swift; path = Shared/Services/User/DeviceService.swift; sourceTree = SOURCE_ROOT; };
 		A657E4D4D9CECEAE742EC4F7 /* FeedPostCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedPostCard.swift; sourceTree = "<group>"; };
+		FEEDVIDEOPLAYER_REF /* FeedVideoPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedVideoPlayer.swift; sourceTree = "<group>"; };
+		LIVEPHOTOMGR_REF /* LivePhotoManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LivePhotoManager.swift; path = Shared/Services/Media/LivePhotoManager.swift; sourceTree = SOURCE_ROOT; };
+		LIVEPHOTOVIEW_REF /* LivePhotoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LivePhotoView.swift; path = Shared/Components/LivePhotoView.swift; sourceTree = SOURCE_ROOT; };
 		ACCOUNTSWITCHER_REF /* AccountSwitcherSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSwitcherSheet.swift; sourceTree = "<group>"; };
 		AFC8A907430998B947546C97 /* ProfileData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileData.swift; sourceTree = "<group>"; };
 		B0393038DC4D72E8421D1B35 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
@@ -258,6 +266,8 @@
 		USERPOSTSMANAGER_REF /* UserPostsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserPostsManager.swift; sourceTree = "<group>"; };
 		WELCOMEVIEW002 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		c305a0ac26e55adeed024b77 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
+		MATRIXSERVICE_REF /* MatrixService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatrixService.swift; sourceTree = "<group>"; };
+		MATRIXBRIDGE_REF /* MatrixBridgeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatrixBridgeService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -671,6 +681,7 @@
 			isa = PBXGroup;
 			children = (
 				A657E4D4D9CECEAE742EC4F7 /* FeedPostCard.swift */,
+				FEEDVIDEOPLAYER_REF /* FeedVideoPlayer.swift */,
 				28B434DE97D0F186DE9CEE60 /* PhotoOptionsModal.swift */,
 				935F737074559D05F95D4EF0 /* CommentSheetView.swift */,
 				C258A7984F0CD3E9100A3EDC /* CarouselCardItem.swift */,
@@ -814,6 +825,7 @@
 			isa = PBXGroup;
 			children = (
 				CHATSERVICEGROUP /* Chat */,
+				MATRIXSERVICEGROUP /* Matrix */,
 				4E85EECF31BEE6AC3820E20B /* Feed */,
 				E208F4762BA09D9DB85B836A /* Security */,
 				DBF089D6F321073A5A00AEED /* Auth */,
@@ -835,6 +847,15 @@
 				CHATSERVICE002 /* ChatService.swift */,
 			);
 			path = Chat;
+			sourceTree = "<group>";
+		};
+		MATRIXSERVICEGROUP /* Matrix */ = {
+			isa = PBXGroup;
+			children = (
+				MATRIXSERVICE_REF /* MatrixService.swift */,
+				MATRIXBRIDGE_REF /* MatrixBridgeService.swift */,
+			);
+			path = Matrix;
 			sourceTree = "<group>";
 		};
 		DA5913B03AADDAF0AE36289D /* Search */ = {
@@ -1089,6 +1110,9 @@
 				9D403603997395E16F32005B /* KeychainService.swift in Sources */,
 				858C6C6ECF0979152AD9A5D6 /* DateExtension.swift in Sources */,
 				3F6648708367596A84E3227F /* FeedPostCard.swift in Sources */,
+				FEEDVIDEOPLAYER_BLD /* FeedVideoPlayer.swift in Sources */,
+				LIVEPHOTOMGR_BLD /* LivePhotoManager.swift in Sources */,
+				LIVEPHOTOVIEW_BLD /* LivePhotoView.swift in Sources */,
 				880C675ED8B3ECE21637D093 /* BottomTabBar.swift in Sources */,
 				A749A18A605032419552108D /* PhotoOptionsModal.swift in Sources */,
 				2C1AE65CD1BCEE877390EA52 /* CommentSheetView.swift in Sources */,
@@ -1169,6 +1193,8 @@
 				WELCOMEVIEW001 /* WelcomeView.swift in Sources */,
 				SPLASHVIEW001 /* SplashScreenView.swift in Sources */,
 				CHATSERVICE001 /* ChatService.swift in Sources */,
+				MATRIXSERVICE_BLD /* MatrixService.swift in Sources */,
+				MATRIXBRIDGE_BLD /* MatrixBridgeService.swift in Sources */,
 				KEYBOARDEXT001 /* KeyboardExtension.swift in Sources */,
 				SHARESHEET001 /* ShareSheet.swift in Sources */,
 				DEFAULTAVATAR_BLD /* DefaultAvatarView.swift in Sources */,

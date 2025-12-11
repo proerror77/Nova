@@ -316,31 +316,84 @@ class FeedViewModel: ObservableObject {
         }
     }
 
-    /// Share a post
-    func sharePost(postId: String) async {
+    /// Share a post - records share to backend and returns post for native share sheet
+    /// - Returns: The post to share, or nil if not found
+    func sharePost(postId: String) async -> FeedPost? {
+        guard let index = posts.firstIndex(where: { $0.id == postId }),
+              let userId = currentUserId else { return nil }
+
+        let post = posts[index]
+
+        // Record share to backend (don't block on this)
+        Task {
+            do {
+                try await socialService.createShare(postId: postId, userId: userId)
+                // Update share count on success
+                await MainActor.run {
+                    if let idx = posts.firstIndex(where: { $0.id == postId }) {
+                        posts[idx] = posts[idx].copying(shareCount: posts[idx].shareCount + 1)
+                    }
+                }
+            } catch {
+                #if DEBUG
+                print("[Feed] Share post error: \(error)")
+                #endif
+            }
+        }
+
+        return post
+    }
+
+    /// Toggle bookmark on a post
+    func toggleBookmark(postId: String) async {
         guard let index = posts.firstIndex(where: { $0.id == postId }),
               let userId = currentUserId else { return }
 
         let post = posts[index]
+        let wasBookmarked = post.isBookmarked
+
+        // Optimistic update
+        posts[index] = post.copying(isBookmarked: !wasBookmarked)
 
         do {
-            try await socialService.createShare(postId: postId, userId: userId)
-            // Update share count
-            posts[index] = post.copying(shareCount: post.shareCount + 1)
+            if wasBookmarked {
+                try await socialService.deleteBookmark(postId: postId)
+            } else {
+                try await socialService.createBookmark(postId: postId, userId: userId)
+            }
+        } catch let error as APIError {
+            // Revert on failure
+            posts[index] = post
+
+            // Handle specific error cases
+            switch error {
+            case .unauthorized:
+                self.toastError = "Session expired. Please log in again."
+                #if DEBUG
+                print("[Feed] Toggle bookmark error: Session expired")
+                #endif
+            case .noConnection:
+                self.toastError = "No internet connection. Please try again."
+            case .notFound:
+                // Backend bookmark API not deployed yet - keep local state
+                posts[index] = post.copying(isBookmarked: !wasBookmarked)
+                #if DEBUG
+                print("[Feed] Bookmark API not available, using local state only")
+                #endif
+            default:
+                self.toastError = "Failed to bookmark post. Please try again."
+                #if DEBUG
+                print("[Feed] Toggle bookmark error: \(error)")
+                #endif
+            }
         } catch {
+            // Revert on failure
+            posts[index] = post
+            self.toastError = "Failed to bookmark post. Please try again."
             #if DEBUG
-            print("[Feed] Share post error: \(error)")
+            print("[Feed] Toggle bookmark error: \(error)")
             #endif
         }
-    }
-
-    /// Toggle bookmark on a post
-    func toggleBookmark(postId: String) {
-        guard let index = posts.firstIndex(where: { $0.id == postId }) else { return }
-
-        let post = posts[index]
-        // Local toggle only - backend bookmark API TBD
-        posts[index] = post.copying(isBookmarked: !post.isBookmarked)
     }
 
     // MARK: - Private Methods

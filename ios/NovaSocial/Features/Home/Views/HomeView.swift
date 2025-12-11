@@ -25,6 +25,8 @@ struct HomeView: View {
     @State private var showPostDetail = false
     @State private var selectedChannel: String = "Fashion"  // 当前选中的 Channel
     @State private var showToast = false
+    @State private var showShareSheet = false
+    @State private var selectedPostForShare: FeedPost?
 
     // Channel 列表
     private let channels = ["Fashion", "Travel", "Fitness", "Pets", "Study", "Career", "Tech"]
@@ -68,8 +70,11 @@ struct HomeView: View {
                         selectedPostForComment = post
                         showComments = true
                     },
+                    onShare: {
+                        Task { await feedViewModel.sharePost(postId: post.id) }
+                    },
                     onBookmark: {
-                        feedViewModel.toggleBookmark(postId: post.id)
+                        Task { await feedViewModel.toggleBookmark(postId: post.id) }
                     }
                 )
                 .transition(.identity)
@@ -138,6 +143,21 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let post = selectedPostForShare {
+                ActivityShareSheet(
+                    activityItems: ShareContentBuilder.buildShareItems(for: post),
+                    onComplete: { completed in
+                        showShareSheet = false
+                        selectedPostForShare = nil
+                        #if DEBUG
+                        print("[Share] Share completed: \(completed)")
+                        #endif
+                    }
+                )
+                .presentationDetents([.medium, .large])
+            }
         }
         .onChange(of: selectedImage) { oldValue, newValue in
             // 选择/拍摄照片后，自动跳转到NewPostView
@@ -265,8 +285,18 @@ struct HomeView: View {
                                             selectedPostForComment = post
                                             showComments = true
                                         },
-                                        onShare: { Task { await feedViewModel.sharePost(postId: post.id) } },
-                                        onBookmark: { feedViewModel.toggleBookmark(postId: post.id) }
+                                        onShare: {
+                                            Task {
+                                                // Record share to backend and get post for native share sheet
+                                                if let postToShare = await feedViewModel.sharePost(postId: post.id) {
+                                                    await MainActor.run {
+                                                        selectedPostForShare = postToShare
+                                                        showShareSheet = true
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        onBookmark: { Task { await feedViewModel.toggleBookmark(postId: post.id) } }
                                     )
                                     .onTapGesture {
                                         selectedPostForDetail = post

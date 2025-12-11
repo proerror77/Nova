@@ -156,7 +156,7 @@ struct ProfileView: View {
             }
         }
         .sheet(isPresented: $showShareSheet) {
-            NovaShareSheet(items: shareItems)
+            ActivityShareSheet(activityItems: shareItems)
         }
         .sheet(isPresented: $showMyQRCode) {
             MyQRCodeView()
