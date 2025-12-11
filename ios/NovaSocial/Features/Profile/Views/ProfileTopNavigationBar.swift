@@ -33,6 +33,7 @@ struct ProfileTopNavigationBar: View {
 
     // Actions
     var onShareTapped: () -> Void = {}
+    var onQRCodeTapped: () -> Void = {}
     var onSettingsTapped: () -> Void = {}
     var onUsernameTapped: () -> Void = {}
 
@@ -54,8 +55,14 @@ struct ProfileTopNavigationBar: View {
 
             Spacer()
 
-            // MARK: - 右侧：分享和设置图标
+            // MARK: - 右侧：二维码、分享和设置图标
             HStack(spacing: layout.iconSpacing) {
+                Button(action: onQRCodeTapped) {
+                    Image(systemName: "qrcode")
+                        .font(.system(size: layout.iconSize - 2, weight: .medium))
+                        .foregroundColor(layout.iconColor)
+                }
+
                 Button(action: onShareTapped) {
                     Image("share")
                         .resizable()

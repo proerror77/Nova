@@ -16,6 +16,7 @@ struct ProfileView: View {
     @State private var showShareSheet = false
     @State private var localAvatarImage: UIImage? = nil  // 本地选择的头像
     @State private var showAccountSwitcher = false  // 账户切换弹窗
+    @State private var showMyQRCode = false  // 我的二维码弹窗
 
     // Access AvatarManager
     @StateObject private var avatarManager = AvatarManager.shared
@@ -157,6 +158,9 @@ struct ProfileView: View {
         .sheet(isPresented: $showShareSheet) {
             NovaShareSheet(items: shareItems)
         }
+        .sheet(isPresented: $showMyQRCode) {
+            MyQRCodeView()
+        }
     }
 
     // ==================== 布局配置（可在此调整） ====================
@@ -219,6 +223,7 @@ struct ProfileView: View {
                     username: displayUser?.displayName ?? displayUser?.username ?? "User",
                     layout: navBarLayout,
                     onShareTapped: { showShareSheet = true },
+                    onQRCodeTapped: { showMyQRCode = true },
                     onSettingsTapped: { currentPage = .setting },
                     onUsernameTapped: {
                         withAnimation(.easeOut(duration: 0.25)) {

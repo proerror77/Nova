@@ -11,6 +11,7 @@ class AddFriendsViewModel {
     var isSearching: Bool = false
     var isLoadingRecommendations: Bool = false
     var errorMessage: String?
+    var toastMessage: String?
 
     private let friendsService = FriendsService()
 
@@ -58,6 +59,16 @@ class AddFriendsViewModel {
             print("❌ Failed to add friend: \(error)")
         }
     }
+
+    func showToast(_ message: String) {
+        toastMessage = message
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            await MainActor.run {
+                toastMessage = nil
+            }
+        }
+    }
 }
 
 // MARK: - Add Friends View
@@ -65,6 +76,8 @@ class AddFriendsViewModel {
 struct AddFriendsView: View {
     @Binding var currentPage: AppPage
     @State private var viewModel = AddFriendsViewModel()
+    @State private var showQRScanner = false
+    @State private var showMyQRCode = false
 
     var body: some View {
         ZStack {
@@ -90,7 +103,14 @@ struct AddFriendsView: View {
 
                     Spacer()
 
-                    Color.clear.frame(width: 20, height: 20)
+                    // QR Code button
+                    Button(action: {
+                        showQRScanner = true
+                    }) {
+                        Image(systemName: "qrcode.viewfinder")
+                            .frame(width: 24, height: 24)
+                            .foregroundColor(.black)
+                    }
                 }
                 .frame(height: 56)
                 .padding(.horizontal, 16)
@@ -142,6 +162,77 @@ struct AddFriendsView: View {
 
                 ScrollView {
                     VStack(spacing: 16) {
+                        // MARK: - QR Code Actions
+                        VStack(spacing: 12) {
+                            // Scan QR Code Button
+                            Button(action: {
+                                showQRScanner = true
+                            }) {
+                                HStack(spacing: 16) {
+                                    Image(systemName: "qrcode.viewfinder")
+                                        .font(.system(size: 20))
+                                        .foregroundColor(.blue)
+                                        .frame(width: 40, height: 40)
+                                        .background(Color.blue.opacity(0.1))
+                                        .clipShape(Circle())
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(String(localized: "scan_qr_code", defaultValue: "Scan QR Code"))
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundColor(.black)
+
+                                        Text(String(localized: "scan_qr_hint", defaultValue: "Scan a friend's QR code to add them"))
+                                            .font(.system(size: 12))
+                                            .foregroundColor(.gray)
+                                    }
+
+                                    Spacer()
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.gray)
+                                }
+                                .padding(16)
+                                .background(Color.white)
+                                .cornerRadius(12)
+                            }
+
+                            // My QR Code Button
+                            Button(action: {
+                                showMyQRCode = true
+                            }) {
+                                HStack(spacing: 16) {
+                                    Image(systemName: "qrcode")
+                                        .font(.system(size: 20))
+                                        .foregroundColor(.green)
+                                        .frame(width: 40, height: 40)
+                                        .background(Color.green.opacity(0.1))
+                                        .clipShape(Circle())
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(String(localized: "my_qr_code", defaultValue: "My QR Code"))
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundColor(.black)
+
+                                        Text(String(localized: "my_qr_hint", defaultValue: "Let others scan to add you"))
+                                            .font(.system(size: 12))
+                                            .foregroundColor(.gray)
+                                    }
+
+                                    Spacer()
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.gray)
+                                }
+                                .padding(16)
+                                .background(Color.white)
+                                .cornerRadius(12)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 16)
+
                         // MARK: - Search Results
                         if !viewModel.searchResults.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
@@ -162,7 +253,7 @@ struct AddFriendsView: View {
                                     .padding(.horizontal, 16)
                                 }
                             }
-                            .padding(.top, 20)
+                            .padding(.top, 8)
                         }
 
                         // MARK: - Recommendations
@@ -185,7 +276,7 @@ struct AddFriendsView: View {
                                     .padding(.horizontal, 16)
                                 }
                             }
-                            .padding(.top, viewModel.searchResults.isEmpty ? 20 : 0)
+                            .padding(.top, viewModel.searchResults.isEmpty ? 8 : 0)
                         }
 
                         // MARK: - Loading
@@ -220,6 +311,23 @@ struct AddFriendsView: View {
                     }
                 }
             }
+
+            // MARK: - Toast Message
+            if let toast = viewModel.toastMessage {
+                VStack {
+                    Spacer()
+                    Text(toast)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(Color.black.opacity(0.8))
+                        .cornerRadius(20)
+                        .padding(.bottom, 100)
+                }
+                .transition(.opacity)
+                .animation(.easeInOut, value: viewModel.toastMessage)
+            }
         }
         .task {
             await viewModel.loadRecommendations()
@@ -227,6 +335,20 @@ struct AddFriendsView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
+        .fullScreenCover(isPresented: $showQRScanner) {
+            QRCodeScannerView(
+                isPresented: $showQRScanner,
+                onFriendAdded: { userId in
+                    viewModel.showToast(String(localized: "friend_added_toast", defaultValue: "Friend added successfully!"))
+                    Task {
+                        await viewModel.loadRecommendations()
+                    }
+                }
+            )
+        }
+        .sheet(isPresented: $showMyQRCode) {
+            MyQRCodeView()
         }
     }
 }

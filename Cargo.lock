@@ -2492,6 +2492,7 @@ checksum = "2a2330da5de22e8a3cb63252ce2abb30116bf5265e89c0e01bc17015ce30a476"
 name = "db-pool"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "lazy_static",
  "prometheus",
  "serial_test",
@@ -2500,6 +2501,7 @@ dependencies = [
  "tokio-test",
  "tracing",
  "tracing-subscriber",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -5781,6 +5783,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "http 1.4.0",
+ "http-body 1.0.1",
  "opentelemetry 0.22.0",
  "opentelemetry-otlp",
  "opentelemetry_sdk 0.22.1",

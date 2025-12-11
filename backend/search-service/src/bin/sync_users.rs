@@ -11,7 +11,6 @@
 ///   - ELASTICSEARCH_URL: Elasticsearch connection string
 ///   - SYNC_BATCH_SIZE: Number of users to sync per batch (default: 100)
 ///   - SYNC_DELAY_MS: Delay between batches in milliseconds (default: 100)
-
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -115,12 +114,7 @@ impl ElasticsearchSync {
             }
         });
 
-        let response = self
-            .client
-            .put(&index_url)
-            .json(&mapping)
-            .send()
-            .await?;
+        let response = self.client.put(&index_url).json(&mapping).send().await?;
 
         if response.status().is_success() {
             info!("Created users index with mapping");
@@ -279,8 +273,8 @@ async fn main() -> Result<()> {
     let database_url = env::var("IDENTITY_DATABASE_URL")
         .context("IDENTITY_DATABASE_URL environment variable not set")?;
 
-    let elasticsearch_url = env::var("ELASTICSEARCH_URL")
-        .context("ELASTICSEARCH_URL environment variable not set")?;
+    let elasticsearch_url =
+        env::var("ELASTICSEARCH_URL").context("ELASTICSEARCH_URL environment variable not set")?;
 
     let batch_size: i64 = env::var("SYNC_BATCH_SIZE")
         .unwrap_or_else(|_| "100".to_string())
