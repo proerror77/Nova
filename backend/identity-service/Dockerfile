@@ -14,25 +14,11 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy backend workspace Cargo files first for layer caching
-COPY backend/Cargo.toml backend/Cargo.lock ./
+# Copy backend workspace files (Cargo.toml, Cargo.lock, all services, libs, proto)
+COPY backend ./backend
 
-# Copy all services and libs for workspace resolution
-COPY backend/identity-service ./identity-service
-COPY backend/libs ./libs
-COPY backend/graphql-gateway ./graphql-gateway
-COPY backend/content-service ./content-service
-COPY backend/social-service ./social-service
-COPY backend/media-service ./media-service
-COPY backend/feed-service ./feed-service
-COPY backend/graph-service ./graph-service
-COPY backend/analytics-service ./analytics-service
-COPY backend/notification-service ./notification-service
-COPY backend/search-service ./search-service
-COPY backend/ranking-service ./ranking-service
-COPY backend/trust-safety-service ./trust-safety-service
-COPY backend/feature-store ./feature-store
-COPY backend/streaming-service ./streaming-service
+# Change to backend directory for workspace build
+WORKDIR /app/backend
 
 # Build identity-service
 RUN cargo build --release -p identity-service --bin identity-service
@@ -53,7 +39,7 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 WORKDIR /app
 
 # Copy binary
-COPY --from=builder /app/target/release/identity-service /app/identity-service
+COPY --from=builder /app/backend/target/release/identity-service /app/identity-service
 
 # Adjust ownership
 RUN chown -R appuser:appuser /app
