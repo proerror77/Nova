@@ -7,6 +7,8 @@ async fn test_basic_workflow() {
         redis::Client::open("redis://localhost:6379").expect("Failed to create Redis client");
     let graph_channel =
         tonic::transport::Channel::from_static("http://localhost:9008").connect_lazy();
+    let content_channel =
+        tonic::transport::Channel::from_static("http://localhost:9009").connect_lazy();
 
     let recall_config = RecallConfig {
         graph_recall_limit: 50,
@@ -17,7 +19,7 @@ async fn test_basic_workflow() {
         personalized_recall_weight: 0.1,
     };
 
-    let recall_layer = RecallLayer::new(graph_channel, redis_client, recall_config);
+    let recall_layer = RecallLayer::new(graph_channel, content_channel, redis_client, recall_config);
     let ranking_layer = RankingLayer::new();
     let diversity_layer = DiversityLayer::new(0.7);
 
