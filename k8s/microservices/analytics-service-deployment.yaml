@@ -71,7 +71,7 @@ spec:
         - name: CLICKHOUSE_URL
           value: 'http://clickhouse:8123'
         - name: CLICKHOUSE_DATABASE
-          value: 'analytics'
+          value: 'nova_feed'
         # ClickHouse authentication from secret
         - name: CLICKHOUSE_USER
           valueFrom:
