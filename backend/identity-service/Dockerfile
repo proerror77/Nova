@@ -14,10 +14,25 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy workspace files from repo root
-COPY Cargo.toml Cargo.lock ./
-# Copy full backend workspace to satisfy workspace members
-COPY backend ./backend
+# Copy backend workspace Cargo files first for layer caching
+COPY backend/Cargo.toml backend/Cargo.lock ./
+
+# Copy all services and libs for workspace resolution
+COPY backend/identity-service ./identity-service
+COPY backend/libs ./libs
+COPY backend/graphql-gateway ./graphql-gateway
+COPY backend/content-service ./content-service
+COPY backend/social-service ./social-service
+COPY backend/media-service ./media-service
+COPY backend/feed-service ./feed-service
+COPY backend/graph-service ./graph-service
+COPY backend/analytics-service ./analytics-service
+COPY backend/notification-service ./notification-service
+COPY backend/search-service ./search-service
+COPY backend/ranking-service ./ranking-service
+COPY backend/trust-safety-service ./trust-safety-service
+COPY backend/feature-store ./feature-store
+COPY backend/streaming-service ./streaming-service
 
 # Build identity-service
 RUN cargo build --release -p identity-service --bin identity-service
