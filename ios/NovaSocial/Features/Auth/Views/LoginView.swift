@@ -13,6 +13,7 @@ struct LoginView: View {
     @State private var isGoogleLoading = false
     @State private var errorMessage: String?
     @State private var showPassword = false
+    @State private var showForgotPassword = false
 
     // MARK: - Validation State
     @State private var emailError: String?
@@ -85,7 +86,7 @@ struct LoginView: View {
                             HStack {
                                 Spacer()
                                 Button(action: {
-                                    // TODO: Handle forgot password
+                                    showForgotPassword = true
                                 }) {
                                     Text(LocalizedStringKey("Forgot_Password"))
                                         .font(.system(size: 12, weight: .light))
@@ -132,6 +133,10 @@ struct LoginView: View {
             }
         }
         .ignoresSafeArea(.keyboard)
+        .fullScreenCover(isPresented: $showForgotPassword) {
+            ForgotPasswordView()
+                .environmentObject(authManager)
+        }
     }
 
     // MARK: - Logo Section

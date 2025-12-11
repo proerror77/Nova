@@ -51,8 +51,7 @@ pub struct IdentityServiceServer {
     db: PgPool,
     #[allow(dead_code)] // Used internally by OAuthService
     redis: SharedConnectionManager,
-    #[allow(dead_code)] // Reserved for email verification flow
-    _email: EmailService,
+    email: EmailService,
     #[allow(dead_code)] // Reserved for 2FA implementation
     _two_fa: TwoFaService,
     kafka: Option<KafkaEventProducer>,
@@ -80,7 +79,7 @@ impl IdentityServiceServer {
         Self {
             db,
             redis,
-            _email: email,
+            email,
             _two_fa: two_fa,
             kafka,
             invite_delivery,
@@ -1286,6 +1285,148 @@ impl AuthService for IdentityServiceServer {
             success: true,
             error: None,
         }))
+    }
+
+    // ========== Password Reset ==========
+
+    /// Request password reset email
+    ///
+    /// This endpoint is public (no auth required).
+    /// Always returns success to prevent email enumeration attacks.
+    async fn request_password_reset(
+        &self,
+        request: Request<RequestPasswordResetRequest>,
+    ) -> std::result::Result<Response<PasswordResetResponse>, Status> {
+        let req = request.into_inner();
+
+        // Validate email format
+        if !crate::validators::validate_email(&req.email) {
+            // Still return OK to prevent enumeration
+            info!(email = %req.email, "Password reset requested for invalid email format");
+            return Ok(Response::new(PasswordResetResponse { success: true }));
+        }
+
+        // Try to find user by email
+        match db::users::find_by_email(&self.db, &req.email).await {
+            Ok(Some(user)) => {
+                // Check rate limiting (1 request per 2 minutes)
+                match db::password_reset::has_recent_request(&self.db, user.id, 2).await {
+                    Ok(true) => {
+                        info!(
+                            user_id = %user.id,
+                            email = %req.email,
+                            "Password reset rate limited"
+                        );
+                        // Still return OK to prevent enumeration
+                        return Ok(Response::new(PasswordResetResponse { success: true }));
+                    }
+                    Ok(false) => {}
+                    Err(e) => {
+                        error!(error = %e, "Failed to check rate limit");
+                        // Continue anyway
+                    }
+                }
+
+                // Create reset token
+                match db::password_reset::create_reset_token(&self.db, user.id, None).await {
+                    Ok(token_result) => {
+                        // Send email
+                        if let Err(e) = self
+                            .email
+                            .send_password_reset_email(&req.email, &token_result.token)
+                            .await
+                        {
+                            error!(
+                                user_id = %user.id,
+                                error = %e,
+                                "Failed to send password reset email"
+                            );
+                        } else {
+                            info!(
+                                user_id = %user.id,
+                                email = %req.email,
+                                expires_at = %token_result.expires_at,
+                                "Password reset email sent"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        error!(
+                            user_id = %user.id,
+                            error = %e,
+                            "Failed to create password reset token"
+                        );
+                    }
+                }
+            }
+            Ok(None) => {
+                // User not found - log but don't reveal
+                info!(email = %req.email, "Password reset requested for non-existent email");
+            }
+            Err(e) => {
+                error!(error = %e, "Database error during password reset request");
+            }
+        }
+
+        // Always return success to prevent email enumeration
+        Ok(Response::new(PasswordResetResponse { success: true }))
+    }
+
+    /// Reset password using token from email
+    ///
+    /// This endpoint is public (no auth required).
+    async fn reset_password(
+        &self,
+        request: Request<ResetPasswordRequest>,
+    ) -> std::result::Result<Response<PasswordResetResponse>, Status> {
+        let req = request.into_inner();
+
+        // Validate token format
+        if req.reset_token.is_empty() {
+            return Err(Status::invalid_argument("Reset token is required"));
+        }
+
+        // Validate new password
+        if req.new_password.len() < 8 {
+            return Err(Status::invalid_argument(
+                "Password must be at least 8 characters",
+            ));
+        }
+
+        // Validate token and get user ID
+        let user_id = db::password_reset::validate_reset_token(&self.db, &req.reset_token)
+            .await
+            .map_err(to_status)?
+            .ok_or_else(|| Status::invalid_argument("Invalid or expired reset token"))?;
+
+        // Hash new password (includes strength validation)
+        let password_hash = hash_password(&req.new_password).map_err(to_status)?;
+
+        // Update password
+        db::users::update_password(&self.db, user_id, &password_hash)
+            .await
+            .map_err(to_status)?;
+
+        // Mark token as used
+        db::password_reset::mark_token_used(&self.db, &req.reset_token)
+            .await
+            .map_err(to_status)?;
+
+        // Invalidate all other reset tokens for this user
+        db::password_reset::invalidate_user_tokens(&self.db, user_id)
+            .await
+            .map_err(to_status)?;
+
+        // Publish PasswordChanged event
+        if let Some(producer) = &self.kafka {
+            if let Err(err) = producer.publish_password_changed(user_id).await {
+                warn!("Failed to publish PasswordChanged event: {:?}", err);
+            }
+        }
+
+        info!(user_id = %user_id, "Password reset successfully");
+
+        Ok(Response::new(PasswordResetResponse { success: true }))
     }
 }
 

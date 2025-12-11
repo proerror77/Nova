@@ -12,6 +12,10 @@ struct ICEREDApp: App {
     // 记录 App 是否进入过后台
     @State private var hasEnteredBackground = false
 
+    // Deep link state for password reset
+    @State private var resetPasswordToken: String?
+    @State private var showResetPasswordView = false
+
     // Check if running in UI testing mode
     private var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains("--uitesting")
@@ -131,6 +135,54 @@ struct ICEREDApp: App {
                     hasEnteredBackground = false
                     currentPage = .splash
                 }
+            }
+            // Handle deep links for password reset
+            .onOpenURL { url in
+                handleDeepLink(url)
+            }
+            // Present reset password view when token is available
+            .fullScreenCover(isPresented: $showResetPasswordView) {
+                if let token = resetPasswordToken {
+                    ResetPasswordView(resetToken: token)
+                        .environmentObject(authManager)
+                }
+            }
+        }
+    }
+
+    // MARK: - Deep Link Handler
+
+    /// Handle incoming deep links
+    /// Supports: nova://reset-password?token=xxx
+    ///           https://app.icered.com/reset-password?token=xxx
+    private func handleDeepLink(_ url: URL) {
+        #if DEBUG
+        print("[App] Received deep link: \(url)")
+        #endif
+
+        // Check for password reset path
+        let pathComponents = url.pathComponents
+        let host = url.host?.lowercased()
+
+        // Handle both custom scheme (nova://) and universal link (https://)
+        let isResetPassword = (host == "reset-password") ||
+                              (pathComponents.contains("reset-password"))
+
+        if isResetPassword {
+            // Extract token from query parameters
+            if let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
+               let token = components.queryItems?.first(where: { $0.name == "token" })?.value,
+               !token.isEmpty {
+                resetPasswordToken = token
+                showResetPasswordView = true
+
+                #if DEBUG
+                print("[App] Opening password reset with token: \(token.prefix(8))...")
+                #endif
+            } else {
+                #if DEBUG
+                print("[App] Password reset link missing token parameter")
+                #endif
             }
         }
     }
