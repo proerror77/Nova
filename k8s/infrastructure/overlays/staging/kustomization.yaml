@@ -361,6 +361,7 @@ patches:
 - path: service-redis-env-patch.yaml
 - path: grpc-tls-env-patch.yaml
 - path: graphql-gateway-env-patch.yaml
+- path: graphql-gateway-configmap-patch.yaml
 - path: social-service-env-patch.yaml
 - path: patch-deployment-selectors.yaml
 - path: patch-analytics-kafka-env.yaml

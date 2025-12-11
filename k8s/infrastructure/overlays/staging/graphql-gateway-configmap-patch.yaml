@@ -1,0 +1,16 @@
+# Patch graphql-gateway-configmap for staging namespace
+# Fix service URLs to use nova-staging instead of nova
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: graphql-gateway-configmap
+data:
+  # Fix all service URLs to use nova-staging namespace
+  auth-service-url: "http://identity-service.nova-staging.svc.cluster.local:50051"
+  user-service-url: "http://user-service.nova-staging.svc.cluster.local:50054"
+  content-service-url: "http://content-service.nova-staging.svc.cluster.local:50055"
+  social-service-url: "http://social-service.nova-staging.svc.cluster.local:50052"
+  communication-service-url: "http://communication-service.nova-staging.svc.cluster.local:50053"
+  media-service-url: "http://media-service.nova-staging.svc.cluster.local:50056"
+  search-service-url: "http://search-service.nova-staging.svc.cluster.local:50057"
+  events-service-url: "http://events-service.nova-staging.svc.cluster.local:50058"
