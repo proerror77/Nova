@@ -77,15 +77,8 @@ impl TracingConfig {
         let sample_rate = std::env::var("TRACING_SAMPLE_RATE")
             .ok()
             .and_then(|v| v.parse::<f64>().ok())
-            .unwrap_or(0.1);
-
-        let sample_rate = if sample_rate < 0.0 {
-            0.0
-        } else if sample_rate > 1.0 {
-            1.0
-        } else {
-            sample_rate
-        };
+            .unwrap_or(0.1)
+            .clamp(0.0, 1.0);
 
         let service_version =
             std::env::var("SERVICE_VERSION").unwrap_or_else(|_| "dev".to_string());

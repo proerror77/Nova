@@ -13,6 +13,7 @@ fn main() {
         .build_client(true)
         .file_descriptor_set_path(out_dir.join("nova_descriptor.bin"))
         .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
+        .type_attribute(".", "#[allow(clippy::enum_variant_names)]")
         .compile_well_known_types(true)
         .extern_path(".google.protobuf", "::pbjson_types")
         .compile_protos(
@@ -44,6 +45,7 @@ fn main() {
         .build_server(false)
         .build_client(true)
         .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
+        .type_attribute(".", "#[allow(clippy::enum_variant_names)]")
         .compile_protos(
             &["../realtime-chat-service/proto/realtime_chat.proto"],
             &["../realtime-chat-service/proto/"],
