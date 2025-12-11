@@ -2,28 +2,46 @@ import SwiftUI
 
 // MARK: - Add Friends ViewModel
 
+/// AddFriendsViewModel - 添加好友頁面的 ViewModel
+/// 架構說明：
+/// - 使用 FriendsService 搜索用戶 (可用的端點)
+/// - 使用 FeedService 獲取推薦創作者 (已部署的端點)
+/// - 使用 GraphService 處理 Follow 關係
 @MainActor
 @Observable
 class AddFriendsViewModel {
     var searchQuery: String = ""
     var searchResults: [UserProfile] = []
-    var recommendations: [UserProfile] = []
+    var recommendations: [RecommendedCreator] = []
     var isSearching: Bool = false
     var isLoadingRecommendations: Bool = false
     var errorMessage: String?
     var toastMessage: String?
 
     private let friendsService = FriendsService()
+    private let feedService = FeedService()
+    private let graphService = GraphService()
 
     func loadRecommendations() async {
         isLoadingRecommendations = true
         errorMessage = nil
 
         do {
-            recommendations = try await friendsService.getRecommendations(limit: 20)
+            // 使用 FeedService 獲取推薦創作者（已部署的端點）
+            recommendations = try await feedService.getRecommendedCreators(limit: 20)
         } catch {
-            errorMessage = "加载推荐联系人失败: \(error.localizedDescription)"
-            print("❌ Failed to load recommendations: \(error)")
+            // 如果端點也未部署（501），顯示空狀態而非錯誤
+            if case APIError.serverError(let statusCode, _) = error, statusCode == 501 || statusCode == 503 {
+                recommendations = []
+                #if DEBUG
+                print("[AddFriendsView] Recommendations endpoint not deployed yet")
+                #endif
+            } else {
+                errorMessage = "加载推荐联系人失败: \(error.localizedDescription)"
+                #if DEBUG
+                print("❌ Failed to load recommendations: \(error)")
+                #endif
+            }
         }
 
         isLoadingRecommendations = false
@@ -39,24 +57,34 @@ class AddFriendsViewModel {
         errorMessage = nil
 
         do {
+            // 使用 FriendsService 搜索用戶 (返回 [UserProfile])
             searchResults = try await friendsService.searchUsers(query: searchQuery, limit: 20)
         } catch {
             errorMessage = "搜索失败: \(error.localizedDescription)"
+            #if DEBUG
             print("❌ Search failed: \(error)")
+            #endif
         }
 
         isSearching = false
     }
 
-    func addFriend(userId: String) async {
+    func followUser(userId: String) async {
         errorMessage = nil
 
         do {
-            try await friendsService.addFriend(userId: userId)
-            await loadRecommendations()
+            // 使用 GraphService 進行 Follow
+            guard let currentUserId = AuthenticationManager.shared.currentUser?.id else {
+                errorMessage = "请先登录"
+                return
+            }
+            try await graphService.followUser(followerId: currentUserId, followeeId: userId)
+            showToast("已关注")
         } catch {
-            errorMessage = "添加好友失败: \(error.localizedDescription)"
-            print("❌ Failed to add friend: \(error)")
+            errorMessage = "关注失败: \(error.localizedDescription)"
+            #if DEBUG
+            print("❌ Failed to follow user: \(error)")
+            #endif
         }
     }
 
@@ -244,9 +272,9 @@ struct AddFriendsView: View {
                                 ForEach(viewModel.searchResults) { user in
                                     UserCardView(
                                         user: user,
-                                        onAddFriend: {
+                                        onFollow: {
                                             Task {
-                                                await viewModel.addFriend(userId: user.id)
+                                                await viewModel.followUser(userId: user.id)
                                             }
                                         }
                                     )
@@ -259,17 +287,17 @@ struct AddFriendsView: View {
                         // MARK: - Recommendations
                         if !viewModel.recommendations.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
-                                Text("推荐联系人")
+                                Text("推荐关注")
                                     .font(.system(size: 17.50, weight: .bold))
                                     .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
                                     .padding(.horizontal, 24)
 
-                                ForEach(viewModel.recommendations) { user in
-                                    UserCardView(
-                                        user: user,
-                                        onAddFriend: {
+                                ForEach(viewModel.recommendations) { creator in
+                                    RecommendedCreatorCard(
+                                        creator: creator,
+                                        onFollow: {
                                             Task {
-                                                await viewModel.addFriend(userId: user.id)
+                                                await viewModel.followUser(userId: creator.id)
                                             }
                                         }
                                     )
@@ -357,7 +385,7 @@ struct AddFriendsView: View {
 
 struct UserCardView: View {
     let user: UserProfile
-    let onAddFriend: () -> Void
+    let onFollow: () -> Void
     @State private var isAdding: Bool = false
     @State private var isAdded: Bool = false
 
@@ -388,7 +416,7 @@ struct UserCardView: View {
             Button(action: {
                 guard !isAdding && !isAdded else { return }
                 isAdding = true
-                onAddFriend()
+                onFollow()
                 isAdded = true
                 isAdding = false
             }) {
@@ -409,6 +437,88 @@ struct UserCardView: View {
         .padding(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
         .frame(maxWidth: .infinity)
         .frame(height: 67)
+        .background(Color(red: 0.97, green: 0.96, blue: 0.96))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .inset(by: 0.50)
+                .stroke(Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.50)
+        )
+    }
+}
+
+// MARK: - Recommended Creator Card Component
+
+struct RecommendedCreatorCard: View {
+    let creator: RecommendedCreator
+    let onFollow: () -> Void
+    @State private var isFollowing: Bool = false
+    @State private var isFollowed: Bool = false
+
+    var body: some View {
+        HStack(spacing: 13) {
+            // 头像
+            AvatarView(image: nil, url: creator.avatarUrl, size: 50)
+
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 4) {
+                    Text(creator.displayName)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.black)
+
+                    if creator.isVerified {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.blue)
+                    }
+                }
+
+                Text("@\(creator.username)")
+                    .font(.system(size: 11.50, weight: .medium))
+                    .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
+
+                if let reason = creator.reason, !reason.isEmpty {
+                    Text(reason)
+                        .font(.system(size: 10))
+                        .foregroundColor(Color(red: 0.5, green: 0.5, blue: 0.5))
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            Button(action: {
+                guard !isFollowing && !isFollowed else { return }
+                isFollowing = true
+                onFollow()
+                isFollowed = true
+                isFollowing = false
+            }) {
+                if isFollowing {
+                    ProgressView().scaleEffect(0.8)
+                } else if isFollowed {
+                    Text("已关注")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.gray)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color(red: 0.9, green: 0.9, blue: 0.9))
+                        .cornerRadius(14)
+                } else {
+                    Text("关注")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color(red: 0.87, green: 0.11, blue: 0.26))
+                        .cornerRadius(14)
+                }
+            }
+            .disabled(isFollowing || isFollowed)
+        }
+        .padding(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 67)
         .background(Color(red: 0.97, green: 0.96, blue: 0.96))
         .cornerRadius(12)
         .overlay(
