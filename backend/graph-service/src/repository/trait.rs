@@ -76,6 +76,16 @@ pub trait GraphRepositoryTrait: Send + Sync {
         Ok((a_follows_b && b_follows_a, a_follows_b, b_follows_a))
     }
 
+    /// Get mutual followers (friends) of a user with pagination
+    /// Friends = users who both follow each other
+    /// Returns: (friend_ids, total_count, has_more)
+    async fn get_mutual_followers(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32, bool)>;
+
     /// Batch check if follower is following multiple followees
     /// Returns: HashMap<followee_id_string, is_following>
     async fn batch_check_following(

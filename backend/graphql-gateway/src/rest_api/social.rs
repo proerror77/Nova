@@ -23,9 +23,10 @@ use crate::clients::proto::auth::{
 };
 use crate::clients::proto::chat::{ConversationType, CreateConversationRequest};
 use crate::clients::proto::social::{
-    FollowUserRequest as GrpcFollowUserRequest, GetFollowingRequest as GrpcGetFollowingRequest,
+    FollowUserRequest as GrpcFollowUserRequest,
     UnfollowUserRequest as GrpcUnfollowUserRequest,
 };
+use crate::clients::proto::graph::GetMutualFollowersRequest as GrpcGetMutualFollowersRequest;
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
 
@@ -315,7 +316,7 @@ pub async fn remove_friend(
 }
 
 /// GET /api/v2/friends/list
-/// Get friends list (users you are following)
+/// Get friends list (users who mutually follow each other)
 pub async fn get_friends_list(
     http_req: HttpRequest,
     query: web::Query<std::collections::HashMap<String, String>>,
@@ -347,24 +348,26 @@ pub async fn get_friends_list(
         "GET /api/v2/friends/list"
     );
 
-    // Call social-service GetFollowing RPC
-    let mut social_client = clients.social_client();
-    let grpc_request = tonic::Request::new(GrpcGetFollowingRequest {
+    // Call graph-service GetMutualFollowers RPC
+    // Friends = users who both follow each other (mutual followers)
+    let mut graph_client = clients.graph_client();
+    let grpc_request = tonic::Request::new(GrpcGetMutualFollowersRequest {
         user_id: user_id.clone(),
         limit,
         offset,
     });
 
     match clients
-        .call_social(|| async move { social_client.get_following(grpc_request).await })
+        .call_graph(|| async move { graph_client.get_mutual_followers(grpc_request).await })
         .await
     {
         Ok(response) => {
-            info!(user_id = %user_id, total = response.total, "Friends list retrieved successfully");
+            info!(user_id = %user_id, total = response.total_count, "Friends list retrieved successfully");
 
             Ok(HttpResponse::Ok().json(serde_json::json!({
                 "friends": response.user_ids,
-                "total": response.total,
+                "total": response.total_count,
+                "hasMore": response.has_more,
             })))
         }
         Err(e) => {

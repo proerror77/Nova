@@ -298,6 +298,30 @@ impl DualWriteRepository {
             }
         }
     }
+
+    /// Get mutual followers / friends (users who both follow each other)
+    /// PostgreSQL only - Neo4j doesn't have this query optimized yet
+    pub async fn get_mutual_followers(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32, bool)> {
+        let start = std::time::Instant::now();
+
+        let result = self
+            .postgres
+            .get_mutual_followers(user_id, limit, offset)
+            .await?;
+
+        let duration = start.elapsed();
+        tracing::debug!(
+            "postgres_query_success{{operation=\"get_mutual_followers\",duration_ms={}}}",
+            duration.as_millis()
+        );
+
+        Ok(result)
+    }
 }
 
 // Implement GraphRepositoryTrait for DualWriteRepository
@@ -372,6 +396,15 @@ impl GraphRepositoryTrait for DualWriteRepository {
         offset: i32,
     ) -> Result<(Vec<Uuid>, i32, bool)> {
         Self::get_blocked_users(self, user_id, limit, offset).await
+    }
+
+    async fn get_mutual_followers(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32, bool)> {
+        Self::get_mutual_followers(self, user_id, limit, offset).await
     }
 
     async fn health_check(&self) -> Result<()> {

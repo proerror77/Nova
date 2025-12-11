@@ -116,6 +116,16 @@ service GraphService {
     };
   }
 
+  // Get user's mutual followers (friends - users who both follow each other)
+  rpc GetMutualFollowers(GetMutualFollowersRequest) returns (GetMutualFollowersResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/graph/friends/{user_id}"
+      additional_bindings {
+        get: "/api/v2/graph/friends"
+      }
+    };
+  }
+
   // Batch check following relationships
   rpc BatchCheckFollowing(BatchCheckFollowingRequest) returns (BatchCheckFollowingResponse) {
     option (google.api.http) = {
@@ -289,4 +299,17 @@ message AreMutualFollowersResponse {
   bool are_mutuals = 1;         // true if both follow each other
   bool a_follows_b = 2;         // true if user_a follows user_b
   bool b_follows_a = 3;         // true if user_b follows user_a
+}
+
+// Get mutual followers (friends)
+message GetMutualFollowersRequest {
+  string user_id = 1;
+  int32 limit = 2;              // Default 50, max 1000
+  int32 offset = 3;
+}
+
+message GetMutualFollowersResponse {
+  repeated string user_ids = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
 }

@@ -530,4 +530,44 @@ impl GraphService for GraphServiceImpl {
             }
         }
     }
+
+    async fn get_mutual_followers(
+        &self,
+        request: Request<GetMutualFollowersRequest>,
+    ) -> Result<Response<GetMutualFollowersResponse>, Status> {
+        let req = request.into_inner();
+
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
+
+        let limit = if req.limit > 0 { req.limit } else { 50 };
+        let offset = req.offset;
+
+        match self.repo.get_mutual_followers(user_id, limit, offset).await {
+            Ok((friends, total_count, has_more)) => {
+                let user_ids: Vec<String> = friends.iter().map(|id| id.to_string()).collect();
+
+                info!(
+                    "Get mutual followers (friends) for {}: {} results (offset: {}, has_more: {})",
+                    user_id,
+                    user_ids.len(),
+                    offset,
+                    has_more
+                );
+
+                Ok(Response::new(GetMutualFollowersResponse {
+                    user_ids,
+                    total_count,
+                    has_more,
+                }))
+            }
+            Err(e) => {
+                error!("Failed to get mutual followers: {}", e);
+                Err(Status::internal(format!(
+                    "Failed to get mutual followers: {}",
+                    e
+                )))
+            }
+        }
+    }
 }

@@ -268,4 +268,58 @@ impl PostgresGraphRepository {
 
         Ok((blocked_ids, total_count as i32, has_more))
     }
+
+    /// Get mutual followers (friends) - users who both follow each other
+    pub async fn get_mutual_followers(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32, bool)> {
+        let effective_limit = limit.min(10000);
+
+        // Get total count of mutual followers
+        // A mutual follower is someone who follows me AND I follow them
+        let total_count: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*)
+            FROM follows f1
+            INNER JOIN follows f2 ON f1.follower_id = f2.following_id AND f1.following_id = f2.follower_id
+            WHERE f1.following_id = $1
+            "#,
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Get paginated mutual followers
+        let mutual_followers: Vec<(Uuid,)> = sqlx::query_as(
+            r#"
+            SELECT f1.follower_id
+            FROM follows f1
+            INNER JOIN follows f2 ON f1.follower_id = f2.following_id AND f1.following_id = f2.follower_id
+            WHERE f1.following_id = $1
+            ORDER BY f1.created_at DESC
+            LIMIT $2 OFFSET $3
+            "#,
+        )
+        .bind(user_id)
+        .bind(effective_limit as i64)
+        .bind(offset as i64)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let friend_ids: Vec<Uuid> = mutual_followers.into_iter().map(|(id,)| id).collect();
+        let has_more = (offset as i64 + effective_limit as i64) < total_count;
+
+        debug!(
+            "Got {} mutual followers (friends) for user {} from PostgreSQL (offset: {}, has_more: {})",
+            friend_ids.len(),
+            user_id,
+            offset,
+            has_more
+        );
+
+        Ok((friend_ids, total_count as i32, has_more))
+    }
 }

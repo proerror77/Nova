@@ -554,6 +554,78 @@ impl GraphRepository {
         Ok(results)
     }
 
+    /// Get mutual followers (friends) - users who both follow each other
+    pub async fn get_mutual_followers(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32, bool)> {
+        let effective_limit = limit.min(10000);
+
+        // Get total count of mutual followers
+        // A mutual follower is someone who follows me AND I follow them
+        let count_cypher = r#"
+            MATCH (user:User {id: $user_id})<-[:FOLLOWS]-(friend:User)
+            WHERE (user)-[:FOLLOWS]->(friend)
+            RETURN count(friend) AS total
+        "#;
+
+        let mut count_result = self
+            .graph
+            .execute(query(count_cypher).param("user_id", user_id.to_string()))
+            .await
+            .context("Failed to count mutual followers")?;
+
+        let total_count: i32 = if let Some(row) = count_result.next().await? {
+            row.get("total").unwrap_or(0)
+        } else {
+            0
+        };
+
+        // Get paginated mutual followers
+        let cypher = r#"
+            MATCH (user:User {id: $user_id})<-[:FOLLOWS]-(friend:User)
+            WHERE (user)-[:FOLLOWS]->(friend)
+            RETURN friend.id AS friend_id
+            ORDER BY friend.id
+            SKIP $offset
+            LIMIT $limit
+        "#;
+
+        let mut result = self
+            .graph
+            .execute(
+                query(cypher)
+                    .param("user_id", user_id.to_string())
+                    .param("offset", offset as i64)
+                    .param("limit", effective_limit as i64),
+            )
+            .await
+            .context("Failed to get mutual followers")?;
+
+        let mut friends = Vec::new();
+        while let Some(row) = result.next().await? {
+            if let Ok(id_str) = row.get::<String>("friend_id") {
+                if let Ok(friend_id) = Uuid::parse_str(&id_str) {
+                    friends.push(friend_id);
+                }
+            }
+        }
+
+        let has_more = (offset + effective_limit) < total_count;
+
+        debug!(
+            "Got {} mutual followers (friends) for user {} (offset: {}, has_more: {})",
+            friends.len(),
+            user_id,
+            offset,
+            has_more
+        );
+
+        Ok((friends, total_count, has_more))
+    }
+
     /// Get graph stats for a user (followers/following/muted/blocked counts)
     #[allow(dead_code)] // Reserved for graph analytics endpoint
     pub async fn get_graph_stats(&self, user_id: Uuid) -> Result<GraphStats> {
@@ -735,6 +807,15 @@ impl GraphRepositoryTrait for GraphRepository {
         offset: i32,
     ) -> Result<(Vec<Uuid>, i32, bool)> {
         Self::get_blocked_users(self, user_id, limit, offset).await
+    }
+
+    async fn get_mutual_followers(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32, bool)> {
+        Self::get_mutual_followers(self, user_id, limit, offset).await
     }
 
     async fn health_check(&self) -> Result<()> {
