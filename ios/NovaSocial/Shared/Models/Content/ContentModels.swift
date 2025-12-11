@@ -91,12 +91,12 @@ struct GetPostsByAuthorResponse: Codable {
 }
 
 struct GetUserBookmarksResponse: Codable {
-    let posts: [Post]
-    let total: Int
+    let postIds: [String]
+    let totalCount: Int
 
     enum CodingKeys: String, CodingKey {
-        case posts
-        case total
+        case postIds = "post_ids"
+        case totalCount = "total_count"
     }
 }
 

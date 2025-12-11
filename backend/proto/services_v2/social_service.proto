@@ -68,6 +68,11 @@ service SocialService {
       get: "/api/v2/social/likes/{post_id}/check"
     };
   }
+  rpc GetUserLikedPosts(GetUserLikedPostsRequest) returns (GetUserLikedPostsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/users/{user_id}/liked-posts"
+    };
+  }
 
   // Comments
   rpc CreateComment(CreateCommentRequest) returns (CreateCommentResponse) {
@@ -236,6 +241,8 @@ message GetLikesRequest { string post_id = 1; int32 limit = 2; int32 offset = 3;
 message GetLikesResponse { repeated Like likes = 1; int32 total = 2; }
 message CheckUserLikedRequest { string user_id = 1; string post_id = 2; }
 message CheckUserLikedResponse { bool liked = 1; }
+message GetUserLikedPostsRequest { string user_id = 1; int32 limit = 2; int32 offset = 3; }
+message GetUserLikedPostsResponse { repeated string post_ids = 1; int32 total = 2; }
 
 // Comments
 message CreateCommentRequest {

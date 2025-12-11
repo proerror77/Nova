@@ -55,7 +55,7 @@ struct ProfileUserInfoSection: View {
     let isVerified: Bool
     let followingCount: Int
     let followersCount: Int
-    let likesCount: Int
+    let postsCount: Int
 
     // Layout configuration
     var layout: ProfileUserInfoLayout = .default
@@ -127,8 +127,8 @@ struct ProfileUserInfoSection: View {
                     .fill(layout.textColor)
                     .frame(width: layout.statsDividerWidth, height: layout.statsDividerHeight)
 
-                // Likes
-                statsItem(label: "Likes", value: "\(likesCount)")
+                // Posts
+                statsItem(label: "Posts", value: "\(postsCount)")
                     .frame(width: layout.statsItemWidth)
             }
             .padding(.top, layout.statsTopPadding)
@@ -213,7 +213,7 @@ struct ProfileUserInfoSection: View {
             isVerified: true,
             followingCount: 592,
             followersCount: 1449,
-            likesCount: 452,
+            postsCount: 452,
             layout: ProfileUserInfoLayout(
                 containerWidth: 365,
                 avatarOuterSize: 108,
@@ -238,7 +238,7 @@ struct ProfileUserInfoSection: View {
             isVerified: false,
             followingCount: 0,
             followersCount: 0,
-            likesCount: 0,
+            postsCount: 0,
             layout: ProfileUserInfoLayout(
                 containerWidth: 365,
                 avatarOuterSize: 108,

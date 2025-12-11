@@ -198,6 +198,7 @@ struct CreateAccountView: View {
                             .accessibilityIdentifier("usernameTextField")
 
                         // Password field - 优化版本，避免视图重建
+                        // 注意：使用 .oneTimeCode 禁用 iOS 自動強密碼建議
                         Group {
                             if showPassword {
                                 TextField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
@@ -207,7 +208,7 @@ struct CreateAccountView: View {
                                     .frame(width: 343, height: 49)
                                     .autocapitalization(.none)
                                     .autocorrectionDisabled()
-                                    .textContentType(.password)
+                                    .textContentType(.oneTimeCode)
                                     .accessibilityIdentifier("passwordTextField")
                                     .focused($focusedField, equals: .password)
                             } else {
@@ -216,7 +217,7 @@ struct CreateAccountView: View {
                                     .font(.system(size: 14))
                                     .padding(.horizontal, 16)
                                     .frame(width: 343, height: 49)
-                                    .textContentType(.password)
+                                    .textContentType(.oneTimeCode)
                                     .accessibilityIdentifier("passwordTextField")
                                     .focused($focusedField, equals: .password)
                             }
@@ -224,6 +225,7 @@ struct CreateAccountView: View {
                         .offset(x: 0, y: -19.50)
 
                         // Confirm Password field - 优化版本，避免视图重建
+                        // 注意：使用 .oneTimeCode 禁用 iOS 自動強密碼建議
                         Group {
                             if showConfirmPassword {
                                 TextField("", text: $confirmPassword, prompt: Text("Confirm your password").foregroundColor(Color.white.opacity(0.4)))
@@ -233,7 +235,7 @@ struct CreateAccountView: View {
                                     .frame(width: 343, height: 49)
                                     .autocapitalization(.none)
                                     .autocorrectionDisabled()
-                                    .textContentType(.password)
+                                    .textContentType(.oneTimeCode)
                                     .accessibilityIdentifier("confirmPasswordTextField")
                                     .focused($focusedField, equals: .confirmPassword)
                             } else {
@@ -242,7 +244,7 @@ struct CreateAccountView: View {
                                     .font(.system(size: 14))
                                     .padding(.horizontal, 16)
                                     .frame(width: 343, height: 49)
-                                    .textContentType(.password)
+                                    .textContentType(.oneTimeCode)
                                     .accessibilityIdentifier("confirmPasswordTextField")
                                     .focused($focusedField, equals: .confirmPassword)
                             }

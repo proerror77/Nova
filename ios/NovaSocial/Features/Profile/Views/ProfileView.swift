@@ -243,7 +243,7 @@ struct ProfileView: View {
                     isVerified: displayUser?.safeIsVerified ?? false,
                     followingCount: displayUser?.safeFollowingCount ?? 0,
                     followersCount: displayUser?.safeFollowerCount ?? 0,
-                    likesCount: displayUser?.safePostCount ?? 0,
+                    postsCount: displayUser?.safePostCount ?? 0,
                     layout: userInfoLayout
                 )
             }

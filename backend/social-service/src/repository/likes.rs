@@ -106,4 +106,41 @@ impl LikeRepository {
 
         Ok(likes)
     }
+
+    /// Get posts liked by a user (paginated)
+    pub async fn get_user_liked_posts(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32)> {
+        // Get post IDs liked by user
+        let post_ids: Vec<Uuid> = sqlx::query_scalar(
+            r#"
+            SELECT post_id
+            FROM likes
+            WHERE user_id = $1
+            ORDER BY created_at DESC
+            LIMIT $2 OFFSET $3
+            "#,
+        )
+        .bind(user_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        // Get total count
+        let total: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*) FROM likes
+            WHERE user_id = $1
+            "#,
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok((post_ids, total as i32))
+    }
 }

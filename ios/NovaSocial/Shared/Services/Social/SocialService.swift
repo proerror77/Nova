@@ -94,6 +94,24 @@ class SocialService {
         return response.liked
     }
 
+    /// Get posts liked by a user (paginated)
+    func getUserLikedPosts(userId: String, limit: Int = 20, offset: Int = 0) async throws -> (postIds: [String], total: Int) {
+        struct Response: Codable {
+            let post_ids: [String]
+            let total: Int
+        }
+
+        let response: Response = try await client.get(
+            endpoint: APIConfig.Social.getUserLikedPosts(userId),
+            queryParams: [
+                "limit": String(limit),
+                "offset": String(offset)
+            ]
+        )
+
+        return (response.post_ids, response.total)
+    }
+
     // MARK: - Comments
 
     func createComment(postId: String, content: String, parentCommentId: String? = nil) async throws -> SocialComment {

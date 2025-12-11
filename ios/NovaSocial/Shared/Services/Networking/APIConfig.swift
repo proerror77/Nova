@@ -85,6 +85,8 @@ struct APIConfig {
         static func deleteLike(_ postId: String) -> String { "/api/v2/social/unlike/\(postId)" }
         static func getLikes(_ postId: String) -> String { "/api/v2/social/likes/\(postId)" }
         static func checkLiked(_ postId: String) -> String { "/api/v2/social/check-liked/\(postId)" }
+        /// GET /api/v2/social/users/{user_id}/liked-posts 獲取用戶點讚的帖子
+        static func getUserLikedPosts(_ userId: String) -> String { "/api/v2/social/users/\(userId)/liked-posts" }
         static let createComment = "/api/v2/social/comment"
         static func deleteComment(_ commentId: String) -> String { "/api/v2/social/comment/\(commentId)" }
         static let getComments = "/api/v2/social/comments"

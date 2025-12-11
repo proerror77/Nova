@@ -347,6 +347,27 @@ impl SocialService for SocialServiceImpl {
         Ok(Response::new(CheckUserLikedResponse { liked }))
     }
 
+    async fn get_user_liked_posts(
+        &self,
+        request: Request<GetUserLikedPostsRequest>,
+    ) -> Result<Response<GetUserLikedPostsResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+        let limit = sanitize_limit(req.limit, 1, 100, 20);
+        let offset = req.offset.max(0);
+
+        let (post_ids, total) = self
+            .like_repo()
+            .get_user_liked_posts(user_id, limit, offset)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get user liked posts: {e}")))?;
+
+        Ok(Response::new(GetUserLikedPostsResponse {
+            post_ids: post_ids.iter().map(|id| id.to_string()).collect(),
+            total,
+        }))
+    }
+
     // ========= Comments =========
     async fn create_comment(
         &self,

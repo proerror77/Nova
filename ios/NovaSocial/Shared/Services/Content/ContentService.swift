@@ -231,16 +231,13 @@ class ContentService {
     // MARK: - Bookmarks
 
     func getUserBookmarks(userId: String, limit: Int = 20, offset: Int = 0) async throws -> GetUserBookmarksResponse {
-        struct Request: Codable {
-            let user_id: String
-            let limit: Int
-            let offset: Int
-        }
-
-        let request = Request(user_id: userId, limit: limit, offset: offset)
-        return try await client.request(
-            endpoint: APIConfig.Content.bookmarks,
-            body: request
+        return try await client.get(
+            endpoint: APIConfig.Social.getBookmarks,
+            queryParams: [
+                "user_id": userId,
+                "limit": String(limit),
+                "offset": String(offset)
+            ]
         )
     }
 }
