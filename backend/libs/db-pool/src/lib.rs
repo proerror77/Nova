@@ -318,6 +318,10 @@ mod tests {
 
     #[test]
     fn test_for_service_high_traffic() {
+        // Clear env vars that could override the service-specific defaults
+        std::env::remove_var("DB_MAX_CONNECTIONS");
+        std::env::remove_var("DB_MIN_CONNECTIONS");
+
         // High-traffic services should have higher connection limits (proportional)
         let auth_config = DbConfig::for_service("auth-service");
         assert_eq!(auth_config.service_name, "auth-service");
@@ -337,6 +341,10 @@ mod tests {
 
     #[test]
     fn test_for_service_medium_traffic() {
+        // Clear env vars that could override the service-specific defaults
+        std::env::remove_var("DB_MAX_CONNECTIONS");
+        std::env::remove_var("DB_MIN_CONNECTIONS");
+
         // Medium-traffic services should have moderate connection limits
         let feed_config = DbConfig::for_service("feed-service");
         assert_eq!(feed_config.max_connections, 8);
@@ -350,6 +358,10 @@ mod tests {
 
     #[test]
     fn test_for_service_light_traffic() {
+        // Clear env vars that could override the service-specific defaults
+        std::env::remove_var("DB_MAX_CONNECTIONS");
+        std::env::remove_var("DB_MIN_CONNECTIONS");
+
         // Light-traffic services should have lower connection limits
         let video_config = DbConfig::for_service("video-service");
         assert_eq!(video_config.max_connections, 3);
@@ -360,6 +372,10 @@ mod tests {
 
     #[test]
     fn test_for_service_unknown_service() {
+        // Clear env vars that could override the service-specific defaults
+        std::env::remove_var("DB_MAX_CONNECTIONS");
+        std::env::remove_var("DB_MIN_CONNECTIONS");
+
         // Unknown services should use conservative defaults
         let unknown_config = DbConfig::for_service("unknown-service");
         assert_eq!(unknown_config.max_connections, 2);
@@ -368,6 +384,9 @@ mod tests {
 
     #[test]
     fn test_for_service_connect_timeout() {
+        // Clear env vars that could override the service-specific defaults
+        std::env::remove_var("DB_CONNECT_TIMEOUT_SECS");
+
         // All services should have fast connection timeout
         let auth_config = DbConfig::for_service("auth-service");
         assert_eq!(auth_config.connect_timeout_secs, 5);
