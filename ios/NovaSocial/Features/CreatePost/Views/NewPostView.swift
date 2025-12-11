@@ -12,6 +12,8 @@ struct NewPostView: View {
     @State private var showCamera = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var selectedImages: [UIImage] = []
+    @State private var selectedMediaItems: [PostMediaItem] = []  // Live Photo support
+    @State private var isProcessingMedia = false  // Live Photo processing indicator
     @State private var isPosting = false
     @State private var postError: String?
     @State private var showNameSelector = false  // 控制名称选择弹窗
@@ -28,6 +30,7 @@ struct NewPostView: View {
     // Services
     private let mediaService = MediaService()
     private let contentService = ContentService()
+    private let livePhotoManager = LivePhotoManager.shared
 
     var body: some View {
         ZStack {
@@ -60,21 +63,16 @@ struct NewPostView: View {
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: .constant(nil))
         }
-        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotos, maxSelectionCount: 5 - selectedImages.count, matching: .images)
+        // PhotosPicker with Live Photo support
+        .photosPicker(
+            isPresented: $showPhotoPicker,
+            selection: $selectedPhotos,
+            maxSelectionCount: 5 - selectedMediaItems.count,
+            matching: .any(of: [.images, .livePhotos])  // Support both images and Live Photos
+        )
         .onChange(of: selectedPhotos) { oldValue, newValue in
             Task {
-                // 将新选择的照片添加到已有照片中（不清空）
-                for item in newValue {
-                    // 检查是否已达到最大数量
-                    guard selectedImages.count < 5 else { break }
-
-                    if let data = try? await item.loadTransferable(type: Data.self),
-                       let image = UIImage(data: data) {
-                        selectedImages.append(image)
-                    }
-                }
-                // 清空 selectedPhotos 以便下次继续选择
-                selectedPhotos = []
+                await processSelectedPhotos(newValue)
             }
         }
         .onAppear {
@@ -275,43 +273,105 @@ struct NewPostView: View {
         }
     }
 
-    // MARK: - Image Preview Section
+    // MARK: - Image Preview Section (with Live Photo support)
     private var imagePreviewSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 12) {
-                // 显示所有选中的图片
-                ForEach(Array(selectedImages.enumerated()), id: \.offset) { index, image in
-                    ZStack(alignment: .topTrailing) {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 239, height: 290)
-                            .cornerRadius(10)
-                            .clipped()
-
-                        // 删除按钮
-                        Button(action: {
-                            removeImage(at: index)
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(.white)
-                                .background(
-                                    Circle()
-                                        .fill(Color.black.opacity(0.5))
-                                        .frame(width: 20, height: 20)
-                                )
-                        }
-                        .padding(4)
-                    }
-                }
-
-                // 添加更多图片按钮（最多5张）- 始终显示在最右边
-                if selectedImages.count < 5 {
+                // Processing indicator
+                if isProcessingMedia {
                     ZStack {
                         Rectangle()
                             .foregroundColor(.clear)
-                            .frame(width: selectedImages.isEmpty ? 239 : 100, height: selectedImages.isEmpty ? 290 : 210)
+                            .frame(width: 239, height: 290)
+                            .background(Color(red: 0.91, green: 0.91, blue: 0.91))
+                            .cornerRadius(10)
+                        
+                        VStack(spacing: 12) {
+                            ProgressView()
+                                .scaleEffect(1.2)
+                            Text("Processing...")
+                                .font(.system(size: 12))
+                                .foregroundColor(.gray)
+                        }
+                    }
+                }
+                
+                // Display all selected media (images and Live Photos)
+                ForEach(Array(selectedMediaItems.enumerated()), id: \.element.id) { index, mediaItem in
+                    ZStack(alignment: .topTrailing) {
+                        switch mediaItem {
+                        case .image(let image):
+                            // Regular image preview
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 239, height: 290)
+                                .cornerRadius(10)
+                                .clipped()
+                            
+                        case .livePhoto(let livePhotoData):
+                            // Live Photo preview with play capability
+                            LivePhotoPreviewCard(
+                                livePhotoData: livePhotoData,
+                                onDelete: {
+                                    removeMediaItem(at: index)
+                                }
+                            )
+                        }
+                        
+                        // Delete button (for regular images, Live Photo has its own)
+                        if case .image = mediaItem {
+                            Button(action: {
+                                removeMediaItem(at: index)
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.white)
+                                    .background(
+                                        Circle()
+                                            .fill(Color.black.opacity(0.5))
+                                            .frame(width: 20, height: 20)
+                                    )
+                            }
+                            .padding(4)
+                        }
+                    }
+                }
+                
+                // Legacy support: show selectedImages if selectedMediaItems is empty
+                if selectedMediaItems.isEmpty {
+                    ForEach(Array(selectedImages.enumerated()), id: \.offset) { index, image in
+                        ZStack(alignment: .topTrailing) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 239, height: 290)
+                                .cornerRadius(10)
+                                .clipped()
+
+                            Button(action: {
+                                removeImage(at: index)
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.white)
+                                    .background(
+                                        Circle()
+                                            .fill(Color.black.opacity(0.5))
+                                            .frame(width: 20, height: 20)
+                                    )
+                            }
+                            .padding(4)
+                        }
+                    }
+                }
+
+                // Add more media button (max 5) - always shown on the right
+                if totalMediaCount < 5 && !isProcessingMedia {
+                    ZStack {
+                        Rectangle()
+                            .foregroundColor(.clear)
+                            .frame(width: totalMediaCount == 0 ? 239 : 100, height: totalMediaCount == 0 ? 290 : 210)
                             .background(Color(red: 0.91, green: 0.91, blue: 0.91))
                             .cornerRadius(10)
 
@@ -320,10 +380,17 @@ struct NewPostView: View {
                                 .font(.system(size: 30, weight: .light))
                                 .foregroundColor(.white)
 
-                            if selectedImages.count > 0 {
-                                Text("\(selectedImages.count)/5")
+                            if totalMediaCount > 0 {
+                                Text("\(totalMediaCount)/5")
                                     .font(.system(size: 12))
                                     .foregroundColor(.white)
+                            }
+                            
+                            // Hint for Live Photo support
+                            if totalMediaCount == 0 {
+                                Text("Photos & Live Photos")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.white.opacity(0.8))
                             }
                         }
                     }
@@ -336,8 +403,79 @@ struct NewPostView: View {
         }
         .padding(.top, 16)
     }
+    
+    // MARK: - Total media count
+    private var totalMediaCount: Int {
+        selectedMediaItems.isEmpty ? selectedImages.count : selectedMediaItems.count
+    }
+    
+    // MARK: - Process Selected Photos (with Live Photo support)
+    private func processSelectedPhotos(_ items: [PhotosPickerItem]) async {
+        guard !items.isEmpty else { return }
+        
+        await MainActor.run {
+            isProcessingMedia = true
+        }
+        
+        defer {
+            Task { @MainActor in
+                isProcessingMedia = false
+                selectedPhotos = []  // Clear for next selection
+            }
+        }
+        
+        do {
+            let maxToAdd = 5 - selectedMediaItems.count
+            let newMedia = try await livePhotoManager.loadMedia(from: items, maxCount: maxToAdd)
+            
+            await MainActor.run {
+                selectedMediaItems.append(contentsOf: newMedia)
+                
+                // Also update legacy selectedImages for backward compatibility
+                for media in newMedia {
+                    selectedImages.append(media.displayImage)
+                }
+            }
+        } catch {
+            #if DEBUG
+            print("[NewPost] Failed to process photos: \(error)")
+            #endif
+            
+            // Fallback to regular image loading
+            for item in items {
+                guard selectedMediaItems.count < 5 else { break }
+                
+                if let data = try? await item.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    await MainActor.run {
+                        selectedMediaItems.append(.image(image))
+                        selectedImages.append(image)
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Remove media item
+    private func removeMediaItem(at index: Int) {
+        guard index < selectedMediaItems.count else { return }
+        
+        let item = selectedMediaItems[index]
+        
+        // Clean up temporary files for Live Photos
+        if case .livePhoto(let data) = item {
+            try? FileManager.default.removeItem(at: data.videoURL)
+        }
+        
+        selectedMediaItems.remove(at: index)
+        
+        // Sync with legacy selectedImages
+        if index < selectedImages.count {
+            selectedImages.remove(at: index)
+        }
+    }
 
-    // MARK: - 删除图片
+    // MARK: - 删除图片 (legacy support)
     private func removeImage(at index: Int) {
         guard index < selectedImages.count else { return }
         selectedImages.remove(at: index)
@@ -345,6 +483,11 @@ struct NewPostView: View {
         // 同步更新 selectedPhotos
         if index < selectedPhotos.count {
             selectedPhotos.remove(at: index)
+        }
+        
+        // Also remove from selectedMediaItems if applicable
+        if index < selectedMediaItems.count {
+            removeMediaItem(at: index)
         }
     }
 
@@ -594,49 +737,104 @@ struct NewPostView: View {
         postError = nil
 
         do {
-            // Step 1: 上传图片 (如果有，带重试逻辑)
+            // Step 1: Upload media (images and Live Photos with retry logic)
             var mediaUrls: [String] = []
-            for image in selectedImages {
-                // 先调整图片大小再压缩，避免上传过大的文件
-                let resizedImage = resizeImageForUpload(image)
-                if let imageData = resizedImage.jpegData(compressionQuality: 0.3) {
+            var mediaType: String = "image"  // Default to image
+            
+            // Use new media items if available, otherwise fall back to legacy selectedImages
+            let itemsToUpload: [PostMediaItem] = selectedMediaItems.isEmpty 
+                ? selectedImages.map { .image($0) } 
+                : selectedMediaItems
+            
+            for mediaItem in itemsToUpload {
+                switch mediaItem {
+                case .image(let image):
+                    // Regular image upload
+                    let resizedImage = resizeImageForUpload(image)
+                    if let imageData = resizedImage.jpegData(compressionQuality: 0.3) {
+                        #if DEBUG
+                        print("[NewPost] Uploading image: \(imageData.count / 1024) KB")
+                        #endif
+
+                        var mediaUrl: String?
+                        var lastError: Error?
+
+                        for attempt in 1...3 {
+                            do {
+                                mediaUrl = try await mediaService.uploadImage(
+                                    imageData: imageData,
+                                    filename: "post_\(UUID().uuidString).jpg"
+                                )
+                                break
+                            } catch let error as APIError {
+                                lastError = error
+                                if case .serverError(let statusCode, _) = error, statusCode == 503 {
+                                    #if DEBUG
+                                    print("[NewPost] Image upload attempt \(attempt) failed with 503, retrying...")
+                                    #endif
+                                    if attempt < 3 {
+                                        try await Task.sleep(nanoseconds: UInt64(attempt) * 2_000_000_000)
+                                        continue
+                                    }
+                                }
+                                throw error
+                            }
+                        }
+
+                        guard let uploadedUrl = mediaUrl else {
+                            throw lastError ?? APIError.serverError(statusCode: 503, message: "Image upload failed")
+                        }
+
+                        mediaUrls.append(uploadedUrl)
+                    }
+                    
+                case .livePhoto(let livePhotoData):
+                    // Live Photo upload (both image and video)
                     #if DEBUG
-                    print("[NewPost] Uploading image: \(imageData.count / 1024) KB")
+                    print("[NewPost] Uploading Live Photo...")
                     #endif
-
-                    // 重试逻辑处理 503 错误
-                    var mediaUrl: String?
+                    
+                    let resizedImage = resizeImageForUpload(livePhotoData.stillImage)
+                    guard let imageData = resizedImage.jpegData(compressionQuality: 0.5) else {
+                        continue
+                    }
+                    
+                    var livePhotoResult: LivePhotoUploadResult?
                     var lastError: Error?
-
+                    
                     for attempt in 1...3 {
                         do {
-                            mediaUrl = try await mediaService.uploadImage(
+                            livePhotoResult = try await mediaService.uploadLivePhoto(
                                 imageData: imageData,
-                                filename: "post_\(UUID().uuidString).jpg"
+                                videoURL: livePhotoData.videoURL
                             )
-                            break  // 成功则跳出循环
+                            break
                         } catch let error as APIError {
                             lastError = error
                             if case .serverError(let statusCode, _) = error, statusCode == 503 {
                                 #if DEBUG
-                                print("[NewPost] Image upload attempt \(attempt) failed with 503, retrying in \(attempt * 2)s...")
+                                print("[NewPost] Live Photo upload attempt \(attempt) failed with 503, retrying...")
                                 #endif
                                 if attempt < 3 {
-                                    try await Task.sleep(nanoseconds: UInt64(attempt) * 2_000_000_000)  // 2s, 4s delay
+                                    try await Task.sleep(nanoseconds: UInt64(attempt) * 2_000_000_000)
                                     continue
                                 }
                             }
                             throw error
                         }
                     }
-
-                    guard let uploadedUrl = mediaUrl else {
-                        throw lastError ?? APIError.serverError(statusCode: 503, message: "Image upload failed")
+                    
+                    guard let result = livePhotoResult else {
+                        throw lastError ?? APIError.serverError(statusCode: 503, message: "Live Photo upload failed")
                     }
-
-                    mediaUrls.append(uploadedUrl)
+                    
+                    // Add both URLs - image first, then video
+                    mediaUrls.append(result.imageUrl)
+                    mediaUrls.append(result.videoUrl)
+                    mediaType = "live_photo"  // Mark as Live Photo
+                    
                     #if DEBUG
-                    print("[NewPost] Uploaded image: \(uploadedUrl)")
+                    print("[NewPost] Live Photo uploaded - Image: \(result.imageUrl), Video: \(result.videoUrl)")
                     #endif
                 }
             }

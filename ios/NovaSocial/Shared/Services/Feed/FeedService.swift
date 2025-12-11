@@ -310,13 +310,17 @@ struct FeedWithDetailsResponse {
 enum FeedMediaType: String, Codable {
     case image = "image"
     case video = "video"
+    case livePhoto = "live_photo"  // Live Photo (still image + short video)
     case mixed = "mixed"  // Post contains both images and videos
     
     /// Determine media type from URL extension
     static func from(url: String) -> FeedMediaType {
         let lowercased = url.lowercased()
-        if lowercased.contains(".mp4") || lowercased.contains(".mov") || 
-           lowercased.contains(".m4v") || lowercased.contains(".webm") {
+        if lowercased.contains(".mp4") || lowercased.contains(".m4v") || lowercased.contains(".webm") {
+            return .video
+        }
+        // MOV could be Live Photo video or regular video
+        if lowercased.contains(".mov") {
             return .video
         }
         return .image
@@ -336,6 +340,11 @@ enum FeedMediaType: String, Codable {
             return .video
         }
         return .image
+    }
+    
+    /// Check if this is a Live Photo type
+    var isLivePhoto: Bool {
+        self == .livePhoto
     }
 }
 
@@ -370,6 +379,11 @@ struct FeedPost: Identifiable, Codable {
         mediaType == .video || mediaType == .mixed
     }
     
+    /// Check if this post is a Live Photo
+    var isLivePhoto: Bool {
+        mediaType == .livePhoto
+    }
+    
     /// Get the first video URL if available
     var firstVideoUrl: URL? {
         guard hasVideo else { return nil }
@@ -381,6 +395,18 @@ struct FeedPost: Identifiable, Codable {
     var videoThumbnailUrl: URL? {
         guard hasVideo else { return nil }
         return thumbnailUrls.first.flatMap { URL(string: $0) }
+    }
+    
+    /// Get Live Photo image URL (first URL for live_photo type)
+    var livePhotoImageUrl: URL? {
+        guard isLivePhoto, let first = mediaUrls.first else { return nil }
+        return URL(string: first)
+    }
+    
+    /// Get Live Photo video URL (second URL for live_photo type)
+    var livePhotoVideoUrl: URL? {
+        guard isLivePhoto, mediaUrls.count >= 2 else { return nil }
+        return URL(string: mediaUrls[1])
     }
 
     /// Create FeedPost from raw backend response

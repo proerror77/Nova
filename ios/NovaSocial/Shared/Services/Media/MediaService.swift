@@ -736,12 +736,108 @@ class MediaService {
         #endif
     }
 
+    // MARK: - Live Photo Upload
+    
+    /// Upload a Live Photo (both still image and video components)
+    /// - Parameters:
+    ///   - imageData: Still image data (JPEG)
+    ///   - videoURL: URL to the video file (.mov)
+    /// - Returns: LivePhotoUploadResult with URLs for both components
+    func uploadLivePhoto(imageData: Data, videoURL: URL) async throws -> LivePhotoUploadResult {
+        // Upload still image first
+        let imageUrl = try await uploadImage(
+            imageData: imageData,
+            filename: "livephoto_\(UUID().uuidString).jpg"
+        )
+        
+        // Read video data
+        let videoData = try Data(contentsOf: videoURL)
+        
+        // Upload video component
+        let videoUrl = try await uploadLivePhotoVideo(
+            videoData: videoData,
+            filename: "livephoto_\(UUID().uuidString).mov"
+        )
+        
+        return LivePhotoUploadResult(
+            imageUrl: imageUrl,
+            videoUrl: videoUrl
+        )
+    }
+    
+    /// Upload Live Photo video component (MOV format)
+    private func uploadLivePhotoVideo(videoData: Data, filename: String) async throws -> String {
+        let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.uploadStart)")!
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 120  // 2 minutes for Live Photo video (typically small)
+
+        if let token = client.getAuthToken() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: video/quicktime\r\n\r\n".data(using: .utf8)!)  // MOV is video/quicktime
+        body.append(videoData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        request.httpBody = body
+
+        #if DEBUG
+        print("[Media] Starting Live Photo video upload: \(videoData.count / 1024) KB")
+        #endif
+
+        let (data, response) = try await uploadSession.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+
+        switch httpResponse.statusCode {
+        case 200...299:
+            let decoder = JSONDecoder()
+            let uploadResponse = try decoder.decode(UploadResponse.self, from: data)
+
+            if let mediaUrl = uploadResponse.mediaUrl, !mediaUrl.isEmpty {
+                return mediaUrl
+            } else if let presignedUrl = uploadResponse.presignedUrl, !presignedUrl.isEmpty {
+                try await uploadToPresignedUrl(presignedUrl, data: videoData, contentType: "video/quicktime")
+                return presignedUrl.components(separatedBy: "?").first ?? presignedUrl
+            } else if let uploadId = uploadResponse.uploadId, !uploadId.isEmpty {
+                return uploadId
+            }
+
+            throw APIError.serverError(statusCode: 200, message: "Upload response missing required fields")
+        case 401:
+            throw APIError.unauthorized
+        case 413:
+            throw APIError.serverError(statusCode: 413, message: "File too large")
+        default:
+            let message = String(data: data, encoding: .utf8) ?? "Upload failed"
+            throw APIError.serverError(statusCode: httpResponse.statusCode, message: message)
+        }
+    }
+
     // MARK: - Legacy Support
 
     /// Legacy method for backward compatibility
     func uploadImage(image: Data, userId: String, contentType: String = "image/jpeg") async throws -> String {
         return try await uploadImage(imageData: image, filename: "avatar_\(UUID().uuidString).jpg")
     }
+}
+
+// MARK: - Live Photo Upload Result
+
+/// Result of uploading a Live Photo
+struct LivePhotoUploadResult {
+    let imageUrl: String
+    let videoUrl: String
 }
 
 // MARK: - Media Response Models
