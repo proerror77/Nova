@@ -14,10 +14,11 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy workspace files from repo root
-COPY Cargo.toml Cargo.lock ./
-# Copy full backend workspace to satisfy workspace members
+# Copy backend workspace files (Cargo.toml, Cargo.lock, all services, libs, proto)
 COPY backend ./backend
+
+# Change to backend directory for workspace build
+WORKDIR /app/backend
 
 # Build trust-safety-service
 RUN cargo build --release -p trust-safety-service --bin trust-safety-service
@@ -38,7 +39,7 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 WORKDIR /app
 
 # Copy binary
-COPY --from=builder /app/target/release/trust-safety-service /app/trust-safety-service
+COPY --from=builder /app/backend/target/release/trust-safety-service /app/trust-safety-service
 
 # Copy model files
 COPY --from=builder /app/backend/trust-safety-service/models /app/models

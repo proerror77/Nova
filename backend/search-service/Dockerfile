@@ -12,10 +12,11 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy workspace files from repo root
-COPY Cargo.toml Cargo.lock ./
-# Copy full backend workspace to satisfy workspace members
+# Copy backend workspace files (Cargo.toml, Cargo.lock, all services, libs, proto)
 COPY backend ./backend
+
+# Change to backend directory for workspace build
+WORKDIR /app/backend
 
 RUN cargo build --release -p search-service --bin search-service
 
@@ -31,7 +32,7 @@ RUN apt-get update && apt-get install -y \
 RUN useradd -m -u 1001 -s /bin/bash appuser
 
 WORKDIR /app
-COPY --from=builder /app/target/release/search-service /app/search-service
+COPY --from=builder /app/backend/target/release/search-service /app/search-service
 
 # Adjust ownership and drop privileges
 RUN chown -R appuser:appuser /app

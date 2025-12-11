@@ -14,10 +14,11 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy workspace files from repo root
-COPY Cargo.toml Cargo.lock ./
-# Copy full backend workspace to satisfy workspace members
+# Copy backend workspace files (Cargo.toml, Cargo.lock, all services, libs, proto)
 COPY backend ./backend
+
+# Change to backend directory for workspace build
+WORKDIR /app/backend
 
 # Build media-service binaries (main server + thumbnail migrator)
 RUN cargo build --release -p media-service --bin media-service --bin thumb-migrate
@@ -38,8 +39,8 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 WORKDIR /app
 
 # Copy binaries
-COPY --from=builder /app/target/release/media-service /app/media-service
-COPY --from=builder /app/target/release/thumb-migrate /app/thumb-migrate
+COPY --from=builder /app/backend/target/release/media-service /app/media-service
+COPY --from=builder /app/backend/target/release/thumb-migrate /app/thumb-migrate
 
 # Adjust ownership
 RUN chown -R appuser:appuser /app
