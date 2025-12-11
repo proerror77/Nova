@@ -1,3 +1,7 @@
+# Service selectors patch for staging environment
+# Ensures Services only use 'app: <service-name>' selector to match pod labels
+# This fixes endpoint registration issues where pods only have 'app' label
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -21,7 +25,6 @@ metadata:
 spec:
   selector:
     app: content-service
-    tier: backend
 ---
 apiVersion: v1
 kind: Service
@@ -30,7 +33,6 @@ metadata:
 spec:
   selector:
     app: feed-service
-    tier: backend
 ---
 apiVersion: v1
 kind: Service
@@ -39,7 +41,7 @@ metadata:
 spec:
   selector:
     app: media-service
-    tier: backend
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -47,4 +49,91 @@ metadata:
 spec:
   selector:
     app: search-service
-    tier: backend
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics-service
+spec:
+  selector:
+    app: analytics-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: graph-service
+spec:
+  selector:
+    app: graph-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+spec:
+  selector:
+    app: notification-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ranking-service
+spec:
+  selector:
+    app: ranking-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: realtime-chat-service
+spec:
+  selector:
+    app: realtime-chat-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: social-service
+spec:
+  selector:
+    app: social-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: social-service-headless
+spec:
+  selector:
+    app: social-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trust-safety-service
+spec:
+  selector:
+    app: trust-safety-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: identity-service
+spec:
+  selector:
+    app: identity-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: identity-service-headless
+spec:
+  selector:
+    app: identity-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: graphql-gateway
+spec:
+  selector:
+    app: graphql-gateway
