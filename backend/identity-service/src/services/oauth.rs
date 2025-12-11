@@ -317,6 +317,64 @@ impl OAuthService {
             .map_err(|e| IdentityError::OAuthError(format!("Failed to sign Apple JWT: {}", e)))
     }
 
+    /// Handle Apple native sign-in (from iOS ASAuthorizationAppleIDCredential)
+    ///
+    /// This verifies the identity token and creates/links the user account.
+    /// Unlike the web flow, this uses the identity_token directly instead of exchanging a code.
+    pub async fn apple_native_sign_in(
+        &self,
+        identity_token: &str,
+        user_identifier: &str,
+        email: Option<&str>,
+        given_name: Option<&str>,
+        family_name: Option<&str>,
+    ) -> Result<OAuthCallbackResult> {
+        // 1. Decode and verify the identity token (JWT from Apple)
+        let id_token_claims: AppleIdTokenClaims = decode_jwt_claims(identity_token)?;
+
+        // 2. Verify the subject matches the user_identifier
+        if id_token_claims.sub != user_identifier {
+            return Err(IdentityError::OAuthError(
+                "User identifier mismatch".to_string(),
+            ));
+        }
+
+        // 3. Construct user info
+        // Note: email and name are only provided on first sign-in, so we use the cached values
+        let user_email = email
+            .map(|s| s.to_string())
+            .or(id_token_claims.email)
+            .unwrap_or_default();
+
+        let user_name = match (given_name, family_name) {
+            (Some(given), Some(family)) => Some(format!("{} {}", given, family)),
+            (Some(given), None) => Some(given.to_string()),
+            (None, Some(family)) => Some(family.to_string()),
+            (None, None) => None,
+        };
+
+        let oauth_user = OAuthUserInfo {
+            provider_user_id: user_identifier.to_string(),
+            email: user_email,
+            name: user_name,
+            picture: None,
+            access_token: identity_token.to_string(), // Store identity token as access token
+            refresh_token: None,
+            expires_at: None,
+        };
+
+        // 4. Create or link user
+        let (user, is_new_user) = self.upsert_user(oauth_user, OAuthProvider::Apple).await?;
+
+        info!(
+            user_id = %user.id,
+            is_new_user = is_new_user,
+            "Apple native sign-in completed"
+        );
+
+        Ok(OAuthCallbackResult { user, is_new_user })
+    }
+
     async fn upsert_user(
         &self,
         oauth_user: OAuthUserInfo,

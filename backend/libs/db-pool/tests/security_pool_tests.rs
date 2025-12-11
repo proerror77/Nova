@@ -2,8 +2,8 @@
 //!
 //! OWASP A04:2021 - Insecure Design (Resource Exhaustion)
 
+#[allow(unused_imports)]
 use db_pool::{create_pool, DbConfig};
-use sqlx::PgPool;
 
 // =============================================================================
 // P0-2: Pool Backpressure & Exhaustion Tests
@@ -53,7 +53,7 @@ async fn test_pool_config_rejects_oversized_env_override() {
     // Malicious or misconfigured env var should be clamped
     std::env::set_var("DB_MAX_CONNECTIONS", "999999");
 
-    let config = DbConfig::for_service("test-service");
+    let _config = DbConfig::for_service("test-service");
 
     // Should be clamped to reasonable max (e.g., 100)
     // TODO: Implement bounds checking in DbConfig::from_env()

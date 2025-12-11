@@ -6,10 +6,13 @@ import CryptoKit
 
 /// Handles OAuth authentication flows (Google, Apple)
 /// Communicates with backend identity-service for token exchange
-class OAuthService {
+class OAuthService: NSObject {
     static let shared = OAuthService()
 
     private let apiClient = APIClient.shared
+
+    // Apple Sign-In continuation for async/await
+    private var appleSignInContinuation: CheckedContinuation<ASAuthorization, Error>?
 
     // MARK: - OAuth Provider
 
@@ -151,6 +154,115 @@ class OAuthService {
         )
     }
 
+    // MARK: - Apple Sign-In (Native flow)
+
+    /// Perform Apple Sign-In using native AuthenticationServices
+    @MainActor
+    func signInWithApple() async throws -> OAuthCallbackResponse {
+        // 1. Request Apple authorization
+        let authorization = try await requestAppleAuthorization()
+
+        guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+            throw OAuthError.invalidCallback
+        }
+
+        // 2. Extract authorization code
+        guard let authorizationCodeData = appleIDCredential.authorizationCode,
+              let authorizationCode = String(data: authorizationCodeData, encoding: .utf8) else {
+            throw OAuthError.invalidCallback
+        }
+
+        // 3. Extract identity token for verification
+        guard let identityTokenData = appleIDCredential.identityToken,
+              let identityToken = String(data: identityTokenData, encoding: .utf8) else {
+            throw OAuthError.invalidCallback
+        }
+
+        // 4. Get user info (only available on first sign-in)
+        let fullName = appleIDCredential.fullName
+        let email = appleIDCredential.email
+
+        // 5. Exchange with backend
+        return try await completeAppleSignIn(
+            authorizationCode: authorizationCode,
+            identityToken: identityToken,
+            userIdentifier: appleIDCredential.user,
+            email: email,
+            fullName: fullName
+        )
+    }
+
+    /// Request Apple authorization using ASAuthorizationController
+    @MainActor
+    private func requestAppleAuthorization() async throws -> ASAuthorization {
+        try await withCheckedThrowingContinuation { continuation in
+            self.appleSignInContinuation = continuation
+
+            let appleIDProvider = ASAuthorizationAppleIDProvider()
+            let request = appleIDProvider.createRequest()
+            request.requestedScopes = [.fullName, .email]
+
+            let authorizationController = ASAuthorizationController(authorizationRequests: [request])
+            authorizationController.delegate = self
+            authorizationController.presentationContextProvider = self
+            authorizationController.performRequests()
+        }
+    }
+
+    /// Complete Apple Sign-In by exchanging credentials with backend
+    private func completeAppleSignIn(
+        authorizationCode: String,
+        identityToken: String,
+        userIdentifier: String,
+        email: String?,
+        fullName: PersonNameComponents?
+    ) async throws -> OAuthCallbackResponse {
+        let url = URL(string: "\(APIConfig.current.baseURL)/api/v2/auth/oauth/apple/native")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        var body: [String: Any] = [
+            "authorization_code": authorizationCode,
+            "identity_token": identityToken,
+            "user_identifier": userIdentifier
+        ]
+
+        if let email = email {
+            body["email"] = email
+        }
+
+        if let fullName = fullName {
+            var nameDict: [String: String] = [:]
+            if let givenName = fullName.givenName {
+                nameDict["given_name"] = givenName
+            }
+            if let familyName = fullName.familyName {
+                nameDict["family_name"] = familyName
+            }
+            if !nameDict.isEmpty {
+                body["full_name"] = nameDict
+            }
+        }
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw OAuthError.callbackFailed
+        }
+
+        if httpResponse.statusCode != 200 {
+            if let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
+                throw OAuthError.serverError(errorResponse.message ?? "Unknown error")
+            }
+            throw OAuthError.callbackFailed
+        }
+
+        return try JSONDecoder().decode(OAuthCallbackResponse.self, from: data)
+    }
+
     // MARK: - Web Authentication
 
     @MainActor
@@ -191,6 +303,51 @@ class OAuthService {
     private func getRedirectUri(for provider: OAuthProvider) -> String {
         // Use custom URL scheme for iOS callback
         return "icered://oauth/\(provider.rawValue)/callback"
+    }
+}
+
+// MARK: - ASAuthorizationControllerDelegate
+
+extension OAuthService: ASAuthorizationControllerDelegate {
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        appleSignInContinuation?.resume(returning: authorization)
+        appleSignInContinuation = nil
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        if let authError = error as? ASAuthorizationError {
+            switch authError.code {
+            case .canceled:
+                appleSignInContinuation?.resume(throwing: OAuthError.userCancelled)
+            case .failed:
+                appleSignInContinuation?.resume(throwing: OAuthError.webAuthFailed("Apple Sign-In failed"))
+            case .invalidResponse:
+                appleSignInContinuation?.resume(throwing: OAuthError.invalidCallback)
+            case .notHandled:
+                appleSignInContinuation?.resume(throwing: OAuthError.webAuthFailed("Apple Sign-In not handled"))
+            case .notInteractive:
+                appleSignInContinuation?.resume(throwing: OAuthError.webAuthFailed("Apple Sign-In requires interaction"))
+            case .unknown:
+                appleSignInContinuation?.resume(throwing: OAuthError.webAuthFailed("Unknown Apple Sign-In error"))
+            @unknown default:
+                appleSignInContinuation?.resume(throwing: OAuthError.webAuthFailed(error.localizedDescription))
+            }
+        } else {
+            appleSignInContinuation?.resume(throwing: OAuthError.webAuthFailed(error.localizedDescription))
+        }
+        appleSignInContinuation = nil
+    }
+}
+
+// MARK: - ASAuthorizationControllerPresentationContextProviding
+
+extension OAuthService: ASAuthorizationControllerPresentationContextProviding {
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = scene.windows.first else {
+            return UIWindow()
+        }
+        return window
     }
 }
 

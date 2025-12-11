@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		FORGOTPWD_BLD /* ForgotPasswordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FORGOTPWD_REF /* ForgotPasswordView.swift */; };
+		RESETPWD_BLD /* ResetPasswordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RESETPWD_REF /* ResetPasswordView.swift */; };
+		MYQRCODE_BLD /* MyQRCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MYQRCODE_REF /* MyQRCodeView.swift */; };
+		QRCODEGEN_BLD /* QRCodeGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = QRCODEGEN_REF /* QRCodeGenerator.swift */; };
 		03790B19E7A59D67154C1C74 /* UserProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6BA9F5A2B38332ACB7A915 /* UserProfileView.swift */; };
 		0DE576B3DF62C46814220CF8 /* RankingListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02124441331C326D27EC0A72 /* RankingListView.swift */; };
 		0F11FE719B8F4B76047CA6BA /* ThankYouModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13853E573F5F9E4DAA1DFBA3 /* ThankYouModal.swift */; };
@@ -138,6 +142,10 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		FORGOTPWD_REF /* ForgotPasswordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgotPasswordView.swift; sourceTree = "<group>"; };
+		RESETPWD_REF /* ResetPasswordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResetPasswordView.swift; sourceTree = "<group>"; };
+		MYQRCODE_REF /* MyQRCodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyQRCodeView.swift; sourceTree = "<group>"; };
+		QRCODEGEN_REF /* QRCodeGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeGenerator.swift; sourceTree = "<group>"; };
 		01DB89BF1F554C0AA4C14AAD /* GenerateImage01View.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerateImage01View.swift; sourceTree = "<group>"; };
 		02124441331C326D27EC0A72 /* RankingListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RankingListView.swift; sourceTree = "<group>"; };
 		04441F5DE9B28C6299B147DF /* FeedLayoutConfig.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedLayoutConfig.swift; sourceTree = "<group>"; };
@@ -272,6 +280,7 @@
 		0343A16899A0A367949D493E /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				MYQRCODE_REF /* MyQRCodeView.swift */,
 				F11B58E321CDB3D79E807514 /* QRCodeScannerView.swift */,
 			);
 			path = Views;
@@ -429,8 +438,17 @@
 				6A75990C5D6857D229305D91 /* Models */,
 				C652DC05CDF0383A5C43BEC2 /* Services */,
 				81964BD8B3D4CD6D68503851 /* UI */,
+				UTILITIES_GRP /* Utilities */,
 			);
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		UTILITIES_GRP /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				QRCODEGEN_REF /* QRCodeGenerator.swift */,
+			);
+			path = Utilities;
 			sourceTree = "<group>";
 		};
 		57CCFA98776A24F7C7D8EC69 /* Extensions */ = {
@@ -727,7 +745,9 @@
 			isa = PBXGroup;
 			children = (
 				CREATEACCOUNT002 /* CreateAccountView.swift */,
+				FORGOTPWD_REF /* ForgotPasswordView.swift */,
 				15BE5EA996149A16BBC12B09 /* LoginView.swift */,
+				RESETPWD_REF /* ResetPasswordView.swift */,
 				WELCOMEVIEW002 /* WelcomeView.swift */,
 			);
 			path = Views;
@@ -1121,6 +1141,10 @@
 				PROFILEPOSTCARD_BLD /* ProfilePostCard.swift in Sources */,
 				USERPOSTSMANAGER_BLD /* UserPostsManager.swift in Sources */,
 				F1EC16AC74BAE163D51D5ADF /* QRCodeScannerView.swift in Sources */,
+				MYQRCODE_BLD /* MyQRCodeView.swift in Sources */,
+				QRCODEGEN_BLD /* QRCodeGenerator.swift in Sources */,
+				FORGOTPWD_BLD /* ForgotPasswordView.swift in Sources */,
+				RESETPWD_BLD /* ResetPasswordView.swift in Sources */,
 				E7F8D1272D7C4673E8DAC22C /* ReportModal.swift in Sources */,
 				66303466366230322D393262622D346630392D613136312D /* NameSelectorModal.swift in Sources */,
 				28DB49853F12862488ED815C /* SearchModels.swift in Sources */,
@@ -1208,6 +1232,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ICERED.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = M49V64HVRF;
@@ -1236,6 +1261,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ICERED.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = M49V64HVRF;

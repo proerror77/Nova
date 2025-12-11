@@ -10,7 +10,7 @@
 //! - Load testing
 
 use db_pool::{acquire_with_metrics, create_pool, DbConfig};
-use sqlx::PgPool;
+use sqlx::{Connection, PgPool};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
@@ -104,7 +104,7 @@ async fn test_metrics_recording() {
     let pool = create_test_pool(5).await;
 
     // Acquire connection with metrics
-    let conn = acquire_with_metrics(&pool, "pool-test")
+    let mut conn = acquire_with_metrics(&pool, "pool-test")
         .await
         .expect("Should acquire connection");
 
@@ -125,7 +125,7 @@ async fn test_concurrent_access_safety() {
     for i in 0..50 {
         let pool_clone = Arc::clone(&pool);
         let handle = tokio::spawn(async move {
-            let conn = acquire_with_metrics(&pool_clone, "pool-test")
+            let mut conn = acquire_with_metrics(&pool_clone, "pool-test")
                 .await
                 .unwrap_or_else(|_| panic!("Task {} failed to acquire connection", i));
 
@@ -165,7 +165,7 @@ async fn test_load_stress_sequential() {
 
     // Execute 100 sequential queries
     for i in 0..100 {
-        let conn = acquire_with_metrics(&pool, "pool-test")
+        let mut conn = acquire_with_metrics(&pool, "pool-test")
             .await
             .unwrap_or_else(|_| panic!("Failed at iteration {}", i));
 
@@ -198,7 +198,7 @@ async fn test_load_stress_burst() {
         let handle = tokio::spawn(async move {
             let _permit = sem.acquire().await.expect("Failed to acquire semaphore");
 
-            let conn = acquire_with_metrics(&pool_clone, "pool-test")
+            let mut conn = acquire_with_metrics(&pool_clone, "pool-test")
                 .await
                 .unwrap_or_else(|_| panic!("Task {} failed", i));
 
@@ -279,7 +279,7 @@ async fn test_pool_recovery_after_exhaustion() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Should be able to acquire again
-    let conn4 = pool.acquire().await.expect("Should acquire after release");
+    let mut conn4 = pool.acquire().await.expect("Should acquire after release");
 
     assert!(conn4.ping().await.is_ok());
 

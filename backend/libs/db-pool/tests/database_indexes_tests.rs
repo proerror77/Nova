@@ -26,14 +26,14 @@ async fn test_index_creation_verification() {
     let pool = create_test_pool().await;
 
     // Verify engagement_events indexes
-    let indexes = sqlx::query!(
+    let indexes: Vec<(String,)> = sqlx::query_as(
         r#"
         SELECT indexname
         FROM pg_indexes
         WHERE tablename = 'engagement_events'
         AND indexname LIKE 'idx_engagement%'
         ORDER BY indexname
-        "#
+        "#,
     )
     .fetch_all(&pool)
     .await
@@ -55,7 +55,7 @@ async fn test_index_creation_verification() {
 
     for expected in expected_indexes {
         assert!(
-            indexes.iter().any(|row| row.indexname == expected),
+            indexes.iter().any(|row| row.0 == expected),
             "Missing index: {}",
             expected
         );
@@ -68,19 +68,19 @@ async fn test_trending_scores_primary_key() {
     // Test: trending_scores has composite primary key
     let pool = create_test_pool().await;
 
-    let constraint = sqlx::query!(
+    let constraint: (String, String) = sqlx::query_as(
         r#"
         SELECT constraint_name, constraint_type
         FROM information_schema.table_constraints
         WHERE table_name = 'trending_scores'
         AND constraint_type = 'PRIMARY KEY'
-        "#
+        "#,
     )
     .fetch_one(&pool)
     .await
     .expect("Failed to fetch primary key");
 
-    assert_eq!(constraint.constraint_name, "pk_trending_scores");
+    assert_eq!(constraint.0, "pk_trending_scores");
 }
 
 #[tokio::test]
@@ -92,16 +92,16 @@ async fn test_query_performance_with_indexes() {
     // Insert test data
     let content_id = uuid::Uuid::new_v4();
     for _ in 0..1000 {
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO engagement_events (id, content_id, user_id, event_type, created_at)
             VALUES ($1, $2, $3, $4, NOW())
             "#,
-            uuid::Uuid::new_v4(),
-            content_id,
-            uuid::Uuid::new_v4(),
-            "view"
         )
+        .bind(uuid::Uuid::new_v4())
+        .bind(content_id)
+        .bind(uuid::Uuid::new_v4())
+        .bind("view")
         .execute(&pool)
         .await
         .expect("Failed to insert test data");
@@ -109,15 +109,15 @@ async fn test_query_performance_with_indexes() {
 
     // Query with index
     let start = Instant::now();
-    let result = sqlx::query!(
+    let result: (Option<i64>,) = sqlx::query_as(
         r#"
         SELECT COUNT(*) as count
         FROM engagement_events
         WHERE content_id = $1
         AND created_at >= NOW() - INTERVAL '30 days'
         "#,
-        content_id
     )
+    .bind(content_id)
     .fetch_one(&pool)
     .await
     .expect("Query failed");
@@ -129,16 +129,14 @@ async fn test_query_performance_with_indexes() {
         "Query with index should be fast (<100ms), took {:?}",
         elapsed
     );
-    assert_eq!(result.count, Some(1000));
+    assert_eq!(result.0, Some(1000));
 
     // Cleanup
-    sqlx::query!(
-        "DELETE FROM engagement_events WHERE content_id = $1",
-        content_id
-    )
-    .execute(&pool)
-    .await
-    .expect("Failed to cleanup");
+    sqlx::query("DELETE FROM engagement_events WHERE content_id = $1")
+        .bind(content_id)
+        .execute(&pool)
+        .await
+        .expect("Failed to cleanup");
 }
 
 #[tokio::test]
@@ -150,7 +148,7 @@ async fn test_explain_plan_uses_index() {
     let content_id = uuid::Uuid::new_v4();
 
     // Get explain plan
-    let explain = sqlx::query_scalar::<_, String>(
+    let explain: String = sqlx::query_scalar(
         r#"
         EXPLAIN (FORMAT JSON)
         SELECT COUNT(*)
@@ -184,7 +182,7 @@ async fn test_index_size_reasonable() {
     // Test: Index sizes are within reasonable bounds
     let pool = create_test_pool().await;
 
-    let index_sizes = sqlx::query!(
+    let index_sizes: Vec<(String, String, i64)> = sqlx::query_as(
         r#"
         SELECT
             indexname,
@@ -193,7 +191,7 @@ async fn test_index_size_reasonable() {
         FROM pg_stat_user_indexes
         WHERE tablename IN ('engagement_events', 'trending_scores')
         ORDER BY pg_relation_size(indexrelid) DESC
-        "#
+        "#,
     )
     .fetch_all(&pool)
     .await
@@ -202,10 +200,10 @@ async fn test_index_size_reasonable() {
     for idx in index_sizes {
         // No single index should exceed 500MB (warning threshold)
         assert!(
-            idx.size_bytes < 500 * 1024 * 1024,
+            idx.2 < 500 * 1024 * 1024,
             "Index {} is too large: {}",
-            idx.indexname,
-            idx.size
+            idx.0,
+            idx.1
         );
     }
 }
@@ -229,7 +227,7 @@ async fn test_concurrent_index_creation() {
     assert!(result.is_ok(), "Concurrent index creation should succeed");
 
     // Verify index exists
-    let exists = sqlx::query_scalar::<_, bool>(
+    let exists: bool = sqlx::query_scalar(
         r#"
         SELECT EXISTS (
             SELECT 1 FROM pg_indexes
@@ -268,7 +266,7 @@ async fn test_rollback_capability() {
     .expect("Failed to create test index");
 
     // Verify it exists
-    let exists_before = sqlx::query_scalar::<_, bool>(
+    let exists_before: bool = sqlx::query_scalar(
         r#"
         SELECT EXISTS (
             SELECT 1 FROM pg_indexes
@@ -288,7 +286,7 @@ async fn test_rollback_capability() {
         .expect("Failed to drop index");
 
     // Verify it's gone
-    let exists_after = sqlx::query_scalar::<_, bool>(
+    let exists_after: bool = sqlx::query_scalar(
         r#"
         SELECT EXISTS (
             SELECT 1 FROM pg_indexes
@@ -308,7 +306,7 @@ async fn test_posts_user_created_index() {
     // Test: posts table has user_id + created_at index
     let pool = create_test_pool().await;
 
-    let exists = sqlx::query_scalar::<_, bool>(
+    let exists: bool = sqlx::query_scalar(
         r#"
         SELECT EXISTS (
             SELECT 1 FROM pg_indexes
@@ -330,7 +328,7 @@ async fn test_comments_post_created_index() {
     // Test: comments table has post_id + created_at index
     let pool = create_test_pool().await;
 
-    let exists = sqlx::query_scalar::<_, bool>(
+    let exists: bool = sqlx::query_scalar(
         r#"
         SELECT EXISTS (
             SELECT 1 FROM pg_indexes
@@ -352,7 +350,7 @@ async fn test_partial_index_conditions() {
     // Test: Partial indexes have correct WHERE clauses
     let pool = create_test_pool().await;
 
-    let index_def = sqlx::query_scalar::<_, String>(
+    let index_def: String = sqlx::query_scalar(
         r#"
         SELECT pg_get_indexdef(indexrelid)
         FROM pg_stat_user_indexes
@@ -378,7 +376,7 @@ async fn test_index_performance_trending_query() {
     let pool = create_test_pool().await;
 
     let start = Instant::now();
-    let result = sqlx::query!(
+    let result: Vec<(String, f64, i32)> = sqlx::query_as(
         r#"
         SELECT content_id, score, rank
         FROM trending_scores
@@ -386,7 +384,7 @@ async fn test_index_performance_trending_query() {
         AND category = 'technology'
         ORDER BY score DESC
         LIMIT 100
-        "#
+        "#,
     )
     .fetch_all(&pool)
     .await
@@ -401,9 +399,9 @@ async fn test_index_performance_trending_query() {
     );
 
     // Should return results in descending score order
-    for i in 0..result.len() - 1 {
+    for i in 0..result.len().saturating_sub(1) {
         assert!(
-            result[i].score >= result[i + 1].score,
+            result[i].1 >= result[i + 1].1,
             "Results should be ordered by score DESC"
         );
     }
@@ -422,19 +420,19 @@ async fn test_analyze_statistics_updated() {
         .expect("ANALYZE failed");
 
     // Verify statistics exist
-    let stats = sqlx::query!(
+    let stats: (Option<i64>, Option<i64>, Option<chrono::NaiveDateTime>) = sqlx::query_as(
         r#"
         SELECT n_live_tup, n_dead_tup, last_analyze
         FROM pg_stat_user_tables
         WHERE relname = 'engagement_events'
-        "#
+        "#,
     )
     .fetch_one(&pool)
     .await
     .expect("Failed to fetch statistics");
 
     assert!(
-        stats.last_analyze.is_some(),
+        stats.2.is_some(),
         "Table should have analyze timestamp"
     );
 }

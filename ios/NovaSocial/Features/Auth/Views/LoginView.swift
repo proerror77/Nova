@@ -1,4 +1,5 @@
 import SwiftUI
+import AuthenticationServices
 
 // MARK: - Login View
 
@@ -11,6 +12,7 @@ struct LoginView: View {
     @State private var password = ""
     @State private var isLoading = false
     @State private var isGoogleLoading = false
+    @State private var isAppleLoading = false
     @State private var errorMessage: String?
     @State private var showPassword = false
     @State private var showForgotPassword = false
@@ -116,6 +118,12 @@ struct LoginView: View {
 
                                 // Create Account Button
                                 createAccountButton
+
+                                // Divider
+                                orDivider
+
+                                // Social Sign-In Buttons
+                                socialSignInButtons
                             }
                             .padding(.horizontal, 16)
                         }
@@ -279,6 +287,89 @@ struct LoginView: View {
         .accessibilityIdentifier("createAccountButton")
     }
 
+    // MARK: - Or Divider
+    private var orDivider: some View {
+        HStack(spacing: 16) {
+            Rectangle()
+                .fill(Color.white.opacity(0.3))
+                .frame(height: 0.5)
+
+            Text("OR")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(Color.white.opacity(0.6))
+
+            Rectangle()
+                .fill(Color.white.opacity(0.3))
+                .frame(height: 0.5)
+        }
+        .padding(.vertical, 8)
+    }
+
+    // MARK: - Social Sign-In Buttons
+    private var socialSignInButtons: some View {
+        VStack(spacing: 12) {
+            // Apple Sign-In Button
+            Button(action: {
+                Task {
+                    await handleAppleSignIn()
+                }
+            }) {
+                HStack(spacing: 12) {
+                    if isAppleLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "apple.logo")
+                            .font(.system(size: 18, weight: .medium))
+                    }
+                    Text("Sign in with Apple")
+                        .font(.system(size: 16, weight: .medium))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 46)
+                .background(Color.black)
+                .cornerRadius(31.50)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 31.50)
+                        .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
+                )
+            }
+            .disabled(isLoading || isGoogleLoading || isAppleLoading)
+            .accessibilityIdentifier("appleSignInButton")
+
+            // Google Sign-In Button
+            Button(action: {
+                Task {
+                    await handleGoogleSignIn()
+                }
+            }) {
+                HStack(spacing: 12) {
+                    if isGoogleLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                            .scaleEffect(0.8)
+                    } else {
+                        Image("google-logo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 18, height: 18)
+                    }
+                    Text("Sign in with Google")
+                        .font(.system(size: 16, weight: .medium))
+                }
+                .foregroundColor(.black)
+                .frame(maxWidth: .infinity)
+                .frame(height: 46)
+                .background(Color.white)
+                .cornerRadius(31.50)
+            }
+            .disabled(isLoading || isGoogleLoading || isAppleLoading)
+            .accessibilityIdentifier("googleSignInButton")
+        }
+    }
+
     // MARK: - Actions
 
     private func handleLogin() async {
@@ -328,6 +419,26 @@ struct LoginView: View {
         }
 
         isGoogleLoading = false
+    }
+
+    private func handleAppleSignIn() async {
+        isAppleLoading = true
+        errorMessage = nil
+
+        do {
+            let _ = try await authManager.loginWithApple()
+            // Success - AuthenticationManager will update isAuthenticated
+        } catch {
+            // Check if user cancelled
+            let errorDesc = error.localizedDescription.lowercased()
+            if errorDesc.contains("cancel") {
+                // User cancelled, no error message needed
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        }
+
+        isAppleLoading = false
     }
 
     // MARK: - Validation

@@ -1309,6 +1309,48 @@ impl AuthService for IdentityServiceServer {
         }))
     }
 
+    /// Apple native sign-in (for iOS apps using ASAuthorizationAppleIDCredential)
+    ///
+    /// This handles the native Apple Sign-In flow where iOS provides the identity token directly.
+    async fn apple_native_sign_in(
+        &self,
+        request: Request<AppleNativeSignInRequest>,
+    ) -> std::result::Result<Response<AppleNativeSignInResponse>, Status> {
+        let req = request.into_inner();
+
+        let result = self
+            .oauth
+            .apple_native_sign_in(
+                &req.identity_token,
+                &req.user_identifier,
+                req.email.as_deref(),
+                req.given_name.as_deref(),
+                req.family_name.as_deref(),
+            )
+            .await
+            .map_err(to_status)?;
+
+        // Generate token pair for the user
+        let tokens = generate_token_pair(result.user.id, &result.user.email, &result.user.username)
+            .map_err(anyhow_to_status)?;
+
+        info!(
+            user_id = %result.user.id,
+            is_new_user = result.is_new_user,
+            "Apple native sign-in completed"
+        );
+
+        Ok(Response::new(AppleNativeSignInResponse {
+            user_id: result.user.id.to_string(),
+            token: tokens.access_token,
+            refresh_token: tokens.refresh_token,
+            expires_in: tokens.expires_in,
+            username: result.user.username,
+            email: result.user.email,
+            is_new_user: result.is_new_user,
+        }))
+    }
+
     // ========== Password Reset ==========
 
     /// Request password reset email

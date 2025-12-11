@@ -582,6 +582,27 @@ message UnlinkOAuthProviderResponse {
   optional string error = 2;        // Error message if unlink failed
 }
 
+// Apple Sign-In native flow (iOS native authentication)
+message AppleNativeSignInRequest {
+  string authorization_code = 1;    // Authorization code from ASAuthorizationAppleIDCredential
+  string identity_token = 2;        // JWT identity token from Apple
+  string user_identifier = 3;       // Apple user identifier (stable across devices)
+  optional string email = 4;        // Email (only provided on first sign-in)
+  optional string given_name = 5;   // First name (only provided on first sign-in)
+  optional string family_name = 6;  // Last name (only provided on first sign-in)
+  optional string invite_code = 7;  // Invite code for new user registration
+}
+
+message AppleNativeSignInResponse {
+  string user_id = 1;               // UUID of authenticated user
+  string token = 2;                 // JWT access token
+  string refresh_token = 3;         // Refresh token
+  int64 expires_in = 4;             // Seconds until access_token expires
+  string username = 5;              // Username
+  string email = 6;                 // Email address
+  bool is_new_user = 7;             // True if this created a new account
+}
+
 // ============================================================================
 // Password Reset
 // ============================================================================
@@ -835,6 +856,14 @@ service AuthService {
   rpc UnlinkOAuthProvider(UnlinkOAuthProviderRequest) returns (UnlinkOAuthProviderResponse) {
     option (google.api.http) = {
       delete: "/api/v2/auth/users/{user_id}/oauth/{provider}"
+    };
+  }
+
+  // Apple Sign-In native flow (for iOS apps using ASAuthorizationAppleIDCredential)
+  rpc AppleNativeSignIn(AppleNativeSignInRequest) returns (AppleNativeSignInResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/oauth/apple/native"
+      body: "*"
     };
   }
 

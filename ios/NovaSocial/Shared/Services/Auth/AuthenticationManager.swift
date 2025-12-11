@@ -228,6 +228,55 @@ class AuthenticationManager: ObservableObject {
         return user
     }
 
+    /// Login with Apple Sign-In
+    func loginWithApple() async throws -> UserProfile {
+        let oauthService = OAuthService.shared
+
+        // Perform Apple Sign-In flow (native)
+        let response = try await oauthService.signInWithApple()
+
+        // Create user profile from response
+        let user: UserProfile
+        if let responseUser = response.user {
+            user = responseUser
+        } else {
+            // Minimal profile if not provided
+            user = UserProfile(
+                id: response.userId,
+                username: "user_\(response.userId.prefix(8))",
+                email: nil,
+                displayName: nil,
+                bio: nil,
+                avatarUrl: nil,
+                coverUrl: nil,
+                website: nil,
+                location: nil,
+                isVerified: false,
+                isPrivate: false,
+                isBanned: false,
+                followerCount: 0,
+                followingCount: 0,
+                postCount: 0,
+                createdAt: nil,
+                updatedAt: nil,
+                deletedAt: nil,
+                firstName: nil,
+                lastName: nil,
+                dateOfBirth: nil,
+                gender: nil
+            )
+        }
+
+        // Save authentication
+        await saveAuth(token: response.token, refreshToken: response.refreshToken, user: user)
+
+        #if DEBUG
+        print("[Auth] Apple Sign-In successful, isNewUser: \(response.isNewUser)")
+        #endif
+
+        return user
+    }
+
     // MARK: - Logout
 
     /// Logout current user
