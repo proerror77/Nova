@@ -15,8 +15,9 @@ use crate::rest_api::search::{
 };
 use crate::rest_api::settings::{get_settings, update_settings};
 use crate::rest_api::social_likes::{
-    check_liked, create_comment, create_like, create_share, delete_comment, delete_comment_v2,
-    delete_like, delete_like_legacy, get_comments, get_likes, get_share_count,
+    batch_check_bookmarked, check_bookmarked, check_liked, create_bookmark, create_comment,
+    create_like, create_share, delete_bookmark, delete_comment, delete_comment_v2, delete_like,
+    delete_like_legacy, get_bookmarks, get_comments, get_likes, get_share_count,
     get_share_count_legacy,
 };
 use actix_web::{middleware::Logger, web, App, HttpServer};
@@ -457,6 +458,12 @@ async fn main() -> std::io::Result<()> {
             .service(create_share)
             .service(get_share_count)
             .service(get_share_count_legacy)
+            // ✅ Bookmark API
+            .service(create_bookmark)
+            .service(delete_bookmark)
+            .service(get_bookmarks)
+            .service(check_bookmarked)
+            .service(batch_check_bookmarked)
             // ✅ Device Management API
             .route("/api/v2/devices", web::get().to(rest_api::get_devices))
             .route(

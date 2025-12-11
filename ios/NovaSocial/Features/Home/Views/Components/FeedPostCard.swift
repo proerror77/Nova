@@ -78,17 +78,16 @@ struct FeedPostCard: View {
 
                 // Interaction Buttons
                 HStack(spacing: 20) {
-                    // Like button
+                    // Like button - shows filled heart when liked
                     Button(action: onLike) {
                         HStack(spacing: 6) {
-                            Image("card-heart-icon")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 20, height: 20)
+                            Image(systemName: post.isLiked ? "heart.fill" : "heart")
+                                .font(.system(size: 18))
+                                .foregroundColor(post.isLiked ? Color(red: 0.81, green: 0.13, blue: 0.25) : Color(red: 0.38, green: 0.37, blue: 0.37))
                             Text("\(post.likeCount)")
                                 .font(.system(size: 10))
                                 .lineSpacing(20)
-                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                .foregroundColor(post.isLiked ? Color(red: 0.81, green: 0.13, blue: 0.25) : Color(red: 0.38, green: 0.37, blue: 0.37))
                         }
                     }
                     .accessibilityLabel("Like, \(post.likeCount) likes")
@@ -96,10 +95,9 @@ struct FeedPostCard: View {
                     // Comment button
                     Button(action: onComment) {
                         HStack(spacing: 6) {
-                            Image("card-comment-icon")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 20, height: 20)
+                            Image(systemName: "bubble.right")
+                                .font(.system(size: 18))
+                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
                             Text("\(post.commentCount)")
                                 .font(.system(size: 10))
                                 .lineSpacing(20)
@@ -108,17 +106,16 @@ struct FeedPostCard: View {
                     }
                     .accessibilityLabel("Comments, \(post.commentCount)")
 
-                    // Bookmark/Star button
+                    // Bookmark button - shows filled bookmark when bookmarked
                     Button(action: onBookmark) {
                         HStack(spacing: 6) {
-                            Image("card-star-icon")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 20, height: 20)
+                            Image(systemName: post.isBookmarked ? "bookmark.fill" : "bookmark")
+                                .font(.system(size: 18))
+                                .foregroundColor(post.isBookmarked ? Color(red: 0.81, green: 0.13, blue: 0.25) : Color(red: 0.38, green: 0.37, blue: 0.37))
                             Text("\(post.shareCount)")
                                 .font(.system(size: 10))
                                 .lineSpacing(20)
-                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                .foregroundColor(post.isBookmarked ? Color(red: 0.81, green: 0.13, blue: 0.25) : Color(red: 0.38, green: 0.37, blue: 0.37))
                         }
                     }
                     .accessibilityLabel("Bookmark")

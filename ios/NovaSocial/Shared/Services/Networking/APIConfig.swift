@@ -91,6 +91,12 @@ struct APIConfig {
         static let createShare = "/api/v2/social/share"
         static func getShareCount(_ postId: String) -> String { "/api/v2/social/shares/count/\(postId)" }
         static let batchGetStats = "/api/v2/social/stats/batch"
+
+        // Bookmark endpoints
+        static let createBookmark = "/api/v2/social/bookmark"
+        static func deleteBookmark(_ postId: String) -> String { "/api/v2/social/bookmark/\(postId)" }
+        static let getBookmarks = "/api/v2/social/bookmarks"
+        static func checkBookmarked(_ postId: String) -> String { "/api/v2/social/check-bookmarked/\(postId)" }
     }
 
     struct Content {

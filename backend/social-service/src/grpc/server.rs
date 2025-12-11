@@ -1,4 +1,4 @@
-use crate::repository::{CommentRepository, LikeRepository, ShareRepository};
+use crate::repository::{BookmarkRepository, CommentRepository, LikeRepository, ShareRepository};
 use crate::services::CounterService;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -17,6 +17,7 @@ pub struct SocialServiceImpl {
     like_repo: LikeRepository,
     comment_repo: CommentRepository,
     share_repo: ShareRepository,
+    bookmark_repo: BookmarkRepository,
     counter_service: CounterService,
 }
 
@@ -25,12 +26,14 @@ impl SocialServiceImpl {
         like_repo: LikeRepository,
         comment_repo: CommentRepository,
         share_repo: ShareRepository,
+        bookmark_repo: BookmarkRepository,
         counter_service: CounterService,
     ) -> Self {
         Self {
             like_repo,
             comment_repo,
             share_repo,
+            bookmark_repo,
             counter_service,
         }
     }
@@ -518,5 +521,147 @@ impl SocialService for SocialServiceImpl {
         }
 
         Ok(Response::new(BatchGetPostStatsResponse { stats }))
+    }
+
+    // ========== Bookmark Operations ==========
+
+    async fn create_bookmark(
+        &self,
+        request: Request<CreateBookmarkRequest>,
+    ) -> Result<Response<CreateBookmarkResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+        let post_id = Uuid::parse_str(&req.post_id)
+            .map_err(|_| Status::invalid_argument("Invalid post_id"))?;
+
+        let bookmark = self
+            .bookmark_repo
+            .create_bookmark(user_id, post_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to create bookmark: {}", e)))?;
+
+        let proto_bookmark = Bookmark {
+            id: bookmark.id.to_string(),
+            user_id: bookmark.user_id.to_string(),
+            post_id: bookmark.post_id.to_string(),
+            collection_id: bookmark.collection_id.map(|id| id.to_string()).unwrap_or_default(),
+            bookmarked_at: Some(prost_types::Timestamp {
+                seconds: bookmark.bookmarked_at.timestamp(),
+                nanos: bookmark.bookmarked_at.timestamp_subsec_nanos() as i32,
+            }),
+        };
+
+        Ok(Response::new(CreateBookmarkResponse {
+            success: true,
+            bookmark: Some(proto_bookmark),
+        }))
+    }
+
+    async fn delete_bookmark(
+        &self,
+        request: Request<DeleteBookmarkRequest>,
+    ) -> Result<Response<DeleteBookmarkResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+        let post_id = Uuid::parse_str(&req.post_id)
+            .map_err(|_| Status::invalid_argument("Invalid post_id"))?;
+
+        self.bookmark_repo
+            .delete_bookmark(user_id, post_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to delete bookmark: {}", e)))?;
+
+        Ok(Response::new(DeleteBookmarkResponse { success: true }))
+    }
+
+    async fn get_bookmarks(
+        &self,
+        request: Request<GetBookmarksRequest>,
+    ) -> Result<Response<GetBookmarksResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+        let limit = if req.limit > 0 && req.limit <= 100 {
+            req.limit
+        } else {
+            50
+        };
+        let offset = req.offset.max(0);
+
+        let post_ids = self
+            .bookmark_repo
+            .get_bookmarked_post_ids(user_id, limit, offset)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get bookmarks: {}", e)))?;
+
+        let total_count = self
+            .bookmark_repo
+            .get_user_bookmark_count(user_id)
+            .await
+            .unwrap_or(0) as i32;
+
+        let post_id_strings: Vec<String> = post_ids.into_iter().map(|id| id.to_string()).collect();
+
+        Ok(Response::new(GetBookmarksResponse {
+            post_ids: post_id_strings,
+            total_count,
+        }))
+    }
+
+    async fn check_user_bookmarked(
+        &self,
+        request: Request<CheckUserBookmarkedRequest>,
+    ) -> Result<Response<CheckUserBookmarkedResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+        let post_id = Uuid::parse_str(&req.post_id)
+            .map_err(|_| Status::invalid_argument("Invalid post_id"))?;
+
+        let bookmarked = self
+            .bookmark_repo
+            .check_user_bookmarked(user_id, post_id)
+            .await
+            .unwrap_or(false);
+
+        Ok(Response::new(CheckUserBookmarkedResponse { bookmarked }))
+    }
+
+    async fn batch_check_bookmarked(
+        &self,
+        request: Request<BatchCheckBookmarkedRequest>,
+    ) -> Result<Response<BatchCheckBookmarkedResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+
+        if req.post_ids.len() > 100 {
+            return Err(Status::invalid_argument(
+                "Maximum 100 post IDs allowed in batch",
+            ));
+        }
+
+        let post_ids: Result<Vec<Uuid>, _> = req
+            .post_ids
+            .iter()
+            .map(|id| Uuid::parse_str(id))
+            .collect();
+
+        let post_ids = post_ids.map_err(|_| Status::invalid_argument("Invalid post_id in batch"))?;
+
+        let bookmarked_ids = self
+            .bookmark_repo
+            .batch_check_bookmarked(user_id, &post_ids)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to batch check bookmarks: {}", e)))?;
+
+        let bookmarked_post_ids: Vec<String> =
+            bookmarked_ids.into_iter().map(|id| id.to_string()).collect();
+
+        Ok(Response::new(BatchCheckBookmarkedResponse {
+            bookmarked_post_ids,
+        }))
     }
 }

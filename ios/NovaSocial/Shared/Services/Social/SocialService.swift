@@ -190,6 +190,69 @@ class SocialService {
         return response.stats
     }
 
+    // MARK: - Bookmarks
+
+    /// Create a bookmark for a post
+    func createBookmark(postId: String, userId: String) async throws {
+        struct Request: Codable {
+            let post_id: String
+            let user_id: String
+        }
+
+        struct Response: Codable {
+            let success: Bool
+        }
+
+        let request = Request(post_id: postId, user_id: userId)
+        let _: Response = try await client.request(
+            endpoint: APIConfig.Social.createBookmark,
+            body: request
+        )
+    }
+
+    /// Delete a bookmark from a post
+    func deleteBookmark(postId: String) async throws {
+        struct Response: Codable {
+            let success: Bool
+        }
+
+        let _: Response = try await client.request(
+            endpoint: APIConfig.Social.deleteBookmark(postId),
+            method: "DELETE"
+        )
+    }
+
+    /// Get user's bookmarked posts
+    func getBookmarks(limit: Int = 20, offset: Int = 0) async throws -> (postIds: [String], totalCount: Int) {
+        struct Response: Codable {
+            let post_ids: [String]
+            let total_count: Int
+        }
+
+        let response: Response = try await client.get(
+            endpoint: APIConfig.Social.getBookmarks,
+            queryParams: [
+                "limit": String(limit),
+                "offset": String(offset)
+            ]
+        )
+
+        return (response.post_ids, response.total_count)
+    }
+
+    /// Check if user has bookmarked a post
+    func checkBookmarked(postId: String) async throws -> Bool {
+        struct Response: Codable {
+            let bookmarked: Bool
+        }
+
+        let response: Response = try await client.get(
+            endpoint: APIConfig.Social.checkBookmarked(postId)
+        )
+
+        return response.bookmarked
+    }
+
     // MARK: - Polls (投票榜单)
 
     /// Get trending polls for carousel display

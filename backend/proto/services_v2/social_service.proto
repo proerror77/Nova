@@ -100,6 +100,35 @@ service SocialService {
     };
   }
 
+  // Bookmarks
+  rpc CreateBookmark(CreateBookmarkRequest) returns (CreateBookmarkResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/social/bookmark"
+      body: "*"
+    };
+  }
+  rpc DeleteBookmark(DeleteBookmarkRequest) returns (DeleteBookmarkResponse) {
+    option (google.api.http) = {
+      delete: "/api/v2/social/bookmark/{post_id}"
+    };
+  }
+  rpc GetBookmarks(GetBookmarksRequest) returns (GetBookmarksResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/bookmarks"
+    };
+  }
+  rpc CheckUserBookmarked(CheckUserBookmarkedRequest) returns (CheckUserBookmarkedResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/check-bookmarked/{post_id}"
+    };
+  }
+  rpc BatchCheckBookmarked(BatchCheckBookmarkedRequest) returns (BatchCheckBookmarkedResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/social/bookmarks/batch-check"
+      body: "*"
+    };
+  }
+
   // Feed
   rpc GetUserFeed(GetUserFeedRequest) returns (GetUserFeedResponse) {
     option (google.api.http) = {
@@ -230,6 +259,56 @@ message CreateShareRequest {
 message CreateShareResponse { bool success = 1; }
 message GetShareCountRequest { string post_id = 1; }
 message GetShareCountResponse { int64 count = 1; }
+
+// Bookmarks
+message CreateBookmarkRequest {
+  string user_id = 1;
+  string post_id = 2;
+  string collection_id = 3;  // optional: organize into a collection
+}
+message CreateBookmarkResponse {
+  bool success = 1;
+  Bookmark bookmark = 2;
+}
+message DeleteBookmarkRequest {
+  string user_id = 1;
+  string post_id = 2;
+}
+message DeleteBookmarkResponse {
+  bool success = 1;
+}
+message GetBookmarksRequest {
+  string user_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+  string collection_id = 4;  // optional: filter by collection
+}
+message GetBookmarksResponse {
+  repeated string post_ids = 1;
+  int32 total_count = 2;
+}
+message CheckUserBookmarkedRequest {
+  string user_id = 1;
+  string post_id = 2;
+}
+message CheckUserBookmarkedResponse {
+  bool bookmarked = 1;
+}
+message BatchCheckBookmarkedRequest {
+  string user_id = 1;
+  repeated string post_ids = 2;
+}
+message BatchCheckBookmarkedResponse {
+  repeated string bookmarked_post_ids = 1;
+}
+
+message Bookmark {
+  string id = 1;
+  string user_id = 2;
+  string post_id = 3;
+  string collection_id = 4;
+  google.protobuf.Timestamp bookmarked_at = 5;
+}
 
 // Feed
 message GetUserFeedRequest { string user_id = 1; int32 limit = 2; string cursor = 3; }

@@ -2,9 +2,10 @@ use actix_web::{delete, get, post, web, HttpMessage, HttpRequest, HttpResponse};
 use tracing::error;
 
 use crate::clients::proto::social::{
-    CheckUserLikedRequest, CreateCommentRequest, CreateLikeRequest, CreateShareRequest,
-    DeleteCommentRequest, DeleteLikeRequest, GetCommentsRequest, GetLikesRequest,
-    GetShareCountRequest,
+    BatchCheckBookmarkedRequest, CheckUserBookmarkedRequest, CheckUserLikedRequest,
+    CreateBookmarkRequest, CreateCommentRequest, CreateLikeRequest, CreateShareRequest,
+    DeleteBookmarkRequest, DeleteCommentRequest, DeleteLikeRequest, GetBookmarksRequest,
+    GetCommentsRequest, GetLikesRequest, GetShareCountRequest,
 };
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
@@ -391,4 +392,187 @@ pub struct ShareBody {
 #[derive(Debug, Deserialize)]
 pub struct ShareCountQuery {
     pub post_id: String,
+}
+
+// ============================================================================
+// BOOKMARK ENDPOINTS
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+pub struct BookmarkBody {
+    pub post_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BookmarksQuery {
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
+}
+
+/// Create a bookmark for a post
+#[post("/api/v2/social/bookmark")]
+pub async fn create_bookmark(
+    http_req: HttpRequest,
+    clients: web::Data<ServiceClients>,
+    body: web::Json<BookmarkBody>,
+) -> HttpResponse {
+    let user_id = match http_req.extensions().get::<AuthenticatedUser>().copied() {
+        Some(AuthenticatedUser(id)) => id.to_string(),
+        None => return HttpResponse::Unauthorized().finish(),
+    };
+
+    let req = CreateBookmarkRequest {
+        user_id,
+        post_id: body.post_id.clone(),
+        collection_id: String::new(), // Default: no collection
+    };
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.create_bookmark(req).await }
+        })
+        .await
+    {
+        Ok(resp) => HttpResponse::Ok().json(serde_json::json!({
+            "success": resp.success,
+            "bookmark": resp.bookmark
+        })),
+        Err(e) => {
+            error!("create_bookmark failed: {}", e);
+            HttpResponse::ServiceUnavailable().finish()
+        }
+    }
+}
+
+/// Delete a bookmark from a post
+#[delete("/api/v2/social/bookmark/{post_id}")]
+pub async fn delete_bookmark(
+    http_req: HttpRequest,
+    clients: web::Data<ServiceClients>,
+    path: web::Path<String>,
+) -> HttpResponse {
+    let user_id = match http_req.extensions().get::<AuthenticatedUser>().copied() {
+        Some(AuthenticatedUser(id)) => id.to_string(),
+        None => return HttpResponse::Unauthorized().finish(),
+    };
+
+    let post_id = path.into_inner();
+    let req = DeleteBookmarkRequest { user_id, post_id };
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.delete_bookmark(req).await }
+        })
+        .await
+    {
+        Ok(resp) => HttpResponse::Ok().json(serde_json::json!({"success": resp.success})),
+        Err(e) => {
+            error!("delete_bookmark failed: {}", e);
+            HttpResponse::ServiceUnavailable().finish()
+        }
+    }
+}
+
+/// Get user's bookmarked posts
+#[get("/api/v2/social/bookmarks")]
+pub async fn get_bookmarks(
+    http_req: HttpRequest,
+    clients: web::Data<ServiceClients>,
+    query: web::Query<BookmarksQuery>,
+) -> HttpResponse {
+    let user_id = match http_req.extensions().get::<AuthenticatedUser>().copied() {
+        Some(AuthenticatedUser(id)) => id.to_string(),
+        None => return HttpResponse::Unauthorized().finish(),
+    };
+
+    let q = query.into_inner();
+    let req = GetBookmarksRequest {
+        user_id,
+        limit: q.limit.unwrap_or(50) as i32,
+        offset: q.offset.unwrap_or(0) as i32,
+        collection_id: String::new(), // Default: all bookmarks
+    };
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.get_bookmarks(req).await }
+        })
+        .await
+    {
+        Ok(resp) => HttpResponse::Ok().json(serde_json::json!({
+            "post_ids": resp.post_ids,
+            "total_count": resp.total_count
+        })),
+        Err(e) => {
+            error!("get_bookmarks failed: {}", e);
+            HttpResponse::ServiceUnavailable().finish()
+        }
+    }
+}
+
+/// Check if user has bookmarked a post
+#[get("/api/v2/social/check-bookmarked/{post_id}")]
+pub async fn check_bookmarked(
+    http_req: HttpRequest,
+    clients: web::Data<ServiceClients>,
+    path: web::Path<String>,
+) -> HttpResponse {
+    let user_id = match http_req.extensions().get::<AuthenticatedUser>().copied() {
+        Some(AuthenticatedUser(id)) => id.to_string(),
+        None => return HttpResponse::Unauthorized().finish(),
+    };
+
+    let post_id = path.into_inner();
+    let req = CheckUserBookmarkedRequest { user_id, post_id };
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.check_user_bookmarked(req).await }
+        })
+        .await
+    {
+        Ok(resp) => HttpResponse::Ok().json(serde_json::json!({"bookmarked": resp.bookmarked})),
+        Err(e) => {
+            error!("check_bookmarked failed: {}", e);
+            HttpResponse::ServiceUnavailable().finish()
+        }
+    }
+}
+
+/// Batch check if user has bookmarked multiple posts
+#[post("/api/v2/social/bookmarks/batch-check")]
+pub async fn batch_check_bookmarked(
+    http_req: HttpRequest,
+    clients: web::Data<ServiceClients>,
+    body: web::Json<BatchCheckBookmarkedBody>,
+) -> HttpResponse {
+    let user_id = match http_req.extensions().get::<AuthenticatedUser>().copied() {
+        Some(AuthenticatedUser(id)) => id.to_string(),
+        None => return HttpResponse::Unauthorized().finish(),
+    };
+
+    let req = BatchCheckBookmarkedRequest {
+        user_id,
+        post_ids: body.post_ids.clone(),
+    };
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.batch_check_bookmarked(req).await }
+        })
+        .await
+    {
+        Ok(resp) => {
+            HttpResponse::Ok().json(serde_json::json!({"bookmarked_post_ids": resp.bookmarked_post_ids}))
+        }
+        Err(e) => {
+            error!("batch_check_bookmarked failed: {}", e);
+            HttpResponse::ServiceUnavailable().finish()
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BatchCheckBookmarkedBody {
+    pub post_ids: Vec<String>,
 }

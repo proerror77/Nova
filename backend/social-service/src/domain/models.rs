@@ -33,6 +33,28 @@ pub struct Share {
     pub created_at: DateTime<Utc>,
 }
 
+/// Bookmark entity - represents a user bookmarking/saving a post
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Bookmark {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub post_id: Uuid,
+    pub bookmarked_at: DateTime<Utc>,
+    pub collection_id: Option<Uuid>,
+}
+
+/// Bookmark collection - represents a folder for organizing bookmarks
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct BookmarkCollection {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub is_private: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
 /// Post statistics aggregated from likes, comments, shares
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
