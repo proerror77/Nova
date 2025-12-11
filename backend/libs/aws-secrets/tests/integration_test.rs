@@ -44,6 +44,7 @@ async fn test_secret_manager_initialization() {
 
 /// Test: Fetch secret and verify caching
 #[tokio::test]
+#[ignore = "Requires AWS credentials"]
 async fn test_secret_fetch_and_cache() {
     let manager = SecretManager::new()
         .await
@@ -83,6 +84,7 @@ async fn test_secret_fetch_and_cache() {
 
 /// Test: JWT config parsing and validation
 #[tokio::test]
+#[ignore = "Requires AWS credentials"]
 async fn test_jwt_config_parsing() {
     let manager = SecretManager::new()
         .await
@@ -137,6 +139,7 @@ async fn test_jwt_config_parsing() {
 
 /// Test: Cache invalidation
 #[tokio::test]
+#[ignore = "Requires AWS credentials"]
 async fn test_cache_invalidation() {
     let manager = SecretManager::new()
         .await
@@ -182,6 +185,7 @@ async fn test_cache_invalidation() {
 
 /// Test: Cache expiration (TTL)
 #[tokio::test]
+#[ignore = "Requires AWS credentials"]
 async fn test_cache_ttl_expiration() {
     // Create manager with 2-second TTL for testing
     let manager = SecretManager::with_cache_ttl(Duration::from_secs(2))
@@ -231,6 +235,7 @@ async fn test_cache_ttl_expiration() {
 
 /// Test: Simulate secret rotation
 #[tokio::test]
+#[ignore = "Requires AWS credentials"]
 async fn test_secret_rotation_simulation() {
     let manager = SecretManager::with_cache_ttl(Duration::from_secs(2))
         .await
@@ -330,6 +335,7 @@ fn test_invalid_jwt_config_parsing() {
 
 /// Test: Concurrent access to cache
 #[tokio::test]
+#[ignore = "Requires AWS credentials"]
 async fn test_concurrent_cache_access() {
     let manager = SecretManager::new()
         .await
@@ -393,6 +399,7 @@ async fn test_concurrent_cache_access() {
 
 /// Test: Multiple secret names in cache
 #[tokio::test]
+#[ignore = "Requires AWS credentials"]
 async fn test_multiple_secrets_in_cache() {
     let manager = SecretManager::new()
         .await
