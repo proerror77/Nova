@@ -839,6 +839,7 @@ impl<R: OutboxRepository, P: OutboxPublisher> OutboxProcessor<R, P> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rdkafka::config::FromClientConfig;
 
     #[test]
     fn test_backoff_calculation() {

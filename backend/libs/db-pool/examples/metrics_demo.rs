@@ -12,6 +12,7 @@
 
 use db_pool::{acquire_with_metrics, create_pool, DbConfig};
 use prometheus::{Encoder, TextEncoder};
+use sqlx::Row;
 use std::time::Duration;
 use tokio::time::sleep;
 
