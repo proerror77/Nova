@@ -35,6 +35,9 @@ data:
   KAFKA_CONTENT_EVENTS_TOPIC: "nova.content.events"
   KAFKA_MESSAGE_EVENTS_TOPIC: "nova.message.events"
   KAFKA_FEED_EVENTS_TOPIC: "nova.feed.events"
+  KAFKA_IDENTITY_EVENTS_TOPIC: "nova.identity.events"
+  # Identity service uses KAFKA_TOPIC_PREFIX for its event topic name
+  KAFKA_TOPIC_PREFIX: "nova.identity.events"
 
   # JWT
   JWT_ACCESS_TOKEN_EXPIRES_IN_MINUTES: "15"

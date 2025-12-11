@@ -7,7 +7,9 @@ use rdkafka::message::Message;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
-use super::consumers::{on_message_deleted, on_message_persisted, EventContext, EventError};
+use super::consumers::{
+    on_identity_event, on_message_deleted, on_message_persisted, EventContext, EventError,
+};
 
 #[derive(Debug, Clone)]
 pub struct KafkaConsumerConfig {
@@ -15,6 +17,7 @@ pub struct KafkaConsumerConfig {
     pub group_id: String,
     pub message_persisted_topic: String,
     pub message_deleted_topic: String,
+    pub identity_events_topic: String,
 }
 
 impl KafkaConsumerConfig {
@@ -35,6 +38,8 @@ impl KafkaConsumerConfig {
                 .unwrap_or_else(|_| "message_persisted".to_string()),
             message_deleted_topic: std::env::var("KAFKA_MESSAGE_DELETED_TOPIC")
                 .unwrap_or_else(|_| "message_deleted".to_string()),
+            identity_events_topic: std::env::var("KAFKA_IDENTITY_EVENTS_TOPIC")
+                .unwrap_or_else(|_| "identity-events".to_string()),
         })
     }
 }
@@ -50,8 +55,8 @@ pub fn spawn_message_consumer(ctx: EventContext, config: KafkaConsumerConfig) ->
 
 async fn run_consumer(ctx: EventContext, config: KafkaConsumerConfig) -> Result<(), KafkaError> {
     info!(
-        "Starting Kafka consumer for search indexing (topics: {}, {})",
-        config.message_persisted_topic, config.message_deleted_topic
+        "Starting Kafka consumer for search indexing (topics: {}, {}, {})",
+        config.message_persisted_topic, config.message_deleted_topic, config.identity_events_topic
     );
 
     let consumer: StreamConsumer = ClientConfig::new()
@@ -66,6 +71,7 @@ async fn run_consumer(ctx: EventContext, config: KafkaConsumerConfig) -> Result<
     consumer.subscribe(&[
         config.message_persisted_topic.as_str(),
         config.message_deleted_topic.as_str(),
+        config.identity_events_topic.as_str(),
     ])?;
 
     loop {
@@ -88,6 +94,8 @@ async fn run_consumer(ctx: EventContext, config: KafkaConsumerConfig) -> Result<
                     on_message_persisted(&ctx, data).await
                 } else if topic == config.message_deleted_topic {
                     on_message_deleted(&ctx, data).await
+                } else if topic == config.identity_events_topic {
+                    on_identity_event(&ctx, data).await
                 } else {
                     warn!("Received message for unexpected topic: {}", topic);
                     Ok(())

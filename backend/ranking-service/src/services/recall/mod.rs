@@ -36,7 +36,10 @@ impl RecallLayer {
     ) -> Self {
         let strategies: Vec<(Box<dyn RecallStrategy>, f32)> = vec![
             (
-                Box::new(GraphRecallStrategy::new(graph_client.clone(), content_client.clone())),
+                Box::new(GraphRecallStrategy::new(
+                    graph_client.clone(),
+                    content_client.clone(),
+                )),
                 config.graph_recall_weight,
             ),
             (

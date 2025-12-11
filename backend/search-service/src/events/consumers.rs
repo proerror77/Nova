@@ -1,4 +1,6 @@
-use crate::services::elasticsearch::{ElasticsearchClient, ElasticsearchError, MessageDocument};
+use crate::services::elasticsearch::{
+    ElasticsearchClient, ElasticsearchError, MessageDocument, UserDocument,
+};
 use chrono::{DateTime, Utc};
 use serde::de::{Deserializer, Error as DeError};
 use serde::Deserialize;
@@ -178,6 +180,165 @@ where
             "unsupported timestamp representation: {other}"
         ))),
     }
+}
+
+// ============================================================================
+// IDENTITY SERVICE EVENTS
+// ============================================================================
+
+/// Event envelope from identity-service
+#[derive(Debug, Deserialize)]
+struct IdentityEventEnvelope {
+    #[serde(default)]
+    event_id: Option<Uuid>,
+    data: IdentityEventData,
+}
+
+/// Identity event data - can be UserCreated or UserProfileUpdated
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum IdentityEventData {
+    UserCreated(UserCreatedEventData),
+    UserProfileUpdated(UserProfileUpdatedEventData),
+    UserDeleted(UserDeletedEventData),
+}
+
+#[derive(Debug, Deserialize)]
+struct UserCreatedEventData {
+    user_id: Uuid,
+    #[serde(default)]
+    email: Option<String>,
+    username: String,
+    #[serde(default)]
+    created_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UserProfileUpdatedEventData {
+    user_id: Uuid,
+    username: String,
+    #[serde(default)]
+    display_name: Option<String>,
+    #[serde(default)]
+    bio: Option<String>,
+    #[serde(default)]
+    avatar_url: Option<String>,
+    #[serde(default)]
+    is_verified: bool,
+    #[serde(default)]
+    follower_count: i32,
+    #[serde(default)]
+    updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UserDeletedEventData {
+    user_id: Uuid,
+    #[serde(default)]
+    deleted_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    soft_delete: bool,
+}
+
+/// Handle identity events from Kafka (UserCreated, UserProfileUpdated, UserDeleted)
+pub async fn on_identity_event(ctx: &EventContext, payload: &[u8]) -> Result<(), EventError> {
+    let envelope: IdentityEventEnvelope = serde_json::from_slice(payload)?;
+
+    let Some(search) = ctx.search_backend() else {
+        debug!("Search backend not configured; identity event ignored");
+        return Ok(());
+    };
+
+    match envelope.data {
+        IdentityEventData::UserCreated(event) => {
+            debug!(
+                user_id = %event.user_id,
+                username = %event.username,
+                "Processing UserCreated event for search indexing"
+            );
+
+            // Index new user with minimal data (will be updated when profile is filled)
+            let document = UserDocument {
+                user_id: event.user_id,
+                username: event.username,
+                display_name: String::new(),
+                bio: None,
+                location: None,
+                interests: vec![],
+                is_verified: false,
+                follower_count: 0,
+            };
+
+            if let Err(err) = search.index_user(&document).await {
+                error!(
+                    user_id = %event.user_id,
+                    "Failed to index user in Elasticsearch: {err}"
+                );
+                return Err(EventError::Search(err));
+            }
+
+            debug!(
+                user_id = %event.user_id,
+                "Indexed new user into Elasticsearch"
+            );
+        }
+        IdentityEventData::UserProfileUpdated(event) => {
+            debug!(
+                user_id = %event.user_id,
+                username = %event.username,
+                "Processing UserProfileUpdated event for search indexing"
+            );
+
+            let document = UserDocument {
+                user_id: event.user_id,
+                username: event.username,
+                display_name: event.display_name.unwrap_or_default(),
+                bio: event.bio,
+                location: None,
+                interests: vec![],
+                is_verified: event.is_verified,
+                follower_count: event.follower_count,
+            };
+
+            if let Err(err) = search.index_user(&document).await {
+                error!(
+                    user_id = %event.user_id,
+                    "Failed to update user in Elasticsearch: {err}"
+                );
+                return Err(EventError::Search(err));
+            }
+
+            debug!(
+                user_id = %event.user_id,
+                "Updated user in Elasticsearch"
+            );
+        }
+        IdentityEventData::UserDeleted(event) => {
+            debug!(
+                user_id = %event.user_id,
+                soft_delete = event.soft_delete,
+                "Processing UserDeleted event"
+            );
+
+            // Only remove from search index if hard delete
+            if !event.soft_delete {
+                if let Err(err) = search.delete_user(event.user_id).await {
+                    error!(
+                        user_id = %event.user_id,
+                        "Failed to delete user from Elasticsearch: {err}"
+                    );
+                    return Err(EventError::Search(err));
+                }
+
+                debug!(
+                    user_id = %event.user_id,
+                    "Deleted user from Elasticsearch"
+                );
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

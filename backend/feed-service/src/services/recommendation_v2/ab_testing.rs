@@ -11,9 +11,7 @@
 // - Event logging to ClickHouse
 // - Redis caching for fast variant lookup
 
-use crate::db::experiments_repo::{
-    ExperimentStatus as DbExperimentStatus, ExperimentsRepo,
-};
+use crate::db::experiments_repo::{ExperimentStatus as DbExperimentStatus, ExperimentsRepo};
 use crate::error::{AppError, Result};
 use chrono::{DateTime, Utc};
 use redis::aio::ConnectionManager;
@@ -217,7 +215,11 @@ impl ABTestingFramework {
     /// - Control: 50% (buckets 0-49)
     /// - Variant A: 30% (buckets 50-79)
     /// - Variant B: 20% (buckets 80-99)
-    pub fn assign_bucket<'a>(&self, user_id: Uuid, experiment: &'a Experiment) -> Result<&'a Variant> {
+    pub fn assign_bucket<'a>(
+        &self,
+        user_id: Uuid,
+        experiment: &'a Experiment,
+    ) -> Result<&'a Variant> {
         // Check if experiment is running
         if experiment.status != ExperimentStatus::Running {
             return Err(AppError::BadRequest(format!(
@@ -291,10 +293,7 @@ impl ABTestingFramework {
                 }
                 Err(e) => {
                     // Log but don't fail - assignment might already exist
-                    warn!(
-                        "Failed to persist assignment (may already exist): {}",
-                        e
-                    );
+                    warn!("Failed to persist assignment (may already exist): {}", e);
                 }
             }
         }
@@ -306,7 +305,8 @@ impl ABTestingFramework {
             config: variant.config.clone(),
             cached_at: Utc::now(),
         };
-        self.cache_variant(user_id, experiment_name, &cached).await?;
+        self.cache_variant(user_id, experiment_name, &cached)
+            .await?;
 
         Ok((variant.id, variant.name.clone(), variant.config.clone()))
     }
@@ -390,7 +390,10 @@ impl ABTestingFramework {
                 AppError::Internal(format!("Redis error: {}", e))
             })?;
 
-        debug!("Cached variant for user {} in experiment {}", user_id, experiment_name);
+        debug!(
+            "Cached variant for user {} in experiment {}",
+            user_id, experiment_name
+        );
         Ok(())
     }
 
@@ -430,11 +433,7 @@ impl ABTestingFramework {
         let experiments = self.experiments.read().await;
         let experiment = experiments
             .get(&format!("exp_{}", event.experiment_id))
-            .or_else(|| {
-                experiments
-                    .values()
-                    .find(|e| e.id == event.experiment_id)
-            });
+            .or_else(|| experiments.values().find(|e| e.id == event.experiment_id));
 
         if let Some(exp) = experiment {
             // Find variant ID
@@ -664,14 +663,12 @@ mod tests {
             description: "Test".to_string(),
             start_date: Utc::now(),
             end_date: None,
-            variants: vec![
-                Variant {
-                    id: Uuid::new_v4(),
-                    name: "control".to_string(),
-                    allocation: 100,
-                    config: serde_json::json!({}),
-                },
-            ],
+            variants: vec![Variant {
+                id: Uuid::new_v4(),
+                name: "control".to_string(),
+                allocation: 100,
+                config: serde_json::json!({}),
+            }],
             status: ExperimentStatus::Draft, // Not running
         };
 

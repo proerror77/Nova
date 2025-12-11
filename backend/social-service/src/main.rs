@@ -176,7 +176,12 @@ async fn main() -> Result<()> {
     info!("✅ Graph service gRPC client initialized");
 
     // Create AppState
-    let app_state = Arc::new(AppState::new(pg_pool.clone(), counter_service, outbox_repo, graph_client));
+    let app_state = Arc::new(AppState::new(
+        pg_pool.clone(),
+        counter_service,
+        outbox_repo,
+        graph_client,
+    ));
     info!("✅ AppState created");
 
     // gRPC server address

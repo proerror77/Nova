@@ -165,7 +165,8 @@ async fn main() -> Result<()> {
             Some(cache) => {
                 info!("🚀 Graph service initialized with Neo4j + caching");
                 let cached_repo = CachedGraphRepository::new(Arc::new(neo4j_repo), cache, true);
-                let repo: Arc<dyn repository::GraphRepositoryTrait + Send + Sync> = Arc::new(cached_repo);
+                let repo: Arc<dyn repository::GraphRepositoryTrait + Send + Sync> =
+                    Arc::new(cached_repo);
 
                 // Clone repo for Kafka consumer
                 let repo_for_consumer = repo.clone();
@@ -173,14 +174,12 @@ async fn main() -> Result<()> {
                 // Spawn Kafka consumer for social events if configured
                 spawn_kafka_consumer_if_enabled(repo_for_consumer, &config);
 
-                GraphServiceImpl::new_with_trait(
-                    repo,
-                    config.internal_write_token.clone(),
-                )
+                GraphServiceImpl::new_with_trait(repo, config.internal_write_token.clone())
             }
             None => {
                 info!("🚀 Graph service initialized with Neo4j (no cache)");
-                let repo: Arc<dyn repository::GraphRepositoryTrait + Send + Sync> = Arc::new(neo4j_repo);
+                let repo: Arc<dyn repository::GraphRepositoryTrait + Send + Sync> =
+                    Arc::new(neo4j_repo);
 
                 // Clone repo for Kafka consumer
                 let repo_for_consumer = repo.clone();
@@ -311,4 +310,3 @@ fn spawn_kafka_consumer_if_enabled(
         }
     });
 }
-

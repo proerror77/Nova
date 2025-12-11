@@ -1,5 +1,4 @@
 pub mod gcs;
-pub mod transcoder;
 /// Video service module
 ///
 /// Provides video-related services migrated from video-service:
@@ -10,6 +9,7 @@ pub mod transcoder;
 ///
 /// Part of Phase C: Media Consolidation
 pub mod s3;
+pub mod transcoder;
 
 // Re-export commonly used functions
 pub use s3::{
@@ -19,6 +19,6 @@ pub use s3::{
 
 // Re-export GCP Transcoder client
 pub use transcoder::{
-    GcpTranscoderClient, TranscoderConfig, TranscodeProfile, TranscodeJobResult,
-    TranscodeJobStatus, TranscodeOutput, is_transcoding_enabled,
+    is_transcoding_enabled, GcpTranscoderClient, TranscodeJobResult, TranscodeJobStatus,
+    TranscodeOutput, TranscodeProfile, TranscoderConfig,
 };

@@ -30,10 +30,11 @@ use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UserCard {
     pub id: String,
     pub username: String,
-    pub display_name: String,
+    pub display_name: Option<String>,
     pub avatar_url: Option<String>,
     pub bio: Option<String>,
     pub is_following: bool,
@@ -118,10 +119,41 @@ pub async fn search_users(
         .call_search(|| async move { search_client.search_users(req).await })
         .await
     {
-        Ok(resp) => Ok(HttpResponse::Ok().json(resp)),
+        Ok(resp) => {
+            // Transform response to match iOS expected format
+            let users: Vec<UserCard> = resp
+                .results
+                .into_iter()
+                .map(|u| UserCard {
+                    id: u.id,
+                    username: u.username,
+                    display_name: if u.display_name.is_empty() {
+                        None
+                    } else {
+                        Some(u.display_name)
+                    },
+                    avatar_url: if u.avatar_url.is_empty() {
+                        None
+                    } else {
+                        Some(u.avatar_url)
+                    },
+                    bio: if u.bio.is_empty() { None } else { Some(u.bio) },
+                    is_following: false,
+                })
+                .collect();
+
+            Ok(HttpResponse::Ok().json(serde_json::json!({
+                "users": users,
+                "total": resp.total_count,
+            })))
+        }
         Err(e) => {
             error!("search_users failed: {}", e);
-            Ok(HttpResponse::ServiceUnavailable().finish())
+            Ok(HttpResponse::ServiceUnavailable().json(serde_json::json!({
+                "users": [],
+                "total": 0,
+                "error": e.to_string(),
+            })))
         }
     }
 }
@@ -199,7 +231,8 @@ pub async fn add_friend(
             );
 
             Ok(HttpResponse::Ok().json(serde_json::json!({
-                "status": "friend_added",
+                "success": true,
+                "message": "Friend added successfully",
                 "user_id": req.user_id,
             })))
         }
@@ -213,7 +246,7 @@ pub async fn add_friend(
 
             // Map ServiceError to HTTP response
             Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "failed_to_add_friend",
+                "success": false,
                 "message": e.to_string(),
             })))
         }

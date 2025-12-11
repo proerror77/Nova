@@ -2,17 +2,10 @@
 //!
 //! This module requires the `grpc-interceptors` feature to be enabled.
 
-use opentelemetry::{
-    global,
-    propagation::Extractor,
-    trace::SpanKind,
-};
+use opentelemetry::{global, propagation::Extractor, trace::SpanKind};
 use std::task::{Context as TaskContext, Poll};
 use tonic::{
-    body::BoxBody,
-    metadata::MetadataMap,
-    transport::Body,
-    Request, Status as TonicStatus,
+    body::BoxBody, metadata::MetadataMap, transport::Body, Request, Status as TonicStatus,
 };
 use tower::{Layer, Service};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -33,9 +26,7 @@ impl Extractor for MetadataExtractor<'_> {
 /// gRPC tracing interceptor for server-side requests
 ///
 /// Extracts trace context from incoming requests and creates spans
-pub fn grpc_tracing_interceptor(
-    req: Request<()>,
-) -> Result<Request<()>, TonicStatus> {
+pub fn grpc_tracing_interceptor(req: Request<()>) -> Result<Request<()>, TonicStatus> {
     let metadata = req.metadata();
     let parent_context = global::get_text_map_propagator(|propagator| {
         propagator.extract(&MetadataExtractor(metadata))
@@ -132,13 +123,13 @@ mod tests {
     #[test]
     fn test_metadata_extractor() {
         let mut metadata = MetadataMap::new();
-        metadata.insert("traceparent", "00-trace-id-span-id-01".parse().expect("Valid header"));
+        metadata.insert(
+            "traceparent",
+            "00-trace-id-span-id-01".parse().expect("Valid header"),
+        );
 
         let extractor = MetadataExtractor(&metadata);
-        assert_eq!(
-            extractor.get("traceparent"),
-            Some("00-trace-id-span-id-01")
-        );
+        assert_eq!(extractor.get("traceparent"), Some("00-trace-id-span-id-01"));
     }
 
     #[test]
@@ -150,9 +141,6 @@ mod tests {
         );
 
         let extractor = HeaderExtractor(&headers);
-        assert_eq!(
-            extractor.get("traceparent"),
-            Some("00-trace-id-span-id-01")
-        );
+        assert_eq!(extractor.get("traceparent"), Some("00-trace-id-span-id-01"));
     }
 }

@@ -9,7 +9,6 @@
 /// - `GCS_BUCKET`: GCS bucket for input/output videos
 /// - `GCS_SERVICE_ACCOUNT_JSON_PATH`: Path to service account JSON
 /// - `MEDIA_TRANSCODE_ENABLE_MOCK`: Set to "false" to enable real transcoding
-
 use crate::error::{AppError, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
@@ -150,7 +149,9 @@ impl GcpTranscoderClient {
     /// Refresh the OAuth2 access token using application default credentials
     async fn refresh_access_token(&mut self) -> Result<()> {
         // Try to get token from metadata server (GKE/Cloud Run) or ADC
-        let token = self.get_access_token_from_metadata().await
+        let token = self
+            .get_access_token_from_metadata()
+            .await
             .or_else(|_| self.get_access_token_from_adc())
             .map_err(|e| AppError::Internal(format!("Failed to get GCP access token: {e}")))?;
 
@@ -162,7 +163,8 @@ impl GcpTranscoderClient {
     async fn get_access_token_from_metadata(&self) -> std::result::Result<String, String> {
         let url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
 
-        let response = self.http_client
+        let response = self
+            .http_client
             .get(url)
             .header("Metadata-Flavor", "Google")
             .send()
@@ -178,7 +180,9 @@ impl GcpTranscoderClient {
             access_token: String,
         }
 
-        let token_response: TokenResponse = response.json().await
+        let token_response: TokenResponse = response
+            .json()
+            .await
             .map_err(|e| format!("Failed to parse token response: {e}"))?;
 
         Ok(token_response.access_token)
@@ -188,7 +192,10 @@ impl GcpTranscoderClient {
     fn get_access_token_from_adc(&self) -> std::result::Result<String, String> {
         // This would typically use google-cloud-auth crate
         // For now, return placeholder - in production this should use proper ADC
-        Err("ADC not implemented - use metadata server or set GOOGLE_APPLICATION_CREDENTIALS".to_string())
+        Err(
+            "ADC not implemented - use metadata server or set GOOGLE_APPLICATION_CREDENTIALS"
+                .to_string(),
+        )
     }
 
     /// Create a transcoding job for a reel
@@ -203,15 +210,13 @@ impl GcpTranscoderClient {
         input_gcs_uri: &str,
         profiles: &[TranscodeProfile],
     ) -> Result<String> {
-        let access_token = self.access_token.as_ref()
+        let access_token = self
+            .access_token
+            .as_ref()
             .ok_or_else(|| AppError::Internal("No access token available".to_string()))?;
 
         let job_id = format!("reel-{}-{}", reel_id, chrono::Utc::now().timestamp_millis());
-        let output_uri = format!(
-            "gs://{}/reels/{}/",
-            self.config.gcs_bucket,
-            reel_id
-        );
+        let output_uri = format!("gs://{}/reels/{}/", self.config.gcs_bucket, reel_id);
 
         // Build elementary streams and mux streams for each profile
         let mut elementary_streams = Vec::new();
@@ -269,8 +274,7 @@ impl GcpTranscoderClient {
 
         let url = format!(
             "https://transcoder.googleapis.com/v1/projects/{}/locations/{}/jobs",
-            self.config.project_id,
-            self.config.location
+            self.config.project_id, self.config.location
         );
 
         info!(
@@ -278,7 +282,8 @@ impl GcpTranscoderClient {
             reel_id, input_gcs_uri, output_uri
         );
 
-        let response = self.http_client
+        let response = self
+            .http_client
             .post(&url)
             .header("Authorization", format!("Bearer {}", access_token))
             .header("Content-Type", "application/json")
@@ -290,7 +295,10 @@ impl GcpTranscoderClient {
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
             error!("GCP Transcoder API error: {}", error_text);
-            return Err(AppError::Internal(format!("Transcoder job creation failed: {}", error_text)));
+            return Err(AppError::Internal(format!(
+                "Transcoder job creation failed: {}",
+                error_text
+            )));
         }
 
         #[derive(Deserialize)]
@@ -298,11 +306,16 @@ impl GcpTranscoderClient {
             name: String,
         }
 
-        let job_response: JobResponse = response.json().await
+        let job_response: JobResponse = response
+            .json()
+            .await
             .map_err(|e| AppError::Internal(format!("Failed to parse job response: {e}")))?;
 
         // Extract job ID from resource name (projects/.../jobs/JOB_ID)
-        let gcp_job_id = job_response.name.split('/').last()
+        let gcp_job_id = job_response
+            .name
+            .split('/')
+            .last()
             .unwrap_or(&job_id)
             .to_string();
 
@@ -316,17 +329,18 @@ impl GcpTranscoderClient {
 
     /// Get the status of a transcoding job
     pub async fn get_job_status(&mut self, job_id: &str) -> Result<TranscodeJobResult> {
-        let access_token = self.access_token.as_ref()
+        let access_token = self
+            .access_token
+            .as_ref()
             .ok_or_else(|| AppError::Internal("No access token available".to_string()))?;
 
         let url = format!(
             "https://transcoder.googleapis.com/v1/projects/{}/locations/{}/jobs/{}",
-            self.config.project_id,
-            self.config.location,
-            job_id
+            self.config.project_id, self.config.location, job_id
         );
 
-        let response = self.http_client
+        let response = self
+            .http_client
             .get(&url)
             .header("Authorization", format!("Bearer {}", access_token))
             .send()
@@ -335,7 +349,10 @@ impl GcpTranscoderClient {
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(AppError::Internal(format!("Failed to get job status: {}", error_text)));
+            return Err(AppError::Internal(format!(
+                "Failed to get job status: {}",
+                error_text
+            )));
         }
 
         #[derive(Deserialize)]
@@ -370,7 +387,9 @@ impl GcpTranscoderClient {
             uri: String,
         }
 
-        let job: GcpJobResponse = response.json().await
+        let job: GcpJobResponse = response
+            .json()
+            .await
             .map_err(|e| AppError::Internal(format!("Failed to parse job response: {e}")))?;
 
         let status = match job.state.as_str() {
@@ -381,7 +400,8 @@ impl GcpTranscoderClient {
             _ => TranscodeJobStatus::Processing,
         };
 
-        let progress = job.progress
+        let progress = job
+            .progress
             .map(|p| (p.progress * 100.0) as i32)
             .unwrap_or(0);
 
@@ -392,13 +412,21 @@ impl GcpTranscoderClient {
                 let gcs_uri = format!(
                     "gs://{}/reels/{}/{}.mp4",
                     self.config.gcs_bucket,
-                    job_id.replace("reel-", "").split('-').next().unwrap_or(job_id),
+                    job_id
+                        .replace("reel-", "")
+                        .split('-')
+                        .next()
+                        .unwrap_or(job_id),
                     profile.name
                 );
                 let cdn_url = format!(
                     "{}/reels/{}/{}.mp4",
                     self.config.cdn_base_url.trim_end_matches('/'),
-                    job_id.replace("reel-", "").split('-').next().unwrap_or(job_id),
+                    job_id
+                        .replace("reel-", "")
+                        .split('-')
+                        .next()
+                        .unwrap_or(job_id),
                     profile.name
                 );
                 output_uris.push(TranscodeOutput {

@@ -86,6 +86,18 @@ pub struct UserDeletedEvent {
     pub soft_delete: bool, // false = hard delete user data
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserProfileUpdatedEvent {
+    pub user_id: Uuid,
+    pub username: String,
+    pub display_name: Option<String>,
+    pub bio: Option<String>,
+    pub avatar_url: Option<String>,
+    pub is_verified: bool,
+    pub follower_count: i32,
+    pub updated_at: DateTime<Utc>,
+}
+
 // ============================================================================
 // CONTENT SERVICE EVENTS
 // ============================================================================

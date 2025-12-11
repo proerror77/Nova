@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use crypto_core::kafka_correlation::inject_headers;
 use event_schema::{
     EventEnvelope, PasswordChangedEvent, TwoFAEnabledEvent, UserCreatedEvent, UserDeletedEvent,
+    UserProfileUpdatedEvent,
 };
 use rdkafka::message::OwnedHeaders;
 use rdkafka::producer::{FutureProducer, FutureRecord};
@@ -99,6 +100,35 @@ impl KafkaEventProducer {
             user_id,
             deleted_at,
             soft_delete,
+        };
+
+        let envelope =
+            EventEnvelope::new("identity-service", event).with_correlation_id(Uuid::new_v4());
+
+        self.publish_event(&envelope, user_id).await
+    }
+
+    /// Publish user profile updated event (for search indexing)
+    #[allow(clippy::too_many_arguments)]
+    pub async fn publish_user_profile_updated(
+        &self,
+        user_id: Uuid,
+        username: &str,
+        display_name: Option<&str>,
+        bio: Option<&str>,
+        avatar_url: Option<&str>,
+        is_verified: bool,
+        follower_count: i32,
+    ) -> Result<()> {
+        let event = UserProfileUpdatedEvent {
+            user_id,
+            username: username.to_string(),
+            display_name: display_name.map(|s| s.to_string()),
+            bio: bio.map(|s| s.to_string()),
+            avatar_url: avatar_url.map(|s| s.to_string()),
+            is_verified,
+            follower_count,
+            updated_at: Utc::now(),
         };
 
         let envelope =

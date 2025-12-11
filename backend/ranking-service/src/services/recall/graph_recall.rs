@@ -126,10 +126,7 @@ impl GraphRecallStrategy {
                     }
                 }
                 Err(e) => {
-                    warn!(
-                        "Failed to get posts for user {}: {}",
-                        following_user_id, e
-                    );
+                    warn!("Failed to get posts for user {}: {}", following_user_id, e);
                     // 繼續處理其他用戶，不中斷整個流程
                 }
             }

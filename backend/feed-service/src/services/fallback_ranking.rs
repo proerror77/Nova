@@ -42,10 +42,7 @@ pub fn fallback_rank_posts(posts: Vec<CachedFeedPost>) -> Vec<CachedFeedPost> {
     // Sort by score descending (highest scores first)
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-    debug!(
-        "Fallback ranking applied to {} posts",
-        scored.len()
-    );
+    debug!("Fallback ranking applied to {} posts", scored.len());
 
     scored.into_iter().map(|(post, _)| post).collect()
 }
@@ -60,13 +57,10 @@ pub fn fallback_rank_posts(posts: Vec<CachedFeedPost>) -> Vec<CachedFeedPost> {
 /// Computed ranking score (higher is better)
 fn calculate_post_score(post: &CachedFeedPost, now: DateTime<Utc>) -> f64 {
     // Convert Unix timestamp to DateTime
-    let post_time = DateTime::from_timestamp(post.created_at, 0)
-        .unwrap_or_else(|| Utc::now());
+    let post_time = DateTime::from_timestamp(post.created_at, 0).unwrap_or_else(|| Utc::now());
 
     // Time decay: newer posts score higher
-    let age_hours = (now - post_time)
-        .num_hours()
-        .max(0) as f64;
+    let age_hours = (now - post_time).num_hours().max(0) as f64;
 
     // Exponential decay: score halves every 24 hours
     let time_score = 1.0 / (1.0 + age_hours / 24.0);

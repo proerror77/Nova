@@ -180,10 +180,7 @@ async fn start_stream(
 }
 
 // POST /api/v1/streams/end - Called by RTMP server on unpublish
-async fn end_stream(
-    state: web::Data<AppState>,
-    body: web::Json<EndStreamRequest>,
-) -> HttpResponse {
+async fn end_stream(state: web::Data<AppState>, body: web::Json<EndStreamRequest>) -> HttpResponse {
     let Some(redis) = state.redis.clone() else {
         return HttpResponse::ServiceUnavailable().body("Redis not configured");
     };
@@ -257,10 +254,7 @@ async fn end_stream(
 }
 
 // GET /api/v1/streams/{stream_key} - Get stream info
-async fn get_stream_info(
-    state: web::Data<AppState>,
-    path: web::Path<String>,
-) -> HttpResponse {
+async fn get_stream_info(state: web::Data<AppState>, path: web::Path<String>) -> HttpResponse {
     let Some(redis) = state.redis.clone() else {
         return HttpResponse::ServiceUnavailable().body("Redis not configured");
     };

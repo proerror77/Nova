@@ -15,8 +15,8 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
-use tract_onnx::prelude::*;
 use tracing::{debug, error, info, warn};
+use tract_onnx::prelude::*;
 
 /// Type alias for the optimized tract model
 type TractModel = SimplePlan<TypedFact, Box<dyn TypedOp>, Graph<TypedFact, Box<dyn TypedOp>>>;
@@ -237,10 +237,7 @@ impl ONNXModelServer {
         // Calculate embedding statistics
         let magnitude = embeddings.iter().map(|x| x * x).sum::<f32>().sqrt();
         let mean = embeddings.iter().sum::<f32>() / embeddings.len().max(1) as f32;
-        let variance = embeddings
-            .iter()
-            .map(|x| (x - mean).powi(2))
-            .sum::<f32>()
+        let variance = embeddings.iter().map(|x| (x - mean).powi(2)).sum::<f32>()
             / embeddings.len().max(1) as f32;
 
         // Base score from embedding quality

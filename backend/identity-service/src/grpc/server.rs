@@ -839,6 +839,28 @@ impl AuthService for IdentityServiceServer {
             .map_err(to_status)?
             .ok_or_else(|| Status::not_found("User not found"))?;
 
+        // Publish UserProfileUpdated event for search indexing
+        if let Some(kafka) = &self.kafka {
+            if let Err(err) = kafka
+                .publish_user_profile_updated(
+                    user.id,
+                    &user.username,
+                    user.display_name.as_deref(),
+                    user.bio.as_deref(),
+                    user.avatar_url.as_deref(),
+                    false, // is_verified - TODO: add to user model if needed
+                    0,     // follower_count - managed by social-service
+                )
+                .await
+            {
+                warn!(
+                    user_id = %user.id,
+                    error = %err,
+                    "Failed to publish UserProfileUpdated event"
+                );
+            }
+        }
+
         Ok(Response::new(UpdateUserProfileResponse {
             profile: Some(UserProfile {
                 user_id: user.id.to_string(),

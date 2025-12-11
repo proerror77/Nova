@@ -57,44 +57,43 @@ async fn main() -> io::Result<()> {
 
     // Initialize FCM client from environment
     // FCM_CREDENTIALS should point to a Firebase service account JSON file
-    let fcm_client: Option<Arc<FCMClient>> =
-        if let Ok(credentials_path) = std::env::var("FCM_CREDENTIALS") {
-            match std::fs::read_to_string(&credentials_path) {
-                Ok(json_content) => {
-                    match serde_json::from_str::<ServiceAccountKey>(&json_content) {
-                        Ok(key) => {
-                            let project_id = key.project_id.clone();
-                            let client = FCMClient::new(project_id.clone(), key);
-                            tracing::info!(
-                                "FCM client initialized for project {} from {}",
-                                project_id,
-                                credentials_path
-                            );
-                            Some(Arc::new(client))
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Failed to parse FCM credentials from {}: {}",
-                                credentials_path,
-                                e
-                            );
-                            None
-                        }
-                    }
+    let fcm_client: Option<Arc<FCMClient>> = if let Ok(credentials_path) =
+        std::env::var("FCM_CREDENTIALS")
+    {
+        match std::fs::read_to_string(&credentials_path) {
+            Ok(json_content) => match serde_json::from_str::<ServiceAccountKey>(&json_content) {
+                Ok(key) => {
+                    let project_id = key.project_id.clone();
+                    let client = FCMClient::new(project_id.clone(), key);
+                    tracing::info!(
+                        "FCM client initialized for project {} from {}",
+                        project_id,
+                        credentials_path
+                    );
+                    Some(Arc::new(client))
                 }
                 Err(e) => {
                     tracing::warn!(
-                        "Failed to read FCM credentials file {}: {}",
+                        "Failed to parse FCM credentials from {}: {}",
                         credentials_path,
                         e
                     );
                     None
                 }
+            },
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to read FCM credentials file {}: {}",
+                    credentials_path,
+                    e
+                );
+                None
             }
-        } else {
-            tracing::warn!("FCM_CREDENTIALS not set - FCM push notifications disabled");
-            None
-        };
+        }
+    } else {
+        tracing::warn!("FCM_CREDENTIALS not set - FCM push notifications disabled");
+        None
+    };
 
     // Initialize APNs client from environment
     let apns_client: Option<Arc<APNsClient>> =
@@ -146,7 +145,8 @@ async fn main() -> io::Result<()> {
 
     if kafka_enabled {
         tokio::spawn(async move {
-            let consumer = KafkaNotificationConsumer::new(kafka_broker.clone(), "notifications".to_string());
+            let consumer =
+                KafkaNotificationConsumer::new(kafka_broker.clone(), "notifications".to_string());
 
             tracing::info!(
                 "Starting Kafka notification consumer (broker: {})",

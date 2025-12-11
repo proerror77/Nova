@@ -45,7 +45,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .connect_lazy();
 
     // Initialize layers
-    let recall_layer = RecallLayer::new(graph_client, content_client, redis_client, config.recall.clone());
+    let recall_layer = RecallLayer::new(
+        graph_client,
+        content_client,
+        redis_client,
+        config.recall.clone(),
+    );
     let ranking_layer = RankingLayer::new();
     let diversity_layer = DiversityLayer::new(0.7); // lambda = 0.7
 

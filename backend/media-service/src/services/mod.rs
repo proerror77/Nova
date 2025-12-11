@@ -473,9 +473,7 @@ impl ReelTranscodePipeline {
 
     /// Check if real GCP transcoding is available
     fn is_gcp_transcoding_available(&self) -> bool {
-        !self.enable_mock
-            && self.gcs_bucket.is_some()
-            && self.gcp_project_id.is_some()
+        !self.enable_mock && self.gcs_bucket.is_some() && self.gcp_project_id.is_some()
     }
 
     /// Enqueue asynchronous processing for a reel
@@ -504,14 +502,7 @@ impl ReelTranscodePipeline {
                 )
                 .await
             } else {
-                Self::process_reel_mock(
-                    pool,
-                    reel_id,
-                    upload_id,
-                    profiles,
-                    cdn_base_url,
-                )
-                .await
+                Self::process_reel_mock(pool, reel_id, upload_id, profiles, cdn_base_url).await
             };
 
             if let Err(err) = result {
@@ -537,7 +528,7 @@ impl ReelTranscodePipeline {
         gcp_location: String,
     ) -> Result<()> {
         use crate::services::video::transcoder::{
-            GcpTranscoderClient, TranscoderConfig, TranscodeProfile, TranscodeJobStatus,
+            GcpTranscoderClient, TranscodeJobStatus, TranscodeProfile, TranscoderConfig,
         };
 
         let upload_id = match upload_id {
@@ -604,7 +595,8 @@ impl ReelTranscodePipeline {
             Ok(client) => client,
             Err(e) => {
                 error!("Failed to create GCP Transcoder client: {}", e);
-                mark_reel_failed(&pool, reel_id, &format!("Transcoder client error: {}", e)).await?;
+                mark_reel_failed(&pool, reel_id, &format!("Transcoder client error: {}", e))
+                    .await?;
                 return Ok(());
             }
         };
@@ -623,11 +615,10 @@ impl ReelTranscodePipeline {
             .collect();
 
         // Create transcoding job
-        let job_id = match transcoder.create_transcode_job(
-            reel_id,
-            &input_gcs_uri,
-            &transcode_profiles,
-        ).await {
+        let job_id = match transcoder
+            .create_transcode_job(reel_id, &input_gcs_uri, &transcode_profiles)
+            .await
+        {
             Ok(id) => id,
             Err(e) => {
                 error!("Failed to create transcode job: {}", e);
@@ -636,7 +627,10 @@ impl ReelTranscodePipeline {
             }
         };
 
-        info!("GCP Transcoder job created: {} for reel {}", job_id, reel_id);
+        info!(
+            "GCP Transcoder job created: {} for reel {}",
+            job_id, reel_id
+        );
 
         // Update all transcode jobs with GCP job ID
         sqlx::query(
@@ -753,7 +747,9 @@ impl ReelTranscodePipeline {
                     return Ok(());
                 }
                 TranscodeJobStatus::Failed => {
-                    let error_msg = job_result.error_message.unwrap_or_else(|| "Unknown error".to_string());
+                    let error_msg = job_result
+                        .error_message
+                        .unwrap_or_else(|| "Unknown error".to_string());
                     error!("GCP Transcoder job {} failed: {}", job_id, error_msg);
                     mark_reel_failed(&pool, reel_id, &error_msg).await?;
                     return Ok(());

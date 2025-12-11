@@ -217,9 +217,11 @@ async fn fetch_posts_with_metadata(user_id: Uuid, limit: usize) -> Result<Vec<Ca
         );
 
     let social_counts = match social_client
-        .batch_get_counts(grpc_clients::nova::social_service::v2::BatchGetCountsRequest {
-            post_ids: list_resp.post_ids.clone(),
-        })
+        .batch_get_counts(
+            grpc_clients::nova::social_service::v2::BatchGetCountsRequest {
+                post_ids: list_resp.post_ids.clone(),
+            },
+        )
         .await
     {
         Ok(response) => response.into_inner().counts,
