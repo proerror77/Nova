@@ -38,8 +38,8 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# Copy binary from builder (binary is in workspace target dir)
-COPY --from=builder /app/backend/target/release/graphql-gateway /app/graphql-gateway
+# Copy binary from builder (binary is in workspace target dir at root level)
+COPY --from=builder /app/target/release/graphql-gateway /app/graphql-gateway
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && \
