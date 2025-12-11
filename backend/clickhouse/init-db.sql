@@ -1,4 +1,9 @@
 -- ClickHouse initialization for Nova analytics
+-- Database: nova_feed (set via CLICKHOUSE_DB env var)
+
+-- Ensure we're using the correct database
+CREATE DATABASE IF NOT EXISTS nova_feed;
+USE nova_feed;
 
 -- Events stream (generic)
 CREATE TABLE IF NOT EXISTS events (

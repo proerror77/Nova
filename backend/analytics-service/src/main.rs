@@ -93,10 +93,10 @@ async fn main() -> Result<()> {
         tracing::warn!("OUTBOX_PUBLISHER_ENABLED=false - skipping outbox worker start");
     }
 
-    // Start CDC Consumer in background (feature flag)
+    // Start CDC Consumer in background (enabled by default for feed ranking)
     let cdc_enabled = std::env::var("CDC_CONSUMER_ENABLED")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
+        .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
+        .unwrap_or(true);
 
     if cdc_enabled {
         let cdc_config = CdcConsumerConfig::from_env();

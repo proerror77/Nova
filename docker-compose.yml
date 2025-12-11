@@ -330,6 +330,15 @@ services:
     networks:
       - nova-network
 
+  # ============================================
+  # Messaging Service (WebSocket API)
+  # ============================================
+  messaging-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.messaging
+    restart: unless-stopped
+    environment:
       RTC_TURN_USERNAME: novauser
       RTC_TURN_PASSWORD: nova-pass
       RTC_ICE_TTL_SECONDS: 3600
@@ -354,8 +363,6 @@ services:
     # ports:
     #   - "8085:3000"
     depends_on:
-      postgres-messaging:
-        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
@@ -617,6 +624,140 @@ services:
   # Milvus Vector Database
   # ============================================
   # milvus: (removed duplicate definition, using the one at line 612 instead)
+
+  # ============================================
+  # Analytics Service (CDC Consumer for ClickHouse)
+  # ============================================
+  analytics-service:
+    build:
+      context: .
+      dockerfile: ./backend/analytics-service/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Application
+      APP_ENV: development
+      PORT: 8087
+      RUST_LOG: info,analytics_service=debug
+
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
+      DATABASE_MAX_CONNECTIONS: 10
+
+      # Kafka
+      KAFKA_BROKERS: kafka:9092
+
+      # ClickHouse
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DATABASE: nova_feed
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
+
+      # CDC Consumer (enabled by default)
+      CDC_CONSUMER_ENABLED: "true"
+      CDC_TOPICS: cdc.posts,cdc.follows,cdc.comments,cdc.likes
+      CDC_CONSUMER_GROUP: analytics-cdc-consumer-v1
+      CDC_MAX_CONCURRENT_INSERTS: 10
+
+      # Outbox Publisher
+      OUTBOX_PUBLISHER_ENABLED: "true"
+    # NOTE: Internal ports are NOT exposed to host
+    # Access via API Gateway (api-gateway:3000) instead
+    # Uncomment below for direct debugging access:
+    # ports:
+    #   - "8087:8087"
+    #   - "9087:9087"  # gRPC
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      clickhouse:
+        condition: service_healthy
+      debezium:
+        condition: service_started
+    networks:
+      - nova-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8087/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ============================================
+  # Content Service (Feed Ranking & Posts API)
+  # ============================================
+  content-service:
+    build:
+      context: .
+      dockerfile: ./backend/content-service/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Application
+      APP_ENV: development
+      CONTENT_SERVICE_HOST: 0.0.0.0
+      CONTENT_SERVICE_PORT: 8088
+      RUST_LOG: info,content_service=debug
+
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
+      DATABASE_MAX_CONNECTIONS: 20
+
+      # Redis
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
+
+      # Kafka
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_EVENTS_TOPIC: nova-events
+
+      # ClickHouse (for feed ranking)
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DATABASE: nova_feed
+      CLICKHOUSE_USERNAME: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
+      CLICKHOUSE_QUERY_TIMEOUT_MS: 2000
+
+      # Feed Ranking Config
+      FEED_FRESHNESS_WEIGHT: "0.3"
+      FEED_ENGAGEMENT_WEIGHT: "0.4"
+      FEED_AFFINITY_WEIGHT: "0.3"
+      FEED_FRESHNESS_LAMBDA: "0.1"
+      FEED_MAX_CANDIDATES: "1000"
+      FEED_CANDIDATE_PREFETCH_MULTIPLIER: "5"
+      FEED_FALLBACK_CACHE_TTL_SECS: "60"
+      FEED_MAX_CONSECUTIVE_SAME_AUTHOR: "2"
+      FEED_FILTER_SEEN_POSTS: "true"
+
+      # CORS
+      CORS_ALLOWED_ORIGINS: "http://localhost:3000"
+    # NOTE: Internal port is NOT exposed to host
+    # Access via API Gateway (api-gateway:3000) instead
+    # Uncomment below for direct debugging access:
+    # ports:
+    #   - "8088:8088"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      clickhouse:
+        condition: service_healthy
+      analytics-service:
+        condition: service_healthy
+    networks:
+      - nova-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8088/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   # ============================================
   # MailHog (Email testing - development only)

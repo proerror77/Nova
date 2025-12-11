@@ -53,7 +53,7 @@ impl CdcConsumerConfig {
             clickhouse_url: std::env::var("CLICKHOUSE_URL")
                 .unwrap_or_else(|_| "http://clickhouse:8123".to_string()),
             clickhouse_database: std::env::var("CLICKHOUSE_DATABASE")
-                .unwrap_or_else(|_| "analytics".to_string()),
+                .unwrap_or_else(|_| "nova_feed".to_string()),
             clickhouse_user: std::env::var("CLICKHOUSE_USER")
                 .unwrap_or_else(|_| "default".to_string()),
             clickhouse_password: std::env::var("CLICKHOUSE_PASSWORD").unwrap_or_default(),

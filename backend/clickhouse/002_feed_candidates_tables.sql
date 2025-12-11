@@ -2,6 +2,9 @@
 -- These tables store pre-computed feed candidates for fast feed generation
 -- They should be populated by ETL jobs from CDC data
 
+-- Ensure we're using the correct database
+USE nova_feed;
+
 -- ============================================
 -- 1. Feed candidates from followed users (personalized)
 -- ============================================
