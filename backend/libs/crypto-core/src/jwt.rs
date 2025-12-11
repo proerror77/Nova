@@ -44,7 +44,7 @@ use uuid::Uuid;
 // ============================================================================
 
 const ACCESS_TOKEN_EXPIRY_HOURS: i64 = 1;
-const REFRESH_TOKEN_EXPIRY_DAYS: i64 = 30;
+const REFRESH_TOKEN_EXPIRY_DAYS: i64 = 90;
 const MAX_IAT_FUTURE_SKEW_SECS: i64 = 300;
 const DEFAULT_VALIDATION_LEEWAY: u64 = 30;
 

@@ -26,6 +26,10 @@ class AuthenticationManager: ObservableObject {
     // Note: Using nonisolated property access pattern for Swift 6 compatibility
     private var refreshTask: Task<Bool, Never>?
 
+    // Retry configuration for token refresh
+    private let maxRefreshRetries = 3
+    private let refreshRetryDelaySeconds: UInt64 = 2
+
     private init() {
         migrateFromUserDefaults()
         loadSavedAuth()
@@ -320,6 +324,7 @@ class AuthenticationManager: ObservableObject {
     /// Attempt to refresh token if expired (401 error)
     /// Returns true if refresh was successful
     /// Uses task coalescence to prevent multiple concurrent refresh attempts (race condition fix)
+    /// Includes retry logic for network failures to avoid unnecessary logouts
     func attemptTokenRefresh() async -> Bool {
         // If already refreshing, wait for the existing task (MainActor ensures thread safety)
         if let existingTask = refreshTask {
@@ -337,20 +342,44 @@ class AuthenticationManager: ObservableObject {
         let task = Task<Bool, Never> { [weak self] in
             guard let self = self else { return false }
 
-            do {
-                try await self.refreshToken(refreshToken: storedRefreshToken)
-                #if DEBUG
-                print("[Auth] Token refreshed successfully")
-                #endif
-                return true
-            } catch {
-                #if DEBUG
-                print("[Auth] Token refresh failed: \(error)")
-                #endif
-                // Clear auth state on refresh failure
-                await self.logout()
-                return false
+            // Retry loop for network failures
+            for attempt in 1...self.maxRefreshRetries {
+                do {
+                    try await self.refreshToken(refreshToken: storedRefreshToken)
+                    #if DEBUG
+                    print("[Auth] Token refreshed successfully on attempt \(attempt)")
+                    #endif
+                    return true
+                } catch {
+                    #if DEBUG
+                    print("[Auth] Token refresh attempt \(attempt)/\(self.maxRefreshRetries) failed: \(error)")
+                    #endif
+
+                    // Check if it's a network error (worth retrying) vs auth error (don't retry)
+                    let isNetworkError = self.isRetryableError(error)
+
+                    if isNetworkError && attempt < self.maxRefreshRetries {
+                        // Wait before retrying for network errors
+                        try? await Task.sleep(nanoseconds: self.refreshRetryDelaySeconds * 1_000_000_000)
+                        continue
+                    }
+
+                    // Only logout on authentication errors (401/403), not network failures
+                    if self.isAuthenticationError(error) {
+                        #if DEBUG
+                        print("[Auth] Authentication error - logging out")
+                        #endif
+                        await self.logout()
+                    } else {
+                        #if DEBUG
+                        print("[Auth] Network error - keeping session, user can retry later")
+                        #endif
+                        // Don't logout for network errors - user can try again when connection is restored
+                    }
+                    return false
+                }
             }
+            return false
         }
 
         refreshTask = task
@@ -360,6 +389,47 @@ class AuthenticationManager: ObservableObject {
         refreshTask = nil
 
         return result
+    }
+
+    /// Check if the error is retryable (network issues)
+    private func isRetryableError(_ error: Error) -> Bool {
+        // Use APIError's built-in isRetryable property
+        if let apiError = error as? APIError {
+            return apiError.isRetryable
+        }
+
+        // Network-related URLErrors
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet,
+                 .networkConnectionLost,
+                 .timedOut,
+                 .cannotConnectToHost,
+                 .dnsLookupFailed:
+                return true
+            default:
+                return false
+            }
+        }
+
+        return false
+    }
+
+    /// Check if the error is an authentication error (should trigger logout)
+    private func isAuthenticationError(_ error: Error) -> Bool {
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .unauthorized:
+                return true
+            case .serverError(let statusCode, _):
+                // 401 = Unauthorized, 403 = Forbidden
+                return statusCode == 401 || statusCode == 403
+            default:
+                return false
+            }
+        }
+
+        return false
     }
 
     /// Get stored refresh token

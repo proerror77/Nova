@@ -23,7 +23,7 @@ pub async fn create_session(
 ) -> Result<Session> {
     let session_id = Uuid::new_v4();
     let now = Utc::now();
-    let expires_at = now + chrono::Duration::days(30);
+    let expires_at = now + chrono::Duration::days(90);
 
     let session = sqlx::query_as::<_, Session>(
         r#"
