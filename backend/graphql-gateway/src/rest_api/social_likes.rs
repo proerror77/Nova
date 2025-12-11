@@ -32,7 +32,7 @@ pub async fn create_like(
         })
         .await
     {
-        Ok(_) => HttpResponse::Ok().finish(),
+        Ok(_) => HttpResponse::Ok().json(serde_json::json!({"success": true})),
         Err(e) => {
             error!("create_like failed: {}", e);
             HttpResponse::ServiceUnavailable().finish()
@@ -62,7 +62,7 @@ pub async fn delete_like(
         })
         .await
     {
-        Ok(_) => HttpResponse::Ok().finish(),
+        Ok(_) => HttpResponse::Ok().json(serde_json::json!({"success": true})),
         Err(e) => {
             error!("delete_like failed: {}", e);
             HttpResponse::ServiceUnavailable().finish()
