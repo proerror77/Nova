@@ -56,7 +56,7 @@ impl RedisCache {
         let serialized = serde_json::to_string(value)?;
         let ttl_secs = ttl.unwrap_or(self.default_ttl).as_secs();
 
-        conn.set_ex(key, serialized, ttl_secs).await?;
+        let _: () = conn.set_ex(key, serialized, ttl_secs).await?;
         Ok(())
     }
 
