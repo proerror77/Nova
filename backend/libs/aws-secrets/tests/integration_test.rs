@@ -283,6 +283,7 @@ async fn test_secret_rotation_simulation() {
 
 /// Test: Error handling for non-existent secret
 #[tokio::test]
+#[ignore = "Requires AWS credentials"]
 async fn test_secret_not_found_error() {
     let manager = SecretManager::new()
         .await
