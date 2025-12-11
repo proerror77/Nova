@@ -583,6 +583,23 @@ message UnlinkOAuthProviderResponse {
 }
 
 // ============================================================================
+// Password Reset
+// ============================================================================
+
+message RequestPasswordResetRequest {
+  string email = 1;  // Email address to send reset link to
+}
+
+message ResetPasswordRequest {
+  string reset_token = 1;   // Token from email link
+  string new_password = 2;  // New password (will be validated and hashed)
+}
+
+message PasswordResetResponse {
+  bool success = 1;
+}
+
+// ============================================================================
 // Auth Service Definition
 // ============================================================================
 
@@ -818,6 +835,23 @@ service AuthService {
   rpc UnlinkOAuthProvider(UnlinkOAuthProviderRequest) returns (UnlinkOAuthProviderResponse) {
     option (google.api.http) = {
       delete: "/api/v2/auth/users/{user_id}/oauth/{provider}"
+    };
+  }
+
+  // ========== Password Reset ==========
+  // Request password reset email (public - no auth required)
+  rpc RequestPasswordReset(RequestPasswordResetRequest) returns (PasswordResetResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/password/reset/request"
+      body: "*"
+    };
+  }
+
+  // Reset password using token from email
+  rpc ResetPassword(ResetPasswordRequest) returns (PasswordResetResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/password/reset"
+      body: "*"
     };
   }
 }

@@ -323,6 +323,19 @@ class AuthenticationManager: ObservableObject {
         keychain.get(.userId)
     }
 
+    // MARK: - Password Reset
+
+    /// Request password reset email
+    /// Always succeeds (from user perspective) to prevent email enumeration
+    func requestPasswordReset(email: String) async throws {
+        try await identityService.requestPasswordReset(email: email)
+    }
+
+    /// Reset password using token from email
+    func resetPassword(token: String, newPassword: String) async throws {
+        try await identityService.resetPassword(resetToken: token, newPassword: newPassword)
+    }
+
     // MARK: - Private Helpers
 
     private func saveAuth(token: String, refreshToken: String?, user: UserProfile) async {

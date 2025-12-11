@@ -134,8 +134,8 @@ struct APIConfig {
 
         // Password Management
         static let changePassword = "/api/v2/auth/change-password"
-        static let requestPasswordReset = "/api/v2/auth/request-password-reset"
-        static let resetPassword = "/api/v2/auth/reset-password"
+        static let requestPasswordReset = "/api/v2/auth/password/reset/request"
+        static let resetPassword = "/api/v2/auth/password/reset"
 
         // Token Management
         static let verifyToken = "/api/v2/auth/verify-token"

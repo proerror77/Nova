@@ -99,3 +99,20 @@
 "Search_people_on_Icered" = "Search people on Icered";
 "Share_invitation_link" = "Share invitation link";
 "Invitations_left" = "You have 3 invitations left.";
+
+// MARK: - Password Reset
+"Back" = "Back";
+"Forgot_Password_Title" = "Reset Password";
+"Forgot_Password_Description" = "Enter your email address and we'll send you a link to reset your password.";
+"Enter_Your_Email" = "Enter your email address";
+"Send_Reset_Link" = "Send Reset Link";
+"Back_To_Login" = "Back to Login";
+"Password_Reset_Email_Sent" = "If an account exists with this email, you will receive a password reset link shortly.";
+"Reset_Password_Title" = "Create New Password";
+"Reset_Password_Description" = "Enter your new password below.";
+"New_Password" = "New Password";
+"Confirm_New_Password" = "Confirm New Password";
+"Reset_Password" = "Reset Password";
+"Password_Reset_Success" = "Your password has been reset successfully. You can now log in with your new password.";
+"Invalid_Reset_Token" = "This password reset link is invalid or has expired. Please request a new one.";
+"Password_Too_Short" = "Password must be at least 8 characters";
