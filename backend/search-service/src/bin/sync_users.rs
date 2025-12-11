@@ -29,6 +29,7 @@ struct UserRecord {
     username: String,
     display_name: Option<String>,
     bio: Option<String>,
+    #[allow(dead_code)]
     avatar_url: Option<String>,
     #[allow(dead_code)]
     created_at: DateTime<Utc>,
@@ -256,8 +257,8 @@ fn to_es_document(user: &UserRecord) -> UserDocument {
         bio: user.bio.clone(),
         location: None,
         interests: vec![],
-        is_verified: false,    // TODO: Add is_verified to users table if needed
-        follower_count: 0,     // Managed by social-service
+        is_verified: false,
+        follower_count: 0,
     }
 }
 
