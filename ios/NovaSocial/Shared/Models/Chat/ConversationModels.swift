@@ -357,27 +357,31 @@ struct SendMessageRequest: Codable, Sendable {
     let conversationId: String
     let encryptedContent: String  // Base64-encoded ciphertext
     let nonce: String  // Must be exactly 32 characters (24 bytes base64-encoded)
-    let messageType: String  // "text" or "system"
+    let messageType: String  // "text", "image", "video", "audio", "file", "location", or "system"
+    let mediaUrl: String?  // Required for image/video/audio/file types
 
     enum CodingKeys: String, CodingKey {
         case conversationId = "conversation_id"
         case encryptedContent = "encrypted_content"
         case nonce
         case messageType = "message_type"
+        case mediaUrl = "media_url"
     }
 
     init(
         conversationId: String,
         encryptedContent: String,
         nonce: String,
-        messageType: ChatMessageType = .text
+        messageType: ChatMessageType = .text,
+        mediaUrl: String? = nil
     ) {
         self.conversationId = conversationId
         self.encryptedContent = encryptedContent
         self.nonce = nonce
         self.messageType = messageType.rawValue
+        self.mediaUrl = mediaUrl
     }
-    
+
     /// Legacy convenience initializer for plain text (will be encrypted by caller)
     init(
         conversationId: String,
@@ -391,6 +395,7 @@ struct SendMessageRequest: Codable, Sendable {
         self.encryptedContent = Data(content.utf8).base64EncodedString()
         self.nonce = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==" // Placeholder - should be real nonce
         self.messageType = type.rawValue
+        self.mediaUrl = mediaUrl
     }
 }
 

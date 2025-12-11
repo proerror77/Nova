@@ -277,6 +277,9 @@ struct ChatView: View {
     /// ⚠️ 这是连接后端API的关键，不要替换成其他Service
     @State private var chatService = ChatService()
 
+    /// 媒体服务 - 负责图片/视频上传
+    private let mediaService = MediaService()
+
     /// 必需参数
     @Binding var showChat: Bool
     let conversationId: String  // ← 从上级View传入，标识当前聊天对象
@@ -292,6 +295,7 @@ struct ChatView: View {
     // Loading states
     @State private var isLoadingHistory = false
     @State private var isSending = false
+    @State private var isUploadingImage = false
     @State private var error: String?
     
     // Typing indicator state
@@ -862,27 +866,104 @@ struct ChatView: View {
     }
 
     // MARK: - 发送图片消息
+    /// 完整图片上传流程：压缩 → 上传到 MediaService → 发送消息
     private func sendImageMessage(image: UIImage) {
-        // TODO: 先上传图片到Media Service，获取URL，然后发送消息
-        // 暂时只添加到本地UI
+        // 压缩图片
+        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+            #if DEBUG
+            print("[ChatView] Failed to compress image")
+            #endif
+            error = "Failed to compress image"
+            return
+        }
+
+        // 立即添加到本地 UI（乐观更新）
         let localMessage = ChatMessage(localText: "", isFromMe: true, image: image)
         messages.append(localMessage)
+        showAttachmentOptions = false
 
-        #if DEBUG
-        print("[ChatView] Image upload not yet implemented")
-        #endif
+        // 异步上传并发送
+        Task {
+            isUploadingImage = true
+
+            do {
+                // 1. 上传图片到 MediaService
+                let filename = "chat_image_\(UUID().uuidString).jpg"
+                let mediaUrl = try await mediaService.uploadImage(imageData: imageData, filename: filename)
+
+                #if DEBUG
+                print("[ChatView] Image uploaded: \(mediaUrl)")
+                #endif
+
+                // 2. 发送带 mediaUrl 的消息到聊天服务
+                let sentMessage = try await chatService.sendMessage(
+                    conversationId: conversationId,
+                    content: mediaUrl,  // 图片 URL 作为内容
+                    type: .image,
+                    mediaUrl: mediaUrl
+                )
+
+                // 3. 替换本地消息为服务器返回的消息
+                if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
+                    // 保留本地图片用于显示，同时更新消息 ID
+                    var updatedMessage = ChatMessage(from: sentMessage, currentUserId: currentUserId)
+                    updatedMessage.image = image  // 保留本地图片
+                    messages[index] = updatedMessage
+                }
+
+                #if DEBUG
+                print("[ChatView] Image message sent: \(sentMessage.id)")
+                #endif
+
+            } catch {
+                #if DEBUG
+                print("[ChatView] Failed to send image: \(error)")
+                #endif
+
+                // 上传失败 - 标记消息为失败状态
+                self.error = "Failed to send image"
+
+                // 可选：移除失败的消息或添加重试按钮
+                // messages.removeAll { $0.id == localMessage.id }
+            }
+
+            isUploadingImage = false
+        }
     }
 
     // MARK: - 发送位置消息
+    /// 发送位置消息到会话
     private func sendLocationMessage(location: CLLocationCoordinate2D) {
-        // TODO: 发送location类型消息
-        // 暂时只添加到本地UI
+        // 立即添加到本地 UI（乐观更新）
         let localMessage = ChatMessage(localText: "", isFromMe: true, location: location)
         messages.append(localMessage)
+        showAttachmentOptions = false
 
-        #if DEBUG
-        print("[ChatView] Location sharing not yet implemented")
-        #endif
+        Task {
+            isSending = true
+
+            do {
+                // 使用 ChatService 的位置分享 API
+                try await chatService.shareLocation(
+                    conversationId: conversationId,
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                    accuracy: nil
+                )
+
+                #if DEBUG
+                print("[ChatView] Location shared: \(location.latitude), \(location.longitude)")
+                #endif
+
+            } catch {
+                #if DEBUG
+                print("[ChatView] Failed to share location: \(error)")
+                #endif
+                self.error = "Failed to share location"
+            }
+
+            isSending = false
+        }
     }
 
     // MARK: - 获取当前日期字符串

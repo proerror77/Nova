@@ -284,7 +284,8 @@ Send a new message to a conversation.
   "conversation_id": "conv-uuid",
   "encrypted_content": "base64-ciphertext",
   "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",  // 32 chars (24 bytes base64)
-  "message_type": "text"  // or "system"
+  "message_type": "text",  // "text", "image", "video", "audio", "file", "location", or "system"
+  "media_url": null  // Required for image/video/audio/file types
 }
 ```
 
@@ -297,6 +298,7 @@ Send a new message to a conversation.
   "encrypted_content": "base64-ciphertext",
   "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
   "message_type": "text",
+  "media_url": null,
   "created_at": "2025-10-19T13:05:00Z"
 }
 ```
@@ -304,7 +306,8 @@ Send a new message to a conversation.
 **Validation**:
 - `encrypted_content`: Must be valid base64
 - `nonce`: Must be exactly 32 characters (24 bytes base64-encoded)
-- `message_type`: Must be "text" or "system"
+- `message_type`: Must be one of: "text", "image", "video", "audio", "file", "location", "system"
+- `media_url`: Required when message_type is "image", "video", "audio", or "file"
 - User must be a member of the conversation
 
 **Side Effects**:
@@ -318,6 +321,53 @@ Send a new message to a conversation.
 **Error Responses**:
 - `400 Bad Request`: Invalid encrypted_content or nonce
 - `403 Forbidden`: User is not a member of the conversation
+
+---
+
+### Send Media Message
+
+Send a message with media content (image, video, audio, file).
+
+**Workflow**:
+1. Upload media to Media Service (`POST /api/v2/media/upload`)
+2. Get `media_url` from upload response
+3. Send message with `message_type` and `media_url`
+
+**Endpoint**: `POST /messages`
+
+**Request Body** (Image Example):
+```json
+{
+  "conversation_id": "conv-uuid",
+  "encrypted_content": "base64-encrypted-media-url",
+  "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+  "message_type": "image",
+  "media_url": "https://cdn.nova.app/media/123/image.jpg"
+}
+```
+
+**Message Types**:
+| Type | Description | media_url Required |
+|------|-------------|-------------------|
+| `text` | Plain text message | No |
+| `image` | Image (JPEG, PNG, GIF) | Yes |
+| `video` | Video (MP4, MOV) | Yes |
+| `audio` | Voice message | Yes |
+| `file` | Document attachment | Yes |
+| `location` | Location coordinates | No (uses content) |
+| `system` | System notification | No |
+
+**Location Message Request**:
+```json
+{
+  "conversation_id": "conv-uuid",
+  "encrypted_content": "base64-encrypted-coordinates",
+  "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+  "message_type": "location"
+}
+```
+
+**Note**: For location messages, the encrypted content should contain JSON: `{"latitude": 40.7128, "longitude": -74.0060, "accuracy": 10.0}`
 
 ---
 
