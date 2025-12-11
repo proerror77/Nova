@@ -22,6 +22,7 @@ mod identity_service_grpc_tests {
             pub mod v2 {
                 tonic::include_proto!("nova.common.v2");
             }
+            #[allow(unused_imports)]
             pub use v2::*;
         }
         pub mod auth_service {
@@ -84,6 +85,7 @@ mod identity_service_grpc_tests {
             email: email.clone(),
             username: username.clone(),
             password: "StrongPassword123!".to_string(),
+            invite_code: "TESTCODE".to_string(),
         });
 
         match client.register(request).await {
@@ -147,6 +149,7 @@ mod identity_service_grpc_tests {
             email: "not-an-email".to_string(), // Invalid email format
             username: format!("testuser_{}", timestamp),
             password: "StrongPassword123!".to_string(),
+            invite_code: "TESTCODE".to_string(),
         });
 
         match client.register(request).await {
@@ -202,6 +205,7 @@ mod identity_service_grpc_tests {
             email: email.clone(),
             username: format!("user1_{}", timestamp),
             password: "StrongPassword123!".to_string(),
+            invite_code: "TESTCODE".to_string(),
         });
 
         match client.register(request1).await {
@@ -217,6 +221,7 @@ mod identity_service_grpc_tests {
             email: email.clone(),
             username: format!("user2_{}", timestamp), // Different username
             password: "StrongPassword123!".to_string(),
+            invite_code: "TESTCODE".to_string(),
         });
 
         match client.register(request2).await {
@@ -270,6 +275,7 @@ mod identity_service_grpc_tests {
             email: email.clone(),
             username: format!("loginuser_{}", timestamp),
             password: password.to_string(),
+            invite_code: "TESTCODE".to_string(),
         });
 
         let register_resp = match client.register(register_req).await {
@@ -345,6 +351,7 @@ mod identity_service_grpc_tests {
             email: email.clone(),
             username: format!("pwtest_{}", timestamp),
             password: "CorrectPassword123!".to_string(),
+            invite_code: "TESTCODE".to_string(),
         });
 
         if let Err(e) = client.register(register_req).await {
@@ -456,6 +463,7 @@ mod identity_service_grpc_tests {
             email: email.clone(),
             username: username.clone(),
             password: "StrongPassword123!".to_string(),
+            invite_code: "TESTCODE".to_string(),
         });
 
         let register_resp = match client.register(register_req).await {
@@ -579,6 +587,7 @@ mod identity_service_grpc_tests {
             email: email.clone(),
             username: username.clone(),
             password: "StrongPassword123!".to_string(),
+            invite_code: "TESTCODE".to_string(),
         });
 
         let register_resp = match client.register(register_req).await {
@@ -656,6 +665,7 @@ mod identity_service_grpc_tests {
             email: format!("exists_test_{}@example.com", timestamp),
             username: format!("existsuser_{}", timestamp),
             password: "StrongPassword123!".to_string(),
+            invite_code: "TESTCODE".to_string(),
         });
 
         let user_id = match client.register(register_req).await {
