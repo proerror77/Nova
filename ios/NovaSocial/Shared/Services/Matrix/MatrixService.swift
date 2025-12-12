@@ -1,6 +1,196 @@
 import Foundation
 import Combine
-import MatrixRustSDK
+import UIKit  // For UIDevice
+
+// MARK: - MatrixRustSDK Stub Types
+// TODO: Remove these stubs once MatrixRustSDK is properly integrated via SPM
+// These are placeholder types to allow the app to compile without the SDK
+
+#if !canImport(MatrixRustSDK)
+class Client {
+    func userId() -> String { "" }
+    func rooms() -> [Room] { [] }
+    func getRoom(roomId: String) -> Room? { nil }
+    func createRoom(request: CreateRoomParameters) async throws -> String { "" }
+    func joinRoomByIdOrAlias(roomIdOrAlias: String, serverNames: [String]) async throws -> Room {
+        fatalError("MatrixRustSDK not integrated")
+    }
+    func syncService() -> SyncServiceBuilder { SyncServiceBuilder() }
+    func login(username: String, password: String, initialDeviceName: String, deviceId: String?) async throws {}
+    func logout() async throws {}
+    func session() throws -> Session { fatalError("MatrixRustSDK not integrated") }
+    func restoreSession(session: Session) async throws {}
+}
+
+class ClientBuilder {
+    func homeserverUrl(url: String) -> ClientBuilder { self }
+    func sessionPath(path: String) -> ClientBuilder { self }
+    func userAgent(userAgent: String) -> ClientBuilder { self }
+    func build() async throws -> Client { Client() }
+}
+
+class SyncServiceBuilder {
+    func withCrossProcessLock(appIdentifier: String) -> SyncServiceBuilder { self }
+    func finish() async throws -> SyncService { SyncService() }
+}
+
+class SyncService {
+    func start() async throws {}
+    func stop() async throws {}
+    func roomListService() -> RoomListService { RoomListService() }
+}
+
+class RoomListService {
+    func allRooms() async throws -> RoomList { RoomList() }
+}
+
+class RoomList {
+    func entries(listener: RoomListEntriesListenerProtocol) -> (entries: [RoomListEntry], handle: TaskHandle) {
+        ([], TaskHandle())
+    }
+}
+
+class Room {
+    func id() -> String { "" }
+    func displayName() -> String? { nil }
+    func roomInfo() -> RoomInfo { RoomInfo() }
+    func leave() async throws {}
+    func inviteUserById(userId: String) async throws {}
+    func kickUser(userId: String, reason: String?) async throws {}
+    func typingNotice(isTyping: Bool) async throws {}
+    func timeline() async throws -> Timeline { Timeline() }
+}
+
+struct RoomInfo {
+    var topic: String?
+    var avatarUrl: String?
+    var isDirect: Bool = false
+    var isEncrypted: Bool = false
+    var activeMembersCount: UInt = 0
+    var numUnreadMessages: UInt = 0
+}
+
+class Timeline {
+    func send(msg: Any) async throws {}
+    func paginateBackwards(numEvents: UInt16) async throws {}
+    func getTimelineItems() -> [TimelineItem] { [] }
+    func markAsRead(receiptType: ReceiptType) async throws {}
+    func sendImage(url: String, thumbnailUrl: String?, imageInfo: ImageInfo, caption: String?, formattedCaption: String?, progressWatcher: Any?) async throws {}
+    func sendVideo(url: String, thumbnailUrl: String?, videoInfo: VideoInfo, caption: String?, formattedCaption: String?, progressWatcher: Any?) async throws {}
+    func sendAudio(url: String, audioInfo: AudioInfo, caption: String?, formattedCaption: String?, progressWatcher: Any?) async throws {}
+    func sendFile(url: String, fileInfo: FileInfo, progressWatcher: Any?) async throws {}
+}
+
+enum ReceiptType { case read }
+
+class TimelineItem {
+    func asEvent() -> EventTimelineItem? { nil }
+}
+
+class EventTimelineItem {
+    func eventId() -> String? { nil }
+    func sender() -> String { "" }
+    func timestamp() -> UInt64 { 0 }
+    func content() -> TimelineItemContent? { nil }
+}
+
+class TimelineItemContent {
+    func kind() -> TimelineItemContentKind { .message }
+    func asMessage() -> MessageContent? { nil }
+}
+
+enum TimelineItemContentKind { case message }
+
+class MessageContent {
+    func body() -> String { "" }
+    func msgtype() -> MatrixMessageTypeSDK { .text }
+}
+
+enum MatrixMessageTypeSDK { case text, image, video, audio, file, location, notice, emote }
+
+struct Session {
+    var accessToken: String
+    var refreshToken: String?
+    var userId: String
+    var deviceId: String
+    var homeserverUrl: String
+    var oidcData: String?
+    var slidingSyncVersion: SlidingSyncVersion
+}
+
+enum SlidingSyncVersion { case none }
+
+struct CreateRoomParameters {
+    var name: String?
+    var topic: String?
+    var isEncrypted: Bool
+    var isDirect: Bool
+    var visibility: RoomVisibility
+    var preset: RoomPreset
+    var invite: [String]
+    var avatar: String?
+    var powerLevelContentOverride: String?
+}
+
+enum RoomVisibility { case `private` }
+enum RoomPreset { case trustedPrivateChat, privateChat }
+
+struct ImageInfo {
+    var height: UInt64?
+    var width: UInt64?
+    var mimetype: String?
+    var size: UInt64
+    var thumbnailInfo: String?
+    var thumbnailSource: String?
+    var blurhash: String?
+}
+
+struct VideoInfo {
+    var duration: UInt64?
+    var height: UInt64?
+    var width: UInt64?
+    var mimetype: String?
+    var size: UInt64
+    var thumbnailInfo: String?
+    var thumbnailSource: String?
+    var blurhash: String?
+}
+
+struct AudioInfo {
+    var duration: UInt64?
+    var size: UInt64
+    var mimetype: String?
+}
+
+struct FileInfo {
+    var mimetype: String?
+    var size: UInt64
+    var thumbnailInfo: String?
+    var thumbnailSource: String?
+}
+
+class TaskHandle {
+    func cancel() {}
+}
+
+enum RoomListEntry {
+    case filled(String)
+    case empty
+    case invalidated
+}
+
+enum RoomListEntriesUpdate {
+    case append([RoomListEntry])
+    case set(Int, RoomListEntry)
+    case insert(Int, RoomListEntry)
+}
+
+protocol RoomListEntriesListenerProtocol: AnyObject {
+    func onUpdate(roomEntriesUpdate: [RoomListEntriesUpdate])
+}
+
+func messageEventContentFromMarkdown(md: String) -> Any { md }
+#endif
 
 // MARK: - Matrix Service
 //
@@ -1044,6 +1234,9 @@ final class MatrixService: MatrixServiceProtocol {
         let deviceId: String
     }
 
+    // Matrix session storage key for UserDefaults (not sensitive enough for Keychain)
+    private static let matrixSessionKey = "matrix_session_data"
+
     private func storeSessionCredentials(userId: String, accessToken: String, deviceId: String) {
         let credentials = StoredCredentials(
             userId: userId,
@@ -1052,13 +1245,12 @@ final class MatrixService: MatrixServiceProtocol {
         )
 
         if let data = try? JSONEncoder().encode(credentials) {
-            KeychainService.shared.set(String(data: data, encoding: .utf8) ?? "", for: .matrixSession)
+            UserDefaults.standard.set(data, forKey: Self.matrixSessionKey)
         }
     }
 
     private func loadSessionCredentials() -> StoredCredentials? {
-        guard let jsonString = KeychainService.shared.get(.matrixSession),
-              let data = jsonString.data(using: .utf8),
+        guard let data = UserDefaults.standard.data(forKey: Self.matrixSessionKey),
               let credentials = try? JSONDecoder().decode(StoredCredentials.self, from: data) else {
             return nil
         }
@@ -1066,7 +1258,7 @@ final class MatrixService: MatrixServiceProtocol {
     }
 
     private func clearSessionCredentials() {
-        KeychainService.shared.delete(.matrixSession)
+        UserDefaults.standard.removeObject(forKey: Self.matrixSessionKey)
     }
 
     private func getOrCreateDeviceId() -> String {
@@ -1142,8 +1334,3 @@ struct MatrixConfiguration {
     }
 }
 
-// MARK: - Keychain Extension for Matrix
-
-extension KeychainService.Key {
-    static let matrixSession = KeychainService.Key(rawValue: "matrix_session")
-}
