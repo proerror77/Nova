@@ -608,7 +608,8 @@ jobs:
   notify-success:
     name: Notify Success
     needs: [detect-changes, smoke-test]
-    if: success() && needs.detect-changes.outputs.has_changes == 'true'
+    # Use !failure() && !cancelled() instead of success() to handle skipped jobs correctly
+    if: always() && needs.smoke-test.result == 'success' && needs.detect-changes.outputs.has_changes == 'true'
     uses: ./.github/workflows/_reusable-feishu-notify.yml
     with:
       title: "Staging 增量部署成功 (GCP)"
@@ -627,7 +628,8 @@ jobs:
   notify-failure:
     name: Notify Failure
     needs: [detect-changes, build-changed, deploy-layer0, deploy-layer1, deploy-layer2, deploy-layer3, deploy-layer4, smoke-test]
-    if: failure()
+    # Run on any failure in the pipeline, check actual job results
+    if: always() && (needs.build-changed.result == 'failure' || needs.deploy-layer0.result == 'failure' || needs.deploy-layer1.result == 'failure' || needs.deploy-layer2.result == 'failure' || needs.deploy-layer3.result == 'failure' || needs.deploy-layer4.result == 'failure' || needs.smoke-test.result == 'failure')
     uses: ./.github/workflows/_reusable-feishu-notify.yml
     with:
       title: "Staging 部署失敗 (GCP)"
