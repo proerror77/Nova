@@ -98,81 +98,98 @@ jobs:
         if: steps.check.outputs.configured == 'true'
         env:
           FEISHU_WEBHOOK: ${{ secrets.feishu-webhook }}
+          EMOJI: ${{ steps.prepare.outputs.emoji }}
+          TITLE: ${{ inputs.title }}
+          COLOR: ${{ steps.prepare.outputs.color }}
+          STATUS_TEXT: ${{ steps.prepare.outputs.status_text }}
+          WORKFLOW_NAME: ${{ inputs.workflow-name }}
+          BRANCH_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          MESSAGE: ${{ inputs.message }}
+          DETAILS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          # Build Feishu card message
-          cat > /tmp/feishu_message.json << 'EOF'
-          {
-            "msg_type": "interactive",
-            "card": {
-              "header": {
-                "title": {
-                  "content": "${{ steps.prepare.outputs.emoji }} ${{ inputs.title }}",
-                  "tag": "plain_text"
+          # Build Feishu card message using jq for proper JSON escaping
+          jq -n \
+            --arg emoji "$EMOJI" \
+            --arg title "$TITLE" \
+            --arg color "$COLOR" \
+            --arg status_text "$STATUS_TEXT" \
+            --arg workflow_name "$WORKFLOW_NAME" \
+            --arg branch_name "$BRANCH_NAME" \
+            --arg commit_sha "$COMMIT_SHA" \
+            --arg message "$MESSAGE" \
+            --arg details_url "$DETAILS_URL" \
+            '{
+              "msg_type": "interactive",
+              "card": {
+                "header": {
+                  "title": {
+                    "content": "\($emoji) \($title)",
+                    "tag": "plain_text"
+                  },
+                  "template": $color
                 },
-                "template": "${{ steps.prepare.outputs.color }}"
-              },
-              "elements": [
-                {
-                  "tag": "div",
-                  "fields": [
-                    {
-                      "is_short": true,
-                      "text": {
-                        "tag": "lark_md",
-                        "content": "**狀態**\n${{ steps.prepare.outputs.status_text }}"
-                      }
-                    },
-                    {
-                      "is_short": true,
-                      "text": {
-                        "tag": "lark_md",
-                        "content": "**工作流**\n${{ inputs.workflow-name }}"
-                      }
-                    },
-                    {
-                      "is_short": true,
-                      "text": {
-                        "tag": "lark_md",
-                        "content": "**分支**\n${{ github.ref_name }}"
-                      }
-                    },
-                    {
-                      "is_short": true,
-                      "text": {
-                        "tag": "lark_md",
-                        "content": "**提交**\n`${{ github.sha }}`"
-                      }
-                    }
-                  ]
-                },
-                {
-                  "tag": "hr"
-                },
-                {
-                  "tag": "div",
-                  "text": {
-                    "tag": "lark_md",
-                    "content": "${{ inputs.message }}"
-                  }
-                },
-                {
-                  "tag": "action",
-                  "actions": [
-                    {
-                      "tag": "button",
-                      "text": {
-                        "tag": "plain_text",
-                        "content": "查看詳情"
+                "elements": [
+                  {
+                    "tag": "div",
+                    "fields": [
+                      {
+                        "is_short": true,
+                        "text": {
+                          "tag": "lark_md",
+                          "content": "**狀態**\n\($status_text)"
+                        }
                       },
-                      "type": "primary",
-                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                      {
+                        "is_short": true,
+                        "text": {
+                          "tag": "lark_md",
+                          "content": "**工作流**\n\($workflow_name)"
+                        }
+                      },
+                      {
+                        "is_short": true,
+                        "text": {
+                          "tag": "lark_md",
+                          "content": "**分支**\n\($branch_name)"
+                        }
+                      },
+                      {
+                        "is_short": true,
+                        "text": {
+                          "tag": "lark_md",
+                          "content": "**提交**\n`\($commit_sha)`"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "tag": "hr"
+                  },
+                  {
+                    "tag": "div",
+                    "text": {
+                      "tag": "lark_md",
+                      "content": $message
                     }
-                  ]
-                }
-              ]
-            }
-          }
-          EOF
+                  },
+                  {
+                    "tag": "action",
+                    "actions": [
+                      {
+                        "tag": "button",
+                        "text": {
+                          "tag": "plain_text",
+                          "content": "查看詳情"
+                        },
+                        "type": "primary",
+                        "url": $details_url
+                      }
+                    ]
+                  }
+                ]
+              }
+            }' > /tmp/feishu_message.json
 
           echo "📤 Sending notification to Feishu..."
 
