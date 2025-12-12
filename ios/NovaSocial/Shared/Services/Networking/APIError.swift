@@ -12,6 +12,7 @@ enum APIError: Error, LocalizedError {
     case notFound
     case timeout
     case noConnection
+    case serviceUnavailable
 
     // MARK: - LocalizedError
 
@@ -35,6 +36,8 @@ enum APIError: Error, LocalizedError {
             return "Request timed out. Please try again."
         case .noConnection:
             return "No internet connection. Please check your network."
+        case .serviceUnavailable:
+            return "Service temporarily unavailable. Please try again later."
         }
     }
 

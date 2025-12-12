@@ -146,6 +146,8 @@ class APIClient {
                 throw APIError.notFound
             case 408, 504:
                 throw APIError.timeout
+            case 503:
+                throw APIError.serviceUnavailable
             default:
                 let message = String(data: data, encoding: .utf8) ?? "Unknown error"
                 throw APIError.serverError(statusCode: httpResponse.statusCode, message: message)

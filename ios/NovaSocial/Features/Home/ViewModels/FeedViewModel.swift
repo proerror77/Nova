@@ -311,6 +311,11 @@ class FeedViewModel: ObservableObject {
                 #endif
             case .noConnection:
                 self.toastError = "No internet connection. Please try again."
+            case .serviceUnavailable:
+                self.toastError = "Service temporarily unavailable. Please try again later."
+                #if DEBUG
+                print("[Feed] Toggle like error: Service unavailable (503)")
+                #endif
             default:
                 self.toastError = "Failed to like post. Please try again."
                 #if DEBUG

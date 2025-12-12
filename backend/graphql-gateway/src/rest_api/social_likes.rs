@@ -39,7 +39,8 @@ pub async fn create_like(
         Ok(_) => HttpResponse::Ok().json(serde_json::json!({"success": true})),
         Err(e) => {
             error!("create_like failed: {}", e);
-            HttpResponse::ServiceUnavailable().finish()
+            HttpResponse::ServiceUnavailable()
+                .json(serde_json::json!({"success": false, "error": "Service temporarily unavailable"}))
         }
     }
 }
@@ -68,7 +69,8 @@ pub async fn delete_like(
         Ok(_) => HttpResponse::Ok().json(serde_json::json!({"success": true})),
         Err(e) => {
             error!("delete_like failed: {}", e);
-            HttpResponse::ServiceUnavailable().finish()
+            HttpResponse::ServiceUnavailable()
+                .json(serde_json::json!({"success": false, "error": "Service temporarily unavailable"}))
         }
     }
 }
@@ -99,7 +101,8 @@ pub async fn delete_like_legacy(
         Ok(_) => HttpResponse::Ok().json(serde_json::json!({"success": true})),
         Err(e) => {
             error!("delete_like failed: {}", e);
-            HttpResponse::ServiceUnavailable().finish()
+            HttpResponse::ServiceUnavailable()
+                .json(serde_json::json!({"success": false, "error": "Service temporarily unavailable"}))
         }
     }
 }
