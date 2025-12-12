@@ -13,6 +13,7 @@ struct FeedPostCard: View {
     var onCardTap: () -> Void = {}
 
     @State private var currentImageIndex = 0
+    @State private var isVideoVisible: Bool = true
 
     var body: some View {
         VStack(spacing: 8) {
@@ -159,8 +160,12 @@ struct FeedPostCard: View {
                     thumbnailUrl: post.videoThumbnailUrl,
                     autoPlay: true,
                     isMuted: true,
+                    isVisible: isVideoVisible,
                     height: 500
                 )
+                .trackVisibility(id: "\(post.id)_video", threshold: 0.5) { visible in
+                    isVideoVisible = visible
+                }
             }
             
         case .livePhoto:
@@ -287,13 +292,17 @@ struct FeedPostCard: View {
                         // Video item
                         FeedVideoPlayer(
                             url: url,
-                            thumbnailUrl: post.thumbnailUrls.indices.contains(index) 
-                                ? URL(string: post.thumbnailUrls[index]) 
+                            thumbnailUrl: post.thumbnailUrls.indices.contains(index)
+                                ? URL(string: post.thumbnailUrls[index])
                                 : nil,
                             autoPlay: currentImageIndex == index, // Only autoplay visible video
                             isMuted: true,
+                            isVisible: isVideoVisible,
                             height: 500
                         )
+                        .trackVisibility(id: "\(post.id)_video_\(index)", threshold: 0.5) { visible in
+                            isVideoVisible = visible
+                        }
                         .tag(index)
                     } else {
                         // Image item

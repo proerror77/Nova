@@ -27,23 +27,27 @@ struct FeedVideoPlayer: View {
     let autoPlay: Bool
     let isMuted: Bool
     let height: CGFloat
-    
+    let isVisible: Bool
+
     @StateObject private var viewModel: FeedVideoPlayerViewModel
     @State private var showControls = false
     @State private var controlsTimer: Timer?
-    
+    @State private var wasPlayingBeforeHidden = false
+
     init(
         url: URL,
         thumbnailUrl: URL? = nil,
         autoPlay: Bool = true,
         isMuted: Bool = true,
-        height: CGFloat = 500
+        height: CGFloat = 500,
+        isVisible: Bool = true
     ) {
         self.url = url
         self.thumbnailUrl = thumbnailUrl
         self.autoPlay = autoPlay
         self.isMuted = isMuted
         self.height = height
+        self.isVisible = isVisible
         _viewModel = StateObject(wrappedValue: FeedVideoPlayerViewModel(url: url, autoPlay: autoPlay, isMuted: isMuted))
     }
     
@@ -108,6 +112,20 @@ struct FeedVideoPlayer: View {
         }
         .onDisappear {
             viewModel.pause()
+        }
+        .onChange(of: isVisible) { _, newValue in
+            if newValue {
+                // Became visible
+                if wasPlayingBeforeHidden && autoPlay {
+                    viewModel.play()
+                } else if autoPlay && viewModel.isReady {
+                    viewModel.play()
+                }
+            } else {
+                // Became hidden
+                wasPlayingBeforeHidden = viewModel.isPlaying
+                viewModel.pause()
+            }
         }
     }
     

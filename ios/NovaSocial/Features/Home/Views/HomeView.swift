@@ -224,7 +224,7 @@ struct HomeView: View {
 
                 // MARK: - 可滚动内容区
                 ScrollView {
-                        VStack(spacing: DesignTokens.spacing20) {
+                        LazyVStack(spacing: DesignTokens.spacing20) {
                             // MARK: - Promo Banner (活动/广告区域)
                             PromoBannerView(onTap: {
                                 // TODO: 处理广告点击事件
@@ -303,12 +303,6 @@ struct HomeView: View {
                                             showPostDetail = true
                                         }
                                     )
-                                    .onAppear {
-                                        // Auto-load more when reaching near the end (3 posts before)
-                                        if index >= feedViewModel.posts.count - 3 && feedViewModel.hasMore && !feedViewModel.isLoadingMore {
-                                            Task { await feedViewModel.loadMore() }
-                                        }
-                                    }
 
                                 case .carousel:
                                     HottestBankerSection(onSeeAllTapped: {
@@ -346,6 +340,15 @@ struct HomeView: View {
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 40)
+                            }
+
+                            // Pagination trigger - explicit trigger point
+                            if feedViewModel.hasMore && !feedViewModel.isLoadingMore {
+                                Color.clear
+                                    .frame(height: 1)
+                                    .onAppear {
+                                        Task { await feedViewModel.loadMore() }
+                                    }
                             }
 
                             // MARK: - Loading More Indicator

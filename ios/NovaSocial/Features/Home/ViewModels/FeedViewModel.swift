@@ -27,6 +27,12 @@ class FeedViewModel: ObservableObject {
         KeychainService.shared.get(.userId)
     }
 
+    // Track ongoing like operations to prevent concurrent calls for the same post
+    private var ongoingLikeOperations: Set<String> = []
+
+    // Track ongoing bookmark operations to prevent concurrent calls for the same post
+    private var ongoingBookmarkOperations: Set<String> = []
+
     // MARK: - Public Methods
 
     /// Check if user is authenticated (has valid token and is not in guest mode)
@@ -310,6 +316,16 @@ class FeedViewModel: ObservableObject {
 
     /// Toggle like on a post
     func toggleLike(postId: String) async {
+        // Prevent concurrent like operations for the same post
+        guard !ongoingLikeOperations.contains(postId) else {
+            #if DEBUG
+            print("[Feed] toggleLike skipped - operation already in progress for postId: \(postId)")
+            #endif
+            return
+        }
+        ongoingLikeOperations.insert(postId)
+        defer { ongoingLikeOperations.remove(postId) }
+
         #if DEBUG
         print("[Feed] toggleLike called for postId: \(postId)")
         print("[Feed] currentUserId: \(currentUserId ?? "nil")")
@@ -404,6 +420,16 @@ class FeedViewModel: ObservableObject {
 
     /// Toggle bookmark on a post
     func toggleBookmark(postId: String) async {
+        // Prevent concurrent bookmark operations for the same post
+        guard !ongoingBookmarkOperations.contains(postId) else {
+            #if DEBUG
+            print("[Feed] toggleBookmark skipped - operation already in progress for postId: \(postId)")
+            #endif
+            return
+        }
+        ongoingBookmarkOperations.insert(postId)
+        defer { ongoingBookmarkOperations.remove(postId) }
+
         #if DEBUG
         print("[Feed] toggleBookmark called for postId: \(postId)")
         print("[Feed] currentUserId: \(currentUserId ?? "nil")")
