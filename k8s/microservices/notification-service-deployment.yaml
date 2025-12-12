@@ -56,7 +56,7 @@ spec:
               containerPort: 8000
               protocol: TCP
             - name: grpc
-              containerPort: 9093
+              containerPort: 9000
               protocol: TCP
           resources:
             requests:

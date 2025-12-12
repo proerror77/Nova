@@ -104,7 +104,7 @@ spec:
         - containerPort: 8080
           name: http
           protocol: TCP
-        - containerPort: 9090
+        - containerPort: 9080
           name: grpc
           protocol: TCP
         readinessProbe:
