@@ -23,8 +23,9 @@ class ProfileData {
     private let mediaService = MediaService()
 
     // MARK: - Current User ID
-    // TODO: Get from authentication service
-    private var currentUserId: String = "current_user_id"
+    private var currentUserId: String? {
+        KeychainService.shared.get(.userId)
+    }
 
     // MARK: - Tab State
 
@@ -69,21 +70,42 @@ class ProfileData {
                 posts = response.posts
 
             case .saved:
-                // Get post IDs the user has bookmarked
-                let response = try await contentService.getUserBookmarks(userId: userId)
-                if !response.postIds.isEmpty {
-                    savedPosts = try await contentService.getPostsByIds(response.postIds)
+                // Get post IDs the user has bookmarked (uses JWT for current user)
+                let (postIds, _) = try await socialService.getBookmarks()
+                #if DEBUG
+                print("[Profile] getBookmarks returned \(postIds.count) post IDs")
+                #endif
+                if !postIds.isEmpty {
+                    savedPosts = try await contentService.getPostsByIds(postIds)
+                    #if DEBUG
+                    print("[Profile] Loaded \(savedPosts.count) saved posts")
+                    #endif
                 } else {
                     savedPosts = []
                 }
 
             case .liked:
                 // Get post IDs the user has liked
-                let (postIds, _) = try await socialService.getUserLikedPosts(userId: userId)
-                if !postIds.isEmpty {
-                    likedPosts = try await contentService.getPostsByIds(postIds)
-                } else {
+                do {
+                    let (postIds, total) = try await socialService.getUserLikedPosts(userId: userId)
+                    #if DEBUG
+                    print("[Profile] getUserLikedPosts returned \(postIds.count) post IDs (total: \(total))")
+                    #endif
+                    if !postIds.isEmpty {
+                        likedPosts = try await contentService.getPostsByIds(postIds)
+                        #if DEBUG
+                        print("[Profile] Loaded \(likedPosts.count) liked posts")
+                        #endif
+                    } else {
+                        likedPosts = []
+                    }
+                } catch {
+                    #if DEBUG
+                    print("[Profile] Failed to load liked posts: \(error)")
+                    #endif
+                    // Don't rethrow - just show empty state with error
                     likedPosts = []
+                    throw error
                 }
             }
         } catch {
@@ -126,32 +148,35 @@ class ProfileData {
     }
 
     func followUser() async {
-        guard let userId = userProfile?.id else { return }
+        guard let userId = userProfile?.id,
+              let currentId = currentUserId else { return }
 
         do {
-            try await graphService.followUser(followerId: currentUserId, followeeId: userId)
-            // TODO: Reload profile to get updated follower count
-            // Need to fetch updated follower count from somewhere
+            try await graphService.followUser(followerId: currentId, followeeId: userId)
+            // Reload profile to get updated follower count
+            await loadUserProfile(userId: userId)
         } catch {
             handleError(error)
         }
     }
 
     func unfollowUser() async {
-        guard let userId = userProfile?.id else { return }
+        guard let userId = userProfile?.id,
+              let currentId = currentUserId else { return }
 
         do {
-            try await graphService.unfollowUser(followerId: currentUserId, followeeId: userId)
-            // TODO: Reload profile to get updated follower count
-            // Need to fetch updated follower count from somewhere
+            try await graphService.unfollowUser(followerId: currentId, followeeId: userId)
+            // Reload profile to get updated follower count
+            await loadUserProfile(userId: userId)
         } catch {
             handleError(error)
         }
     }
 
     func likePost(postId: String) async {
+        guard let currentId = currentUserId else { return }
         do {
-            try await socialService.createLike(postId: postId, userId: currentUserId)
+            try await socialService.createLike(postId: postId, userId: currentId)
             // Reload content to reflect the change
             await loadContent(for: selectedTab)
         } catch {
@@ -160,8 +185,9 @@ class ProfileData {
     }
 
     func unlikePost(postId: String) async {
+        guard let currentId = currentUserId else { return }
         do {
-            try await socialService.deleteLike(postId: postId, userId: currentUserId)
+            try await socialService.deleteLike(postId: postId, userId: currentId)
             // Reload content to reflect the change
             await loadContent(for: selectedTab)
         } catch {
