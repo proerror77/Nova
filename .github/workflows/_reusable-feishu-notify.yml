@@ -2,6 +2,8 @@ name: Reusable Feishu Notification
 
 # Reusable workflow for sending notifications to Feishu (Lark)
 # Supports rich card messages with status indicators
+#
+# NOTE: This workflow is NON-FATAL - notification failures won't fail the parent workflow
 
 on:
   workflow_call:
@@ -31,17 +33,32 @@ on:
     secrets:
       feishu-webhook:
         description: 'Feishu webhook URL'
-        required: true
+        required: false  # Changed to optional to prevent workflow failures
 
 jobs:
   notify:
     name: Send Feishu Notification
     runs-on: ubuntu-22.04
+    # Continue even if notification fails - notifications should never block deployments
+    continue-on-error: true
     permissions:
       contents: read
 
     steps:
+      - name: Check webhook configuration
+        id: check
+        run: |
+          if [ -z "${{ secrets.feishu-webhook }}" ]; then
+            echo "⚠️ FEISHU_WEBHOOK secret is not configured"
+            echo "Skipping Feishu notification"
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "✅ FEISHU_WEBHOOK is configured"
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Prepare notification content
+        if: steps.check.outputs.configured == 'true'
         id: prepare
         run: |
           # Determine color and emoji based on status
@@ -78,11 +95,12 @@ jobs:
           echo "status_text=$STATUS_TEXT" >> "$GITHUB_OUTPUT"
 
       - name: Send to Feishu
+        if: steps.check.outputs.configured == 'true'
         env:
           FEISHU_WEBHOOK: ${{ secrets.feishu-webhook }}
         run: |
           # Build Feishu card message
-          cat > /tmp/feishu_message.json << EOF
+          cat > /tmp/feishu_message.json << 'EOF'
           {
             "msg_type": "interactive",
             "card": {
@@ -122,7 +140,7 @@ jobs:
                       "is_short": true,
                       "text": {
                         "tag": "lark_md",
-                        "content": "**提交**\n\`${{ github.sha }}\`"
+                        "content": "**提交**\n`${{ github.sha }}`"
                       }
                     }
                   ]
@@ -156,33 +174,53 @@ jobs:
           }
           EOF
 
-          # Add additional details if provided
-          if [ -n "${{ inputs.details }}" ]; then
-            echo "Adding additional details..."
-            # Details should be pre-formatted JSON
-          fi
+          echo "📤 Sending notification to Feishu..."
 
-          # Send to Feishu
+          # Send to Feishu with timeout and retry
           HTTP_CODE=$(curl -X POST "$FEISHU_WEBHOOK" \
             -H 'Content-Type: application/json' \
             -d @/tmp/feishu_message.json \
             -w '%{http_code}' \
             -o /tmp/feishu_response.json \
-            -s)
+            --connect-timeout 10 \
+            --max-time 30 \
+            -s || echo "000")
 
           if [ "$HTTP_CODE" = "200" ]; then
             echo "✅ 飛書通知發送成功"
-            cat /tmp/feishu_response.json
+            cat /tmp/feishu_response.json || true
           else
             echo "⚠️ 飛書通知發送失敗 (HTTP $HTTP_CODE)"
-            cat /tmp/feishu_response.json
-            exit 1
+            echo "Response:"
+            cat /tmp/feishu_response.json 2>/dev/null || echo "No response body"
+            echo ""
+            echo "Note: Notification failure does not affect deployment status"
+            # Don't exit with error - notification failures are non-fatal
           fi
 
+      - name: Skip notification
+        if: steps.check.outputs.configured != 'true'
+        run: |
+          echo "════════════════════════════════════════════════════"
+          echo "⏭️  FEISHU NOTIFICATION SKIPPED"
+          echo "════════════════════════════════════════════════════"
+          echo ""
+          echo "Reason: FEISHU_WEBHOOK secret is not configured"
+          echo ""
+          echo "To enable Feishu notifications:"
+          echo "1. Go to repository Settings > Secrets and variables > Actions"
+          echo "2. Add a secret named FEISHU_WEBHOOK"
+          echo "3. Set the value to your Feishu bot webhook URL"
+          echo ""
+          echo "Deployment will continue without notification."
+          echo "════════════════════════════════════════════════════"
+
       - name: Upload response
-        if: always()
+        if: always() && steps.check.outputs.configured == 'true'
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
-          name: feishu-notification-response
+          name: feishu-notification-response-${{ github.run_id }}
           path: /tmp/feishu_response.json
           retention-days: 7
+          if-no-files-found: ignore
