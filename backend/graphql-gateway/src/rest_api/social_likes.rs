@@ -5,7 +5,7 @@ use crate::clients::proto::social::{
     BatchCheckBookmarkedRequest, CheckUserBookmarkedRequest, CheckUserLikedRequest,
     CreateBookmarkRequest, CreateCommentRequest, CreateLikeRequest, CreateShareRequest,
     DeleteBookmarkRequest, DeleteCommentRequest, DeleteLikeRequest, GetBookmarksRequest,
-    GetCommentsRequest, GetLikesRequest, GetShareCountRequest,
+    GetCommentsRequest, GetLikesRequest, GetShareCountRequest, GetUserLikedPostsRequest,
 };
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
@@ -571,4 +571,48 @@ pub async fn batch_check_bookmarked(
 #[derive(Debug, Deserialize)]
 pub struct BatchCheckBookmarkedBody {
     pub post_ids: Vec<String>,
+}
+
+// ============================================================================
+// USER LIKED POSTS ENDPOINT
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+pub struct UserLikedPostsQuery {
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
+}
+
+/// Get posts liked by a user
+#[get("/api/v2/social/users/{user_id}/liked-posts")]
+pub async fn get_user_liked_posts(
+    clients: web::Data<ServiceClients>,
+    path: web::Path<String>,
+    query: web::Query<UserLikedPostsQuery>,
+) -> HttpResponse {
+    let user_id = path.into_inner();
+    let q = query.into_inner();
+
+    let req = GetUserLikedPostsRequest {
+        user_id,
+        limit: q.limit.unwrap_or(20) as i32,
+        offset: q.offset.unwrap_or(0) as i32,
+    };
+
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.get_user_liked_posts(req).await }
+        })
+        .await
+    {
+        Ok(resp) => HttpResponse::Ok().json(serde_json::json!({
+            "post_ids": resp.post_ids,
+            "total": resp.total
+        })),
+        Err(e) => {
+            error!("get_user_liked_posts failed: {}", e);
+            HttpResponse::ServiceUnavailable().finish()
+        }
+    }
 }

@@ -18,7 +18,7 @@ use crate::rest_api::social_likes::{
     batch_check_bookmarked, check_bookmarked, check_liked, create_bookmark, create_comment,
     create_like, create_share, delete_bookmark, delete_comment, delete_comment_v2, delete_like,
     delete_like_legacy, get_bookmarks, get_comments, get_likes, get_share_count,
-    get_share_count_legacy,
+    get_share_count_legacy, get_user_liked_posts,
 };
 use actix_web::{middleware::Logger, web, App, HttpServer};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
@@ -486,6 +486,8 @@ async fn main() -> std::io::Result<()> {
             .service(get_bookmarks)
             .service(check_bookmarked)
             .service(batch_check_bookmarked)
+            // ✅ User Liked Posts API
+            .service(get_user_liked_posts)
             // ✅ Device Management API
             .route("/api/v2/devices", web::get().to(rest_api::get_devices))
             .route(
