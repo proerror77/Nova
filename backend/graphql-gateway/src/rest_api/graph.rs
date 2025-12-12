@@ -244,10 +244,19 @@ pub async fn follow_user(
 
     let mut graph_client = clients.graph_client();
 
-    let grpc_request = tonic::Request::new(CreateFollowRequest {
+    let mut grpc_request = tonic::Request::new(CreateFollowRequest {
         follower_id: user_id.clone(),
         followee_id: followee_id.clone(),
     });
+
+    // Add internal token for write operations
+    if let Ok(token) = std::env::var("INTERNAL_GRAPH_WRITE_TOKEN") {
+        if let Ok(token_value) = token.parse() {
+            grpc_request
+                .metadata_mut()
+                .insert("x-internal-token", token_value);
+        }
+    }
 
     match graph_client.create_follow(grpc_request).await {
         Ok(response) => {
@@ -317,10 +326,19 @@ pub async fn unfollow_user(
 
     let mut graph_client = clients.graph_client();
 
-    let grpc_request = tonic::Request::new(DeleteFollowRequest {
+    let mut grpc_request = tonic::Request::new(DeleteFollowRequest {
         follower_id: user_id.clone(),
         followee_id: followee_id.clone(),
     });
+
+    // Add internal token for write operations
+    if let Ok(token) = std::env::var("INTERNAL_GRAPH_WRITE_TOKEN") {
+        if let Ok(token_value) = token.parse() {
+            grpc_request
+                .metadata_mut()
+                .insert("x-internal-token", token_value);
+        }
+    }
 
     match graph_client.delete_follow(grpc_request).await {
         Ok(response) => {
