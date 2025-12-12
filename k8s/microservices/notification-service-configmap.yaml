@@ -5,3 +5,6 @@ metadata:
 data:
   LOG_LEVEL: "info"
   ENVIRONMENT: "staging"
+  # Kafka configuration
+  KAFKA_BROKER: "kafka:9092"
+  KAFKA_ENABLED: "true"

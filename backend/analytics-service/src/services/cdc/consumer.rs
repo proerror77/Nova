@@ -256,20 +256,19 @@ impl CdcConsumer {
         let created_at_raw: String = Self::extract_field(data, "created_at")?;
         let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
 
-        let is_deleted: u8 = if matches!(op, CdcOperation::Delete) {
-            1
-        } else {
-            0
-        };
-        let cdc_timestamp = Self::ts_ms_u64(msg.payload().ts_ms)?;
+        // Match actual ClickHouse table schema (nova_feed.follows_cdc):
+        // followed_id (not followee_id), cdc_operation (not is_deleted), follow_count
+        let cdc_operation = if *op == CdcOperation::Delete { 2 } else { 1 };  // 1=INSERT, 2=DELETE
+        let follow_count: i8 = if *op == CdcOperation::Delete { -1 } else { 1 };  // For SummingMergeTree
 
         let query = format!(
-            "INSERT INTO follows_cdc (follower_id, followee_id, created_at, cdc_timestamp, is_deleted) VALUES ('{}', '{}', '{}', {}, {})",
+            "INSERT INTO follows_cdc (follower_id, followed_id, created_at, cdc_operation, cdc_timestamp, follow_count) VALUES ('{}', '{}', '{}', {}, '{}', {})",
             follower_id,
-            followee_id,
-            created_at.format("%Y-%m-%d %H:%M:%S"),
-            cdc_timestamp,
-            is_deleted
+            followee_id,  // Variable is still named followee_id, but column is followed_id
+            created_at.format("%Y-%m-%d %H:%M:%S%.3f"),  // DateTime64(3) needs milliseconds
+            cdc_operation,
+            created_at.format("%Y-%m-%d %H:%M:%S%.3f"),  // cdc_timestamp is also DateTime64(3)
+            follow_count
         );
 
         self.ch_client.query(&query).execute().await.map_err(|e| {
