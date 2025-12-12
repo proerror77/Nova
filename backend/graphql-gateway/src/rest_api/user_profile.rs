@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
 use crate::clients::proto::auth::{
-    auth_service_client::AuthServiceClient, GetUserByUsernameRequest, GetUserRequest,
+    auth_service_client::AuthServiceClient, GetUserByUsernameRequest, GetUserProfilesByIdsRequest,
     UpdateUserProfileRequest,
 };
 use crate::clients::proto::media::{
@@ -49,14 +49,21 @@ pub struct UserProfileResponse {
     pub id: String,
     pub username: String,
     pub email: String,
+    pub display_name: Option<String>,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar_url: Option<String>,
+    pub cover_url: Option<String>,
     pub bio: Option<String>,
     pub location: Option<String>,
     pub date_of_birth: Option<String>,
     pub gender: Option<String>,
     pub website: Option<String>,
+    pub is_verified: bool,
+    pub is_private: bool,
+    pub follower_count: i32,
+    pub following_count: i32,
+    pub post_count: i32,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -75,14 +82,15 @@ pub async fn get_profile(
 
     info!(user_id = %user_id, "GET /api/v2/users/{user_id}");
 
+    // Use get_user_profiles_by_ids to get full profile with extended fields
     let mut auth_client: AuthServiceClient<_> = clients.auth_client();
-    let req = tonic::Request::new(GetUserRequest {
-        user_id: user_id.to_string(),
+    let req = tonic::Request::new(GetUserProfilesByIdsRequest {
+        user_ids: vec![user_id.to_string()],
     });
-    let resp = match auth_client.get_user(req).await {
+    let resp = match auth_client.get_user_profiles_by_ids(req).await {
         Ok(resp) => resp.into_inner(),
         Err(e) => {
-            error!("get_user failed: {}", e);
+            error!("get_user_profiles_by_ids failed: {}", e);
             return Ok(HttpResponse::ServiceUnavailable().finish());
         }
     };
@@ -93,23 +101,44 @@ pub async fn get_profile(
         })));
     }
 
-    if let Some(u) = resp.user {
+    // Get the first (and only) profile from the batch response
+    if let Some(p) = resp.profiles.into_iter().next() {
+        // Build display_name from first_name and last_name if not set
+        let display_name = p.display_name.or_else(|| {
+            match (p.first_name.as_ref(), p.last_name.as_ref()) {
+                (Some(f), Some(l)) if !f.is_empty() && !l.is_empty() => Some(format!("{} {}", f, l)),
+                (Some(f), _) if !f.is_empty() => Some(f.clone()),
+                (_, Some(l)) if !l.is_empty() => Some(l.clone()),
+                _ => None,
+            }
+        });
+
         let profile = UserProfileResponse {
-            id: u.id,
-            username: u.username,
-            email: u.email,
-            first_name: None,
-            last_name: None,
-            avatar_url: None,
-            bio: None,
-            location: None,
-            date_of_birth: None,
-            gender: None,
+            id: p.user_id,
+            username: p.username,
+            email: p.email.unwrap_or_default(),
+            display_name,
+            first_name: p.first_name,
+            last_name: p.last_name,
+            avatar_url: p.avatar_url,
+            cover_url: p.cover_photo_url,
+            bio: p.bio,
+            location: p.location,
+            date_of_birth: p.date_of_birth,
+            gender: p.gender,
             website: None,
-            created_at: u.created_at,
-            updated_at: chrono::Utc::now().timestamp(),
+            is_verified: false,
+            is_private: p.private_account,
+            follower_count: 0,
+            following_count: 0,
+            post_count: 0,
+            created_at: p.created_at,
+            updated_at: p.updated_at,
         };
-        return Ok(HttpResponse::Ok().json(profile));
+        // Wrap in "user" object to match iOS client expected format
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "user": profile
+        })));
     }
 
     Ok(HttpResponse::NotFound().finish())
@@ -130,10 +159,12 @@ pub async fn get_profile_by_username(
     info!(username = %username, "GET /api/v2/users/username/{username}");
 
     let mut auth_client: AuthServiceClient<_> = clients.auth_client();
+
+    // First, get user by username to obtain the user_id
     let req = tonic::Request::new(GetUserByUsernameRequest {
         username: username.to_string(),
     });
-    let resp = match auth_client.get_user_by_username(req).await {
+    let user_resp = match auth_client.get_user_by_username(req).await {
         Ok(resp) => resp.into_inner(),
         Err(e) => {
             error!("get_user_by_username failed: {}", e);
@@ -146,26 +177,72 @@ pub async fn get_profile_by_username(
         }
     };
 
-    if let Some(err) = resp.error {
+    if let Some(err) = user_resp.error {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({
             "error": err.message
         })));
     }
 
-    if let Some(u) = resp.user {
-        // Wrap user in UserProfile wrapper to match iOS expected response format
-        let user_response = serde_json::json!({
-            "user": {
-                "id": u.id,
-                "username": u.username,
-                "email": u.email,
-                "displayName": u.username,  // Use username as display_name for now
-                "avatarUrl": null,
-                "bio": null,
-                "createdAt": u.created_at
+    let user_id = match user_resp.user {
+        Some(u) => u.id,
+        None => return Ok(HttpResponse::NotFound().finish()),
+    };
+
+    // Now get full profile using user_id
+    let profile_req = tonic::Request::new(GetUserProfilesByIdsRequest {
+        user_ids: vec![user_id.clone()],
+    });
+    let profile_resp = match auth_client.get_user_profiles_by_ids(profile_req).await {
+        Ok(resp) => resp.into_inner(),
+        Err(e) => {
+            error!("get_user_profiles_by_ids failed: {}", e);
+            return Ok(HttpResponse::ServiceUnavailable().finish());
+        }
+    };
+
+    if let Some(err) = profile_resp.error {
+        return Ok(HttpResponse::NotFound().json(serde_json::json!({
+            "error": err.message
+        })));
+    }
+
+    if let Some(p) = profile_resp.profiles.into_iter().next() {
+        // Build display_name from first_name and last_name if not set
+        let display_name = p.display_name.or_else(|| {
+            match (p.first_name.as_ref(), p.last_name.as_ref()) {
+                (Some(f), Some(l)) if !f.is_empty() && !l.is_empty() => Some(format!("{} {}", f, l)),
+                (Some(f), _) if !f.is_empty() => Some(f.clone()),
+                (_, Some(l)) if !l.is_empty() => Some(l.clone()),
+                _ => None,
             }
         });
-        return Ok(HttpResponse::Ok().json(user_response));
+
+        let profile = UserProfileResponse {
+            id: p.user_id,
+            username: p.username,
+            email: p.email.unwrap_or_default(),
+            display_name,
+            first_name: p.first_name,
+            last_name: p.last_name,
+            avatar_url: p.avatar_url,
+            cover_url: p.cover_photo_url,
+            bio: p.bio,
+            location: p.location,
+            date_of_birth: p.date_of_birth,
+            gender: p.gender,
+            website: None,
+            is_verified: false,
+            is_private: p.private_account,
+            follower_count: 0,
+            following_count: 0,
+            post_count: 0,
+            created_at: p.created_at,
+            updated_at: p.updated_at,
+        };
+        // Wrap in "user" object to match iOS client expected format
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "user": profile
+        })));
     }
 
     Ok(HttpResponse::NotFound().finish())
@@ -232,22 +309,42 @@ pub async fn update_profile(
                 })));
             }
             if let Some(p) = resp.profile {
+                // Build display_name from first_name and last_name if not set
+                let display_name = p.display_name.or_else(|| {
+                    match (p.first_name.as_ref(), p.last_name.as_ref()) {
+                        (Some(f), Some(l)) if !f.is_empty() && !l.is_empty() => Some(format!("{} {}", f, l)),
+                        (Some(f), _) if !f.is_empty() => Some(f.clone()),
+                        (_, Some(l)) if !l.is_empty() => Some(l.clone()),
+                        _ => None,
+                    }
+                });
+
                 let profile = UserProfileResponse {
                     id: p.user_id,
                     username: p.username,
                     email: p.email.unwrap_or_default(),
+                    display_name,
                     first_name: p.first_name,
                     last_name: p.last_name,
                     avatar_url: p.avatar_url,
+                    cover_url: p.cover_photo_url,
                     bio: p.bio,
                     location: p.location,
                     date_of_birth: p.date_of_birth,
                     gender: p.gender,
                     website: None,
+                    is_verified: false,
+                    is_private: p.private_account,
+                    follower_count: 0,
+                    following_count: 0,
+                    post_count: 0,
                     created_at: p.created_at,
                     updated_at: p.updated_at,
                 };
-                Ok(HttpResponse::Ok().json(profile))
+                // Wrap in "user" object to match iOS client expected format
+                Ok(HttpResponse::Ok().json(serde_json::json!({
+                    "user": profile
+                })))
             } else {
                 Ok(HttpResponse::InternalServerError().finish())
             }
