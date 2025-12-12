@@ -217,8 +217,9 @@ struct APIConfig {
     // MARK: - Alice Voice Service API (TEN Agent)
     struct AliceVoice {
         /// TEN Agent 服務器基礎 URL
-        /// Staging: https://api.staging.novaplatform.me/alice-voice
-        /// Production: https://api.nova.social/alice-voice
+        /// Note: Uses dedicated domain because GCE Ingress doesn't support URL rewriting
+        /// Staging: http://35.241.37.124 (DNS pending: alice-voice.staging.nova.social)
+        /// Production: https://alice-voice.nova.social
         static var baseURL: String {
             switch current {
             case .development:
@@ -227,10 +228,10 @@ struct APIConfig {
                 }
                 return "http://localhost:8080"
             case .staging:
-                // Use HTTPS staging domain
-                return "https://api.staging.novaplatform.me/alice-voice"
+                // Direct IP until DNS is configured for alice-voice.staging.nova.social -> 35.241.37.124
+                return "http://35.241.37.124"
             case .production:
-                return "https://api.nova.social/alice-voice"
+                return "https://alice-voice.nova.social"
             }
         }
 
