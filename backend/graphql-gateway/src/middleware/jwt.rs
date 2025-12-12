@@ -86,6 +86,8 @@ where
             "/api/v2/guest/feed/trending",
             // Invite code validation (pre-registration check, no auth required)
             "/api/v2/auth/invites/validate",
+            // Phone authentication (SMS OTP - public endpoints for registration/login)
+            "/api/v2/auth/phone",
             // Comments API (public read access for viewing comments)
             "/api/v2/social/comments",
             // Alice AI Assistant API (public access for chat and voice)

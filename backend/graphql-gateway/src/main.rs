@@ -319,6 +319,23 @@ async fn main() -> std::io::Result<()> {
                 "/api/v2/auth/invites/validate",
                 web::get().to(rest_api::validate_invite_code),
             )
+            // ✅ Phone Authentication API (public endpoints - no auth required)
+            .route(
+                "/api/v2/auth/phone/send-code",
+                web::post().to(rest_api::phone_auth::send_phone_code),
+            )
+            .route(
+                "/api/v2/auth/phone/verify",
+                web::post().to(rest_api::phone_auth::verify_phone_code),
+            )
+            .route(
+                "/api/v2/auth/phone/register",
+                web::post().to(rest_api::phone_auth::phone_register),
+            )
+            .route(
+                "/api/v2/auth/phone/login",
+                web::post().to(rest_api::phone_auth::phone_login),
+            )
             // ✅ Identity/Password Management API
             .route(
                 "/api/v2/identity/password/change",

@@ -512,6 +512,103 @@ pub async fn search_users(pool: &PgPool, query: &str, limit: i64) -> Result<Vec<
     Ok(users)
 }
 
+/// Find user by phone number (excluding soft-deleted users)
+pub async fn find_by_phone(pool: &PgPool, phone_number: &str) -> Result<Option<User>> {
+    let user = sqlx::query_as::<_, User>(
+        "SELECT * FROM users WHERE phone_number = $1 AND deleted_at IS NULL",
+    )
+    .bind(phone_number)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(user)
+}
+
+/// Check if phone number exists (excluding soft-deleted users)
+pub async fn phone_exists(pool: &PgPool, phone_number: &str) -> Result<bool> {
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE phone_number = $1 AND deleted_at IS NULL)",
+    )
+    .bind(phone_number)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(exists)
+}
+
+/// Create a new user with phone number (phone-based registration)
+pub async fn create_user_with_phone(
+    pool: &PgPool,
+    phone_number: &str,
+    username: &str,
+    password_hash: &str,
+    display_name: Option<&str>,
+) -> Result<User> {
+    // Generate a placeholder email for phone-registered users
+    // This maintains database constraint compatibility while allowing phone-only registration
+    let placeholder_email = format!("phone+{}@nova.local", phone_number.replace('+', ""));
+
+    let user = sqlx::query_as::<_, User>(
+        r#"
+        INSERT INTO users (
+            id, email, username, password_hash, display_name,
+            phone_number, phone_verified, email_verified,
+            totp_enabled, totp_verified, private_account,
+            failed_login_attempts, created_at, updated_at
+        )
+        VALUES (
+            uuid_generate_v4(), $1, $2, $3, $4,
+            $5, true, false,
+            false, false, false,
+            0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+        RETURNING *
+        "#,
+    )
+    .bind(&placeholder_email)
+    .bind(username)
+    .bind(password_hash)
+    .bind(display_name)
+    .bind(phone_number)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(user)
+}
+
+/// Verify phone number for user
+pub async fn verify_phone(pool: &PgPool, user_id: Uuid) -> Result<()> {
+    sqlx::query("UPDATE users SET phone_verified = true WHERE id = $1")
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
+/// Update user's phone number
+pub async fn update_phone_number(
+    pool: &PgPool,
+    user_id: Uuid,
+    phone_number: &str,
+    verified: bool,
+) -> Result<()> {
+    sqlx::query(
+        r#"
+        UPDATE users
+        SET phone_number = $2, phone_verified = $3, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1 AND deleted_at IS NULL
+        "#,
+    )
+    .bind(user_id)
+    .bind(phone_number)
+    .bind(verified)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 /// Create a new user via OAuth (social login)
 pub async fn create_oauth_user(
     pool: &PgPool,

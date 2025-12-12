@@ -65,6 +65,9 @@ pub enum IdentityError {
     #[error("Account locked until: {0}")]
     AccountLocked(String),
 
+    #[error("Rate limited: {0}")]
+    RateLimited(String),
+
     #[error("Database error: {0}")]
     Database(String),
 
@@ -136,6 +139,9 @@ impl IdentityError {
                 Code::PermissionDenied,
                 format!("Account locked until: {}", until),
             ),
+            IdentityError::RateLimited(msg) => {
+                Status::new(Code::ResourceExhausted, format!("Rate limited: {}", msg))
+            }
             IdentityError::Validation(msg) => {
                 Status::new(Code::InvalidArgument, format!("Validation error: {}", msg))
             }

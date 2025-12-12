@@ -627,6 +627,65 @@ message AppleNativeSignInResponse {
 }
 
 // ============================================================================
+// Phone Authentication (SMS OTP)
+// ============================================================================
+
+// Request to send SMS verification code
+message SendPhoneCodeRequest {
+  string phone_number = 1;  // Phone number in E.164 format (e.g., +14155551234)
+}
+
+message SendPhoneCodeResponse {
+  bool success = 1;
+  optional string message = 2;
+  int32 expires_in = 3;  // Seconds until code expires (default: 300)
+}
+
+// Request to verify SMS code
+message VerifyPhoneCodeRequest {
+  string phone_number = 1;  // Phone number in E.164 format
+  string code = 2;          // 6-digit verification code
+}
+
+message VerifyPhoneCodeResponse {
+  bool success = 1;
+  optional string verification_token = 2;  // Token to use for registration/login
+  optional string message = 3;
+}
+
+// Request to register with verified phone number
+message PhoneRegisterRequest {
+  string phone_number = 1;        // Verified phone number
+  string verification_token = 2;  // Token from VerifyPhoneCodeResponse
+  string username = 3;            // Desired username
+  string password = 4;            // Account password
+  optional string display_name = 5;
+}
+
+message PhoneRegisterResponse {
+  string user_id = 1;
+  string token = 2;
+  string refresh_token = 3;
+  int64 expires_in = 4;
+  string username = 5;
+  bool is_new_user = 6;
+}
+
+// Request to login with verified phone number
+message PhoneLoginRequest {
+  string phone_number = 1;        // Phone number in E.164 format
+  string verification_token = 2;  // Token from VerifyPhoneCodeResponse
+}
+
+message PhoneLoginResponse {
+  string user_id = 1;
+  string token = 2;
+  string refresh_token = 3;
+  int64 expires_in = 4;
+  string username = 5;
+}
+
+// ============================================================================
 // Password Reset
 // ============================================================================
 
@@ -918,6 +977,39 @@ service AuthService {
   rpc ResetPassword(ResetPasswordRequest) returns (PasswordResetResponse) {
     option (google.api.http) = {
       post: "/api/v2/auth/password/reset"
+      body: "*"
+    };
+  }
+
+  // ========== Phone Authentication (SMS OTP) ==========
+  // Send verification code to phone number (public - no auth required)
+  rpc SendPhoneCode(SendPhoneCodeRequest) returns (SendPhoneCodeResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/phone/send-code"
+      body: "*"
+    };
+  }
+
+  // Verify SMS code (public - no auth required)
+  rpc VerifyPhoneCode(VerifyPhoneCodeRequest) returns (VerifyPhoneCodeResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/phone/verify"
+      body: "*"
+    };
+  }
+
+  // Register new user with verified phone number (public - no auth required)
+  rpc PhoneRegister(PhoneRegisterRequest) returns (PhoneRegisterResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/phone/register"
+      body: "*"
+    };
+  }
+
+  // Login with verified phone number (public - no auth required)
+  rpc PhoneLogin(PhoneLoginRequest) returns (PhoneLoginResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/phone/login"
       body: "*"
     };
   }

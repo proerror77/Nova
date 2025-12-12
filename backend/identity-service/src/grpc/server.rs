@@ -15,7 +15,7 @@ use crate::error::IdentityError;
 use crate::security::{generate_token_pair, hash_password, validate_token, verify_password};
 use crate::services::{
     EmailService, InviteDeliveryConfig, InviteDeliveryService, KafkaEventProducer, OAuthService,
-    TwoFaService,
+    PhoneAuthService, TwoFaService,
 };
 use chrono::{TimeZone, Utc};
 use redis_utils::SharedConnectionManager;
@@ -57,6 +57,7 @@ pub struct IdentityServiceServer {
     kafka: Option<KafkaEventProducer>,
     invite_delivery: std::sync::Arc<InviteDeliveryService>,
     oauth: OAuthService,
+    phone_auth: PhoneAuthService,
 }
 
 impl IdentityServiceServer {
@@ -71,11 +72,12 @@ impl IdentityServiceServer {
         let two_fa = TwoFaService::new(db.clone(), redis.clone(), kafka.clone());
         let invite_delivery = std::sync::Arc::new(InviteDeliveryService::new(
             db.clone(),
-            sns_client,
+            sns_client.clone(),
             email.clone(),
             InviteDeliveryConfig::default(),
         ));
         let oauth = OAuthService::new(oauth_settings, db.clone(), redis.clone(), kafka.clone());
+        let phone_auth = PhoneAuthService::new(db.clone(), redis.clone(), sns_client);
         Self {
             db,
             redis,
@@ -84,6 +86,7 @@ impl IdentityServiceServer {
             kafka,
             invite_delivery,
             oauth,
+            phone_auth,
         }
     }
 }
@@ -1575,6 +1578,176 @@ impl AuthService for IdentityServiceServer {
 
         Ok(Response::new(PasswordResetResponse { success: true }))
     }
+
+    // ========== Phone Authentication ==========
+
+    /// Send OTP verification code to phone number
+    async fn send_phone_code(
+        &self,
+        request: Request<SendPhoneCodeRequest>,
+    ) -> std::result::Result<Response<SendPhoneCodeResponse>, Status> {
+        let req = request.into_inner();
+
+        // Validate phone number format (E.164)
+        if !req.phone_number.starts_with('+') || req.phone_number.len() < 10 {
+            return Err(Status::invalid_argument(
+                "Invalid phone number format. Must be E.164 format (e.g., +886912345678)",
+            ));
+        }
+
+        // Send verification code via PhoneAuthService
+        match self.phone_auth.send_code(&req.phone_number).await {
+            Ok(expires_in) => {
+                // Mask phone number for logging (show last 4 digits only)
+                let masked = format!(
+                    "{}****{}",
+                    &req.phone_number[..4],
+                    &req.phone_number[req.phone_number.len().saturating_sub(4)..]
+                );
+                info!(phone = %masked, "Phone verification code sent");
+
+                Ok(Response::new(SendPhoneCodeResponse {
+                    success: true,
+                    message: Some("Verification code sent".to_string()),
+                    expires_in,
+                }))
+            }
+            Err(IdentityError::RateLimited(msg)) => {
+                warn!(phone = "masked", error = %msg, "Phone code rate limited");
+                Ok(Response::new(SendPhoneCodeResponse {
+                    success: false,
+                    message: Some(msg),
+                    expires_in: 0,
+                }))
+            }
+            Err(e) => {
+                error!(error = %e, "Failed to send phone verification code");
+                Err(to_status(e))
+            }
+        }
+    }
+
+    /// Verify OTP code and return verification token
+    async fn verify_phone_code(
+        &self,
+        request: Request<VerifyPhoneCodeRequest>,
+    ) -> std::result::Result<Response<VerifyPhoneCodeResponse>, Status> {
+        let req = request.into_inner();
+
+        // Validate inputs
+        if req.phone_number.is_empty() || req.code.is_empty() {
+            return Err(Status::invalid_argument(
+                "Phone number and code are required",
+            ));
+        }
+
+        // Verify code via PhoneAuthService
+        match self
+            .phone_auth
+            .verify_code(&req.phone_number, &req.code)
+            .await
+        {
+            Ok(verification_token) => {
+                info!(phone = "masked", "Phone verification successful");
+                Ok(Response::new(VerifyPhoneCodeResponse {
+                    success: true,
+                    verification_token: Some(verification_token),
+                    message: Some("Phone verified successfully".to_string()),
+                }))
+            }
+            Err(IdentityError::InvalidToken) => Ok(Response::new(VerifyPhoneCodeResponse {
+                success: false,
+                verification_token: None,
+                message: Some("Invalid or expired verification code".to_string()),
+            })),
+            Err(e) => {
+                error!(error = %e, "Phone verification failed");
+                Err(to_status(e))
+            }
+        }
+    }
+
+    /// Register new user with phone number
+    async fn phone_register(
+        &self,
+        request: Request<PhoneRegisterRequest>,
+    ) -> std::result::Result<Response<PhoneRegisterResponse>, Status> {
+        let req = request.into_inner();
+
+        // Validate inputs
+        if req.phone_number.is_empty() || req.verification_token.is_empty() {
+            return Err(Status::invalid_argument(
+                "Phone number and verification token are required",
+            ));
+        }
+        if req.username.is_empty() || req.password.is_empty() {
+            return Err(Status::invalid_argument("Username and password are required"));
+        }
+
+        // Register user via PhoneAuthService (includes validation and event publishing)
+        let result = self
+            .phone_auth
+            .register(
+                &req.phone_number,
+                &req.verification_token,
+                &req.username,
+                &req.password,
+                req.display_name.as_deref(),
+            )
+            .await
+            .map_err(to_status)?;
+
+        info!(
+            user_id = %result.user_id,
+            username = %result.username,
+            "User registered successfully via phone"
+        );
+
+        Ok(Response::new(PhoneRegisterResponse {
+            user_id: result.user_id.to_string(),
+            token: result.access_token,
+            refresh_token: result.refresh_token,
+            expires_in: result.expires_in,
+            username: result.username,
+            is_new_user: result.is_new_user,
+        }))
+    }
+
+    /// Login with phone number
+    async fn phone_login(
+        &self,
+        request: Request<PhoneLoginRequest>,
+    ) -> std::result::Result<Response<PhoneLoginResponse>, Status> {
+        let req = request.into_inner();
+
+        // Validate inputs
+        if req.phone_number.is_empty() || req.verification_token.is_empty() {
+            return Err(Status::invalid_argument(
+                "Phone number and verification token are required",
+            ));
+        }
+
+        // Login via PhoneAuthService (includes token generation and last login update)
+        let result = self
+            .phone_auth
+            .login(&req.phone_number, &req.verification_token)
+            .await
+            .map_err(to_status)?;
+
+        info!(
+            user_id = %result.user_id,
+            username = %result.username,
+            "User logged in successfully via phone"
+        );
+
+        Ok(Response::new(PhoneLoginResponse {
+            user_id: result.user_id.to_string(),
+            token: result.access_token,
+            refresh_token: result.refresh_token,
+            expires_in: result.expires_in,
+            username: result.username,
+        }))
+    }
 }
 
 // ===== Helper Functions =====
@@ -1608,6 +1781,9 @@ fn to_status(err: IdentityError) -> Status {
         IdentityError::OAuthError(msg) => Status::internal(format!("OAuth error: {}", msg)),
         IdentityError::InvalidOAuthState => Status::invalid_argument("Invalid OAuth state"),
         IdentityError::InvalidOAuthProvider => Status::invalid_argument("Invalid OAuth provider"),
+        IdentityError::RateLimited(msg) => {
+            Status::resource_exhausted(format!("Rate limited: {}", msg))
+        }
         IdentityError::Database(msg) => Status::internal(format!("Database error: {}", msg)),
         IdentityError::Redis(msg) => Status::internal(format!("Redis error: {}", msg)),
         IdentityError::JwtError(msg) => Status::internal(format!("JWT error: {}", msg)),

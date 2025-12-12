@@ -15,11 +15,14 @@ struct CreateAccountView: View {
     @State private var displayName = ""
     @State private var inviteCode = ""
     @State private var isLoading = false
+    @State private var isGoogleLoading = false
+    @State private var isAppleLoading = false
     @State private var errorMessage: String?
     @State private var showPassword = false
     @State private var showConfirmPassword = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var selectedAvatar: UIImage?
+    @State private var showPhoneRegistration = false
 
     // MARK: - Focus State
     @FocusState private var focusedField: Field?
@@ -301,7 +304,7 @@ struct CreateAccountView: View {
                         HStack(spacing: 54) {
                             // Phone button
                             Button(action: {
-                                // TODO: Phone login
+                                showPhoneRegistration = true
                             }) {
                                 HStack(spacing: 8) {
                                     Image(systemName: "iphone")
@@ -316,15 +319,24 @@ struct CreateAccountView: View {
                                         .stroke(.white, lineWidth: 0.20)
                                 )
                             }
+                            .disabled(isLoading || isGoogleLoading || isAppleLoading)
 
                             // Apple button
                             Button(action: {
-                                // TODO: Apple login
+                                Task {
+                                    await handleAppleSignIn()
+                                }
                             }) {
                                 HStack(spacing: 8) {
-                                    Image(systemName: "apple.logo")
-                                        .font(.system(size: 20))
-                                        .foregroundColor(.white)
+                                    if isAppleLoading {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(0.8)
+                                    } else {
+                                        Image(systemName: "apple.logo")
+                                            .font(.system(size: 20))
+                                            .foregroundColor(.white)
+                                    }
                                 }
                                 .frame(width: 46, height: 46)
                                 .cornerRadius(23)
@@ -334,15 +346,24 @@ struct CreateAccountView: View {
                                         .stroke(.white, lineWidth: 0.20)
                                 )
                             }
+                            .disabled(isLoading || isGoogleLoading || isAppleLoading)
 
                             // Google button
                             Button(action: {
-                                // TODO: Google login
+                                Task {
+                                    await handleGoogleSignIn()
+                                }
                             }) {
                                 HStack(spacing: 8) {
-                                    Text("G")
-                                        .font(.system(size: 20, weight: .bold))
-                                        .foregroundColor(.white)
+                                    if isGoogleLoading {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(0.8)
+                                    } else {
+                                        Text("G")
+                                            .font(.system(size: 20, weight: .bold))
+                                            .foregroundColor(.white)
+                                    }
                                 }
                                 .frame(width: 46, height: 46)
                                 .cornerRadius(23)
@@ -352,6 +373,7 @@ struct CreateAccountView: View {
                                         .stroke(.white, lineWidth: 0.20)
                                 )
                             }
+                            .disabled(isLoading || isGoogleLoading || isAppleLoading)
                         }
                         .offset(x: 0.50, y: 263)
 
@@ -414,6 +436,11 @@ struct CreateAccountView: View {
                 }
             }
         }
+        // TODO: Add PhoneRegistrationView to project
+        // .fullScreenCover(isPresented: $showPhoneRegistration) {
+        //     PhoneRegistrationView(currentPage: $currentPage)
+        //         .environmentObject(authManager)
+        // }
     }
 
     // MARK: - Actions
@@ -470,6 +497,56 @@ struct CreateAccountView: View {
         }
 
         isLoading = false
+    }
+
+    private func handleGoogleSignIn() async {
+        isGoogleLoading = true
+        errorMessage = nil
+
+        do {
+            _ = try await authManager.loginWithGoogle()
+            #if DEBUG
+            print("[CreateAccountView] Google Sign-In successful!")
+            #endif
+            await MainActor.run {
+                currentPage = .home
+            }
+        } catch {
+            let errorDesc = error.localizedDescription.lowercased()
+            if !errorDesc.contains("cancel") {
+                errorMessage = error.localizedDescription
+            }
+            #if DEBUG
+            print("[CreateAccountView] Google Sign-In error: \(error)")
+            #endif
+        }
+
+        isGoogleLoading = false
+    }
+
+    private func handleAppleSignIn() async {
+        isAppleLoading = true
+        errorMessage = nil
+
+        do {
+            _ = try await authManager.loginWithApple()
+            #if DEBUG
+            print("[CreateAccountView] Apple Sign-In successful!")
+            #endif
+            await MainActor.run {
+                currentPage = .home
+            }
+        } catch {
+            let errorDesc = error.localizedDescription.lowercased()
+            if !errorDesc.contains("cancel") {
+                errorMessage = error.localizedDescription
+            }
+            #if DEBUG
+            print("[CreateAccountView] Apple Sign-In error: \(error)")
+            #endif
+        }
+
+        isAppleLoading = false
     }
 
     // MARK: - Validation

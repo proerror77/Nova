@@ -22,6 +22,7 @@ pub mod identity;
 pub mod media;
 pub mod models;
 pub mod notifications;
+pub mod phone_auth;
 pub mod poll;
 pub mod search;
 pub mod settings;
