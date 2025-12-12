@@ -237,7 +237,11 @@ pub async fn refresh_token(
 
             Ok(HttpResponse::Ok().json(AuthResponse {
                 token: auth_response.token,
-                refresh_token: None, // RefreshTokenResponse doesn't include new refresh_token
+                refresh_token: if auth_response.refresh_token.is_empty() {
+                    None
+                } else {
+                    Some(auth_response.refresh_token) // Token rotation: new refresh_token each time (like IG/Twitter)
+                },
                 user: profile,
             }))
         }

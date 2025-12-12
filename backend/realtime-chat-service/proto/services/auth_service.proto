@@ -294,6 +294,7 @@ message RefreshTokenRequest {
 message RefreshTokenResponse {
   string token = 1;           // New JWT access token (RS256 signed, expires_in=3600s)
   int64 expires_in = 2;       // Seconds until new access_token expires
+  string refresh_token = 3;   // New refresh token (rotation for extended sessions like IG/Twitter)
 }
 
 // ============================================================================ 

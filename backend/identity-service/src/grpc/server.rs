@@ -305,6 +305,7 @@ impl AuthService for IdentityServiceServer {
         Ok(Response::new(RefreshTokenResponse {
             token: tokens.access_token,
             expires_in: tokens.expires_in,
+            refresh_token: tokens.refresh_token, // Rotation: issue new refresh token each time (like IG/Twitter)
         }))
     }
 
