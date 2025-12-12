@@ -133,7 +133,7 @@ enum AliceError: LocalizedError {
     static func from(_ error: Error) -> AliceError {
         if let apiError = error as? APIError {
             switch apiError {
-            case .httpError(let code, _):
+            case .serverError(let code, _):
                 if code == 503 {
                     return .serviceUnavailable("Alice AI service is currently unavailable. Please try again later.")
                 }

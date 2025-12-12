@@ -268,8 +268,19 @@ class FeedViewModel: ObservableObject {
 
     /// Toggle like on a post
     func toggleLike(postId: String) async {
+        #if DEBUG
+        print("[Feed] toggleLike called for postId: \(postId)")
+        print("[Feed] currentUserId: \(currentUserId ?? "nil")")
+        print("[Feed] isAuthenticated: \(isAuthenticated)")
+        #endif
+
         guard let index = posts.firstIndex(where: { $0.id == postId }),
-              let userId = currentUserId else { return }
+              let userId = currentUserId else {
+            #if DEBUG
+            print("[Feed] toggleLike early return - postId not found or userId is nil")
+            #endif
+            return
+        }
 
         let post = posts[index]
         let wasLiked = post.isLiked
@@ -346,8 +357,18 @@ class FeedViewModel: ObservableObject {
 
     /// Toggle bookmark on a post
     func toggleBookmark(postId: String) async {
+        #if DEBUG
+        print("[Feed] toggleBookmark called for postId: \(postId)")
+        print("[Feed] currentUserId: \(currentUserId ?? "nil")")
+        #endif
+
         guard let index = posts.firstIndex(where: { $0.id == postId }),
-              let userId = currentUserId else { return }
+              let userId = currentUserId else {
+            #if DEBUG
+            print("[Feed] toggleBookmark early return - postId not found or userId is nil")
+            #endif
+            return
+        }
 
         let post = posts[index]
         let wasBookmarked = post.isBookmarked
@@ -362,32 +383,34 @@ class FeedViewModel: ObservableObject {
                 try await socialService.createBookmark(postId: postId, userId: userId)
             }
         } catch let error as APIError {
-            // Revert on failure
-            posts[index] = post
-
-            // Handle specific error cases
+            // Handle specific error cases - some errors should keep local state
             switch error {
             case .unauthorized:
+                // Revert on auth error
+                posts[index] = post
                 self.toastError = "Session expired. Please log in again."
                 #if DEBUG
                 print("[Feed] Toggle bookmark error: Session expired")
                 #endif
             case .noConnection:
+                // Revert on connection error
+                posts[index] = post
                 self.toastError = "No internet connection. Please try again."
-            case .notFound:
-                // Backend bookmark API not deployed yet - keep local state
-                posts[index] = post.copying(isBookmarked: !wasBookmarked)
+            case .notFound, .serverError:
+                // Backend bookmark API not deployed yet - keep local state (don't revert)
                 #if DEBUG
-                print("[Feed] Bookmark API not available, using local state only")
+                print("[Feed] Bookmark API not available (\(error)), using local state only")
                 #endif
             default:
+                // Revert on other errors
+                posts[index] = post
                 self.toastError = "Failed to bookmark post. Please try again."
                 #if DEBUG
                 print("[Feed] Toggle bookmark error: \(error)")
                 #endif
             }
         } catch {
-            // Revert on failure
+            // Revert on unknown failure
             posts[index] = post
             self.toastError = "Failed to bookmark post. Please try again."
             #if DEBUG

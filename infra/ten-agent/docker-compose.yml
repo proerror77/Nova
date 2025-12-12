@@ -19,8 +19,10 @@ services:
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
       
-      # TTS - ElevenLabs 文字轉語音
-      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      # TTS - Text to Speech (OpenAI or ElevenLabs)
+      - TTS_PROVIDER=${TTS_PROVIDER:-openai}
+      - OPENAI_TTS_VOICE=${OPENAI_TTS_VOICE:-alloy}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}
       
       # Agent 配置
       - GRAPH_NAME=${GRAPH_NAME:-voice_assistant}

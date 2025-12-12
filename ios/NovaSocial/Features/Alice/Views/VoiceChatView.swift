@@ -12,7 +12,10 @@ struct VoiceChatView: View {
     @State private var audioLevel: Float = 0
     @State private var isMuted: Bool = false
     @State private var showEndConfirmation: Bool = false
-    
+
+    // Keep delegate alive (weak reference in service requires strong reference here)
+    @State private var delegateHandler: VoiceChatDelegateHandler?
+
     // 動畫相關
     @State private var pulseAnimation: Bool = false
     @State private var wavePhase: Double = 0
@@ -353,7 +356,8 @@ struct VoiceChatView: View {
     
     // MARK: - Actions
     private func startVoiceChat() {
-        voiceChatService.delegate = VoiceChatDelegateHandler(
+        // Create and store the delegate handler to keep it alive
+        let handler = VoiceChatDelegateHandler(
             onStateChange: { newState in
                 withAnimation(.easeInOut(duration: 0.3)) {
                     state = newState
@@ -370,7 +374,11 @@ struct VoiceChatView: View {
                 wavePhase += 0.1
             }
         )
-        
+
+        // Store strong reference to keep delegate alive
+        delegateHandler = handler
+        voiceChatService.delegate = handler
+
         voiceChatService.startVoiceChat()
     }
     

@@ -73,10 +73,9 @@ struct AliceView: View {
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
         }
-        // TODO: Re-enable when VoiceChatView is added to project
-        // .fullScreenCover(isPresented: $showVoiceChat) {
-        //     VoiceChatView(isPresented: $showVoiceChat)
-        // }
+        .fullScreenCover(isPresented: $showVoiceChat) {
+            VoiceChatView(isPresented: $showVoiceChat)
+        }
         .onChange(of: selectedImage) { oldValue, newValue in
             // 选择/拍摄照片后，自动跳转到NewPostView
             if newValue != nil {
@@ -469,140 +468,6 @@ struct ModelRowView: View {
             .padding(.horizontal, 6)
         }
         .buttonStyle(PlainButtonStyle())
-    }
-}
-
-// MARK: - Alice AI Service (Inline)
-// Uses the Nova backend Alice API endpoints (/api/v2/alice/*)
-
-@Observable
-final class AliceService {
-    static let shared = AliceService()
-
-    private let apiClient = APIClient.shared
-
-    private init() {}
-
-    @MainActor
-    func sendMessage(
-        messages: [AIChatMessage],
-        model: String = "gpt-4o-all"
-    ) async throws -> String {
-        // Get the last user message to send to Alice API
-        guard let lastUserMessage = messages.last(where: { $0.role == "user" }) else {
-            throw AliceError.emptyResponse
-        }
-
-        // Build the URL using APIConfig.Alice endpoint
-        let baseURL = APIConfig.current.baseURL
-        let endpoint = APIConfig.Alice.sendMessage  // "/api/v2/alice/chat"
-        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
-            throw AliceError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        
-        // Use user's JWT token for authentication
-        if let token = apiClient.getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        // Create Alice API request format
-        let requestBody = AliceChatRequest(
-            message: lastUserMessage.content,
-            mode: "text"
-        )
-
-        let encoder = JSONEncoder()
-        request.httpBody = try encoder.encode(requestBody)
-
-        #if DEBUG
-        print("[AliceService] Sending to: \(url.absoluteString)")
-        print("[AliceService] Message: \(requestBody.message)")
-        #endif
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AliceError.invalidResponse
-        }
-
-        #if DEBUG
-        print("[AliceService] Response status: \(httpResponse.statusCode)")
-        if let responseString = String(data: data, encoding: .utf8) {
-            print("[AliceService] Response body: \(responseString)")
-        }
-        #endif
-
-        guard httpResponse.statusCode == 200 else {
-            if let errorResponse = try? JSONDecoder().decode(AIErrorResponse.self, from: data) {
-                throw AliceError.apiError(errorResponse.error.message)
-            }
-            throw AliceError.httpError(httpResponse.statusCode)
-        }
-
-        let decoder = JSONDecoder()
-        let aliceResponse = try decoder.decode(AliceChatResponse.self, from: data)
-
-        return aliceResponse.message
-    }
-}
-
-// MARK: - Alice API Request/Response Models
-
-struct AliceChatRequest: Codable, Sendable {
-    let message: String
-    let mode: String  // "text" or "voice"
-}
-
-struct AliceChatResponse: Codable, Sendable {
-    let id: String?
-    let message: String
-    let timestamp: Int?
-    
-    // Also handle error response format
-    let status: String?
-}
-
-// MARK: - AI Data Models (for compatibility)
-
-struct AIChatMessage: Codable, Sendable {
-    let role: String
-    let content: String
-}
-
-struct AIErrorResponse: Codable, Sendable {
-    let error: ErrorDetail
-
-    struct ErrorDetail: Codable, Sendable {
-        let message: String
-        let type: String?
-        let code: String?
-    }
-}
-
-enum AliceError: LocalizedError {
-    case invalidURL
-    case invalidResponse
-    case httpError(Int)
-    case apiError(String)
-    case emptyResponse
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidURL:
-            return "Invalid API URL"
-        case .invalidResponse:
-            return "Invalid response from server"
-        case .httpError(let code):
-            return "HTTP error: \(code)"
-        case .apiError(let message):
-            return "API error: \(message)"
-        case .emptyResponse:
-            return "Empty response from server"
-        }
     }
 }
 

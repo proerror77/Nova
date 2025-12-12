@@ -133,10 +133,11 @@ struct HomeView: View {
         .sheet(isPresented: $showReportView) {
             ReportModal(isPresented: $showReportView, showThankYouView: $showThankYouView)
         }
-        .sheet(isPresented: $showComments) {
-            if let post = selectedPostForComment {
-                CommentSheetView(post: post, isPresented: $showComments)
-            }
+        .sheet(item: $selectedPostForComment) { post in
+            CommentSheetView(post: post, isPresented: .constant(true))
+                .onDisappear {
+                    selectedPostForComment = nil
+                }
         }
         .sheet(isPresented: $showImagePicker) {
             ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
@@ -296,12 +297,12 @@ struct HomeView: View {
                                                 }
                                             }
                                         },
-                                        onBookmark: { Task { await feedViewModel.toggleBookmark(postId: post.id) } }
+                                        onBookmark: { Task { await feedViewModel.toggleBookmark(postId: post.id) } },
+                                        onCardTap: {
+                                            selectedPostForDetail = post
+                                            showPostDetail = true
+                                        }
                                     )
-                                    .onTapGesture {
-                                        selectedPostForDetail = post
-                                        showPostDetail = true
-                                    }
                                     .onAppear {
                                         // Auto-load more when reaching near the end (3 posts before)
                                         if index >= feedViewModel.posts.count - 3 && feedViewModel.hasMore && !feedViewModel.isLoadingMore {

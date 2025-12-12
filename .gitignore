@@ -94,3 +94,5 @@ vendor/
 **/*.xcarchive/
 **/*.xcodeproj/xcshareddata/xcschemes/
 .backup/
+infra/ten-agent-repo/
+infra/ten-agent-repo/
