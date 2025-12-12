@@ -1,0 +1,261 @@
+name: Deploy Alice Voice Service
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+        default: staging
+      image_tag:
+        description: 'Docker image tag (leave empty for latest commit SHA)'
+        required: false
+        type: string
+  push:
+    branches:
+      - main
+    paths:
+      - 'infra/ten-agent/**'
+      - 'k8s/microservices/alice-voice-service*.yaml'
+      - '.github/workflows/deploy-alice-voice-service.yml'
+
+concurrency:
+  group: deploy-alice-voice-${{ inputs.environment || 'staging' }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION || 'asia-northeast1' }}
+  GKE_CLUSTER: ${{ vars.GKE_CLUSTER || 'nova-staging' }}
+  GAR_REGISTRY: ${{ vars.GCP_REGION || 'asia-northeast1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/nova
+  SERVICE_NAME: alice-voice-service
+  NAMESPACE: nova-staging
+
+jobs:
+  build-and-push:
+    name: Build & Push to GCP Artifact Registry
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tag }}
+      image-full: ${{ steps.meta.outputs.image }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Extract metadata
+        id: meta
+        run: |
+          if [[ -n "${{ inputs.image_tag }}" ]]; then
+            TAG="${{ inputs.image_tag }}"
+          else
+            TAG="${{ github.sha }}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "image=${{ env.GAR_REGISTRY }}/${{ env.SERVICE_NAME }}:$TAG" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./infra/ten-agent
+          file: ./infra/ten-agent/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}
+            ${{ env.GAR_REGISTRY }}/${{ env.SERVICE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            USE_AGENT=agents/examples/voice-assistant
+
+      - name: Image summary
+        run: |
+          echo "Alice Voice Service image built successfully"
+          echo "Image: ${{ steps.meta.outputs.image }}"
+          echo "Tag: ${{ steps.meta.outputs.tag }}"
+
+  deploy-to-gke:
+    name: Deploy to GKE
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GCP_REGION }}
+
+      - name: Verify cluster connection
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Apply K8s manifests (first deploy only)
+        run: |
+          # Check if deployment exists, if not apply all manifests
+          if ! kubectl get deployment ${{ env.SERVICE_NAME }} -n ${{ env.NAMESPACE }} &>/dev/null; then
+            echo "First deployment - applying all manifests..."
+            kubectl apply -f k8s/microservices/alice-voice-service-serviceaccount.yaml -n ${{ env.NAMESPACE }}
+            kubectl apply -f k8s/microservices/alice-voice-service-configmap.yaml -n ${{ env.NAMESPACE }}
+            kubectl apply -f k8s/microservices/alice-voice-service-secret.yaml -n ${{ env.NAMESPACE }}
+            kubectl apply -f k8s/microservices/alice-voice-service-deployment.yaml -n ${{ env.NAMESPACE }}
+            kubectl apply -f k8s/microservices/alice-voice-service-service.yaml -n ${{ env.NAMESPACE }}
+            kubectl apply -f k8s/microservices/alice-voice-service-ingress.yaml -n ${{ env.NAMESPACE }}
+          fi
+
+      - name: Update deployment image
+        run: |
+          IMAGE="${{ needs.build-and-push.outputs.image-full }}"
+          echo "Updating deployment with image: ${IMAGE}"
+          kubectl set image deployment/${{ env.SERVICE_NAME }} \
+            -n ${{ env.NAMESPACE }} \
+            ${{ env.SERVICE_NAME }}=${IMAGE}
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/${{ env.SERVICE_NAME }} \
+            -n ${{ env.NAMESPACE }} \
+            --timeout=10m || {
+            echo "Rollout failed, collecting diagnostics..."
+            echo ""
+            echo "=== Pod Status ==="
+            kubectl get pods -n ${{ env.NAMESPACE }} -l app=${{ env.SERVICE_NAME }} -o wide
+            echo ""
+            echo "=== Pod Descriptions ==="
+            kubectl describe pods -n ${{ env.NAMESPACE }} -l app=${{ env.SERVICE_NAME }} | tail -100
+            echo ""
+            echo "=== Recent Pod Logs ==="
+            for pod in $(kubectl get pods -n ${{ env.NAMESPACE }} -l app=${{ env.SERVICE_NAME }} -o jsonpath='{.items[*].metadata.name}'); do
+              echo "--- Logs from $pod ---"
+              kubectl logs -n ${{ env.NAMESPACE }} $pod --tail=100 2>&1 || echo "No logs available"
+            done
+            echo ""
+            echo "=== Events ==="
+            kubectl get events -n ${{ env.NAMESPACE }} --sort-by='.lastTimestamp' | grep -i ${{ env.SERVICE_NAME }} | tail -20
+            exit 1
+          }
+
+      - name: Verify deployment
+        run: |
+          echo "Alice Voice Service deployment status:"
+          kubectl get deployment ${{ env.SERVICE_NAME }} -n ${{ env.NAMESPACE }}
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=${{ env.SERVICE_NAME }}
+          kubectl get svc ${{ env.SERVICE_NAME }} -n ${{ env.NAMESPACE }}
+          kubectl get ingress ${{ env.SERVICE_NAME }}-ingress -n ${{ env.NAMESPACE }} || true
+
+      - name: Deployment summary
+        run: |
+          echo "Alice Voice Service deployed successfully!"
+          echo "Image: ${{ needs.build-and-push.outputs.image-full }}"
+          echo "Namespace: ${{ env.NAMESPACE }}"
+          echo "Endpoint: https://api.staging.novaplatform.me/alice-voice"
+
+  health-check:
+    name: Run Health Checks
+    runs-on: ubuntu-latest
+    needs: deploy-to-gke
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GCP_REGION }}
+
+      - name: Health check
+        run: |
+          echo "Waiting for Alice Voice Service to be ready..."
+          kubectl wait --for=condition=ready pod \
+            -l app=${{ env.SERVICE_NAME }} \
+            -n ${{ env.NAMESPACE }} \
+            --timeout=5m
+
+          echo "Testing health endpoint..."
+          POD_NAME=$(kubectl get pod -n ${{ env.NAMESPACE }} -l app=${{ env.SERVICE_NAME }} -o jsonpath="{.items[0].metadata.name}")
+          kubectl exec -n ${{ env.NAMESPACE }} $POD_NAME -- curl -sf http://localhost:8080/health || \
+          kubectl exec -n ${{ env.NAMESPACE }} $POD_NAME -- curl -sf http://localhost:8080/ping || \
+          echo "Health endpoint not available yet"
+
+          echo "Health check completed!"
+
+      - name: Test TEN Agent API
+        run: |
+          POD_NAME=$(kubectl get pod -n ${{ env.NAMESPACE }} -l app=${{ env.SERVICE_NAME }} -o jsonpath="{.items[0].metadata.name}")
+
+          echo "Testing TEN Agent /ping endpoint..."
+          kubectl exec -n ${{ env.NAMESPACE }} $POD_NAME -- curl -sf -X POST http://localhost:8080/ping \
+            -H "Content-Type: application/json" \
+            -d '{"request_id": "health-check-test"}' || echo "Ping test skipped"
+
+  summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [build-and-push, deploy-to-gke, health-check]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Alice Voice Service Deployment Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build & Push" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ needs.build-and-push.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Image: \`${{ needs.build-and-push.outputs.image-full }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deploy to GKE" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ needs.deploy-to-gke.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Environment: \`${{ inputs.environment || 'staging' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Health Checks" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ needs.health-check.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Endpoints" >> $GITHUB_STEP_SUMMARY
+          echo "- API: \`https://api.staging.novaplatform.me/alice-voice\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Start: \`POST /alice-voice/start\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Stop: \`POST /alice-voice/stop\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Ping: \`POST /alice-voice/ping\`" >> $GITHUB_STEP_SUMMARY

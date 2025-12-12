@@ -214,6 +214,36 @@ struct APIConfig {
         static let voiceMode = "/api/v2/alice/voice"  // POST 語音模式
     }
 
+    // MARK: - Alice Voice Service API (TEN Agent)
+    struct AliceVoice {
+        /// TEN Agent 服務器基礎 URL
+        /// Staging: https://api.staging.novaplatform.me/alice-voice
+        /// Production: https://api.nova.social/alice-voice
+        static var baseURL: String {
+            switch current {
+            case .development:
+                if let localURL = ProcessInfo.processInfo.environment["ALICE_VOICE_URL"] {
+                    return localURL
+                }
+                return "http://localhost:8080"
+            case .staging:
+                // Use HTTPS staging domain
+                return "https://api.staging.novaplatform.me/alice-voice"
+            case .production:
+                return "https://api.nova.social/alice-voice"
+            }
+        }
+
+        /// POST /start - 啟動 TEN Agent 會話
+        static var start: String { "\(baseURL)/start" }
+        /// POST /stop - 停止 TEN Agent 會話
+        static var stop: String { "\(baseURL)/stop" }
+        /// POST /ping - Keep-alive for TEN Agent 會話
+        static var ping: String { "\(baseURL)/ping" }
+        /// GET /health - 健康檢查
+        static var health: String { "\(baseURL)/health" }
+    }
+
     // MARK: - AI Configuration (Backend Proxy)
     /// AI requests are proxied through our backend to protect API keys
     /// The backend handles authentication with third-party AI providers
@@ -326,6 +356,22 @@ struct APIConfig {
         static func unregisterPushToken(_ token: String) -> String { "/api/v2/notifications/push-token/\(token)" }
         /// POST /api/v2/notifications/batch - Batch create notifications
         static let batchCreate = "/api/v2/notifications/batch"
+    }
+
+    // MARK: - Trending API
+    struct Trending {
+        /// GET /api/v2/trending - Get trending content
+        static let getTrending = "/api/v2/trending"
+        /// GET /api/v2/trending/videos - Get trending videos
+        static let getVideos = "/api/v2/trending/videos"
+        /// GET /api/v2/trending/posts - Get trending posts
+        static let getPosts = "/api/v2/trending/posts"
+        /// GET /api/v2/trending/streams - Get trending streams
+        static let getStreams = "/api/v2/trending/streams"
+        /// GET /api/v2/trending/categories - Get trending categories
+        static let getCategories = "/api/v2/trending/categories"
+        /// POST /api/v2/trending/engagement - Record engagement
+        static let recordEngagement = "/api/v2/trending/engagement"
     }
 
     // MARK: - Chat & Messaging API

@@ -19,21 +19,17 @@ enum AliceVoiceConfig {
     // MARK: - TEN Agent 服務器配置
     /// Alice Voice Service 後端服務器地址
     /// 開發環境: http://localhost:8080
-    /// Staging 環境: 使用主 API 域名的 /alice-voice 路徑
+    /// Staging 環境: https://api.staging.novaplatform.me/alice-voice
     /// 生產環境: https://api.nova.social/alice-voice
     static var tenAgentServerURL: String {
-        #if DEBUG
-        // Development: use local server or staging
-        if let localURL = ProcessInfo.processInfo.environment["ALICE_VOICE_URL"] {
-            return localURL
-        }
-        // Use staging API with alice-voice path
-        return "\(APIConfig.current.baseURL)/alice-voice"
-        #else
-        // Production: use main API endpoint
-        return "\(APIConfig.current.baseURL)/alice-voice"
-        #endif
+        APIConfig.AliceVoice.baseURL
     }
+
+    /// TEN Agent API Endpoints
+    static var startSessionURL: String { APIConfig.AliceVoice.start }
+    static var stopSessionURL: String { APIConfig.AliceVoice.stop }
+    static var pingSessionURL: String { APIConfig.AliceVoice.ping }
+    static var healthCheckURL: String { APIConfig.AliceVoice.health }
     
     // MARK: - 頻道配置
     /// 頻道名稱前綴

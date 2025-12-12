@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: alice-voice-service
+  labels:
+    app: alice-voice-service
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: rtc
+    port: 3000
+    targetPort: 3000
+    protocol: TCP
+  selector:
+    app: alice-voice-service

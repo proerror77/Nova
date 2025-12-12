@@ -1,0 +1,152 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alice-voice-service
+  labels:
+    app: alice-voice-service
+    version: v1
+    tier: ai
+  annotations:
+    description: "TEN Agent for Alice Voice Chat - STT/LLM/TTS pipeline"
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: alice-voice-service
+  template:
+    metadata:
+      labels:
+        app: alice-voice-service
+        version: v1
+        tier: ai
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: alice-voice-service
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+      - name: alice-voice-service
+        image: asia-northeast1-docker.pkg.dev/PROJECT_ID/nova/alice-voice-service:latest
+        imagePullPolicy: Always
+
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: rtc
+          containerPort: 3000
+          protocol: TCP
+
+        # Environment variables from ConfigMap
+        envFrom:
+        - configMapRef:
+            name: alice-voice-service-config
+
+        # Environment variables from Secrets
+        env:
+        - name: AGORA_APP_ID
+          valueFrom:
+            secretKeyRef:
+              name: alice-voice-service-secret
+              key: agora-app-id
+        - name: AGORA_APP_CERTIFICATE
+          valueFrom:
+            secretKeyRef:
+              name: alice-voice-service-secret
+              key: agora-app-certificate
+              optional: true
+        - name: DEEPGRAM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: alice-voice-service-secret
+              key: deepgram-api-key
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: alice-voice-service-secret
+              key: openai-api-key
+        - name: OPENAI_API_BASE
+          valueFrom:
+            configMapKeyRef:
+              name: alice-voice-service-config
+              key: openai-api-base
+        - name: OPENAI_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: alice-voice-service-config
+              key: openai-model
+
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        # Resources - TEN Agent needs more memory for AI processing
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+
+        # Volume mounts
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /tmp/ten_agent
+
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
+
+      # Spread across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - alice-voice-service
+              topologyKey: kubernetes.io/hostname
+
+      terminationGracePeriodSeconds: 60

@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alice-voice-service-config
+  labels:
+    app: alice-voice-service
+data:
+  # Server configuration
+  LOG_PATH: "/tmp/ten_agent"
+  LOG_STDOUT: "true"
+  LOG_LEVEL: "info"
+  SERVER_PORT: "8080"
+  WORKERS_MAX: "100"
+  WORKER_QUIT_TIMEOUT_SECONDS: "60"
+
+  # OpenAI configuration
+  openai-api-base: "https://api.tu-zi.com/v1"
+  openai-model: "gpt-4o-all"
+
+  # Agent configuration
+  GRAPH_NAME: "voice_assistant"
+
+  # STT configuration
+  STT_PROVIDER: "deepgram"
+  STT_LANGUAGE: "zh-TW"
+
+  # TTS configuration
+  TTS_PROVIDER: "openai"
+  TTS_VOICE: "nova"
+
+  # Alice persona
+  ALICE_GREETING: "你好！我是 Alice，有什麼我可以幫助你的嗎？"
+  ALICE_PROMPT: "你是 Alice，Nova 社交平台的 AI 助理。你友善、有幫助，會用繁體中文回答問題。保持回答簡潔自然，像真人對話一樣。"
