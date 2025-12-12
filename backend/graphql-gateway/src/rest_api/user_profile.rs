@@ -1,6 +1,7 @@
 //! User Profile Settings API endpoints
 //!
 //! GET /api/v2/users/{id} - Get user profile
+//! GET /api/v2/users/username/{username} - Get user profile by username
 //! PUT /api/v2/users/{id} - Update user profile
 //! POST /api/v2/users/avatar - Upload user avatar
 
@@ -11,7 +12,8 @@ use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
 use crate::clients::proto::auth::{
-    auth_service_client::AuthServiceClient, GetUserRequest, UpdateUserProfileRequest,
+    auth_service_client::AuthServiceClient, GetUserByUsernameRequest, GetUserRequest,
+    UpdateUserProfileRequest,
 };
 use crate::clients::proto::media::{
     media_service_client::MediaServiceClient, InitiateUploadRequest, MediaType,
@@ -108,6 +110,62 @@ pub async fn get_profile(
             updated_at: chrono::Utc::now().timestamp(),
         };
         return Ok(HttpResponse::Ok().json(profile));
+    }
+
+    Ok(HttpResponse::NotFound().finish())
+}
+
+/// GET /api/v2/users/username/{username}
+/// Get user profile by username
+pub async fn get_profile_by_username(
+    http_req: HttpRequest,
+    username: web::Path<String>,
+    clients: web::Data<ServiceClients>,
+) -> Result<HttpResponse> {
+    let authed = http_req.extensions().get::<AuthenticatedUser>().copied();
+    if authed.is_none() {
+        return Ok(HttpResponse::Unauthorized().finish());
+    }
+
+    info!(username = %username, "GET /api/v2/users/username/{username}");
+
+    let mut auth_client: AuthServiceClient<_> = clients.auth_client();
+    let req = tonic::Request::new(GetUserByUsernameRequest {
+        username: username.to_string(),
+    });
+    let resp = match auth_client.get_user_by_username(req).await {
+        Ok(resp) => resp.into_inner(),
+        Err(e) => {
+            error!("get_user_by_username failed: {}", e);
+            if e.code() == tonic::Code::NotFound {
+                return Ok(HttpResponse::NotFound().json(serde_json::json!({
+                    "error": "User not found"
+                })));
+            }
+            return Ok(HttpResponse::ServiceUnavailable().finish());
+        }
+    };
+
+    if let Some(err) = resp.error {
+        return Ok(HttpResponse::NotFound().json(serde_json::json!({
+            "error": err.message
+        })));
+    }
+
+    if let Some(u) = resp.user {
+        // Wrap user in UserProfile wrapper to match iOS expected response format
+        let user_response = serde_json::json!({
+            "user": {
+                "id": u.id,
+                "username": u.username,
+                "email": u.email,
+                "displayName": u.username,  // Use username as display_name for now
+                "avatarUrl": null,
+                "bio": null,
+                "createdAt": u.created_at
+            }
+        });
+        return Ok(HttpResponse::Ok().json(user_response));
     }
 
     Ok(HttpResponse::NotFound().finish())

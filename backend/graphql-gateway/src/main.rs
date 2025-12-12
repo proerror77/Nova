@@ -377,6 +377,11 @@ async fn main() -> std::io::Result<()> {
                 web::delete().to(rest_api::content::delete_post),
             )
             // ✅ User Profile API
+            // NOTE: username route MUST be before {id} route to prevent {id} from matching "username"
+            .route(
+                "/api/v2/users/username/{username}",
+                web::get().to(rest_api::get_profile_by_username),
+            )
             .route("/api/v2/users/{id}", web::get().to(rest_api::get_profile))
             .route(
                 "/api/v2/users/{id}",

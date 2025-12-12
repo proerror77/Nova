@@ -754,6 +754,24 @@ impl AuthService for IdentityServiceServer {
         }))
     }
 
+    /// Get user by username
+    async fn get_user_by_username(
+        &self,
+        request: Request<GetUserByUsernameRequest>,
+    ) -> std::result::Result<Response<GetUserByUsernameResponse>, Status> {
+        let req = request.into_inner();
+
+        let user = db::users::find_by_username(&self.db, &req.username)
+            .await
+            .map_err(to_status)?
+            .ok_or_else(|| Status::not_found("User not found"))?;
+
+        Ok(Response::new(GetUserByUsernameResponse {
+            user: Some(user_model_to_proto(&user)),
+            error: None,
+        }))
+    }
+
     /// List users with pagination and search
     async fn list_users(
         &self,

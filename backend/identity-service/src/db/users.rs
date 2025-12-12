@@ -55,6 +55,17 @@ pub async fn find_by_email(pool: &PgPool, email: &str) -> Result<Option<User>> {
     Ok(user)
 }
 
+/// Find user by username (excluding soft-deleted users)
+pub async fn find_by_username(pool: &PgPool, username: &str) -> Result<Option<User>> {
+    let user =
+        sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = $1 AND deleted_at IS NULL")
+            .bind(username)
+            .fetch_optional(pool)
+            .await?;
+
+    Ok(user)
+}
+
 /// Find user by email or username (excluding soft-deleted users)
 /// This function supports login with either email or username
 pub async fn find_by_email_or_username(pool: &PgPool, identifier: &str) -> Result<Option<User>> {

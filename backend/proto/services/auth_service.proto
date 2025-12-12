@@ -98,6 +98,15 @@ message GetUserByEmailResponse {
   optional .nova.common.v2.ErrorStatus error = 2;
 }
 
+message GetUserByUsernameRequest {
+  string username = 1;  // Username to look up
+}
+
+message GetUserByUsernameResponse {
+  User user = 1;
+  optional .nova.common.v2.ErrorStatus error = 2;
+}
+
 // ============================================================================
 // List Users (with pagination)
 // ============================================================================
@@ -697,6 +706,13 @@ service AuthService {
   rpc GetUserByEmail(GetUserByEmailRequest) returns (GetUserByEmailResponse) {
     option (google.api.http) = {
       get: "/api/v2/auth/users/by-email"
+    };
+  }
+
+  // Get user by username
+  rpc GetUserByUsername(GetUserByUsernameRequest) returns (GetUserByUsernameResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users/by-username/{username}"
     };
   }
 
