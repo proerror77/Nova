@@ -7,6 +7,8 @@
 # - cdc.comments (3 partitions) - Comment events
 # - cdc.likes (3 partitions) - Like/unlike events
 # - cdc.follows (3 partitions) - Follow/unfollow events
+# - dlq.nova-content-cdc (1 partition) - Dead letter queue for content CDC
+# - dlq.nova-graph-cdc (1 partition) - Dead letter queue for graph CDC
 # - connect-configs (1 partition) - Kafka Connect config storage
 # - connect-offsets (25 partitions) - Kafka Connect offset storage
 # - connect-status (5 partitions) - Kafka Connect status storage
@@ -73,6 +75,12 @@ spec:
             "cdc.follows:3:1"
           )
 
+          # Dead Letter Queue topics for failed CDC messages
+          DLQ_TOPICS=(
+            "dlq.nova-content-cdc:1:1"
+            "dlq.nova-graph-cdc:1:1"
+          )
+
           # Kafka Connect internal topics
           CONNECT_TOPICS=(
             "connect-configs:1:1"
@@ -95,6 +103,27 @@ spec:
               --replication-factor "$replication" \
               --if-not-exists \
               --config retention.ms=604800000 \
+              --config cleanup.policy=delete || true
+
+            echo ""
+          done
+
+          echo "Creating Dead Letter Queue topics..."
+          echo ""
+
+          for topic_spec in "${DLQ_TOPICS[@]}"; do
+            IFS=':' read -r topic_name partitions replication <<< "$topic_spec"
+            echo "Creating DLQ topic: $topic_name (partitions: $partitions)"
+
+            # DLQ topics with longer retention for debugging
+            kafka-topics \
+              --bootstrap-server "$BOOTSTRAP_SERVER" \
+              --create \
+              --topic "$topic_name" \
+              --partitions "$partitions" \
+              --replication-factor "$replication" \
+              --if-not-exists \
+              --config retention.ms=2592000000 \
               --config cleanup.policy=delete || true
 
             echo ""
@@ -125,7 +154,7 @@ spec:
           echo "=============================================="
           echo ""
           echo "Topic list:"
-          kafka-topics --bootstrap-server "$BOOTSTRAP_SERVER" --list | grep -E "^(cdc\.|connect-)" || true
+          kafka-topics --bootstrap-server "$BOOTSTRAP_SERVER" --list | grep -E "^(cdc\.|dlq\.|connect-)" || true
           echo ""
 
         resources:

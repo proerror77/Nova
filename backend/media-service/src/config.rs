@@ -12,6 +12,24 @@ pub struct Config {
     pub kafka: KafkaConfig,
     pub s3: S3Config,
     pub gcs: Option<GcsConfig>,
+    pub upload: UploadConfig,
+}
+
+/// Upload limits configuration
+#[derive(Clone, Debug, Deserialize)]
+pub struct UploadConfig {
+    /// Maximum image file size in bytes (default: 10MB)
+    pub max_image_size: u64,
+    /// Maximum video file size in bytes (default: 100MB)
+    pub max_video_size: u64,
+    /// Maximum audio file size in bytes (default: 50MB)
+    pub max_audio_size: u64,
+    /// Maximum total request body size in bytes (default: 150MB)
+    pub max_request_size: u64,
+    /// Allowed image MIME types
+    pub allowed_image_types: Vec<String>,
+    /// Allowed video MIME types
+    pub allowed_video_types: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -137,6 +155,46 @@ impl Config {
                 } else {
                     None
                 }
+            },
+            upload: UploadConfig {
+                // Default: 10MB for images
+                max_image_size: std::env::var("UPLOAD_MAX_IMAGE_SIZE")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(10 * 1024 * 1024),
+                // Default: 100MB for videos
+                max_video_size: std::env::var("UPLOAD_MAX_VIDEO_SIZE")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(100 * 1024 * 1024),
+                // Default: 50MB for audio
+                max_audio_size: std::env::var("UPLOAD_MAX_AUDIO_SIZE")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(50 * 1024 * 1024),
+                // Default: 150MB total request size
+                max_request_size: std::env::var("UPLOAD_MAX_REQUEST_SIZE")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(150 * 1024 * 1024),
+                allowed_image_types: std::env::var("UPLOAD_ALLOWED_IMAGE_TYPES")
+                    .map(|v| v.split(',').map(|s| s.trim().to_string()).collect())
+                    .unwrap_or_else(|_| vec![
+                        "image/jpeg".to_string(),
+                        "image/png".to_string(),
+                        "image/gif".to_string(),
+                        "image/webp".to_string(),
+                        "image/heic".to_string(),
+                        "image/heif".to_string(),
+                    ]),
+                allowed_video_types: std::env::var("UPLOAD_ALLOWED_VIDEO_TYPES")
+                    .map(|v| v.split(',').map(|s| s.trim().to_string()).collect())
+                    .unwrap_or_else(|_| vec![
+                        "video/mp4".to_string(),
+                        "video/quicktime".to_string(),
+                        "video/webm".to_string(),
+                        "video/x-msvideo".to_string(),
+                    ]),
             },
         })
     }

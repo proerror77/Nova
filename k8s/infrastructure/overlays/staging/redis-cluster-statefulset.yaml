@@ -29,7 +29,7 @@ data:
     appendfsync everysec
 
     # Memory management
-    maxmemory 256mb
+    maxmemory 450mb
     maxmemory-policy allkeys-lru
 
     # Timeout

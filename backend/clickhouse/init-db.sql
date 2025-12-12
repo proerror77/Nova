@@ -17,6 +17,7 @@ ORDER BY (timestamp, event_type)
 SETTINGS index_granularity = 8192;
 
 -- Posts CDC mirror (feed + analytics source of truth)
+-- TTL: 1 year retention for posts data
 CREATE TABLE IF NOT EXISTS posts_cdc (
   id String,
   user_id String,
@@ -27,9 +28,11 @@ CREATE TABLE IF NOT EXISTS posts_cdc (
   is_deleted UInt8 DEFAULT 0
 ) ENGINE = ReplacingMergeTree(cdc_timestamp)
 ORDER BY id
+TTL created_at + INTERVAL 1 YEAR
 SETTINGS index_granularity = 8192;
 
 -- Follows CDC mirror (for feed/trending joins)
+-- TTL: 2 years retention for social graph data
 CREATE TABLE IF NOT EXISTS follows_cdc (
   follower_id String,
   followee_id String,
@@ -38,9 +41,11 @@ CREATE TABLE IF NOT EXISTS follows_cdc (
   is_deleted UInt8 DEFAULT 0
 ) ENGINE = ReplacingMergeTree(cdc_timestamp)
 ORDER BY (follower_id, followee_id)
+TTL created_at + INTERVAL 2 YEAR
 SETTINGS index_granularity = 8192;
 
 -- Comments CDC mirror (engagement analytics)
+-- TTL: 1 year retention for comments
 CREATE TABLE IF NOT EXISTS comments_cdc (
   id String,
   post_id String,
@@ -51,9 +56,11 @@ CREATE TABLE IF NOT EXISTS comments_cdc (
   is_deleted UInt8 DEFAULT 0
 ) ENGINE = ReplacingMergeTree(cdc_timestamp)
 ORDER BY id
+TTL created_at + INTERVAL 1 YEAR
 SETTINGS index_granularity = 8192;
 
 -- Likes CDC mirror (engagement analytics)
+-- TTL: 1 year retention for likes
 CREATE TABLE IF NOT EXISTS likes_cdc (
   user_id String,
   post_id String,
@@ -62,9 +69,11 @@ CREATE TABLE IF NOT EXISTS likes_cdc (
   is_deleted UInt8 DEFAULT 0
 ) ENGINE = ReplacingMergeTree(cdc_timestamp)
 ORDER BY (user_id, post_id, created_at)
+TTL created_at + INTERVAL 1 YEAR
 SETTINGS index_granularity = 8192;
 
 -- Post events (engagement tracking)
+-- TTL: 90 days retention for event stream
 CREATE TABLE IF NOT EXISTS post_events (
   event_time DateTime DEFAULT now(),
   event_type String,
@@ -72,9 +81,11 @@ CREATE TABLE IF NOT EXISTS post_events (
   post_id String DEFAULT ''
 ) ENGINE = MergeTree
 ORDER BY (event_time, event_type)
+TTL event_time + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192;
 
 -- Feed candidate tables (materialized by background job)
+-- TTL: 30 days retention for feed candidates (refreshed frequently)
 CREATE TABLE IF NOT EXISTS feed_candidates_followees (
   user_id String,
   post_id String,
@@ -92,8 +103,10 @@ CREATE TABLE IF NOT EXISTS feed_candidates_followees (
 ) ENGINE = ReplacingMergeTree(updated_at)
 PARTITION BY toYYYYMM(created_at)
 ORDER BY (user_id, combined_score, post_id)
+TTL created_at + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192;
 
+-- TTL: 30 days retention for trending candidates
 CREATE TABLE IF NOT EXISTS feed_candidates_trending (
   post_id String,
   author_id String,
@@ -110,8 +123,10 @@ CREATE TABLE IF NOT EXISTS feed_candidates_trending (
 ) ENGINE = ReplacingMergeTree(updated_at)
 PARTITION BY toYYYYMM(created_at)
 ORDER BY (combined_score, post_id)
+TTL created_at + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192;
 
+-- TTL: 30 days retention for affinity candidates
 CREATE TABLE IF NOT EXISTS feed_candidates_affinity (
   user_id String,
   post_id String,
@@ -129,6 +144,7 @@ CREATE TABLE IF NOT EXISTS feed_candidates_affinity (
 ) ENGINE = ReplacingMergeTree(updated_at)
 PARTITION BY toYYYYMM(created_at)
 ORDER BY (user_id, combined_score, post_id)
+TTL created_at + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192;
 
 -- Dimension helper for latest, non-deleted posts
@@ -140,81 +156,123 @@ SELECT
 FROM posts_cdc
 GROUP BY id;
 
--- Hourly post engagement metrics sourced from CDC tables
-CREATE VIEW IF NOT EXISTS post_metrics_1h AS
-WITH
-  likes AS (
-    SELECT
-      toStartOfHour(created_at) AS metric_hour,
-      post_id,
-      sum(if(is_deleted = 1, -1, 1)) AS likes_count
-    FROM likes_cdc
-    GROUP BY metric_hour, post_id
-  ),
-  comments AS (
-    SELECT
-      toStartOfHour(created_at) AS metric_hour,
-      post_id,
-      sum(if(is_deleted = 1, -1, 1)) AS comments_count
-    FROM comments_cdc
-    GROUP BY metric_hour, post_id
-  ),
-  union_metrics AS (
-    SELECT metric_hour, post_id FROM likes
-    UNION ALL
-    SELECT metric_hour, post_id FROM comments
-  ),
-  combined AS (
-    SELECT metric_hour, post_id
-    FROM union_metrics
-    GROUP BY metric_hour, post_id
-  )
+-- ============================================================================
+-- MATERIALIZED VIEWS FOR REAL-TIME METRICS
+-- ============================================================================
+
+-- Target table for hourly likes metrics (incremental)
+CREATE TABLE IF NOT EXISTS post_likes_hourly (
+  metric_hour DateTime,
+  post_id String,
+  likes_delta Int64,
+  updated_at DateTime DEFAULT now()
+) ENGINE = SummingMergeTree(likes_delta)
+ORDER BY (metric_hour, post_id)
+TTL metric_hour + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192;
+
+-- Materialized view: incrementally aggregate likes by hour
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_post_likes_hourly
+TO post_likes_hourly AS
 SELECT
-  combined.metric_hour,
-  combined.post_id,
-  posts_latest.author_id,
-  greatest(0, ifNull(likes.likes_count, 0)) AS likes_count,
-  greatest(0, ifNull(comments.comments_count, 0)) AS comments_count,
+  toStartOfHour(created_at) AS metric_hour,
+  post_id,
+  if(is_deleted = 1, -1, 1) AS likes_delta,
+  now() AS updated_at
+FROM likes_cdc;
+
+-- Target table for hourly comments metrics (incremental)
+CREATE TABLE IF NOT EXISTS post_comments_hourly (
+  metric_hour DateTime,
+  post_id String,
+  comments_delta Int64,
+  updated_at DateTime DEFAULT now()
+) ENGINE = SummingMergeTree(comments_delta)
+ORDER BY (metric_hour, post_id)
+TTL metric_hour + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192;
+
+-- Materialized view: incrementally aggregate comments by hour
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_post_comments_hourly
+TO post_comments_hourly AS
+SELECT
+  toStartOfHour(created_at) AS metric_hour,
+  post_id,
+  if(is_deleted = 1, -1, 1) AS comments_delta,
+  now() AS updated_at
+FROM comments_cdc;
+
+-- Target table for user-author affinity (incremental)
+CREATE TABLE IF NOT EXISTS user_author_affinity (
+  user_id String,
+  author_id String,
+  affinity_delta Float64,
+  event_time DateTime,
+  updated_at DateTime DEFAULT now()
+) ENGINE = SummingMergeTree(affinity_delta)
+ORDER BY (user_id, author_id)
+TTL event_time + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192;
+
+-- Materialized view: incrementally track user-author likes affinity
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_user_author_likes
+TO user_author_affinity AS
+SELECT
+  l.user_id AS user_id,
+  p.user_id AS author_id,
+  if(l.is_deleted = 1, -1.0, 1.0) AS affinity_delta,
+  l.created_at AS event_time,
+  now() AS updated_at
+FROM likes_cdc l
+INNER JOIN posts_cdc p ON p.id = l.post_id;
+
+-- Materialized view: incrementally track user-author comments affinity
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_user_author_comments
+TO user_author_affinity AS
+SELECT
+  c.user_id AS user_id,
+  p.user_id AS author_id,
+  if(c.is_deleted = 1, -2.0, 2.0) AS affinity_delta,
+  c.created_at AS event_time,
+  now() AS updated_at
+FROM comments_cdc c
+INNER JOIN posts_cdc p ON p.id = c.post_id;
+
+-- ============================================================================
+-- QUERY VIEWS (use materialized data for fast queries)
+-- ============================================================================
+
+-- Hourly post engagement metrics (reads from materialized tables)
+CREATE VIEW IF NOT EXISTS post_metrics_1h AS
+SELECT
+  coalesce(l.metric_hour, c.metric_hour) AS metric_hour,
+  coalesce(l.post_id, c.post_id) AS post_id,
+  p.author_id,
+  greatest(0, coalesce(l.likes_count, 0)) AS likes_count,
+  greatest(0, coalesce(c.comments_count, 0)) AS comments_count,
   toInt64(0) AS shares_count,
   toInt64(0) AS impressions_count
-FROM combined
-LEFT JOIN likes ON likes.metric_hour = combined.metric_hour AND likes.post_id = combined.post_id
-LEFT JOIN comments ON comments.metric_hour = combined.metric_hour AND comments.post_id = combined.post_id
-LEFT JOIN posts_latest ON posts_latest.id = combined.post_id
-WHERE posts_latest.is_deleted = 0 OR posts_latest.is_deleted IS NULL;
+FROM (
+  SELECT metric_hour, post_id, sum(likes_delta) AS likes_count
+  FROM post_likes_hourly
+  GROUP BY metric_hour, post_id
+) l
+FULL OUTER JOIN (
+  SELECT metric_hour, post_id, sum(comments_delta) AS comments_count
+  FROM post_comments_hourly
+  GROUP BY metric_hour, post_id
+) c ON l.metric_hour = c.metric_hour AND l.post_id = c.post_id
+LEFT JOIN posts_latest p ON p.id = coalesce(l.post_id, c.post_id)
+WHERE p.is_deleted = 0 OR p.is_deleted IS NULL;
 
--- 90-day user ⇄ author affinity view sourced from engagement CDC tables
+-- 90-day user ⇄ author affinity (reads from materialized table)
 CREATE VIEW IF NOT EXISTS user_author_90d AS
-WITH
-  like_events AS (
-    SELECT
-      user_id,
-      post_id,
-      created_at AS event_time,
-      if(is_deleted = 1, -1.0, 1.0) AS weight
-    FROM likes_cdc
-  ),
-  comment_events AS (
-    SELECT
-      user_id,
-      post_id,
-      created_at AS event_time,
-      if(is_deleted = 1, -2.0, 2.0) AS weight
-    FROM comments_cdc
-  ),
-  all_events AS (
-    SELECT * FROM like_events
-    UNION ALL
-    SELECT * FROM comment_events
-  )
 SELECT
-  events.user_id,
-  posts_latest.author_id,
-  sum(events.weight) AS interaction_count,
-  max(events.event_time) AS last_interaction
-FROM all_events AS events
-INNER JOIN posts_latest ON posts_latest.id = events.post_id
-WHERE (posts_latest.is_deleted = 0 OR posts_latest.is_deleted IS NULL)
-  AND events.event_time >= now() - INTERVAL 90 DAY
-GROUP BY events.user_id, posts_latest.author_id
+  user_id,
+  author_id,
+  sum(affinity_delta) AS interaction_count,
+  max(event_time) AS last_interaction
+FROM user_author_affinity
+WHERE event_time >= now() - INTERVAL 90 DAY
+GROUP BY user_id, author_id
 HAVING interaction_count > 0;

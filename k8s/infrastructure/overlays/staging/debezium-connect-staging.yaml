@@ -281,7 +281,10 @@ spec:
                   "heartbeat.interval.ms": "30000",
                   "errors.tolerance": "all",
                   "errors.log.enable": "true",
-                  "errors.log.include.messages": "true"
+                  "errors.log.include.messages": "true",
+                  "errors.deadletterqueue.topic.name": "dlq.nova-content-cdc",
+                  "errors.deadletterqueue.topic.replication.factor": "1",
+                  "errors.deadletterqueue.context.headers.enable": "true"
                 }
               }'
             echo "  Connector ${CONNECTOR_NAME} created"
@@ -334,7 +337,10 @@ spec:
                   "heartbeat.interval.ms": "30000",
                   "errors.tolerance": "all",
                   "errors.log.enable": "true",
-                  "errors.log.include.messages": "true"
+                  "errors.log.include.messages": "true",
+                  "errors.deadletterqueue.topic.name": "dlq.nova-graph-cdc",
+                  "errors.deadletterqueue.topic.replication.factor": "1",
+                  "errors.deadletterqueue.context.headers.enable": "true"
                 }
               }'
             echo "  Connector ${CONNECTOR_NAME} created"
