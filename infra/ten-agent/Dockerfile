@@ -44,6 +44,7 @@ RUN apt-get clean && apt-get update && apt-get install -y --no-install-recommend
     jq \
     ca-certificates \
     curl \
+    unzip \
     && apt-get clean && rm -rf /var/lib/apt/lists/* && rm -rf /tmp/*
 
 # Install Node.js 20 (for potential frontend serving)
