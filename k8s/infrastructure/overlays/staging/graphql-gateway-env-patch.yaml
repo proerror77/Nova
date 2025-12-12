@@ -34,9 +34,9 @@ spec:
         - name: GRPC_MEDIA_SERVICE_URL
           value: "https://media-service.nova-staging.svc.cluster.local:9082"
 
-        # Identity service - staging runs without TLS (plaintext gRPC on 50051)
+        # Identity service - gRPC port 50051 with mTLS
         - name: GRPC_IDENTITY_SERVICE_URL
-          value: "http://identity-service.nova-staging.svc.cluster.local:50051"
+          value: "https://identity-service.nova-staging.svc.cluster.local:50051"
 
         # Social service - gRPC port 50052 with mTLS
         - name: GRPC_SOCIAL_SERVICE_URL
