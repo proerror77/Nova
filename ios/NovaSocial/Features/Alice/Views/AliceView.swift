@@ -473,56 +473,68 @@ struct ModelRowView: View {
 }
 
 // MARK: - Alice AI Service (Inline)
-// 临时将服务代码放在这里，避免添加新文件到项目
+// Uses the Nova backend Alice API endpoints (/api/v2/alice/*)
 
 @Observable
 final class AliceService {
     static let shared = AliceService()
 
-    private let baseURL: String
-    private let apiKey: String
-
     private let apiClient = APIClient.shared
 
-    private init() {
-        // API requests are proxied through our backend
-        // Backend handles third-party AI provider authentication
-        self.baseURL = APIConfig.AI.baseURL
-        self.apiKey = ""  // Not used - backend manages API keys
-    }
+    private init() {}
 
     @MainActor
     func sendMessage(
         messages: [AIChatMessage],
         model: String = "gpt-4o-all"
     ) async throws -> String {
-        guard let url = URL(string: "\(baseURL)/chat/completions") else {
+        // Get the last user message to send to Alice API
+        guard let lastUserMessage = messages.last(where: { $0.role == "user" }) else {
+            throw AliceError.emptyResponse
+        }
+
+        // Build the URL using APIConfig.Alice endpoint
+        let baseURL = APIConfig.current.baseURL
+        let endpoint = APIConfig.Alice.sendMessage  // "/api/v2/alice/chat"
+        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
             throw AliceError.invalidURL
         }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        // Use user's JWT token for authentication with our backend proxy
-        // Backend will then authenticate with the AI provider using server-side API keys
+        
+        // Use user's JWT token for authentication
         if let token = apiClient.getAuthToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let requestBody = ChatCompletionRequest(
-            model: model,
-            messages: messages
+        // Create Alice API request format
+        let requestBody = AliceChatRequest(
+            message: lastUserMessage.content,
+            mode: "text"
         )
 
         let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
         request.httpBody = try encoder.encode(requestBody)
+
+        #if DEBUG
+        print("[AliceService] Sending to: \(url.absoluteString)")
+        print("[AliceService] Message: \(requestBody.message)")
+        #endif
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AliceError.invalidResponse
         }
+
+        #if DEBUG
+        print("[AliceService] Response status: \(httpResponse.statusCode)")
+        if let responseString = String(data: data, encoding: .utf8) {
+            print("[AliceService] Response body: \(responseString)")
+        }
+        #endif
 
         guard httpResponse.statusCode == 200 else {
             if let errorResponse = try? JSONDecoder().decode(AIErrorResponse.self, from: data) {
@@ -532,41 +544,33 @@ final class AliceService {
         }
 
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        let completionResponse = try decoder.decode(ChatCompletionResponse.self, from: data)
+        let aliceResponse = try decoder.decode(AliceChatResponse.self, from: data)
 
-        guard let firstChoice = completionResponse.choices.first else {
-            throw AliceError.emptyResponse
-        }
-
-        return firstChoice.message.content
+        return aliceResponse.message
     }
 }
 
-// MARK: - AI Data Models
+// MARK: - Alice API Request/Response Models
+
+struct AliceChatRequest: Codable, Sendable {
+    let message: String
+    let mode: String  // "text" or "voice"
+}
+
+struct AliceChatResponse: Codable, Sendable {
+    let id: String?
+    let message: String
+    let timestamp: Int?
+    
+    // Also handle error response format
+    let status: String?
+}
+
+// MARK: - AI Data Models (for compatibility)
 
 struct AIChatMessage: Codable, Sendable {
     let role: String
     let content: String
-}
-
-struct ChatCompletionRequest: Codable, Sendable {
-    let model: String
-    let messages: [AIChatMessage]
-}
-
-struct ChatCompletionResponse: Codable, Sendable {
-    let id: String
-    let object: String
-    let created: Int
-    let model: String
-    let choices: [Choice]
-
-    struct Choice: Codable, Sendable {
-        let index: Int
-        let message: AIChatMessage
-        let finishReason: String?
-    }
 }
 
 struct AIErrorResponse: Codable, Sendable {
