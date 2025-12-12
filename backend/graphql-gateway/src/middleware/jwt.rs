@@ -86,6 +86,8 @@ where
             "/api/v2/guest/feed/trending",
             // Invite code validation (pre-registration check, no auth required)
             "/api/v2/auth/invites/validate",
+            // Comments API (public read access for viewing comments)
+            "/api/v2/social/comments",
         ];
 
         if public_prefixes.iter().any(|p| path.starts_with(p)) {

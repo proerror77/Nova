@@ -131,18 +131,24 @@ struct CommentSheetView: View {
             comments = result.comments
             totalCount = result.totalCount
         } catch let apiError as APIError {
+            print("❌ Failed to load comments for post \(post.id): \(apiError)")
             switch apiError {
             case .unauthorized:
-                error = "Please login to view comments"
+                error = "Authentication error. Please try logging out and back in."
             case .notFound:
                 // No comments yet - not an error
                 comments = []
                 totalCount = 0
+            case .serverError:
+                error = "Server error. Please try again later."
+            case .networkError:
+                error = "Network connection error. Please check your internet connection."
             default:
-                error = "Failed to load comments"
+                error = "Failed to load comments. Please try again."
             }
         } catch {
-            self.error = "Network error"
+            print("❌ Unexpected error loading comments: \(error)")
+            self.error = "An unexpected error occurred. Please try again."
         }
 
         isLoading = false
@@ -157,10 +163,27 @@ struct CommentSheetView: View {
             comments.insert(newComment, at: 0)
             totalCount += 1
             commentText = ""
+        } catch let apiError as APIError {
+            print("❌ Failed to post comment for post \(post.id): \(apiError)")
+            // Show error briefly with specific messaging
+            switch apiError {
+            case .unauthorized:
+                self.error = "Please login to post comments"
+            case .serverError:
+                self.error = "Server error. Please try again."
+            case .networkError:
+                self.error = "Network error. Check your connection."
+            default:
+                self.error = "Failed to post comment. Please try again."
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                self.error = nil
+            }
         } catch {
-            // Show error briefly
+            print("❌ Unexpected error posting comment: \(error)")
             self.error = "Failed to post comment"
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 self.error = nil
             }
         }
