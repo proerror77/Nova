@@ -218,6 +218,7 @@ jobs:
           fi
 
           # Build the card JSON using jq
+          # First build the elements array separately, then construct the final object
           jq -n \
             --arg emoji "$EMOJI" \
             --arg title "$TITLE" \
@@ -240,175 +241,64 @@ jobs:
             --arg commit_url "$COMMIT_URL" \
             --arg repo_url "$REPO_URL" \
             --arg layer_section "$LAYER_SECTION" \
-            '{
+            '
+            # Build base elements
+            [
+              {
+                "tag": "div",
+                "fields": [
+                  {"is_short": true, "text": {"tag": "lark_md", "content": "**環境**\n\($environment | ascii_upcase)"}},
+                  {"is_short": true, "text": {"tag": "lark_md", "content": "**狀態**\n\($status_tag) \($status_text)"}},
+                  {"is_short": true, "text": {"tag": "lark_md", "content": "**分支**\n`\($branch_name)`"}},
+                  {"is_short": true, "text": {"tag": "lark_md", "content": "**服務數量**\n\($service_count) 個服務"}}
+                ]
+              },
+              {"tag": "hr"},
+              {
+                "tag": "div",
+                "fields": [
+                  {"is_short": true, "text": {"tag": "lark_md", "content": "**觸發方式**\n\($trigger_type)"}},
+                  {"is_short": true, "text": {"tag": "lark_md", "content": "**觸發者**\n@\($trigger_actor)"}},
+                  {"is_short": true, "text": {"tag": "lark_md", "content": "**提交**\n[\($commit_sha_short)](\($commit_url))"}},
+                  {"is_short": true, "text": {"tag": "lark_md", "content": "**時間**\n\($timestamp)"}}
+                ]
+              }
+            ]
+            # Add services section if available
+            + (if (($service_display | length) > 0 and ($service_display == "無變更服務" | not)) then
+              [{"tag": "hr"}, {"tag": "div", "text": {"tag": "lark_md", "content": "**📦 部署的服務**\n\($service_display)"}}]
+              else [] end)
+            # Add layer status if available
+            + (if ($layer_section | length) > 0 then
+              [{"tag": "div", "text": {"tag": "lark_md", "content": "**🔄 部署層級**\n\($layer_section)"}}]
+              else [] end)
+            # Add duration if available
+            + (if ($duration_display | length) > 0 then
+              [{"tag": "note", "elements": [{"tag": "plain_text", "content": "\($duration_display)"}]}]
+              else [] end)
+            # Add message and action buttons
+            + [
+              {"tag": "hr"},
+              {"tag": "div", "text": {"tag": "lark_md", "content": $message}},
+              {
+                "tag": "action",
+                "actions": [
+                  {"tag": "button", "text": {"tag": "plain_text", "content": "📋 查看日誌"}, "type": "primary", "url": $details_url},
+                  {"tag": "button", "text": {"tag": "plain_text", "content": "🔍 查看提交"}, "type": "default", "url": $commit_url},
+                  {"tag": "button", "text": {"tag": "plain_text", "content": "📁 查看倉庫"}, "type": "default", "url": $repo_url}
+                ]
+              },
+              {"tag": "note", "elements": [{"tag": "plain_text", "content": "Nova CI/CD • \($workflow_name)"}]}
+            ]
+            | {
               "msg_type": "interactive",
               "card": {
-                "config": {
-                  "wide_screen_mode": true
-                },
+                "config": {"wide_screen_mode": true},
                 "header": {
-                  "title": {
-                    "content": "\($emoji) \($title)",
-                    "tag": "plain_text"
-                  },
+                  "title": {"content": "\($emoji) \($title)", "tag": "plain_text"},
                   "template": $color
                 },
-                "elements": [
-                  {
-                    "tag": "div",
-                    "fields": [
-                      {
-                        "is_short": true,
-                        "text": {
-                          "tag": "lark_md",
-                          "content": "**環境**\n\($environment | ascii_upcase)"
-                        }
-                      },
-                      {
-                        "is_short": true,
-                        "text": {
-                          "tag": "lark_md",
-                          "content": "**狀態**\n\($status_tag) \($status_text)"
-                        }
-                      },
-                      {
-                        "is_short": true,
-                        "text": {
-                          "tag": "lark_md",
-                          "content": "**分支**\n`\($branch_name)`"
-                        }
-                      },
-                      {
-                        "is_short": true,
-                        "text": {
-                          "tag": "lark_md",
-                          "content": "**服務數量**\n\($service_count) 個服務"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "tag": "hr"
-                  },
-                  {
-                    "tag": "div",
-                    "fields": [
-                      {
-                        "is_short": true,
-                        "text": {
-                          "tag": "lark_md",
-                          "content": "**觸發方式**\n\($trigger_type)"
-                        }
-                      },
-                      {
-                        "is_short": true,
-                        "text": {
-                          "tag": "lark_md",
-                          "content": "**觸發者**\n@\($trigger_actor)"
-                        }
-                      },
-                      {
-                        "is_short": true,
-                        "text": {
-                          "tag": "lark_md",
-                          "content": "**提交**\n[\($commit_sha_short)](\($commit_url))"
-                        }
-                      },
-                      {
-                        "is_short": true,
-                        "text": {
-                          "tag": "lark_md",
-                          "content": "**時間**\n\($timestamp)"
-                        }
-                      }
-                    ]
-                  }
-                ]
-                + (if $service_display != "" and $service_display != "無變更服務" then [
-                  {
-                    "tag": "hr"
-                  },
-                  {
-                    "tag": "div",
-                    "text": {
-                      "tag": "lark_md",
-                      "content": "**📦 部署的服務**\n\($service_display)"
-                    }
-                  }
-                ] else [] end)
-                + (if $layer_section != "" then [
-                  {
-                    "tag": "div",
-                    "text": {
-                      "tag": "lark_md",
-                      "content": "**🔄 部署層級**\n\($layer_section)"
-                    }
-                  }
-                ] else [] end)
-                + (if $duration_display != "" then [
-                  {
-                    "tag": "note",
-                    "elements": [
-                      {
-                        "tag": "plain_text",
-                        "content": "\($duration_display)"
-                      }
-                    ]
-                  }
-                ] else [] end)
-                + [
-                  {
-                    "tag": "hr"
-                  },
-                  {
-                    "tag": "div",
-                    "text": {
-                      "tag": "lark_md",
-                      "content": $message
-                    }
-                  },
-                  {
-                    "tag": "action",
-                    "actions": [
-                      {
-                        "tag": "button",
-                        "text": {
-                          "tag": "plain_text",
-                          "content": "📋 查看日誌"
-                        },
-                        "type": "primary",
-                        "url": $details_url
-                      },
-                      {
-                        "tag": "button",
-                        "text": {
-                          "tag": "plain_text",
-                          "content": "🔍 查看提交"
-                        },
-                        "type": "default",
-                        "url": $commit_url
-                      },
-                      {
-                        "tag": "button",
-                        "text": {
-                          "tag": "plain_text",
-                          "content": "📁 查看倉庫"
-                        },
-                        "type": "default",
-                        "url": $repo_url
-                      }
-                    ]
-                  },
-                  {
-                    "tag": "note",
-                    "elements": [
-                      {
-                        "tag": "plain_text",
-                        "content": "Nova CI/CD • \($workflow_name)"
-                      }
-                    ]
-                  }
-                ]
+                "elements": .
               }
             }' > /tmp/feishu_message.json
 
