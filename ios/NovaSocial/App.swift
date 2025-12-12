@@ -217,7 +217,9 @@ struct ICEREDApp: App {
                         await initializeMatrixBridge()
                     }
                 } else if !isAuthenticated && wasAuthenticated {
-                    // 用戶登出 - 關閉 Matrix
+                    // 用戶登出或 Session 過期 - 強制跳轉到歡迎頁面
+                    currentPage = .welcome
+                    // 關閉 Matrix
                     Task { @MainActor in
                         await shutdownMatrixBridge()
                     }
