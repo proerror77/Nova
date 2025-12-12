@@ -27,6 +27,9 @@ struct AliceView: View {
     @State private var showNewPost = false
     @State private var showWrite = false
     @State private var selectedModel = "gpt-4o-all"
+    
+    // MARK: - Voice Chat States
+    @State private var showVoiceChat = false
 
     // MARK: - Chat States
     @State private var messages: [AliceChatMessage] = []
@@ -70,6 +73,10 @@ struct AliceView: View {
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
         }
+        // TODO: Re-enable when VoiceChatView is added to project
+        // .fullScreenCover(isPresented: $showVoiceChat) {
+        //     VoiceChatView(isPresented: $showVoiceChat)
+        // }
         .onChange(of: selectedImage) { oldValue, newValue in
             // 选择/拍摄照片后，自动跳转到NewPostView
             if newValue != nil {
@@ -180,17 +187,38 @@ struct AliceView: View {
                             )
 
                             // Voice Mode 按钮
-                            Text("Voice Mode")
-                                .font(.system(size: 16, weight: .medium))
+                            Button(action: {
+                                showVoiceChat = true
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "waveform")
+                                        .font(.system(size: 16))
+                                    Text("Voice Mode")
+                                        .font(.system(size: 16, weight: .medium))
+                                }
                                 .foregroundColor(DesignTokens.textPrimary)
-                                .frame(width: 131, height: 42)
-                                .background(DesignTokens.surface)
+                                .frame(width: 140, height: 42)
+                                .background(
+                                    LinearGradient(
+                                        colors: [.purple.opacity(0.3), .blue.opacity(0.2)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
                                 .cornerRadius(21)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 21)
                                         .inset(by: 0.50)
-                                        .stroke(DesignTokens.borderColor, lineWidth: 0.50)
+                                        .stroke(
+                                            LinearGradient(
+                                                colors: [.purple.opacity(0.5), .blue.opacity(0.3)],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            ),
+                                            lineWidth: 1
+                                        )
                                 )
+                            }
                         }
                         .padding(.horizontal, 16)
                     }

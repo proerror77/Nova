@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  ten-agent:
+    image: agoraio/ten_agent_server:latest
+    container_name: ten-agent-server
+    ports:
+      - "8080:8080"
+    environment:
+      # Agora RTC 配置
+      - AGORA_APP_ID=${AGORA_APP_ID}
+      - AGORA_APP_CERTIFICATE=${AGORA_APP_CERTIFICATE}
+      
+      # STT - Deepgram 語音轉文字
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      
+      # LLM - OpenAI
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      
+      # TTS - ElevenLabs 文字轉語音
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      
+      # Agent 配置
+      - GRAPH_NAME=${GRAPH_NAME:-voice_assistant}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - ./agents:/app/agents
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 可選：TEN Agent Playground (開發用)
+  ten-playground:
+    image: agoraio/ten_agent_playground:latest
+    container_name: ten-agent-playground
+    ports:
+      - "3001:3000"
+    environment:
+      - AGENT_SERVER_URL=http://ten-agent:8080
+    depends_on:
+      - ten-agent
+    profiles:
+      - dev
+
+networks:
+  default:
+    name: ten-agent-network

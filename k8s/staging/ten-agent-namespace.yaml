@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nova-staging
+  labels:
+    app.kubernetes.io/part-of: nova
+    environment: staging
+---
+# 如果 namespace 已存在，這個會被忽略

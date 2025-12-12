@@ -69,6 +69,10 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>We need access to your camera to take photos and scan QR codes.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>We need access to your microphone to enable voice chat with Alice AI.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>We need speech recognition to convert your voice to text for Alice AI.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>We need access to your location to help you add location tags to your posts.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
