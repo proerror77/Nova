@@ -52,9 +52,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Bun
-RUN curl -fsSL https://bun.sh/install | bash
-ENV PATH="/root/.bun/bin:$PATH"
+# Install Bun (to /usr/local/bin for global access)
+RUN curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash
+ENV PATH="/usr/local/bin:$PATH"
 
 # Install Task runner
 RUN sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
