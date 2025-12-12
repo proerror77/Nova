@@ -88,6 +88,8 @@ where
             "/api/v2/auth/invites/validate",
             // Comments API (public read access for viewing comments)
             "/api/v2/social/comments",
+            // Alice AI Assistant API (public access for chat and voice)
+            "/api/v2/alice",
         ];
 
         if public_prefixes.iter().any(|p| path.starts_with(p)) {
