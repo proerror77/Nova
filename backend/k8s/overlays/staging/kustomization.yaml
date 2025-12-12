@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - ../../base
+  - matrix-well-known.yaml
 
 namespace: nova-backend
 
@@ -21,6 +22,10 @@ patches:
         value: 1
   # Synapse resource patch for staging
   - path: matrix-synapse-patch.yaml
+  # Zitadel OIDC provider for staging
+  - path: zitadel-patch.yaml
+  # Synapse OIDC configuration for staging
+  - path: synapse-oidc-patch.yaml
 
 # ConfigMap patches for staging environment
 configMapGenerator:
@@ -29,12 +34,18 @@ configMapGenerator:
     literals:
       - APP_ENV=staging
       - LOG_LEVEL=debug
-      # Matrix configuration for staging
+      # Matrix configuration for staging (updated for OIDC SSO)
       - MATRIX_ENABLED=true
       - MATRIX_HOMESERVER_URL=http://matrix-synapse:8008
-      - MATRIX_SERVICE_USER=@nova-service:staging.nova.local
+      - MATRIX_SERVICE_USER=@nova-service:staging.nova.app
       - MATRIX_DEVICE_NAME=nova-realtime-chat-service-staging
-      - MATRIX_SERVER_NAME=staging.nova.local
+      - MATRIX_SERVER_NAME=staging.nova.app
+      # OIDC SSO configuration
+      - MATRIX_OIDC_ENABLED=true
+      - MATRIX_OIDC_ISSUER=https://id.staging.nova.app
+      - MATRIX_OIDC_CLIENT_ID=synapse-nova-staging
+      # Zitadel configuration
+      - ZITADEL_EXTERNAL_DOMAIN=id.staging.nova.app
 
 # Staging image tags (use latest for staging)
 images:
@@ -42,3 +53,5 @@ images:
     newTag: staging
   - name: matrixdotorg/synapse
     newTag: v1.98.0
+  - name: ghcr.io/zitadel/zitadel
+    newTag: v2.62.1

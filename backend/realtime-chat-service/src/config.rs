@@ -35,6 +35,18 @@ pub struct MatrixConfig {
     /// Recovery key for E2EE key backup (Base58-encoded)
     /// Set this to enable automatic key recovery on service restart
     pub recovery_key: Option<String>,
+    /// Admin access token for Synapse Admin API
+    pub admin_token: Option<String>,
+    /// Server name for Matrix User IDs (e.g., "staging.nova.app")
+    pub server_name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct KafkaConfig {
+    pub enabled: bool,
+    pub brokers: String,
+    pub identity_events_topic: String,
+    pub consumer_group_id: String,
 }
 
 /// VoIP configuration combining ICE servers and Matrix settings
@@ -108,6 +120,7 @@ pub struct Config {
     pub s3: S3Config,
     pub auth_service_url: String,
     pub matrix: MatrixConfig,
+    pub kafka: KafkaConfig,
 }
 
 impl Config {
@@ -245,16 +258,46 @@ impl Config {
             .ok()
             .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
             .unwrap_or(false);
+
+        // Extract server name from MATRIX_SERVICE_USER or use MATRIX_SERVER_NAME
+        let service_user = env::var("MATRIX_SERVICE_USER")
+            .unwrap_or_else(|_| "@service:staging.nova.app".to_string());
+        let server_name = env::var("MATRIX_SERVER_NAME")
+            .unwrap_or_else(|_| {
+                // Extract from service_user (format: @user:server.name)
+                service_user
+                    .split(':')
+                    .nth(1)
+                    .unwrap_or("staging.nova.app")
+                    .to_string()
+            });
+
         let matrix = MatrixConfig {
             enabled: matrix_enabled,
             homeserver_url: env::var("MATRIX_HOMESERVER_URL")
-                .unwrap_or_else(|_| "https://chat.yourcorp.com".to_string()),
-            service_user: env::var("MATRIX_SERVICE_USER")
-                .unwrap_or_else(|_| "@service:chat.yourcorp.com".to_string()),
+                .unwrap_or_else(|_| "http://matrix-synapse:8008".to_string()),
+            service_user,
             access_token: env::var("MATRIX_ACCESS_TOKEN").ok(),
             device_name: env::var("MATRIX_DEVICE_NAME")
                 .unwrap_or_else(|_| "nova-realtime-chat-service".to_string()),
             recovery_key: env::var("MATRIX_RECOVERY_KEY").ok(),
+            admin_token: env::var("MATRIX_ADMIN_TOKEN").ok(),
+            server_name,
+        };
+
+        // Kafka configuration
+        let kafka_enabled = env::var("KAFKA_ENABLED")
+            .ok()
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+            .unwrap_or(false);
+        let kafka = KafkaConfig {
+            enabled: kafka_enabled,
+            brokers: env::var("KAFKA_BROKERS")
+                .unwrap_or_else(|_| "localhost:9092".to_string()),
+            identity_events_topic: env::var("KAFKA_IDENTITY_EVENTS_TOPIC")
+                .unwrap_or_else(|_| "nova.identity.events".to_string()),
+            consumer_group_id: env::var("KAFKA_CONSUMER_GROUP_ID")
+                .unwrap_or_else(|_| "realtime-chat-service".to_string()),
         };
 
         Ok(Self {
@@ -269,6 +312,7 @@ impl Config {
             s3,
             auth_service_url,
             matrix,
+            kafka,
         })
     }
 }
@@ -303,6 +347,9 @@ mod tests {
                 service_user: "@service:example.com".to_string(),
                 access_token: None,
                 device_name: "test".to_string(),
+                recovery_key: None,
+                admin_token: None,
+                server_name: "example.com".to_string(),
             },
         };
 
@@ -356,6 +403,15 @@ mod tests {
                 service_user: "@service:test.com".to_string(),
                 access_token: Some("token".to_string()),
                 device_name: "test-device".to_string(),
+                recovery_key: None,
+                admin_token: None,
+                server_name: "test.com".to_string(),
+            },
+            kafka: KafkaConfig {
+                enabled: false,
+                brokers: "localhost:9092".to_string(),
+                identity_events_topic: "nova.identity.events".to_string(),
+                consumer_group_id: "test-group".to_string(),
             },
         };
 

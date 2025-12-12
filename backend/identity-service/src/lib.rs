@@ -13,11 +13,13 @@
 /// - `security`: JWT, password hashing, TOTP, token revocation
 /// - `services`: Business logic (email, kafka, oauth, 2FA)
 /// - `validators`: Input validation
+/// - `http`: HTTP API for internal services (Zitadel Actions)
 pub mod config;
 pub mod db;
 pub mod domain;
 pub mod error;
 pub mod grpc;
+pub mod http;
 pub mod models;
 pub mod security;
 pub mod services;

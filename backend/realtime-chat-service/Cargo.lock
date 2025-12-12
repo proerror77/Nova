@@ -2315,6 +2315,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "event-schema"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "eyeball"
 version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5162,6 +5172,7 @@ dependencies = [
  "env_logger",
  "error-handling",
  "error-types",
+ "event-schema",
  "futures",
  "futures-util",
  "getrandom 0.2.16",
@@ -5179,6 +5190,7 @@ dependencies = [
  "prometheus",
  "prost",
  "rand 0.8.5",
+ "rdkafka",
  "redis",
  "redis-utils",
  "reqwest",
@@ -5199,6 +5211,7 @@ dependencies = [
  "tonic-health",
  "tracing",
  "tracing-subscriber",
+ "urlencoding",
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",

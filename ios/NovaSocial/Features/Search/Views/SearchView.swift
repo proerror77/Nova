@@ -5,6 +5,10 @@ struct SearchView: View {
     @State private var viewModel = SearchViewModel()
     @FocusState private var isSearchFocused: Bool
 
+    // User profile navigation state
+    @State private var showUserProfile = false
+    @State private var selectedUserId: String?
+
     var body: some View {
         ZStack {
             // MARK: - 背景色
@@ -87,6 +91,10 @@ struct SearchView: View {
                             // 搜索结果
                             ForEach(viewModel.searchResults) { result in
                                 SearchResultItem(result: result)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        handleResultTap(result)
+                                    }
                             }
                         }
                     }
@@ -123,6 +131,31 @@ struct SearchView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
+        .fullScreenCover(isPresented: $showUserProfile) {
+            if let userId = selectedUserId {
+                UserProfileView(showUserProfile: $showUserProfile, userId: userId)
+            }
+        }
+    }
+
+    // MARK: - Handle Result Tap
+    private func handleResultTap(_ result: SearchResult) {
+        switch result {
+        case .user(let id, let username, _, _, _):
+            // Save to recent searches
+            viewModel.saveToRecentSearches(username)
+            // Navigate to user profile
+            selectedUserId = id
+            showUserProfile = true
+
+        case .post(let id, _, _, _, _):
+            // TODO: Navigate to post detail
+            print("Navigate to post: \(id)")
+
+        case .hashtag(let tag, _):
+            // TODO: Navigate to hashtag feed
+            print("Navigate to hashtag: \(tag)")
         }
     }
     

@@ -36,11 +36,16 @@ spec:
         - name: SERVER_HOST
           value: "0.0.0.0"
         - name: SERVER_PORT
-          value: "8081"
+          value: "9081"
         - name: GRPC_PORT
           value: "9081"
         - name: RUST_LOG
           value: "info"
+        - name: INTERNAL_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: identity-service-secrets
+              key: INTERNAL_API_KEY
         envFrom:
         - configMapRef:
             name: nova-backend-config
@@ -55,7 +60,7 @@ spec:
             cpu: "500m"
         livenessProbe:
           httpGet:
-            path: /api/v1/health/live
+            path: /health
             port: 8081
           initialDelaySeconds: 30
           periodSeconds: 10
@@ -63,7 +68,7 @@ spec:
           failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /api/v1/health/ready
+            path: /health
             port: 8081
           initialDelaySeconds: 10
           periodSeconds: 5
@@ -72,7 +77,7 @@ spec:
           failureThreshold: 3
         startupProbe:
           httpGet:
-            path: /api/v1/health
+            path: /health
             port: 8081
           initialDelaySeconds: 0
           periodSeconds: 5

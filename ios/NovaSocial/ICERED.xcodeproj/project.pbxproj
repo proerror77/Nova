@@ -11,6 +11,7 @@
 		0110DBA1EA84032CDEA590D7 /* ChatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8B1760D88CE8A2673D74AFB /* ChatService.swift */; };
 		0192881506556BB11FF1C57D /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = D040E1C8EF2FF6D6CBAAA5E3 /* DesignTokens.swift */; };
 		02A9DB80B22101FDD66A033D /* MatrixBridgeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 234851800D447CF6CD504A1A /* MatrixBridgeService.swift */; };
+		02A9DB80B22101FDD66A034E /* MatrixSSOManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 234851800D447CF6CD504A2B /* MatrixSSOManager.swift */; };
 		053C8BF9C3C70329DFED17F2 /* ContentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7634AC3CDDF314F5F89CF059 /* ContentModels.swift */; };
 		09D77F54E987AC76D5971878 /* NavigationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75EC152D81EC4B655AFC53A1 /* NavigationManager.swift */; };
 		0CE35545BE0426ACFD947E22 /* CryptoCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBBFF77645A4CF02AAB9B2E4 /* CryptoCore.swift */; };
@@ -19,6 +20,7 @@
 		1183B659832CB30303FC0564 /* PhoneRegistrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F413929E863DA61C476F44D6 /* PhoneRegistrationView.swift */; };
 		124E367C3D6397C95405BDAF /* PostAsSelectionPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24CEFEAC014290526A9CD69E /* PostAsSelectionPanel.swift */; };
 		162EEE7D84A7DE23589C45F0 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D34F87E7DE783C7F956B76F /* ChatView.swift */; };
+		162EEE7D84A7DE23589C45F1 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D34F87E7DE783C7F956B770 /* ChatViewModel.swift */; };
 		1648C8ED60D353785E217E14 /* WriteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF7C3F1FF4F4ED65A51E66E2 /* WriteView.swift */; };
 		16A00A9F355364B31163C73B /* CarouselView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A94850235E23697D1EF6503B /* CarouselView.swift */; };
 		17BADB88A6299F21878B9602 /* CarouselCardItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B140AB4127BB17B46A837D83 /* CarouselCardItem.swift */; };
@@ -153,6 +155,7 @@
 		21C58A10ECD63A9AD9BEB6D5 /* PhotoOptionsModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoOptionsModal.swift; sourceTree = "<group>"; };
 		21DD82679F813BE27BFE6092 /* PushNotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotificationManager.swift; sourceTree = "<group>"; };
 		234851800D447CF6CD504A1A /* MatrixBridgeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatrixBridgeService.swift; sourceTree = "<group>"; };
+		234851800D447CF6CD504A2B /* MatrixSSOManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatrixSSOManager.swift; sourceTree = "<group>"; };
 		24173BE45B1DC7AA94F7016A /* AddFriendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddFriendsView.swift; sourceTree = "<group>"; };
 		24CEFEAC014290526A9CD69E /* PostAsSelectionPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostAsSelectionPanel.swift; sourceTree = "<group>"; };
 		2E7A9645F230A1DF8AD452F2 /* LocationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationView.swift; sourceTree = "<group>"; };
@@ -185,6 +188,7 @@
 		69B449484719B1691927E1D6 /* AuthenticationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationManager.swift; sourceTree = "<group>"; };
 		6C8DE5693B6E939EE1A86A67 /* RankingListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RankingListView.swift; sourceTree = "<group>"; };
 		6D34F87E7DE783C7F956B76F /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		6D34F87E7DE783C7F956B770 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
 		712BA1842DBC03D66DB2611F /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 		7382F96F698E0CDC89B99912 /* GetVerifiedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GetVerifiedView.swift; sourceTree = "<group>"; };
 		75ADA8314EFFF10E30AEE448 /* InviteFriendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteFriendsView.swift; sourceTree = "<group>"; };
@@ -279,8 +283,17 @@
 			isa = PBXGroup;
 			children = (
 				256A10F89FC9C64DCDBF76E6 /* Views */,
+				00D23E0A2E752DBA61667BFB /* ViewModels */,
 			);
 			path = Chat;
+			sourceTree = "<group>";
+		};
+		00D23E0A2E752DBA61667BFB /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				6D34F87E7DE783C7F956B770 /* ChatViewModel.swift */,
+			);
+			path = ViewModels;
 			sourceTree = "<group>";
 		};
 		03227C42DE12A3503BF69DE4 /* UI */ = {
@@ -835,6 +848,7 @@
 				79CD728AAD8F73549C311B73 /* INTEGRATION_GUIDE.md */,
 				234851800D447CF6CD504A1A /* MatrixBridgeService.swift */,
 				A373078F13E1684A5699D2E5 /* MatrixService.swift */,
+				234851800D447CF6CD504A2B /* MatrixSSOManager.swift */,
 			);
 			path = Matrix;
 			sourceTree = "<group>";
@@ -1085,6 +1099,7 @@
 				16A00A9F355364B31163C73B /* CarouselView.swift in Sources */,
 				0110DBA1EA84032CDEA590D7 /* ChatService.swift in Sources */,
 				162EEE7D84A7DE23589C45F0 /* ChatView.swift in Sources */,
+				162EEE7D84A7DE23589C45F1 /* ChatViewModel.swift in Sources */,
 				E0B1B70631617B9CDF27DE9D /* CommentCardItem.swift in Sources */,
 				97F6C657D7E2048352947CDA /* CommentSheetView.swift in Sources */,
 				C14F2A4B72CAD50242535A72 /* CommunicationService.swift in Sources */,
@@ -1128,6 +1143,7 @@
 				4C722130FF631EA3ED07E08E /* LoginView.swift in Sources */,
 				02A9DB80B22101FDD66A033D /* MatrixBridgeService.swift in Sources */,
 				5B4C21CD305C033B16C603A0 /* MatrixService.swift in Sources */,
+				02A9DB80B22101FDD66A034E /* MatrixSSOManager.swift in Sources */,
 				79D3B98307F3B7BCE51E29BC /* MediaService.swift in Sources */,
 				F213E5619BF6A2E4B0A7E098 /* MessageView.swift in Sources */,
 				FE5A7851F73E4DAE93743284 /* MyChannelsView.swift in Sources */,

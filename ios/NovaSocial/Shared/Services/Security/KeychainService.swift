@@ -19,6 +19,12 @@ final class KeychainService {
         case refreshToken = "refresh_token"
         case userId = "user_id"
         case e2eeDeviceIdentity = "e2ee_device_identity"
+
+        // Matrix SSO credentials
+        case matrixAccessToken = "matrix_access_token"
+        case matrixUserId = "matrix_user_id"
+        case matrixDeviceId = "matrix_device_id"
+        case matrixHomeserver = "matrix_homeserver"
     }
 
     // MARK: - Public Methods
@@ -79,7 +85,15 @@ final class KeychainService {
 
     /// Clear all stored values
     func clearAll() {
-        for key in [Key.authToken, Key.refreshToken, Key.userId, Key.e2eeDeviceIdentity] {
+        for key in [Key.authToken, Key.refreshToken, Key.userId, Key.e2eeDeviceIdentity,
+                    Key.matrixAccessToken, Key.matrixUserId, Key.matrixDeviceId, Key.matrixHomeserver] {
+            delete(key)
+        }
+    }
+
+    /// Clear only Matrix-related credentials
+    func clearMatrixCredentials() {
+        for key in [Key.matrixAccessToken, Key.matrixUserId, Key.matrixDeviceId, Key.matrixHomeserver] {
             delete(key)
         }
     }

@@ -196,12 +196,85 @@ struct MatrixConfiguration {
 }
 ```
 
+## SSO Authentication (Recommended)
+
+Nova iOS uses Matrix SSO authentication via Zitadel for secure user login. This replaces the legacy `/api/v2/matrix/token` endpoint which returned a service account token.
+
+### SSO Flow
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌─────────────┐     ┌─────────────┐
+│   iOS App   │────▶│  Matrix Synapse │────▶│   Zitadel   │────▶│  Nova Auth  │
+│             │     │  SSO Redirect   │     │   Login UI  │     │   Backend   │
+└─────────────┘     └─────────────────┘     └─────────────┘     └─────────────┘
+      │                                            │
+      │◀────────────────────────────────────────────
+      │         loginToken via callback URL
+      │
+      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Exchange loginToken for Matrix access_token via m.login.token              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Usage
+
+```swift
+// Initialize Matrix SSO login
+let ssoManager = MatrixSSOManager.shared
+
+// Check if SSO is available
+let available = try await ssoManager.checkSSOAvailable()
+
+// Start SSO login (opens web authentication)
+let result = try await ssoManager.startSSOLogin()
+
+// Use result.accessToken and result.userId for Matrix operations
+print("Logged in as: \(result.userId)")
+```
+
+### URL Scheme Configuration
+
+The app registers these URL schemes for SSO callbacks:
+
+- **Staging**: `nova-staging://matrix-sso-callback`
+- **Production**: `nova://matrix-sso-callback`
+
+These are configured in `Info.plist` under `CFBundleURLTypes`.
+
+### SSO Configuration
+
+```swift
+// MatrixSSOConfiguration
+struct MatrixSSOConfiguration {
+    // Staging
+    static let stagingHomeserver = "https://matrix.staging.nova.app"
+    static let stagingCallbackURL = "nova-staging://matrix-sso-callback"
+
+    // Production
+    static let productionHomeserver = "https://matrix.nova.app"
+    static let productionCallbackURL = "nova://matrix-sso-callback"
+}
+```
+
+### Legacy Token Endpoint (Deprecated)
+
+The `/api/v2/matrix/token` endpoint is **DEPRECATED** and will be removed in a future version. It returns a service account token, not a user-specific token.
+
+```swift
+// DEPRECATED - Do not use
+// APIConfig.Matrix.getToken
+
+// Use instead:
+let result = try await MatrixSSOManager.shared.startSSOLogin()
+```
+
 ## Backend Requirements
 
 The Nova backend must:
 
 1. **Run Matrix Synapse** - Homeserver for Matrix protocol
-2. **Mint Matrix Access Tokens** - Issue tokens for authenticated Nova users
+2. **Configure Zitadel SSO** - OIDC integration for SSO redirect flow
 3. **Store Room Mappings** - conversation_id ↔ matrix_room_id table
 4. **Bridge Events** (optional) - Forward Matrix events to Nova WebSocket
 

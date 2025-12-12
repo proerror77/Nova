@@ -26,6 +26,22 @@
 				<string>icered</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.nova.matrix-sso-staging</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>nova-staging</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.nova.matrix-sso</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>nova</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>

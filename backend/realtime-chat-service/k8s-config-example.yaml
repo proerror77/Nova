@@ -1,0 +1,72 @@
+# Example Kubernetes Configuration for Matrix Kafka Sync
+# Add these configurations to realtime-chat-service deployment
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: realtime-chat-service-config
+  namespace: infrastructure
+data:
+  # Existing configs...
+  DATABASE_URL: "postgresql://..."
+  REDIS_URL: "redis://..."
+  PORT: "3000"
+  GRPC_PORT: "50051"
+
+  # Kafka Configuration (NEW)
+  KAFKA_ENABLED: "true"
+  KAFKA_BROKERS: "kafka-headless:9092"
+  KAFKA_IDENTITY_EVENTS_TOPIC: "nova.identity.events"
+  KAFKA_CONSUMER_GROUP_ID: "realtime-chat-service"
+
+  # Matrix Configuration (UPDATED)
+  MATRIX_ENABLED: "true"
+  MATRIX_HOMESERVER_URL: "http://matrix-synapse:8008"
+  MATRIX_SERVER_NAME: "staging.nova.app"
+  MATRIX_SERVICE_USER: "@nova-service:staging.nova.app"
+  MATRIX_ACCESS_TOKEN: ""  # For E2EE messaging (existing)
+  # MATRIX_ADMIN_TOKEN is in Secret below
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: realtime-chat-service-secret
+  namespace: infrastructure
+type: Opaque
+data:
+  # Existing secrets...
+  ENCRYPTION_MASTER_KEY: "<base64-encoded-key>"
+
+  # Matrix Admin Token (NEW)
+  # Obtain via: register_new_matrix_user or /_matrix/client/v3/login
+  # Base64 encode the token: echo -n "syt_yourtoken" | base64
+  MATRIX_ADMIN_TOKEN: "c3l0X3lvdXJ0b2tlbg=="  # Example: base64 of "syt_yourtoken"
+
+---
+# Example deployment snippet showing how to mount the secret
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: realtime-chat-service
+  namespace: infrastructure
+spec:
+  template:
+    spec:
+      containers:
+      - name: realtime-chat-service
+        image: ghcr.io/yourorg/realtime-chat-service:latest
+        envFrom:
+        - configMapRef:
+            name: realtime-chat-service-config
+        - secretRef:
+            name: realtime-chat-service-secret
+        env:
+        # Override specific values if needed
+        - name: MATRIX_ADMIN_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: realtime-chat-service-secret
+              key: MATRIX_ADMIN_TOKEN
+              optional: false

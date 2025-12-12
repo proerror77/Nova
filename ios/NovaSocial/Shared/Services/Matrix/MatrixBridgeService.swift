@@ -22,9 +22,14 @@ final class MatrixBridgeService {
     // MARK: - Dependencies
 
     private let matrixService = MatrixService.shared
+    private let matrixSSOManager = MatrixSSOManager.shared
     private let chatService = ChatService()
     private let keychain = KeychainService.shared
     private let apiClient = APIClient.shared
+
+    /// Feature flag to use SSO login instead of legacy token endpoint
+    /// Set to true to use the new Matrix SSO flow
+    private let useSSOLogin = true
 
     // MARK: - State
 
@@ -103,18 +108,15 @@ final class MatrixBridgeService {
             let sessionRestored = try await matrixService.restoreSession()
 
             if !sessionRestored {
-                // Login to Matrix with Nova credentials
-                guard let currentUser = AuthenticationManager.shared.currentUser else {
-                    throw MatrixBridgeError.notAuthenticated
+                // Choose login method based on feature flag
+                if useSSOLogin {
+                    // Use new SSO login flow
+                    try await loginWithSSO()
+                } else {
+                    // Legacy: Get Matrix access token from Nova backend
+                    // DEPRECATED: This endpoint returns a service account token
+                    try await loginWithLegacyToken()
                 }
-
-                // Get Matrix access token from Nova backend
-                let matrixToken = try await getMatrixAccessToken(novaUserId: currentUser.id)
-
-                try await matrixService.login(
-                    novaUserId: currentUser.id,
-                    accessToken: matrixToken
-                )
             }
 
             // Start sync to receive messages
@@ -138,10 +140,75 @@ final class MatrixBridgeService {
         }
     }
 
-    /// Shutdown the Matrix bridge
-    func shutdown() async {
+    /// Login to Matrix using SSO flow
+    /// This is the preferred method - user authenticates via Zitadel
+    private func loginWithSSO() async throws {
         #if DEBUG
-        print("[MatrixBridge] Shutting down...")
+        print("[MatrixBridge] Starting SSO login flow...")
+        #endif
+
+        // Check if we have stored SSO credentials
+        if let storedCredentials = matrixSSOManager.loadStoredCredentials() {
+            #if DEBUG
+            print("[MatrixBridge] Found stored SSO credentials, attempting restore...")
+            #endif
+
+            // Try to use stored credentials
+            do {
+                try await matrixService.login(
+                    novaUserId: storedCredentials.userId,
+                    accessToken: storedCredentials.accessToken
+                )
+                return
+            } catch {
+                #if DEBUG
+                print("[MatrixBridge] Stored credentials invalid, initiating new SSO login: \(error)")
+                #endif
+                matrixSSOManager.clearCredentials()
+            }
+        }
+
+        // Perform SSO login
+        let result = try await matrixSSOManager.startSSOLogin()
+
+        // Login to Matrix service with obtained credentials
+        try await matrixService.login(
+            novaUserId: result.userId,
+            accessToken: result.accessToken
+        )
+
+        #if DEBUG
+        print("[MatrixBridge] SSO login completed successfully")
+        print("[MatrixBridge] Matrix user ID: \(result.userId)")
+        #endif
+    }
+
+    /// Login to Matrix using legacy token endpoint
+    /// DEPRECATED: This returns a service account token, not a user-specific token
+    @available(*, deprecated, message: "Use loginWithSSO() instead. Legacy token endpoint returns service account token.")
+    private func loginWithLegacyToken() async throws {
+        guard let currentUser = AuthenticationManager.shared.currentUser else {
+            throw MatrixBridgeError.notAuthenticated
+        }
+
+        #if DEBUG
+        print("[MatrixBridge] Using legacy token endpoint (DEPRECATED)")
+        #endif
+
+        // Get Matrix access token from Nova backend
+        let matrixToken = try await getMatrixAccessToken(novaUserId: currentUser.id)
+
+        try await matrixService.login(
+            novaUserId: currentUser.id,
+            accessToken: matrixToken
+        )
+    }
+
+    /// Shutdown the Matrix bridge
+    /// - Parameter clearCredentials: If true, clears stored SSO credentials (for full logout)
+    func shutdown(clearCredentials: Bool = false) async {
+        #if DEBUG
+        print("[MatrixBridge] Shutting down... (clearCredentials: \(clearCredentials))")
         #endif
 
         matrixService.stopSync()
@@ -152,6 +219,11 @@ final class MatrixBridgeService {
             #if DEBUG
             print("[MatrixBridge] Logout error: \(error)")
             #endif
+        }
+
+        // Clear SSO credentials if requested (full logout)
+        if clearCredentials {
+            matrixSSOManager.clearCredentials()
         }
 
         conversationToRoomMap.removeAll()
@@ -482,6 +554,10 @@ final class MatrixBridgeService {
         }
     }
 
+    /// Get Matrix access token from Nova backend (legacy endpoint)
+    /// DEPRECATED: This endpoint returns a service account token, not a user-specific token.
+    /// Use loginWithSSO() for proper user authentication via Zitadel SSO.
+    @available(*, deprecated, message: "Use loginWithSSO() instead. This endpoint returns a service account token.")
     private func getMatrixAccessToken(novaUserId: String) async throws -> String {
         struct MatrixTokenRequest: Codable {
             let userId: String

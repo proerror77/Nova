@@ -507,6 +507,10 @@ struct APIConfig {
     // MARK: - Matrix E2EE Integration API
     struct Matrix {
         /// POST /api/v2/matrix/token - Get Matrix access token for current user
+        /// DEPRECATED: This endpoint returns a service account token, not a user-specific token.
+        /// Use MatrixSSOManager.startSSOLogin() for proper user authentication via Zitadel SSO.
+        /// This endpoint will be removed in a future version.
+        @available(*, deprecated, message: "Use MatrixSSOManager.startSSOLogin() instead. This endpoint returns a service account token.")
         static let getToken = "/api/v2/matrix/token"
         /// GET /api/v2/matrix/rooms - Get all conversation-to-room mappings for current user
         static let getRoomMappings = "/api/v2/matrix/rooms"

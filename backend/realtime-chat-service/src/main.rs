@@ -287,6 +287,60 @@ async fn main() -> Result<(), error::AppError> {
         tracing::info!("✅ Matrix sync loop started in background");
     }
 
+    // Initialize Kafka consumer for identity events (if Kafka is enabled)
+    if cfg.kafka.enabled {
+        tracing::info!(
+            "Initializing Kafka consumer for identity events: brokers={}, topic={}, group_id={}",
+            cfg.kafka.brokers,
+            cfg.kafka.identity_events_topic,
+            cfg.kafka.consumer_group_id
+        );
+
+        // Create Matrix Admin client if Matrix is enabled and admin token is available
+        let matrix_admin_client = if cfg.matrix.enabled && cfg.matrix.admin_token.is_some() {
+            let admin_token = cfg.matrix.admin_token.clone().unwrap();
+            let admin_client = realtime_chat_service::services::MatrixAdminClient::new(
+                cfg.matrix.homeserver_url.clone(),
+                admin_token,
+                cfg.matrix.server_name.clone(),
+            );
+            tracing::info!("✅ Matrix Admin client initialized for user lifecycle sync");
+            Some(Arc::new(admin_client))
+        } else {
+            if cfg.matrix.enabled && cfg.matrix.admin_token.is_none() {
+                tracing::warn!("Matrix is enabled but MATRIX_ADMIN_TOKEN not set, user lifecycle sync disabled");
+            }
+            None
+        };
+
+        // Create identity event consumer
+        let consumer_config = realtime_chat_service::services::IdentityEventConsumerConfig {
+            brokers: cfg.kafka.brokers.clone(),
+            group_id: cfg.kafka.consumer_group_id.clone(),
+            topic: cfg.kafka.identity_events_topic.clone(),
+            matrix_enabled: cfg.matrix.enabled,
+        };
+
+        match realtime_chat_service::services::IdentityEventConsumer::new(
+            consumer_config,
+            matrix_admin_client,
+        ) {
+            Ok(consumer) => {
+                let consumer_arc = Arc::new(consumer);
+                let _kafka_consumer_task: JoinHandle<()> = tokio::spawn(async move {
+                    tracing::info!("Starting Kafka identity event consumer");
+                    consumer_arc.start_consuming().await;
+                });
+                tracing::info!("✅ Kafka identity event consumer started in background");
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to initialize Kafka consumer, continuing without event sync");
+            }
+        }
+    } else {
+        tracing::info!("Kafka integration disabled (KAFKA_ENABLED=false)");
+    }
+
     let bind_addr = format!("0.0.0.0:{}", cfg.port);
     tracing::info!(%bind_addr, "starting realtime-chat-service (REST on port {})", cfg.port);
 

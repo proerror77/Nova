@@ -176,6 +176,11 @@ class SearchViewModel {
         searchText = query
         performSearch()
     }
+
+    /// Save a query to recent searches
+    func saveToRecentSearches(_ query: String) {
+        searchService.saveRecentSearch(query)
+    }
     
     /// Change filter and re-search if needed
     func changeFilter(_ filter: SearchFilter) {

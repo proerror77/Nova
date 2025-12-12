@@ -21,6 +21,7 @@ resources:
   - trust-safety-service.yaml
   - graphql-gateway.yaml
   - matrix-synapse.yaml
+  - zitadel.yaml
 
 commonLabels:
   app.kubernetes.io/name: nova

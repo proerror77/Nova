@@ -1305,10 +1305,11 @@ private class RoomListEntriesListener: RoomListEntriesListenerProtocol {
 
 struct MatrixConfiguration {
     /// Nova staging Matrix homeserver URL
-    static let stagingHomeserver = "https://matrix.staging.nova.internal"
+    /// Note: Updated to use public domain (matrix.staging.nova.app) for SSO flow
+    static let stagingHomeserver = "https://matrix.staging.nova.app"
 
     /// Nova production Matrix homeserver URL
-    static let productionHomeserver = "https://matrix.nova.social"
+    static let productionHomeserver = "https://matrix.nova.app"
 
     /// Sliding sync proxy URL (if using)
     static let slidingSyncProxy: String? = nil
@@ -1326,11 +1327,28 @@ struct MatrixConfiguration {
 
     /// Get homeserver URL based on environment
     static var homeserverURL: String {
-        #if DEBUG
-        return stagingHomeserver
-        #else
-        return productionHomeserver
-        #endif
+        switch APIConfig.current {
+        case .development, .staging:
+            return stagingHomeserver
+        case .production:
+            return productionHomeserver
+        }
+    }
+
+    /// Staging SSO callback URL
+    static let stagingCallbackURL = "nova-staging://matrix-sso-callback"
+
+    /// Production SSO callback URL
+    static let productionCallbackURL = "nova://matrix-sso-callback"
+
+    /// SSO callback URL based on environment
+    static var ssoCallbackURL: String {
+        switch APIConfig.current {
+        case .development, .staging:
+            return stagingCallbackURL
+        case .production:
+            return productionCallbackURL
+        }
     }
 }
 

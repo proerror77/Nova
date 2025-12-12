@@ -95,6 +95,12 @@ redis-utils = { path = "../libs/redis-utils" }
 grpc-metrics = { path = "../libs/grpc-metrics" }
 transactional-outbox = { path = "../libs/transactional-outbox" }
 
+# HTTP server for internal endpoints (Zitadel Actions)
+axum = "0.7"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+hyper = "1.4"
+
 # API documentation (optional - for future HTTP endpoints)
 utoipa = { version = "4", features = ["chrono", "uuid"], optional = true }
 utoipa-swagger-ui = { version = "5", features = ["actix-web"], optional = true }

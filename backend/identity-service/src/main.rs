@@ -10,6 +10,7 @@ use anyhow::{anyhow, Context, Result};
 use identity_service::{
     config::Settings,
     grpc::{nova::auth_service::auth_service_server::AuthServiceServer, IdentityServiceServer},
+    http::{start_http_server, HttpServerState},
     security::initialize_jwt_keys,
     services::{spawn_outbox_consumer, EmailService, KafkaEventProducer, OutboxConsumerConfig},
 };
@@ -175,11 +176,36 @@ async fn main() -> Result<()> {
         settings.oauth.clone(),
     );
 
-    let addr = format!("{}:{}", settings.server.host, settings.server.port)
+    let grpc_addr = format!("{}:{}", settings.server.host, settings.server.port)
         .parse()
         .context("Invalid server address")?;
 
-    info!("Starting gRPC server on {}", addr);
+    info!("Starting gRPC server on {}", grpc_addr);
+
+    // Start HTTP server for internal APIs (Zitadel Actions)
+    let http_port = std::env::var("HTTP_PORT")
+        .ok()
+        .and_then(|p| p.parse::<u16>().ok())
+        .unwrap_or(8081); // Default HTTP port
+
+    let internal_api_key = std::env::var("INTERNAL_API_KEY").ok();
+    if internal_api_key.is_none() {
+        warn!("INTERNAL_API_KEY not set - HTTP internal APIs will reject all requests");
+    }
+
+    let http_state = HttpServerState {
+        db: db_pool.clone(),
+        internal_api_key,
+    };
+
+    // Spawn HTTP server in background
+    let http_handle = tokio::spawn(async move {
+        if let Err(e) = start_http_server(http_state, "0.0.0.0", http_port).await {
+            error!("HTTP server error: {}", e);
+        }
+    });
+
+    info!("Starting HTTP internal API server on port {}", http_port);
 
     let tls_required = matches!(
         std::env::var("APP_ENV")
@@ -218,17 +244,22 @@ async fn main() -> Result<()> {
             .context("Failed to configure gRPC TLS")?;
     }
 
-    server_builder
+    // Start gRPC server with graceful shutdown
+    let grpc_result = server_builder
         .add_service(AuthServiceServer::with_interceptor(
             identity_service,
             grpc_server_interceptor,
         ))
-        .serve_with_shutdown(addr, shutdown_signal())
+        .serve_with_shutdown(grpc_addr, shutdown_signal())
         .await
-        .context("gRPC server error")?;
+        .context("gRPC server error");
+
+    // Wait for HTTP server to shutdown (it will stop when gRPC stops)
+    http_handle.abort();
 
     info!("Identity service shutdown complete");
 
+    grpc_result?;
     Ok(())
 }
 

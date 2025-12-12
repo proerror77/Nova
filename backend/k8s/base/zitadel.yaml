@@ -1,0 +1,317 @@
+---
+# Zitadel OIDC Provider for Nova SSO
+# Kubernetes-native identity management with OIDC support
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: zitadel-data
+  namespace: nova-backend
+  labels:
+    app: zitadel
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard-rwo
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zitadel-config
+  namespace: nova-backend
+  labels:
+    app: zitadel
+data:
+  # Zitadel configuration
+  # See https://zitadel.com/docs/self-hosting/manage/configure
+  ZITADEL_LOG_LEVEL: "info"
+
+  # Database configuration (uses PostgreSQL)
+  ZITADEL_DATABASE_POSTGRES_HOST: "postgres"
+  ZITADEL_DATABASE_POSTGRES_PORT: "5432"
+  ZITADEL_DATABASE_POSTGRES_DATABASE: "zitadel"
+  ZITADEL_DATABASE_POSTGRES_USER_USERNAME: "zitadel"
+  ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: "disable"
+  ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: "postgres"
+  ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: "disable"
+
+  # First instance configuration
+  ZITADEL_FIRSTINSTANCE_ORG_NAME: "Nova"
+  ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: "admin"
+  ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL: "admin@nova.app"
+  ZITADEL_FIRSTINSTANCE_ORG_HUMAN_FIRSTNAME: "Nova"
+  ZITADEL_FIRSTINSTANCE_ORG_HUMAN_LASTNAME: "Admin"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zitadel
+  namespace: nova-backend
+  labels:
+    app: zitadel
+    component: identity
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: zitadel
+  template:
+    metadata:
+      labels:
+        app: zitadel
+    spec:
+      serviceAccountName: default
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      initContainers:
+        - name: init-db
+          image: ghcr.io/zitadel/zitadel:v2.62.1
+          command:
+            - zitadel
+            - init
+            - --config
+            - /config/zitadel.yaml
+          env:
+            - name: ZITADEL_MASTERKEY
+              valueFrom:
+                secretKeyRef:
+                  name: zitadel-secrets
+                  key: ZITADEL_MASTERKEY
+            - name: ZITADEL_DATABASE_POSTGRES_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: zitadel-secrets
+                  key: ZITADEL_DATABASE_POSTGRES_USER_PASSWORD
+            - name: ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: zitadel-secrets
+                  key: ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD
+          envFrom:
+            - configMapRef:
+                name: zitadel-config
+          volumeMounts:
+            - name: zitadel-config-file
+              mountPath: /config
+      containers:
+        - name: zitadel
+          image: ghcr.io/zitadel/zitadel:v2.62.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - zitadel
+            - start
+            - --config
+            - /config/zitadel.yaml
+            - --masterkeyFromEnv
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: grpc
+              containerPort: 8081
+              protocol: TCP
+          env:
+            - name: ZITADEL_MASTERKEY
+              valueFrom:
+                secretKeyRef:
+                  name: zitadel-secrets
+                  key: ZITADEL_MASTERKEY
+            - name: ZITADEL_DATABASE_POSTGRES_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: zitadel-secrets
+                  key: ZITADEL_DATABASE_POSTGRES_USER_PASSWORD
+            - name: ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: zitadel-secrets
+                  key: ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD
+            - name: ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: zitadel-secrets
+                  key: ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD
+          envFrom:
+            - configMapRef:
+                name: zitadel-config
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          volumeMounts:
+            - name: zitadel-config-file
+              mountPath: /config
+            - name: zitadel-data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /debug/healthz
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /debug/ready
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /debug/healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+      volumes:
+        - name: zitadel-config-file
+          configMap:
+            name: zitadel-runtime-config
+        - name: zitadel-data
+          persistentVolumeClaim:
+            claimName: zitadel-data
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zitadel-runtime-config
+  namespace: nova-backend
+  labels:
+    app: zitadel
+data:
+  zitadel.yaml: |
+    # Zitadel runtime configuration
+    # External domain configuration (set via overlay for env-specific values)
+    ExternalDomain: "ZITADEL_EXTERNAL_DOMAIN_PLACEHOLDER"
+    ExternalPort: 443
+    ExternalSecure: true
+
+    # TLS disabled - handled by ingress
+    TLS:
+      Enabled: false
+
+    # Database
+    Database:
+      postgres:
+        Host: postgres
+        Port: 5432
+        Database: zitadel
+        MaxOpenConns: 20
+        MaxIdleConns: 10
+        MaxConnLifetime: 1h
+        MaxConnIdleTime: 5m
+        User:
+          Username: zitadel
+          SSL:
+            Mode: disable
+        Admin:
+          Username: postgres
+          SSL:
+            Mode: disable
+
+    # Logging
+    Log:
+      Level: info
+      Formatter:
+        Format: text
+
+    # Machine identification for distributed setup
+    Machine:
+      Identification:
+        Hostname:
+          Enabled: true
+
+    # Default settings for new instances
+    DefaultInstance:
+      OIDCSettings:
+        AccessTokenLifetime: 12h
+        IdTokenLifetime: 12h
+        RefreshTokenIdleExpiration: 720h
+        RefreshTokenExpiration: 2160h
+
+      LoginPolicy:
+        AllowUsernamePassword: true
+        AllowRegister: false
+        AllowExternalIDP: false
+        ForceMFA: false
+        PasswordlessType: 1
+        HidePasswordReset: false
+        IgnoreUnknownUsernames: false
+        AllowDomainDiscovery: false
+        DisableLoginWithEmail: false
+        DisableLoginWithPhone: true
+
+      PasswordComplexityPolicy:
+        MinLength: 8
+        HasUppercase: true
+        HasLowercase: true
+        HasNumber: true
+        HasSymbol: false
+
+      LabelPolicy:
+        PrimaryColor: "#6366f1"
+        BackgroundColor: "#ffffff"
+        WarnColor: "#f97316"
+        FontColor: "#1f2937"
+        HideLoginNameSuffix: true
+        DisableWatermark: true
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zitadel
+  namespace: nova-backend
+  labels:
+    app: zitadel
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+    - name: grpc
+      port: 8081
+      targetPort: 8081
+      protocol: TCP
+  selector:
+    app: zitadel
+
+---
+# ServiceMonitor for Prometheus (if using prometheus-operator)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: zitadel
+  namespace: nova-backend
+  labels:
+    app: zitadel
+spec:
+  selector:
+    matchLabels:
+      app: zitadel
+  endpoints:
+    - port: http
+      path: /debug/metrics
+      interval: 30s

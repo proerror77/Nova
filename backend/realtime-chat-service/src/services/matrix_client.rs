@@ -156,10 +156,10 @@ impl MatrixClient {
         let invites: Vec<OwnedUserId> = participant_user_ids
             .iter()
             .filter_map(|user_id| {
-                // Convert UUID to Matrix user ID format: @<uuid>:<server_name>
+                // Convert UUID to Matrix user ID format: @nova-<uuid>:<server_name>
                 let matrix_user_id = format!(
-                    "@{}:{}",
-                    user_id.to_string().replace("-", ""),
+                    "@nova-{}:{}",
+                    user_id,
                     self.extract_server_name()
                 );
                 UserId::parse(&matrix_user_id).ok()

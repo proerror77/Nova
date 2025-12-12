@@ -1,0 +1,276 @@
+/// Kafka consumer for Nova identity service events
+///
+/// Consumes events from `nova.identity.events` topic and syncs user lifecycle
+/// events to Matrix (Synapse) via Admin API.
+///
+/// Supported events:
+/// - UserDeletedEvent -> Deactivate Matrix account
+/// - UserProfileUpdatedEvent -> Update Matrix displayname/avatar
+use crate::error::AppError;
+use crate::services::matrix_admin::MatrixAdminClient;
+use event_schema::{EventEnvelope, UserDeletedEvent, UserProfileUpdatedEvent};
+use rdkafka::config::ClientConfig;
+use rdkafka::consumer::{Consumer, StreamConsumer};
+use rdkafka::message::Message;
+use serde_json;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::time::sleep;
+use tracing::{error, info, warn};
+
+/// Identity event consumer configuration
+#[derive(Debug, Clone)]
+pub struct IdentityEventConsumerConfig {
+    /// Kafka broker addresses (comma-separated)
+    pub brokers: String,
+    /// Consumer group ID
+    pub group_id: String,
+    /// Topic to consume from
+    pub topic: String,
+    /// Whether Matrix sync is enabled
+    pub matrix_enabled: bool,
+}
+
+/// Kafka consumer for identity events with Matrix sync
+pub struct IdentityEventConsumer {
+    consumer: StreamConsumer,
+    matrix_admin: Option<Arc<MatrixAdminClient>>,
+    config: IdentityEventConsumerConfig,
+}
+
+impl IdentityEventConsumer {
+    /// Create a new identity event consumer
+    ///
+    /// # Arguments
+    /// * `config` - Consumer configuration
+    /// * `matrix_admin` - Optional Matrix admin client (None if Matrix is disabled)
+    pub fn new(
+        config: IdentityEventConsumerConfig,
+        matrix_admin: Option<Arc<MatrixAdminClient>>,
+    ) -> Result<Self, AppError> {
+        info!(
+            "Initializing IdentityEventConsumer: brokers={}, group_id={}, topic={}, matrix_enabled={}",
+            config.brokers, config.group_id, config.topic, config.matrix_enabled
+        );
+
+        let consumer: StreamConsumer = ClientConfig::new()
+            .set("bootstrap.servers", &config.brokers)
+            .set("group.id", &config.group_id)
+            .set("enable.auto.commit", "true")
+            .set("auto.offset.reset", "latest") // Start from latest to avoid replaying all historical events
+            .set("session.timeout.ms", "30000")
+            .set("enable.partition.eof", "false")
+            .create()
+            .map_err(|e| AppError::StartServer(format!("Failed to create Kafka consumer: {}", e)))?;
+
+        consumer
+            .subscribe(&[&config.topic])
+            .map_err(|e| AppError::StartServer(format!("Failed to subscribe to topic: {}", e)))?;
+
+        info!(
+            "Successfully subscribed to Kafka topic: {}",
+            config.topic
+        );
+
+        Ok(Self {
+            consumer,
+            matrix_admin,
+            config,
+        })
+    }
+
+    /// Start consuming events in a background loop
+    ///
+    /// This method runs forever and should be spawned in a background task.
+    /// It automatically retries on transient errors with exponential backoff.
+    pub async fn start_consuming(self: Arc<Self>) {
+        info!("Starting IdentityEventConsumer loop...");
+
+        loop {
+            match self.consume_loop().await {
+                Ok(_) => {
+                    warn!("Kafka consumer loop exited unexpectedly, restarting...");
+                }
+                Err(e) => {
+                    error!("Kafka consumer error: {}, retrying in 5s...", e);
+                    sleep(Duration::from_secs(5)).await;
+                }
+            }
+        }
+    }
+
+    /// Internal consume loop
+    async fn consume_loop(&self) -> Result<(), AppError> {
+        loop {
+            match self.consumer.recv().await {
+                Ok(message) => {
+                    if let Err(e) = self.handle_message(&message).await {
+                        error!(
+                            "Failed to handle Kafka message from topic {}: {}",
+                            self.config.topic, e
+                        );
+                        // Continue processing other messages even if one fails
+                    }
+                }
+                Err(e) => {
+                    error!("Kafka recv error: {}", e);
+                    return Err(AppError::StartServer(format!("Kafka recv failed: {}", e)));
+                }
+            }
+        }
+    }
+
+    /// Handle a single Kafka message
+    async fn handle_message(
+        &self,
+        message: &rdkafka::message::BorrowedMessage<'_>,
+    ) -> Result<(), AppError> {
+        let payload = match message.payload() {
+            Some(p) => p,
+            None => {
+                warn!("Received Kafka message with no payload, skipping");
+                return Ok(());
+            }
+        };
+
+        let payload_str = std::str::from_utf8(payload).map_err(|e| {
+            AppError::StartServer(format!("Invalid UTF-8 in Kafka message payload: {}", e))
+        })?;
+
+        // Try to parse as a generic serde_json::Value first to inspect event type
+        let envelope_value: serde_json::Value = serde_json::from_str(payload_str).map_err(|e| {
+            warn!("Failed to parse Kafka message as JSON: {}", e);
+            AppError::StartServer(format!("Invalid JSON in Kafka message: {}", e))
+        })?;
+
+        // Extract event type from the 'data' field structure
+        // We need to inspect the payload to determine which event type it is
+        if let Some(data) = envelope_value.get("data") {
+            // Check for UserDeletedEvent by looking for 'deleted_at' and 'soft_delete' fields
+            if data.get("deleted_at").is_some() && data.get("soft_delete").is_some() {
+                return self.handle_user_deleted(payload_str).await;
+            }
+
+            // Check for UserProfileUpdatedEvent by looking for 'username' and 'updated_at' fields
+            if data.get("username").is_some() && data.get("updated_at").is_some() && data.get("display_name").is_some() {
+                return self.handle_user_profile_updated(payload_str).await;
+            }
+        }
+
+        // Unknown event type, skip silently
+        // This allows us to ignore other events like UserCreatedEvent, PasswordChangedEvent, etc.
+        Ok(())
+    }
+
+    /// Handle UserDeletedEvent
+    async fn handle_user_deleted(&self, payload: &str) -> Result<(), AppError> {
+        let envelope: EventEnvelope<UserDeletedEvent> = serde_json::from_str(payload)
+            .map_err(|e| AppError::StartServer(format!("Failed to deserialize UserDeletedEvent: {}", e)))?;
+
+        let event = envelope.data;
+        info!(
+            "Processing UserDeletedEvent: user_id={}, soft_delete={}, deleted_at={}",
+            event.user_id, event.soft_delete, event.deleted_at
+        );
+
+        // Only sync to Matrix if enabled
+        if !self.config.matrix_enabled {
+            info!("Matrix sync disabled, skipping Matrix deactivation for user {}", event.user_id);
+            return Ok(());
+        }
+
+        let matrix_admin = match &self.matrix_admin {
+            Some(client) => client,
+            None => {
+                warn!("Matrix admin client not initialized, skipping Matrix deactivation");
+                return Ok(());
+            }
+        };
+
+        // Deactivate Matrix account
+        // erase=true if soft_delete=false (hard delete removes profile data)
+        let erase = !event.soft_delete;
+        if let Err(e) = matrix_admin.deactivate_user(event.user_id, erase).await {
+            error!(
+                "Failed to deactivate Matrix user for user_id={}: {}",
+                event.user_id, e
+            );
+            // Don't propagate error - we want to continue processing other events
+        } else {
+            info!(
+                "Successfully deactivated Matrix user for user_id={}, erase={}",
+                event.user_id, erase
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Handle UserProfileUpdatedEvent
+    async fn handle_user_profile_updated(&self, payload: &str) -> Result<(), AppError> {
+        let envelope: EventEnvelope<UserProfileUpdatedEvent> = serde_json::from_str(payload)
+            .map_err(|e| {
+                AppError::StartServer(format!("Failed to deserialize UserProfileUpdatedEvent: {}", e))
+            })?;
+
+        let event = envelope.data;
+        info!(
+            "Processing UserProfileUpdatedEvent: user_id={}, username={}, display_name={:?}, avatar={:?}",
+            event.user_id, event.username, event.display_name, event.avatar_url
+        );
+
+        // Only sync to Matrix if enabled
+        if !self.config.matrix_enabled {
+            info!("Matrix sync disabled, skipping Matrix profile update for user {}", event.user_id);
+            return Ok(());
+        }
+
+        let matrix_admin = match &self.matrix_admin {
+            Some(client) => client,
+            None => {
+                warn!("Matrix admin client not initialized, skipping Matrix profile update");
+                return Ok(());
+            }
+        };
+
+        // Update Matrix profile with display_name and avatar_url
+        // Use display_name if available, otherwise fall back to username
+        let displayname = event.display_name.or(Some(event.username));
+
+        if let Err(e) = matrix_admin
+            .update_profile(event.user_id, displayname, event.avatar_url)
+            .await
+        {
+            error!(
+                "Failed to update Matrix profile for user_id={}: {}",
+                event.user_id, e
+            );
+            // Don't propagate error - we want to continue processing other events
+        } else {
+            info!(
+                "Successfully updated Matrix profile for user_id={}",
+                event.user_id
+            );
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_consumer_config_creation() {
+        let config = IdentityEventConsumerConfig {
+            brokers: "localhost:9092".to_string(),
+            group_id: "realtime-chat-service".to_string(),
+            topic: "nova.identity.events".to_string(),
+            matrix_enabled: true,
+        };
+
+        assert_eq!(config.brokers, "localhost:9092");
+        assert_eq!(config.topic, "nova.identity.events");
+    }
+}
