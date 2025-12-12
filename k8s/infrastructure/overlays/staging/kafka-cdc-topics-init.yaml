@@ -3,12 +3,21 @@
 # Pre-creates CDC topics for Debezium before connector starts
 #
 # Topics created:
+# CDC Topics:
 # - cdc.posts (3 partitions) - Post creation/update/delete events
 # - cdc.comments (3 partitions) - Comment events
 # - cdc.likes (3 partitions) - Like/unlike events
 # - cdc.follows (3 partitions) - Follow/unfollow events
+# Notification Event Topics:
+# - MessageCreated (3 partitions) - New message notifications
+# - FollowAdded (3 partitions) - New follower notifications
+# - CommentCreated (3 partitions) - New comment notifications
+# - PostLiked (3 partitions) - Post like notifications
+# - ReplyLiked (3 partitions) - Reply like notifications
+# Dead Letter Queues:
 # - dlq.nova-content-cdc (1 partition) - Dead letter queue for content CDC
 # - dlq.nova-graph-cdc (1 partition) - Dead letter queue for graph CDC
+# Kafka Connect Internal:
 # - connect-configs (1 partition) - Kafka Connect config storage
 # - connect-offsets (25 partitions) - Kafka Connect offset storage
 # - connect-status (5 partitions) - Kafka Connect status storage
@@ -75,6 +84,15 @@ spec:
             "cdc.follows:3:1"
           )
 
+          # Notification event topics (consumed by notification-service)
+          NOTIFICATION_TOPICS=(
+            "MessageCreated:3:1"
+            "FollowAdded:3:1"
+            "CommentCreated:3:1"
+            "PostLiked:3:1"
+            "ReplyLiked:3:1"
+          )
+
           # Dead Letter Queue topics for failed CDC messages
           DLQ_TOPICS=(
             "dlq.nova-content-cdc:1:1"
@@ -92,6 +110,26 @@ spec:
           echo ""
 
           for topic_spec in "${CDC_TOPICS[@]}"; do
+            IFS=':' read -r topic_name partitions replication <<< "$topic_spec"
+            echo "Creating topic: $topic_name (partitions: $partitions)"
+
+            kafka-topics \
+              --bootstrap-server "$BOOTSTRAP_SERVER" \
+              --create \
+              --topic "$topic_name" \
+              --partitions "$partitions" \
+              --replication-factor "$replication" \
+              --if-not-exists \
+              --config retention.ms=604800000 \
+              --config cleanup.policy=delete || true
+
+            echo ""
+          done
+
+          echo "Creating Notification event topics..."
+          echo ""
+
+          for topic_spec in "${NOTIFICATION_TOPICS[@]}"; do
             IFS=':' read -r topic_name partitions replication <<< "$topic_spec"
             echo "Creating topic: $topic_name (partitions: $partitions)"
 
@@ -154,7 +192,7 @@ spec:
           echo "=============================================="
           echo ""
           echo "Topic list:"
-          kafka-topics --bootstrap-server "$BOOTSTRAP_SERVER" --list | grep -E "^(cdc\.|dlq\.|connect-)" || true
+          kafka-topics --bootstrap-server "$BOOTSTRAP_SERVER" --list | grep -E "^(cdc\.|dlq\.|connect-|Message|Follow|Comment|Post|Reply)" || true
           echo ""
 
         resources:

@@ -318,21 +318,23 @@ spec:
         - name: KAFKA_JMX_OPTS
           value: "-Dcom.sun.management.jmxremote=false"
 
+        # Increased startup time for Kafka to load many partitions
+        # Kafka can have 100+ partitions which takes time to initialize
         livenessProbe:
           tcpSocket:
             port: 9092
-          initialDelaySeconds: 30
+          initialDelaySeconds: 120
           periodSeconds: 10
           timeoutSeconds: 5
-          failureThreshold: 3
+          failureThreshold: 10
 
         readinessProbe:
           tcpSocket:
             port: 9092
-          initialDelaySeconds: 10
+          initialDelaySeconds: 60
           periodSeconds: 5
           timeoutSeconds: 3
-          failureThreshold: 3
+          failureThreshold: 10
 
         resources:
           requests:
