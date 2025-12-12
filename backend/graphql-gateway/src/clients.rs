@@ -142,7 +142,7 @@ impl Default for ServiceClients {
             "http://media-service.nova-staging.svc.cluster.local:9086",
             "http://search-service.nova-staging.svc.cluster.local:9087",
             "http://notification-service.nova-staging.svc.cluster.local:50051",
-            "http://graph-service.nova-staging.svc.cluster.local:50051",
+            "http://graph-service.nova-staging.svc.cluster.local:9080",
         )
     }
 }
@@ -189,7 +189,7 @@ impl ServiceClients {
             )),
             graph_channel: Arc::new(Self::create_channel(
                 &std::env::var("GRAPH_SERVICE_URL").unwrap_or_else(|_| {
-                    "http://graph-service.nova-staging.svc.cluster.local:50051".to_string()
+                    "http://graph-service.nova-staging.svc.cluster.local:9080".to_string()
                 }),
             )),
             auth_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
@@ -740,7 +740,7 @@ mod tests {
             "http://custom-media:8086",
             "http://custom-search:8087",
             "http://custom-notification:8088",
-            "http://custom-graph:8089",
+            "http://custom-graph:9080",
         );
 
         // Should create without panicking
@@ -764,7 +764,7 @@ mod tests {
             "http://media:8086",
             "http://search:8087",
             "http://notification:8088",
-            "http://graph:8089",
+            "http://graph:9080",
         );
     }
 }

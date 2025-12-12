@@ -158,6 +158,8 @@ spec:
             # Service endpoints
             - name: AUTH_SERVICE_URL
               value: "http://identity-service.nova-staging.svc.cluster.local:50051"
+            - name: GRAPH_SERVICE_URL
+              value: "http://graph-service.nova-staging.svc.cluster.local:9080"
 
             # Kafka configuration
             - name: KAFKA_BROKERS
