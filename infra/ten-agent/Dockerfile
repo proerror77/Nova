@@ -68,8 +68,8 @@ COPY --from=builder /usr/local/lib /usr/local/lib
 COPY --from=builder /usr/lib/python3 /usr/lib/python3
 COPY --from=builder /usr/local/bin/tman /usr/local/bin/tman
 
-# Copy playground (optional)
-COPY --from=builder /app/playground/ /app/playground/ 2>/dev/null || true
+# Copy playground (if built)
+COPY --from=builder /app/playground/ /app/playground/
 
 # Copy Docker Taskfile
 COPY --from=builder /app/${USE_AGENT}/Taskfile.docker.yml /app/Taskfile.docker.yml
