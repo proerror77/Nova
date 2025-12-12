@@ -1,0 +1,218 @@
+syntax = "proto3";
+package nova.content_service.v2;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/nova/api/gen/go/services_v2;services_v2";
+
+// Content Service - Post and Channel Management
+// Minimal content-service surface used by feed-service and social integrations.
+
+enum ContentStatus {
+  CONTENT_STATUS_UNSPECIFIED = 0;
+  CONTENT_STATUS_DRAFT = 1;
+  CONTENT_STATUS_PUBLISHED = 2;
+  CONTENT_STATUS_MODERATED = 3;
+  CONTENT_STATUS_DELETED = 4;
+}
+
+enum Visibility {
+  VISIBILITY_UNSPECIFIED = 0;
+  VISIBILITY_PUBLIC = 1;
+  VISIBILITY_FOLLOWERS = 2;
+  VISIBILITY_PRIVATE = 3;
+}
+
+message Post {
+  string id = 1;
+  string author_id = 2;
+  string content = 3;
+  int64 created_at = 4;
+  int64 updated_at = 5;
+  int64 deleted_at = 6;
+  ContentStatus status = 7;
+  repeated string media_ids = 8;  // Media IDs associated with this post
+  repeated string media_urls = 9; // CDN URLs for attached media (populated by service)
+  string media_type = 10;         // Type of media: "image", "video", "none"
+  repeated string thumbnail_urls = 11; // CDN URLs for thumbnails (fallbacks to media_urls when absent)
+}
+
+message CreatePostRequest {
+  string author_id = 1;
+  string content = 2;
+  repeated string media_urls = 3;  // CDN URLs for attached media (images/videos)
+  string media_type = 4;           // Type of media: "image", "video", "none"
+}
+
+message CreatePostResponse {
+  Post post = 1;
+}
+
+message GetPostRequest { string post_id = 1; }
+message GetPostResponse {
+  Post post = 1;
+  bool found = 2;
+}
+
+message GetPostsByIdsRequest { repeated string post_ids = 1; }
+message GetPostsByIdsResponse {
+  repeated Post posts = 1;
+  repeated string not_found_ids = 2;
+}
+
+message GetUserPostsRequest {
+  string user_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+  ContentStatus status = 4;
+}
+
+message GetUserPostsResponse {
+  repeated Post posts = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+}
+
+message ListRecentPostsRequest {
+  int32 limit = 1;
+  string exclude_user_id = 2;
+}
+message ListRecentPostsResponse { repeated string post_ids = 1; }
+
+message ListTrendingPostsRequest {
+  int32 limit = 1;
+  string exclude_user_id = 2;
+}
+message ListTrendingPostsResponse { repeated string post_ids = 1; }
+
+message UpdatePostRequest {
+  string post_id = 1;
+  string content = 2;
+  Visibility visibility = 3;
+  bool comments_enabled = 4;
+}
+message UpdatePostResponse { Post post = 1; }
+
+message DeletePostRequest {
+  string post_id = 1;
+  string user_id = 2;
+}
+message DeletePostResponse {
+  string post_id = 1;
+  int64 deleted_at = 2;
+}
+
+// ============================================================================
+// Channels (category/interest definition)
+// ============================================================================
+message Channel {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string category = 4;
+  uint32 subscriber_count = 5;
+}
+
+message ListChannelsRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+  string category = 3;
+}
+
+message ListChannelsResponse {
+  repeated Channel channels = 1;
+  int32 total = 2;
+}
+
+message GetChannelRequest {
+  string id = 1;
+}
+
+message GetChannelResponse {
+  Channel channel = 1;
+  bool found = 2;
+}
+
+service ContentService {
+  // Post CRUD operations
+  rpc CreatePost(CreatePostRequest) returns (CreatePostResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/content/post/create"
+      body: "*"
+      additional_bindings {
+        post: "/api/v2/content"
+        body: "*"
+      }
+    };
+  }
+
+  rpc GetPost(GetPostRequest) returns (GetPostResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/content/post/{post_id}"
+      additional_bindings {
+        get: "/api/v2/content/{post_id}"
+      }
+    };
+  }
+
+  rpc GetPostsByIds(GetPostsByIdsRequest) returns (GetPostsByIdsResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/content/posts/batch"
+      body: "*"
+    };
+  }
+
+  rpc GetUserPosts(GetUserPostsRequest) returns (GetUserPostsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/content/posts/author/{user_id}"
+      additional_bindings {
+        get: "/api/v2/content/user/{user_id}"
+      }
+    };
+  }
+
+  rpc ListRecentPosts(ListRecentPostsRequest) returns (ListRecentPostsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/content/posts/recent"
+    };
+  }
+
+  rpc ListTrendingPosts(ListTrendingPostsRequest) returns (ListTrendingPostsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/content/posts/trending"
+    };
+  }
+
+  rpc UpdatePost(UpdatePostRequest) returns (UpdatePostResponse) {
+    option (google.api.http) = {
+      put: "/api/v2/content/post/update/{post_id}"
+      body: "*"
+      additional_bindings {
+        put: "/api/v2/content/{post_id}"
+        body: "*"
+      }
+    };
+  }
+
+  rpc DeletePost(DeletePostRequest) returns (DeletePostResponse) {
+    option (google.api.http) = {
+      delete: "/api/v2/content/post/delete/{post_id}"
+      additional_bindings {
+        delete: "/api/v2/content/{post_id}"
+      }
+    };
+  }
+
+  // Channels
+  rpc ListChannels(ListChannelsRequest) returns (ListChannelsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/channels"
+    };
+  }
+
+  rpc GetChannel(GetChannelRequest) returns (GetChannelResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/channels/{id}"
+    };
+  }
+}

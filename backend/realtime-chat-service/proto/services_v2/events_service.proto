@@ -1,0 +1,278 @@
+syntax = "proto3";
+package nova.events.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
+import "google/protobuf/empty.proto";
+
+// ============================================================================
+// Events Service - Event Bus & Orchestration
+//
+// Owns: domain_events, event_subscriptions, dead_letter_queue
+// Responsibilities:
+//   - Kafka topic management
+//   - Event publishing (Outbox pattern)
+//   - Event routing
+//   - Dead letter queue handling
+//   - Event replay
+//   - Saga orchestration
+//
+// This is the central nervous system for event-driven architecture.
+// All services publish events here, subscribers consume from Kafka.
+// ============================================================================
+
+service EventsService {
+  // ========== Publishing ==========
+  rpc PublishEvent(PublishEventRequest) returns (google.protobuf.Empty);
+  rpc PublishBatch(PublishBatchRequest) returns (google.protobuf.Empty);
+
+  // ========== Subscription Management ==========
+  rpc Subscribe(SubscribeRequest) returns (stream EventMessage);
+  rpc CreateSubscription(CreateSubscriptionRequest) returns (CreateSubscriptionResponse);
+  rpc DeleteSubscription(DeleteSubscriptionRequest) returns (google.protobuf.Empty);
+  rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse);
+
+  // ========== Event History ==========
+  rpc GetEventHistory(GetEventHistoryRequest) returns (GetEventHistoryResponse);
+  rpc ReplayEvents(ReplayEventsRequest) returns (google.protobuf.Empty);
+
+  // ========== Dead Letter Queue ==========
+  rpc GetDeadLetterQueue(GetDeadLetterQueueRequest) returns (GetDeadLetterQueueResponse);
+  rpc RetryDeadLetter(RetryDeadLetterRequest) returns (google.protobuf.Empty);
+  rpc DiscardDeadLetter(DiscardDeadLetterRequest) returns (google.protobuf.Empty);
+
+  // ========== Health & Metrics ==========
+  rpc GetEventMetrics(GetEventMetricsRequest) returns (GetEventMetricsResponse);
+}
+
+// ============================================================================
+// Messages
+// ============================================================================
+
+// -------- Event Model --------
+message Event {
+  string id = 1;                  // UUID
+  string topic = 2;               // e.g., "user.created", "post.liked"
+  string event_type = 3;          // Event type name
+  string aggregate_id = 4;        // ID of entity (user_id, post_id, etc.)
+  string aggregate_type = 5;      // Entity type (User, Post, etc.)
+  google.protobuf.Any payload = 6;  // Event data (protobuf message)
+  map<string, string> metadata = 7;  // Correlation ID, user ID, etc.
+  int32 version = 8;              // Schema version
+  google.protobuf.Timestamp created_at = 9;
+}
+
+// -------- Publish Event --------
+message PublishEventRequest {
+  string topic = 1;
+  string event_type = 2;
+  string aggregate_id = 3;
+  string aggregate_type = 4;
+  google.protobuf.Any payload = 5;
+  map<string, string> metadata = 6;
+}
+
+// -------- Publish Batch (Transactional Outbox) --------
+message PublishBatchRequest {
+  repeated PublishEventRequest events = 1;
+  string transaction_id = 2;      // For exactly-once delivery
+}
+
+// -------- Subscribe --------
+message SubscribeRequest {
+  string subscription_id = 1;
+  repeated string topics = 2;     // Topic patterns (e.g., "user.*")
+  string consumer_group = 3;      // For load balancing
+}
+
+message EventMessage {
+  Event event = 1;
+  string partition = 2;           // Kafka partition
+  int64 offset = 3;               // Kafka offset
+  google.protobuf.Timestamp received_at = 4;
+}
+
+// -------- Create Subscription --------
+message CreateSubscriptionRequest {
+  string service_name = 1;        // Subscriber service
+  repeated string topics = 2;
+  string consumer_group = 3;
+  SubscriptionConfig config = 4;
+}
+
+message SubscriptionConfig {
+  bool enable_retry = 1;
+  int32 max_retries = 2;          // Default 3
+  int32 retry_backoff_ms = 3;     // Default 1000
+  bool enable_dead_letter = 4;
+  string filter_expression = 5;   // Optional event filtering
+}
+
+message CreateSubscriptionResponse {
+  string subscription_id = 1;
+}
+
+// -------- Delete Subscription --------
+message DeleteSubscriptionRequest {
+  string subscription_id = 1;
+}
+
+// -------- List Subscriptions --------
+message ListSubscriptionsRequest {
+  string service_name = 1;        // Optional filter
+}
+
+message Subscription {
+  string id = 1;
+  string service_name = 2;
+  repeated string topics = 3;
+  string consumer_group = 4;
+  SubscriptionConfig config = 5;
+  SubscriptionStatus status = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+enum SubscriptionStatus {
+  SUBSCRIPTION_STATUS_UNSPECIFIED = 0;
+  SUBSCRIPTION_STATUS_ACTIVE = 1;
+  SUBSCRIPTION_STATUS_PAUSED = 2;
+  SUBSCRIPTION_STATUS_FAILED = 3;
+}
+
+message ListSubscriptionsResponse {
+  repeated Subscription subscriptions = 1;
+}
+
+// -------- Event History --------
+message GetEventHistoryRequest {
+  string aggregate_id = 1;        // Optional filter
+  string aggregate_type = 2;      // Optional filter
+  repeated string topics = 3;     // Optional filter
+  google.protobuf.Timestamp from = 4;
+  google.protobuf.Timestamp to = 5;
+  int32 limit = 6;
+  int32 offset = 7;
+}
+
+message GetEventHistoryResponse {
+  repeated Event events = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+}
+
+// -------- Replay Events --------
+message ReplayEventsRequest {
+  string topic = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+  string target_subscription = 4;  // Where to replay
+}
+
+// -------- Dead Letter Queue --------
+message GetDeadLetterQueueRequest {
+  string subscription_id = 1;     // Optional filter
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message DeadLetterEvent {
+  string id = 1;
+  Event event = 2;
+  string subscription_id = 3;
+  string error_message = 4;
+  int32 retry_count = 5;
+  google.protobuf.Timestamp failed_at = 6;
+}
+
+message GetDeadLetterQueueResponse {
+  repeated DeadLetterEvent events = 1;
+  int32 total_count = 2;
+}
+
+// -------- Retry Dead Letter --------
+message RetryDeadLetterRequest {
+  string dead_letter_id = 1;
+}
+
+// -------- Discard Dead Letter --------
+message DiscardDeadLetterRequest {
+  string dead_letter_id = 1;
+  string reason = 2;
+}
+
+// -------- Metrics --------
+message GetEventMetricsRequest {
+  repeated string topics = 1;     // Optional filter
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+}
+
+message EventMetrics {
+  string topic = 1;
+  int64 total_events = 2;
+  int64 events_per_second = 3;
+  double avg_processing_time_ms = 4;
+  int64 failed_events = 5;
+  int64 dead_letter_count = 6;
+  map<string, int64> events_by_type = 7;
+}
+
+message GetEventMetricsResponse {
+  repeated EventMetrics metrics = 1;
+  google.protobuf.Timestamp collected_at = 2;
+}
+
+// ============================================================================
+// Standard Event Topics
+// ============================================================================
+
+// Identity Domain
+// - identity.user.registered
+// - identity.user.logged_in
+// - identity.session.revoked
+// - identity.password.changed
+
+// User Domain
+// - user.profile.updated
+// - user.deleted
+// - user.verified
+// - user.banned
+
+// Content Domain
+// - content.post.created
+// - content.post.updated
+// - content.post.deleted
+// - content.comment.created
+// - content.article.published
+
+// Social Domain
+// - social.follow.created
+// - social.like.created
+// - social.share.created
+// - social.feed.updated
+
+// Media Domain
+// - media.uploaded
+// - media.processed
+// - media.transcoded
+// - media.deleted
+
+// Communication Domain
+// - communication.message.sent
+// - communication.notification.sent
+
+// ============================================================================
+// Event Metadata Standard Keys
+// ============================================================================
+//
+// Required:
+// - correlation_id: UUID for tracing across services
+// - causation_id: ID of event that caused this event
+// - user_id: ID of user who triggered the action
+// - timestamp: ISO-8601 timestamp
+//
+// Optional:
+// - request_id: HTTP request ID
+// - session_id: User session ID
+// - ip_address: Client IP
+// - user_agent: Client user agent

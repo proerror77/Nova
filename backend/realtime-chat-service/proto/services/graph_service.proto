@@ -1,0 +1,315 @@
+syntax = "proto3";
+
+package nova.graph_service.v2;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/nova/api/gen/go/services;services";
+
+// Graph Service - Social Graph Management
+// Manages Follow/Mute/Block directed edges
+service GraphService {
+  // Create Follow edge
+  rpc CreateFollow(CreateFollowRequest) returns (CreateFollowResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/graph/follow"
+      body: "*"
+    };
+  }
+
+  // Delete Follow edge
+  rpc DeleteFollow(DeleteFollowRequest) returns (DeleteFollowResponse) {
+    option (google.api.http) = {
+      delete: "/api/v2/graph/follow/{followee_id}"
+    };
+  }
+
+  // Create Mute edge
+  rpc CreateMute(CreateMuteRequest) returns (CreateMuteResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/graph/mute"
+      body: "*"
+    };
+  }
+
+  // Delete Mute edge
+  rpc DeleteMute(DeleteMuteRequest) returns (DeleteMuteResponse) {
+    option (google.api.http) = {
+      delete: "/api/v2/graph/mute/{mutee_id}"
+    };
+  }
+
+  // Create Block edge
+  rpc CreateBlock(CreateBlockRequest) returns (CreateBlockResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/graph/block"
+      body: "*"
+    };
+  }
+
+  // Delete Block edge
+  rpc DeleteBlock(DeleteBlockRequest) returns (DeleteBlockResponse) {
+    option (google.api.http) = {
+      delete: "/api/v2/graph/block/{blocked_id}"
+    };
+  }
+
+  // Get user's followers (who follows this user)
+  rpc GetFollowers(GetFollowersRequest) returns (GetFollowersResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/graph/followers/{user_id}"
+      additional_bindings {
+        get: "/api/v2/graph/followers"
+      }
+    };
+  }
+
+  // Get user's following list (who this user follows)
+  rpc GetFollowing(GetFollowingRequest) returns (GetFollowingResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/graph/following/{user_id}"
+      additional_bindings {
+        get: "/api/v2/graph/following"
+      }
+    };
+  }
+
+  // Check if following
+  rpc IsFollowing(IsFollowingRequest) returns (IsFollowingResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/graph/is-following/{followee_id}"
+    };
+  }
+
+  // Check if muted
+  rpc IsMuted(IsMutedRequest) returns (IsMutedResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/graph/is-muted/{mutee_id}"
+    };
+  }
+
+  // Check if blocked
+  rpc IsBlocked(IsBlockedRequest) returns (IsBlockedResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/graph/is-blocked/{blocked_id}"
+    };
+  }
+
+  // Check if either user has blocked the other (bidirectional)
+  rpc HasBlockBetween(HasBlockBetweenRequest) returns (HasBlockBetweenResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/graph/has-block-between"
+    };
+  }
+
+  // Get list of users blocked by a user
+  rpc GetBlockedUsers(GetBlockedUsersRequest) returns (GetBlockedUsersResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/graph/blocked/{user_id}"
+    };
+  }
+
+  // Check if two users are mutual followers
+  rpc AreMutualFollowers(AreMutualFollowersRequest) returns (AreMutualFollowersResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/graph/are-mutuals"
+    };
+  }
+
+  // Get user's mutual followers (friends - users who both follow each other)
+  rpc GetMutualFollowers(GetMutualFollowersRequest) returns (GetMutualFollowersResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/graph/friends/{user_id}"
+      additional_bindings {
+        get: "/api/v2/graph/friends"
+      }
+    };
+  }
+
+  // Batch check following relationships
+  rpc BatchCheckFollowing(BatchCheckFollowingRequest) returns (BatchCheckFollowingResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/graph/batch-check-following"
+      body: "*"
+    };
+  }
+}
+
+// Follow edge
+message CreateFollowRequest {
+  string follower_id = 1;  // Follower (from JWT context if empty)
+  string followee_id = 2;  // User to follow
+}
+
+message CreateFollowResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message DeleteFollowRequest {
+  string follower_id = 1;
+  string followee_id = 2;
+}
+
+message DeleteFollowResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Mute edge
+message CreateMuteRequest {
+  string muter_id = 1;    // Muter
+  string mutee_id = 2;    // User to mute
+}
+
+message CreateMuteResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message DeleteMuteRequest {
+  string muter_id = 1;
+  string mutee_id = 2;
+}
+
+message DeleteMuteResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Block edge
+message CreateBlockRequest {
+  string blocker_id = 1;  // Blocker
+  string blocked_id = 2;  // User to block
+}
+
+message CreateBlockResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message DeleteBlockRequest {
+  string blocker_id = 1;
+  string blocked_id = 2;
+}
+
+message DeleteBlockResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Query followers
+message GetFollowersRequest {
+  string user_id = 1;
+  int32 limit = 2;   // Default 50, max 1000
+  int32 offset = 3;
+}
+
+message GetFollowersResponse {
+  repeated string user_ids = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+}
+
+// Query following list
+message GetFollowingRequest {
+  string user_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message GetFollowingResponse {
+  repeated string user_ids = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+}
+
+// Check if following
+message IsFollowingRequest {
+  string follower_id = 1;
+  string followee_id = 2;
+}
+
+message IsFollowingResponse {
+  bool is_following = 1;
+}
+
+// Check if muted
+message IsMutedRequest {
+  string muter_id = 1;
+  string mutee_id = 2;
+}
+
+message IsMutedResponse {
+  bool is_muted = 1;
+}
+
+// Check if blocked
+message IsBlockedRequest {
+  string blocker_id = 1;
+  string blocked_id = 2;
+}
+
+message IsBlockedResponse {
+  bool is_blocked = 1;
+}
+
+// Batch check following relationships
+message BatchCheckFollowingRequest {
+  string follower_id = 1;
+  repeated string followee_ids = 2;  // Max 100
+}
+
+message BatchCheckFollowingResponse {
+  map<string, bool> results = 1;  // followee_id -> is_following
+}
+
+// Check if either user has blocked the other
+message HasBlockBetweenRequest {
+  string user_a = 1;
+  string user_b = 2;
+}
+
+message HasBlockBetweenResponse {
+  bool has_block = 1;           // true if either blocked the other
+  bool a_blocked_b = 2;         // true if user_a blocked user_b
+  bool b_blocked_a = 3;         // true if user_b blocked user_a
+}
+
+// Get blocked users list
+message GetBlockedUsersRequest {
+  string user_id = 1;
+  int32 limit = 2;              // Default 50, max 1000
+  int32 offset = 3;
+}
+
+message GetBlockedUsersResponse {
+  repeated string blocked_user_ids = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+}
+
+// Check mutual followers
+message AreMutualFollowersRequest {
+  string user_a = 1;
+  string user_b = 2;
+}
+
+message AreMutualFollowersResponse {
+  bool are_mutuals = 1;         // true if both follow each other
+  bool a_follows_b = 2;         // true if user_a follows user_b
+  bool b_follows_a = 3;         // true if user_b follows user_a
+}
+
+// Get mutual followers (friends)
+message GetMutualFollowersRequest {
+  string user_id = 1;
+  int32 limit = 2;              // Default 50, max 1000
+  int32 offset = 3;
+}
+
+message GetMutualFollowersResponse {
+  repeated string user_ids = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+}

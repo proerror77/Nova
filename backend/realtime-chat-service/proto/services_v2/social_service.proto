@@ -1,0 +1,547 @@
+syntax = "proto3";
+package nova.social_service.v2;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "google/api/annotations.proto";
+
+// Social Service - Relationships & Engagement
+service SocialService {
+  // Relationships
+  rpc FollowUser(FollowUserRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/api/v2/social/follow"
+      body: "*"
+    };
+  }
+  rpc UnfollowUser(UnfollowUserRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/api/v2/social/follow/{followee_id}"
+    };
+  }
+  rpc BlockUser(BlockUserRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/api/v2/social/block"
+      body: "*"
+    };
+  }
+  rpc UnblockUser(UnblockUserRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/api/v2/social/block/{blockee_id}"
+    };
+  }
+  rpc GetFollowers(GetFollowersRequest) returns (GetFollowersResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/followers/{user_id}"
+    };
+  }
+  rpc GetFollowing(GetFollowingRequest) returns (GetFollowingResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/following/{user_id}"
+    };
+  }
+  rpc GetRelationship(GetRelationshipRequest) returns (GetRelationshipResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/relationship"
+    };
+  }
+
+  // Likes
+  rpc CreateLike(CreateLikeRequest) returns (CreateLikeResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/social/likes"
+      body: "*"
+    };
+  }
+  rpc DeleteLike(DeleteLikeRequest) returns (DeleteLikeResponse) {
+    option (google.api.http) = {
+      delete: "/api/v2/social/likes/{post_id}"
+    };
+  }
+  rpc GetLikes(GetLikesRequest) returns (GetLikesResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/likes/{post_id}"
+    };
+  }
+  rpc CheckUserLiked(CheckUserLikedRequest) returns (CheckUserLikedResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/likes/{post_id}/check"
+    };
+  }
+  rpc GetUserLikedPosts(GetUserLikedPostsRequest) returns (GetUserLikedPostsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/users/{user_id}/liked-posts"
+    };
+  }
+
+  // Comments
+  rpc CreateComment(CreateCommentRequest) returns (CreateCommentResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/social/comments"
+      body: "*"
+    };
+  }
+  rpc DeleteComment(DeleteCommentRequest) returns (DeleteCommentResponse) {
+    option (google.api.http) = {
+      delete: "/api/v2/social/comments/{comment_id}"
+    };
+  }
+  rpc GetComments(GetCommentsRequest) returns (GetCommentsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/comments/{post_id}"
+    };
+  }
+
+  // Shares
+  rpc CreateShare(CreateShareRequest) returns (CreateShareResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/social/shares"
+      body: "*"
+    };
+  }
+  rpc GetShareCount(GetShareCountRequest) returns (GetShareCountResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/shares/{post_id}/count"
+    };
+  }
+
+  // Bookmarks
+  rpc CreateBookmark(CreateBookmarkRequest) returns (CreateBookmarkResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/social/bookmark"
+      body: "*"
+    };
+  }
+  rpc DeleteBookmark(DeleteBookmarkRequest) returns (DeleteBookmarkResponse) {
+    option (google.api.http) = {
+      delete: "/api/v2/social/bookmark/{post_id}"
+    };
+  }
+  rpc GetBookmarks(GetBookmarksRequest) returns (GetBookmarksResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/bookmarks"
+    };
+  }
+  rpc CheckUserBookmarked(CheckUserBookmarkedRequest) returns (CheckUserBookmarkedResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/check-bookmarked/{post_id}"
+    };
+  }
+  rpc BatchCheckBookmarked(BatchCheckBookmarkedRequest) returns (BatchCheckBookmarkedResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/social/bookmarks/batch-check"
+      body: "*"
+    };
+  }
+
+  // Feed
+  rpc GetUserFeed(GetUserFeedRequest) returns (GetUserFeedResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/feed/{user_id}"
+    };
+  }
+  rpc GetExploreFeed(GetExploreFeedRequest) returns (GetExploreFeedResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/explore"
+    };
+  }
+
+  // Polls (投票榜单)
+  rpc GetTrendingPolls(GetTrendingPollsRequest) returns (GetTrendingPollsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/polls/trending"
+    };
+  }
+  rpc GetPoll(GetPollRequest) returns (GetPollResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/polls/{poll_id}"
+    };
+  }
+  rpc GetPollRankings(GetPollRankingsRequest) returns (GetPollRankingsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/polls/{poll_id}/rankings"
+    };
+  }
+  rpc VoteOnPoll(VoteOnPollRequest) returns (VoteOnPollResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/polls/{poll_id}/vote"
+      body: "*"
+    };
+  }
+  rpc CheckPollVoted(CheckPollVotedRequest) returns (CheckPollVotedResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/polls/{poll_id}/voted"
+    };
+  }
+  rpc CreatePoll(CreatePollRequest) returns (CreatePollResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/polls"
+      body: "*"
+    };
+  }
+  rpc UnvotePoll(UnvotePollRequest) returns (UnvotePollResponse) {
+    option (google.api.http) = {
+      delete: "/api/v2/polls/{poll_id}/vote"
+    };
+  }
+  rpc AddPollCandidate(AddPollCandidateRequest) returns (AddPollCandidateResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/polls/{poll_id}/candidates"
+      body: "*"
+    };
+  }
+  rpc RemovePollCandidate(RemovePollCandidateRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/api/v2/polls/{poll_id}/candidates/{candidate_id}"
+    };
+  }
+  rpc ClosePoll(ClosePollRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/api/v2/polls/{poll_id}/close"
+    };
+  }
+  rpc DeletePoll(DeletePollRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/api/v2/polls/{poll_id}"
+    };
+  }
+  rpc GetActivePolls(GetActivePollsRequest) returns (GetActivePollsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/polls/active"
+    };
+  }
+
+  // Batch Operations (Feed Rendering Optimization)
+  rpc BatchGetCounts(BatchGetCountsRequest) returns (BatchGetCountsResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/social/batch/counts"
+      body: "*"
+    };
+  }
+}
+
+// Relationships
+message FollowUserRequest { string follower_id = 1; string followee_id = 2; }
+message UnfollowUserRequest { string follower_id = 1; string followee_id = 2; }
+message BlockUserRequest { string blocker_id = 1; string blockee_id = 2; }
+message UnblockUserRequest { string blocker_id = 1; string blockee_id = 2; }
+message GetFollowersRequest { string user_id = 1; int32 limit = 2; int32 offset = 3; }
+message GetFollowersResponse { repeated string user_ids = 1; int32 total = 2; }
+message GetFollowingRequest { string user_id = 1; int32 limit = 2; int32 offset = 3; }
+message GetFollowingResponse { repeated string user_ids = 1; int32 total = 2; }
+message GetRelationshipRequest { string user_id = 1; string other_user_id = 2; }
+message GetRelationshipResponse { Relationship relationship = 1; }
+
+// Likes
+message CreateLikeRequest { string user_id = 1; string post_id = 2; }
+message CreateLikeResponse { bool success = 1; int64 like_count = 2; }
+message DeleteLikeRequest { string user_id = 1; string post_id = 2; }
+message DeleteLikeResponse { bool success = 1; int64 like_count = 2; }
+message GetLikesRequest { string post_id = 1; int32 limit = 2; int32 offset = 3; }
+message GetLikesResponse { repeated Like likes = 1; int32 total = 2; }
+message CheckUserLikedRequest { string user_id = 1; string post_id = 2; }
+message CheckUserLikedResponse { bool liked = 1; }
+message GetUserLikedPostsRequest { string user_id = 1; int32 limit = 2; int32 offset = 3; }
+message GetUserLikedPostsResponse { repeated string post_ids = 1; int32 total = 2; }
+
+// Comments
+message CreateCommentRequest {
+  string user_id = 1;
+  string post_id = 2;
+  string content = 3;
+  string parent_comment_id = 4;
+}
+message CreateCommentResponse { Comment comment = 1; }
+message DeleteCommentRequest { string user_id = 1; string comment_id = 2; }
+message DeleteCommentResponse { bool success = 1; }
+message GetCommentsRequest { string post_id = 1; int32 limit = 2; int32 offset = 3; }
+message GetCommentsResponse { repeated Comment comments = 1; int32 total = 2; }
+
+// Shares
+message CreateShareRequest {
+  string user_id = 1;
+  string post_id = 2;
+  string caption = 3;
+}
+message CreateShareResponse { bool success = 1; }
+message GetShareCountRequest { string post_id = 1; }
+message GetShareCountResponse { int64 count = 1; }
+
+// Bookmarks
+message CreateBookmarkRequest {
+  string user_id = 1;
+  string post_id = 2;
+  string collection_id = 3;  // optional: organize into a collection
+}
+message CreateBookmarkResponse {
+  bool success = 1;
+  Bookmark bookmark = 2;
+}
+message DeleteBookmarkRequest {
+  string user_id = 1;
+  string post_id = 2;
+}
+message DeleteBookmarkResponse {
+  bool success = 1;
+}
+message GetBookmarksRequest {
+  string user_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+  string collection_id = 4;  // optional: filter by collection
+}
+message GetBookmarksResponse {
+  repeated string post_ids = 1;
+  int32 total_count = 2;
+}
+message CheckUserBookmarkedRequest {
+  string user_id = 1;
+  string post_id = 2;
+}
+message CheckUserBookmarkedResponse {
+  bool bookmarked = 1;
+}
+message BatchCheckBookmarkedRequest {
+  string user_id = 1;
+  repeated string post_ids = 2;
+}
+message BatchCheckBookmarkedResponse {
+  repeated string bookmarked_post_ids = 1;
+}
+
+message Bookmark {
+  string id = 1;
+  string user_id = 2;
+  string post_id = 3;
+  string collection_id = 4;
+  google.protobuf.Timestamp bookmarked_at = 5;
+}
+
+// Feed
+message GetUserFeedRequest { string user_id = 1; int32 limit = 2; string cursor = 3; }
+message GetUserFeedResponse { repeated FeedItem items = 1; string next_cursor = 2; bool has_more = 3; }
+message GetExploreFeedRequest { int32 limit = 1; string cursor = 2; }
+message GetExploreFeedResponse { repeated FeedItem items = 1; string next_cursor = 2; bool has_more = 3; }
+
+// Models
+message Relationship {
+  string id = 1;
+  string follower_id = 2;
+  string followee_id = 3;
+  RelationshipType type = 4;
+  RelationshipStatus status = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+enum RelationshipType {
+  RELATIONSHIP_TYPE_UNSPECIFIED = 0;
+  RELATIONSHIP_TYPE_FOLLOW = 1;
+  RELATIONSHIP_TYPE_BLOCK = 2;
+  RELATIONSHIP_TYPE_MUTE = 3;
+}
+
+enum RelationshipStatus {
+  RELATIONSHIP_STATUS_UNSPECIFIED = 0;
+  RELATIONSHIP_STATUS_ACTIVE = 1;
+  RELATIONSHIP_STATUS_PENDING = 2;
+  RELATIONSHIP_STATUS_REJECTED = 3;
+}
+
+message Like {
+  string id = 1;
+  string user_id = 2;
+  string post_id = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message Comment {
+  string id = 1;
+  string user_id = 2;
+  string post_id = 3;
+  string content = 4;
+  string parent_comment_id = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message FeedItem {
+  string id = 1;
+  string content_id = 2;
+  string author_id = 3;
+  double relevance_score = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+// Poll Messages
+message GetTrendingPollsRequest {
+  int32 limit = 1;
+  repeated string tags = 2;
+}
+message GetTrendingPollsResponse {
+  repeated PollSummary polls = 1;
+}
+
+message GetPollRequest {
+  string poll_id = 1;
+  bool include_candidates = 2;
+}
+message GetPollResponse {
+  Poll poll = 1;
+  repeated PollCandidate candidates = 2;
+  string my_voted_candidate_id = 3;
+}
+
+message GetPollRankingsRequest {
+  string poll_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+message GetPollRankingsResponse {
+  repeated PollCandidate rankings = 1;
+  int32 total_candidates = 2;
+  int64 total_votes = 3;
+}
+
+message VoteOnPollRequest {
+  string poll_id = 1;
+  string candidate_id = 2;
+}
+message VoteOnPollResponse {
+  bool success = 1;
+  PollCandidate updated_candidate = 2;
+  int64 total_votes = 3;
+}
+
+message CheckPollVotedRequest {
+  string poll_id = 1;
+}
+message CheckPollVotedResponse {
+  bool has_voted = 1;
+  string voted_candidate_id = 2;
+  google.protobuf.Timestamp voted_at = 3;
+}
+
+message CreatePollRequest {
+  string title = 1;
+  string description = 2;
+  string cover_image_url = 3;
+  string poll_type = 4;  // "ranking", "single_choice", "multiple_choice"
+  repeated string tags = 5;
+  google.protobuf.Timestamp ends_at = 6;
+  repeated CreatePollCandidateInput initial_candidates = 7;
+}
+message CreatePollCandidateInput {
+  string name = 1;
+  string avatar_url = 2;
+  string description = 3;
+  string user_id = 4;  // optional: link to a user
+}
+message CreatePollResponse {
+  Poll poll = 1;
+  repeated PollCandidate candidates = 2;
+}
+
+message UnvotePollRequest {
+  string poll_id = 1;
+}
+message UnvotePollResponse {
+  bool success = 1;
+  int64 total_votes = 2;
+}
+
+message AddPollCandidateRequest {
+  string poll_id = 1;
+  string name = 2;
+  string avatar_url = 3;
+  string description = 4;
+  string user_id = 5;  // optional
+}
+message AddPollCandidateResponse {
+  PollCandidate candidate = 1;
+}
+
+message RemovePollCandidateRequest {
+  string poll_id = 1;
+  string candidate_id = 2;
+}
+
+message ClosePollRequest {
+  string poll_id = 1;
+}
+
+message DeletePollRequest {
+  string poll_id = 1;
+}
+
+message GetActivePollsRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+  repeated string tags = 3;
+}
+message GetActivePollsResponse {
+  repeated PollSummary polls = 1;
+  int32 total = 2;
+}
+
+// Poll Models
+message Poll {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  string cover_image_url = 4;
+  string creator_id = 5;
+  string poll_type = 6;
+  string status = 7;
+  int64 total_votes = 8;
+  int32 candidate_count = 9;
+  repeated string tags = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp ends_at = 12;
+}
+
+message PollSummary {
+  string id = 1;
+  string title = 2;
+  string cover_image_url = 3;
+  string poll_type = 4;
+  string status = 5;
+  int64 total_votes = 6;
+  int32 candidate_count = 7;
+  repeated CandidatePreview top_candidates = 8;
+  repeated string tags = 9;
+  google.protobuf.Timestamp ends_at = 10;
+}
+
+message PollCandidate {
+  string id = 1;
+  string name = 2;
+  string avatar_url = 3;
+  string description = 4;
+  string user_id = 5;
+  int64 vote_count = 6;
+  int32 rank = 7;
+  int32 rank_change = 8;
+  double vote_percentage = 9;
+}
+
+message CandidatePreview {
+  string id = 1;
+  string name = 2;
+  string avatar_url = 3;
+  int32 rank = 4;
+}
+
+// Batch Operations Messages
+message BatchGetCountsRequest {
+  repeated string post_ids = 1;  // List of post UUIDs (max 100)
+}
+
+message BatchGetCountsResponse {
+  map<string, PostCounts> counts = 1;  // post_id -> counts mapping
+}
+
+message PostCounts {
+  int64 like_count = 1;
+  int64 comment_count = 2;
+  int64 share_count = 3;
+}

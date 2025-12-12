@@ -6,13 +6,14 @@
 // - Matrix configuration retrieval
 // - Encryption status
 
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{web, HttpResponse};
+use db_pool::PgPool;
+use matrix_sdk::ruma::RoomId;
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::middleware::auth::AuthenticatedUser;
+use crate::middleware::guards::User;
 use crate::services::matrix_client::MatrixClient;
 use crate::services::matrix_db;
 
@@ -103,12 +104,12 @@ pub struct RoomStatusResponse {
 /// This endpoint exchanges a Nova JWT for a Matrix access token.
 /// The Matrix access token allows the iOS app to connect directly to Matrix.
 pub async fn get_matrix_token(
-    user: AuthenticatedUser,
+    user: User,
     matrix_client: web::Data<Option<MatrixClient>>,
     config: web::Data<crate::config::Config>,
 ) -> Result<HttpResponse, AppError> {
     // Check if Matrix is enabled
-    let matrix = match matrix_client.as_ref() {
+    let _matrix = match matrix_client.as_ref() {
         Some(client) => client,
         None => {
             return Ok(HttpResponse::ServiceUnavailable().json(serde_json::json!({
@@ -121,7 +122,7 @@ pub async fn get_matrix_token(
     let matrix_config = &config.matrix;
 
     // Generate Matrix user ID from Nova user ID
-    let nova_user_id = user.user_id;
+    let nova_user_id = user.id;
     let homeserver_domain = matrix_config.homeserver_url
         .trim_start_matches("https://")
         .trim_start_matches("http://")
@@ -156,7 +157,7 @@ pub async fn get_matrix_token(
 /// GET /api/v2/matrix/rooms/{conversation_id}
 /// Get Matrix room ID for a Nova conversation
 pub async fn get_room_mapping(
-    user: AuthenticatedUser,
+    _user: User,
     path: web::Path<String>,
     db: web::Data<PgPool>,
 ) -> Result<HttpResponse, AppError> {
@@ -167,13 +168,15 @@ pub async fn get_room_mapping(
     // Load room mapping from database
     let room_id = matrix_db::load_room_mapping(db.get_ref(), conversation_id).await?;
 
-    Ok(HttpResponse::Ok().json(RoomMappingResponse { room_id }))
+    Ok(HttpResponse::Ok().json(RoomMappingResponse {
+        room_id: room_id.map(|r| r.to_string())
+    }))
 }
 
 /// GET /api/v2/matrix/conversations
 /// Get Nova conversation ID for a Matrix room ID (query param: room_id)
 pub async fn get_conversation_mapping(
-    user: AuthenticatedUser,
+    _user: User,
     query: web::Query<std::collections::HashMap<String, String>>,
     db: web::Data<PgPool>,
 ) -> Result<HttpResponse, AppError> {
@@ -191,7 +194,7 @@ pub async fn get_conversation_mapping(
 /// GET /api/v2/matrix/rooms
 /// Get all conversation-to-room mappings for the current user
 pub async fn get_all_room_mappings(
-    user: AuthenticatedUser,
+    _user: User,
     db: web::Data<PgPool>,
 ) -> Result<HttpResponse, AppError> {
     // Load all room mappings
@@ -202,7 +205,7 @@ pub async fn get_all_room_mappings(
         .into_iter()
         .map(|(conv_id, room_id)| MappingEntry {
             conversation_id: conv_id.to_string(),
-            room_id,
+            room_id: room_id.to_string(),
         })
         .collect();
 
@@ -212,15 +215,19 @@ pub async fn get_all_room_mappings(
 /// POST /api/v2/matrix/rooms
 /// Save a new conversation-to-room mapping
 pub async fn save_room_mapping(
-    user: AuthenticatedUser,
+    _user: User,
     body: web::Json<SaveRoomMappingRequest>,
     db: web::Data<PgPool>,
 ) -> Result<HttpResponse, AppError> {
     let conversation_id = Uuid::parse_str(&body.conversation_id)
         .map_err(|_| AppError::BadRequest("Invalid conversation ID".to_string()))?;
 
+    // Parse room_id as Matrix RoomId
+    let room_id = <&RoomId>::try_from(body.room_id.as_str())
+        .map_err(|_| AppError::BadRequest("Invalid Matrix room ID".to_string()))?;
+
     // Save mapping to database
-    matrix_db::save_room_mapping(db.get_ref(), conversation_id, &body.room_id).await?;
+    matrix_db::save_room_mapping(db.get_ref(), conversation_id, room_id).await?;
 
     Ok(HttpResponse::Created().json(serde_json::json!({
         "message": "Room mapping saved successfully"
@@ -230,7 +237,7 @@ pub async fn save_room_mapping(
 /// GET /api/v2/matrix/config
 /// Get Matrix configuration (homeserver URL, enabled status, etc.)
 pub async fn get_matrix_config(
-    user: AuthenticatedUser,
+    _user: User,
     config: web::Data<crate::config::Config>,
     matrix_client: web::Data<Option<MatrixClient>>,
 ) -> Result<HttpResponse, AppError> {
@@ -251,7 +258,7 @@ pub async fn get_matrix_config(
 /// GET /api/v2/matrix/encryption/status
 /// Get encryption status for the current user
 pub async fn get_encryption_status(
-    user: AuthenticatedUser,
+    _user: User,
     matrix_client: web::Data<Option<MatrixClient>>,
     config: web::Data<crate::config::Config>,
 ) -> Result<HttpResponse, AppError> {
@@ -275,7 +282,7 @@ pub async fn get_encryption_status(
 /// GET /api/v2/matrix/conversations/{conversation_id}/room-status
 /// Get detailed Matrix room status for a conversation
 pub async fn get_room_status(
-    user: AuthenticatedUser,
+    _user: User,
     path: web::Path<String>,
     db: web::Data<PgPool>,
     matrix_client: web::Data<Option<MatrixClient>>,
@@ -291,8 +298,8 @@ pub async fn get_room_status(
     let room_id = matrix_db::load_room_mapping(db.get_ref(), conversation_id).await?;
 
     // Get room encryption status if room exists and Matrix is enabled
-    let is_encrypted = if let (Some(ref client), Some(ref room_id)) = (matrix_client.as_ref(), &room_id) {
-        client.is_room_encrypted(room_id).await.unwrap_or(false)
+    let is_encrypted = if let (Some(ref client), Some(ref rid)) = (matrix_client.as_ref(), &room_id) {
+        client.is_room_encrypted(rid).await
     } else {
         false
     };
@@ -308,7 +315,7 @@ pub async fn get_room_status(
     };
 
     Ok(HttpResponse::Ok().json(RoomStatusResponse {
-        room_id,
+        room_id: room_id.map(|r| r.to_string()),
         is_encrypted,
         members_synced,
         matrix_enabled,

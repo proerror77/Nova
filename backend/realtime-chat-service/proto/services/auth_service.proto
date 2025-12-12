@@ -1,0 +1,924 @@
+syntax = "proto3";
+package nova.identity_service.v2;
+
+import "common.proto";
+import "google/protobuf/wrappers.proto";
+import "google/api/annotations.proto";
+
+// ============================================================================
+// Auth Service gRPC API
+//
+// This service provides user authentication, authorization, and identity
+// management for all other services in Nova backend.
+//
+// Key responsibilities:
+//   - User registration and login
+//   - Token validation and verification
+//   - User information retrieval
+//   - Permission and role checking
+// ============================================================================
+
+// Message: Represents a basic user
+message User {
+  string id = 1;                    // UUID of the user
+  string email = 2;                 // User's email address
+  string username = 3;              // User's username (unique)
+  int64 created_at = 4;            // Unix timestamp (seconds)
+  bool is_active = 5;               // Whether user account is active
+  int32 failed_login_attempts = 6;  // Current failed login count
+  optional int64 locked_until = 7;  // Unix timestamp (seconds) when lockout expires
+}
+
+// ============================================================================
+// Get User by ID
+// ============================================================================
+
+message GetUserRequest {
+  string user_id = 1;  // UUID of the user to retrieve
+}
+
+message GetUserResponse {
+  User user = 1;
+  optional .nova.common.v2.ErrorStatus error = 2;
+}
+
+// ============================================================================
+// Get Multiple Users by IDs (batch operation)
+// ============================================================================
+
+message GetUsersByIdsRequest {
+  repeated string user_ids = 1;  // List of user UUIDs
+}
+
+message GetUsersByIdsResponse {
+  repeated User users = 1;
+  optional .nova.common.v2.ErrorStatus error = 2;
+}
+
+// ============================================================================
+// Verify Token Validity
+// ============================================================================
+
+message VerifyTokenRequest {
+  string token = 1;  // JWT token to verify
+}
+
+message VerifyTokenResponse {
+  bool is_valid = 1;           // Whether token is valid
+  string user_id = 2;          // UUID of token owner (if valid)
+  string email = 3;            // Email of token owner (if valid)
+  string username = 4;         // Username of token owner (if valid)
+  int64 expires_at = 5;        // Unix timestamp when token expires
+  bool is_revoked = 6;         // Whether token has been revoked
+  optional .nova.common.v2.ErrorStatus error = 7;
+}
+
+// ============================================================================
+// Check User Exists
+// ============================================================================
+
+message CheckUserExistsRequest {
+  string user_id = 1;  // UUID to check
+}
+
+message CheckUserExistsResponse {
+  bool exists = 1;
+}
+
+// ============================================================================
+// Get User by Email
+// ============================================================================
+
+message GetUserByEmailRequest {
+  string email = 1;  // Email address to look up
+}
+
+message GetUserByEmailResponse {
+  User user = 1;
+  optional .nova.common.v2.ErrorStatus error = 2;
+}
+
+message GetUserByUsernameRequest {
+  string username = 1;  // Username to look up
+}
+
+message GetUserByUsernameResponse {
+  User user = 1;
+  optional .nova.common.v2.ErrorStatus error = 2;
+}
+
+// ============================================================================
+// List Users (with pagination)
+// ============================================================================
+
+message ListUsersRequest {
+  int32 limit = 1;    // Number of results (max 100)
+  int32 offset = 2;   // Pagination offset
+  string search = 3;  // Optional search term (email or username)
+}
+
+message ListUsersResponse {
+  repeated User users = 1;
+  int32 total_count = 2;
+  optional .nova.common.v2.ErrorStatus error = 3;
+}
+
+// ============================================================================
+// Check User Has Permission
+// ============================================================================
+
+message CheckPermissionRequest {
+  string user_id = 1;
+  string permission = 2;  // e.g., "posts:create", "users:delete"
+}
+
+message CheckPermissionResponse {
+  bool has_permission = 1;
+  optional .nova.common.v2.ErrorStatus error = 2;
+}
+
+// ============================================================================
+// Get User Permissions
+// ============================================================================
+
+message GetUserPermissionsRequest {
+  string user_id = 1;
+}
+
+message GetUserPermissionsResponse {
+  repeated string permissions = 1;
+  repeated string roles = 2;
+  optional .nova.common.v2.ErrorStatus error = 3;
+}
+
+// ============================================================================
+// Record Failed Login Attempt
+// ============================================================================
+
+message RecordFailedLoginRequest {
+  string user_id = 1;
+  int32 max_attempts = 2;         // Maximum failed attempts before lockout
+  int32 lock_duration_secs = 3;   // Duration of lockout in seconds
+}
+
+message RecordFailedLoginResponse {
+  int32 failed_attempts = 1;
+  bool is_locked = 2;
+  optional int64 locked_until = 3;  // Unix timestamp (seconds) if locked
+  optional .nova.common.v2.ErrorStatus error = 4;
+}
+
+// ============================================================================
+// User Profile Management (single-writer via auth-service)
+// ============================================================================
+
+message UpdateUserProfileRequest {
+  string user_id = 1;
+  optional string display_name = 2;
+  optional string bio = 3;
+  optional string avatar_url = 4;
+  optional string cover_photo_url = 5;
+  optional string location = 6;
+  optional bool private_account = 7;
+  // Extended profile fields
+  optional string first_name = 8;
+  optional string last_name = 9;
+  optional string date_of_birth = 10;  // ISO 8601 date format (YYYY-MM-DD)
+  optional string gender = 11;         // male, female, other, prefer_not_to_say
+}
+
+message UserProfile {
+  string user_id = 1;
+  string username = 2;
+  optional string email = 3;
+  optional string display_name = 4;
+  optional string bio = 5;
+  optional string avatar_url = 6;
+  optional string cover_photo_url = 7;
+  optional string location = 8;
+  bool private_account = 9;
+  int64 created_at = 10;
+  int64 updated_at = 11;
+  // Extended profile fields
+  optional string first_name = 12;
+  optional string last_name = 13;
+  optional string date_of_birth = 14;  // ISO 8601 date format (YYYY-MM-DD)
+  optional string gender = 15;         // male, female, other, prefer_not_to_say
+}
+
+message UpdateUserProfileResponse {
+  optional UserProfile profile = 1;
+  optional .nova.common.v2.ErrorStatus error = 2;
+}
+
+// ============================================================================
+// Get Multiple User Profiles by IDs (batch operation)
+// ============================================================================
+
+message GetUserProfilesByIdsRequest {
+  repeated string user_ids = 1;  // List of user UUIDs
+}
+
+message GetUserProfilesByIdsResponse {
+  repeated UserProfile profiles = 1;
+  optional .nova.common.v2.ErrorStatus error = 2;
+}
+
+// ============================================================================
+// Public Key Management (E2EE messaging support)
+// ============================================================================
+
+message UpsertUserPublicKeyRequest {
+  string user_id = 1;
+  string public_key = 2;
+}
+
+message UpsertUserPublicKeyResponse {
+  bool success = 1;
+  optional .nova.common.v2.ErrorStatus error = 2;
+}
+
+message GetUserPublicKeyRequest {
+  string user_id = 1;
+}
+
+message GetUserPublicKeyResponse {
+  bool found = 1;
+  optional string public_key = 2;
+  optional .nova.common.v2.ErrorStatus error = 3;
+}
+
+// ============================================================================
+// User Registration (Phase 0 - 009-A: auth-register-login)
+// ============================================================================
+
+message RegisterRequest {
+  string email = 1;        // User email address (must be valid format)
+  string username = 2;     // User username (3-32 chars, alphanumeric + underscore)
+  string password = 3;     // User password (validated by zxcvbn score >= 3)
+  string invite_code = 4;  // Required: valid invite code for registration
+  optional string display_name = 5;  // Optional display name (defaults to username if not provided)
+}
+
+message RegisterResponse {
+  string user_id = 1;         // UUID of newly created user
+  string token = 2;           // JWT access token (RS256 signed, expires_in=3600s)
+  string refresh_token = 3;   // Refresh token (stateless or stored in sessions table)
+  int64 expires_in = 4;       // Seconds until access_token expires
+}
+
+// ============================================================================
+// User Login (Phase 0 - 009-A: auth-register-login)
+// ============================================================================
+
+message LoginRequest {
+  string email = 1;      // User email address
+  string password = 2;   // User password (plain text - validated against hash)
+}
+
+message LoginResponse {
+  string user_id = 1;         // UUID of authenticated user
+  string token = 2;           // JWT access token (RS256 signed, expires_in=3600s)
+  string refresh_token = 3;   // Refresh token
+  int64 expires_in = 4;       // Seconds until access_token expires
+}
+
+// ============================================================================
+// Token Refresh (Phase 0 - 009-A: auth-register-login)
+// ============================================================================
+
+message RefreshTokenRequest {
+  string refresh_token = 1;   // Refresh token (from previous login/register)
+}
+
+message RefreshTokenResponse {
+  string token = 1;           // New JWT access token (RS256 signed, expires_in=3600s)
+  int64 expires_in = 2;       // Seconds until new access_token expires
+}
+
+// ============================================================================ 
+// Invitations (lightweight invite code for sign-up)
+// ============================================================================
+message GenerateInviteRequest {
+  string issuer_user_id = 1;
+  optional string target_email = 2;
+  optional string target_phone = 3;
+  optional int64 expires_at = 4; // unix seconds
+}
+
+message GenerateInviteResponse {
+  string code = 1;
+  string invite_url = 2;
+  int64 expires_at = 3;
+}
+
+message RedeemInviteRequest {
+  string code = 1;
+  string new_user_id = 2;
+}
+
+message RedeemInviteResponse {
+  bool success = 1;
+}
+
+message ListInvitationsRequest {
+  string user_id = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+}
+
+message InvitationInfo {
+  string code = 1;
+  string invite_url = 2;
+  int64 created_at = 3;
+  int64 expires_at = 4;
+  bool is_redeemed = 5;
+  optional string redeemed_by_user_id = 6;
+  optional int64 redeemed_at = 7;
+}
+
+message ListInvitationsResponse {
+  repeated InvitationInfo invitations = 1;
+  int32 total = 2;
+}
+
+message GetInvitationStatsRequest {
+  string user_id = 1;
+}
+
+message GetInvitationStatsResponse {
+  int32 total_generated = 1;
+  int32 total_redeemed = 2;
+  int32 total_pending = 3;
+  int32 total_expired = 4;
+}
+
+// ============================================================================
+// Invite Quota Management
+// ============================================================================
+message GetInviteQuotaRequest {
+  string user_id = 1;
+}
+
+message GetInviteQuotaResponse {
+  int32 total_quota = 1;           // Total invite quota
+  int32 used_quota = 2;            // Already generated invites
+  int32 remaining_quota = 3;       // Remaining invites available
+  int32 successful_referrals = 4;  // Count of successful referrals
+}
+
+// ============================================================================
+// Send Invite via Channel (SMS, Email, Link)
+// ============================================================================
+message SendInviteRequest {
+  string user_id = 1;              // Issuer user ID
+  string channel = 2;              // "sms", "email", "link"
+  optional string recipient = 3;   // Phone number or email (required for sms/email)
+  optional string message = 4;     // Custom message to include
+}
+
+message SendInviteResponse {
+  bool success = 1;
+  string invite_code = 2;
+  string invite_url = 3;           // Firebase Dynamic Link URL
+  string share_text = 4;           // Pre-formatted share message
+  optional string delivery_id = 5; // Tracking ID for SMS/Email delivery
+  optional string error = 6;
+}
+
+// ============================================================================
+// Validate Invite Code (check before registration)
+// ============================================================================
+message ValidateInviteRequest {
+  string code = 1;
+}
+
+message ValidateInviteResponse {
+  bool is_valid = 1;
+  optional string issuer_username = 2;  // Who sent the invite
+  optional int64 expires_at = 3;
+  optional string error = 4;  // "expired", "already_used", "not_found"
+}
+
+// ============================================================================
+// Referral Chain Info
+// ============================================================================
+message GetReferralInfoRequest {
+  string user_id = 1;
+}
+
+message ReferralUser {
+  string user_id = 1;
+  string username = 2;
+  optional string avatar_url = 3;
+  int64 joined_at = 4;
+  string status = 5;  // "pending", "active"
+}
+
+message GetReferralInfoResponse {
+  optional ReferralUser referred_by = 1;    // Who invited this user
+  repeated ReferralUser referrals = 2;      // Users this user invited
+  int32 total_referrals = 3;
+  int32 active_referrals = 4;
+}
+
+// ============================================================================
+// User Settings (P0: user-service migration)
+// ============================================================================
+
+message UserSettings {
+  string user_id = 1;
+  string dm_permission = 2;           // "anyone", "followers", "mutuals", "nobody"
+  bool email_notifications = 3;
+  bool push_notifications = 4;
+  bool marketing_emails = 5;
+  string timezone = 6;
+  string language = 7;
+  bool dark_mode = 8;
+  string privacy_level = 9;           // "public", "friends_only", "private"
+  bool allow_messages = 10;
+  bool show_online_status = 11;
+  int64 created_at = 12;
+  int64 updated_at = 13;
+}
+
+message GetUserSettingsRequest {
+  string user_id = 1;
+}
+
+message GetUserSettingsResponse {
+  UserSettings settings = 1;
+  optional .nova.common.v2.ErrorStatus error = 2;
+}
+
+message UpdateUserSettingsRequest {
+  string user_id = 1;
+  optional string dm_permission = 2;
+  optional bool email_notifications = 3;
+  optional bool push_notifications = 4;
+  optional bool marketing_emails = 5;
+  optional string timezone = 6;
+  optional string language = 7;
+  optional bool dark_mode = 8;
+  optional string privacy_level = 9;
+  optional bool allow_messages = 10;
+  optional bool show_online_status = 11;
+}
+
+message UpdateUserSettingsResponse {
+  UserSettings settings = 1;
+  optional .nova.common.v2.ErrorStatus error = 2;
+}
+
+// ============================================================================
+// Devices (session-associated devices)
+// ============================================================================
+message Device {
+  string id = 1;
+  string name = 2;
+  string device_type = 3;
+  string os = 4;
+  int64 last_active = 5;
+  bool is_current = 6;
+}
+
+message ListDevicesRequest {
+  string user_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message ListDevicesResponse {
+  repeated Device devices = 1;
+  int32 total = 2;
+}
+
+message LogoutDeviceRequest {
+  string user_id = 1;
+  string device_id = 2;
+  bool all = 3;
+}
+
+message LogoutDeviceResponse {
+  bool success = 1;
+}
+
+message GetCurrentDeviceRequest {
+  string user_id = 1;
+  optional string device_id = 2;
+}
+
+message GetCurrentDeviceResponse {
+  optional Device device = 1;
+}
+
+// ============================================================================ 
+// User channel subscriptions (stored with profile)
+// ============================================================================
+message ListUserChannelsRequest {
+  string user_id = 1;
+}
+
+message ListUserChannelsResponse {
+  repeated string channel_ids = 1;
+}
+
+message UpdateUserChannelsRequest {
+  string user_id = 1;
+  repeated string subscribe_ids = 2;
+  repeated string unsubscribe_ids = 3;
+}
+
+message UpdateUserChannelsResponse {
+  repeated string channel_ids = 1;
+}
+
+// ============================================================================
+// OAuth/SSO (Google, Apple)
+// ============================================================================
+
+// Supported OAuth providers
+enum OAuthProvider {
+  OAUTH_PROVIDER_UNSPECIFIED = 0;
+  OAUTH_PROVIDER_GOOGLE = 1;
+  OAUTH_PROVIDER_APPLE = 2;
+}
+
+// Start OAuth flow - returns authorization URL
+message StartOAuthFlowRequest {
+  OAuthProvider provider = 1;       // OAuth provider to authenticate with
+  string redirect_uri = 2;          // Client callback URL after OAuth completes
+  optional string invite_code = 3;  // Optional invite code for new user registration
+}
+
+message StartOAuthFlowResponse {
+  string authorization_url = 1;     // URL to redirect user to for OAuth
+  string state = 2;                 // State token for CSRF protection (store client-side)
+}
+
+// Complete OAuth flow - exchange code for tokens
+message CompleteOAuthFlowRequest {
+  string state = 1;                 // State token from StartOAuthFlowResponse
+  string code = 2;                  // Authorization code from OAuth provider callback
+  string redirect_uri = 3;          // Same redirect URI used in StartOAuthFlow
+  optional string invite_code = 4;  // Invite code for new user registration (Nova is invite-only)
+}
+
+message CompleteOAuthFlowResponse {
+  string user_id = 1;               // UUID of authenticated user
+  string token = 2;                 // JWT access token
+  string refresh_token = 3;         // Refresh token
+  int64 expires_in = 4;             // Seconds until access_token expires
+  string username = 5;              // Username
+  string email = 6;                 // Email address
+  bool is_new_user = 7;             // True if this OAuth login created a new account
+}
+
+// List linked OAuth providers for a user
+message ListOAuthConnectionsRequest {
+  string user_id = 1;
+}
+
+message OAuthConnectionInfo {
+  string id = 1;                    // Connection UUID
+  OAuthProvider provider = 2;       // OAuth provider
+  string provider_user_id = 3;      // User's ID on the provider
+  optional string email = 4;        // Email from provider (may differ from account email)
+  optional string name = 5;         // Name from provider
+  optional string picture_url = 6;  // Profile picture URL from provider
+  int64 connected_at = 7;           // Unix timestamp when connected
+  int64 last_used_at = 8;           // Unix timestamp when last used for login
+}
+
+message ListOAuthConnectionsResponse {
+  repeated OAuthConnectionInfo connections = 1;
+}
+
+// Unlink an OAuth provider from user account
+message UnlinkOAuthProviderRequest {
+  string user_id = 1;
+  OAuthProvider provider = 2;       // Provider to unlink
+}
+
+message UnlinkOAuthProviderResponse {
+  bool success = 1;
+  optional string error = 2;        // Error message if unlink failed
+}
+
+// Apple Sign-In native flow (iOS native authentication)
+message AppleNativeSignInRequest {
+  string authorization_code = 1;    // Authorization code from ASAuthorizationAppleIDCredential
+  string identity_token = 2;        // JWT identity token from Apple
+  string user_identifier = 3;       // Apple user identifier (stable across devices)
+  optional string email = 4;        // Email (only provided on first sign-in)
+  optional string given_name = 5;   // First name (only provided on first sign-in)
+  optional string family_name = 6;  // Last name (only provided on first sign-in)
+  optional string invite_code = 7;  // Invite code for new user registration
+}
+
+message AppleNativeSignInResponse {
+  string user_id = 1;               // UUID of authenticated user
+  string token = 2;                 // JWT access token
+  string refresh_token = 3;         // Refresh token
+  int64 expires_in = 4;             // Seconds until access_token expires
+  string username = 5;              // Username
+  string email = 6;                 // Email address
+  bool is_new_user = 7;             // True if this created a new account
+}
+
+// ============================================================================
+// Password Reset
+// ============================================================================
+
+message RequestPasswordResetRequest {
+  string email = 1;  // Email address to send reset link to
+}
+
+message ResetPasswordRequest {
+  string reset_token = 1;   // Token from email link
+  string new_password = 2;  // New password (will be validated and hashed)
+}
+
+message PasswordResetResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Auth Service Definition
+// ============================================================================
+
+service AuthService {
+  // User Registration
+  rpc Register(RegisterRequest) returns (RegisterResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/register"
+      body: "*"
+    };
+  }
+
+  // User Login
+  rpc Login(LoginRequest) returns (LoginResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/login"
+      body: "*"
+    };
+  }
+
+  // Token Refresh
+  rpc Refresh(RefreshTokenRequest) returns (RefreshTokenResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/refresh"
+      body: "*"
+    };
+  }
+
+  // Get single user by ID
+  rpc GetUser(GetUserRequest) returns (GetUserResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users/{user_id}"
+    };
+  }
+
+  // Get multiple users in a single batch request
+  rpc GetUsersByIds(GetUsersByIdsRequest) returns (GetUsersByIdsResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/users/batch"
+      body: "*"
+    };
+  }
+
+  // Verify JWT token validity
+  rpc VerifyToken(VerifyTokenRequest) returns (VerifyTokenResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/verify"
+      body: "*"
+    };
+  }
+
+  // Check if user exists
+  rpc CheckUserExists(CheckUserExistsRequest) returns (CheckUserExistsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users/{user_id}/exists"
+    };
+  }
+
+  // Get user by email address
+  rpc GetUserByEmail(GetUserByEmailRequest) returns (GetUserByEmailResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users/by-email"
+    };
+  }
+
+  // Get user by username
+  rpc GetUserByUsername(GetUserByUsernameRequest) returns (GetUserByUsernameResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users/by-username/{username}"
+    };
+  }
+
+  // List users with pagination and search
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users"
+    };
+  }
+
+  // Check if user has specific permission
+  rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/permissions/check"
+    };
+  }
+
+  // Get all permissions for a user
+  rpc GetUserPermissions(GetUserPermissionsRequest) returns (GetUserPermissionsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users/{user_id}/permissions"
+    };
+  }
+
+  // Record a failed login attempt (internal)
+  rpc RecordFailedLogin(RecordFailedLoginRequest) returns (RecordFailedLoginResponse);
+
+  // Update mutable user profile fields
+  rpc UpdateUserProfile(UpdateUserProfileRequest) returns (UpdateUserProfileResponse) {
+    option (google.api.http) = {
+      put: "/api/v2/auth/users/{user_id}/profile"
+      body: "*"
+    };
+  }
+
+  // Get multiple user profiles in a single batch request
+  rpc GetUserProfilesByIds(GetUserProfilesByIdsRequest) returns (GetUserProfilesByIdsResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/users/profiles/batch"
+      body: "*"
+    };
+  }
+
+  // Manage user public keys for E2E encryption
+  rpc UpsertUserPublicKey(UpsertUserPublicKeyRequest) returns (UpsertUserPublicKeyResponse) {
+    option (google.api.http) = {
+      put: "/api/v2/auth/users/{user_id}/public-key"
+      body: "*"
+    };
+  }
+  rpc GetUserPublicKey(GetUserPublicKeyRequest) returns (GetUserPublicKeyResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users/{user_id}/public-key"
+    };
+  }
+
+  // Invitations
+  rpc GenerateInvite(GenerateInviteRequest) returns (GenerateInviteResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/invites"
+      body: "*"
+    };
+  }
+  rpc RedeemInvite(RedeemInviteRequest) returns (RedeemInviteResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/invites/redeem"
+      body: "*"
+    };
+  }
+  rpc ListInvitations(ListInvitationsRequest) returns (ListInvitationsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/invites"
+    };
+  }
+  rpc GetInvitationStats(GetInvitationStatsRequest) returns (GetInvitationStatsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/invites/stats"
+    };
+  }
+
+  // Invite Quota
+  rpc GetInviteQuota(GetInviteQuotaRequest) returns (GetInviteQuotaResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/invites/quota"
+    };
+  }
+
+  // Send Invite via Channel (SMS, Email, Link)
+  rpc SendInvite(SendInviteRequest) returns (SendInviteResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/invites/send"
+      body: "*"
+    };
+  }
+
+  // Validate Invite Code (public - no auth required)
+  rpc ValidateInvite(ValidateInviteRequest) returns (ValidateInviteResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/invites/validate"
+    };
+  }
+
+  // Referral Info
+  rpc GetReferralInfo(GetReferralInfoRequest) returns (GetReferralInfoResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/referrals"
+    };
+  }
+
+  // Devices
+  rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/devices"
+    };
+  }
+  rpc LogoutDevice(LogoutDeviceRequest) returns (LogoutDeviceResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/devices/logout"
+      body: "*"
+    };
+  }
+  rpc GetCurrentDevice(GetCurrentDeviceRequest) returns (GetCurrentDeviceResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/devices/current"
+    };
+  }
+
+  // User channel subscriptions
+  rpc ListUserChannels(ListUserChannelsRequest) returns (ListUserChannelsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users/{user_id}/channels"
+    };
+  }
+  rpc UpdateUserChannels(UpdateUserChannelsRequest) returns (UpdateUserChannelsResponse) {
+    option (google.api.http) = {
+      put: "/api/v2/auth/users/{user_id}/channels"
+      body: "*"
+    };
+  }
+
+  // User Settings (P0: user-service migration)
+  rpc GetUserSettings(GetUserSettingsRequest) returns (GetUserSettingsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users/{user_id}/settings"
+    };
+  }
+  rpc UpdateUserSettings(UpdateUserSettingsRequest) returns (UpdateUserSettingsResponse) {
+    option (google.api.http) = {
+      put: "/api/v2/auth/users/{user_id}/settings"
+      body: "*"
+    };
+  }
+
+  // ========== OAuth/SSO ==========
+  // Start OAuth flow - returns authorization URL to redirect user to
+  rpc StartOAuthFlow(StartOAuthFlowRequest) returns (StartOAuthFlowResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/oauth/start"
+      body: "*"
+    };
+  }
+
+  // Complete OAuth flow - exchange authorization code for tokens
+  rpc CompleteOAuthFlow(CompleteOAuthFlowRequest) returns (CompleteOAuthFlowResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/oauth/callback"
+      body: "*"
+    };
+  }
+
+  // List linked OAuth providers for a user
+  rpc ListOAuthConnections(ListOAuthConnectionsRequest) returns (ListOAuthConnectionsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users/{user_id}/oauth"
+    };
+  }
+
+  // Unlink an OAuth provider from user account
+  rpc UnlinkOAuthProvider(UnlinkOAuthProviderRequest) returns (UnlinkOAuthProviderResponse) {
+    option (google.api.http) = {
+      delete: "/api/v2/auth/users/{user_id}/oauth/{provider}"
+    };
+  }
+
+  // Apple Sign-In native flow (for iOS apps using ASAuthorizationAppleIDCredential)
+  rpc AppleNativeSignIn(AppleNativeSignInRequest) returns (AppleNativeSignInResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/oauth/apple/native"
+      body: "*"
+    };
+  }
+
+  // ========== Password Reset ==========
+  // Request password reset email (public - no auth required)
+  rpc RequestPasswordReset(RequestPasswordResetRequest) returns (PasswordResetResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/password/reset/request"
+      body: "*"
+    };
+  }
+
+  // Reset password using token from email
+  rpc ResetPassword(ResetPasswordRequest) returns (PasswordResetResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/password/reset"
+      body: "*"
+    };
+  }
+}

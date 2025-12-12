@@ -1,0 +1,200 @@
+syntax = "proto3";
+
+package nova.media_service.v2;
+
+import "common.proto";
+
+// Media Service - gRPC interface for video, reel, and upload operations
+// Serves media-service (port 8082)
+
+message Video {
+    string id = 1;
+    string creator_id = 2;
+    string title = 3;
+    string description = 4;
+    int32 duration_seconds = 5;
+    string cdn_url = 6;
+    string thumbnail_url = 7;
+    string status = 8;
+    string visibility = 9;
+    int64 created_at = 10;
+}
+
+message Upload {
+    string id = 1;
+    string user_id = 2;
+    string video_id = 3;
+    string file_name = 4;
+    int64 file_size = 5;
+    int64 uploaded_size = 6;
+    string status = 7;
+    int64 created_at = 8;
+}
+
+message ReelVariant {
+    string quality = 1;
+    string codec = 2;
+    int32 bitrate_kbps = 3;
+    int32 width = 4;
+    int32 height = 5;
+    float frame_rate = 6;
+    string cdn_url = 7;
+    int64 file_size_bytes = 8;
+    bool is_default = 9;
+}
+
+message ReelTranscodeJob {
+    string target_quality = 1;
+    string status = 2;
+    string stage = 3;
+    int32 progress = 4;
+    int64 updated_at = 5;
+    .nova.common.v2.ErrorStatus error = 6;
+}
+
+message Reel {
+    string id = 1;
+    string creator_id = 2;
+    string upload_id = 3;
+    string caption = 4;
+    string music_title = 5;
+    string music_artist = 6;
+    int32 duration_seconds = 7;
+    string visibility = 8;
+    string status = 9;
+    string processing_stage = 10;
+    int32 processing_progress = 11;
+    bool allow_comments = 12;
+    bool allow_shares = 13;
+    string cover_image_url = 14;
+    string source_video_url = 15;
+    int64 published_at = 16;
+    int64 failed_at = 17;
+    int64 created_at = 18;
+    int64 updated_at = 19;
+    repeated ReelVariant variants = 20;
+    repeated ReelTranscodeJob transcode_jobs = 21;
+}
+
+message GetVideoRequest {
+    string video_id = 1;
+}
+
+message GetVideoResponse {
+    Video video = 1;
+    bool found = 2;
+    .nova.common.v2.ErrorStatus error = 3;
+}
+
+message GetUserVideosRequest {
+    string user_id = 1;
+    int32 limit = 2;
+}
+
+message GetUserVideosResponse {
+    repeated Video videos = 1;
+    .nova.common.v2.ErrorStatus error = 2;
+}
+
+message CreateVideoRequest {
+    string creator_id = 1;
+    string title = 2;
+    string description = 3;
+    string visibility = 4;
+}
+
+message CreateVideoResponse {
+    Video video = 1;
+    .nova.common.v2.ErrorStatus error = 2;
+}
+
+message ListReelsRequest {
+    int32 limit = 1;
+}
+
+message ListReelsResponse {
+    repeated Reel reels = 1;
+    .nova.common.v2.ErrorStatus error = 2;
+}
+
+message GetReelRequest {
+    string reel_id = 1;
+}
+
+message GetReelResponse {
+    Reel reel = 1;
+    bool found = 2;
+    .nova.common.v2.ErrorStatus error = 3;
+}
+
+message CreateReelRequest {
+    string creator_id = 1;
+    string upload_id = 2;
+    string caption = 3;
+    string music_title = 4;
+    string music_artist = 5;
+    int32 duration_seconds = 6;
+    string visibility = 7;
+    bool allow_comments = 8;
+    bool allow_shares = 9;
+    string cover_image_url = 10;
+}
+
+message CreateReelResponse {
+    Reel reel = 1;
+    .nova.common.v2.ErrorStatus error = 2;
+}
+
+message GetUploadRequest {
+    string upload_id = 1;
+}
+
+message GetUploadResponse {
+    Upload upload = 1;
+    bool found = 2;
+    .nova.common.v2.ErrorStatus error = 3;
+}
+
+message UpdateUploadProgressRequest {
+    string upload_id = 1;
+    int64 uploaded_size = 2;
+}
+
+message UpdateUploadProgressResponse {
+    Upload upload = 1;
+    .nova.common.v2.ErrorStatus error = 2;
+}
+
+message StartUploadRequest {
+    string user_id = 1;
+    string file_name = 2;
+    int64 file_size = 3;
+    string content_type = 4;
+}
+
+message StartUploadResponse {
+    Upload upload = 1;
+    .nova.common.v2.ErrorStatus error = 2;
+}
+
+message CompleteUploadRequest {
+    string upload_id = 1;
+}
+
+message CompleteUploadResponse {
+    Upload upload = 1;
+    .nova.common.v2.ErrorStatus error = 2;
+}
+
+service MediaService {
+    rpc GetVideo(GetVideoRequest) returns (GetVideoResponse) {}
+    rpc GetUserVideos(GetUserVideosRequest) returns (GetUserVideosResponse) {}
+    rpc CreateVideo(CreateVideoRequest) returns (CreateVideoResponse) {}
+    rpc ListReels(ListReelsRequest) returns (ListReelsResponse) {}
+    rpc GetReel(GetReelRequest) returns (GetReelResponse) {}
+    rpc CreateReel(CreateReelRequest) returns (CreateReelResponse) {}
+    rpc GetUpload(GetUploadRequest) returns (GetUploadResponse) {}
+    rpc UpdateUploadProgress(UpdateUploadProgressRequest) returns (UpdateUploadProgressResponse) {}
+    rpc StartUpload(StartUploadRequest) returns (StartUploadResponse) {}
+    rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse) {}
+}

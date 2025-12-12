@@ -1,0 +1,312 @@
+syntax = "proto3";
+
+package nova.events_service.v2;
+
+import "common.proto";
+
+// ============================================================================
+// Events Service gRPC API
+//
+// This service manages event publishing, subscription, and processing.
+//
+// Key responsibilities:
+//   - Event publishing to Kafka
+//   - Event subscription management
+//   - Event schema registry
+//   - Outbox pattern for transactional event publishing
+// ============================================================================
+
+// Message: Represents a domain event
+message DomainEvent {
+  string id = 1;                      // UUID of event
+  string event_type = 2;              // Event type (e.g., "user.created", "post.published")
+  string aggregate_id = 3;            // ID of affected entity
+  string aggregate_type = 4;          // Type of entity (user, post, message, etc.)
+  int32 version = 5;                  // Event version for schema evolution
+  string data = 6;                    // JSON event data
+  string metadata = 7;                // JSON event metadata
+  string correlation_id = 8;          // For tracing related events
+  string causation_id = 9;            // ID of event that caused this one
+  int64 created_at = 10;             // Unix timestamp (seconds)
+  string created_by = 11;             // User who triggered event (optional)
+}
+
+// Message: Outbox event (for transactional event publishing)
+message OutboxEvent {
+  string id = 1;                      // UUID of outbox entry
+  string event_type = 2;              // Event type
+  string aggregate_id = 3;            // Affected entity ID
+  string aggregate_type = 4;          // Entity type
+  string data = 5;                    // JSON event data
+  string status = 6;                  // "pending", "published", "failed"
+  int32 retry_count = 7;              // Number of publication attempts
+  .nova.common.v2.ErrorStatus error = 8;           // Error message if failed
+  int64 created_at = 9;              // Unix timestamp (seconds)
+  int64 published_at = 10;           // Unix timestamp (seconds) (when published)
+}
+
+// Message: Event subscription
+message EventSubscription {
+  string id = 1;                      // UUID of subscription
+  string subscriber_service = 2;      // Service subscribing to events
+  repeated string event_types = 3;    // Event types to subscribe to
+  string endpoint = 4;                // gRPC endpoint or Kafka topic
+  bool is_active = 5;                 // Whether subscription is active
+  int64 created_at = 6;              // Unix timestamp (seconds)
+}
+
+// Message: Event schema definition
+message EventSchema {
+  string id = 1;                      // UUID of schema
+  string event_type = 2;              // Event type
+  int32 version = 3;                  // Schema version
+  string schema_json = 4;             // JSON schema definition
+  bool is_active = 5;                 // Whether this is the active version
+  int64 created_at = 6;              // Unix timestamp (seconds)
+}
+
+// ============================================================================
+// Publish Event
+// ============================================================================
+
+message PublishEventRequest {
+  string event_type = 1;
+  string aggregate_id = 2;
+  string aggregate_type = 3;
+  string data = 4;                    // JSON data
+  string metadata = 5;                // Optional JSON metadata
+  string correlation_id = 6;          // Optional
+  string causation_id = 7;            // Optional
+}
+
+message PublishEventResponse {
+  DomainEvent event = 1;
+}
+
+// ============================================================================
+// Publish Events (Batch)
+// ============================================================================
+
+message PublishEventsRequest {
+  message EventData {
+    string event_type = 1;
+    string aggregate_id = 2;
+    string aggregate_type = 3;
+    string data = 4;
+    string correlation_id = 5;        // Optional
+  }
+  repeated EventData events = 1;
+}
+
+message PublishEventsResponse {
+  repeated DomainEvent events = 1;
+  int32 success_count = 2;
+  int32 failed_count = 3;
+}
+
+// ============================================================================
+// Get Event by ID
+// ============================================================================
+
+message GetEventRequest {
+  string event_id = 1;
+}
+
+message GetEventResponse {
+  DomainEvent event = 1;
+}
+
+// ============================================================================
+// Get Events by Aggregate
+// ============================================================================
+
+message GetEventsByAggregateRequest {
+  string aggregate_id = 1;
+  string aggregate_type = 2;
+  int32 limit = 3;                    // Number of results
+  int32 offset = 4;                   // Pagination offset
+}
+
+message GetEventsByAggregateResponse {
+  repeated DomainEvent events = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Get Events by Type
+// ============================================================================
+
+message GetEventsByTypeRequest {
+  string event_type = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message GetEventsByTypeResponse {
+  repeated DomainEvent events = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Subscribe to Events
+// ============================================================================
+
+message SubscribeToEventsRequest {
+  string subscriber_service = 1;
+  repeated string event_types = 2;
+  string endpoint = 3;                // gRPC endpoint or Kafka consumer group
+}
+
+message SubscribeToEventsResponse {
+  EventSubscription subscription = 1;
+}
+
+// ============================================================================
+// Unsubscribe from Events
+// ============================================================================
+
+message UnsubscribeFromEventsRequest {
+  string subscription_id = 1;
+}
+
+message UnsubscribeFromEventsResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Get Subscriptions
+// ============================================================================
+
+message GetSubscriptionsRequest {
+  string subscriber_service = 1;      // Optional: filter by service
+}
+
+message GetSubscriptionsResponse {
+  repeated EventSubscription subscriptions = 1;
+}
+
+// ============================================================================
+// Register Event Schema
+// ============================================================================
+
+message RegisterEventSchemaRequest {
+  string event_type = 1;
+  string schema_json = 2;             // JSON schema
+  bool set_as_active = 3;             // Whether to make this active version
+}
+
+message RegisterEventSchemaResponse {
+  EventSchema schema = 1;
+}
+
+// ============================================================================
+// Get Event Schema
+// ============================================================================
+
+message GetEventSchemaRequest {
+  string event_type = 1;
+}
+
+message GetEventSchemaResponse {
+  EventSchema schema = 1;
+}
+
+// ============================================================================
+// Get Outbox Events (for processing)
+// ============================================================================
+
+message GetOutboxEventsRequest {
+  string status = 1;                  // "pending", "failed"
+  int32 limit = 2;
+}
+
+message GetOutboxEventsResponse {
+  repeated OutboxEvent events = 1;
+}
+
+// ============================================================================
+// Mark Outbox Event as Published
+// ============================================================================
+
+message MarkOutboxEventPublishedRequest {
+  string outbox_event_id = 1;
+}
+
+message MarkOutboxEventPublishedResponse {
+  OutboxEvent event = 1;
+}
+
+// ============================================================================
+// Retry Failed Outbox Event
+// ============================================================================
+
+message RetryOutboxEventRequest {
+  string outbox_event_id = 1;
+}
+
+message RetryOutboxEventResponse {
+  OutboxEvent event = 1;
+}
+
+// ============================================================================
+// Get Event Processing Stats
+// ============================================================================
+
+message GetEventStatsRequest {
+  string time_period = 1;             // "1h", "24h", "7d"
+}
+
+message GetEventStatsResponse {
+  int32 total_events_published = 1;
+  int32 total_events_processed = 2;
+  int32 failed_events = 3;
+  map<string, int32> events_by_type = 4;
+}
+
+// ============================================================================
+// Events Service Definition
+// ============================================================================
+
+service EventsService {
+  // Publish single domain event
+  rpc PublishEvent(PublishEventRequest) returns (PublishEventResponse);
+
+  // Publish multiple events in batch
+  rpc PublishEvents(PublishEventsRequest) returns (PublishEventsResponse);
+
+  // Get single event by ID
+  rpc GetEvent(GetEventRequest) returns (GetEventResponse);
+
+  // Get all events for an aggregate
+  rpc GetEventsByAggregate(GetEventsByAggregateRequest) returns (GetEventsByAggregateResponse);
+
+  // Get all events of specific type
+  rpc GetEventsByType(GetEventsByTypeRequest) returns (GetEventsByTypeResponse);
+
+  // Subscribe service to event types
+  rpc SubscribeToEvents(SubscribeToEventsRequest) returns (SubscribeToEventsResponse);
+
+  // Unsubscribe from events
+  rpc UnsubscribeFromEvents(UnsubscribeFromEventsRequest) returns (UnsubscribeFromEventsResponse);
+
+  // Get active subscriptions
+  rpc GetSubscriptions(GetSubscriptionsRequest) returns (GetSubscriptionsResponse);
+
+  // Register event schema
+  rpc RegisterEventSchema(RegisterEventSchemaRequest) returns (RegisterEventSchemaResponse);
+
+  // Get event schema
+  rpc GetEventSchema(GetEventSchemaRequest) returns (GetEventSchemaResponse);
+
+  // Get pending/failed outbox events for processing
+  rpc GetOutboxEvents(GetOutboxEventsRequest) returns (GetOutboxEventsResponse);
+
+  // Mark outbox event as published
+  rpc MarkOutboxEventPublished(MarkOutboxEventPublishedRequest) returns (MarkOutboxEventPublishedResponse);
+
+  // Retry failed outbox event
+  rpc RetryOutboxEvent(RetryOutboxEventRequest) returns (RetryOutboxEventResponse);
+
+  // Get event processing statistics
+  rpc GetEventStats(GetEventStatsRequest) returns (GetEventStatsResponse);
+}

@@ -4,10 +4,10 @@
 fn main() {
     // Compile all proto files for client generation
     // This centralizes client code generation for all services
-    // Note: This is in realtime-chat-service/libs/grpc-clients, so we go up 3 levels to reach backend/
+    // Note: Proto files are copied to realtime-chat-service/proto/ for independent workspace build
 
-    let base = "../../../proto/services";
-    let third_party = "../../../proto/third_party";
+    let base = "../../proto/services";
+    let third_party = "../../proto/third_party";
     let services = vec![
         ("auth_service", format!("{}/auth_service.proto", base)),
         ("user_service", format!("{}/user_service.proto", base)),
@@ -37,8 +37,8 @@ fn main() {
         .compile_well_known_types(true)
         .extern_path(".google.protobuf", "::prost_types")
         .compile_protos(
-            &["../../../proto/services_v2/content_service.proto"],
-            &["../../../proto/services_v2", third_party],
+            &["../../proto/services_v2/content_service.proto"],
+            &["../../proto/services_v2", third_party],
         )
         .unwrap_or_else(|e| panic!("Failed to compile content_service v2: {}", e));
 
@@ -73,9 +73,9 @@ fn main() {
         .compile_protos(&["proto/trust_safety.proto"], &["proto"])
         .unwrap_or_else(|e| panic!("Failed to compile trust_safety: {}", e));
 
-    println!("cargo:rerun-if-changed=../../../proto/services/");
-    println!("cargo:rerun-if-changed=../../../proto/services/common.proto");
-    println!("cargo:rerun-if-changed=../../../proto/services_v2/");
+    println!("cargo:rerun-if-changed=../../proto/services/");
+    println!("cargo:rerun-if-changed=../../proto/services/common.proto");
+    println!("cargo:rerun-if-changed=../../proto/services_v2/");
     println!("cargo:rerun-if-changed=proto/social.proto");
     println!("cargo:rerun-if-changed=proto/ranking.proto");
     println!("cargo:rerun-if-changed=proto/feature_store.proto");

@@ -1,0 +1,384 @@
+syntax = "proto3";
+package nova.media.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "google/api/annotations.proto";
+
+// ============================================================================
+// Media Service - Unified Media Handling
+//
+// Replaces: media-service, video-service, streaming-service, cdn-service
+//
+// Owns: media_files, media_metadata, thumbnails, transcode_jobs
+// Responsibilities:
+//   - File upload and storage
+//   - Image processing (resize, thumbnail, optimize)
+//   - Video transcoding
+//   - Streaming URL generation
+//   - CDN integration
+//   - File deletion and cleanup
+//
+// This service consolidates all media operations into a single boundary.
+// ============================================================================
+
+service MediaService {
+  // ========== Upload ==========
+  rpc InitiateUpload(InitiateUploadRequest) returns (InitiateUploadResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/media/upload/init"
+      body: "*"
+    };
+  }
+  rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/media/upload/{upload_id}/complete"
+      body: "*"
+    };
+  }
+  rpc CancelUpload(CancelUploadRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/api/v2/media/upload/{upload_id}"
+    };
+  }
+
+  // ========== Retrieval ==========
+  rpc GetMedia(GetMediaRequest) returns (GetMediaResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/media/{media_id}"
+    };
+  }
+  rpc GetMediaByIds(GetMediaByIdsRequest) returns (GetMediaByIdsResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/media/batch"
+      body: "*"
+    };
+  }
+  rpc GetUserMedia(GetUserMediaRequest) returns (GetUserMediaResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/media/user/{user_id}"
+    };
+  }
+
+  // ========== Processing ==========
+  rpc GenerateThumbnail(GenerateThumbnailRequest) returns (GenerateThumbnailResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/media/{media_id}/thumbnail"
+      body: "*"
+    };
+  }
+  rpc TranscodeVideo(TranscodeVideoRequest) returns (TranscodeVideoResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/media/{media_id}/transcode"
+      body: "*"
+    };
+  }
+  rpc GetTranscodeStatus(GetTranscodeStatusRequest) returns (GetTranscodeStatusResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/media/transcode/{job_id}/status"
+    };
+  }
+
+  // ========== Streaming ==========
+  rpc GetStreamingUrl(GetStreamingUrlRequest) returns (GetStreamingUrlResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/media/{media_id}/stream"
+    };
+  }
+  rpc GetDownloadUrl(GetDownloadUrlRequest) returns (GetDownloadUrlResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/media/{media_id}/download"
+    };
+  }
+
+  // ========== Deletion ==========
+  rpc DeleteMedia(DeleteMediaRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/api/v2/media/{media_id}"
+    };
+  }
+  rpc BulkDeleteMedia(BulkDeleteMediaRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/api/v2/media/bulk-delete"
+      body: "*"
+    };
+  }
+}
+
+// ============================================================================
+// Messages
+// ============================================================================
+
+// -------- Media File Model --------
+message MediaFile {
+  string id = 1;                  // UUID
+  string user_id = 2;             // Uploader
+  string filename = 3;            // Original filename
+  MediaType media_type = 4;
+  string mime_type = 5;           // e.g., image/jpeg, video/mp4
+  int64 size_bytes = 6;           // File size
+  string storage_path = 7;        // S3/GCS path
+  string cdn_url = 8;             // CDN URL for access
+  string thumbnail_url = 9;       // Thumbnail URL (if applicable)
+  ProcessingStatus status = 10;
+  MediaMetadata metadata = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+  google.protobuf.Timestamp deleted_at = 14;
+}
+
+enum MediaType {
+  MEDIA_TYPE_UNSPECIFIED = 0;
+  MEDIA_TYPE_IMAGE = 1;
+  MEDIA_TYPE_VIDEO = 2;
+  MEDIA_TYPE_AUDIO = 3;
+  MEDIA_TYPE_DOCUMENT = 4;
+}
+
+enum ProcessingStatus {
+  PROCESSING_STATUS_UNSPECIFIED = 0;
+  PROCESSING_STATUS_UPLOADING = 1;
+  PROCESSING_STATUS_PROCESSING = 2;
+  PROCESSING_STATUS_READY = 3;
+  PROCESSING_STATUS_FAILED = 4;
+}
+
+// -------- Media Metadata --------
+message MediaMetadata {
+  // Image metadata
+  int32 width = 1;
+  int32 height = 2;
+  string format = 3;              // jpeg, png, webp
+
+  // Video metadata
+  int32 duration_seconds = 4;
+  int32 bitrate = 5;
+  string codec = 6;               // h264, vp9
+  int32 framerate = 7;
+  repeated VideoVariant variants = 8;  // Different resolutions
+
+  // Audio metadata
+  int32 sample_rate = 9;
+  int32 channels = 10;            // mono, stereo
+
+  // Common
+  string checksum = 11;           // SHA256 hash
+  map<string, string> exif = 12;  // EXIF data for images
+}
+
+message VideoVariant {
+  string variant_id = 1;
+  int32 width = 2;
+  int32 height = 3;
+  int32 bitrate = 4;
+  string url = 5;
+  string format = 6;              // hls, dash, mp4
+}
+
+// -------- Upload Initiation --------
+message InitiateUploadRequest {
+  string user_id = 1;
+  string filename = 2;
+  MediaType media_type = 3;
+  string mime_type = 4;
+  int64 size_bytes = 5;
+}
+
+message InitiateUploadResponse {
+  string upload_id = 1;           // UUID for this upload
+  string presigned_url = 2;       // S3/GCS presigned URL
+  map<string, string> headers = 3;  // Required headers
+  int64 expires_at = 4;           // URL expiration (unix timestamp)
+}
+
+// -------- Upload Completion --------
+message CompleteUploadRequest {
+  string upload_id = 1;
+  string user_id = 2;
+  string checksum = 3;            // SHA256 for verification
+}
+
+message CompleteUploadResponse {
+  MediaFile media = 1;
+}
+
+// -------- Cancel Upload --------
+message CancelUploadRequest {
+  string upload_id = 1;
+  string user_id = 2;
+}
+
+// -------- Get Media --------
+message GetMediaRequest {
+  string media_id = 1;
+}
+
+message GetMediaResponse {
+  MediaFile media = 1;
+}
+
+// -------- Get Media by IDs (Batch) --------
+message GetMediaByIdsRequest {
+  repeated string media_ids = 1;
+}
+
+message GetMediaByIdsResponse {
+  repeated MediaFile media = 1;
+  repeated string not_found_ids = 2;
+}
+
+// -------- Get User Media --------
+message GetUserMediaRequest {
+  string user_id = 1;
+  MediaType media_type = 2;       // Optional filter
+  int32 limit = 3;
+  int32 offset = 4;
+}
+
+message GetUserMediaResponse {
+  repeated MediaFile media = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+}
+
+// -------- Generate Thumbnail --------
+message GenerateThumbnailRequest {
+  string media_id = 1;
+  int32 width = 2;                // Target width
+  int32 height = 3;               // Target height
+  ThumbnailFormat format = 4;
+}
+
+enum ThumbnailFormat {
+  THUMBNAIL_FORMAT_UNSPECIFIED = 0;
+  THUMBNAIL_FORMAT_JPEG = 1;
+  THUMBNAIL_FORMAT_PNG = 2;
+  THUMBNAIL_FORMAT_WEBP = 3;
+}
+
+message GenerateThumbnailResponse {
+  string thumbnail_url = 1;
+  int32 width = 2;
+  int32 height = 3;
+}
+
+// -------- Transcode Video --------
+message TranscodeVideoRequest {
+  string media_id = 1;
+  repeated TranscodeProfile profiles = 2;
+}
+
+message TranscodeProfile {
+  string profile_name = 1;        // e.g., "720p", "1080p", "4k"
+  int32 width = 2;
+  int32 height = 3;
+  int32 bitrate = 4;
+  string codec = 5;               // h264, vp9, av1
+  string format = 6;              // mp4, hls, dash
+}
+
+message TranscodeVideoResponse {
+  string job_id = 1;              // UUID for transcode job
+  TranscodeJobStatus status = 2;
+}
+
+enum TranscodeJobStatus {
+  TRANSCODE_JOB_STATUS_UNSPECIFIED = 0;
+  TRANSCODE_JOB_STATUS_QUEUED = 1;
+  TRANSCODE_JOB_STATUS_PROCESSING = 2;
+  TRANSCODE_JOB_STATUS_COMPLETED = 3;
+  TRANSCODE_JOB_STATUS_FAILED = 4;
+}
+
+// -------- Get Transcode Status --------
+message GetTranscodeStatusRequest {
+  string job_id = 1;
+}
+
+message GetTranscodeStatusResponse {
+  string job_id = 1;
+  TranscodeJobStatus status = 2;
+  int32 progress_percent = 3;
+  repeated VideoVariant variants = 4;  // Available variants
+  string error_message = 5;       // If failed
+}
+
+// -------- Get Streaming URL --------
+message GetStreamingUrlRequest {
+  string media_id = 1;
+  StreamingProtocol protocol = 2;
+  string quality = 3;             // Optional: auto, 720p, 1080p
+}
+
+enum StreamingProtocol {
+  STREAMING_PROTOCOL_UNSPECIFIED = 0;
+  STREAMING_PROTOCOL_HLS = 1;     // Apple HLS
+  STREAMING_PROTOCOL_DASH = 2;    // MPEG-DASH
+  STREAMING_PROTOCOL_PROGRESSIVE = 3;  // Direct MP4
+}
+
+message GetStreamingUrlResponse {
+  string url = 1;                 // Streaming manifest URL
+  int64 expires_at = 2;           // URL expiration
+  repeated VideoVariant available_qualities = 3;
+}
+
+// -------- Get Download URL --------
+message GetDownloadUrlRequest {
+  string media_id = 1;
+  int64 expires_in_seconds = 2;  // Default 3600 (1 hour)
+}
+
+message GetDownloadUrlResponse {
+  string url = 1;                 // Presigned download URL
+  int64 expires_at = 2;
+}
+
+// -------- Delete Media --------
+message DeleteMediaRequest {
+  string media_id = 1;
+  string user_id = 2;             // For authorization
+}
+
+// -------- Bulk Delete Media --------
+message BulkDeleteMediaRequest {
+  repeated string media_ids = 1;
+  string user_id = 2;
+}
+
+// ============================================================================
+// Events Published by Media Service
+// ============================================================================
+
+// Kafka Topic: media.uploaded
+message MediaUploadedEvent {
+  string media_id = 1;
+  string user_id = 2;
+  MediaType media_type = 3;
+  int64 size_bytes = 4;
+  google.protobuf.Timestamp uploaded_at = 5;
+}
+
+// Kafka Topic: media.processed
+message MediaProcessedEvent {
+  string media_id = 1;
+  ProcessingStatus status = 2;
+  string cdn_url = 3;
+  string thumbnail_url = 4;
+  google.protobuf.Timestamp processed_at = 5;
+}
+
+// Kafka Topic: media.transcoded
+message MediaTranscodedEvent {
+  string media_id = 1;
+  string job_id = 2;
+  repeated VideoVariant variants = 3;
+  google.protobuf.Timestamp transcoded_at = 4;
+}
+
+// Kafka Topic: media.deleted
+message MediaDeletedEvent {
+  string media_id = 1;
+  string user_id = 2;
+  google.protobuf.Timestamp deleted_at = 3;
+}

@@ -1,0 +1,299 @@
+syntax = "proto3";
+package nova.identity.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// ============================================================================
+// Identity Service - Authentication & Authorization
+//
+// Owns: sessions, refresh_tokens, revoked_tokens
+// Responsibilities:
+//   - User registration (creates user in user-service via event)
+//   - Login/Logout (session management)
+//   - Token validation and refresh
+//   - Password reset
+//
+// Does NOT own: user profiles, user settings (belongs to user-service)
+// ============================================================================
+
+service IdentityService {
+  // ========== Authentication ==========
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc Logout(LogoutRequest) returns (google.protobuf.Empty);
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+
+  // ========== Verification ==========
+  rpc VerifyToken(VerifyTokenRequest) returns (VerifyTokenResponse);
+  rpc VerifyPassword(VerifyPasswordRequest) returns (VerifyPasswordResponse);
+
+  // ========== Password Management ==========
+  rpc ChangePassword(ChangePasswordRequest) returns (google.protobuf.Empty);
+  rpc RequestPasswordReset(RequestPasswordResetRequest) returns (google.protobuf.Empty);
+  rpc ResetPassword(ResetPasswordRequest) returns (google.protobuf.Empty);
+
+  // ========== Session Management ==========
+  rpc RevokeToken(RevokeTokenRequest) returns (google.protobuf.Empty);
+  rpc RevokeAllUserTokens(RevokeAllUserTokensRequest) returns (google.protobuf.Empty);
+  rpc ListActiveSessions(ListActiveSessionsRequest) returns (ListActiveSessionsResponse);
+
+  // ========== OAuth/SSO ==========
+  // Start OAuth flow - returns authorization URL to redirect user to
+  rpc StartOAuthFlow(StartOAuthFlowRequest) returns (StartOAuthFlowResponse);
+  // Complete OAuth flow - exchange authorization code for tokens
+  rpc CompleteOAuthFlow(CompleteOAuthFlowRequest) returns (CompleteOAuthFlowResponse);
+  // List linked OAuth providers for a user
+  rpc ListOAuthConnections(ListOAuthConnectionsRequest) returns (ListOAuthConnectionsResponse);
+  // Unlink an OAuth provider from user account
+  rpc UnlinkOAuthProvider(UnlinkOAuthProviderRequest) returns (google.protobuf.Empty);
+}
+
+// ============================================================================
+// Messages
+// ============================================================================
+
+// -------- Registration --------
+message RegisterRequest {
+  string email = 1;          // User email (unique)
+  string username = 2;       // Username (unique)
+  string password = 3;       // Plain text password (will be hashed)
+  string display_name = 4;   // Optional display name
+}
+
+message RegisterResponse {
+  string user_id = 1;        // UUID of created user
+  string access_token = 2;   // JWT access token
+  string refresh_token = 3;  // JWT refresh token
+  int64 expires_at = 4;      // Access token expiration (unix timestamp)
+}
+
+// -------- Login --------
+message LoginRequest {
+  string email_or_username = 1;  // Email or username
+  string password = 2;            // Plain text password
+  string device_id = 3;           // Optional device identifier
+  string user_agent = 4;          // Optional user agent string
+}
+
+message LoginResponse {
+  string user_id = 1;
+  string access_token = 2;
+  string refresh_token = 3;
+  int64 expires_at = 4;
+
+  // User info (for convenience, avoid extra gRPC call)
+  string username = 5;
+  string email = 6;
+  bool is_verified = 7;
+}
+
+// -------- Logout --------
+message LogoutRequest {
+  string access_token = 1;   // Token to revoke
+}
+
+// -------- Token Refresh --------
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message RefreshTokenResponse {
+  string access_token = 1;
+  string refresh_token = 2;  // New refresh token (rotation)
+  int64 expires_at = 3;
+}
+
+// -------- Token Verification --------
+message VerifyTokenRequest {
+  string access_token = 1;
+}
+
+message VerifyTokenResponse {
+  bool is_valid = 1;
+  string user_id = 2;        // Empty if invalid
+  string email = 3;
+  string username = 4;
+  repeated string roles = 5; // User roles (e.g., "admin", "moderator")
+  int64 expires_at = 6;
+  bool is_revoked = 7;
+}
+
+// -------- Password Verification (for other services) --------
+message VerifyPasswordRequest {
+  string user_id = 1;        // UUID of user
+  string password = 2;       // Plain text password to verify
+}
+
+message VerifyPasswordResponse {
+  bool is_valid = 1;
+}
+
+// -------- Password Change --------
+message ChangePasswordRequest {
+  string user_id = 1;
+  string old_password = 2;
+  string new_password = 3;
+}
+
+// -------- Password Reset --------
+message RequestPasswordResetRequest {
+  string email = 1;
+}
+
+message ResetPasswordRequest {
+  string reset_token = 1;    // Token from email link
+  string new_password = 2;
+}
+
+// -------- Token Revocation --------
+message RevokeTokenRequest {
+  string access_token = 1;
+}
+
+message RevokeAllUserTokensRequest {
+  string user_id = 1;
+}
+
+// -------- Session Listing --------
+message ListActiveSessionsRequest {
+  string user_id = 1;
+}
+
+message Session {
+  string session_id = 1;
+  string device_id = 2;
+  string user_agent = 3;
+  string ip_address = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp last_active = 6;
+}
+
+message ListActiveSessionsResponse {
+  repeated Session sessions = 1;
+}
+
+// ============================================================================
+// Events Published by Identity Service
+// ============================================================================
+
+// Kafka Topic: identity.user.registered
+message UserRegisteredEvent {
+  string user_id = 1;
+  string email = 2;
+  string username = 3;
+  string display_name = 4;
+  google.protobuf.Timestamp registered_at = 5;
+}
+
+// Kafka Topic: identity.user.logged_in
+message UserLoggedInEvent {
+  string user_id = 1;
+  string session_id = 2;
+  string device_id = 3;
+  string ip_address = 4;
+  google.protobuf.Timestamp logged_in_at = 5;
+}
+
+// Kafka Topic: identity.session.revoked
+message SessionRevokedEvent {
+  string user_id = 1;
+  string session_id = 2;
+  string reason = 3;
+  google.protobuf.Timestamp revoked_at = 4;
+}
+
+// Kafka Topic: identity.password.changed
+message PasswordChangedEvent {
+  string user_id = 1;
+  google.protobuf.Timestamp changed_at = 2;
+}
+
+// ============================================================================
+// OAuth/SSO Messages
+// ============================================================================
+
+// Supported OAuth providers
+enum OAuthProvider {
+  OAUTH_PROVIDER_UNSPECIFIED = 0;
+  OAUTH_PROVIDER_GOOGLE = 1;
+  OAUTH_PROVIDER_APPLE = 2;
+}
+
+// -------- Start OAuth Flow --------
+message StartOAuthFlowRequest {
+  OAuthProvider provider = 1;      // OAuth provider (google, apple, etc.)
+  string redirect_uri = 2;         // Callback URL after OAuth completes
+  string invite_code = 3;          // Optional invite code for new user registration
+}
+
+message StartOAuthFlowResponse {
+  string authorization_url = 1;    // URL to redirect user to for OAuth
+  string state = 2;                // State token for CSRF protection
+}
+
+// -------- Complete OAuth Flow --------
+message CompleteOAuthFlowRequest {
+  string state = 1;                // State token from StartOAuthFlowResponse
+  string code = 2;                 // Authorization code from OAuth provider
+  string redirect_uri = 3;         // Same redirect URI used in start flow
+  string invite_code = 4;          // Optional invite code (for new user registration)
+}
+
+message CompleteOAuthFlowResponse {
+  string user_id = 1;
+  string access_token = 2;
+  string refresh_token = 3;
+  int64 expires_at = 4;
+
+  // User info
+  string username = 5;
+  string email = 6;
+  bool is_new_user = 7;            // True if this OAuth login created a new account
+}
+
+// -------- List OAuth Connections --------
+message ListOAuthConnectionsRequest {
+  string user_id = 1;
+}
+
+message OAuthConnection {
+  string id = 1;                   // Connection UUID
+  OAuthProvider provider = 2;      // OAuth provider
+  string provider_user_id = 3;     // User's ID on the provider
+  string email = 4;                // Email from provider (may differ from account email)
+  string name = 5;                 // Name from provider
+  string picture_url = 6;          // Profile picture URL from provider
+  google.protobuf.Timestamp connected_at = 7;
+  google.protobuf.Timestamp last_used_at = 8;
+}
+
+message ListOAuthConnectionsResponse {
+  repeated OAuthConnection connections = 1;
+}
+
+// -------- Unlink OAuth Provider --------
+message UnlinkOAuthProviderRequest {
+  string user_id = 1;
+  OAuthProvider provider = 2;      // Provider to unlink
+}
+
+// ============================================================================
+// OAuth Events
+// ============================================================================
+
+// Kafka Topic: identity.oauth.connected
+message OAuthConnectedEvent {
+  string user_id = 1;
+  string provider = 2;             // "google", "apple", etc.
+  string provider_user_id = 3;
+  bool is_new_user = 4;
+  google.protobuf.Timestamp connected_at = 5;
+}
+
+// Kafka Topic: identity.oauth.disconnected
+message OAuthDisconnectedEvent {
+  string user_id = 1;
+  string provider = 2;
+  google.protobuf.Timestamp disconnected_at = 3;
+}
