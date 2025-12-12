@@ -3664,6 +3664,7 @@ dependencies = [
  "rdkafka",
  "redis 0.25.4",
  "regex",
+ "reqwest 0.11.27",
  "resilience",
  "rustls 0.23.35",
  "serde",

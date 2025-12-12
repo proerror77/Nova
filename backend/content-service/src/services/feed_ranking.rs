@@ -242,7 +242,10 @@ impl FeedRankingService {
                 .write_feed_cache(user_id, filtered_posts.clone(), None)
                 .await?;
             // Also persist a snapshot without TTL for CH-down fallback
-            let _ = self.cache.write_snapshot(user_id, filtered_posts.clone()).await;
+            let _ = self
+                .cache
+                .write_snapshot(user_id, filtered_posts.clone())
+                .await;
         } else {
             self.cache.invalidate_feed(user_id).await?;
         }
@@ -416,7 +419,10 @@ impl FeedRankingService {
         let mut deferred: Vec<RankedPost> = Vec::new();
 
         for post in posts {
-            let consecutive = author_consecutive.get(&post.author_id).copied().unwrap_or(0);
+            let consecutive = author_consecutive
+                .get(&post.author_id)
+                .copied()
+                .unwrap_or(0);
 
             if consecutive < self.max_consecutive_same_author {
                 // Reset other authors' consecutive counts when we add a new post

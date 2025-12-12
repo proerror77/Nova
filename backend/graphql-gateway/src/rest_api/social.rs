@@ -22,11 +22,10 @@ use crate::clients::proto::auth::{
     GetInvitationStatsRequest, ListDevicesRequest, ListInvitationsRequest, LogoutDeviceRequest,
 };
 use crate::clients::proto::chat::{ConversationType, CreateConversationRequest};
-use crate::clients::proto::social::{
-    FollowUserRequest as GrpcFollowUserRequest,
-    UnfollowUserRequest as GrpcUnfollowUserRequest,
-};
 use crate::clients::proto::graph::GetMutualFollowersRequest as GrpcGetMutualFollowersRequest;
+use crate::clients::proto::social::{
+    FollowUserRequest as GrpcFollowUserRequest, UnfollowUserRequest as GrpcUnfollowUserRequest,
+};
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
 

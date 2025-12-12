@@ -1158,7 +1158,10 @@ impl SocialService for SocialServiceImpl {
             .map_err(|e| Status::internal(format!("Failed to batch check bookmarks: {}", e)))?;
 
         Ok(Response::new(BatchCheckBookmarkedResponse {
-            bookmarked_post_ids: bookmarked_ids.into_iter().map(|id| id.to_string()).collect(),
+            bookmarked_post_ids: bookmarked_ids
+                .into_iter()
+                .map(|id| id.to_string())
+                .collect(),
         }))
     }
 }

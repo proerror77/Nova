@@ -399,7 +399,9 @@ impl GraphRepositoryTrait for CachedGraphRepository {
     ) -> Result<(Vec<Uuid>, i32, bool)> {
         // For mutual followers (friends), we don't cache the list to keep it simple
         // The list changes when either user follows/unfollows the other
-        self.inner.get_mutual_followers(user_id, limit, offset).await
+        self.inner
+            .get_mutual_followers(user_id, limit, offset)
+            .await
     }
 
     async fn health_check(&self) -> Result<()> {

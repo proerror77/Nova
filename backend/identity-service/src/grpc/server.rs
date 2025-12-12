@@ -1681,7 +1681,9 @@ impl AuthService for IdentityServiceServer {
             ));
         }
         if req.username.is_empty() || req.password.is_empty() {
-            return Err(Status::invalid_argument("Username and password are required"));
+            return Err(Status::invalid_argument(
+                "Username and password are required",
+            ));
         }
 
         // Register user via PhoneAuthService (includes validation and event publishing)

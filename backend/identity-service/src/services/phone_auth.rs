@@ -65,11 +65,7 @@ pub struct PhoneLoginResult {
 }
 
 impl PhoneAuthService {
-    pub fn new(
-        db: PgPool,
-        redis: SharedConnectionManager,
-        sns_client: Option<SnsClient>,
-    ) -> Self {
+    pub fn new(db: PgPool, redis: SharedConnectionManager, sns_client: Option<SnsClient>) -> Self {
         Self {
             db,
             redis,
@@ -443,11 +439,7 @@ impl PhoneAuthService {
     }
 
     /// Validate verification token
-    async fn validate_verification_token(
-        &self,
-        phone_number: &str,
-        token: &str,
-    ) -> Result<()> {
+    async fn validate_verification_token(&self, phone_number: &str, token: &str) -> Result<()> {
         let key = format!("{}{}", REDIS_VERIFICATION_TOKEN_PREFIX, token);
         let mut conn = self.redis.lock().await.clone();
 
@@ -513,7 +505,10 @@ impl PhoneAuthService {
                             error = %e,
                             "Failed to send SMS"
                         );
-                        Err(IdentityError::Internal(format!("Failed to send SMS: {}", e)))
+                        Err(IdentityError::Internal(format!(
+                            "Failed to send SMS: {}",
+                            e
+                        )))
                     }
                 }
             }

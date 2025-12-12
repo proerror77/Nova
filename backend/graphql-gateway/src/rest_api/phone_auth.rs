@@ -91,11 +91,9 @@ pub async fn send_phone_code(
 
     let mut auth_client = clients.auth_client();
 
-    let grpc_request = tonic::Request::new(
-        crate::clients::proto::auth::SendPhoneCodeRequest {
-            phone_number: req.phone_number.clone(),
-        },
-    );
+    let grpc_request = tonic::Request::new(crate::clients::proto::auth::SendPhoneCodeRequest {
+        phone_number: req.phone_number.clone(),
+    });
 
     match auth_client.send_phone_code(grpc_request).await {
         Ok(response) => {
@@ -158,12 +156,10 @@ pub async fn verify_phone_code(
 
     let mut auth_client = clients.auth_client();
 
-    let grpc_request = tonic::Request::new(
-        crate::clients::proto::auth::VerifyPhoneCodeRequest {
-            phone_number: req.phone_number.clone(),
-            code: req.code.clone(),
-        },
-    );
+    let grpc_request = tonic::Request::new(crate::clients::proto::auth::VerifyPhoneCodeRequest {
+        phone_number: req.phone_number.clone(),
+        code: req.code.clone(),
+    });
 
     match auth_client.verify_phone_code(grpc_request).await {
         Ok(response) => {
@@ -184,7 +180,9 @@ pub async fn verify_phone_code(
                 Ok(HttpResponse::BadRequest().json(VerifyPhoneCodeResponse {
                     success: false,
                     verification_token: None,
-                    message: resp.message.or(Some("Invalid verification code".to_string())),
+                    message: resp
+                        .message
+                        .or(Some("Invalid verification code".to_string())),
                 }))
             }
         }
@@ -243,15 +241,13 @@ pub async fn phone_register(
 
     let mut auth_client = clients.auth_client();
 
-    let grpc_request = tonic::Request::new(
-        crate::clients::proto::auth::PhoneRegisterRequest {
-            phone_number: req.phone_number.clone(),
-            verification_token: req.verification_token.clone(),
-            username: req.username.clone(),
-            password: req.password.clone(),
-            display_name: req.display_name.clone(),
-        },
-    );
+    let grpc_request = tonic::Request::new(crate::clients::proto::auth::PhoneRegisterRequest {
+        phone_number: req.phone_number.clone(),
+        verification_token: req.verification_token.clone(),
+        username: req.username.clone(),
+        password: req.password.clone(),
+        display_name: req.display_name.clone(),
+    });
 
     match auth_client.phone_register(grpc_request).await {
         Ok(response) => {
@@ -313,9 +309,12 @@ pub async fn phone_register(
                 tonic::Code::InvalidArgument => HttpResponse::BadRequest().json(
                     ErrorResponse::with_message("Invalid request", status.message()),
                 ),
-                tonic::Code::Unauthenticated => HttpResponse::Unauthorized().json(
-                    ErrorResponse::with_message("Invalid token", "Verification token is invalid or expired"),
-                ),
+                tonic::Code::Unauthenticated => {
+                    HttpResponse::Unauthorized().json(ErrorResponse::with_message(
+                        "Invalid token",
+                        "Verification token is invalid or expired",
+                    ))
+                }
                 _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
                     "Internal server error",
                     "Registration failed",
@@ -337,12 +336,10 @@ pub async fn phone_login(
 
     let mut auth_client = clients.auth_client();
 
-    let grpc_request = tonic::Request::new(
-        crate::clients::proto::auth::PhoneLoginRequest {
-            phone_number: req.phone_number.clone(),
-            verification_token: req.verification_token.clone(),
-        },
-    );
+    let grpc_request = tonic::Request::new(crate::clients::proto::auth::PhoneLoginRequest {
+        phone_number: req.phone_number.clone(),
+        verification_token: req.verification_token.clone(),
+    });
 
     match auth_client.phone_login(grpc_request).await {
         Ok(response) => {
@@ -394,12 +391,18 @@ pub async fn phone_login(
             );
 
             let error_response = match status.code() {
-                tonic::Code::NotFound => HttpResponse::NotFound().json(
-                    ErrorResponse::with_message("Not found", "No account found with this phone number"),
-                ),
-                tonic::Code::Unauthenticated => HttpResponse::Unauthorized().json(
-                    ErrorResponse::with_message("Invalid token", "Verification token is invalid or expired"),
-                ),
+                tonic::Code::NotFound => {
+                    HttpResponse::NotFound().json(ErrorResponse::with_message(
+                        "Not found",
+                        "No account found with this phone number",
+                    ))
+                }
+                tonic::Code::Unauthenticated => {
+                    HttpResponse::Unauthorized().json(ErrorResponse::with_message(
+                        "Invalid token",
+                        "Verification token is invalid or expired",
+                    ))
+                }
                 _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
                     "Internal server error",
                     "Login failed",

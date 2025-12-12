@@ -10,8 +10,8 @@
 
 use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn, error};
 use std::env;
+use tracing::{error, info, warn};
 
 use crate::clients::ServiceClients;
 
@@ -66,10 +66,9 @@ struct OpenAIChoice {
 
 /// Get OpenAI API configuration from environment
 fn get_api_config() -> (String, String) {
-    let base_url = env::var("OPENAI_API_BASE_URL")
-        .unwrap_or_else(|_| "https://api.tu-zi.com/v1".to_string());
-    let api_key = env::var("OPENAI_API_KEY")
-        .unwrap_or_else(|_| "".to_string());
+    let base_url =
+        env::var("OPENAI_API_BASE_URL").unwrap_or_else(|_| "https://api.tu-zi.com/v1".to_string());
+    let api_key = env::var("OPENAI_API_KEY").unwrap_or_else(|_| "".to_string());
     (base_url, api_key)
 }
 

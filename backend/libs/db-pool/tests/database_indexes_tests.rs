@@ -443,8 +443,5 @@ async fn test_analyze_statistics_updated() {
     .await
     .expect("Failed to fetch statistics");
 
-    assert!(
-        stats.2.is_some(),
-        "Table should have analyze timestamp"
-    );
+    assert!(stats.2.is_some(), "Table should have analyze timestamp");
 }

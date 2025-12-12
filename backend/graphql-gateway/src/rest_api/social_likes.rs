@@ -54,10 +54,7 @@ pub async fn delete_like(
     };
 
     let post_id = path.into_inner();
-    let req = DeleteLikeRequest {
-        user_id,
-        post_id,
-    };
+    let req = DeleteLikeRequest { user_id, post_id };
     match clients
         .call_social(|| {
             let mut social = clients.social_client();
@@ -562,9 +559,8 @@ pub async fn batch_check_bookmarked(
         })
         .await
     {
-        Ok(resp) => {
-            HttpResponse::Ok().json(serde_json::json!({"bookmarked_post_ids": resp.bookmarked_post_ids}))
-        }
+        Ok(resp) => HttpResponse::Ok()
+            .json(serde_json::json!({"bookmarked_post_ids": resp.bookmarked_post_ids})),
         Err(e) => {
             error!("batch_check_bookmarked failed: {}", e);
             HttpResponse::ServiceUnavailable().finish()
