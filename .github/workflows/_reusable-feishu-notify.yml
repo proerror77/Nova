@@ -1,7 +1,7 @@
 name: Reusable Feishu Notification
 
 # Reusable workflow for sending notifications to Feishu (Lark)
-# Supports rich card messages with status indicators
+# Supports rich card messages with status indicators and interactive buttons
 #
 # NOTE: This workflow is NON-FATAL - notification failures won't fail the parent workflow
 
@@ -25,21 +25,35 @@ on:
         required: false
         type: string
         default: ${{ github.workflow }}
-      details:
-        description: 'Additional details (JSON format)'
+      environment:
+        description: 'Deployment environment (staging, production)'
+        required: false
+        type: string
+        default: 'staging'
+      services:
+        description: 'Comma-separated list of deployed services'
+        required: false
+        type: string
+        default: ''
+      duration:
+        description: 'Deployment duration (e.g., "5m 30s")'
+        required: false
+        type: string
+        default: ''
+      layer-status:
+        description: 'JSON object of layer statuses (e.g., {"layer0":"success","layer1":"skipped"})'
         required: false
         type: string
         default: ''
     secrets:
       feishu-webhook:
         description: 'Feishu webhook URL'
-        required: false  # Changed to optional to prevent workflow failures
+        required: false
 
 jobs:
   notify:
     name: Send Feishu Notification
     runs-on: ubuntu-22.04
-    # Continue even if notification fails - notifications should never block deployments
     continue-on-error: true
     permissions:
       contents: read
@@ -60,39 +74,96 @@ jobs:
       - name: Prepare notification content
         if: steps.check.outputs.configured == 'true'
         id: prepare
+        env:
+          SERVICES: ${{ inputs.services }}
+          LAYER_STATUS: ${{ inputs.layer-status }}
         run: |
           # Determine color and emoji based on status
           case "${{ inputs.status }}" in
             success)
               COLOR="green"
               EMOJI="✅"
-              STATUS_TEXT="成功"
+              STATUS_TEXT="部署成功"
+              STATUS_TAG="🟢"
               ;;
             failure)
               COLOR="red"
               EMOJI="❌"
-              STATUS_TEXT="失敗"
+              STATUS_TEXT="部署失敗"
+              STATUS_TAG="🔴"
               ;;
             warning)
               COLOR="orange"
               EMOJI="⚠️"
-              STATUS_TEXT="警告"
+              STATUS_TEXT="需要注意"
+              STATUS_TAG="🟡"
               ;;
             info)
               COLOR="blue"
               EMOJI="ℹ️"
-              STATUS_TEXT="資訊"
+              STATUS_TEXT="資訊通知"
+              STATUS_TAG="🔵"
               ;;
             *)
               COLOR="grey"
               EMOJI="📢"
               STATUS_TEXT="${{ inputs.status }}"
+              STATUS_TAG="⚪"
               ;;
           esac
 
           echo "color=$COLOR" >> "$GITHUB_OUTPUT"
           echo "emoji=$EMOJI" >> "$GITHUB_OUTPUT"
           echo "status_text=$STATUS_TEXT" >> "$GITHUB_OUTPUT"
+          echo "status_tag=$STATUS_TAG" >> "$GITHUB_OUTPUT"
+
+          # Count services
+          if [ -n "$SERVICES" ]; then
+            SERVICE_COUNT=$(echo "$SERVICES" | tr ',' '\n' | grep -c . || echo "0")
+          else
+            SERVICE_COUNT="0"
+          fi
+          echo "service_count=$SERVICE_COUNT" >> "$GITHUB_OUTPUT"
+
+          # Format services list for display
+          if [ -n "$SERVICES" ]; then
+            SERVICE_LIST=$(echo "$SERVICES" | tr ',' '\n' | sed 's/^/• /' | tr '\n' '|' | sed 's/|$//')
+            # Replace | with actual newline for jq
+            echo "service_list=$SERVICE_LIST" >> "$GITHUB_OUTPUT"
+          else
+            echo "service_list=無變更服務" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Parse layer status if provided
+          if [ -n "$LAYER_STATUS" ] && [ "$LAYER_STATUS" != "{}" ]; then
+            echo "has_layer_status=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_layer_status=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Determine trigger type
+          case "${{ github.event_name }}" in
+            push)
+              TRIGGER_TYPE="🔄 代碼推送"
+              ;;
+            pull_request)
+              TRIGGER_TYPE="📥 PR 合併"
+              ;;
+            workflow_dispatch)
+              TRIGGER_TYPE="👤 手動觸發"
+              ;;
+            schedule)
+              TRIGGER_TYPE="⏰ 定時任務"
+              ;;
+            *)
+              TRIGGER_TYPE="🚀 ${{ github.event_name }}"
+              ;;
+          esac
+          echo "trigger_type=$TRIGGER_TYPE" >> "$GITHUB_OUTPUT"
+
+          # Get current timestamp in UTC+8
+          TIMESTAMP=$(TZ='Asia/Taipei' date '+%Y-%m-%d %H:%M:%S')
+          echo "timestamp=$TIMESTAMP" >> "$GITHUB_OUTPUT"
 
       - name: Send to Feishu
         if: steps.check.outputs.configured == 'true'
@@ -102,26 +173,79 @@ jobs:
           TITLE: ${{ inputs.title }}
           COLOR: ${{ steps.prepare.outputs.color }}
           STATUS_TEXT: ${{ steps.prepare.outputs.status_text }}
+          STATUS_TAG: ${{ steps.prepare.outputs.status_tag }}
           WORKFLOW_NAME: ${{ inputs.workflow-name }}
           BRANCH_NAME: ${{ github.ref_name }}
           COMMIT_SHA: ${{ github.sha }}
           MESSAGE: ${{ inputs.message }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          SERVICES: ${{ inputs.services }}
+          SERVICE_COUNT: ${{ steps.prepare.outputs.service_count }}
+          SERVICE_LIST: ${{ steps.prepare.outputs.service_list }}
+          DURATION: ${{ inputs.duration }}
+          TRIGGER_TYPE: ${{ steps.prepare.outputs.trigger_type }}
+          TIMESTAMP: ${{ steps.prepare.outputs.timestamp }}
+          TRIGGER_ACTOR: ${{ github.actor }}
           DETAILS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          LAYER_STATUS: ${{ inputs.layer-status }}
+          HAS_LAYER_STATUS: ${{ steps.prepare.outputs.has_layer_status }}
         run: |
-          # Build Feishu card message using jq for proper JSON escaping
+          # Build service list with proper formatting
+          SERVICE_DISPLAY=$(echo "$SERVICE_LIST" | tr '|' '\n')
+
+          # Build layer status section if available
+          LAYER_SECTION=""
+          if [ "$HAS_LAYER_STATUS" = "true" ] && [ -n "$LAYER_STATUS" ]; then
+            # Parse layer status JSON and format for display
+            LAYER_SECTION=$(echo "$LAYER_STATUS" | jq -r '
+              to_entries | map(
+                if .value == "success" then "✅ " + .key
+                elif .value == "failure" then "❌ " + .key
+                elif .value == "skipped" then "⏭️ " + .key
+                else "⚪ " + .key
+                end
+              ) | join(" | ")
+            ' 2>/dev/null || echo "")
+          fi
+
+          # Duration display
+          if [ -n "$DURATION" ]; then
+            DURATION_DISPLAY="⏱️ $DURATION"
+          else
+            DURATION_DISPLAY=""
+          fi
+
+          # Build the card JSON using jq
           jq -n \
             --arg emoji "$EMOJI" \
             --arg title "$TITLE" \
             --arg color "$COLOR" \
             --arg status_text "$STATUS_TEXT" \
+            --arg status_tag "$STATUS_TAG" \
             --arg workflow_name "$WORKFLOW_NAME" \
             --arg branch_name "$BRANCH_NAME" \
             --arg commit_sha "$COMMIT_SHA" \
+            --arg commit_sha_short "${COMMIT_SHA:0:7}" \
             --arg message "$MESSAGE" \
+            --arg environment "$ENVIRONMENT" \
+            --arg service_count "$SERVICE_COUNT" \
+            --arg service_display "$SERVICE_DISPLAY" \
+            --arg duration_display "$DURATION_DISPLAY" \
+            --arg trigger_type "$TRIGGER_TYPE" \
+            --arg trigger_actor "$TRIGGER_ACTOR" \
+            --arg timestamp "$TIMESTAMP" \
             --arg details_url "$DETAILS_URL" \
+            --arg commit_url "$COMMIT_URL" \
+            --arg repo_url "$REPO_URL" \
+            --arg layer_section "$LAYER_SECTION" \
             '{
               "msg_type": "interactive",
               "card": {
+                "config": {
+                  "wide_screen_mode": true
+                },
                 "header": {
                   "title": {
                     "content": "\($emoji) \($title)",
@@ -137,32 +261,102 @@ jobs:
                         "is_short": true,
                         "text": {
                           "tag": "lark_md",
-                          "content": "**狀態**\n\($status_text)"
+                          "content": "**環境**\n\($environment | ascii_upcase)"
                         }
                       },
                       {
                         "is_short": true,
                         "text": {
                           "tag": "lark_md",
-                          "content": "**工作流**\n\($workflow_name)"
+                          "content": "**狀態**\n\($status_tag) \($status_text)"
                         }
                       },
                       {
                         "is_short": true,
                         "text": {
                           "tag": "lark_md",
-                          "content": "**分支**\n\($branch_name)"
+                          "content": "**分支**\n`\($branch_name)`"
                         }
                       },
                       {
                         "is_short": true,
                         "text": {
                           "tag": "lark_md",
-                          "content": "**提交**\n`\($commit_sha)`"
+                          "content": "**服務數量**\n\($service_count) 個服務"
                         }
                       }
                     ]
                   },
+                  {
+                    "tag": "hr"
+                  },
+                  {
+                    "tag": "div",
+                    "fields": [
+                      {
+                        "is_short": true,
+                        "text": {
+                          "tag": "lark_md",
+                          "content": "**觸發方式**\n\($trigger_type)"
+                        }
+                      },
+                      {
+                        "is_short": true,
+                        "text": {
+                          "tag": "lark_md",
+                          "content": "**觸發者**\n@\($trigger_actor)"
+                        }
+                      },
+                      {
+                        "is_short": true,
+                        "text": {
+                          "tag": "lark_md",
+                          "content": "**提交**\n[\($commit_sha_short)](\($commit_url))"
+                        }
+                      },
+                      {
+                        "is_short": true,
+                        "text": {
+                          "tag": "lark_md",
+                          "content": "**時間**\n\($timestamp)"
+                        }
+                      }
+                    ]
+                  }
+                ]
+                + (if $service_display != "" and $service_display != "無變更服務" then [
+                  {
+                    "tag": "hr"
+                  },
+                  {
+                    "tag": "div",
+                    "text": {
+                      "tag": "lark_md",
+                      "content": "**📦 部署的服務**\n\($service_display)"
+                    }
+                  }
+                ] else [] end)
+                + (if $layer_section != "" then [
+                  {
+                    "tag": "div",
+                    "text": {
+                      "tag": "lark_md",
+                      "content": "**🔄 部署層級**\n\($layer_section)"
+                    }
+                  }
+                ] else [] end)
+                + (if $duration_display != "" then [
+                  {
+                    "tag": "note",
+                    "elements": [
+                      {
+                        "tag": "plain_text",
+                        "content": "\($duration_display)"
+                      }
+                    ]
+                  }
+                ] else [] end)
+                + [
                   {
                     "tag": "hr"
                   },
@@ -180,10 +374,37 @@ jobs:
                         "tag": "button",
                         "text": {
                           "tag": "plain_text",
-                          "content": "查看詳情"
+                          "content": "📋 查看日誌"
                         },
                         "type": "primary",
                         "url": $details_url
+                      },
+                      {
+                        "tag": "button",
+                        "text": {
+                          "tag": "plain_text",
+                          "content": "🔍 查看提交"
+                        },
+                        "type": "default",
+                        "url": $commit_url
+                      },
+                      {
+                        "tag": "button",
+                        "text": {
+                          "tag": "plain_text",
+                          "content": "📁 查看倉庫"
+                        },
+                        "type": "default",
+                        "url": $repo_url
+                      }
+                    ]
+                  },
+                  {
+                    "tag": "note",
+                    "elements": [
+                      {
+                        "tag": "plain_text",
+                        "content": "Nova CI/CD • \($workflow_name)"
                       }
                     ]
                   }
@@ -191,6 +412,11 @@ jobs:
               }
             }' > /tmp/feishu_message.json
 
+          # Debug: show generated JSON
+          echo "📝 Generated message:"
+          cat /tmp/feishu_message.json | jq '.' || cat /tmp/feishu_message.json
+
+          echo ""
           echo "📤 Sending notification to Feishu..."
 
           # Send to Feishu with timeout and retry
@@ -212,7 +438,6 @@ jobs:
             cat /tmp/feishu_response.json 2>/dev/null || echo "No response body"
             echo ""
             echo "Note: Notification failure does not affect deployment status"
-            # Don't exit with error - notification failures are non-fatal
           fi
 
       - name: Skip notification

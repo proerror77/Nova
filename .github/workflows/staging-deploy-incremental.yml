@@ -607,21 +607,22 @@ jobs:
   # ============================================================
   notify-success:
     name: Notify Success
-    needs: [detect-changes, smoke-test]
+    needs: [detect-changes, build-changed, deploy-layer0, deploy-layer1, deploy-layer2, deploy-layer3, deploy-layer4, smoke-test]
     # Use !failure() && !cancelled() instead of success() to handle skipped jobs correctly
     if: always() && needs.smoke-test.result == 'success' && needs.detect-changes.outputs.has_changes == 'true'
     uses: ./.github/workflows/_reusable-feishu-notify.yml
     with:
-      title: "Staging 增量部署成功 (GCP)"
+      title: "Staging 增量部署成功"
       status: "success"
       workflow-name: "Staging Deploy (Incremental)"
+      environment: "staging"
+      services: ${{ needs.detect-changes.outputs.changed_services }}
+      layer-status: '{"Layer0":"${{ needs.deploy-layer0.result }}","Layer1":"${{ needs.deploy-layer1.result }}","Layer2":"${{ needs.deploy-layer2.result }}","Layer3":"${{ needs.deploy-layer3.result }}","Layer4":"${{ needs.deploy-layer4.result }}"}'
       message: |
-        **環境**: nova-staging (GKE)
-        **提交**: ${{ github.sha }}
-        **分支**: ${{ github.ref_name }}
-        **部署服務**: ${{ needs.detect-changes.outputs.changed_services }}
+        🎉 所有服務部署成功！
 
-        ✅ 增量部署完成，只更新了變更的服務
+        增量部署已完成，只更新了變更的服務。
+        Smoke Test 通過，服務運行正常。
     secrets:
       feishu-webhook: ${{ secrets.FEISHU_WEBHOOK }}
 
@@ -632,17 +633,17 @@ jobs:
     if: always() && (needs.build-changed.result == 'failure' || needs.deploy-layer0.result == 'failure' || needs.deploy-layer1.result == 'failure' || needs.deploy-layer2.result == 'failure' || needs.deploy-layer3.result == 'failure' || needs.deploy-layer4.result == 'failure' || needs.smoke-test.result == 'failure')
     uses: ./.github/workflows/_reusable-feishu-notify.yml
     with:
-      title: "Staging 部署失敗 (GCP)"
+      title: "Staging 部署失敗"
       status: "failure"
       workflow-name: "Staging Deploy (Incremental)"
+      environment: "staging"
+      services: ${{ needs.detect-changes.outputs.changed_services }}
+      layer-status: '{"Layer0":"${{ needs.deploy-layer0.result }}","Layer1":"${{ needs.deploy-layer1.result }}","Layer2":"${{ needs.deploy-layer2.result }}","Layer3":"${{ needs.deploy-layer3.result }}","Layer4":"${{ needs.deploy-layer4.result }}"}'
       message: |
-        **環境**: nova-staging (GKE)
-        **提交**: ${{ github.sha }}
-        **分支**: ${{ github.ref_name }}
-        **嘗試部署**: ${{ needs.detect-changes.outputs.changed_services }}
+        ⚠️ 部署過程中發生錯誤！
 
-        ❌ 部署失敗，已自動回滾失敗的服務
-        請檢查日誌並修復問題。
+        失敗的服務已自動回滾到上一個版本。
+        請點擊「查看日誌」檢查錯誤詳情並修復問題。
     secrets:
       feishu-webhook: ${{ secrets.FEISHU_WEBHOOK }}
 
