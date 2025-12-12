@@ -1,92 +1,82 @@
 import Foundation
 
 // MARK: - Alice AI Service
-// 调用 Chat Completions API 的服务
+// Calls Nova's Alice API endpoints (/api/v2/alice/*)
 
 @Observable
 final class AliceService {
     static let shared = AliceService()
 
-    private let baseURL = "https://api.tu-zi.com/v1"
-    private let apiKey = "your-api-key-here"  // TODO: 从配置或环境变量读取
+    private let apiClient = APIClient.shared
 
     private init() {}
 
-    // MARK: - Chat Completions API
+    // MARK: - Chat API
 
-    /// 发送消息到 AI 模型并获取回复
+    /// Send message to Alice AI and get response
     /// - Parameters:
-    ///   - messages: 对话历史消息数组
-    ///   - model: 使用的模型名称
-    /// - Returns: AI 的回复内容
+    ///   - messages: Conversation history
+    ///   - model: Model name (currently unused by backend)
+    /// - Returns: Alice's response content
     @MainActor
     func sendMessage(
         messages: [AIChatMessage],
         model: String = "gpt-4o-all"
     ) async throws -> String {
-        guard let url = URL(string: "\(baseURL)/chat/completions") else {
-            throw AliceError.invalidURL
+        // Convert chat history to single message (backend limitation)
+        // Use the last user message as the content
+        guard let lastUserMessage = messages.last(where: { $0.role == "user" }) else {
+            throw AliceError.emptyMessage
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let requestBody = ChatCompletionRequest(
-            model: model,
-            messages: messages
+        let request = AliceRequest(
+            message: lastUserMessage.content,
+            mode: "text"
         )
 
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        request.httpBody = try encoder.encode(requestBody)
-
         #if DEBUG
-        print("[AliceService] Sending request to \(url)")
-        print("[AliceService] Model: \(model)")
-        print("[AliceService] Messages count: \(messages.count)")
+        print("[AliceService] Sending message to Alice API")
+        print("[AliceService] Message: \(request.message)")
         #endif
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        do {
+            let response: AliceResponse = try await apiClient.request(
+                endpoint: APIConfig.Alice.sendMessage,
+                method: "POST",
+                body: request
+            )
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AliceError.invalidResponse
+            #if DEBUG
+            print("[AliceService] Received response: \(response.message)")
+            #endif
+
+            return response.message
+        } catch {
+            #if DEBUG
+            print("[AliceService] Error: \(error)")
+            #endif
+            throw AliceError.from(error)
         }
+    }
 
+    /// Check Alice service status
+    @MainActor
+    func checkStatus() async throws -> AliceStatus {
         #if DEBUG
-        print("[AliceService] Response status: \(httpResponse.statusCode)")
+        print("[AliceService] Checking Alice status")
         #endif
 
-        guard httpResponse.statusCode == 200 else {
-            // 尝试解析错误信息
-            if let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
-                throw AliceError.apiError(errorResponse.error.message)
-            }
-            throw AliceError.httpError(httpResponse.statusCode)
-        }
+        let status: AliceStatus = try await apiClient.get(
+            endpoint: APIConfig.Alice.getStatus
+        )
 
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        let completionResponse = try decoder.decode(ChatCompletionResponse.self, from: data)
-
-        guard let firstChoice = completionResponse.choices.first else {
-            throw AliceError.emptyResponse
-        }
-
-        let content = firstChoice.message.content
-
-        #if DEBUG
-        print("[AliceService] Received response: \(content.prefix(100))...")
-        #endif
-
-        return content
+        return status
     }
 }
 
 // MARK: - Data Models
 
-/// AI Chat message structure
+/// AI Chat message structure (compatible with OpenAI format)
 struct AIChatMessage: Codable, Sendable {
     let role: String  // "system", "user", or "assistant"
     let content: String
@@ -104,43 +94,29 @@ struct AIChatMessage: Codable, Sendable {
     }
 }
 
-/// Chat completion request
-struct ChatCompletionRequest: Codable, Sendable {
-    let model: String
-    let messages: [AIChatMessage]
+/// Alice API request format
+private struct AliceRequest: Codable {
+    let message: String
+    let mode: String  // "text" or "voice"
 }
 
-/// Chat completion response
-struct ChatCompletionResponse: Codable, Sendable {
-    let id: String
-    let object: String
-    let created: Int
-    let model: String
-    let choices: [Choice]
-    let usage: Usage?
+/// Alice API response format
+private struct AliceResponse: Codable {
+    let message: String
+    let id: String?
+    let timestamp: Int?
 
-    struct Choice: Codable, Sendable {
-        let index: Int
-        let message: AIChatMessage
-        let finishReason: String?
-    }
-
-    struct Usage: Codable, Sendable {
-        let promptTokens: Int
-        let completionTokens: Int
-        let totalTokens: Int
-    }
+    // Handle mock response format
+    let status: String?
+    let echo: String?
 }
 
-/// Error response
-struct ErrorResponse: Codable, Sendable {
-    let error: ErrorDetail
-
-    struct ErrorDetail: Codable, Sendable {
-        let message: String
-        let type: String?
-        let code: String?
-    }
+/// Alice service status
+struct AliceStatus: Codable {
+    let status: String
+    let version: String
+    let available: Bool
+    let message: String?
 }
 
 // MARK: - Errors
@@ -151,6 +127,25 @@ enum AliceError: LocalizedError {
     case httpError(Int)
     case apiError(String)
     case emptyResponse
+    case emptyMessage
+    case serviceUnavailable(String)
+
+    static func from(_ error: Error) -> AliceError {
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .httpError(let code, _):
+                if code == 503 {
+                    return .serviceUnavailable("Alice AI service is currently unavailable. Please try again later.")
+                }
+                return .httpError(code)
+            case .decodingError:
+                return .invalidResponse
+            default:
+                return .apiError(error.localizedDescription)
+            }
+        }
+        return .apiError(error.localizedDescription)
+    }
 
     var errorDescription: String? {
         switch self {
@@ -161,9 +156,13 @@ enum AliceError: LocalizedError {
         case .httpError(let code):
             return "HTTP error: \(code)"
         case .apiError(let message):
-            return "API error: \(message)"
+            return message
         case .emptyResponse:
             return "Empty response from server"
+        case .emptyMessage:
+            return "Please enter a message"
+        case .serviceUnavailable(let message):
+            return message
         }
     }
 }
