@@ -444,20 +444,23 @@ struct LoginView: View {
     // MARK: - Validation
 
     private func validateLogin() -> Bool {
-        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedIdentifier = email.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            if trimmedEmail.isEmpty {
-                errorMessage = "Please_enter_your_email"
+        if trimmedIdentifier.isEmpty {
+            errorMessage = "Please_enter_your_email"
             return false
         }
 
-            if !isValidEmail(trimmedEmail) {
-                errorMessage = "Please_enter_a_valid_email"
+        // Allow both username and email formats
+        // Username: alphanumeric with optional underscores/dots, 3+ chars
+        // Email: standard email format
+        if !isValidIdentifier(trimmedIdentifier) {
+            errorMessage = "Please_enter_a_valid_email"
             return false
         }
 
-            if password.isEmpty {
-                errorMessage = "Please_enter_your_password"
+        if password.isEmpty {
+            errorMessage = "Please_enter_your_password"
             return false
         }
 
@@ -470,7 +473,7 @@ struct LoginView: View {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             emailError = nil  // Don't show error for empty field until submit
-        } else if !isValidEmail(trimmed) {
+        } else if !isValidIdentifier(trimmed) {
             emailError = "Invalid_email_format"
         } else {
             emailError = nil
@@ -478,6 +481,18 @@ struct LoginView: View {
     }
 
     // MARK: - Validation Helpers
+
+    /// Validates if input is a valid email OR username
+    /// Backend accepts both formats for login
+    private func isValidIdentifier(_ identifier: String) -> Bool {
+        // Check if it's a valid email
+        if isValidEmail(identifier) {
+            return true
+        }
+        // Check if it's a valid username (alphanumeric, underscores, dots, 3-30 chars)
+        let usernameRegex = #"^[A-Za-z0-9._]{3,30}$"#
+        return identifier.range(of: usernameRegex, options: .regularExpression) != nil
+    }
 
     private func isValidEmail(_ email: String) -> Bool {
         // Basic email format validation using regex

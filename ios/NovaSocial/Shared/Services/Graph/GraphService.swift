@@ -56,16 +56,17 @@ class GraphService {
     // MARK: - Modify Relationships
 
     func followUser(followerId: String, followeeId: String) async throws {
+        // Backend expects only user_id (the person to follow)
+        // The follower_id is automatically extracted from the JWT token
         struct Request: Codable {
-            let follower_id: String
-            let followee_id: String
+            let user_id: String
         }
 
         struct Response: Codable {
             let success: Bool
         }
 
-        let request = Request(follower_id: followerId, followee_id: followeeId)
+        let request = Request(user_id: followeeId)
         let _: Response = try await client.request(
             endpoint: APIConfig.Graph.follow,
             body: request
@@ -73,38 +74,29 @@ class GraphService {
     }
 
     func unfollowUser(followerId: String, followeeId: String) async throws {
-        struct Request: Codable {
-            let follower_id: String
-            let followee_id: String
-        }
-
+        // Backend uses DELETE /api/v2/graph/follow/{user_id}
+        // The follower_id is automatically extracted from the JWT token
         struct Response: Codable {
             let success: Bool
         }
 
-        let request = Request(follower_id: followerId, followee_id: followeeId)
         let _: Response = try await client.request(
-            endpoint: APIConfig.Graph.unfollow,
-            body: request
+            endpoint: APIConfig.Graph.unfollow(followeeId),
+            method: "DELETE"
         )
     }
 
     // MARK: - Check Relationships
 
     func isFollowing(followerId: String, followeeId: String) async throws -> Bool {
-        struct Request: Codable {
-            let follower_id: String
-            let followee_id: String
-        }
-
+        // Backend uses GET /api/v2/graph/is-following/{user_id}
+        // The follower_id is automatically extracted from the JWT token
         struct Response: Codable {
             let is_following: Bool
         }
 
-        let request = Request(follower_id: followerId, followee_id: followeeId)
-        let response: Response = try await client.request(
-            endpoint: APIConfig.Graph.isFollowing,
-            body: request
+        let response: Response = try await client.get(
+            endpoint: APIConfig.Graph.isFollowing(followeeId)
         )
 
         return response.is_following

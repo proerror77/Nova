@@ -6,28 +6,28 @@ import Foundation
 struct UserProfile: Codable, Identifiable {
     let id: String
     let username: String
-    let email: String?
-    let displayName: String?
-    let bio: String?
-    let avatarUrl: String?
-    let coverUrl: String?
-    let website: String?
-    let location: String?
-    let isVerified: Bool?
-    let isPrivate: Bool?
-    let isBanned: Bool?
-    let followerCount: Int?
-    let followingCount: Int?
-    let postCount: Int?
-    let createdAt: Int64?
-    let updatedAt: Int64?
-    let deletedAt: Int64?
+    var email: String? = nil
+    var displayName: String? = nil
+    var bio: String? = nil
+    var avatarUrl: String? = nil
+    var coverUrl: String? = nil
+    var website: String? = nil
+    var location: String? = nil
+    var isVerified: Bool? = nil
+    var isPrivate: Bool? = nil
+    var isBanned: Bool? = nil
+    var followerCount: Int? = nil
+    var followingCount: Int? = nil
+    var postCount: Int? = nil
+    var createdAt: Int64? = nil
+    var updatedAt: Int64? = nil
+    var deletedAt: Int64? = nil
 
     // Extended profile fields (for profile settings)
-    let firstName: String?
-    let lastName: String?
-    let dateOfBirth: String?  // ISO 8601 date format (YYYY-MM-DD)
-    let gender: Gender?
+    var firstName: String? = nil
+    var lastName: String? = nil
+    var dateOfBirth: String? = nil  // ISO 8601 date format (YYYY-MM-DD)
+    var gender: Gender? = nil
 
     // Safe accessors with defaults
     var safeIsVerified: Bool { isVerified ?? false }

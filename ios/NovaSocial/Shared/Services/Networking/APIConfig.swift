@@ -59,8 +59,10 @@ struct APIConfig {
         static let followers = "/api/v2/graph/followers"
         static let following = "/api/v2/graph/following"
         static let follow = "/api/v2/graph/follow"
-        static let unfollow = "/api/v2/graph/unfollow"
-        static let isFollowing = "/api/v2/graph/is-following"
+        // unfollow uses DELETE /api/v2/graph/follow/{user_id}
+        static func unfollow(_ userId: String) -> String { "/api/v2/graph/follow/\(userId)" }
+        // isFollowing uses GET /api/v2/graph/is-following/{user_id}
+        static func isFollowing(_ userId: String) -> String { "/api/v2/graph/is-following/\(userId)" }
         static let areMutuals = "/api/v2/graph/are-mutuals"
         static let batchCheckFollowing = "/api/v2/graph/batch-check-following"
 
