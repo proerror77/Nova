@@ -86,6 +86,7 @@ mod identity_service_grpc_tests {
             username: username.clone(),
             password: "StrongPassword123!".to_string(),
             invite_code: "TESTCODE".to_string(),
+            display_name: None,
         });
 
         match client.register(request).await {
@@ -150,6 +151,7 @@ mod identity_service_grpc_tests {
             username: format!("testuser_{}", timestamp),
             password: "StrongPassword123!".to_string(),
             invite_code: "TESTCODE".to_string(),
+            display_name: None,
         });
 
         match client.register(request).await {
@@ -206,6 +208,7 @@ mod identity_service_grpc_tests {
             username: format!("user1_{}", timestamp),
             password: "StrongPassword123!".to_string(),
             invite_code: "TESTCODE".to_string(),
+            display_name: None,
         });
 
         match client.register(request1).await {
@@ -222,6 +225,7 @@ mod identity_service_grpc_tests {
             username: format!("user2_{}", timestamp), // Different username
             password: "StrongPassword123!".to_string(),
             invite_code: "TESTCODE".to_string(),
+            display_name: None,
         });
 
         match client.register(request2).await {
@@ -276,6 +280,7 @@ mod identity_service_grpc_tests {
             username: format!("loginuser_{}", timestamp),
             password: password.to_string(),
             invite_code: "TESTCODE".to_string(),
+            display_name: None,
         });
 
         let register_resp = match client.register(register_req).await {
@@ -352,6 +357,7 @@ mod identity_service_grpc_tests {
             username: format!("pwtest_{}", timestamp),
             password: "CorrectPassword123!".to_string(),
             invite_code: "TESTCODE".to_string(),
+            display_name: None,
         });
 
         if let Err(e) = client.register(register_req).await {
@@ -464,6 +470,7 @@ mod identity_service_grpc_tests {
             username: username.clone(),
             password: "StrongPassword123!".to_string(),
             invite_code: "TESTCODE".to_string(),
+            display_name: None,
         });
 
         let register_resp = match client.register(register_req).await {
@@ -588,6 +595,7 @@ mod identity_service_grpc_tests {
             username: username.clone(),
             password: "StrongPassword123!".to_string(),
             invite_code: "TESTCODE".to_string(),
+            display_name: None,
         });
 
         let register_resp = match client.register(register_req).await {
@@ -666,6 +674,7 @@ mod identity_service_grpc_tests {
             username: format!("existsuser_{}", timestamp),
             password: "StrongPassword123!".to_string(),
             invite_code: "TESTCODE".to_string(),
+            display_name: None,
         });
 
         let user_id = match client.register(register_req).await {
