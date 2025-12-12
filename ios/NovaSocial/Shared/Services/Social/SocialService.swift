@@ -499,6 +499,7 @@ struct PostStats: Codable {
 }
 
 /// Comment model matching backend proto: social_service.proto Comment message
+/// Note: Using camelCase property names that match APIClient's convertFromSnakeCase strategy
 struct SocialComment: Codable, Identifiable {
     let id: String
     let userId: String
@@ -507,14 +508,13 @@ struct SocialComment: Codable, Identifiable {
     let parentCommentId: String?
     let createdAt: String?  // ISO8601 timestamp from backend
 
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case postId = "post_id"
-        case content
-        case parentCommentId = "parent_comment_id"
-        case createdAt = "created_at"
-    }
+    // Author information (enriched by graphql-gateway)
+    let authorUsername: String?
+    let authorDisplayName: String?
+    let authorAvatarUrl: String?
+
+    // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase which automatically
+    // converts snake_case JSON keys (user_id, post_id, etc.) to camelCase Swift properties
 
     /// Convert backend timestamp to Date
     var createdDate: Date {
@@ -522,6 +522,18 @@ struct SocialComment: Codable, Identifiable {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.date(from: createdAt) ?? Date()
+    }
+
+    /// Display name for the comment author with fallback
+    var displayAuthorName: String {
+        if let displayName = authorDisplayName, !displayName.isEmpty {
+            return displayName
+        }
+        if let username = authorUsername, !username.isEmpty {
+            return username
+        }
+        // Fallback to truncated userId
+        return "User \(userId.prefix(8))"
     }
 }
 

@@ -10,12 +10,13 @@ struct FeedPostCard: View {
     var onComment: () -> Void = {}
     var onShare: () -> Void = {}
     var onBookmark: () -> Void = {}
+    var onCardTap: () -> Void = {}
 
     @State private var currentImageIndex = 0
 
     var body: some View {
         VStack(spacing: 8) {
-            // MARK: - User Info Header
+            // MARK: - User Info Header - tappable for card detail
             HStack {
                 HStack(spacing: 10) {
                     // Avatar - 显示用户头像或默认头像
@@ -34,100 +35,113 @@ struct FeedPostCard: View {
                                 .foregroundColor(Color(red: 0.20, green: 0.60, blue: 1.0))
                         }
 
-                        HStack(spacing: 9) {
-                            Text(post.createdAt.timeAgoDisplay())
-                                .font(.system(size: 10))
-                                .lineSpacing(13)
-                                .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
-
-                            Text("Location")
-                                .font(.system(size: 10))
-                                .lineSpacing(13)
-                                .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
-                        }
+                        // Time ago display (location removed - backend doesn't support it yet)
+                        Text(post.createdAt.timeAgoDisplay())
+                            .font(.system(size: 10))
+                            .lineSpacing(13)
+                            .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
                     }
                 }
+                .contentShape(Rectangle())
+                .onTapGesture { onCardTap() }
 
                 Spacer()
 
                 // Share Button
-                Button(action: onShare) {
-                    Image("card-share-icon")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 24, height: 24)
-                }
-                .accessibilityLabel("Share")
+                Image("card-share-icon")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        #if DEBUG
+                        print("[FeedPostCard] Share tapped for post: \(post.id)")
+                        #endif
+                        onShare()
+                    }
+                    .accessibilityLabel("Share")
             }
             .padding(.horizontal, 16)
 
-            // MARK: - Post Media (Images or Video)
+            // MARK: - Post Media (Images or Video) - tappable for card detail
             if !post.displayMediaUrls.isEmpty {
                 mediaContent
+                    .contentShape(Rectangle())
+                    .onTapGesture { onCardTap() }
             }
 
-            // MARK: - Post Content & Interaction
-            VStack(alignment: .leading, spacing: 10) {
-                // Post Content Text
-                if !post.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(post.content)
-                        .font(.system(size: 16, weight: .medium))
-                        .lineSpacing(20)
-                        .foregroundColor(.black)
-                }
-
-                // Interaction Buttons
-                HStack(spacing: 20) {
-                    // Like button - shows filled heart when liked
-                    Button(action: onLike) {
-                        HStack(spacing: 6) {
-                            Image(systemName: post.isLiked ? "heart.fill" : "heart")
-                                .font(.system(size: 18))
-                                .foregroundColor(post.isLiked ? Color(red: 0.81, green: 0.13, blue: 0.25) : Color(red: 0.38, green: 0.37, blue: 0.37))
-                            Text("\(post.likeCount)")
-                                .font(.system(size: 10))
-                                .lineSpacing(20)
-                                .foregroundColor(post.isLiked ? Color(red: 0.81, green: 0.13, blue: 0.25) : Color(red: 0.38, green: 0.37, blue: 0.37))
-                        }
-                    }
-                    .accessibilityLabel("Like, \(post.likeCount) likes")
-
-                    // Comment button
-                    Button(action: onComment) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "bubble.right")
-                                .font(.system(size: 18))
-                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
-                            Text("\(post.commentCount)")
-                                .font(.system(size: 10))
-                                .lineSpacing(20)
-                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
-                        }
-                    }
-                    .accessibilityLabel("Comments, \(post.commentCount)")
-
-                    // Bookmark button - shows filled bookmark when bookmarked
-                    Button(action: onBookmark) {
-                        HStack(spacing: 6) {
-                            Image(systemName: post.isBookmarked ? "bookmark.fill" : "bookmark")
-                                .font(.system(size: 18))
-                                .foregroundColor(post.isBookmarked ? Color(red: 0.81, green: 0.13, blue: 0.25) : Color(red: 0.38, green: 0.37, blue: 0.37))
-                            Text("\(post.shareCount)")
-                                .font(.system(size: 10))
-                                .lineSpacing(20)
-                                .foregroundColor(post.isBookmarked ? Color(red: 0.81, green: 0.13, blue: 0.25) : Color(red: 0.38, green: 0.37, blue: 0.37))
-                        }
-                    }
-                    .accessibilityLabel("Bookmark")
-
-                    Spacer()
-                }
+            // MARK: - Post Content Text - tappable for card detail
+            if !post.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(post.content)
+                    .font(.system(size: 16, weight: .medium))
+                    .lineSpacing(20)
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .contentShape(Rectangle())
+                    .onTapGesture { onCardTap() }
             }
-            .padding(.horizontal, 16)
+
+            // MARK: - Interaction Buttons - NO parent tap gesture here
+            HStack(spacing: 0) {
+                // Like button
+                HStack(spacing: 6) {
+                    Image(systemName: post.isLiked ? "heart.fill" : "heart")
+                        .font(.system(size: 18))
+                    Text("\(post.likeCount)")
+                        .font(.system(size: 10))
+                }
+                .foregroundColor(post.isLiked ? Color(red: 0.81, green: 0.13, blue: 0.25) : Color(red: 0.38, green: 0.37, blue: 0.37))
+                .padding(.vertical, 12)
+                .padding(.horizontal, 12)
+                .background(Color.white.opacity(0.001)) // Invisible but tappable
+                .onTapGesture {
+                    #if DEBUG
+                    print("[FeedPostCard] Like tapped for post: \(post.id)")
+                    #endif
+                    onLike()
+                }
+
+                // Comment button
+                HStack(spacing: 6) {
+                    Image(systemName: "bubble.right")
+                        .font(.system(size: 18))
+                    Text("\(post.commentCount)")
+                        .font(.system(size: 10))
+                }
+                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                .padding(.vertical, 12)
+                .padding(.horizontal, 12)
+                .background(Color.white.opacity(0.001)) // Invisible but tappable
+                .onTapGesture {
+                    #if DEBUG
+                    print("[FeedPostCard] Comment tapped for post: \(post.id)")
+                    #endif
+                    onComment()
+                }
+
+                // Bookmark button (no count - like Instagram, bookmarks are private)
+                Image(systemName: post.isBookmarked ? "bookmark.fill" : "bookmark")
+                    .font(.system(size: 18))
+                    .foregroundColor(post.isBookmarked ? Color(red: 0.81, green: 0.13, blue: 0.25) : Color(red: 0.38, green: 0.37, blue: 0.37))
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 12)
+                    .background(Color.white.opacity(0.001)) // Invisible but tappable
+                    .onTapGesture {
+                        #if DEBUG
+                        print("[FeedPostCard] Bookmark tapped for post: \(post.id)")
+                        #endif
+                        onBookmark()
+                    }
+
+                Spacer()
+            }
+            .padding(.horizontal, 4)
             .padding(.bottom, 14)
         }
         .padding(.top, 14)
-        .background(.white)
+        .background(Color.white)
+        // NO card-level tap gesture - each area has its own
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Post by \(post.authorName)")
     }

@@ -5,6 +5,7 @@ import SwiftUI
 struct CommentSheetView: View {
     let post: FeedPost
     @Binding var isPresented: Bool
+    @Environment(\.dismiss) private var dismiss
     @State private var commentText = ""
     @State private var comments: [SocialComment] = []
     @State private var isLoading = false
@@ -111,7 +112,7 @@ struct CommentSheetView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Close") {
-                        isPresented = false
+                        dismiss()
                     }
                     .foregroundColor(DesignTokens.accentColor)
                 }
@@ -199,13 +200,17 @@ struct SocialCommentRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: DesignTokens.spacing12) {
-            Circle()
-                .fill(DesignTokens.avatarPlaceholder)
-                .frame(width: DesignTokens.avatarSmall, height: DesignTokens.avatarSmall)
+            // Avatar - show real avatar if available, otherwise placeholder
+            AvatarView(
+                image: nil,
+                url: comment.authorAvatarUrl,
+                size: DesignTokens.avatarSmall
+            )
 
             VStack(alignment: .leading, spacing: DesignTokens.spacing4) {
                 HStack {
-                    Text("User \(comment.userId.prefix(8))")
+                    // Use displayAuthorName which has proper fallback logic
+                    Text(comment.displayAuthorName)
                         .font(.system(size: DesignTokens.fontMedium, weight: .semibold))
                         .foregroundColor(.black)
 

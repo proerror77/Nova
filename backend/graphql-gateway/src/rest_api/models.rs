@@ -129,6 +129,35 @@ pub struct GetFeedResponse {
 }
 
 // ============================================================================
+// Comment Models (with author enrichment)
+// ============================================================================
+
+/// Comment with author information (enriched from auth-service)
+#[derive(Debug, Serialize)]
+pub struct EnrichedComment {
+    pub id: String,
+    pub user_id: String,
+    pub post_id: String,
+    pub content: String,
+    pub parent_comment_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>, // ISO8601 timestamp
+    // Author information (enriched from auth-service)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_avatar_url: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GetCommentsResponse {
+    pub comments: Vec<EnrichedComment>,
+    pub total: i32,
+}
+
+// ============================================================================
 // Error Response
 // ============================================================================
 

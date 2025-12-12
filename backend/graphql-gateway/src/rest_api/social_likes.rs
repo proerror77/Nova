@@ -1,6 +1,8 @@
 use actix_web::{delete, get, post, web, HttpMessage, HttpRequest, HttpResponse};
-use tracing::error;
+use std::collections::HashMap;
+use tracing::{error, warn};
 
+use crate::clients::proto::auth::GetUserProfilesByIdsRequest;
 use crate::clients::proto::social::{
     BatchCheckBookmarkedRequest, CheckUserBookmarkedRequest, CheckUserLikedRequest,
     CreateBookmarkRequest, CreateCommentRequest, CreateLikeRequest, CreateShareRequest,
@@ -9,6 +11,7 @@ use crate::clients::proto::social::{
 };
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
+use crate::rest_api::models::{EnrichedComment, GetCommentsResponse};
 use serde::Deserialize;
 
 #[post("/api/v2/social/like")]
@@ -258,12 +261,102 @@ pub async fn get_comments(
         })
         .await
     {
-        Ok(resp) => HttpResponse::Ok().json(resp),
+        Ok(resp) => {
+            // Enrich comments with author information
+            let enriched = enrich_comments_with_authors(resp.comments, &clients).await;
+
+            HttpResponse::Ok().json(GetCommentsResponse {
+                comments: enriched,
+                total: resp.total,
+            })
+        }
         Err(e) => {
             error!("get_comments failed: {}", e);
             HttpResponse::ServiceUnavailable().finish()
         }
     }
+}
+
+/// Helper function to enrich comments with author information
+///
+/// Batch fetches user profiles from auth-service and merges them into EnrichedComment responses.
+/// Gracefully handles missing profiles by leaving author fields as None.
+async fn enrich_comments_with_authors(
+    comments: Vec<crate::clients::proto::social::Comment>,
+    clients: &ServiceClients,
+) -> Vec<EnrichedComment> {
+    // Collect unique user IDs
+    let user_ids: Vec<String> = comments
+        .iter()
+        .map(|c| c.user_id.clone())
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    // Batch fetch user profiles
+    let profiles = if !user_ids.is_empty() {
+        let mut auth_client = clients.auth_client();
+        let request = tonic::Request::new(GetUserProfilesByIdsRequest {
+            user_ids: user_ids.clone(),
+        });
+
+        match auth_client.get_user_profiles_by_ids(request).await {
+            Ok(response) => {
+                let profiles_list = response.into_inner().profiles;
+                // Create a HashMap for O(1) lookup
+                profiles_list
+                    .into_iter()
+                    .map(|p| (p.user_id.clone(), p))
+                    .collect::<HashMap<_, _>>()
+            }
+            Err(status) => {
+                warn!(
+                    error = %status,
+                    "Failed to fetch user profiles for comments, continuing without author info"
+                );
+                HashMap::new()
+            }
+        }
+    } else {
+        HashMap::new()
+    };
+
+    // Merge profiles into comments
+    comments
+        .into_iter()
+        .map(|comment| {
+            let profile = profiles.get(&comment.user_id);
+
+            // Fallback: if display_name is empty/None, use username
+            let author_display_name = profile.and_then(|p| {
+                let display_name = p.display_name.clone().unwrap_or_default();
+                if display_name.is_empty() {
+                    Some(p.username.clone())
+                } else {
+                    Some(display_name)
+                }
+            });
+
+            // Convert timestamp to ISO8601 string
+            let created_at = comment.created_at.map(|ts| {
+                chrono::DateTime::from_timestamp(ts.seconds, ts.nanos as u32)
+                    .map(|dt| dt.to_rfc3339())
+                    .unwrap_or_default()
+            });
+
+            EnrichedComment {
+                id: comment.id,
+                user_id: comment.user_id.clone(),
+                post_id: comment.post_id,
+                content: comment.content,
+                parent_comment_id: comment.parent_comment_id,
+                created_at,
+                author_username: profile.map(|p| p.username.clone()),
+                author_display_name,
+                author_avatar_url: profile.and_then(|p| p.avatar_url.clone()),
+            }
+        })
+        .collect()
 }
 
 #[post("/api/v2/social/share")]
