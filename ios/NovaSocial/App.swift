@@ -1,9 +1,14 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct ICEREDApp: App {
+    // Connect AppDelegate for push notification handling
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     // App 持有全局认证状态，并下发 EnvironmentObject
     @StateObject private var authManager = AuthenticationManager.shared
+    @StateObject private var pushManager = PushNotificationManager.shared
     @StateObject private var themeManager = ThemeManager.shared
     @State private var currentPage: AppPage
 
@@ -98,6 +103,27 @@ struct ICEREDApp: App {
         #if DEBUG
         print("[App] Matrix Bridge 已關閉")
         #endif
+    }
+
+    // MARK: - Push Notifications
+
+    /// 設置推送通知 - 在用戶登入後觸發
+    @MainActor
+    private func setupPushNotifications() async {
+        // 檢查當前通知設置
+        await pushManager.checkNotificationSettings()
+
+        // 如果尚未授權，請求權限
+        if !pushManager.isAuthorized {
+            let granted = await pushManager.requestAuthorization()
+
+            #if DEBUG
+            print("[App] Push notification authorization: \(granted ? "granted" : "denied")")
+            #endif
+        } else {
+            // 已授權，直接註冊遠程通知
+            await pushManager.registerForRemoteNotifications()
+        }
     }
 
     var body: some Scene {
@@ -216,12 +242,20 @@ struct ICEREDApp: App {
                     Task { @MainActor in
                         await initializeMatrixBridge()
                     }
+                    // 用戶剛登入 - 請求推送通知權限
+                    Task { @MainActor in
+                        await setupPushNotifications()
+                    }
                 } else if !isAuthenticated && wasAuthenticated {
                     // 用戶登出或 Session 過期 - 強制跳轉到歡迎頁面
                     currentPage = .welcome
                     // 關閉 Matrix
                     Task { @MainActor in
                         await shutdownMatrixBridge()
+                    }
+                    // 取消註冊推送通知
+                    Task { @MainActor in
+                        await pushManager.unregisterToken()
                     }
                 }
             }
