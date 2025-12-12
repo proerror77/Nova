@@ -12,3 +12,7 @@ spec:
       port: 8086
       targetPort: 8086
       protocol: TCP
+    - name: grpc
+      port: 9086
+      targetPort: 9086
+      protocol: TCP

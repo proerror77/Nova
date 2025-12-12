@@ -889,9 +889,17 @@ async fn main() -> std::io::Result<()> {
     let state_data = Data::new(state);
 
     // Start gRPC server on port (PORT + 1000) with all clients
-    let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", port + 1000)
+    let grpc_port = port + 1000;
+    let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", grpc_port)
         .parse()
         .expect("Invalid gRPC bind address");
+
+    tracing::info!(
+        "Starting gRPC server on 0.0.0.0:{} (HTTP port: {}, gRPC port: {})",
+        grpc_port,
+        port,
+        grpc_port
+    );
 
     tokio::spawn(async move {
         let (mut health, health_service) = health_reporter();
@@ -996,13 +1004,16 @@ async fn main() -> std::io::Result<()> {
                 }
             }
 
+            tracing::info!("gRPC server starting to serve on {:?}", grpc_addr);
             if let Err(e) = server_builder
                 .add_service(health_service)
                 .add_service(search_service::grpc::nova::search_service::v2::search_service_server::SearchServiceServer::new(svc))
                 .serve(grpc_addr)
                 .await
             {
-                tracing::error!("search-service gRPC server error: {}", e);
+                tracing::error!("search-service gRPC server failed to start on {:?}: {}", grpc_addr, e);
+            } else {
+                tracing::info!("gRPC server successfully started on {:?}", grpc_addr);
             }
         } else {
             tracing::error!("gRPC server not started: missing clients");
