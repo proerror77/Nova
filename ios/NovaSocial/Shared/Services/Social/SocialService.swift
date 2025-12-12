@@ -272,6 +272,25 @@ class SocialService {
         return response.bookmarked
     }
 
+    /// Batch check if user has bookmarked multiple posts
+    func batchCheckBookmarked(postIds: [String]) async throws -> Set<String> {
+        struct Request: Codable {
+            let post_ids: [String]
+        }
+
+        struct Response: Codable {
+            let bookmarked_post_ids: [String]
+        }
+
+        let request = Request(post_ids: postIds)
+        let response: Response = try await client.request(
+            endpoint: APIConfig.Social.batchCheckBookmarked,
+            body: request
+        )
+
+        return Set(response.bookmarked_post_ids)
+    }
+
     // MARK: - Polls (投票榜单)
 
     /// Get trending polls for carousel display

@@ -101,6 +101,7 @@ struct APIConfig {
         static func deleteBookmark(_ postId: String) -> String { "/api/v2/social/bookmark/\(postId)" }
         static let getBookmarks = "/api/v2/social/bookmarks"
         static func checkBookmarked(_ postId: String) -> String { "/api/v2/social/check-bookmarked/\(postId)" }
+        static let batchCheckBookmarked = "/api/v2/social/bookmarks/batch-check"
     }
 
     struct Content {

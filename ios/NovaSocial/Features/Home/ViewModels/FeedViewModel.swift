@@ -78,7 +78,17 @@ class FeedViewModel: ObservableObject {
             self.hasMore = response.hasMore
 
             // Convert raw posts to FeedPost objects directly
-            let allPosts = response.posts.map { FeedPost(from: $0) }
+            var allPosts = response.posts.map { FeedPost(from: $0) }
+
+            // Fetch bookmark status for authenticated users
+            if isAuthenticated, !allPosts.isEmpty {
+                let postIds = allPosts.map { $0.id }
+                if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) {
+                    allPosts = allPosts.map { post in
+                        bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
+                    }
+                }
+            }
 
             // Client-side deduplication: Remove duplicate posts by ID
             var seenIds = Set<String>()
@@ -115,7 +125,18 @@ class FeedViewModel: ObservableObject {
                     self.currentCursor = fallbackResponse.cursor
                     self.hasMore = fallbackResponse.hasMore
 
-                    let allPosts = fallbackResponse.posts.map { FeedPost(from: $0) }
+                    var allPosts = fallbackResponse.posts.map { FeedPost(from: $0) }
+
+                    // Fetch bookmark status for authenticated users
+                    if isAuthenticated, !allPosts.isEmpty {
+                        let postIds = allPosts.map { $0.id }
+                        if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) {
+                            allPosts = allPosts.map { post in
+                                bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
+                            }
+                        }
+                    }
+
                     var seenIds = Set<String>()
                     self.posts = allPosts.filter { post in
                         guard !seenIds.contains(post.id) else { return false }
@@ -158,7 +179,17 @@ class FeedViewModel: ObservableObject {
             self.hasMore = response.hasMore
 
             // Convert raw posts to FeedPost objects directly
-            let newPosts = response.posts.map { FeedPost(from: $0) }
+            var newPosts = response.posts.map { FeedPost(from: $0) }
+
+            // Fetch bookmark status for authenticated users
+            if isAuthenticated, !newPosts.isEmpty {
+                let postIds = newPosts.map { $0.id }
+                if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) {
+                    newPosts = newPosts.map { post in
+                        bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
+                    }
+                }
+            }
 
             // Client-side deduplication: Only add posts that aren't already in the feed
             let existingIds = Set(self.posts.map { $0.id })
@@ -193,7 +224,18 @@ class FeedViewModel: ObservableObject {
             self.currentCursor = response.cursor
             self.hasMore = response.hasMore
 
-            let allPosts = response.posts.map { FeedPost(from: $0) }
+            var allPosts = response.posts.map { FeedPost(from: $0) }
+
+            // Fetch bookmark status for authenticated users
+            if isAuthenticated, !allPosts.isEmpty {
+                let postIds = allPosts.map { $0.id }
+                if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) {
+                    allPosts = allPosts.map { post in
+                        bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
+                    }
+                }
+            }
+
             var seenIds = Set<String>()
             self.posts = allPosts.filter { post in
                 guard !seenIds.contains(post.id) else { return false }
