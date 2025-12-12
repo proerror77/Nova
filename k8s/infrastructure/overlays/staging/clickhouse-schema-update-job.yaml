@@ -1,0 +1,283 @@
+##############################################################################
+# ClickHouse Schema Update Job
+# Applies the updated init-db.sql with TTL policies and Materialized Views
+#
+# This job should be run once to update the ClickHouse schema.
+# After successful completion, the job will auto-delete after 1 hour.
+##############################################################################
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: clickhouse-schema-update
+  namespace: nova-staging
+  labels:
+    app: clickhouse
+    component: schema-update
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: clickhouse
+        component: schema-update
+    spec:
+      restartPolicy: OnFailure
+
+      initContainers:
+      # Wait for ClickHouse to be ready
+      - name: wait-for-clickhouse
+        image: curlimages/curl:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Waiting for ClickHouse..."
+          for i in $(seq 1 30); do
+            if curl -sf "http://clickhouse.nova-staging.svc.cluster.local:8123/ping" > /dev/null 2>&1; then
+              echo "ClickHouse is ready!"
+              exit 0
+            fi
+            echo "  Attempt $i/30, retrying..."
+            sleep 5
+          done
+          echo "ClickHouse is not ready"
+          exit 1
+
+      containers:
+      - name: schema-update
+        image: clickhouse/clickhouse-client:24.8
+        env:
+        - name: CLICKHOUSE_HOST
+          value: "clickhouse.nova-staging.svc.cluster.local"
+        - name: CLICKHOUSE_PORT
+          value: "9000"
+        - name: CLICKHOUSE_USER
+          value: "nova"
+        - name: CLICKHOUSE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-clickhouse-credentials
+              key: password
+              optional: true
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          echo "=============================================="
+          echo "  ClickHouse Schema Update"
+          echo "=============================================="
+          echo ""
+
+          # Default password if secret not available
+          CH_PASS="${CLICKHOUSE_PASSWORD:-nova}"
+
+          # Drop old views first (they might conflict with new materialized views)
+          echo "Dropping old views if they exist..."
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --query="DROP VIEW IF EXISTS nova_feed.post_metrics_1h" || true
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --query="DROP VIEW IF EXISTS nova_feed.user_author_90d" || true
+
+          echo ""
+          echo "Creating/updating database schema..."
+
+          # Create database if not exists
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --query="CREATE DATABASE IF NOT EXISTS nova_feed"
+
+          # Apply TTL to existing CDC tables (ALTER TABLE)
+          echo "Adding TTL policies to existing tables..."
+
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --query="ALTER TABLE nova_feed.posts_cdc MODIFY TTL created_at + INTERVAL 1 YEAR" || echo "posts_cdc TTL update skipped"
+
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --query="ALTER TABLE nova_feed.follows_cdc MODIFY TTL created_at + INTERVAL 2 YEAR" || echo "follows_cdc TTL update skipped"
+
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --query="ALTER TABLE nova_feed.comments_cdc MODIFY TTL created_at + INTERVAL 1 YEAR" || echo "comments_cdc TTL update skipped"
+
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --query="ALTER TABLE nova_feed.likes_cdc MODIFY TTL created_at + INTERVAL 1 YEAR" || echo "likes_cdc TTL update skipped"
+
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --query="ALTER TABLE nova_feed.post_events MODIFY TTL event_time + INTERVAL 90 DAY" || echo "post_events TTL update skipped"
+
+          echo ""
+          echo "Creating new materialized views and target tables..."
+
+          # Create hourly likes target table
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --multiquery --query="
+          CREATE TABLE IF NOT EXISTS nova_feed.post_likes_hourly (
+            metric_hour DateTime,
+            post_id String,
+            likes_delta Int64,
+            updated_at DateTime DEFAULT now()
+          ) ENGINE = SummingMergeTree(likes_delta)
+          ORDER BY (metric_hour, post_id)
+          TTL metric_hour + INTERVAL 90 DAY
+          SETTINGS index_granularity = 8192"
+
+          # Create hourly comments target table
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --multiquery --query="
+          CREATE TABLE IF NOT EXISTS nova_feed.post_comments_hourly (
+            metric_hour DateTime,
+            post_id String,
+            comments_delta Int64,
+            updated_at DateTime DEFAULT now()
+          ) ENGINE = SummingMergeTree(comments_delta)
+          ORDER BY (metric_hour, post_id)
+          TTL metric_hour + INTERVAL 90 DAY
+          SETTINGS index_granularity = 8192"
+
+          # Create user-author affinity target table
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --multiquery --query="
+          CREATE TABLE IF NOT EXISTS nova_feed.user_author_affinity (
+            user_id String,
+            author_id String,
+            affinity_delta Float64,
+            event_time DateTime,
+            updated_at DateTime DEFAULT now()
+          ) ENGINE = SummingMergeTree(affinity_delta)
+          ORDER BY (user_id, author_id)
+          TTL event_time + INTERVAL 90 DAY
+          SETTINGS index_granularity = 8192"
+
+          echo ""
+          echo "Creating materialized views..."
+
+          # MV for likes
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --multiquery --query="
+          CREATE MATERIALIZED VIEW IF NOT EXISTS nova_feed.mv_post_likes_hourly
+          TO nova_feed.post_likes_hourly AS
+          SELECT
+            toStartOfHour(created_at) AS metric_hour,
+            post_id,
+            if(is_deleted = 1, -1, 1) AS likes_delta,
+            now() AS updated_at
+          FROM nova_feed.likes_cdc"
+
+          # MV for comments
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --multiquery --query="
+          CREATE MATERIALIZED VIEW IF NOT EXISTS nova_feed.mv_post_comments_hourly
+          TO nova_feed.post_comments_hourly AS
+          SELECT
+            toStartOfHour(created_at) AS metric_hour,
+            post_id,
+            if(is_deleted = 1, -1, 1) AS comments_delta,
+            now() AS updated_at
+          FROM nova_feed.comments_cdc"
+
+          # MV for user-author likes affinity
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --multiquery --query="
+          CREATE MATERIALIZED VIEW IF NOT EXISTS nova_feed.mv_user_author_likes
+          TO nova_feed.user_author_affinity AS
+          SELECT
+            l.user_id AS user_id,
+            p.user_id AS author_id,
+            if(l.is_deleted = 1, -1.0, 1.0) AS affinity_delta,
+            l.created_at AS event_time,
+            now() AS updated_at
+          FROM nova_feed.likes_cdc l
+          INNER JOIN nova_feed.posts_cdc p ON p.id = l.post_id"
+
+          # MV for user-author comments affinity
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --multiquery --query="
+          CREATE MATERIALIZED VIEW IF NOT EXISTS nova_feed.mv_user_author_comments
+          TO nova_feed.user_author_affinity AS
+          SELECT
+            c.user_id AS user_id,
+            p.user_id AS author_id,
+            if(c.is_deleted = 1, -2.0, 2.0) AS affinity_delta,
+            c.created_at AS event_time,
+            now() AS updated_at
+          FROM nova_feed.comments_cdc c
+          INNER JOIN nova_feed.posts_cdc p ON p.id = c.post_id"
+
+          echo ""
+          echo "Creating query views..."
+
+          # post_metrics_1h view (reads from materialized tables)
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --multiquery --query="
+          CREATE OR REPLACE VIEW nova_feed.post_metrics_1h AS
+          SELECT
+            coalesce(l.metric_hour, c.metric_hour) AS metric_hour,
+            coalesce(l.post_id, c.post_id) AS post_id,
+            p.author_id,
+            greatest(0, coalesce(l.likes_count, 0)) AS likes_count,
+            greatest(0, coalesce(c.comments_count, 0)) AS comments_count,
+            toInt64(0) AS shares_count,
+            toInt64(0) AS impressions_count
+          FROM (
+            SELECT metric_hour, post_id, sum(likes_delta) AS likes_count
+            FROM nova_feed.post_likes_hourly
+            GROUP BY metric_hour, post_id
+          ) l
+          FULL OUTER JOIN (
+            SELECT metric_hour, post_id, sum(comments_delta) AS comments_count
+            FROM nova_feed.post_comments_hourly
+            GROUP BY metric_hour, post_id
+          ) c ON l.metric_hour = c.metric_hour AND l.post_id = c.post_id
+          LEFT JOIN nova_feed.posts_latest p ON p.id = coalesce(l.post_id, c.post_id)
+          WHERE p.is_deleted = 0 OR p.is_deleted IS NULL"
+
+          # user_author_90d view (reads from materialized table)
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --multiquery --query="
+          CREATE OR REPLACE VIEW nova_feed.user_author_90d AS
+          SELECT
+            user_id,
+            author_id,
+            sum(affinity_delta) AS interaction_count,
+            max(event_time) AS last_interaction
+          FROM nova_feed.user_author_affinity
+          WHERE event_time >= now() - INTERVAL 90 DAY
+          GROUP BY user_id, author_id
+          HAVING interaction_count > 0"
+
+          echo ""
+          echo "=============================================="
+          echo "  Schema Update Complete"
+          echo "=============================================="
+          echo ""
+          echo "Tables created/updated:"
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --query="SHOW TABLES FROM nova_feed"
+          echo ""
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi

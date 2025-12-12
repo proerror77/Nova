@@ -545,6 +545,7 @@ resources:
 - kafka-zookeeper-deployment.yaml
 - kafka-cdc-topics-init.yaml
 - debezium-connect-staging.yaml
+- clickhouse-schema-update-job.yaml
 - clickhouse-statefulset.yaml
 - neo4j-statefulset.yaml
 - proto-management.yaml
