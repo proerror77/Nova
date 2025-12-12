@@ -11,6 +11,9 @@ packages:
   AgoraRtcEngine:
     url: https://github.com/AgoraIO/AgoraRtcEngine_iOS
     version: 4.5.0
+  MatrixRustSDK:
+    url: https://github.com/matrix-org/matrix-rust-components-swift
+    version: 25.11.11
 
 targets:
   FigmaDesignApp:
@@ -28,6 +31,8 @@ targets:
     dependencies:
       - package: AgoraRtcEngine
         product: RtcBasic
+      - package: MatrixRustSDK
+        product: MatrixRustSDK
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.novasocial.icered
       CODE_SIGN_STYLE: Manual

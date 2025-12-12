@@ -13,18 +13,21 @@ struct Conversation: Identifiable, Codable, Sendable {
     let createdAt: Date
     let updatedAt: Date
     let members: [ConversationMember]
-    
+
     // List view specific fields (from GET /conversations)
     let lastMessage: ConversationLastMessage?
     var unreadCount: Int
     var isMuted: Bool
     var isArchived: Bool
-    
+
+    // E2EE status - indicates if this conversation uses Matrix E2EE
+    var isEncrypted: Bool
+
     // Legacy field - kept for backwards compatibility
     var participants: [String] {
         members.map { $0.userId }
     }
-    
+
     // Optional fields
     var avatarUrl: String?
 
@@ -37,6 +40,7 @@ struct Conversation: Identifiable, Codable, Sendable {
         case unreadCount = "unread_count"
         case isMuted = "is_muted"
         case isArchived = "is_archived"
+        case isEncrypted = "is_encrypted"
         case avatarUrl = "avatar_url"
     }
 
@@ -54,6 +58,7 @@ struct Conversation: Identifiable, Codable, Sendable {
         unreadCount = try container.decodeIfPresent(Int.self, forKey: .unreadCount) ?? 0
         isMuted = try container.decodeIfPresent(Bool.self, forKey: .isMuted) ?? false
         isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
+        isEncrypted = try container.decodeIfPresent(Bool.self, forKey: .isEncrypted) ?? false
     }
 }
 

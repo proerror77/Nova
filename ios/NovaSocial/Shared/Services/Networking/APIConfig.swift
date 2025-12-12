@@ -454,6 +454,24 @@ struct APIConfig {
         static let getTrending = "/api/v2/search/trending"  // Alias for SearchService
     }
 
+    // MARK: - Matrix E2EE Integration API
+    struct Matrix {
+        /// POST /api/v2/matrix/token - Get Matrix access token for current user
+        static let getToken = "/api/v2/matrix/token"
+        /// GET /api/v2/matrix/rooms - Get all conversation-to-room mappings for current user
+        static let getRoomMappings = "/api/v2/matrix/rooms"
+        /// POST /api/v2/matrix/rooms - Save a new conversation-to-room mapping
+        static let saveRoomMapping = "/api/v2/matrix/rooms"
+        /// GET /api/v2/matrix/rooms/{conversation_id} - Get room ID for a conversation
+        static func getRoomMapping(_ conversationId: String) -> String {
+            "/api/v2/matrix/rooms/\(conversationId)"
+        }
+        /// GET /api/v2/matrix/conversations - Get conversation ID for a room (query: room_id)
+        static let getConversationMapping = "/api/v2/matrix/conversations"
+        /// GET /api/v2/matrix/config - Get Matrix homeserver configuration
+        static let getConfig = "/api/v2/matrix/config"
+    }
+
     // MARK: - E2EE (End-to-End Encryption) API
     struct E2EE {
         /// POST /api/v2/e2ee/devices - Register device for E2EE

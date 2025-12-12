@@ -7,6 +7,7 @@ import SwiftUI
 /// - 使用 FriendsService 搜索用戶 (可用的端點)
 /// - 使用 FeedService 獲取推薦創作者 (已部署的端點)
 /// - 使用 GraphService 處理 Follow 關係
+/// - 使用 MatrixBridgeService 開始 E2EE 對話
 @MainActor
 @Observable
 class AddFriendsViewModel {
@@ -18,9 +19,18 @@ class AddFriendsViewModel {
     var errorMessage: String?
     var toastMessage: String?
 
+    // Chat navigation state
+    var showChat: Bool = false
+    var chatConversationId: String = ""
+    var chatUserName: String = ""
+    var isCreatingChat: Bool = false
+
     private let friendsService = FriendsService()
     private let feedService = FeedService()
     private let graphService = GraphService()
+    private let userService = UserService.shared
+    private let matrixBridge = MatrixBridgeService.shared
+    private let chatService = ChatService()
 
     func loadRecommendations() async {
         isLoadingRecommendations = true
@@ -57,16 +67,59 @@ class AddFriendsViewModel {
         errorMessage = nil
 
         do {
-            // 使用 FriendsService 搜索用戶 (返回 [UserProfile])
+            // 優先使用 FriendsService 搜索用戶 (返回 [UserProfile])
             searchResults = try await friendsService.searchUsers(query: searchQuery, limit: 20)
-        } catch {
-            errorMessage = "搜索失败: \(error.localizedDescription)"
             #if DEBUG
-            print("❌ Search failed: \(error)")
+            print("[AddFriendsView] Search returned \(searchResults.count) results")
             #endif
+            // 如果搜索返回空結果，也嘗試直接用戶名查找
+            if searchResults.isEmpty {
+                #if DEBUG
+                print("[AddFriendsView] Search returned empty, trying fallback...")
+                #endif
+                await searchUserByUsernameFallback()
+            }
+        } catch {
+            // 如果 search-service 返回 503/502/401 錯誤，嘗試備用方案
+            if case APIError.serverError(let statusCode, _) = error,
+               statusCode == 503 || statusCode == 502 || statusCode == 401 {
+                #if DEBUG
+                print("[AddFriendsView] Search service error (\(statusCode)), trying fallback...")
+                #endif
+                // 備用方案：直接通過用戶名查找
+                await searchUserByUsernameFallback()
+            } else if case APIError.unauthorized = error {
+                #if DEBUG
+                print("[AddFriendsView] Search unauthorized, trying fallback...")
+                #endif
+                await searchUserByUsernameFallback()
+            } else {
+                errorMessage = "搜索失败: \(error.localizedDescription)"
+                #if DEBUG
+                print("❌ Search failed: \(error)")
+                #endif
+            }
         }
 
         isSearching = false
+    }
+
+    /// 備用搜索方案：當 search-service 不可用時，直接通過用戶名查找
+    private func searchUserByUsernameFallback() async {
+        do {
+            // 嘗試通過精確用戶名查找
+            let user = try await userService.getUserByUsername(searchQuery.lowercased())
+            searchResults = [user]
+            #if DEBUG
+            print("[AddFriendsView] Fallback search found user: \(user.username)")
+            #endif
+        } catch {
+            // 如果找不到精確匹配，顯示空結果而非錯誤
+            searchResults = []
+            #if DEBUG
+            print("[AddFriendsView] Fallback search: no user found for '\(searchQuery)'")
+            #endif
+        }
     }
 
     func followUser(userId: String) async {
@@ -97,6 +150,74 @@ class AddFriendsViewModel {
             }
         }
     }
+
+    // MARK: - Start Chat with User
+
+    /// 開始與用戶的 E2EE 對話
+    /// 使用 Matrix Bridge 創建加密聊天室
+    func startChat(with user: UserProfile) async {
+        guard !isCreatingChat else { return }
+
+        isCreatingChat = true
+        errorMessage = nil
+
+        do {
+            let conversation: Conversation
+
+            // 優先使用 Matrix E2EE
+            if matrixBridge.isE2EEAvailable {
+                #if DEBUG
+                print("[AddFriendsView] Starting E2EE chat with \(user.username)")
+                #endif
+
+                conversation = try await matrixBridge.startConversationWithFriend(
+                    friendUserId: user.id
+                )
+
+                #if DEBUG
+                print("[AddFriendsView] ✅ E2EE chat created: \(conversation.id)")
+                #endif
+            } else {
+                // Fallback to regular chat
+                #if DEBUG
+                print("[AddFriendsView] Matrix unavailable, using REST API")
+                #endif
+
+                conversation = try await chatService.createConversation(
+                    type: .direct,
+                    participantIds: [user.id],
+                    name: nil
+                )
+            }
+
+            // Navigate to chat
+            chatConversationId = conversation.id
+            chatUserName = user.displayName ?? user.username
+            showChat = true
+
+        } catch {
+            errorMessage = "無法開始對話: \(error.localizedDescription)"
+            #if DEBUG
+            print("❌ Failed to start chat: \(error)")
+            #endif
+        }
+
+        isCreatingChat = false
+    }
+
+    /// 開始與推薦創作者的對話
+    func startChat(with creator: RecommendedCreator) async {
+        // Convert RecommendedCreator to UserProfile for consistency
+        let userProfile = UserProfile(
+            id: creator.id,
+            username: creator.username,
+            displayName: creator.displayName,
+            avatarUrl: creator.avatarUrl,
+            bio: nil,
+            isVerified: creator.isVerified
+        )
+        await startChat(with: userProfile)
+    }
 }
 
 // MARK: - Add Friends View
@@ -108,6 +229,27 @@ struct AddFriendsView: View {
     @State private var showMyQRCode = false
 
     var body: some View {
+        ZStack {
+            // Navigate to ChatView when chat is created
+            if viewModel.showChat {
+                ChatView(
+                    showChat: $viewModel.showChat,
+                    conversationId: viewModel.chatConversationId,
+                    userName: viewModel.chatUserName
+                )
+            } else {
+                mainContent
+            }
+        }
+        .onChange(of: viewModel.showChat) { _, newValue in
+            if !newValue {
+                // Optionally navigate back to message list
+                // currentPage = .message
+            }
+        }
+    }
+
+    private var mainContent: some View {
         ZStack {
             Color(red: 0.97, green: 0.97, blue: 0.97)
                 .ignoresSafeArea()
@@ -186,6 +328,18 @@ struct AddFriendsView: View {
                         .foregroundColor(.red)
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
+                }
+
+                // MARK: - Creating Chat Indicator
+                if viewModel.isCreatingChat {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                        Text("Creating encrypted chat...")
+                            .font(.system(size: 14))
+                            .foregroundColor(.gray)
+                    }
+                    .padding(.top, 12)
                 }
 
                 ScrollView {
@@ -276,6 +430,11 @@ struct AddFriendsView: View {
                                             Task {
                                                 await viewModel.followUser(userId: user.id)
                                             }
+                                        },
+                                        onChat: {
+                                            Task {
+                                                await viewModel.startChat(with: user)
+                                            }
                                         }
                                     )
                                     .padding(.horizontal, 16)
@@ -298,6 +457,11 @@ struct AddFriendsView: View {
                                         onFollow: {
                                             Task {
                                                 await viewModel.followUser(userId: creator.id)
+                                            }
+                                        },
+                                        onChat: {
+                                            Task {
+                                                await viewModel.startChat(with: creator)
                                             }
                                         }
                                     )
@@ -386,6 +550,7 @@ struct AddFriendsView: View {
 struct UserCardView: View {
     let user: UserProfile
     let onFollow: () -> Void
+    let onChat: () -> Void
     @State private var isAdding: Bool = false
     @State private var isAdded: Bool = false
 
@@ -413,6 +578,17 @@ struct UserCardView: View {
 
             Spacer()
 
+            // Chat button - Start E2EE conversation
+            Button(action: onChat) {
+                Image(systemName: "message.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(.white)
+                    .frame(width: 36, height: 36)
+                    .background(Color(red: 0.87, green: 0.11, blue: 0.26))
+                    .clipShape(Circle())
+            }
+
+            // Follow button
             Button(action: {
                 guard !isAdding && !isAdded else { return }
                 isAdding = true
@@ -452,6 +628,7 @@ struct UserCardView: View {
 struct RecommendedCreatorCard: View {
     let creator: RecommendedCreator
     let onFollow: () -> Void
+    let onChat: () -> Void
     @State private var isFollowing: Bool = false
     @State private var isFollowed: Bool = false
 
@@ -487,6 +664,17 @@ struct RecommendedCreatorCard: View {
 
             Spacer()
 
+            // Chat button - Start E2EE conversation
+            Button(action: onChat) {
+                Image(systemName: "message.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.white)
+                    .frame(width: 32, height: 32)
+                    .background(Color(red: 0.87, green: 0.11, blue: 0.26))
+                    .clipShape(Circle())
+            }
+
+            // Follow button
             Button(action: {
                 guard !isFollowing && !isFollowed else { return }
                 isFollowing = true

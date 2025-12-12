@@ -412,7 +412,8 @@ async fn main() -> Result<(), error::AppError> {
             .service(
                 web::scope("/api/v2")
                     .configure(handlers::e2ee::configure)
-                    .configure(routes::relationships::configure),
+                    .configure(routes::relationships::configure)
+                    .configure(routes::matrix::configure),
             )
             .route("/health", web::get().to(|| async { "OK" }))
     };

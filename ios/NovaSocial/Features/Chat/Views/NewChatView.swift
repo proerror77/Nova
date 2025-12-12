@@ -18,6 +18,7 @@ struct NewChatView: View {
     // MARK: - Services
     private let chatService = ChatService()
     private let friendsService = FriendsService()
+    private let matrixBridge = MatrixBridgeService.shared
 
     // Simple user model for search results
     struct SearchedUser: Identifiable, Equatable {
@@ -300,11 +301,46 @@ struct NewChatView: View {
                 ? selectedUsers.map { $0.displayName }.joined(separator: ", ")
                 : nil
 
-            let conversation = try await chatService.createConversation(
-                type: conversationType,
-                participantIds: participantIds,
-                name: groupName
-            )
+            // 使用 Matrix Bridge 創建對話（同時創建 Nova 對話和 Matrix 房間）
+            let conversation: Conversation
+
+            if matrixBridge.isE2EEAvailable {
+                // Matrix E2EE 可用 - 使用 Bridge 服務
+                #if DEBUG
+                print("[NewChatView] Creating conversation with Matrix E2EE...")
+                #endif
+
+                if selectedUsers.count == 1 {
+                    // 1:1 對話 - 使用專門的好友對話方法
+                    conversation = try await matrixBridge.startConversationWithFriend(
+                        friendUserId: selectedUsers[0].id
+                    )
+                } else {
+                    // 群組對話 - 先創建 Nova 對話，再創建 Matrix 房間
+                    conversation = try await chatService.createConversation(
+                        type: conversationType,
+                        participantIds: participantIds,
+                        name: groupName
+                    )
+                    // 為對話創建 Matrix 房間
+                    _ = try await matrixBridge.createRoomForConversation(conversation)
+                }
+
+                #if DEBUG
+                print("[NewChatView] ✅ Created E2EE conversation: \(conversation.id)")
+                #endif
+            } else {
+                // Matrix 不可用 - 使用普通 REST API
+                #if DEBUG
+                print("[NewChatView] Matrix unavailable, using REST API...")
+                #endif
+
+                conversation = try await chatService.createConversation(
+                    type: conversationType,
+                    participantIds: participantIds,
+                    name: groupName
+                )
+            }
 
             createdConversationId = conversation.id
             createdConversationName = selectedUsers.count == 1

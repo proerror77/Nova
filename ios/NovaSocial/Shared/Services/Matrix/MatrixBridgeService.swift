@@ -30,6 +30,7 @@ final class MatrixBridgeService {
 
     private(set) var isInitialized = false
     private(set) var isBridgeEnabled = false
+    private(set) var initializationError: Error?
 
     // MARK: - ID Mapping Cache
 
@@ -47,6 +48,13 @@ final class MatrixBridgeService {
     /// Called when typing indicator changes
     var onTypingIndicator: ((String, [String]) -> Void)?  // conversationId, userIds
 
+    /// Called when room list updates
+    var onRoomListUpdated: (([MatrixRoom]) -> Void)?
+
+    // MARK: - Cancellables
+
+    private var cancellables = Set<AnyCancellable>()
+
     // MARK: - Initialization
 
     private init() {
@@ -55,6 +63,7 @@ final class MatrixBridgeService {
         #endif
 
         setupMessageHandlers()
+        observeConnectionState()
     }
 
     // MARK: - Public API
@@ -73,47 +82,60 @@ final class MatrixBridgeService {
         print("[MatrixBridge] Initializing bridge...")
         #endif
 
-        // Check if Matrix bridge is enabled for this user
-        // This could be a feature flag from the backend
-        isBridgeEnabled = await checkBridgeEnabled()
+        do {
+            // Check if Matrix bridge is enabled for this user
+            isBridgeEnabled = await checkBridgeEnabled()
 
-        guard isBridgeEnabled else {
+            guard isBridgeEnabled else {
+                #if DEBUG
+                print("[MatrixBridge] Bridge disabled for this user")
+                #endif
+                return
+            }
+
+            // Initialize Matrix client
+            try await matrixService.initialize(
+                homeserverURL: MatrixConfiguration.homeserverURL,
+                sessionPath: MatrixConfiguration.sessionPath
+            )
+
+            // Try to restore existing session first
+            let sessionRestored = try await matrixService.restoreSession()
+
+            if !sessionRestored {
+                // Login to Matrix with Nova credentials
+                guard let currentUser = AuthenticationManager.shared.currentUser else {
+                    throw MatrixBridgeError.notAuthenticated
+                }
+
+                // Get Matrix access token from Nova backend
+                let matrixToken = try await getMatrixAccessToken(novaUserId: currentUser.id)
+
+                try await matrixService.login(
+                    novaUserId: currentUser.id,
+                    accessToken: matrixToken
+                )
+            }
+
+            // Start sync to receive messages
+            try await matrixService.startSync()
+
+            // Load existing conversation mappings
+            try await loadConversationMappings()
+
+            isInitialized = true
+            initializationError = nil
+
             #if DEBUG
-            print("[MatrixBridge] Bridge disabled for this user")
+            print("[MatrixBridge] Bridge initialized successfully")
             #endif
-            return
+        } catch {
+            initializationError = error
+            #if DEBUG
+            print("[MatrixBridge] Initialization failed: \(error)")
+            #endif
+            throw error
         }
-
-        // Initialize Matrix client
-        try await matrixService.initialize(
-            homeserverURL: MatrixConfiguration.homeserverURL,
-            sessionPath: MatrixConfiguration.sessionPath
-        )
-
-        // Login to Matrix with Nova credentials
-        guard let currentUser = AuthenticationManager.shared.currentUser else {
-            throw MatrixBridgeError.notAuthenticated
-        }
-
-        // Get Matrix access token from Nova backend
-        let matrixToken = try await getMatrixAccessToken(novaUserId: currentUser.id)
-
-        try await matrixService.login(
-            novaUserId: currentUser.id,
-            accessToken: matrixToken
-        )
-
-        // Start sync to receive messages
-        try await matrixService.startSync()
-
-        // Load existing conversation mappings
-        try await loadConversationMappings()
-
-        isInitialized = true
-
-        #if DEBUG
-        print("[MatrixBridge] Bridge initialized successfully")
-        #endif
     }
 
     /// Shutdown the Matrix bridge
@@ -257,13 +279,13 @@ final class MatrixBridgeService {
     // MARK: - Room Operations
 
     /// Create Matrix room for a new Nova conversation
+    @discardableResult
     func createRoomForConversation(_ conversation: Conversation) async throws -> String {
         guard isInitialized else {
             throw MatrixBridgeError.notInitialized
         }
 
         let isDirect = conversation.type == .direct
-        // conversation.participants 已經是 [String] (user IDs)
         let participantIds = conversation.participants
 
         let roomId = try await matrixService.createRoom(
@@ -277,7 +299,52 @@ final class MatrixBridgeService {
         print("[MatrixBridge] Created room \(roomId) for conversation \(conversation.id)")
         #endif
 
+        // Cache and save the mapping
+        cacheMapping(conversationId: conversation.id, roomId: roomId)
+        try await saveRoomMapping(conversationId: conversation.id, roomId: roomId)
+
         return roomId
+    }
+
+    /// Create a new conversation with a friend and setup Matrix room
+    /// This is the main entry point for starting a chat with a friend
+    func startConversationWithFriend(friendUserId: String) async throws -> Conversation {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        guard let currentUserId = AuthenticationManager.shared.currentUser?.id else {
+            throw MatrixBridgeError.notAuthenticated
+        }
+
+        #if DEBUG
+        print("[MatrixBridge] Starting conversation with friend: \(friendUserId)")
+        #endif
+
+        // Create Nova conversation first
+        let conversation = try await chatService.createConversation(
+            type: .direct,
+            participantIds: [currentUserId, friendUserId],
+            name: nil
+        )
+
+        // Create Matrix room for E2EE
+        let roomId = try await matrixService.createRoom(
+            name: nil,
+            isDirect: true,
+            inviteUserIds: [friendUserId],
+            isEncrypted: true
+        )
+
+        // Save mapping
+        cacheMapping(conversationId: conversation.id, roomId: roomId)
+        try await saveRoomMapping(conversationId: conversation.id, roomId: roomId)
+
+        #if DEBUG
+        print("[MatrixBridge] Created conversation \(conversation.id) with Matrix room \(roomId)")
+        #endif
+
+        return conversation
     }
 
     /// Invite user to conversation's Matrix room
@@ -300,6 +367,15 @@ final class MatrixBridgeService {
         try await matrixService.kickUser(roomId: roomId, userId: userId, reason: reason)
     }
 
+    /// Get all Matrix rooms as conversations
+    func getMatrixRooms() async throws -> [MatrixRoom] {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        return try await matrixService.getJoinedRooms()
+    }
+
     // MARK: - Private Methods
 
     private func setupMessageHandlers() {
@@ -316,6 +392,30 @@ final class MatrixBridgeService {
                 await self?.handleTypingIndicator(roomId: roomId, userIds: userIds)
             }
         }
+
+        // Handle room updates
+        matrixService.onRoomUpdated = { [weak self] room in
+            Task { @MainActor in
+                self?.handleRoomUpdated(room)
+            }
+        }
+    }
+
+    private func observeConnectionState() {
+        matrixService.connectionStatePublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                self?.handleConnectionStateChange(state)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func handleConnectionStateChange(_ state: MatrixConnectionState) {
+        #if DEBUG
+        print("[MatrixBridge] Connection state changed: \(state)")
+        #endif
+
+        // Could notify UI about connection state changes
     }
 
     private func handleMatrixMessage(_ message: MatrixMessage) async {
@@ -340,6 +440,15 @@ final class MatrixBridgeService {
         onTypingIndicator?(conversationId, novaUserIds)
     }
 
+    private func handleRoomUpdated(_ room: MatrixRoom) {
+        // Notify about room list updates
+        Task {
+            if let rooms = try? await matrixService.getJoinedRooms() {
+                onRoomListUpdated?(rooms)
+            }
+        }
+    }
+
     private func cacheMapping(conversationId: String, roomId: String) {
         conversationToRoomMap[conversationId] = roomId
         roomToConversationMap[roomId] = conversationId
@@ -348,103 +457,159 @@ final class MatrixBridgeService {
     // MARK: - Backend API Calls
 
     private func checkBridgeEnabled() async -> Bool {
-        // TODO: Check feature flag from backend
+        // Check feature flag from backend
         // For now, return true to enable Matrix integration
-        return true
+        do {
+            struct ConfigResponse: Codable {
+                let enabled: Bool
+                let homeserverUrl: String?
+            }
+
+            let response: ConfigResponse = try await apiClient.get(
+                endpoint: APIConfig.Matrix.getConfig
+            )
+            return response.enabled
+        } catch {
+            #if DEBUG
+            print("[MatrixBridge] Failed to check bridge status: \(error)")
+            #endif
+            // Default to enabled in debug mode
+            #if DEBUG
+            return true
+            #else
+            return false
+            #endif
+        }
     }
 
     private func getMatrixAccessToken(novaUserId: String) async throws -> String {
-        // TODO: Get Matrix access token from Nova backend
-        // The backend should mint a Matrix access token for the user
-        // This might be done during Nova login or on-demand
+        struct MatrixTokenRequest: Codable {
+            let userId: String
 
-        /*
+            enum CodingKeys: String, CodingKey {
+                case userId = "user_id"
+            }
+        }
+
         struct MatrixTokenResponse: Codable {
             let accessToken: String
             let matrixUserId: String
             let deviceId: String
+            let homeserverUrl: String?
+
+            enum CodingKeys: String, CodingKey {
+                case accessToken = "access_token"
+                case matrixUserId = "matrix_user_id"
+                case deviceId = "device_id"
+                case homeserverUrl = "homeserver_url"
+            }
         }
 
         let response: MatrixTokenResponse = try await apiClient.request(
-            endpoint: "/api/v2/matrix/token",
-            method: "POST"
+            endpoint: APIConfig.Matrix.getToken,
+            method: "POST",
+            body: MatrixTokenRequest(userId: novaUserId)
         )
 
         return response.accessToken
-        */
-
-        // Stub: Return empty token for now
-        return ""
     }
 
     private func queryRoomMapping(conversationId: String) async throws -> String? {
-        // TODO: Query backend for existing room mapping
-        /*
         struct RoomMappingResponse: Codable {
             let roomId: String?
+
+            enum CodingKeys: String, CodingKey {
+                case roomId = "room_id"
+            }
         }
 
-        let response: RoomMappingResponse = try await apiClient.get(
-            endpoint: "/api/v2/matrix/rooms/\(conversationId)"
-        )
-
-        return response.roomId
-        */
-
-        return nil
+        do {
+            let response: RoomMappingResponse = try await apiClient.get(
+                endpoint: APIConfig.Matrix.getRoomMapping(conversationId)
+            )
+            return response.roomId
+        } catch {
+            // 404 means no mapping exists
+            return nil
+        }
     }
 
     private func queryConversationMapping(roomId: String) async throws -> String? {
-        // TODO: Query backend for conversation mapping
-        // URL encode room ID (!xxx:server contains special chars)
-        /*
-        let encodedRoomId = roomId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? roomId
-
         struct ConversationMappingResponse: Codable {
             let conversationId: String?
+
+            enum CodingKeys: String, CodingKey {
+                case conversationId = "conversation_id"
+            }
         }
 
-        let response: ConversationMappingResponse = try await apiClient.get(
-            endpoint: "/api/v2/matrix/conversations?room_id=\(encodedRoomId)"
-        )
+        // URL encode room ID (!xxx:server contains special chars)
+        let encodedRoomId = roomId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? roomId
 
-        return response.conversationId
-        */
-
-        return nil
+        do {
+            let response: ConversationMappingResponse = try await apiClient.get(
+                endpoint: APIConfig.Matrix.getConversationMapping,
+                queryParams: ["room_id": encodedRoomId]
+            )
+            return response.conversationId
+        } catch {
+            return nil
+        }
     }
 
     private func saveRoomMapping(conversationId: String, roomId: String) async throws {
-        // TODO: Save mapping to backend
-        /*
         struct SaveMappingRequest: Codable {
             let conversationId: String
             let roomId: String
+
+            enum CodingKeys: String, CodingKey {
+                case conversationId = "conversation_id"
+                case roomId = "room_id"
+            }
         }
 
+        struct EmptyResponse: Codable {}
+
         let _: EmptyResponse = try await apiClient.request(
-            endpoint: "/api/v2/matrix/rooms",
+            endpoint: APIConfig.Matrix.saveRoomMapping,
             method: "POST",
             body: SaveMappingRequest(conversationId: conversationId, roomId: roomId)
         )
-        */
     }
 
     private func loadConversationMappings() async throws {
-        // TODO: Load all mappings for current user from backend
-        /*
         struct AllMappingsResponse: Codable {
-            let mappings: [String: String]  // conversationId -> roomId
+            let mappings: [MappingEntry]
+
+            struct MappingEntry: Codable {
+                let conversationId: String
+                let roomId: String
+
+                enum CodingKeys: String, CodingKey {
+                    case conversationId = "conversation_id"
+                    case roomId = "room_id"
+                }
+            }
         }
 
-        let response: AllMappingsResponse = try await apiClient.get(
-            endpoint: "/api/v2/matrix/rooms"
-        )
+        do {
+            let response: AllMappingsResponse = try await apiClient.get(
+                endpoint: APIConfig.Matrix.getRoomMappings
+            )
 
-        for (conversationId, roomId) in response.mappings {
-            cacheMapping(conversationId: conversationId, roomId: roomId)
+            for mapping in response.mappings {
+                cacheMapping(conversationId: mapping.conversationId, roomId: mapping.roomId)
+            }
+
+            #if DEBUG
+            print("[MatrixBridge] Loaded \(response.mappings.count) conversation mappings")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[MatrixBridge] Failed to load mappings: \(error)")
+            #endif
+            // Not critical - mappings will be created on demand
         }
-        */
     }
 }
 
@@ -455,6 +620,7 @@ enum MatrixBridgeError: Error, LocalizedError {
     case notAuthenticated
     case roomMappingFailed(String)
     case messageSendFailed(String)
+    case bridgeDisabled
 
     var errorDescription: String? {
         switch self {
@@ -466,6 +632,8 @@ enum MatrixBridgeError: Error, LocalizedError {
             return "Room mapping failed: \(reason)"
         case .messageSendFailed(let reason):
             return "Message send failed: \(reason)"
+        case .bridgeDisabled:
+            return "Matrix bridge is disabled"
         }
     }
 }
@@ -514,5 +682,25 @@ extension MatrixBridgeService {
         // For now, just return the text content
         // Media messages are handled separately via sendMedia
         return message.content
+    }
+}
+
+// MARK: - Convenience Extensions
+
+extension MatrixBridgeService {
+
+    /// Check if Matrix E2EE is available for messaging
+    var isE2EEAvailable: Bool {
+        isInitialized && isBridgeEnabled
+    }
+
+    /// Get current Matrix connection state
+    var connectionState: MatrixConnectionState {
+        matrixService.connectionState
+    }
+
+    /// Get current Matrix user ID
+    var matrixUserId: String? {
+        matrixService.userId
     }
 }

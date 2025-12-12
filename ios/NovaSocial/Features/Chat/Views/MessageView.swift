@@ -8,6 +8,7 @@ struct ConversationPreview: Identifiable {
     let time: String
     let unreadCount: Int
     let hasUnread: Bool
+    let isEncrypted: Bool  // E2EE status indicator
 }
 
 struct MessageView: View {
@@ -79,7 +80,8 @@ struct MessageView: View {
                     lastMessage: lastMsg,
                     time: timeStr,
                     unreadCount: conv.unreadCount,
-                    hasUnread: conv.unreadCount > 0
+                    hasUnread: conv.unreadCount > 0,
+                    isEncrypted: conv.isEncrypted
                 )
             }
 
@@ -320,7 +322,8 @@ struct MessageView: View {
                                     time: convo.time,
                                     unreadCount: convo.unreadCount,
                                     showMessagePreview: true,
-                                    showTimeAndBadge: convo.hasUnread
+                                    showTimeAndBadge: convo.hasUnread,
+                                    isEncrypted: convo.isEncrypted
                                 )
                                 .onTapGesture {
                                     // alice 跳转到 Alice 页面，其他用户跳转到 Chat 页面
@@ -464,6 +467,7 @@ struct MessageListItem: View {
     var unreadCount: Int = 1
     var showMessagePreview: Bool = true
     var showTimeAndBadge: Bool = true
+    var isEncrypted: Bool = false  // E2EE status indicator
 
     var body: some View {
         HStack(spacing: 12) {
@@ -480,9 +484,18 @@ struct MessageListItem: View {
 
             // 消息内容
             VStack(alignment: .leading, spacing: 5) {
-                Text(name)
-                    .font(.system(size: 19, weight: .bold))
-                    .foregroundColor(DesignTokens.textPrimary)
+                HStack(spacing: 4) {
+                    Text(name)
+                        .font(.system(size: 19, weight: .bold))
+                        .foregroundColor(DesignTokens.textPrimary)
+
+                    // E2EE indicator - show lock icon for encrypted conversations
+                    if isEncrypted {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.green)
+                    }
+                }
 
                 // 消息预览 - 使用动态消息
                 Text(messagePreview)

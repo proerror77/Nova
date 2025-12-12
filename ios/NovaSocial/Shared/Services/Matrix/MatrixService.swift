@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import MatrixRustSDK
 
 // MARK: - Matrix Service
 //
@@ -16,9 +17,6 @@ import Combine
 // - Nova backend runs Matrix Synapse homeserver
 // - User IDs map: nova-uuid -> @nova-<uuid>:staging.nova.internal
 // - Conversation IDs map to Matrix room IDs stored in DB
-//
-// NOTE: This file provides the interface. The actual MatrixRustSDK import
-// is conditional on the package being added to the project.
 
 // MARK: - Matrix Service Protocol
 
@@ -38,6 +36,9 @@ protocol MatrixServiceProtocol: AnyObject {
 
     /// Login with username/password directly
     func loginWithPassword(username: String, password: String) async throws
+
+    /// Restore session from stored credentials
+    func restoreSession() async throws -> Bool
 
     /// Logout and clear session
     func logout() async throws
@@ -158,6 +159,8 @@ enum MatrixError: Error, LocalizedError {
     case syncFailed(String)
     case networkError(String)
     case sdkError(String)
+    case sessionRestoreFailed
+    case encryptionError(String)
 
     var errorDescription: String? {
         switch self {
@@ -177,14 +180,17 @@ enum MatrixError: Error, LocalizedError {
             return "Network error: \(reason)"
         case .sdkError(let reason):
             return "SDK error: \(reason)"
+        case .sessionRestoreFailed:
+            return "Failed to restore session"
+        case .encryptionError(let reason):
+            return "Encryption error: \(reason)"
         }
     }
 }
 
 // MARK: - Matrix Service Implementation
 
-/// Main Matrix service implementation
-/// NOTE: Requires MatrixRustSDK package to be added to the project
+/// Main Matrix service implementation using MatrixRustSDK
 @MainActor
 @Observable
 final class MatrixService: MatrixServiceProtocol {
@@ -207,15 +213,13 @@ final class MatrixService: MatrixServiceProtocol {
     // MARK: - Private Properties
 
     /// Matrix client instance (from MatrixRustSDK)
-    /// Type: ClientProtocol from MatrixRustSDK
-    /// Uncomment when SDK is added:
-    // private var client: ClientProtocol?
+    private var client: Client?
+
+    /// Sync service for background updates
+    private var syncService: SyncService?
 
     /// Room list service for efficient room updates
-    // private var roomListService: RoomListServiceProtocol?
-
-    /// Sync task handle
-    // private var syncTaskHandle: TaskHandle?
+    private var roomListService: RoomListService?
 
     /// Session storage path
     private var sessionPath: String?
@@ -226,6 +230,12 @@ final class MatrixService: MatrixServiceProtocol {
     /// Room cache
     private var roomCache: [String: MatrixRoom] = [:]
 
+    /// Timeline listeners cache (room_id -> listener)
+    private var timelineListeners: [String: TaskHandle] = [:]
+
+    /// Cancellables for Combine subscriptions
+    private var cancellables = Set<AnyCancellable>()
+
     /// Message callbacks
     var onMessageReceived: ((MatrixMessage) -> Void)?
     var onRoomUpdated: ((MatrixRoom) -> Void)?
@@ -235,7 +245,7 @@ final class MatrixService: MatrixServiceProtocol {
 
     private init() {
         #if DEBUG
-        print("[MatrixService] Initialized (SDK integration pending)")
+        print("[MatrixService] Initialized")
         #endif
     }
 
@@ -251,22 +261,28 @@ final class MatrixService: MatrixServiceProtocol {
 
         updateConnectionState(.connecting)
 
-        // TODO: Initialize MatrixRustSDK client
-        // When SDK is added:
-        /*
-        let clientBuilder = ClientBuilder()
-            .homeserverUrl(homeserverURL)
-            .sessionPath(sessionPath)
-            .slidingSyncVersionBuilder(.proxy(url: slidingSyncProxyURL))
+        do {
+            // Ensure session directory exists
+            let sessionURL = URL(fileURLWithPath: sessionPath)
+            try FileManager.default.createDirectory(at: sessionURL, withIntermediateDirectories: true)
 
-        self.client = try await clientBuilder.build()
-        */
+            // Build client using ClientBuilder
+            let clientBuilder = ClientBuilder()
+                .homeserverUrl(url: homeserverURL)
+                .sessionPath(path: sessionPath)
+                .userAgent(userAgent: "NovaSocial-iOS/1.0")
 
-        updateConnectionState(.disconnected)
+            self.client = try await clientBuilder.build()
 
-        #if DEBUG
-        print("[MatrixService] Client initialized (stub)")
-        #endif
+            updateConnectionState(.disconnected)
+
+            #if DEBUG
+            print("[MatrixService] Client initialized successfully")
+            #endif
+        } catch {
+            updateConnectionState(.error(error.localizedDescription))
+            throw MatrixError.sdkError(error.localizedDescription)
+        }
     }
 
     func login(novaUserId: String, accessToken: String) async throws {
@@ -274,33 +290,50 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService] Logging in Nova user: \(novaUserId)")
         #endif
 
-        guard homeserverURL != nil else {
+        guard let client = client else {
             throw MatrixError.notInitialized
         }
 
         updateConnectionState(.connecting)
 
         // Convert Nova user ID to Matrix user ID format
-        // Format: @nova-<uuid>:staging.nova.internal
         let matrixUserId = convertToMatrixUserId(novaUserId: novaUserId)
 
-        // TODO: Login with access token from Nova backend
-        // The Nova backend should provide a Matrix access token
-        // after authenticating the user
-        /*
-        try await client?.restoreSession(session: MatrixSession(
-            userId: matrixUserId,
-            accessToken: accessToken,
-            deviceId: deviceId
-        ))
-        */
+        do {
+            // Extract device ID from stored session or generate new one
+            let deviceId = getOrCreateDeviceId()
 
-        self.userId = matrixUserId
-        updateConnectionState(.connected)
+            // Restore session with access token
+            let session = Session(
+                accessToken: accessToken,
+                refreshToken: nil,
+                userId: matrixUserId,
+                deviceId: deviceId,
+                homeserverUrl: homeserverURL ?? "",
+                oidcData: nil,
+                slidingSyncVersion: .none
+            )
 
-        #if DEBUG
-        print("[MatrixService] Logged in as: \(matrixUserId) (stub)")
-        #endif
+            try await client.restoreSession(session: session)
+
+            self.userId = matrixUserId
+
+            // Store session for later restoration
+            storeSessionCredentials(
+                userId: matrixUserId,
+                accessToken: accessToken,
+                deviceId: deviceId
+            )
+
+            updateConnectionState(.connected)
+
+            #if DEBUG
+            print("[MatrixService] Logged in as: \(matrixUserId)")
+            #endif
+        } catch {
+            updateConnectionState(.error(error.localizedDescription))
+            throw MatrixError.loginFailed(error.localizedDescription)
+        }
     }
 
     func loginWithPassword(username: String, password: String) async throws {
@@ -308,31 +341,87 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService] Logging in with password: \(username)")
         #endif
 
-        guard homeserverURL != nil else {
+        guard let client = client else {
             throw MatrixError.notInitialized
         }
 
         updateConnectionState(.connecting)
 
-        // TODO: Login with username/password
-        /*
-        try await client?.login(
-            username: username,
-            password: password,
-            initialDeviceDisplayName: UIDevice.current.name,
-            deviceId: nil
-        )
+        do {
+            try await client.login(
+                username: username,
+                password: password,
+                initialDeviceName: UIDevice.current.name,
+                deviceId: nil
+            )
 
-        self.userId = try await client?.userId()
-        */
+            self.userId = client.userId()
 
-        // Stub for now
-        self.userId = "@\(username):\(homeserverURL ?? "localhost")"
-        updateConnectionState(.connected)
+            // Store session credentials
+            if let session = try? client.session() {
+                storeSessionCredentials(
+                    userId: session.userId,
+                    accessToken: session.accessToken,
+                    deviceId: session.deviceId
+                )
+            }
 
+            updateConnectionState(.connected)
+
+            #if DEBUG
+            print("[MatrixService] Logged in as: \(userId ?? "unknown")")
+            #endif
+        } catch {
+            updateConnectionState(.error(error.localizedDescription))
+            throw MatrixError.loginFailed(error.localizedDescription)
+        }
+    }
+
+    func restoreSession() async throws -> Bool {
         #if DEBUG
-        print("[MatrixService] Logged in (stub)")
+        print("[MatrixService] Attempting to restore session")
         #endif
+
+        guard let client = client else {
+            throw MatrixError.notInitialized
+        }
+
+        // Check for stored credentials
+        guard let credentials = loadSessionCredentials() else {
+            #if DEBUG
+            print("[MatrixService] No stored credentials found")
+            #endif
+            return false
+        }
+
+        do {
+            let session = Session(
+                accessToken: credentials.accessToken,
+                refreshToken: nil,
+                userId: credentials.userId,
+                deviceId: credentials.deviceId,
+                homeserverUrl: homeserverURL ?? "",
+                oidcData: nil,
+                slidingSyncVersion: .none
+            )
+
+            try await client.restoreSession(session: session)
+
+            self.userId = credentials.userId
+            updateConnectionState(.connected)
+
+            #if DEBUG
+            print("[MatrixService] Session restored for: \(credentials.userId)")
+            #endif
+
+            return true
+        } catch {
+            #if DEBUG
+            print("[MatrixService] Session restore failed: \(error)")
+            #endif
+            clearSessionCredentials()
+            return false
+        }
     }
 
     func logout() async throws {
@@ -342,11 +431,21 @@ final class MatrixService: MatrixServiceProtocol {
 
         stopSync()
 
-        // TODO: Logout from Matrix
-        // try await client?.logout()
+        if let client = client {
+            do {
+                try await client.logout()
+            } catch {
+                #if DEBUG
+                print("[MatrixService] Logout error: \(error)")
+                #endif
+            }
+        }
 
+        clearSessionCredentials()
         self.userId = nil
+        self.client = nil
         roomCache.removeAll()
+        timelineListeners.removeAll()
         updateConnectionState(.disconnected)
 
         #if DEBUG
@@ -361,27 +460,35 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService] Starting sync")
         #endif
 
-        guard userId != nil else {
+        guard let client = client, userId != nil else {
             throw MatrixError.notLoggedIn
         }
 
         updateConnectionState(.syncing)
 
-        // TODO: Start sliding sync
-        /*
-        let syncSettings = SyncSettings()
-        syncTaskHandle = client?.syncService().start(settings: syncSettings)
+        do {
+            // Create sync service
+            let syncServiceBuilder = client.syncService()
+            self.syncService = try await syncServiceBuilder
+                .withCrossProcessLock(appIdentifier: "com.novasocial.icered")
+                .finish()
 
-        // Listen for room updates
-        roomListService = client?.roomListService()
-        roomListService?.subscribeToRooms { [weak self] rooms in
-            self?.handleRoomListUpdate(rooms)
+            // Start sync
+            try await syncService?.start()
+
+            // Setup room list service
+            self.roomListService = syncService?.roomListService()
+
+            // Subscribe to room list updates
+            setupRoomListObserver()
+
+            #if DEBUG
+            print("[MatrixService] Sync started successfully")
+            #endif
+        } catch {
+            updateConnectionState(.error(error.localizedDescription))
+            throw MatrixError.syncFailed(error.localizedDescription)
         }
-        */
-
-        #if DEBUG
-        print("[MatrixService] Sync started (stub)")
-        #endif
     }
 
     func stopSync() {
@@ -389,9 +496,18 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService] Stopping sync")
         #endif
 
-        // TODO: Stop sync
-        // syncTaskHandle?.cancel()
-        // syncTaskHandle = nil
+        Task {
+            try? await syncService?.stop()
+        }
+
+        syncService = nil
+        roomListService = nil
+
+        // Cancel all timeline listeners
+        for (_, handle) in timelineListeners {
+            handle.cancel()
+        }
+        timelineListeners.removeAll()
 
         if connectionState == .syncing {
             updateConnectionState(.connected)
@@ -405,43 +521,36 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService] Creating room: \(name ?? "Direct"), direct=\(isDirect), members=\(inviteUserIds.count)")
         #endif
 
-        guard userId != nil else {
+        guard let client = client, userId != nil else {
             throw MatrixError.notLoggedIn
         }
 
         // Convert Nova user IDs to Matrix user IDs
         let matrixUserIds = inviteUserIds.map { convertToMatrixUserId(novaUserId: $0) }
 
-        // TODO: Create room via SDK
-        /*
-        let parameters = CreateRoomParameters(
-            name: name,
-            topic: nil,
-            isEncrypted: isEncrypted,
-            isDirect: isDirect,
-            visibility: .private,
-            preset: isDirect ? .trustedPrivateChat : .privateChat,
-            invite: matrixUserIds,
-            avatar: nil,
-            powerLevelContentOverride: nil
-        )
+        do {
+            let request = CreateRoomParameters(
+                name: name,
+                topic: nil,
+                isEncrypted: isEncrypted,
+                isDirect: isDirect,
+                visibility: .private,
+                preset: isDirect ? .trustedPrivateChat : .privateChat,
+                invite: matrixUserIds,
+                avatar: nil,
+                powerLevelContentOverride: nil
+            )
 
-        let roomId = try await client?.createRoom(request: parameters)
+            let roomId = try await client.createRoom(request: request)
 
-        // Wait for room to sync
-        try await waitForRoomToSync(roomId: roomId)
+            #if DEBUG
+            print("[MatrixService] Created room: \(roomId)")
+            #endif
 
-        return roomId
-        */
-
-        // Stub: Return a fake room ID
-        let stubRoomId = "!\(UUID().uuidString.prefix(18)):staging.nova.internal"
-
-        #if DEBUG
-        print("[MatrixService] Created room: \(stubRoomId) (stub)")
-        #endif
-
-        return stubRoomId
+            return roomId
+        } catch {
+            throw MatrixError.sdkError(error.localizedDescription)
+        }
     }
 
     func joinRoom(roomIdOrAlias: String) async throws -> String {
@@ -449,20 +558,19 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService] Joining room: \(roomIdOrAlias)")
         #endif
 
-        guard userId != nil else {
+        guard let client = client, userId != nil else {
             throw MatrixError.notLoggedIn
         }
 
-        // TODO: Join room
-        /*
-        let room = try await client?.joinRoomByIdOrAlias(
-            roomIdOrAlias: roomIdOrAlias,
-            serverNames: []
-        )
-        return room.id()
-        */
-
-        return roomIdOrAlias
+        do {
+            let room = try await client.joinRoomByIdOrAlias(
+                roomIdOrAlias: roomIdOrAlias,
+                serverNames: []
+            )
+            return room.id()
+        } catch {
+            throw MatrixError.sdkError(error.localizedDescription)
+        }
     }
 
     func leaveRoom(roomId: String) async throws {
@@ -470,19 +578,21 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService] Leaving room: \(roomId)")
         #endif
 
-        guard userId != nil else {
+        guard let client = client, userId != nil else {
             throw MatrixError.notLoggedIn
         }
 
-        // TODO: Leave room
-        /*
-        guard let room = client?.getRoom(roomId: roomId) else {
-            throw MatrixError.roomNotFound(roomId)
+        do {
+            guard let room = client.getRoom(roomId: roomId) else {
+                throw MatrixError.roomNotFound(roomId)
+            }
+            try await room.leave()
+            roomCache.removeValue(forKey: roomId)
+        } catch let error as MatrixError {
+            throw error
+        } catch {
+            throw MatrixError.sdkError(error.localizedDescription)
         }
-        try await room.leave()
-        */
-
-        roomCache.removeValue(forKey: roomId)
     }
 
     // MARK: - Messaging
@@ -492,34 +602,37 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService] Sending message to room: \(roomId)")
         #endif
 
-        guard userId != nil else {
+        guard let client = client, userId != nil else {
             throw MatrixError.notLoggedIn
         }
 
-        // TODO: Send message via SDK
-        /*
-        guard let room = client?.getRoom(roomId: roomId) else {
-            throw MatrixError.roomNotFound(roomId)
+        do {
+            guard let room = client.getRoom(roomId: roomId) else {
+                throw MatrixError.roomNotFound(roomId)
+            }
+
+            let timeline = try await room.timeline()
+
+            // Create text message content
+            let messageContent = messageEventContentFromMarkdown(md: content)
+
+            // Send message
+            try await timeline.send(msg: messageContent)
+
+            // The event ID will be returned asynchronously via timeline updates
+            // For now, generate a local event ID
+            let localEventId = "$local.\(UUID().uuidString)"
+
+            #if DEBUG
+            print("[MatrixService] Message sent: \(localEventId)")
+            #endif
+
+            return localEventId
+        } catch let error as MatrixError {
+            throw error
+        } catch {
+            throw MatrixError.sendFailed(error.localizedDescription)
         }
-
-        let timeline = room.timeline()
-        try await timeline.send(content: RoomMessageEventContentWithoutRelation.text(
-            body: content,
-            formatted: nil
-        ))
-
-        // Return the event ID from the send receipt
-        return eventId
-        */
-
-        // Stub: Return a fake event ID
-        let stubEventId = "$\(UUID().uuidString)"
-
-        #if DEBUG
-        print("[MatrixService] Message sent: \(stubEventId) (stub)")
-        #endif
-
-        return stubEventId
     }
 
     func sendMedia(roomId: String, mediaURL: URL, mimeType: String, caption: String?) async throws -> String {
@@ -527,56 +640,98 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService] Sending media to room: \(roomId), type: \(mimeType)")
         #endif
 
-        guard userId != nil else {
+        guard let client = client, userId != nil else {
             throw MatrixError.notLoggedIn
         }
 
-        // TODO: Upload and send media
-        /*
-        guard let room = client?.getRoom(roomId: roomId) else {
-            throw MatrixError.roomNotFound(roomId)
+        do {
+            guard let room = client.getRoom(roomId: roomId) else {
+                throw MatrixError.roomNotFound(roomId)
+            }
+
+            let timeline = try await room.timeline()
+
+            // Read file data
+            let data = try Data(contentsOf: mediaURL)
+            let filename = mediaURL.lastPathComponent
+
+            // Determine media type and create appropriate content
+            if mimeType.hasPrefix("image/") {
+                // Send as image
+                try await timeline.sendImage(
+                    url: mediaURL.path,
+                    thumbnailUrl: nil,
+                    imageInfo: ImageInfo(
+                        height: nil,
+                        width: nil,
+                        mimetype: mimeType,
+                        size: UInt64(data.count),
+                        thumbnailInfo: nil,
+                        thumbnailSource: nil,
+                        blurhash: nil
+                    ),
+                    caption: caption,
+                    formattedCaption: nil,
+                    progressWatcher: nil
+                )
+            } else if mimeType.hasPrefix("video/") {
+                // Send as video
+                try await timeline.sendVideo(
+                    url: mediaURL.path,
+                    thumbnailUrl: nil,
+                    videoInfo: VideoInfo(
+                        duration: nil,
+                        height: nil,
+                        width: nil,
+                        mimetype: mimeType,
+                        size: UInt64(data.count),
+                        thumbnailInfo: nil,
+                        thumbnailSource: nil,
+                        blurhash: nil
+                    ),
+                    caption: caption,
+                    formattedCaption: nil,
+                    progressWatcher: nil
+                )
+            } else if mimeType.hasPrefix("audio/") {
+                // Send as audio
+                try await timeline.sendAudio(
+                    url: mediaURL.path,
+                    audioInfo: AudioInfo(
+                        duration: nil,
+                        size: UInt64(data.count),
+                        mimetype: mimeType
+                    ),
+                    caption: caption,
+                    formattedCaption: nil,
+                    progressWatcher: nil
+                )
+            } else {
+                // Send as file
+                try await timeline.sendFile(
+                    url: mediaURL.path,
+                    fileInfo: FileInfo(
+                        mimetype: mimeType,
+                        size: UInt64(data.count),
+                        thumbnailInfo: nil,
+                        thumbnailSource: nil
+                    ),
+                    progressWatcher: nil
+                )
+            }
+
+            let localEventId = "$local.\(UUID().uuidString)"
+
+            #if DEBUG
+            print("[MatrixService] Media sent: \(localEventId)")
+            #endif
+
+            return localEventId
+        } catch let error as MatrixError {
+            throw error
+        } catch {
+            throw MatrixError.sendFailed(error.localizedDescription)
         }
-
-        // Read file data
-        let data = try Data(contentsOf: mediaURL)
-
-        // Upload to Matrix media server
-        let uploadResponse = try await client?.uploadMedia(
-            mimeType: mimeType,
-            data: data,
-            progressWatcher: nil
-        )
-
-        // Send media message
-        let timeline = room.timeline()
-        let content: RoomMessageEventContentWithoutRelation
-
-        if mimeType.hasPrefix("image/") {
-            content = .image(
-                body: caption ?? mediaURL.lastPathComponent,
-                source: MediaSource(url: uploadResponse.contentUri),
-                info: nil
-            )
-        } else if mimeType.hasPrefix("video/") {
-            content = .video(
-                body: caption ?? mediaURL.lastPathComponent,
-                source: MediaSource(url: uploadResponse.contentUri),
-                info: nil
-            )
-        } else {
-            content = .file(
-                body: caption ?? mediaURL.lastPathComponent,
-                source: MediaSource(url: uploadResponse.contentUri),
-                info: nil
-            )
-        }
-
-        try await timeline.send(content: content)
-        return eventId
-        */
-
-        // Stub
-        return "$\(UUID().uuidString)"
     }
 
     func getRoomMessages(roomId: String, limit: Int, from: String?) async throws -> [MatrixMessage] {
@@ -584,27 +739,32 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService] Getting messages for room: \(roomId), limit: \(limit)")
         #endif
 
-        guard userId != nil else {
+        guard let client = client, userId != nil else {
             throw MatrixError.notLoggedIn
         }
 
-        // TODO: Fetch timeline
-        /*
-        guard let room = client?.getRoom(roomId: roomId) else {
-            throw MatrixError.roomNotFound(roomId)
+        do {
+            guard let room = client.getRoom(roomId: roomId) else {
+                throw MatrixError.roomNotFound(roomId)
+            }
+
+            let timeline = try await room.timeline()
+
+            // Paginate backwards to load history
+            try await timeline.paginateBackwards(numEvents: UInt16(limit))
+
+            // Get timeline items
+            let items = timeline.getTimelineItems()
+
+            // Convert to MatrixMessage
+            return items.compactMap { item -> MatrixMessage? in
+                convertTimelineItemToMessage(item, roomId: roomId)
+            }
+        } catch let error as MatrixError {
+            throw error
+        } catch {
+            throw MatrixError.sdkError(error.localizedDescription)
         }
-
-        let timeline = room.timeline()
-        let items = try await timeline.paginateBackwards(count: UInt16(limit))
-
-        return items.compactMap { item -> MatrixMessage? in
-            guard case .event(let eventItem) = item else { return nil }
-            return convertToMatrixMessage(eventItem)
-        }
-        */
-
-        // Stub: Return empty list
-        return []
     }
 
     // MARK: - Room Management
@@ -614,19 +774,22 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService] Inviting user \(userId) to room \(roomId)")
         #endif
 
-        guard self.userId != nil else {
+        guard let client = client, self.userId != nil else {
             throw MatrixError.notLoggedIn
         }
 
         let matrixUserId = convertToMatrixUserId(novaUserId: userId)
 
-        // TODO: Invite user
-        /*
-        guard let room = client?.getRoom(roomId: roomId) else {
-            throw MatrixError.roomNotFound(roomId)
+        do {
+            guard let room = client.getRoom(roomId: roomId) else {
+                throw MatrixError.roomNotFound(roomId)
+            }
+            try await room.inviteUserById(userId: matrixUserId)
+        } catch let error as MatrixError {
+            throw error
+        } catch {
+            throw MatrixError.sdkError(error.localizedDescription)
         }
-        try await room.inviteUserById(userId: matrixUserId)
-        */
     }
 
     func kickUser(roomId: String, userId: String, reason: String?) async throws {
@@ -634,47 +797,59 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService] Kicking user \(userId) from room \(roomId)")
         #endif
 
-        guard self.userId != nil else {
+        guard let client = client, self.userId != nil else {
             throw MatrixError.notLoggedIn
         }
 
         let matrixUserId = convertToMatrixUserId(novaUserId: userId)
 
-        // TODO: Kick user
-        /*
-        guard let room = client?.getRoom(roomId: roomId) else {
-            throw MatrixError.roomNotFound(roomId)
+        do {
+            guard let room = client.getRoom(roomId: roomId) else {
+                throw MatrixError.roomNotFound(roomId)
+            }
+            try await room.kickUser(userId: matrixUserId, reason: reason)
+        } catch let error as MatrixError {
+            throw error
+        } catch {
+            throw MatrixError.sdkError(error.localizedDescription)
         }
-        try await room.kickUser(userId: matrixUserId, reason: reason)
-        */
     }
 
     func setTyping(roomId: String, isTyping: Bool) async throws {
-        guard self.userId != nil else {
+        guard let client = client, self.userId != nil else {
             throw MatrixError.notLoggedIn
         }
 
-        // TODO: Set typing indicator
-        /*
-        guard let room = client?.getRoom(roomId: roomId) else {
-            throw MatrixError.roomNotFound(roomId)
+        do {
+            guard let room = client.getRoom(roomId: roomId) else {
+                throw MatrixError.roomNotFound(roomId)
+            }
+            try await room.typingNotice(isTyping: isTyping)
+        } catch {
+            // Typing indicator errors are not critical
+            #if DEBUG
+            print("[MatrixService] Typing notice error: \(error)")
+            #endif
         }
-        try await room.typingNotice(isTyping: isTyping)
-        */
     }
 
     func markRoomAsRead(roomId: String) async throws {
-        guard self.userId != nil else {
+        guard let client = client, self.userId != nil else {
             throw MatrixError.notLoggedIn
         }
 
-        // TODO: Mark as read
-        /*
-        guard let room = client?.getRoom(roomId: roomId) else {
-            throw MatrixError.roomNotFound(roomId)
+        do {
+            guard let room = client.getRoom(roomId: roomId) else {
+                throw MatrixError.roomNotFound(roomId)
+            }
+
+            let timeline = try await room.timeline()
+            try await timeline.markAsRead(receiptType: .read)
+        } catch {
+            #if DEBUG
+            print("[MatrixService] Mark as read error: \(error)")
+            #endif
         }
-        try await room.markAsRead(receiptType: .read)
-        */
     }
 
     func getRoom(roomId: String) -> MatrixRoom? {
@@ -682,17 +857,22 @@ final class MatrixService: MatrixServiceProtocol {
     }
 
     func getJoinedRooms() async throws -> [MatrixRoom] {
-        guard userId != nil else {
+        guard let client = client, userId != nil else {
             throw MatrixError.notLoggedIn
         }
 
-        // TODO: Get joined rooms
-        /*
-        let rooms = try await roomListService?.allRooms()
-        return rooms?.map { convertToMatrixRoom($0) } ?? []
-        */
+        // Update room cache from client
+        let rooms = client.rooms()
 
-        return Array(roomCache.values)
+        var matrixRooms: [MatrixRoom] = []
+        for room in rooms {
+            if let matrixRoom = await convertSDKRoomToMatrixRoom(room) {
+                roomCache[matrixRoom.id] = matrixRoom
+                matrixRooms.append(matrixRoom)
+            }
+        }
+
+        return matrixRooms
     }
 
     // MARK: - Helper Methods
@@ -736,6 +916,197 @@ final class MatrixService: MatrixServiceProtocol {
         self.connectionState = state
         connectionStateSubject.send(state)
     }
+
+    // MARK: - Room List Observer
+
+    private func setupRoomListObserver() {
+        guard let roomListService = roomListService else { return }
+
+        Task {
+            do {
+                let roomList = try await roomListService.allRooms()
+
+                // Subscribe to room list updates
+                let listener = RoomListEntriesListener { [weak self] entries in
+                    Task { @MainActor in
+                        await self?.handleRoomListUpdate(entries)
+                    }
+                }
+
+                let result = roomList.entries(listener: listener)
+
+                // Process initial entries
+                await handleRoomListUpdate(result.entries)
+            } catch {
+                #if DEBUG
+                print("[MatrixService] Room list observer error: \(error)")
+                #endif
+            }
+        }
+    }
+
+    private func handleRoomListUpdate(_ entries: [RoomListEntry]) async {
+        for entry in entries {
+            switch entry {
+            case .filled(let roomId):
+                if let room = client?.getRoom(roomId: roomId),
+                   let matrixRoom = await convertSDKRoomToMatrixRoom(room) {
+                    roomCache[roomId] = matrixRoom
+                    onRoomUpdated?(matrixRoom)
+                }
+            case .empty, .invalidated:
+                break
+            }
+        }
+    }
+
+    private func convertSDKRoomToMatrixRoom(_ room: Room) async -> MatrixRoom? {
+        let roomId = room.id()
+        let info = room.roomInfo()
+
+        return MatrixRoom(
+            id: roomId,
+            name: room.displayName(),
+            topic: info.topic,
+            avatarURL: info.avatarUrl,
+            isDirect: info.isDirect,
+            isEncrypted: info.isEncrypted,
+            memberCount: Int(info.activeMembersCount),
+            unreadCount: Int(info.numUnreadMessages),
+            lastMessage: nil,  // Would need timeline access
+            lastActivity: nil,
+            novaConversationId: nil
+        )
+    }
+
+    private func convertTimelineItemToMessage(_ item: TimelineItem, roomId: String) -> MatrixMessage? {
+        guard let eventItem = item.asEvent() else { return nil }
+
+        let eventId = eventItem.eventId() ?? UUID().uuidString
+        let senderId = eventItem.sender()
+        let timestamp = Date(timeIntervalSince1970: Double(eventItem.timestamp()) / 1000.0)
+
+        // Extract content based on message type
+        guard let content = eventItem.content() else { return nil }
+
+        switch content.kind() {
+        case .message:
+            if let msgContent = content.asMessage() {
+                let body = msgContent.body()
+                let msgType: MatrixMessageType
+
+                switch msgContent.msgtype() {
+                case .text:
+                    msgType = .text
+                case .image:
+                    msgType = .image
+                case .video:
+                    msgType = .video
+                case .audio:
+                    msgType = .audio
+                case .file:
+                    msgType = .file
+                case .location:
+                    msgType = .location
+                case .notice:
+                    msgType = .notice
+                case .emote:
+                    msgType = .emote
+                default:
+                    msgType = .text
+                }
+
+                return MatrixMessage(
+                    id: eventId,
+                    roomId: roomId,
+                    senderId: senderId,
+                    content: body,
+                    type: msgType,
+                    timestamp: timestamp,
+                    isEdited: false,
+                    replyTo: nil,
+                    mediaURL: nil,
+                    mediaInfo: nil
+                )
+            }
+        default:
+            break
+        }
+
+        return nil
+    }
+
+    // MARK: - Session Storage
+
+    private struct StoredCredentials: Codable {
+        let userId: String
+        let accessToken: String
+        let deviceId: String
+    }
+
+    private func storeSessionCredentials(userId: String, accessToken: String, deviceId: String) {
+        let credentials = StoredCredentials(
+            userId: userId,
+            accessToken: accessToken,
+            deviceId: deviceId
+        )
+
+        if let data = try? JSONEncoder().encode(credentials) {
+            KeychainService.shared.set(String(data: data, encoding: .utf8) ?? "", for: .matrixSession)
+        }
+    }
+
+    private func loadSessionCredentials() -> StoredCredentials? {
+        guard let jsonString = KeychainService.shared.get(.matrixSession),
+              let data = jsonString.data(using: .utf8),
+              let credentials = try? JSONDecoder().decode(StoredCredentials.self, from: data) else {
+            return nil
+        }
+        return credentials
+    }
+
+    private func clearSessionCredentials() {
+        KeychainService.shared.delete(.matrixSession)
+    }
+
+    private func getOrCreateDeviceId() -> String {
+        // Check for existing device ID
+        if let credentials = loadSessionCredentials() {
+            return credentials.deviceId
+        }
+
+        // Generate new device ID
+        let deviceId = "NOVA_IOS_\(UUID().uuidString.prefix(8))"
+        return deviceId
+    }
+}
+
+// MARK: - Room List Entries Listener
+
+private class RoomListEntriesListener: RoomListEntriesListenerProtocol {
+    private let handler: ([RoomListEntry]) -> Void
+
+    init(handler: @escaping ([RoomListEntry]) -> Void) {
+        self.handler = handler
+    }
+
+    func onUpdate(roomEntriesUpdate: [RoomListEntriesUpdate]) {
+        // Extract entries from updates
+        var entries: [RoomListEntry] = []
+        for update in roomEntriesUpdate {
+            switch update {
+            case .append(let values):
+                entries.append(contentsOf: values)
+            case .set(_, let value):
+                entries.append(value)
+            case .insert(_, let value):
+                entries.append(value)
+            default:
+                break
+            }
+        }
+        handler(entries)
+    }
 }
 
 // MARK: - Matrix Configuration
@@ -769,4 +1140,10 @@ struct MatrixConfiguration {
         return productionHomeserver
         #endif
     }
+}
+
+// MARK: - Keychain Extension for Matrix
+
+extension KeychainService.Key {
+    static let matrixSession = KeychainService.Key(rawValue: "matrix_session")
 }
