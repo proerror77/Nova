@@ -1,0 +1,47 @@
+##############################################################################
+# PostgreSQL CDC Configuration Patch for Staging
+# Enables logical replication for Debezium CDC
+#
+# Requirements:
+# - wal_level = logical (enables logical decoding)
+# - max_replication_slots >= 4 (for CDC connectors)
+# - max_wal_senders >= 4 (for replication connections)
+##############################################################################
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: nova-staging
+spec:
+  template:
+    spec:
+      containers:
+      - name: postgres
+        args:
+        - postgres
+        - -c
+        - wal_level=logical
+        - -c
+        - max_replication_slots=10
+        - -c
+        - max_wal_senders=10
+        - -c
+        - wal_keep_size=1GB
+        env:
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DB_USER
+              optional: false
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DB_PASSWORD
+              optional: false
+        - name: POSTGRES_DB
+          value: "nova_auth"
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata

@@ -1,0 +1,313 @@
+##############################################################################
+# Kafka Connect (Debezium) Deployment for Staging
+# CDC pipeline from PostgreSQL to Kafka
+#
+# Components:
+# - Kafka Connect worker with Debezium PostgreSQL connector
+# - REST API on port 8083 for connector management
+# - Connects to Kafka cluster in nova-staging namespace
+##############################################################################
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-connect
+  namespace: nova-staging
+  labels:
+    app: kafka-connect
+    component: cdc
+spec:
+  type: ClusterIP
+  ports:
+  - name: rest
+    port: 8083
+    targetPort: 8083
+    protocol: TCP
+  selector:
+    app: kafka-connect
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-connect
+  namespace: nova-staging
+  labels:
+    app: kafka-connect
+    component: cdc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-connect
+  template:
+    metadata:
+      labels:
+        app: kafka-connect
+        component: cdc
+    spec:
+      initContainers:
+      # Wait for Kafka to be ready
+      - name: wait-for-kafka
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for Kafka..."
+          for i in $(seq 1 60); do
+            if nc -z kafka.nova-staging.svc.cluster.local 9092 2>/dev/null; then
+              echo "Kafka is ready"
+              exit 0
+            fi
+            echo "  Attempt $i/60, retrying..."
+            sleep 5
+          done
+          echo "Kafka is not ready"
+          exit 1
+
+      containers:
+      - name: kafka-connect
+        image: debezium/connect:2.4
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: rest
+          containerPort: 8083
+          protocol: TCP
+
+        env:
+        # Kafka Connect configuration
+        - name: BOOTSTRAP_SERVERS
+          value: "kafka.nova-staging.svc.cluster.local:9092"
+        - name: GROUP_ID
+          value: "nova-cdc-connect-staging"
+        - name: CONFIG_STORAGE_TOPIC
+          value: "connect-configs"
+        - name: OFFSET_STORAGE_TOPIC
+          value: "connect-offsets"
+        - name: STATUS_STORAGE_TOPIC
+          value: "connect-status"
+
+        # Replication factor (1 for single-node Kafka in staging)
+        - name: CONFIG_STORAGE_REPLICATION_FACTOR
+          value: "1"
+        - name: OFFSET_STORAGE_REPLICATION_FACTOR
+          value: "1"
+        - name: STATUS_STORAGE_REPLICATION_FACTOR
+          value: "1"
+
+        # Converter configuration (schema-less JSON)
+        - name: KEY_CONVERTER
+          value: "org.apache.kafka.connect.json.JsonConverter"
+        - name: VALUE_CONVERTER
+          value: "org.apache.kafka.connect.json.JsonConverter"
+        - name: KEY_CONVERTER_SCHEMAS_ENABLE
+          value: "false"
+        - name: VALUE_CONVERTER_SCHEMAS_ENABLE
+          value: "false"
+
+        # Logging
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: CONNECT_LOG4J_LOGGERS
+          value: "org.apache.kafka.connect=INFO,io.debezium=INFO"
+
+        # Database credentials from secret
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DB_USER
+              optional: false
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DB_PASSWORD
+              optional: false
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+
+        livenessProbe:
+          httpGet:
+            path: /
+            port: rest
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /connectors
+            port: rest
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 60
+
+---
+##############################################################################
+# Debezium CDC Connector Initialization Job
+# Deploys the PostgreSQL CDC connector after Kafka Connect is ready
+##############################################################################
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: debezium-cdc-connector-init
+  namespace: nova-staging
+  labels:
+    app: kafka-connect
+    component: cdc-init
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app: kafka-connect
+        component: cdc-init
+    spec:
+      restartPolicy: OnFailure
+
+      initContainers:
+      # Wait for Kafka Connect REST API to be ready
+      - name: wait-for-connect
+        image: curlimages/curl:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Waiting for Kafka Connect REST API..."
+          for i in $(seq 1 60); do
+            if curl -sf http://kafka-connect.nova-staging.svc.cluster.local:8083/ > /dev/null 2>&1; then
+              echo "Kafka Connect is ready!"
+              exit 0
+            fi
+            echo "  Attempt $i/60, Kafka Connect not ready..."
+            sleep 10
+          done
+          echo "Kafka Connect failed to start"
+          exit 1
+
+      containers:
+      - name: deploy-connector
+        image: curlimages/curl:latest
+        env:
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DB_USER
+              optional: false
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DB_PASSWORD
+              optional: false
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+
+          CONNECT_URL="http://kafka-connect.nova-staging.svc.cluster.local:8083"
+          CONNECTOR_NAME="nova-postgres-cdc"
+
+          echo "=============================================="
+          echo "  Debezium CDC Connector Deployment"
+          echo "=============================================="
+          echo ""
+
+          # Check if connector already exists
+          if curl -sf "${CONNECT_URL}/connectors/${CONNECTOR_NAME}" > /dev/null 2>&1; then
+            echo "Connector ${CONNECTOR_NAME} already exists"
+            echo ""
+            echo "Current status:"
+            curl -s "${CONNECT_URL}/connectors/${CONNECTOR_NAME}/status" | head -200
+            echo ""
+            echo "=============================================="
+            exit 0
+          fi
+
+          echo "Deploying connector: ${CONNECTOR_NAME}"
+          echo ""
+
+          # Deploy connector with CDC configuration
+          RESPONSE=$(curl -sf -X POST "${CONNECT_URL}/connectors" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "name": "nova-postgres-cdc",
+              "config": {
+                "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+                "tasks.max": "1",
+                "database.hostname": "postgres.nova-staging.svc.cluster.local",
+                "database.port": "5432",
+                "database.user": "'"${POSTGRES_USER}"'",
+                "database.password": "'"${POSTGRES_PASSWORD}"'",
+                "database.dbname": "nova_auth",
+                "database.server.name": "nova",
+                "plugin.name": "pgoutput",
+                "publication.name": "nova_cdc_publication",
+                "publication.autocreate.mode": "filtered",
+                "slot.name": "nova_cdc_slot",
+                "table.include.list": "public.posts,public.follows,public.comments,public.likes",
+                "topic.prefix": "nova",
+                "topic.creation.enable": "true",
+                "topic.creation.default.replication.factor": "1",
+                "topic.creation.default.partitions": "3",
+                "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+                "key.converter.schemas.enable": "false",
+                "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+                "value.converter.schemas.enable": "false",
+                "transforms": "route",
+                "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+                "transforms.route.regex": "nova\\.public\\.(.+)",
+                "transforms.route.replacement": "cdc.$1",
+                "snapshot.mode": "initial",
+                "decimal.handling.mode": "string",
+                "time.precision.mode": "connect",
+                "heartbeat.interval.ms": "30000",
+                "errors.tolerance": "all",
+                "errors.log.enable": "true",
+                "errors.log.include.messages": "true"
+              }
+            }')
+
+          echo "Connector created successfully"
+          echo ""
+
+          # Wait for connector to initialize
+          echo "Waiting for connector to start..."
+          sleep 15
+
+          # Check connector status
+          echo ""
+          echo "Connector Status:"
+          curl -s "${CONNECT_URL}/connectors/${CONNECTOR_NAME}/status" | head -200
+
+          echo ""
+          echo "=============================================="
+          echo "  CDC Connector Deployment Complete"
+          echo "=============================================="
+
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi

@@ -366,6 +366,7 @@ patches:
 - path: patch-deployment-selectors.yaml
 - path: patch-analytics-kafka-env.yaml
 - path: patch-search-service-ports.yaml
+- path: postgres-cdc-config-patch.yaml
 - patch: |-
     apiVersion: networking.k8s.io/v1
     kind: Ingress
@@ -502,6 +503,12 @@ commonAnnotations:
 
 # Kafka + Zookeeper for event streaming
 
+# ========================================
+# P2.5 Priority: CDC (Change Data Capture)
+# ========================================
+# Debezium Kafka Connect for PostgreSQL CDC
+# Pre-requisites: PostgreSQL with wal_level=logical, Kafka cluster
+
 # ClickHouse for analytics
 
 # ========================================
@@ -536,6 +543,8 @@ resources:
 - postgres-multi-db-init.yaml
 - redis-cluster-statefulset.yaml
 - kafka-zookeeper-deployment.yaml
+- kafka-cdc-topics-init.yaml
+- debezium-connect-staging.yaml
 - clickhouse-statefulset.yaml
 - neo4j-statefulset.yaml
 - proto-management.yaml

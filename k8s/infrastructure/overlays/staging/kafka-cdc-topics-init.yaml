@@ -1,0 +1,137 @@
+##############################################################################
+# Kafka CDC Topics Initialization Job
+# Pre-creates CDC topics for Debezium before connector starts
+#
+# Topics created:
+# - cdc.posts (3 partitions) - Post creation/update/delete events
+# - cdc.comments (3 partitions) - Comment events
+# - cdc.likes (3 partitions) - Like/unlike events
+# - cdc.follows (3 partitions) - Follow/unfollow events
+# - connect-configs (1 partition) - Kafka Connect config storage
+# - connect-offsets (25 partitions) - Kafka Connect offset storage
+# - connect-status (5 partitions) - Kafka Connect status storage
+##############################################################################
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-cdc-topics-init
+  namespace: nova-staging
+  labels:
+    app: kafka
+    component: cdc-topics
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        app: kafka-init
+        component: cdc-topics
+    spec:
+      restartPolicy: OnFailure
+
+      initContainers:
+      - name: wait-for-kafka
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for Kafka to be ready..."
+          for i in $(seq 1 30); do
+            if nc -zv kafka.nova-staging.svc.cluster.local 9092 2>/dev/null; then
+              echo "Kafka is ready"
+              exit 0
+            fi
+            echo "  Attempt $i/30, retrying..."
+            sleep 5
+          done
+          echo "Kafka is not ready"
+          exit 1
+
+      containers:
+      - name: create-cdc-topics
+        image: confluentinc/cp-kafka:7.6.1
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "=============================================="
+          echo "  Kafka CDC Topics Initialization"
+          echo "=============================================="
+          echo ""
+
+          BOOTSTRAP_SERVER="kafka.nova-staging.svc.cluster.local:9092"
+
+          # CDC topics for Debezium output
+          CDC_TOPICS=(
+            "cdc.posts:3:1"
+            "cdc.comments:3:1"
+            "cdc.likes:3:1"
+            "cdc.follows:3:1"
+          )
+
+          # Kafka Connect internal topics
+          CONNECT_TOPICS=(
+            "connect-configs:1:1"
+            "connect-offsets:25:1"
+            "connect-status:5:1"
+          )
+
+          echo "Creating CDC topics..."
+          echo ""
+
+          for topic_spec in "${CDC_TOPICS[@]}"; do
+            IFS=':' read -r topic_name partitions replication <<< "$topic_spec"
+            echo "Creating topic: $topic_name (partitions: $partitions)"
+
+            kafka-topics \
+              --bootstrap-server "$BOOTSTRAP_SERVER" \
+              --create \
+              --topic "$topic_name" \
+              --partitions "$partitions" \
+              --replication-factor "$replication" \
+              --if-not-exists \
+              --config retention.ms=604800000 \
+              --config cleanup.policy=delete || true
+
+            echo ""
+          done
+
+          echo "Creating Kafka Connect internal topics..."
+          echo ""
+
+          for topic_spec in "${CONNECT_TOPICS[@]}"; do
+            IFS=':' read -r topic_name partitions replication <<< "$topic_spec"
+            echo "Creating topic: $topic_name (partitions: $partitions)"
+
+            # Connect topics need compact cleanup policy
+            kafka-topics \
+              --bootstrap-server "$BOOTSTRAP_SERVER" \
+              --create \
+              --topic "$topic_name" \
+              --partitions "$partitions" \
+              --replication-factor "$replication" \
+              --if-not-exists \
+              --config cleanup.policy=compact || true
+
+            echo ""
+          done
+
+          echo "=============================================="
+          echo "  All topics created successfully"
+          echo "=============================================="
+          echo ""
+          echo "Topic list:"
+          kafka-topics --bootstrap-server "$BOOTSTRAP_SERVER" --list | grep -E "^(cdc\.|connect-)" || true
+          echo ""
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
