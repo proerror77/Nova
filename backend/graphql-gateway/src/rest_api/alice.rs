@@ -11,10 +11,95 @@
 
 use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::env;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
 use crate::clients::ServiceClients;
+
+// MARK: - Cache Configuration
+const CACHE_TTL_SECONDS: u64 = 3600; // 1 hour cache
+const CACHE_MAX_ENTRIES: usize = 1000;
+
+// Global cache for enhance results
+static ENHANCE_CACHE: once_cell::sync::Lazy<Arc<RwLock<EnhanceCache>>> =
+    once_cell::sync::Lazy::new(|| Arc::new(RwLock::new(EnhanceCache::new())));
+
+struct CacheEntry {
+    response: AliceEnhanceResponse,
+    created_at: Instant,
+}
+
+struct EnhanceCache {
+    entries: HashMap<String, CacheEntry>,
+}
+
+impl EnhanceCache {
+    fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+        }
+    }
+
+    fn get(&self, key: &str) -> Option<&AliceEnhanceResponse> {
+        self.entries.get(key).and_then(|entry| {
+            if entry.created_at.elapsed() < Duration::from_secs(CACHE_TTL_SECONDS) {
+                Some(&entry.response)
+            } else {
+                None
+            }
+        })
+    }
+
+    fn insert(&mut self, key: String, response: AliceEnhanceResponse) {
+        // Evict old entries if cache is full
+        if self.entries.len() >= CACHE_MAX_ENTRIES {
+            self.evict_expired();
+            // If still full, remove oldest entry
+            if self.entries.len() >= CACHE_MAX_ENTRIES {
+                if let Some(oldest_key) = self
+                    .entries
+                    .iter()
+                    .min_by_key(|(_, v)| v.created_at)
+                    .map(|(k, _)| k.clone())
+                {
+                    self.entries.remove(&oldest_key);
+                }
+            }
+        }
+
+        self.entries.insert(
+            key,
+            CacheEntry {
+                response,
+                created_at: Instant::now(),
+            },
+        );
+    }
+
+    fn evict_expired(&mut self) {
+        let now = Instant::now();
+        self.entries.retain(|_, entry| {
+            now.duration_since(entry.created_at) < Duration::from_secs(CACHE_TTL_SECONDS)
+        });
+    }
+}
+
+/// Generate cache key from image hash
+fn generate_cache_key(image_base64: &str, existing_text: Option<&str>) -> String {
+    let mut hasher = Sha256::new();
+    // Only hash first 10KB of image to speed up hashing
+    let image_prefix = &image_base64[..image_base64.len().min(10240)];
+    hasher.update(image_prefix.as_bytes());
+    if let Some(text) = existing_text {
+        hasher.update(text.as_bytes());
+    }
+    format!("{:x}", hasher.finalize())
+}
 
 // MARK: - Request/Response Models
 
@@ -45,7 +130,7 @@ pub struct AliceEnhanceRequest {
     pub include_trending: Option<bool>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct AliceEnhanceResponse {
     pub description: String,
     pub hashtags: Vec<String>,
@@ -262,7 +347,23 @@ pub async fn enhance_post(
     req: web::Json<AliceEnhanceRequest>,
     _clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
+    let start_time = Instant::now();
     info!("POST /api/v2/alice/enhance");
+
+    // Generate cache key from image hash
+    let cache_key = generate_cache_key(&req.image_base64, req.existing_text.as_deref());
+
+    // Check cache first
+    {
+        let cache = ENHANCE_CACHE.read().await;
+        if let Some(cached_response) = cache.get(&cache_key) {
+            info!(
+                "Cache hit for enhance request, returning in {}ms",
+                start_time.elapsed().as_millis()
+            );
+            return Ok(HttpResponse::Ok().json(cached_response.clone()));
+        }
+    }
 
     let (base_url, api_key) = get_api_config();
 
@@ -282,8 +383,9 @@ pub async fn enhance_post(
     // Build vision request with image
     let image_url = format!("data:image/jpeg;base64,{}", req.image_base64);
 
+    // Use gpt-4o-mini for faster response (typically < 3 seconds)
     let vision_request = OpenAIVisionRequest {
-        model: "gpt-4o-all".to_string(),
+        model: "gpt-4o-mini".to_string(),
         messages: vec![OpenAIVisionMessage {
             role: "user".to_string(),
             content: vec![
@@ -296,11 +398,14 @@ pub async fn enhance_post(
                 },
             ],
         }],
-        max_tokens: Some(1000),
+        max_tokens: Some(500), // Reduced for faster response
     };
 
-    // Call OpenAI Vision API
-    let client = reqwest::Client::new();
+    // Call OpenAI Vision API with timeout
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10)) // 10 second timeout
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
     let api_url = format!("{}/chat/completions", base_url);
 
     match client
@@ -319,22 +424,31 @@ pub async fn enhance_post(
                     Ok(openai_response) => {
                         if let Some(choice) = openai_response.choices.first() {
                             // Parse the structured response from AI
-                            match parse_enhance_response(&choice.message.content) {
-                                Ok(enhance_response) => {
-                                    info!("Enhancement generated successfully");
-                                    Ok(HttpResponse::Ok().json(enhance_response))
-                                }
+                            let enhance_response = match parse_enhance_response(&choice.message.content) {
+                                Ok(response) => response,
                                 Err(e) => {
-                                    error!("Failed to parse enhancement response: {}", e);
+                                    warn!("Failed to parse enhancement response: {}, using fallback", e);
                                     // Fallback: return raw content as description
-                                    Ok(HttpResponse::Ok().json(AliceEnhanceResponse {
+                                    AliceEnhanceResponse {
                                         description: choice.message.content.clone(),
                                         hashtags: vec![],
                                         trending_topics: None,
                                         alternative_descriptions: None,
-                                    }))
+                                    }
                                 }
+                            };
+
+                            // Store in cache
+                            {
+                                let mut cache = ENHANCE_CACHE.write().await;
+                                cache.insert(cache_key.clone(), enhance_response.clone());
                             }
+
+                            info!(
+                                "Enhancement generated successfully in {}ms",
+                                start_time.elapsed().as_millis()
+                            );
+                            Ok(HttpResponse::Ok().json(enhance_response))
                         } else {
                             error!("No choices in OpenAI response");
                             Ok(HttpResponse::InternalServerError().json(serde_json::json!({

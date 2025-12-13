@@ -88,6 +88,7 @@ lazy_static = "1.5"  # ✅ Quick Win #5: For static metric registry
 
 # Persisted Queries
 sha2 = "0.10"  # ✅ P1: SHA-256 hashing for Automatic Persisted Queries (APQ)
+once_cell = "1.19"  # For lazy static initialization (Alice enhance cache)
 
 [build-dependencies]
 tonic-build = "0.12"
