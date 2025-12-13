@@ -70,6 +70,9 @@ spec:
         app: zitadel
     spec:
       serviceAccountName: default
+      # Disable automatic service links to prevent ZITADEL_PORT env var conflict
+      # Kubernetes auto-generates ZITADEL_PORT=tcp://... which breaks Zitadel
+      enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
