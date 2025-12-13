@@ -454,7 +454,9 @@ struct ChatView: View {
         .alert("Share Location", isPresented: $showLocationAlert) {
             Button("Share") {
                 if let location = locationManager.location {
-                    sendLocationMessage(location: location)
+                    Task {
+                        await viewModel.sendLocationMessage(location)
+                    }
                 }
             }
             Button("Cancel", role: .cancel) {}

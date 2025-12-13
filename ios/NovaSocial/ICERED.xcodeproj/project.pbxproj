@@ -124,6 +124,7 @@
 		EB0FE1C0C133317FDCEF80FE /* DateExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = E35DC62777A5472A407CC9A8 /* DateExtension.swift */; };
 		EDF27D6C1C9AE2719C3D6FE9 /* ForgotPasswordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11D90E19EB8E81DACA13AAB /* ForgotPasswordView.swift */; };
 		EEBF79C69078D7BD5A9E44DB /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BA9A27686FBAD37E301363D /* ShareSheet.swift */; };
+		V15181L17YBU1LD5RC5ABCD1 /* VisibilityTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = V15181L17Y7R4CK3R5W1F7A1 /* VisibilityTracker.swift */; };
 		F1888254C4BE3800E997DF37 /* AliceVoiceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = C502D13F9C3DF5D7833C47C9 /* AliceVoiceConfig.swift */; };
 		F213E5619BF6A2E4B0A7E098 /* MessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8742228C1E84193BD2624ACE /* MessageView.swift */; };
 		F22C78793E4AE7D3AC1019A4 /* ContentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52426426C95CA38E013274CD /* ContentService.swift */; };
@@ -141,6 +142,7 @@
 		0421555B5781BC4F1BBB43F4 /* ProfileView.swift.backup */ = {isa = PBXFileReference; path = ProfileView.swift.backup; sourceTree = "<group>"; };
 		0782F9728E588156767DEFCD /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		0BA9A27686FBAD37E301363D /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
+		V15181L17Y7R4CK3R5W1F7A1 /* VisibilityTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisibilityTracker.swift; sourceTree = "<group>"; };
 		0CF9EE837EC3996A27E70749 /* FeedPostCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedPostCard.swift; sourceTree = "<group>"; };
 		0F698A0D140FD88A1F12B773 /* NotificationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationView.swift; sourceTree = "<group>"; };
 		0FC3601C5DCD3158E371A0D5 /* CommunicationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunicationService.swift; sourceTree = "<group>"; };
@@ -640,6 +642,7 @@
 			isa = PBXGroup;
 			children = (
 				7978EE99D9C4B0E5277D4E0D /* LivePhotoView.swift */,
+				V15181L17Y7R4CK3R5W1F7A1 /* VisibilityTracker.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -1185,6 +1188,7 @@
 				424E9016838E6F81E091A92F /* SettingsView.swift in Sources */,
 				72CE287C304465CADA0CD7C4 /* SettingsViewModel.swift in Sources */,
 				EEBF79C69078D7BD5A9E44DB /* ShareSheet.swift in Sources */,
+				V15181L17YBU1LD5RC5ABCD1 /* VisibilityTracker.swift in Sources */,
 				2B3C1F85A7E47D750599DF9C /* SimpleCarouselView.swift in Sources */,
 				46C169B49CD9E53AB2048574 /* SocialService.swift in Sources */,
 				ACB96FD8E0748DE08465014E /* SplashScreenView.swift in Sources */,

@@ -160,8 +160,8 @@ struct FeedPostCard: View {
                     thumbnailUrl: post.videoThumbnailUrl,
                     autoPlay: true,
                     isMuted: true,
-                    isVisible: isVideoVisible,
-                    height: 500
+                    height: 500,
+                    isVisible: isVideoVisible
                 )
                 .trackVisibility(id: "\(post.id)_video", threshold: 0.5) { visible in
                     isVideoVisible = visible
@@ -281,64 +281,13 @@ struct FeedPostCard: View {
     }
     
     // MARK: - Mixed Media Carousel (Images + Videos)
-    
+
+    @ViewBuilder
     private var mixedMediaCarousel: some View {
         VStack(spacing: 8) {
             TabView(selection: $currentImageIndex) {
                 ForEach(Array(post.mediaUrls.enumerated()), id: \.offset) { index, mediaUrl in
-                    let isVideo = FeedMediaType.from(url: mediaUrl) == .video
-                    
-                    if isVideo, let url = URL(string: mediaUrl) {
-                        // Video item
-                        FeedVideoPlayer(
-                            url: url,
-                            thumbnailUrl: post.thumbnailUrls.indices.contains(index)
-                                ? URL(string: post.thumbnailUrls[index])
-                                : nil,
-                            autoPlay: currentImageIndex == index, // Only autoplay visible video
-                            isMuted: true,
-                            isVisible: isVideoVisible,
-                            height: 500
-                        )
-                        .trackVisibility(id: "\(post.id)_video_\(index)", threshold: 0.5) { visible in
-                            isVideoVisible = visible
-                        }
-                        .tag(index)
-                    } else {
-                        // Image item
-                        let displayUrl = post.thumbnailUrls.indices.contains(index) 
-                            ? post.thumbnailUrls[index] 
-                            : mediaUrl
-                        
-                        AsyncImage(url: URL(string: displayUrl)) { phase in
-                            switch phase {
-                            case .empty:
-                                Rectangle()
-                                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                    .overlay(
-                                        ProgressView()
-                                            .tint(.white)
-                                    )
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                            case .failure:
-                                Rectangle()
-                                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                    .overlay(
-                                        Image(systemName: "photo")
-                                            .font(.system(size: 30))
-                                            .foregroundColor(.white.opacity(0.5))
-                                    )
-                            @unknown default:
-                                EmptyView()
-                            }
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
-                        .tag(index)
-                    }
+                    mixedMediaItem(index: index, mediaUrl: mediaUrl)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
@@ -346,6 +295,65 @@ struct FeedPostCard: View {
 
             // Custom page indicator with video dots
             mixedMediaPageIndicator
+        }
+    }
+
+    @ViewBuilder
+    private func mixedMediaItem(index: Int, mediaUrl: String) -> some View {
+        let isVideo = FeedMediaType.from(url: mediaUrl) == .video
+
+        if isVideo, let url = URL(string: mediaUrl) {
+            // Video item
+            let thumbnailUrl: URL? = post.thumbnailUrls.indices.contains(index)
+                ? URL(string: post.thumbnailUrls[index])
+                : nil
+
+            FeedVideoPlayer(
+                url: url,
+                thumbnailUrl: thumbnailUrl,
+                autoPlay: currentImageIndex == index,
+                isMuted: true,
+                height: 500,
+                isVisible: isVideoVisible
+            )
+            .trackVisibility(id: "\(post.id)_video_\(index)", threshold: 0.5) { visible in
+                isVideoVisible = visible
+            }
+            .tag(index)
+        } else {
+            // Image item
+            let displayUrl: String = post.thumbnailUrls.indices.contains(index)
+                ? post.thumbnailUrls[index]
+                : mediaUrl
+
+            AsyncImage(url: URL(string: displayUrl)) { phase in
+                switch phase {
+                case .empty:
+                    Rectangle()
+                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                        .overlay(
+                            ProgressView()
+                                .tint(.white)
+                        )
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    Rectangle()
+                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                        .overlay(
+                            Image(systemName: "photo")
+                                .font(.system(size: 30))
+                                .foregroundColor(.white.opacity(0.5))
+                        )
+                @unknown default:
+                    EmptyView()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .tag(index)
         }
     }
     
