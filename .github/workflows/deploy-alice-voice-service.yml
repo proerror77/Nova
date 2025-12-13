@@ -126,23 +126,23 @@ jobs:
           kubectl cluster-info
           kubectl get nodes
 
-      - name: Apply K8s manifests (first deploy only)
+      - name: Apply K8s manifests
         run: |
-          # Check if deployment exists, if not apply all manifests
-          if ! kubectl get deployment ${{ env.SERVICE_NAME }} -n ${{ env.NAMESPACE }} &>/dev/null; then
-            echo "First deployment - applying all manifests..."
-            kubectl apply -f k8s/microservices/alice-voice-service-serviceaccount.yaml -n ${{ env.NAMESPACE }}
-            kubectl apply -f k8s/microservices/alice-voice-service-configmap.yaml -n ${{ env.NAMESPACE }}
-            kubectl apply -f k8s/microservices/alice-voice-service-secret.yaml -n ${{ env.NAMESPACE }}
-            kubectl apply -f k8s/microservices/alice-voice-service-deployment.yaml -n ${{ env.NAMESPACE }}
-            kubectl apply -f k8s/microservices/alice-voice-service-service.yaml -n ${{ env.NAMESPACE }}
-            kubectl apply -f k8s/microservices/alice-voice-service-ingress.yaml -n ${{ env.NAMESPACE }}
-          fi
+          # Always apply all manifests to ensure spec is up to date
+          echo "Applying all K8s manifests..."
+          kubectl apply -f k8s/microservices/alice-voice-service-serviceaccount.yaml -n ${{ env.NAMESPACE }}
+          kubectl apply -f k8s/microservices/alice-voice-service-configmap.yaml -n ${{ env.NAMESPACE }}
+          kubectl apply -f k8s/microservices/alice-voice-service-secret.yaml -n ${{ env.NAMESPACE }}
+          kubectl apply -f k8s/microservices/alice-voice-service-deployment.yaml -n ${{ env.NAMESPACE }}
+          kubectl apply -f k8s/microservices/alice-voice-service-service.yaml -n ${{ env.NAMESPACE }}
+          kubectl apply -f k8s/microservices/alice-voice-service-ingress.yaml -n ${{ env.NAMESPACE }}
 
       - name: Update deployment image
         run: |
           IMAGE="${{ needs.build-and-push.outputs.image-full }}"
           echo "Updating deployment with image: ${IMAGE}"
+
+          # Update image in deployment spec
           kubectl set image deployment/${{ env.SERVICE_NAME }} \
             -n ${{ env.NAMESPACE }} \
             ${{ env.SERVICE_NAME }}=${IMAGE}
