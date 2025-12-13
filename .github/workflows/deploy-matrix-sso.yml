@@ -1,0 +1,407 @@
+name: Deploy Matrix SSO (Zitadel + Synapse OIDC)
+
+# 部署 Matrix SSO 組件到 GKE staging 環境
+# 組件: Zitadel IdP, Synapse OIDC 配置, 相關 Secrets
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_zitadel:
+        description: 'Deploy Zitadel IdP'
+        type: boolean
+        default: true
+      deploy_synapse_oidc:
+        description: 'Deploy Synapse OIDC config'
+        type: boolean
+        default: true
+      create_secrets:
+        description: 'Create/Update secrets (requires GCP Secret Manager)'
+        type: boolean
+        default: false
+      environment:
+        description: 'Target environment'
+        type: choice
+        options:
+          - staging
+        default: staging
+
+concurrency:
+  group: matrix-sso-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_REGION: ${{ vars.GCP_REGION || 'asia-northeast1' }}
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GKE_CLUSTER: ${{ vars.GKE_CLUSTER || 'nova-staging-gke' }}
+  NAMESPACE: nova-backend
+
+jobs:
+  # ============================================================
+  # Phase 1: Setup & Validation
+  # ============================================================
+  setup:
+    name: Setup & Validate
+    runs-on: ubuntu-latest
+    outputs:
+      namespace: ${{ steps.config.outputs.namespace }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set configuration
+        id: config
+        run: |
+          if [ "${{ inputs.environment }}" == "staging" ]; then
+            echo "namespace=nova-backend" >> "$GITHUB_OUTPUT"
+          else
+            echo "namespace=nova-backend" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate manifests
+        run: |
+          echo "🔍 Validating Kustomize manifests..."
+
+          # Check if kustomize can build the overlay
+          if [ -f "backend/k8s/overlays/staging/kustomization.yaml" ]; then
+            kubectl kustomize backend/k8s/overlays/staging > /dev/null
+            echo "✅ Staging overlay is valid"
+          else
+            echo "❌ Staging overlay not found"
+            exit 1
+          fi
+
+  # ============================================================
+  # Phase 2: Create Secrets (Optional)
+  # ============================================================
+  create-secrets:
+    name: Create Secrets
+    needs: setup
+    if: inputs.create_secrets
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Install gke-gcloud-auth-plugin
+        run: |
+          gcloud components install gke-gcloud-auth-plugin --quiet 2>/dev/null || \
+          sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} \
+            --region ${{ env.GCP_REGION }} \
+            --project ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Create Zitadel Secrets
+        env:
+          NAMESPACE: ${{ needs.setup.outputs.namespace }}
+        run: |
+          echo "🔐 Creating Zitadel secrets..."
+
+          # Generate secure values if not exists
+          MASTERKEY=$(openssl rand -base64 32 | head -c 32)
+          DB_PASSWORD=$(openssl rand -base64 24)
+          ADMIN_PASSWORD="NovaAdmin2024!"  # Default for staging
+
+          # Check if secret exists
+          if kubectl get secret zitadel-secrets -n $NAMESPACE &>/dev/null; then
+            echo "⚠️  Secret zitadel-secrets already exists, skipping..."
+          else
+            kubectl create secret generic zitadel-secrets \
+              --namespace=$NAMESPACE \
+              --from-literal=ZITADEL_MASTERKEY="$MASTERKEY" \
+              --from-literal=ZITADEL_DATABASE_POSTGRES_USER_PASSWORD="$DB_PASSWORD" \
+              --from-literal=ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD="$DB_PASSWORD" \
+              --from-literal=ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD="$ADMIN_PASSWORD"
+            echo "✅ Created zitadel-secrets"
+          fi
+
+      - name: Create Synapse OIDC Secrets
+        env:
+          NAMESPACE: ${{ needs.setup.outputs.namespace }}
+        run: |
+          echo "🔐 Creating Synapse OIDC secrets..."
+
+          OIDC_SECRET=$(openssl rand -base64 32)
+          REGISTRATION_SECRET=$(openssl rand -base64 32)
+
+          if kubectl get secret synapse-oidc-secrets -n $NAMESPACE &>/dev/null; then
+            echo "⚠️  Secret synapse-oidc-secrets already exists, skipping..."
+          else
+            kubectl create secret generic synapse-oidc-secrets \
+              --namespace=$NAMESPACE \
+              --from-literal=oidc_client_secret="$OIDC_SECRET" \
+              --from-literal=registration_shared_secret="$REGISTRATION_SECRET"
+            echo "✅ Created synapse-oidc-secrets"
+          fi
+
+      - name: Create Identity Service API Key
+        env:
+          NAMESPACE: ${{ needs.setup.outputs.namespace }}
+        run: |
+          echo "🔐 Creating identity-service API key..."
+
+          API_KEY=$(openssl rand -base64 32)
+
+          if kubectl get secret identity-service-api-key -n $NAMESPACE &>/dev/null; then
+            echo "⚠️  Secret identity-service-api-key already exists, skipping..."
+          else
+            kubectl create secret generic identity-service-api-key \
+              --namespace=$NAMESPACE \
+              --from-literal=INTERNAL_API_KEY="$API_KEY"
+            echo "✅ Created identity-service-api-key"
+          fi
+
+  # ============================================================
+  # Phase 3: Deploy Zitadel
+  # ============================================================
+  deploy-zitadel:
+    name: Deploy Zitadel
+    needs: [setup, create-secrets]
+    if: always() && inputs.deploy_zitadel && needs.setup.result == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Install gke-gcloud-auth-plugin
+        run: |
+          gcloud components install gke-gcloud-auth-plugin --quiet 2>/dev/null || \
+          sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} \
+            --region ${{ env.GCP_REGION }} \
+            --project ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Deploy Zitadel base resources
+        env:
+          NAMESPACE: ${{ needs.setup.outputs.namespace }}
+        run: |
+          echo "🚀 Deploying Zitadel..."
+
+          # Ensure namespace exists
+          kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+
+          # Apply base Zitadel resources
+          kubectl apply -f backend/k8s/base/zitadel.yaml -n $NAMESPACE
+
+          echo "✅ Zitadel base resources applied"
+
+      - name: Apply staging overlay
+        env:
+          NAMESPACE: ${{ needs.setup.outputs.namespace }}
+        run: |
+          echo "🚀 Applying staging patches..."
+
+          # Apply staging-specific patches
+          kubectl apply -f backend/k8s/overlays/staging/zitadel-patch.yaml -n $NAMESPACE
+
+          echo "✅ Staging patches applied"
+
+      - name: Wait for Zitadel deployment
+        env:
+          NAMESPACE: ${{ needs.setup.outputs.namespace }}
+        run: |
+          echo "⏳ Waiting for Zitadel to be ready..."
+
+          kubectl rollout status deployment/zitadel -n $NAMESPACE --timeout=300s || {
+            echo "❌ Zitadel deployment failed"
+            kubectl describe deployment/zitadel -n $NAMESPACE
+            kubectl logs -l app=zitadel -n $NAMESPACE --tail=100
+            exit 1
+          }
+
+          echo "✅ Zitadel is ready"
+          kubectl get pods -l app=zitadel -n $NAMESPACE
+
+  # ============================================================
+  # Phase 4: Deploy Synapse OIDC Config
+  # ============================================================
+  deploy-synapse-oidc:
+    name: Deploy Synapse OIDC Config
+    needs: [setup, deploy-zitadel]
+    if: always() && inputs.deploy_synapse_oidc && needs.setup.result == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Install gke-gcloud-auth-plugin
+        run: |
+          gcloud components install gke-gcloud-auth-plugin --quiet 2>/dev/null || \
+          sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} \
+            --region ${{ env.GCP_REGION }} \
+            --project ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Deploy Matrix well-known config
+        env:
+          NAMESPACE: ${{ needs.setup.outputs.namespace }}
+        run: |
+          echo "🚀 Deploying Matrix well-known config..."
+
+          kubectl apply -f backend/k8s/overlays/staging/matrix-well-known.yaml -n $NAMESPACE
+
+          echo "✅ Matrix well-known config applied"
+
+      - name: Deploy Synapse OIDC config
+        env:
+          NAMESPACE: ${{ needs.setup.outputs.namespace }}
+        run: |
+          echo "🚀 Deploying Synapse OIDC configuration..."
+
+          kubectl apply -f backend/k8s/overlays/staging/synapse-oidc-patch.yaml -n $NAMESPACE
+
+          echo "✅ Synapse OIDC config applied"
+
+      - name: Restart Synapse to pick up new config
+        env:
+          NAMESPACE: ${{ needs.setup.outputs.namespace }}
+        run: |
+          echo "🔄 Restarting Synapse..."
+
+          if kubectl get deployment matrix-synapse -n $NAMESPACE &>/dev/null; then
+            kubectl rollout restart deployment/matrix-synapse -n $NAMESPACE
+            kubectl rollout status deployment/matrix-synapse -n $NAMESPACE --timeout=300s || {
+              echo "⚠️  Synapse restart timeout, checking status..."
+              kubectl describe deployment/matrix-synapse -n $NAMESPACE
+            }
+          else
+            echo "⚠️  matrix-synapse deployment not found, skipping restart"
+          fi
+
+  # ============================================================
+  # Phase 5: Verification
+  # ============================================================
+  verify:
+    name: Verify Deployment
+    needs: [setup, deploy-zitadel, deploy-synapse-oidc]
+    if: always() && needs.setup.result == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Install gke-gcloud-auth-plugin
+        run: |
+          gcloud components install gke-gcloud-auth-plugin --quiet 2>/dev/null || \
+          sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} \
+            --region ${{ env.GCP_REGION }} \
+            --project ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Check deployment status
+        env:
+          NAMESPACE: ${{ needs.setup.outputs.namespace }}
+        run: |
+          echo "════════════════════════════════════════════════════"
+          echo "📊 Matrix SSO Deployment Summary"
+          echo "════════════════════════════════════════════════════"
+
+          echo ""
+          echo "🔍 Checking Zitadel..."
+          kubectl get deployment zitadel -n $NAMESPACE -o wide 2>/dev/null || echo "Not deployed"
+          kubectl get pods -l app=zitadel -n $NAMESPACE 2>/dev/null || true
+
+          echo ""
+          echo "🔍 Checking Matrix Synapse..."
+          kubectl get deployment matrix-synapse -n $NAMESPACE -o wide 2>/dev/null || echo "Not deployed"
+          kubectl get pods -l app=matrix-synapse -n $NAMESPACE 2>/dev/null || true
+
+          echo ""
+          echo "🔍 Checking Secrets..."
+          kubectl get secret zitadel-secrets -n $NAMESPACE &>/dev/null && echo "✅ zitadel-secrets" || echo "❌ zitadel-secrets missing"
+          kubectl get secret synapse-oidc-secrets -n $NAMESPACE &>/dev/null && echo "✅ synapse-oidc-secrets" || echo "❌ synapse-oidc-secrets missing"
+          kubectl get secret identity-service-api-key -n $NAMESPACE &>/dev/null && echo "✅ identity-service-api-key" || echo "❌ identity-service-api-key missing"
+
+          echo ""
+          echo "🔍 Checking Ingress..."
+          kubectl get ingress -n $NAMESPACE 2>/dev/null | grep -E "zitadel|matrix" || echo "No SSO ingress found"
+
+          echo ""
+          echo "════════════════════════════════════════════════════"
+
+      - name: Test OIDC Discovery (if Zitadel is exposed)
+        continue-on-error: true
+        run: |
+          echo "🧪 Testing OIDC Discovery endpoint..."
+
+          # This will only work if Zitadel is externally accessible
+          curl -s --max-time 10 https://id.staging.nova.app/.well-known/openid-configuration | head -20 || \
+            echo "⚠️  OIDC discovery not accessible (may need DNS/ingress setup)"
+
+      - name: Deployment complete
+        run: |
+          echo ""
+          echo "════════════════════════════════════════════════════"
+          echo "✅ Matrix SSO Deployment Complete"
+          echo "════════════════════════════════════════════════════"
+          echo ""
+          echo "Next steps:"
+          echo "1. Configure DNS for id.staging.nova.app → Zitadel Ingress"
+          echo "2. Configure DNS for matrix.staging.nova.app → Synapse Ingress"
+          echo "3. Access Zitadel console and configure OIDC Application"
+          echo "4. Follow: backend/docs/ZITADEL_UI_SETUP_GUIDE.md"
+          echo ""
