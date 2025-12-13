@@ -164,7 +164,7 @@ spec:
     app: matrix-well-known
 
 ---
-# Ingress for staging.nova.app well-known endpoints
+# Ingress for staging.nova.app well-known endpoints (using GCE Ingress)
 # This serves the well-known files from the main domain
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -172,25 +172,28 @@ metadata:
   name: matrix-well-known-ingress
   namespace: nova-backend
   annotations:
-    kubernetes.io/ingress.class: nginx
-    cert-manager.io/cluster-issuer: letsencrypt-staging
-    # Ensure proper CORS headers
-    nginx.ingress.kubernetes.io/enable-cors: "true"
-    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
-    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, OPTIONS"
+    kubernetes.io/ingress.class: gce
+    networking.gke.io/managed-certificates: nova-staging-well-known-cert
 spec:
-  tls:
-    - hosts:
-        - staging.nova.app
-      secretName: nova-staging-tls
+  ingressClassName: gce
   rules:
     - host: staging.nova.app
       http:
         paths:
-          - path: /.well-known/matrix
-            pathType: Prefix
+          - path: /.well-known/matrix/*
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: matrix-well-known
                 port:
                   number: 80
+---
+# GKE Managed Certificate for staging.nova.app well-known
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: nova-staging-well-known-cert
+  namespace: nova-backend
+spec:
+  domains:
+    - staging.nova.app
