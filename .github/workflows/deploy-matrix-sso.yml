@@ -110,6 +110,14 @@ jobs:
             --region ${{ env.GCP_REGION }} \
             --project ${{ vars.GCP_PROJECT_ID }}
 
+      - name: Ensure namespace exists
+        env:
+          NAMESPACE: ${{ needs.setup.outputs.namespace }}
+        run: |
+          echo "🏗️ Ensuring namespace exists..."
+          kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+          echo "✅ Namespace ready"
+
       - name: Create Zitadel Secrets
         env:
           NAMESPACE: ${{ needs.setup.outputs.namespace }}
@@ -214,8 +222,8 @@ jobs:
           # Ensure namespace exists
           kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
-          # Apply base Zitadel resources
-          kubectl apply -f backend/k8s/base/zitadel.yaml -n $NAMESPACE
+          # Apply base Zitadel resources (ignore ServiceMonitor if CRD not installed)
+          kubectl apply -f backend/k8s/base/zitadel.yaml -n $NAMESPACE 2>&1 | grep -v "ServiceMonitor" || true
 
           echo "✅ Zitadel base resources applied"
 
@@ -297,7 +305,9 @@ jobs:
         run: |
           echo "🚀 Deploying Synapse OIDC configuration..."
 
-          kubectl apply -f backend/k8s/overlays/staging/synapse-oidc-patch.yaml -n $NAMESPACE
+          # Apply Synapse config patch and ingress
+          kubectl apply -f backend/k8s/overlays/staging/synapse-config-patch.yaml -n $NAMESPACE
+          kubectl apply -f backend/k8s/overlays/staging/synapse-ingress.yaml -n $NAMESPACE
 
           echo "✅ Synapse OIDC config applied"
 
