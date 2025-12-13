@@ -564,6 +564,7 @@ struct GetCommentsResponse: Codable {
 // MARK: - Poll Models
 
 /// Summary of a poll for carousel/list display
+/// Note: Uses automatic snake_case conversion via JSONDecoder.keyDecodingStrategy
 struct PollSummary: Codable, Identifiable {
     let id: String
     let title: String
@@ -575,32 +576,19 @@ struct PollSummary: Codable, Identifiable {
     let topCandidates: [CandidatePreview]?
     let tags: [String]?
     let endsAt: String?
-
-    enum CodingKeys: String, CodingKey {
-        case id, title, status, tags
-        case coverImageUrl = "cover_image_url"
-        case pollType = "poll_type"
-        case totalVotes = "total_votes"
-        case candidateCount = "candidate_count"
-        case topCandidates = "top_candidates"
-        case endsAt = "ends_at"
-    }
 }
 
 /// Preview of a candidate (for top 3 display)
+/// Note: Uses automatic snake_case conversion via JSONDecoder.keyDecodingStrategy
 struct CandidatePreview: Codable, Identifiable {
     let id: String
     let name: String
     let avatarUrl: String?
     let rank: Int
-
-    enum CodingKeys: String, CodingKey {
-        case id, name, rank
-        case avatarUrl = "avatar_url"
-    }
 }
 
 /// Full candidate details with vote stats
+/// Note: Uses automatic snake_case conversion via JSONDecoder.keyDecodingStrategy
 struct PollCandidate: Codable, Identifiable {
     let id: String
     let name: String
@@ -611,31 +599,17 @@ struct PollCandidate: Codable, Identifiable {
     let rank: Int
     let rankChange: Int
     let votePercentage: Double
-
-    enum CodingKeys: String, CodingKey {
-        case id, name, description, rank
-        case avatarUrl = "avatar_url"
-        case userId = "user_id"
-        case voteCount = "vote_count"
-        case rankChange = "rank_change"
-        case votePercentage = "vote_percentage"
-    }
 }
 
 struct TrendingPollsResponse: Codable {
     let polls: [PollSummary]
 }
 
+/// Note: Uses automatic snake_case conversion via JSONDecoder.keyDecodingStrategy
 struct PollRankingsResponse: Codable {
     let rankings: [PollCandidate]
     let totalCandidates: Int?
     let totalVotes: Int64?
-
-    enum CodingKeys: String, CodingKey {
-        case rankings
-        case totalCandidates = "total_candidates"
-        case totalVotes = "total_votes"
-    }
 }
 
 /// Poll candidate input for creating polls
