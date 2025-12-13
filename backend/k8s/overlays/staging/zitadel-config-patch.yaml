@@ -11,6 +11,10 @@ data:
     ExternalPort: 443
     ExternalSecure: true
 
+    # Explicit port settings to avoid Kubernetes service env var conflicts
+    # Kubernetes auto-creates ZITADEL_PORT=tcp://... which confuses Zitadel
+    Port: 8080
+
     TLS:
       Enabled: false
 
