@@ -292,16 +292,23 @@ jobs:
           # Ensure namespace exists
           kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
-          # Build and apply Zitadel resources via kustomize (includes all patches)
-          # Filter only Zitadel resources using label selector
-          kubectl kustomize backend/k8s/overlays/staging | kubectl apply -f - -n $NAMESPACE -l app=zitadel --prune=false 2>&1 | grep -v "ServiceMonitor" || true
+          # Check if existing deployment has mismatched selector labels
+          # If so, delete it to allow recreation with correct labels
+          EXISTING_LABELS=$(kubectl get deployment zitadel -n $NAMESPACE -o jsonpath='{.spec.selector.matchLabels}' 2>/dev/null || echo "{}")
+          if echo "$EXISTING_LABELS" | grep -q "app.kubernetes.io/component"; then
+            echo "✅ Deployment has correct labels"
+          elif echo "$EXISTING_LABELS" | grep -q "zitadel"; then
+            echo "⚠️  Deployment has old labels, need to recreate..."
+            kubectl delete deployment zitadel -n $NAMESPACE --ignore-not-found=true
+            sleep 5
+            echo "✅ Old deployment deleted"
+          fi
 
-          # Explicitly apply the patched ConfigMaps to ensure correct values
-          echo "📝 Applying patched ConfigMaps..."
-          kubectl kustomize backend/k8s/overlays/staging | kubectl apply -f - -n $NAMESPACE \
-            --selector='app=zitadel' \
-            --force-conflicts \
-            --server-side=true 2>&1 | grep -E "configmap|ConfigMap" || true
+          # Apply Zitadel resources using server-side apply to handle conflicts
+          echo "📦 Applying Zitadel resources..."
+          kubectl kustomize backend/k8s/overlays/staging | \
+            kubectl apply -f - -n $NAMESPACE --server-side=true --force-conflicts 2>&1 | \
+            grep -E "zitadel|Zitadel" | grep -v "ServiceMonitor" || true
 
           echo "✅ Zitadel resources applied via Kustomize"
 
