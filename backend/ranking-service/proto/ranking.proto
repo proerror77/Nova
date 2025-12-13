@@ -17,6 +17,10 @@ message RankFeedRequest {
   string user_id = 1;
   int32 limit = 2;  // 最終返回數量（默認 20）
   RecallConfig recall_config = 3;
+  // 抖音風格 Pipeline 配置
+  string session_id = 4;  // 會話 ID，用於實時個性化
+  bool enable_exploration = 5;  // 是否啟用新內容探索（默認 true）
+  float exploration_ratio = 6;  // 探索內容比例（默認 0.1 = 10%）
 }
 
 message RecallConfig {
@@ -29,6 +33,19 @@ message RecallConfig {
 message RankFeedResponse {
   repeated RankedPost posts = 1;
   RecallStats recall_stats = 2;
+  PipelineStats pipeline_stats = 3;  // 抖音風格 4 層 Pipeline 統計
+}
+
+// 抖音風格 4 層 Pipeline 統計
+message PipelineStats {
+  int32 recall_count = 1;         // 召回層輸出數量
+  int32 coarse_rank_count = 2;    // 粗排層輸出數量
+  int32 fine_rank_count = 3;      // 精排層輸出數量
+  int32 exploration_count = 4;    // 探索內容數量
+  int32 final_count = 5;          // 最終輸出數量
+  float coarse_rank_latency_ms = 6;   // 粗排延遲
+  float fine_rank_latency_ms = 7;     // 精排延遲
+  float total_latency_ms = 8;         // 總延遲
 }
 
 message RankedPost {

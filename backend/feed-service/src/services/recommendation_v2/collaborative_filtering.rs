@@ -36,6 +36,10 @@ pub struct CollaborativeFilteringModel {
     /// Item-Item similarity: post_id → [(similar_post_id, similarity_score)]
     pub item_similarity: HashMap<Uuid, Vec<(Uuid, f64)>>,
 
+    /// User-Liked posts: user_id → [(post_id, interaction_weight)]
+    /// Interaction weights: like=1.0, comment=2.0, share=3.0, complete_watch=1.5
+    pub user_liked_posts: HashMap<Uuid, Vec<(Uuid, f64)>>,
+
     /// Configuration
     pub k_neighbors: usize,
     pub metric: SimilarityMetric,
@@ -44,26 +48,57 @@ pub struct CollaborativeFilteringModel {
 impl CollaborativeFilteringModel {
     /// Load pre-computed similarity matrices from disk
     ///
-    /// Expected file format: bincode serialized HashMap<Uuid, Vec<(Uuid, f64)>>
+    /// Expected file format: JSON serialized HashMap<Uuid, Vec<(Uuid, f64)>>
     pub fn load(user_sim_path: &str, item_sim_path: &str, k_neighbors: usize) -> Result<Self> {
         let user_path = normalize_path(user_sim_path, "user_similarity.json");
         let item_path = normalize_path(item_sim_path, "item_similarity.json");
+        let user_liked_path = normalize_path(user_sim_path, "user_liked_posts.json");
 
         let user_similarity = load_similarity_map(&user_path, k_neighbors)?;
         let item_similarity = load_similarity_map(&item_path, k_neighbors)?;
+        let user_liked_posts = load_user_liked_posts(&user_liked_path)?;
 
         info!(
             user_entries = user_similarity.len(),
             item_entries = item_similarity.len(),
-            "Collaborative filtering similarity matrices loaded"
+            user_liked_entries = user_liked_posts.len(),
+            "Collaborative filtering data loaded"
         );
 
         Ok(Self {
             user_similarity,
             item_similarity,
+            user_liked_posts,
             k_neighbors,
             metric: SimilarityMetric::Cosine,
         })
+    }
+
+    /// Create an empty model (for testing or initialization)
+    pub fn empty(k_neighbors: usize) -> Self {
+        Self {
+            user_similarity: HashMap::new(),
+            item_similarity: HashMap::new(),
+            user_liked_posts: HashMap::new(),
+            k_neighbors,
+            metric: SimilarityMetric::Cosine,
+        }
+    }
+
+    /// Update user liked posts (for real-time updates)
+    pub fn update_user_liked_posts(&mut self, user_id: Uuid, post_id: Uuid, weight: f64) {
+        let posts = self.user_liked_posts.entry(user_id).or_default();
+        // Update existing entry or add new one
+        if let Some(existing) = posts.iter_mut().find(|(p, _)| *p == post_id) {
+            existing.1 = weight.max(existing.1); // Keep highest weight
+        } else {
+            posts.push((post_id, weight));
+            // Keep only top 100 posts per user
+            if posts.len() > 100 {
+                posts.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                posts.truncate(100);
+            }
+        }
     }
 
     /// Get recommended posts using user-user collaborative filtering
@@ -73,24 +108,70 @@ impl CollaborativeFilteringModel {
     /// 2. Aggregate posts they engaged with (weighted by similarity)
     /// 3. Filter out posts target user already seen
     /// 4. Return top-N posts by weighted score
+    ///
+    /// Formula: score[post] = Σ(similarity[user] × interaction_weight[user, post])
     pub fn recommend_user_based(
         &self,
         user_id: Uuid,
         seen_posts: &[Uuid],
         n: usize,
     ) -> Result<Vec<(Uuid, f64)>> {
-        // Minimal implementation: return empty list to avoid panic
-        // TODO: Implement full user-based CF when user similarity matrix is available
-        // 1. Get similar users from self.user_similarity
-        // 2. Query their liked posts from ClickHouse
-        // 3. Aggregate scores: score[post] = Σ(similarity[user] * interaction[user, post])
-        // 4. Sort by score, filter seen_posts, return top-N
+        // Step 1: Find similar users
+        let similar_users = self.find_similar_users(user_id, self.k_neighbors);
 
-        let _ = user_id;
-        let _ = seen_posts;
-        let _ = n;
+        if similar_users.is_empty() {
+            info!(
+                user_id = %user_id,
+                "No similar users found for user-based CF"
+            );
+            return Ok(Vec::new());
+        }
 
-        Ok(Vec::new())
+        // Step 2: Aggregate posts from similar users weighted by similarity
+        let mut aggregated_scores: HashMap<Uuid, f64> = HashMap::new();
+
+        for (similar_user_id, user_similarity) in &similar_users {
+            // Get posts this similar user liked
+            if let Some(liked_posts) = self.user_liked_posts.get(similar_user_id) {
+                for (post_id, interaction_weight) in liked_posts {
+                    // Skip if already seen by target user
+                    if seen_posts.contains(post_id) {
+                        continue;
+                    }
+
+                    // Weighted score: similarity × interaction_weight
+                    let weighted_score = user_similarity * interaction_weight;
+                    *aggregated_scores.entry(*post_id).or_insert(0.0) += weighted_score;
+                }
+            }
+        }
+
+        if aggregated_scores.is_empty() {
+            info!(
+                user_id = %user_id,
+                similar_users_count = similar_users.len(),
+                "No unseen posts from similar users"
+            );
+            return Ok(Vec::new());
+        }
+
+        // Step 3: Sort by aggregated score (descending) and return top-N
+        let mut ranked: Vec<(Uuid, f64)> = aggregated_scores.into_iter().collect();
+        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        info!(
+            user_id = %user_id,
+            similar_users_count = similar_users.len(),
+            candidate_posts = ranked.len(),
+            "User-based CF recommendations generated"
+        );
+
+        Ok(ranked.into_iter().take(n).collect())
+    }
+
+    /// Get user liked posts (for inspection/debugging)
+    pub fn get_user_liked_posts(&self, user_id: Uuid) -> Option<&Vec<(Uuid, f64)>> {
+        self.user_liked_posts.get(&user_id)
     }
 
     /// Get recommended posts using item-item collaborative filtering
@@ -187,6 +268,62 @@ fn normalize_path(path: &str, default_file: &str) -> PathBuf {
     } else {
         candidate.to_path_buf()
     }
+}
+
+/// Load user liked posts from JSON file
+/// Format: { "user_id": [{"id": "post_id", "score": 1.5}, ...] }
+fn load_user_liked_posts(path: &Path) -> Result<HashMap<Uuid, Vec<(Uuid, f64)>>> {
+    if path.as_os_str().is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    if !path.exists() {
+        warn!("User liked posts file missing: {}", path.display());
+        return Ok(HashMap::new());
+    }
+
+    let data = fs::read(path)?;
+    if data.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let parsed: HashMap<String, SimilarityEntries> = serde_json::from_slice(&data)?;
+    let mut result = HashMap::with_capacity(parsed.len());
+
+    for (user_key, entries) in parsed {
+        let user_id = match Uuid::parse_str(&user_key) {
+            Ok(id) => id,
+            Err(err) => {
+                warn!("Invalid UUID in user liked posts key {}: {}", user_key, err);
+                continue;
+            }
+        };
+
+        let mut posts = Vec::new();
+        for entry in entries.flatten() {
+            if entry.score <= 0.0 {
+                continue;
+            }
+
+            match Uuid::parse_str(&entry.id) {
+                Ok(post_id) => posts.push((post_id, entry.score)),
+                Err(err) => warn!("Invalid UUID in user liked posts entry {}: {}", entry.id, err),
+            }
+        }
+
+        if !posts.is_empty() {
+            // Sort by score descending
+            posts.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            result.insert(user_id, posts);
+        }
+    }
+
+    info!(
+        users_count = result.len(),
+        "User liked posts loaded"
+    );
+
+    Ok(result)
 }
 
 fn load_similarity_map(path: &Path, k_neighbors: usize) -> Result<HashMap<Uuid, Vec<(Uuid, f64)>>> {
@@ -307,6 +444,7 @@ mod tests {
         let model = CollaborativeFilteringModel {
             user_similarity: HashMap::new(),
             item_similarity,
+            user_liked_posts: HashMap::new(),
             k_neighbors: 50,
             metric: SimilarityMetric::Cosine,
         };
@@ -320,5 +458,89 @@ mod tests {
         assert_eq!(recommendations.len(), 2);
         assert_eq!(recommendations[0].0, post2); // Higher similarity first
         assert_eq!(recommendations[0].1, 0.8);
+    }
+
+    #[tokio::test]
+    async fn test_recommend_user_based() {
+        // Create mock data
+        let user1 = Uuid::new_v4(); // Target user
+        let user2 = Uuid::new_v4(); // Similar user
+        let user3 = Uuid::new_v4(); // Another similar user
+        let post1 = Uuid::new_v4(); // Already seen
+        let post2 = Uuid::new_v4(); // Should be recommended (liked by user2)
+        let post3 = Uuid::new_v4(); // Should be recommended (liked by user2 and user3)
+        let post4 = Uuid::new_v4(); // Should be recommended (liked by user3)
+
+        let mut user_similarity = HashMap::new();
+        user_similarity.insert(user1, vec![(user2, 0.9), (user3, 0.7)]);
+
+        let mut user_liked_posts = HashMap::new();
+        user_liked_posts.insert(
+            user2,
+            vec![
+                (post1, 1.0), // Seen by target, should be filtered
+                (post2, 2.0), // Not seen, should appear
+                (post3, 1.5), // Not seen, should appear
+            ],
+        );
+        user_liked_posts.insert(
+            user3,
+            vec![
+                (post3, 3.0), // Also liked by user3, should get combined score
+                (post4, 1.0), // Only liked by user3
+            ],
+        );
+
+        let model = CollaborativeFilteringModel {
+            user_similarity,
+            item_similarity: HashMap::new(),
+            user_liked_posts,
+            k_neighbors: 50,
+            metric: SimilarityMetric::Cosine,
+        };
+
+        let seen_posts = vec![post1];
+        let recommendations = model
+            .recommend_user_based(user1, &seen_posts, 10)
+            .unwrap();
+
+        assert_eq!(recommendations.len(), 3);
+
+        // post3 should have highest score: 0.9 * 1.5 + 0.7 * 3.0 = 1.35 + 2.1 = 3.45
+        assert_eq!(recommendations[0].0, post3);
+        assert!((recommendations[0].1 - 3.45).abs() < 0.01);
+
+        // post2 should be second: 0.9 * 2.0 = 1.8
+        assert_eq!(recommendations[1].0, post2);
+        assert!((recommendations[1].1 - 1.8).abs() < 0.01);
+
+        // post4 should be third: 0.7 * 1.0 = 0.7
+        assert_eq!(recommendations[2].0, post4);
+        assert!((recommendations[2].1 - 0.7).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_update_user_liked_posts() {
+        let mut model = CollaborativeFilteringModel::empty(50);
+        let user = Uuid::new_v4();
+        let post1 = Uuid::new_v4();
+        let post2 = Uuid::new_v4();
+
+        // Add first interaction
+        model.update_user_liked_posts(user, post1, 1.0);
+        assert_eq!(model.user_liked_posts.get(&user).unwrap().len(), 1);
+
+        // Add second interaction
+        model.update_user_liked_posts(user, post2, 2.0);
+        assert_eq!(model.user_liked_posts.get(&user).unwrap().len(), 2);
+
+        // Update existing with higher weight
+        model.update_user_liked_posts(user, post1, 3.0);
+        let posts = model.user_liked_posts.get(&user).unwrap();
+        assert_eq!(posts.len(), 2);
+
+        // post1 should now have weight 3.0
+        let post1_entry = posts.iter().find(|(p, _)| *p == post1).unwrap();
+        assert_eq!(post1_entry.1, 3.0);
     }
 }

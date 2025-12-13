@@ -548,6 +548,18 @@ struct APIConfig {
         static let getMessages = "/api/v2/e2ee/messages"
     }
 
+    // MARK: - Analytics API (推薦系統信號)
+    struct Analytics {
+        /// POST /api/v2/analytics/watch-events - 批量上報觀看事件
+        static let recordWatchEvents = "/api/v2/analytics/watch-events"
+        /// POST /api/v2/analytics/engagement - 上報互動信號
+        static let recordEngagement = "/api/v2/analytics/engagement"
+        /// POST /api/v2/analytics/negative-signal - 上報負面信號
+        static let recordNegativeSignal = "/api/v2/analytics/negative-signal"
+        /// POST /api/v2/analytics/session - 上報會話數據
+        static let recordSession = "/api/v2/analytics/session"
+    }
+
     // MARK: - Service Ports (for direct gRPC access if needed)
 
     struct ServicePorts {

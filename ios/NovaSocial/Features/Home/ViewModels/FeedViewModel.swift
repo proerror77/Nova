@@ -200,10 +200,24 @@ class FeedViewModel: ObservableObject {
             // Client-side deduplication: Only add posts that aren't already in the feed
             let existingIds = Set(self.posts.map { $0.id })
             let uniqueNewPosts = newPosts.filter { !existingIds.contains($0.id) }
-            self.posts.append(contentsOf: uniqueNewPosts)
+
+            // If no new unique posts, stop pagination (backend returned duplicates or empty)
+            if uniqueNewPosts.isEmpty {
+                self.hasMore = false
+                #if DEBUG
+                print("[Feed] loadMore returned no new posts, stopping pagination")
+                #endif
+            } else {
+                self.posts.append(contentsOf: uniqueNewPosts)
+            }
 
         } catch {
-            // Silently handle errors to avoid disrupting user experience
+            // Stop pagination on error to prevent infinite retry loop
+            // Backend doesn't support cursor pagination yet, so errors here are expected
+            self.hasMore = false
+            #if DEBUG
+            print("[Feed] loadMore error (stopping pagination): \(error)")
+            #endif
         }
 
         isLoadingMore = false
@@ -469,8 +483,8 @@ class FeedViewModel: ObservableObject {
                 // Revert on connection error
                 posts[index] = post
                 self.toastError = "No internet connection. Please try again."
-            case .notFound, .serverError:
-                // Backend bookmark API not deployed yet - keep local state (don't revert)
+            case .notFound, .serverError, .serviceUnavailable:
+                // Backend bookmark API not deployed yet or temporarily unavailable - keep local state (don't revert)
                 #if DEBUG
                 print("[Feed] Bookmark API not available (\(error)), using local state only")
                 #endif

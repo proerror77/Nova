@@ -54,6 +54,7 @@ rustls = { version = "0.23", default-features = false, features = ["std", "aws-l
 tract-onnx = "0.21"
 tract-core = "0.21"
 ndarray = "0.16"
+bincode = "1.3"
 
 # gRPC
 tonic.workspace = true

@@ -251,6 +251,7 @@ mod tests {
         let layer = DiversityLayer::with_author_limit(0.7, 1);
 
         let author1 = Uuid::new_v4();
+        let author2 = Uuid::new_v4();
 
         let posts = vec![
             RankedPost {
@@ -271,15 +272,26 @@ mod tests {
                     ..Default::default()
                 },
             },
+            RankedPost {
+                post_id: "post3".to_string(),
+                score: 0.85,
+                recall_source: RecallSource::Graph,
+                features: PostFeatures {
+                    author_id: Some(author2),
+                    ..Default::default()
+                },
+            },
         ];
 
-        let reranked = layer.rerank(posts, 2);
+        let reranked = layer.rerank(posts, 3);
 
         // With limit=1, no two consecutive posts from same author
+        // Should reorder to: post1 (author1), post3 (author2), post2 (author1)
         if reranked.len() >= 2 {
             assert_ne!(
                 reranked[0].features.author_id,
-                reranked[1].features.author_id
+                reranked[1].features.author_id,
+                "First two posts should not be from same author"
             );
         }
     }

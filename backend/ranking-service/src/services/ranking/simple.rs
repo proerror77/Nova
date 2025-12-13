@@ -1,27 +1,80 @@
 use crate::models::{Candidate, PostFeatures, RankedPost};
+use crate::services::features::FeatureClient;
 use anyhow::Result;
+use std::sync::Arc;
+use tracing::debug;
 
-/// Ranking Layer - GBDT 模型打分
-/// Phase D: 簡化版打分邏輯（Phase E 將接入真實 ONNX 模型）
-pub struct RankingLayer;
+/// Ranking Layer - Fine-grained scoring
+/// Phase D: Linear weighted scoring with real features
+/// Phase E: GBDT ONNX model inference (planned)
+pub struct RankingLayer {
+    feature_client: Arc<FeatureClient>,
+    weights: RankingWeights,
+}
 
-impl Default for RankingLayer {
+/// Configurable ranking weights
+#[derive(Debug, Clone)]
+pub struct RankingWeights {
+    pub engagement: f32,
+    pub recency: f32,
+    pub author_quality: f32,
+    pub content_quality: f32,
+    pub completion_rate: f32,
+}
+
+impl Default for RankingWeights {
     fn default() -> Self {
-        Self::new()
+        Self {
+            engagement: 0.30,
+            recency: 0.25,
+            author_quality: 0.15,
+            content_quality: 0.15,
+            completion_rate: 0.15,
+        }
     }
 }
 
 impl RankingLayer {
-    pub fn new() -> Self {
-        Self
+    /// Create new ranking layer with feature client
+    pub fn new(feature_client: Arc<FeatureClient>) -> Self {
+        Self {
+            feature_client,
+            weights: RankingWeights::default(),
+        }
     }
 
-    /// 對候選集進行打分排序
+    /// Create with custom weights
+    pub fn with_weights(feature_client: Arc<FeatureClient>, weights: RankingWeights) -> Self {
+        Self {
+            feature_client,
+            weights,
+        }
+    }
+
+    /// Rank candidates with real feature extraction
     pub async fn rank_candidates(&self, candidates: Vec<Candidate>) -> Result<Vec<RankedPost>> {
+        if candidates.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Batch fetch features for all candidates
+        let content_ids: Vec<String> = candidates.iter().map(|c| c.post_id.clone()).collect();
+        let features_map = self
+            .feature_client
+            .batch_get_content_features(&content_ids)
+            .await;
+
+        debug!(
+            "Fetched features for {} candidates, found {} in cache",
+            candidates.len(),
+            features_map.len()
+        );
+
         let mut ranked_posts: Vec<RankedPost> = candidates
             .into_iter()
             .map(|candidate| {
-                let features = self.extract_features(&candidate);
+                let content_features = features_map.get(&candidate.post_id);
+                let features = self.extract_features(&candidate, content_features);
                 let score = self.compute_score(&features);
 
                 RankedPost {
@@ -33,8 +86,7 @@ impl RankingLayer {
             })
             .collect();
 
-        // 按分數降序排序
-        // Note: NaN scores are treated as less than any valid score
+        // Sort by score descending
         ranked_posts.sort_by(|a, b| {
             b.score
                 .partial_cmp(&a.score)
@@ -44,38 +96,56 @@ impl RankingLayer {
         Ok(ranked_posts)
     }
 
-    /// 特徵提取（Phase D: 簡化版）
-    fn extract_features(&self, candidate: &Candidate) -> PostFeatures {
-        // TODO: Phase E - 從 content-service 獲取真實特徵
-        // 目前使用佔位符特徵
+    /// Extract features from candidate with fetched content features
+    fn extract_features(
+        &self,
+        candidate: &Candidate,
+        content_features: Option<&crate::services::features::ContentFeatures>,
+    ) -> PostFeatures {
+        let (author_quality, content_quality, author_id, completion_rate) =
+            if let Some(cf) = content_features {
+                (
+                    cf.author_quality,
+                    cf.content_quality,
+                    cf.author_id,
+                    cf.completion_rate,
+                )
+            } else {
+                // Fallback to defaults when features not available
+                (0.5, 0.5, None, 0.5)
+            };
+
         PostFeatures {
             engagement_score: candidate.recall_weight * 0.8,
             recency_score: self.compute_recency_score(candidate.timestamp),
-            author_quality_score: 0.7,  // 佔位符
-            content_quality_score: 0.8, // 佔位符
-            author_id: None,            // Phase E: 從 content-service 獲取
+            author_quality_score: author_quality,
+            content_quality_score: content_quality,
+            completion_rate_score: completion_rate,
+            author_id,
         }
     }
 
-    /// 計算時效分數（越新越高）
+    /// Compute recency score with exponential decay
+    /// Score = e^(-age_hours / 24)
+    /// Fresh content (0h) = 1.0, 24h old = 0.37, 48h old = 0.14
     fn compute_recency_score(&self, timestamp: i64) -> f32 {
         let now = chrono::Utc::now().timestamp();
-        let age_seconds = (now - timestamp) as f32;
+        let age_seconds = (now - timestamp).max(0) as f32;
         let age_hours = age_seconds / 3600.0;
 
-        // 指數衰減：24 小時衰減到 0.1
+        // Exponential decay with 24-hour half-life
         (-age_hours / 24.0).exp().max(0.1)
     }
 
-    /// 計算最終分數（Phase D: 線性加權）
-    /// Phase E: 替換為 GBDT ONNX 模型推理
+    /// Compute final ranking score
+    /// Phase D: Linear weighted combination
+    /// Phase E: Replace with GBDT ONNX model
     fn compute_score(&self, features: &PostFeatures) -> f32 {
-        let weights = (0.4, 0.3, 0.2, 0.1); // (engagement, recency, author, content)
-
-        features.engagement_score * weights.0
-            + features.recency_score * weights.1
-            + features.author_quality_score * weights.2
-            + features.content_quality_score * weights.3
+        features.engagement_score * self.weights.engagement
+            + features.recency_score * self.weights.recency
+            + features.author_quality_score * self.weights.author_quality
+            + features.content_quality_score * self.weights.content_quality
+            + features.completion_rate_score * self.weights.completion_rate
     }
 }
 
@@ -84,42 +154,103 @@ mod tests {
     use super::*;
     use crate::models::RecallSource;
 
+    fn create_test_feature_client() -> Arc<FeatureClient> {
+        let redis_client =
+            redis::Client::open("redis://localhost:6379").expect("Failed to create test Redis");
+        Arc::new(FeatureClient::new(redis_client))
+    }
+
     #[tokio::test]
     async fn test_rank_candidates() {
-        let layer = RankingLayer::new();
+        let feature_client = create_test_feature_client();
+        let layer = RankingLayer::new(feature_client);
 
         let candidates = vec![
             Candidate {
                 post_id: "post1".to_string(),
                 recall_source: RecallSource::Graph,
                 recall_weight: 0.9,
-                timestamp: chrono::Utc::now().timestamp() - 3600, // 1 小時前
+                timestamp: chrono::Utc::now().timestamp() - 3600, // 1 hour ago
             },
             Candidate {
                 post_id: "post2".to_string(),
                 recall_source: RecallSource::Trending,
                 recall_weight: 0.7,
-                timestamp: chrono::Utc::now().timestamp() - 7200, // 2 小時前
+                timestamp: chrono::Utc::now().timestamp() - 7200, // 2 hours ago
             },
         ];
 
         let ranked = layer.rank_candidates(candidates).await.unwrap();
 
         assert_eq!(ranked.len(), 2);
-        assert!(ranked[0].score >= ranked[1].score); // 確保降序排序
+        assert!(ranked[0].score >= ranked[1].score);
     }
 
     #[test]
     fn test_recency_score() {
-        let layer = RankingLayer::new();
+        let feature_client = create_test_feature_client();
+        let layer = RankingLayer::new(feature_client);
         let now = chrono::Utc::now().timestamp();
 
-        // 剛發布
+        // Just posted
         let score_fresh = layer.compute_recency_score(now);
-        assert!(score_fresh > 0.9);
+        assert!(score_fresh > 0.9, "Fresh content should have high score");
 
-        // 24 小時前
+        // 24 hours ago
         let score_old = layer.compute_recency_score(now - 86400);
-        assert!(score_old < 0.5);
+        assert!(
+            score_old < 0.5,
+            "24h old content should have lower score: {}",
+            score_old
+        );
+
+        // 48 hours ago
+        let score_very_old = layer.compute_recency_score(now - 172800);
+        assert!(
+            score_very_old < 0.2,
+            "48h old content should have very low score: {}",
+            score_very_old
+        );
+    }
+
+    #[test]
+    fn test_compute_score_with_weights() {
+        let feature_client = create_test_feature_client();
+        let layer = RankingLayer::new(feature_client);
+
+        let features = PostFeatures {
+            engagement_score: 0.8,
+            recency_score: 0.9,
+            author_quality_score: 0.7,
+            content_quality_score: 0.6,
+            completion_rate_score: 0.85,
+            author_id: None,
+        };
+
+        let score = layer.compute_score(&features);
+
+        // Expected: 0.8*0.30 + 0.9*0.25 + 0.7*0.15 + 0.6*0.15 + 0.85*0.15
+        // = 0.24 + 0.225 + 0.105 + 0.09 + 0.1275 = 0.7875
+        assert!(
+            (score - 0.7875).abs() < 0.01,
+            "Score should be ~0.7875, got {}",
+            score
+        );
+    }
+
+    #[test]
+    fn test_custom_weights() {
+        let feature_client = create_test_feature_client();
+        let custom_weights = RankingWeights {
+            engagement: 0.5,
+            recency: 0.2,
+            author_quality: 0.1,
+            content_quality: 0.1,
+            completion_rate: 0.1,
+        };
+        let layer = RankingLayer::with_weights(feature_client, custom_weights);
+
+        assert_eq!(layer.weights.engagement, 0.5);
+        assert_eq!(layer.weights.recency, 0.2);
     }
 }

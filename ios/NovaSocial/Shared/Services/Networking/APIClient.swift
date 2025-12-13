@@ -44,6 +44,42 @@ class APIClient {
 
     // MARK: - Generic Request Methods
 
+    /// Simple POST request (for fire-and-forget analytics)
+    func post(endpoint: String, body: Encodable) async throws {
+        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+            throw APIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        if let token = authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        encoder.dateEncodingStrategy = .iso8601
+        request.httpBody = try encoder.encode(body)
+
+        let (_, response) = try await session.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            #if DEBUG
+            print("[API] POST \(endpoint) failed")
+            #endif
+            throw APIError.serverError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 500, message: "POST failed")
+        }
+
+        #if DEBUG
+        if APIFeatureFlags.enableRequestLogging {
+            print("[API] POST \(endpoint) -> \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+        }
+        #endif
+    }
+
     /// POST/PUT/DELETE request with JSON body
     func request<T: Decodable>(
         endpoint: String,

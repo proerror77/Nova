@@ -1,4 +1,7 @@
-use ranking_service::{config::RecallConfig, DiversityLayer, RankingLayer, RecallLayer};
+use ranking_service::{
+    config::RecallConfig, DiversityLayer, FeatureClient, RankingLayer, RecallLayer,
+};
+use std::sync::Arc;
 
 #[tokio::test]
 async fn test_basic_workflow() {
@@ -20,8 +23,11 @@ async fn test_basic_workflow() {
     };
 
     let recall_layer =
-        RecallLayer::new(graph_channel, content_channel, redis_client, recall_config);
-    let ranking_layer = RankingLayer::new();
+        RecallLayer::new(graph_channel, content_channel, redis_client.clone(), recall_config);
+
+    // 創建 FeatureClient for RankingLayer
+    let feature_client = Arc::new(FeatureClient::new(redis_client));
+    let ranking_layer = RankingLayer::new(feature_client);
     let diversity_layer = DiversityLayer::new(0.7);
 
     // 測試召回（可能為空，取決於服務是否運行）

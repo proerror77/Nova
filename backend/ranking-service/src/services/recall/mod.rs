@@ -134,8 +134,8 @@ impl RecallLayer {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_deduplicate_and_merge() {
+    #[tokio::test]
+    async fn test_deduplicate_and_merge() {
         let candidates = vec![
             Candidate {
                 post_id: "post1".to_string(),

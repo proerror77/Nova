@@ -40,7 +40,8 @@ pub struct PostFeatures {
     pub recency_score: f32,
     pub author_quality_score: f32,
     pub content_quality_score: f32,
-    pub author_id: Option<Uuid>, // For diversity layer author tracking
+    pub completion_rate_score: f32, // Average watch completion rate
+    pub author_id: Option<Uuid>,    // For diversity layer author tracking
 }
 
 #[derive(Debug, Clone, Default)]

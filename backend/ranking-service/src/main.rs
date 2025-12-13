@@ -1,8 +1,9 @@
 use anyhow::{anyhow, Context, Result};
 use ranking_service::{
     grpc::{ranking_proto::ranking_service_server::RankingServiceServer, RankingServiceImpl},
-    Config, DiversityLayer, RankingLayer, RecallLayer,
+    Config, DiversityLayer, FeatureClient, RankingLayer, RecallLayer,
 };
+use std::sync::Arc;
 use tonic::transport::Server;
 use tracing::{error, info, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -44,6 +45,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("Invalid content service URL")
             .connect_lazy();
 
+    // Initialize feature client for ranking layer
+    let feature_redis_client = redis::Client::open(config.redis.url.clone())
+        .expect("Failed to create Redis client for features");
+    let feature_client = Arc::new(FeatureClient::new(feature_redis_client));
+
     // Initialize layers
     let recall_layer = RecallLayer::new(
         graph_client,
@@ -51,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         redis_client,
         config.recall.clone(),
     );
-    let ranking_layer = RankingLayer::new();
+    let ranking_layer = RankingLayer::new(feature_client);
     let diversity_layer = DiversityLayer::new(0.7); // lambda = 0.7
 
     // Create gRPC service
