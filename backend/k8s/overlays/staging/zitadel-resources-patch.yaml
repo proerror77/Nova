@@ -1,0 +1,10 @@
+# Staging-specific Zitadel resource limits (JSON Patch format)
+- op: replace
+  path: /spec/template/spec/containers/0/resources
+  value:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "250m"

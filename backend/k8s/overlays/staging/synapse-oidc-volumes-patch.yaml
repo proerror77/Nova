@@ -1,0 +1,13 @@
+# Synapse Deployment patch to mount OIDC secrets (JSON Patch format)
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: oidc-secrets
+    secret:
+      secretName: synapse-oidc-secrets
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: oidc-secrets
+    mountPath: /secrets
+    readOnly: true

@@ -4,50 +4,81 @@ kind: Kustomization
 resources:
   - ../../base
   - matrix-well-known.yaml
+  # Staging-specific new resources (truly new, not overrides)
+  - synapse-ingress.yaml
+  - zitadel-ingress.yaml
 
 namespace: nova-backend
 
-commonLabels:
-  environment: staging
+labels:
+  - pairs:
+      environment: staging
 
 # Staging-specific configuration patches
 patches:
-  # Reduce replicas for staging
+  # Reduce replicas for all Deployments
   - target:
       kind: Deployment
-      name: ".*"
     patch: |-
       - op: replace
         path: /spec/replicas
         value: 1
-  # Synapse resource patch for staging
-  - path: matrix-synapse-patch.yaml
-  # Zitadel OIDC provider for staging
-  - path: zitadel-patch.yaml
-  # Synapse OIDC configuration for staging
-  - path: synapse-oidc-patch.yaml
+  # Synapse config patch (replace entire ConfigMap data with OIDC config)
+  - path: synapse-config-patch.yaml
+  # Zitadel config patch for staging
+  - path: zitadel-config-patch.yaml
+  # Synapse resource limits for staging
+  - target:
+      kind: Deployment
+      name: matrix-synapse
+    path: matrix-synapse-resources-patch.yaml
+  # Synapse OIDC secrets volume mount
+  - target:
+      kind: Deployment
+      name: matrix-synapse
+    path: synapse-oidc-volumes-patch.yaml
+  # Zitadel resource limits for staging
+  - target:
+      kind: Deployment
+      name: zitadel
+    path: zitadel-resources-patch.yaml
+  # ConfigMap patch for staging environment
+  - target:
+      kind: ConfigMap
+      name: nova-backend-config
+    patch: |-
+      - op: replace
+        path: /data/APP_ENV
+        value: "staging"
+      - op: replace
+        path: /data/LOG_LEVEL
+        value: "debug"
+      - op: replace
+        path: /data/MATRIX_ENABLED
+        value: "true"
+      - op: replace
+        path: /data/MATRIX_SERVICE_USER
+        value: "@nova-service:staging.nova.app"
+      - op: replace
+        path: /data/MATRIX_DEVICE_NAME
+        value: "nova-realtime-chat-service-staging"
+      - op: replace
+        path: /data/MATRIX_SERVER_NAME
+        value: "staging.nova.app"
+      - op: add
+        path: /data/MATRIX_OIDC_ENABLED
+        value: "true"
+      - op: add
+        path: /data/MATRIX_OIDC_ISSUER
+        value: "https://id.staging.nova.app"
+      - op: add
+        path: /data/MATRIX_OIDC_CLIENT_ID
+        value: "synapse-nova-staging"
+      - op: add
+        path: /data/ZITADEL_EXTERNAL_DOMAIN
+        value: "id.staging.nova.app"
 
-# ConfigMap patches for staging environment
-configMapGenerator:
-  - name: nova-backend-config
-    behavior: merge
-    literals:
-      - APP_ENV=staging
-      - LOG_LEVEL=debug
-      # Matrix configuration for staging (updated for OIDC SSO)
-      - MATRIX_ENABLED=true
-      - MATRIX_HOMESERVER_URL=http://matrix-synapse:8008
-      - MATRIX_SERVICE_USER=@nova-service:staging.nova.app
-      - MATRIX_DEVICE_NAME=nova-realtime-chat-service-staging
-      - MATRIX_SERVER_NAME=staging.nova.app
-      # OIDC SSO configuration
-      - MATRIX_OIDC_ENABLED=true
-      - MATRIX_OIDC_ISSUER=https://id.staging.nova.app
-      - MATRIX_OIDC_CLIENT_ID=synapse-nova-staging
-      # Zitadel configuration
-      - ZITADEL_EXTERNAL_DOMAIN=id.staging.nova.app
-
-# Staging image tags (use latest for staging)
+# Staging image tags
 images:
   - name: nova-realtime-chat-service
     newTag: staging

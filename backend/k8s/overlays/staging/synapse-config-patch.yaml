@@ -1,6 +1,5 @@
-# Staging Synapse OIDC SSO configuration patch
-# This updates homeserver.yaml to enable OIDC authentication via Zitadel
-
+# Staging Synapse OIDC SSO configuration (Strategic Merge Patch)
+# This replaces homeserver.yaml to enable OIDC authentication via Zitadel
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -69,21 +68,11 @@ data:
         user_mapping_provider:
           config:
             subject_claim: "sub"
-            # Creates mxid: @nova-<uuid>:staging.nova.app
             localpart_template: "nova-{{ user.sub }}"
             display_name_template: "{{ user.preferred_username | default(user.name) | default(user.email) }}"
             email_template: "{{ user.email }}"
-        # Backchannel logout support for OIDC session management
         backchannel_logout_enabled: true
-        # Backchannel logout URI - Synapse will register this with Zitadel
         backchannel_logout_uri: "https://matrix.staging.nova.app/_synapse/client/oidc/backchannel_logout"
-        # Optional: Attribute requirements for grayscale testing / user whitelist
-        # Uncomment to enable user filtering based on OIDC claims
-        # attribute_requirements:
-        #   - attribute: "email_verified"
-        #     value: "true"
-        #   - attribute: "groups"
-        #     value: "nova-beta-testers"
 
     # SSO settings
     sso:
@@ -92,14 +81,14 @@ data:
         - "nova-staging://"
 
     # Session configuration for OIDC users
-    session_lifetime: 7d  # Sessions last 7 days by default
-    refresh_token_lifetime: 90d  # Refresh tokens valid for 90 days
-    refreshable_access_token_lifetime: 10m  # Access tokens refresh every 10 minutes
-    nonrefreshable_access_token_lifetime: 24h  # Non-refreshable tokens last 24 hours
+    session_lifetime: 7d
+    refresh_token_lifetime: 90d
+    refreshable_access_token_lifetime: 10m
+    nonrefreshable_access_token_lifetime: 24h
 
     # Session timeout on inactivity
     ui_auth:
-      session_timeout: "15m"  # UI auth sessions timeout after 15 minutes
+      session_timeout: "15m"
 
     # Federation (disabled for internal use)
     federation_domain_whitelist: []
@@ -168,67 +157,3 @@ data:
       level: INFO
       handlers: [console]
     disable_existing_loggers: false
-
----
-# Deployment patch to mount OIDC secrets
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: matrix-synapse
-  namespace: nova-backend
-spec:
-  template:
-    spec:
-      containers:
-        - name: synapse
-          volumeMounts:
-            - name: synapse-data
-              mountPath: /data
-            - name: synapse-config
-              mountPath: /config
-              readOnly: true
-            - name: oidc-secrets
-              mountPath: /secrets
-              readOnly: true
-      volumes:
-        - name: synapse-data
-          persistentVolumeClaim:
-            claimName: matrix-synapse-data
-        - name: synapse-config
-          configMap:
-            name: matrix-synapse-config
-        - name: oidc-secrets
-          secret:
-            secretName: synapse-oidc-secrets
-
----
-# Staging ingress for Matrix Synapse (with SSO support)
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: matrix-synapse-ingress
-  namespace: nova-backend
-  annotations:
-    kubernetes.io/ingress.class: nginx
-    cert-manager.io/cluster-issuer: letsencrypt-staging
-    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
-    # Required for proper SSO redirect handling
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      proxy_set_header X-Forwarded-Proto $scheme;
-      proxy_set_header X-Forwarded-Host $host;
-spec:
-  tls:
-    - hosts:
-        - matrix.staging.nova.app
-      secretName: matrix-synapse-tls-staging
-  rules:
-    - host: matrix.staging.nova.app
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: matrix-synapse
-                port:
-                  number: 8008

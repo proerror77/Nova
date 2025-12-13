@@ -1,0 +1,28 @@
+# Staging ingress for Matrix Synapse (with SSO support)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: matrix-synapse-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header X-Forwarded-Host $host;
+spec:
+  tls:
+    - hosts:
+        - matrix.staging.nova.app
+      secretName: matrix-synapse-tls-staging
+  rules:
+    - host: matrix.staging.nova.app
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: matrix-synapse
+                port:
+                  number: 8008
