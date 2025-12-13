@@ -92,6 +92,9 @@ where
             "/api/v2/social/comments",
             // Alice AI Assistant API (public access for chat and voice)
             "/api/v2/alice",
+            // Polls API (public read access for trending polls and rankings)
+            "/api/v2/polls/trending",
+            "/api/v2/polls/active",
         ];
 
         if public_prefixes.iter().any(|p| path.starts_with(p)) {
