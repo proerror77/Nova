@@ -403,8 +403,35 @@ jobs:
 
           kubectl rollout status deployment/zitadel -n $NAMESPACE --timeout=300s || {
             echo "❌ Zitadel deployment failed"
+            echo ""
+            echo "📋 Deployment status:"
             kubectl describe deployment/zitadel -n $NAMESPACE
-            kubectl logs -l app=zitadel -n $NAMESPACE --tail=100
+
+            echo ""
+            echo "📋 Pod status:"
+            kubectl get pods -l app=zitadel -n $NAMESPACE -o wide
+
+            echo ""
+            echo "📋 Init container logs (init-db):"
+            for pod in $(kubectl get pods -l app=zitadel -n $NAMESPACE -o jsonpath='{.items[*].metadata.name}'); do
+              echo "--- Pod: $pod ---"
+              kubectl logs $pod -n $NAMESPACE -c init-db --tail=50 2>/dev/null || echo "No init-db logs"
+            done
+
+            echo ""
+            echo "📋 Main container logs:"
+            for pod in $(kubectl get pods -l app=zitadel -n $NAMESPACE -o jsonpath='{.items[*].metadata.name}'); do
+              echo "--- Pod: $pod ---"
+              kubectl logs $pod -n $NAMESPACE -c zitadel --tail=50 2>/dev/null || echo "No zitadel logs"
+            done
+
+            echo ""
+            echo "📋 Pod events:"
+            for pod in $(kubectl get pods -l app=zitadel -n $NAMESPACE -o jsonpath='{.items[*].metadata.name}'); do
+              echo "--- Pod: $pod ---"
+              kubectl describe pod $pod -n $NAMESPACE | tail -20
+            done
+
             exit 1
           }
 
