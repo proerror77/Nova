@@ -35,7 +35,7 @@ data:
   ZITADEL_DATABASE_POSTGRES_DATABASE: "zitadel"
   ZITADEL_DATABASE_POSTGRES_USER_USERNAME: "zitadel"
   ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: "disable"
-  ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: "postgres"
+  ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: "nova"
   ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: "disable"
 
   # First instance configuration
@@ -223,7 +223,7 @@ data:
           SSL:
             Mode: disable
         Admin:
-          Username: postgres
+          Username: nova
           SSL:
             Mode: disable
 

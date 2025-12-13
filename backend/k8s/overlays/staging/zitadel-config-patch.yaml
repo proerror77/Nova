@@ -29,7 +29,8 @@ data:
           SSL:
             Mode: disable
         Admin:
-          Username: postgres
+          # Use nova user which has superuser privileges in this cluster
+          Username: nova
           SSL:
             Mode: disable
 
