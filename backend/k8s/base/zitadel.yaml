@@ -106,6 +106,41 @@ spec:
           volumeMounts:
             - name: zitadel-config-file
               mountPath: /config
+        - name: setup-zitadel
+          image: ghcr.io/zitadel/zitadel:v2.62.1
+          args:
+            - setup
+            - --config
+            - /config/zitadel.yaml
+            - --masterkeyFromEnv
+            - --init-projections=true
+          env:
+            - name: ZITADEL_MASTERKEY
+              valueFrom:
+                secretKeyRef:
+                  name: zitadel-secrets
+                  key: ZITADEL_MASTERKEY
+            - name: ZITADEL_DATABASE_POSTGRES_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: zitadel-secrets
+                  key: ZITADEL_DATABASE_POSTGRES_USER_PASSWORD
+            - name: ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: zitadel-secrets
+                  key: ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD
+            - name: ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: zitadel-secrets
+                  key: ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD
+          envFrom:
+            - configMapRef:
+                name: zitadel-config
+          volumeMounts:
+            - name: zitadel-config-file
+              mountPath: /config
       containers:
         - name: zitadel
           image: ghcr.io/zitadel/zitadel:v2.62.1
