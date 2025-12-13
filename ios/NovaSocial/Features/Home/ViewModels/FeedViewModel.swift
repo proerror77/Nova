@@ -376,10 +376,10 @@ class FeedViewModel: ObservableObject {
             // Handle specific error cases
             switch error {
             case .unauthorized:
-                // Session expired - notify user to re-login
-                self.toastError = "Session expired. Please log in again."
+                // Session expired - logout to redirect to login page
+                await authManager.logout()
                 #if DEBUG
-                print("[Feed] Toggle like error: Session expired, user needs to re-login")
+                print("[Feed] Toggle like error: Session expired, logging out")
                 #endif
             case .noConnection:
                 self.toastError = "No internet connection. Please try again."
@@ -475,9 +475,10 @@ class FeedViewModel: ObservableObject {
             case .unauthorized:
                 // Revert on auth error
                 posts[index] = post
-                self.toastError = "Session expired. Please log in again."
+                // Session expired - logout to redirect to login page
+                await authManager.logout()
                 #if DEBUG
-                print("[Feed] Toggle bookmark error: Session expired")
+                print("[Feed] Toggle bookmark error: Session expired, logging out")
                 #endif
             case .noConnection:
                 // Revert on connection error
