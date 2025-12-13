@@ -1,0 +1,104 @@
+# One-time job to create Zitadel and Synapse databases
+# Run this once to initialize Matrix SSO databases in existing PostgreSQL
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: matrix-sso-db-init
+  namespace: nova-staging
+  labels:
+    app: matrix-sso
+    component: db-init
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: matrix-sso
+        component: db-init
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: db-init
+        image: postgres:15-alpine
+        env:
+        - name: PGHOST
+          value: postgres.nova-staging.svc.cluster.local
+        - name: PGPORT
+          value: "5432"
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DB_USER
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DB_PASSWORD
+        - name: PGDATABASE
+          value: postgres
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          echo "🔧 Matrix SSO Database Initialization"
+          echo "====================================="
+
+          echo ""
+          echo "Step 1: Creating Zitadel database..."
+          psql -c "SELECT 'CREATE DATABASE zitadel' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'zitadel')" | grep -q CREATE && \
+            psql -c "CREATE DATABASE zitadel" || echo "Database zitadel already exists"
+
+          echo ""
+          echo "Step 2: Creating Synapse database..."
+          psql -c "SELECT 'CREATE DATABASE synapse' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'synapse')" | grep -q CREATE && \
+            psql -c "CREATE DATABASE synapse" || echo "Database synapse already exists"
+
+          echo ""
+          echo "Step 3: Creating Zitadel user..."
+          psql -c "DO \$\$ BEGIN
+            IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'zitadel') THEN
+              CREATE USER zitadel WITH ENCRYPTED PASSWORD 'zitadel_staging_pwd';
+              RAISE NOTICE 'Created user zitadel';
+            ELSE
+              RAISE NOTICE 'User zitadel already exists';
+            END IF;
+          END \$\$;"
+
+          echo ""
+          echo "Step 4: Creating Synapse user..."
+          psql -c "DO \$\$ BEGIN
+            IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'synapse') THEN
+              CREATE USER synapse WITH ENCRYPTED PASSWORD 'synapse_staging_pwd';
+              RAISE NOTICE 'Created user synapse';
+            ELSE
+              RAISE NOTICE 'User synapse already exists';
+            END IF;
+          END \$\$;"
+
+          echo ""
+          echo "Step 5: Granting privileges..."
+          psql -c "GRANT ALL PRIVILEGES ON DATABASE zitadel TO zitadel;"
+          psql -c "GRANT ALL PRIVILEGES ON DATABASE synapse TO synapse;"
+
+          echo ""
+          echo "Step 6: Creating extensions in Zitadel database..."
+          psql -d zitadel -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"
+          psql -d zitadel -c "CREATE EXTENSION IF NOT EXISTS \"pgcrypto\";"
+
+          echo ""
+          echo "Step 7: Creating extensions in Synapse database..."
+          psql -d synapse -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"
+          psql -d synapse -c "CREATE EXTENSION IF NOT EXISTS \"pgcrypto\";"
+
+          echo ""
+          echo "✅ Matrix SSO databases initialized successfully!"
+          echo ""
+          echo "📊 Database list:"
+          psql -c "\l" | grep -E "zitadel|synapse"
+
+          echo ""
+          echo "👥 User list:"
+          psql -c "\du" | grep -E "zitadel|synapse"
