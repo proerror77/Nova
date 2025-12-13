@@ -18,6 +18,25 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Copy)]
 pub struct AuthenticatedUser(pub Uuid);
 
+/// Check if a path is a public poll endpoint (GET only)
+/// Matches: /api/v2/polls/{uuid} or /api/v2/polls/{uuid}/rankings
+fn is_public_poll_endpoint(path: &str) -> bool {
+    if !path.starts_with("/api/v2/polls/") {
+        return false;
+    }
+
+    let remaining = &path["/api/v2/polls/".len()..];
+    let parts: Vec<&str> = remaining.split('/').collect();
+
+    match parts.as_slice() {
+        // /api/v2/polls/{poll_id} - single poll details
+        [poll_id] if Uuid::parse_str(poll_id).is_ok() => true,
+        // /api/v2/polls/{poll_id}/rankings - poll rankings
+        [poll_id, "rankings"] if Uuid::parse_str(poll_id).is_ok() => true,
+        _ => false,
+    }
+}
+
 /// JWT authentication middleware
 ///
 /// Uses crypto-core::jwt for RS256 validation. All JWT operations
@@ -98,6 +117,16 @@ where
         ];
 
         if public_prefixes.iter().any(|p| path.starts_with(p)) {
+            let fut = self.service.call(req);
+            return Box::pin(async move {
+                let res = fut.await?;
+                Ok(res)
+            });
+        }
+
+        // Check for public polls endpoints with dynamic poll_id (GET only)
+        // Pattern: /api/v2/polls/{poll_id} or /api/v2/polls/{poll_id}/rankings
+        if method == "GET" && is_public_poll_endpoint(&path) {
             let fut = self.service.call(req);
             return Box::pin(async move {
                 let res = fut.await?;
