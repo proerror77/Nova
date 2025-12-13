@@ -50,6 +50,13 @@ patches:
       - op: replace
         path: /data/ZITADEL_DATABASE_POSTGRES_HOST
         value: "postgres.nova-staging.svc.cluster.local"
+  # Zitadel PVC storage class patch (use GKE default)
+  - target:
+      kind: PersistentVolumeClaim
+      name: zitadel-data
+    patch: |-
+      - op: remove
+        path: /spec/storageClassName
   # ConfigMap patch for staging environment
   - target:
       kind: ConfigMap

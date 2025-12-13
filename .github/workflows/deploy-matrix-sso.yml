@@ -304,6 +304,20 @@ jobs:
             echo "✅ Old deployment deleted"
           fi
 
+          # Check PVC status - if Pending due to wrong storage class, delete and recreate
+          echo "🔍 Checking PVC status..."
+          PVC_STATUS=$(kubectl get pvc zitadel-data -n $NAMESPACE -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+          PVC_SC=$(kubectl get pvc zitadel-data -n $NAMESPACE -o jsonpath='{.spec.storageClassName}' 2>/dev/null || echo "")
+          echo "PVC status: $PVC_STATUS, storageClassName: $PVC_SC"
+
+          if [ "$PVC_STATUS" = "Pending" ]; then
+            echo "⚠️  PVC is Pending, checking if storage class issue..."
+            # Delete and let it recreate with default storage class
+            kubectl delete pvc zitadel-data -n $NAMESPACE --ignore-not-found=true
+            sleep 3
+            echo "✅ Old PVC deleted, will recreate with default storage class"
+          fi
+
           # Apply Zitadel resources using server-side apply to handle conflicts
           echo "📦 Applying Zitadel resources..."
           kubectl kustomize backend/k8s/overlays/staging | \
@@ -311,6 +325,11 @@ jobs:
             grep -E "zitadel|Zitadel" | grep -v "ServiceMonitor" || true
 
           echo "✅ Zitadel resources applied via Kustomize"
+
+          # Verify PVC is bound
+          echo "🔍 Verifying PVC..."
+          sleep 5
+          kubectl get pvc zitadel-data -n $NAMESPACE || true
 
       - name: Verify and Fix ConfigMap values
         env:
