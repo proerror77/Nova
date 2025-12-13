@@ -97,19 +97,40 @@ struct HottestBankerSection: View {
             // First try to get trending polls to find the poll ID
             if let pollIdToUse = pollId {
                 // If pollId is provided, load rankings for that poll
+                #if DEBUG
+                print("[HottestBankerSection] Loading rankings for poll: \(pollIdToUse)")
+                #endif
                 candidates = try await socialService.getPollRankings(pollId: pollIdToUse, limit: 5)
+                #if DEBUG
+                print("[HottestBankerSection] Loaded \(candidates.count) candidates")
+                #endif
             } else {
                 // Otherwise, get trending polls and use the first one
+                #if DEBUG
+                print("[HottestBankerSection] Loading trending polls...")
+                #endif
                 let trendingPolls = try await socialService.getTrendingPolls(limit: 1)
+                #if DEBUG
+                print("[HottestBankerSection] Got \(trendingPolls.count) trending polls")
+                #endif
                 if let firstPoll = trendingPolls.first {
+                    #if DEBUG
+                    print("[HottestBankerSection] First poll ID: \(firstPoll.id), title: \(firstPoll.title)")
+                    #endif
                     candidates = try await socialService.getPollRankings(pollId: firstPoll.id, limit: 5)
+                    #if DEBUG
+                    print("[HottestBankerSection] Loaded \(candidates.count) candidates for poll")
+                    #endif
                 } else {
                     // No polls available, use empty state
+                    #if DEBUG
+                    print("[HottestBankerSection] No trending polls found")
+                    #endif
                     candidates = []
                 }
             }
         } catch {
-            print("Error loading poll data: \(error)")
+            print("[HottestBankerSection] Error loading poll data: \(error)")
             errorMessage = nil // Don't show error to user, just show empty
             // Keep candidates empty to show placeholder
         }
