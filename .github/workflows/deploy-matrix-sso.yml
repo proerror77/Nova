@@ -185,18 +185,39 @@ jobs:
           # Generate secure values
           MASTERKEY=$(openssl rand -base64 32 | head -c 32)
 
-          # Use fixed password matching the PostgreSQL user created in postgres-multi-db-init.yaml
+          # Use fixed password matching the PostgreSQL user created in matrix-sso-db-init-job.yaml
           DB_PASSWORD="zitadel_staging_pwd"
 
-          # Get postgres superuser password from nova-db-credentials in nova-staging namespace
-          # This is required for Zitadel to run initial migrations
-          ADMIN_PASSWORD_DB=$(kubectl get secret nova-db-credentials -n nova-staging -o jsonpath='{.data.DB_PASSWORD}' 2>/dev/null | base64 -d) || ADMIN_PASSWORD_DB="postgres"
+          # Get postgres superuser credentials from nova-db-credentials in nova-staging namespace
+          # Debug: Show which secret keys are available
+          echo "📋 Checking nova-db-credentials secret..."
+          kubectl get secret nova-db-credentials -n nova-staging -o jsonpath='{.data}' | tr ',' '\n' || echo "Secret not found"
+
+          # Get the actual username and password from the secret
+          DB_USER_RAW=$(kubectl get secret nova-db-credentials -n nova-staging -o jsonpath='{.data.DB_USER}' 2>/dev/null)
+          DB_PASSWORD_RAW=$(kubectl get secret nova-db-credentials -n nova-staging -o jsonpath='{.data.DB_PASSWORD}' 2>/dev/null)
+
+          if [ -n "$DB_PASSWORD_RAW" ]; then
+            ADMIN_PASSWORD_DB=$(echo "$DB_PASSWORD_RAW" | base64 -d)
+            ADMIN_USER_DB=$(echo "$DB_USER_RAW" | base64 -d 2>/dev/null || echo "postgres")
+            echo "📋 Found credentials - User: $ADMIN_USER_DB"
+          else
+            # Fallback: Check if there's a POSTGRES_PASSWORD key
+            PG_PASSWORD_RAW=$(kubectl get secret nova-db-credentials -n nova-staging -o jsonpath='{.data.POSTGRES_PASSWORD}' 2>/dev/null)
+            if [ -n "$PG_PASSWORD_RAW" ]; then
+              ADMIN_PASSWORD_DB=$(echo "$PG_PASSWORD_RAW" | base64 -d)
+              echo "📋 Using POSTGRES_PASSWORD from secret"
+            else
+              echo "⚠️  Warning: Could not find database credentials, using default"
+              ADMIN_PASSWORD_DB="postgres"
+            fi
+          fi
 
           # First user password for Zitadel UI
           ADMIN_PASSWORD="NovaAdmin2024!"
 
           echo "📋 Using DB_PASSWORD for zitadel user: zitadel_staging_pwd"
-          echo "📋 Using ADMIN_PASSWORD from nova-db-credentials secret"
+          echo "📋 Admin password length: ${#ADMIN_PASSWORD_DB} chars"
 
           # Delete existing secret if password mismatch (force update)
           if kubectl get secret zitadel-secrets -n $NAMESPACE &>/dev/null; then
