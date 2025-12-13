@@ -234,7 +234,9 @@ jobs:
           echo "🚀 Applying staging patches..."
 
           # Apply staging-specific patches
-          kubectl apply -f backend/k8s/overlays/staging/zitadel-patch.yaml -n $NAMESPACE
+          # Apply Zitadel staging config and ingress
+          kubectl apply -f backend/k8s/overlays/staging/zitadel-config-patch.yaml -n $NAMESPACE
+          kubectl apply -f backend/k8s/overlays/staging/zitadel-ingress.yaml -n $NAMESPACE
 
           echo "✅ Staging patches applied"
 
