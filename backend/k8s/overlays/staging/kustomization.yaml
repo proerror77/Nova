@@ -42,6 +42,15 @@ patches:
       kind: Deployment
       name: zitadel
     path: zitadel-resources-patch.yaml
+  # Zitadel deployment strategy - use Recreate to avoid resource contention in staging
+  - target:
+      kind: Deployment
+      name: zitadel
+    patch: |-
+      - op: replace
+        path: /spec/strategy
+        value:
+          type: Recreate
   # Zitadel ConfigMap patch for cross-namespace PostgreSQL
   - target:
       kind: ConfigMap
