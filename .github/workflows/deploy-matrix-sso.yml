@@ -283,34 +283,74 @@ jobs:
             --region ${{ env.GCP_REGION }} \
             --project ${{ vars.GCP_PROJECT_ID }}
 
-      - name: Deploy Zitadel base resources
+      - name: Deploy Zitadel via Kustomize
         env:
           NAMESPACE: ${{ needs.setup.outputs.namespace }}
         run: |
-          echo "🚀 Deploying Zitadel..."
+          echo "🚀 Deploying Zitadel via Kustomize..."
 
           # Ensure namespace exists
           kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
-          # Apply base Zitadel resources (ignore ServiceMonitor if CRD not installed)
-          kubectl apply -f backend/k8s/base/zitadel.yaml -n $NAMESPACE 2>&1 | grep -v "ServiceMonitor" || true
+          # Build and apply Zitadel resources via kustomize (includes all patches)
+          # Filter only Zitadel resources using label selector
+          kubectl kustomize backend/k8s/overlays/staging | kubectl apply -f - -n $NAMESPACE -l app=zitadel --prune=false 2>&1 | grep -v "ServiceMonitor" || true
 
-          echo "✅ Zitadel base resources applied"
+          # Explicitly apply the patched ConfigMaps to ensure correct values
+          echo "📝 Applying patched ConfigMaps..."
+          kubectl kustomize backend/k8s/overlays/staging | kubectl apply -f - -n $NAMESPACE \
+            --selector='app=zitadel' \
+            --force-conflicts \
+            --server-side=true 2>&1 | grep -E "configmap|ConfigMap" || true
 
-      - name: Apply staging overlay
+          echo "✅ Zitadel resources applied via Kustomize"
+
+      - name: Verify and Fix ConfigMap values
         env:
           NAMESPACE: ${{ needs.setup.outputs.namespace }}
         run: |
-          echo "🚀 Applying staging patches..."
+          echo "🔍 Verifying Zitadel ConfigMaps..."
 
-          # Apply staging-specific patches using kustomize (applies all patches including ConfigMap)
-          kubectl kustomize backend/k8s/overlays/staging | kubectl apply -f - -n $NAMESPACE --selector=app=zitadel || true
+          # Check zitadel-config (environment variables)
+          echo ""
+          echo "📋 Checking zitadel-config (env vars)..."
+          HOST=$(kubectl get configmap zitadel-config -n $NAMESPACE -o jsonpath='{.data.ZITADEL_DATABASE_POSTGRES_HOST}' 2>/dev/null || echo "NOT_FOUND")
+          echo "ZITADEL_DATABASE_POSTGRES_HOST = $HOST"
 
-          # Also apply Zitadel-specific resources directly
+          if [ "$HOST" = "postgres" ]; then
+            echo "⚠️  ConfigMap has wrong host, patching directly..."
+            kubectl patch configmap zitadel-config -n $NAMESPACE --type='json' \
+              -p='[{"op": "replace", "path": "/data/ZITADEL_DATABASE_POSTGRES_HOST", "value": "postgres.nova-staging.svc.cluster.local"}]'
+            echo "✅ zitadel-config patched"
+          elif [ "$HOST" = "postgres.nova-staging.svc.cluster.local" ]; then
+            echo "✅ zitadel-config has correct host"
+          else
+            echo "❌ Unexpected host value: $HOST"
+          fi
+
+          # Check zitadel-runtime-config (yaml config file)
+          echo ""
+          echo "📋 Checking zitadel-runtime-config (yaml file)..."
+
+          # Apply the staging runtime config patch directly to ensure correct values
           kubectl apply -f backend/k8s/overlays/staging/zitadel-config-patch.yaml -n $NAMESPACE
-          kubectl apply -f backend/k8s/overlays/staging/zitadel-ingress.yaml -n $NAMESPACE
+          echo "✅ zitadel-runtime-config applied"
 
-          echo "✅ Staging patches applied"
+          # Verify the host in runtime config
+          RUNTIME_HOST=$(kubectl get configmap zitadel-runtime-config -n $NAMESPACE -o jsonpath='{.data.zitadel\.yaml}' 2>/dev/null | grep -oP 'Host: \K[^\n]+' | head -1 || echo "NOT_FOUND")
+          echo "Runtime config Host = $RUNTIME_HOST"
+
+          echo ""
+          echo "📊 All ConfigMap values:"
+          kubectl get configmap zitadel-config -n $NAMESPACE -o yaml | grep -E "POSTGRES_HOST|POSTGRES_PORT|POSTGRES_DATABASE" || true
+
+      - name: Apply Zitadel Ingress
+        env:
+          NAMESPACE: ${{ needs.setup.outputs.namespace }}
+        run: |
+          echo "🚀 Applying Zitadel Ingress..."
+          kubectl apply -f backend/k8s/overlays/staging/zitadel-ingress.yaml -n $NAMESPACE
+          echo "✅ Zitadel Ingress applied"
 
       - name: Restart Zitadel deployment
         env:
