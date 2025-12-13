@@ -77,8 +77,7 @@ spec:
       initContainers:
         - name: init-db
           image: ghcr.io/zitadel/zitadel:v2.62.1
-          command:
-            - zitadel
+          args:
             - init
             - --config
             - /config/zitadel.yaml
@@ -108,8 +107,7 @@ spec:
         - name: zitadel
           image: ghcr.io/zitadel/zitadel:v2.62.1
           imagePullPolicy: IfNotPresent
-          command:
-            - zitadel
+          args:
             - start
             - --config
             - /config/zitadel.yaml
