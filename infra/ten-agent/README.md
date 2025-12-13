@@ -125,8 +125,47 @@ Required environment variables:
 | AGORA_APP_CERTIFICATE | Agora certificate (optional) | |
 | DEEPGRAM_API_KEY | Deepgram STT API key | 6a79fabe... |
 | OPENAI_API_KEY | OpenAI/compatible API key | sk-... |
-| OPENAI_API_BASE | API base URL | https://api.tu-zi.com/v1 |
-| OPENAI_MODEL | LLM model name | gpt-4o-all |
+| OPENAI_BASE_URL | API base URL | https://api.openai.com/v1 |
+| OPENAI_MODEL | LLM model name | gpt-4o |
+
+### Voice Features Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| STT_LANGUAGE | Speech-to-text language | zh-TW |
+| TTS_VOICE | Text-to-speech voice | nova |
+| ALICE_PROMPT | System prompt for Alice | 你是 Alice... |
+| ALICE_GREETING | Initial greeting message | 你好！我是 Alice... |
+| TTD_BASE_URL | Turn Detection API URL | https://api.openai.com/v1 |
+| TTD_API_KEY | Turn Detection API key | (uses OPENAI_API_KEY) |
+
+## Voice Pipeline Architecture
+
+The voice assistant now supports **continuous conversation** and **voice interruption**:
+
+```
+User speaks → Agora RTC → STT (Deepgram) → Turn Detection
+                                                  ↓
+                                        [Detect turn complete?]
+                                                  ↓
+                              ┌─────────────────────────────────┐
+                              │                                 │
+                         [Yes: flush]                    [No: continue]
+                              │                                 │
+                              ↓                                 ↓
+                      Interrupt current              Wait for more speech
+                      LLM/TTS output
+                              │
+                              ↓
+                   main_control → LLM → TTS → Agora RTC → User hears
+```
+
+### Key Components
+
+- **turn_detection**: Detects when user finishes speaking, sends `flush` command to interrupt
+- **main_control**: Coordinates the conversation flow, handles interruptions
+- **message_collector**: Collects messages for display/logging
+- **max_memory_length**: Keeps last 10 conversation turns for context
 
 ## iOS Integration
 
