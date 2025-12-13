@@ -304,18 +304,23 @@ jobs:
             echo "✅ Old deployment deleted"
           fi
 
-          # Check PVC status - if Pending due to wrong storage class, delete and recreate
-          echo "🔍 Checking PVC status..."
-          PVC_STATUS=$(kubectl get pvc zitadel-data -n $NAMESPACE -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
-          PVC_SC=$(kubectl get pvc zitadel-data -n $NAMESPACE -o jsonpath='{.spec.storageClassName}' 2>/dev/null || echo "")
-          echo "PVC status: $PVC_STATUS, storageClassName: $PVC_SC"
+          # Clean up old Zitadel resources for fresh deployment
+          echo "🧹 Cleaning up old Zitadel resources..."
 
-          if [ "$PVC_STATUS" = "Pending" ]; then
-            echo "⚠️  PVC is Pending, checking if storage class issue..."
-            # Delete and let it recreate with default storage class
+          # Delete old deployment to free resources
+          kubectl delete deployment zitadel -n $NAMESPACE --ignore-not-found=true
+          sleep 2
+
+          # Check PVC status
+          PVC_STATUS=$(kubectl get pvc zitadel-data -n $NAMESPACE -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+          echo "PVC status: $PVC_STATUS"
+
+          # Delete PVC if it's causing node affinity issues or if we need a fresh start
+          if [ "$PVC_STATUS" != "NotFound" ]; then
+            echo "⚠️  Deleting PVC to resolve node affinity issues..."
             kubectl delete pvc zitadel-data -n $NAMESPACE --ignore-not-found=true
             sleep 3
-            echo "✅ Old PVC deleted, will recreate with default storage class"
+            echo "✅ PVC deleted, will recreate on available node"
           fi
 
           # Apply Zitadel resources using server-side apply to handle conflicts
