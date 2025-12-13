@@ -184,12 +184,19 @@ jobs:
 
           # Generate secure values
           MASTERKEY=$(openssl rand -base64 32 | head -c 32)
+
           # Use fixed password matching the PostgreSQL user created in postgres-multi-db-init.yaml
           DB_PASSWORD="zitadel_staging_pwd"
-          # Admin password for postgres superuser (from nova-db-credentials)
-          ADMIN_PASSWORD_DB="zitadel_staging_pwd"
+
+          # Get postgres superuser password from nova-db-credentials in nova-staging namespace
+          # This is required for Zitadel to run initial migrations
+          ADMIN_PASSWORD_DB=$(kubectl get secret nova-db-credentials -n nova-staging -o jsonpath='{.data.DB_PASSWORD}' 2>/dev/null | base64 -d) || ADMIN_PASSWORD_DB="postgres"
+
           # First user password for Zitadel UI
           ADMIN_PASSWORD="NovaAdmin2024!"
+
+          echo "📋 Using DB_PASSWORD for zitadel user: zitadel_staging_pwd"
+          echo "📋 Using ADMIN_PASSWORD from nova-db-credentials secret"
 
           # Delete existing secret if password mismatch (force update)
           if kubectl get secret zitadel-secrets -n $NAMESPACE &>/dev/null; then
@@ -203,7 +210,7 @@ jobs:
             --from-literal=ZITADEL_DATABASE_POSTGRES_USER_PASSWORD="$DB_PASSWORD" \
             --from-literal=ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD="$ADMIN_PASSWORD_DB" \
             --from-literal=ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD="$ADMIN_PASSWORD"
-          echo "✅ Created zitadel-secrets with correct database password"
+          echo "✅ Created zitadel-secrets with correct database passwords"
 
       - name: Create Synapse OIDC Secrets
         env:
