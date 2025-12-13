@@ -428,6 +428,7 @@ async fn main() -> std::io::Result<()> {
             .route("/api/v2/alice/status", web::get().to(rest_api::get_status))
             .route("/api/v2/alice/chat", web::post().to(rest_api::send_message))
             .route("/api/v2/alice/voice", web::post().to(rest_api::voice_mode))
+            .route("/api/v2/alice/enhance", web::post().to(rest_api::enhance_post))
             // ✅ Channels API
             .route(
                 "/api/v2/channels",

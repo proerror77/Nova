@@ -23,6 +23,12 @@ struct NewPostView: View {
     @State private var isTextEditorFocused: Bool = false  // 用于自定义 TextView 的焦点状态
     @State private var showSaveDraftModal: Bool = false  // 控制保存草稿弹窗
 
+    // Enhance with Alice states
+    @State private var isEnhancing: Bool = false  // 正在獲取 AI 建議
+    @State private var showEnhanceSuggestion: Bool = false  // 顯示建議彈窗
+    @State private var enhanceSuggestion: PostEnhancementSuggestion?  // AI 建議結果
+    @State private var enhanceError: String?  // 增強錯誤訊息
+
     // Draft storage keys
     private let draftTextKey = "NewPostDraftText"
     private let draftImagesKey = "NewPostDraftImages"
@@ -31,6 +37,7 @@ struct NewPostView: View {
     private let mediaService = MediaService()
     private let contentService = ContentService()
     private let livePhotoManager = LivePhotoManager.shared
+    private let aliceService = AliceService.shared
 
     var body: some View {
         ZStack {
@@ -115,6 +122,25 @@ struct NewPostView: View {
                 selectedLocation: $selectedLocation,
                 isPresented: $showLocationPicker
             )
+        }
+        .sheet(isPresented: $showEnhanceSuggestion) {
+            if let suggestion = enhanceSuggestion {
+                // EnhanceSuggestionView - placeholder until file is added to project
+                VStack(spacing: 20) {
+                    Text("Alice's Suggestions")
+                        .font(.headline)
+                    Text(suggestion.description)
+                        .padding()
+                    Button("Apply") {
+                        postText = suggestion.description
+                        showEnhanceSuggestion = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding()
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
         }
     }
 
@@ -298,42 +324,59 @@ struct NewPostView: View {
                 
                 // Display all selected media (images and Live Photos)
                 ForEach(Array(selectedMediaItems.enumerated()), id: \.element.id) { index, mediaItem in
-                    ZStack(alignment: .topTrailing) {
-                        switch mediaItem {
-                        case .image(let image):
-                            // Regular image preview
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 239, height: 290)
-                                .cornerRadius(10)
-                                .clipped()
-                            
-                        case .livePhoto(let livePhotoData):
-                            // Live Photo preview with play capability
-                            LivePhotoPreviewCard(
-                                livePhotoData: livePhotoData,
-                                onDelete: {
-                                    removeMediaItem(at: index)
-                                }
-                            )
-                        }
-                        
-                        // Delete button (for regular images, Live Photo has its own)
-                        if case .image = mediaItem {
-                            Button(action: {
-                                removeMediaItem(at: index)
-                            }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(.white)
-                                    .background(
-                                        Circle()
-                                            .fill(Color.black.opacity(0.5))
-                                            .frame(width: 20, height: 20)
-                                    )
+                    ZStack {
+                        // Top-right alignment for delete button
+                        ZStack(alignment: .topTrailing) {
+                            switch mediaItem {
+                            case .image(let image):
+                                // Regular image preview
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 239, height: 290)
+                                    .cornerRadius(10)
+                                    .clipped()
+
+                            case .livePhoto(let livePhotoData):
+                                // Live Photo preview with play capability
+                                LivePhotoPreviewCard(
+                                    livePhotoData: livePhotoData,
+                                    onDelete: {
+                                        removeMediaItem(at: index)
+                                    }
+                                )
                             }
-                            .padding(4)
+
+                            // Delete button (for regular images, Live Photo has its own)
+                            if case .image = mediaItem {
+                                Button(action: {
+                                    removeMediaItem(at: index)
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 20))
+                                        .foregroundColor(.white)
+                                        .background(
+                                            Circle()
+                                                .fill(Color.black.opacity(0.5))
+                                                .frame(width: 20, height: 20)
+                                        )
+                                }
+                                .padding(4)
+                            }
+                        }
+
+                        // Enhance with Alice button (only on first image)
+                        if index == 0 {
+                            VStack {
+                                Spacer()
+                                HStack {
+                                    enhanceWithAliceButton
+                                        .padding(.leading, 8)
+                                        .padding(.bottom, 8)
+                                    Spacer()
+                                }
+                            }
+                            .frame(width: 239, height: 290)
                         }
                     }
                 }
@@ -341,27 +384,43 @@ struct NewPostView: View {
                 // Legacy support: show selectedImages if selectedMediaItems is empty
                 if selectedMediaItems.isEmpty {
                     ForEach(Array(selectedImages.enumerated()), id: \.offset) { index, image in
-                        ZStack(alignment: .topTrailing) {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 239, height: 290)
-                                .cornerRadius(10)
-                                .clipped()
+                        ZStack {
+                            ZStack(alignment: .topTrailing) {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 239, height: 290)
+                                    .cornerRadius(10)
+                                    .clipped()
 
-                            Button(action: {
-                                removeImage(at: index)
-                            }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(.white)
-                                    .background(
-                                        Circle()
-                                            .fill(Color.black.opacity(0.5))
-                                            .frame(width: 20, height: 20)
-                                    )
+                                Button(action: {
+                                    removeImage(at: index)
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 20))
+                                        .foregroundColor(.white)
+                                        .background(
+                                            Circle()
+                                                .fill(Color.black.opacity(0.5))
+                                                .frame(width: 20, height: 20)
+                                        )
+                                }
+                                .padding(4)
                             }
-                            .padding(4)
+
+                            // Enhance with Alice button (only on first image)
+                            if index == 0 {
+                                VStack {
+                                    Spacer()
+                                    HStack {
+                                        enhanceWithAliceButton
+                                            .padding(.leading, 8)
+                                            .padding(.bottom, 8)
+                                        Spacer()
+                                    }
+                                }
+                                .frame(width: 239, height: 290)
+                            }
                         }
                     }
                 }
@@ -408,7 +467,82 @@ struct NewPostView: View {
     private var totalMediaCount: Int {
         selectedMediaItems.isEmpty ? selectedImages.count : selectedMediaItems.count
     }
-    
+
+    // MARK: - Enhance with Alice Button
+    private var enhanceWithAliceButton: some View {
+        Button(action: {
+            requestEnhancement()
+        }) {
+            HStack(spacing: 6) {
+                if isEnhancing {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .frame(width: 14, height: 14)
+                } else {
+                    Image("alice-center-icon")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 14, height: 14)
+                }
+
+                Text(isEnhancing ? "Analyzing..." : "Enhance with alice")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.black)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                Capsule()
+                    .fill(Color.white)
+                    .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
+            )
+        }
+        .disabled(isEnhancing)
+    }
+
+    // MARK: - Request Enhancement from Alice
+    private func requestEnhancement() {
+        // Get the first image for analysis
+        guard let firstImage = getFirstImage() else { return }
+
+        isEnhancing = true
+        enhanceError = nil
+
+        Task {
+            do {
+                let suggestion = try await aliceService.enhancePost(
+                    image: firstImage,
+                    existingText: postText.isEmpty ? nil : postText,
+                    includeTrending: true
+                )
+
+                await MainActor.run {
+                    enhanceSuggestion = suggestion
+                    showEnhanceSuggestion = true
+                    isEnhancing = false
+                }
+            } catch {
+                await MainActor.run {
+                    enhanceError = error.localizedDescription
+                    isEnhancing = false
+                }
+                #if DEBUG
+                print("[NewPost] Enhancement failed: \(error)")
+                #endif
+            }
+        }
+    }
+
+    // MARK: - Get First Image for Enhancement
+    private func getFirstImage() -> UIImage? {
+        if !selectedMediaItems.isEmpty {
+            return selectedMediaItems.first?.displayImage
+        } else if !selectedImages.isEmpty {
+            return selectedImages.first
+        }
+        return nil
+    }
+
     // MARK: - Process Selected Photos (with Live Photo support)
     private func processSelectedPhotos(_ items: [PhotosPickerItem]) async {
         guard !items.isEmpty else { return }

@@ -213,6 +213,7 @@ struct APIConfig {
         static let getStatus = "/api/v2/alice/status"  // GET 獲取 Alice 服務狀態
         static let sendMessage = "/api/v2/alice/chat"  // POST 發送聊天消息
         static let voiceMode = "/api/v2/alice/voice"  // POST 語音模式
+        static let enhancePost = "/api/v2/alice/enhance"  // POST 圖片分析與內容建議
     }
 
     // MARK: - Alice Voice Service API (TEN Agent)

@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 // MARK: - Alice AI Service
 // Calls Nova's Alice API endpoints (/api/v2/alice/*)
@@ -72,6 +73,63 @@ final class AliceService {
 
         return status
     }
+
+    // MARK: - Post Enhancement API
+
+    /// Enhance post content based on image analysis
+    /// - Parameters:
+    ///   - image: The image to analyze
+    ///   - existingText: Optional existing post text to enhance
+    ///   - includeTrending: Whether to include trending suggestions
+    /// - Returns: Enhancement suggestions
+    @MainActor
+    func enhancePost(
+        image: UIImage,
+        existingText: String? = nil,
+        includeTrending: Bool = true
+    ) async throws -> PostEnhancementSuggestion {
+        // Convert image to base64
+        guard let imageData = image.jpegData(compressionQuality: 0.7) else {
+            throw AliceError.apiError("Failed to process image")
+        }
+        let base64Image = imageData.base64EncodedString()
+
+        let request = AliceEnhanceRequest(
+            imageBase64: base64Image,
+            existingText: existingText,
+            includeTrending: includeTrending
+        )
+
+        #if DEBUG
+        print("[AliceService] Sending enhance request")
+        print("[AliceService] Image size: \(imageData.count) bytes")
+        print("[AliceService] Existing text: \(existingText ?? "none")")
+        #endif
+
+        do {
+            let response: AliceEnhanceResponse = try await apiClient.request(
+                endpoint: APIConfig.Alice.enhancePost,
+                method: "POST",
+                body: request
+            )
+
+            #if DEBUG
+            print("[AliceService] Received enhancement suggestions")
+            #endif
+
+            return PostEnhancementSuggestion(
+                description: response.description,
+                hashtags: response.hashtags,
+                trendingTopics: response.trendingTopics,
+                alternativeDescriptions: response.alternativeDescriptions ?? []
+            )
+        } catch {
+            #if DEBUG
+            print("[AliceService] Enhance error: \(error)")
+            #endif
+            throw AliceError.from(error)
+        }
+    }
 }
 
 // MARK: - Data Models
@@ -98,6 +156,51 @@ struct AIChatMessage: Codable, Sendable {
 private struct AliceRequest: Codable {
     let message: String
     let mode: String  // "text" or "voice"
+}
+
+/// Alice enhance request format
+private struct AliceEnhanceRequest: Codable {
+    let imageBase64: String
+    let existingText: String?
+    let includeTrending: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case imageBase64 = "image_base64"
+        case existingText = "existing_text"
+        case includeTrending = "include_trending"
+    }
+}
+
+/// Alice enhance response format
+private struct AliceEnhanceResponse: Codable {
+    let description: String
+    let hashtags: [String]
+    let trendingTopics: [String]?
+    let alternativeDescriptions: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case description
+        case hashtags
+        case trendingTopics = "trending_topics"
+        case alternativeDescriptions = "alternative_descriptions"
+    }
+}
+
+/// Post enhancement suggestion result
+struct PostEnhancementSuggestion {
+    let description: String
+    let hashtags: [String]
+    let trendingTopics: [String]?
+    let alternativeDescriptions: [String]
+
+    /// Combined description with hashtags
+    var fullSuggestion: String {
+        var result = description
+        if !hashtags.isEmpty {
+            result += "\n\n" + hashtags.map { "#\($0)" }.joined(separator: " ")
+        }
+        return result
+    }
 }
 
 /// Alice API response format
