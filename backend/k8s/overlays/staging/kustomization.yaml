@@ -42,6 +42,14 @@ patches:
       kind: Deployment
       name: zitadel
     path: zitadel-resources-patch.yaml
+  # Zitadel ConfigMap patch for cross-namespace PostgreSQL
+  - target:
+      kind: ConfigMap
+      name: zitadel-config
+    patch: |-
+      - op: replace
+        path: /data/ZITADEL_DATABASE_POSTGRES_HOST
+        value: "postgres.nova-staging.svc.cluster.local"
   # ConfigMap patch for staging environment
   - target:
       kind: ConfigMap

@@ -137,8 +137,9 @@ jobs:
   # ============================================================
   create-secrets:
     name: Create Secrets
-    needs: setup
-    if: inputs.create_secrets
+    needs: [setup, init-databases]
+    # Always run when deploying Zitadel (secrets are required for database connection)
+    if: always() && (inputs.create_secrets || inputs.deploy_zitadel) && needs.setup.result == 'success' && needs.init-databases.result == 'success'
     runs-on: ubuntu-latest
 
     steps:
@@ -181,23 +182,28 @@ jobs:
         run: |
           echo "🔐 Creating Zitadel secrets..."
 
-          # Generate secure values if not exists
+          # Generate secure values
           MASTERKEY=$(openssl rand -base64 32 | head -c 32)
-          DB_PASSWORD=$(openssl rand -base64 24)
-          ADMIN_PASSWORD="NovaAdmin2024!"  # Default for staging
+          # Use fixed password matching the PostgreSQL user created in postgres-multi-db-init.yaml
+          DB_PASSWORD="zitadel_staging_pwd"
+          # Admin password for postgres superuser (from nova-db-credentials)
+          ADMIN_PASSWORD_DB="zitadel_staging_pwd"
+          # First user password for Zitadel UI
+          ADMIN_PASSWORD="NovaAdmin2024!"
 
-          # Check if secret exists
+          # Delete existing secret if password mismatch (force update)
           if kubectl get secret zitadel-secrets -n $NAMESPACE &>/dev/null; then
-            echo "⚠️  Secret zitadel-secrets already exists, skipping..."
-          else
-            kubectl create secret generic zitadel-secrets \
-              --namespace=$NAMESPACE \
-              --from-literal=ZITADEL_MASTERKEY="$MASTERKEY" \
-              --from-literal=ZITADEL_DATABASE_POSTGRES_USER_PASSWORD="$DB_PASSWORD" \
-              --from-literal=ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD="$DB_PASSWORD" \
-              --from-literal=ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD="$ADMIN_PASSWORD"
-            echo "✅ Created zitadel-secrets"
+            echo "⚠️  Recreating zitadel-secrets with correct database password..."
+            kubectl delete secret zitadel-secrets -n $NAMESPACE
           fi
+
+          kubectl create secret generic zitadel-secrets \
+            --namespace=$NAMESPACE \
+            --from-literal=ZITADEL_MASTERKEY="$MASTERKEY" \
+            --from-literal=ZITADEL_DATABASE_POSTGRES_USER_PASSWORD="$DB_PASSWORD" \
+            --from-literal=ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD="$ADMIN_PASSWORD_DB" \
+            --from-literal=ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD="$ADMIN_PASSWORD"
+          echo "✅ Created zitadel-secrets with correct database password"
 
       - name: Create Synapse OIDC Secrets
         env:
@@ -290,12 +296,31 @@ jobs:
         run: |
           echo "🚀 Applying staging patches..."
 
-          # Apply staging-specific patches
-          # Apply Zitadel staging config and ingress
+          # Apply staging-specific patches using kustomize (applies all patches including ConfigMap)
+          kubectl kustomize backend/k8s/overlays/staging | kubectl apply -f - -n $NAMESPACE --selector=app=zitadel || true
+
+          # Also apply Zitadel-specific resources directly
           kubectl apply -f backend/k8s/overlays/staging/zitadel-config-patch.yaml -n $NAMESPACE
           kubectl apply -f backend/k8s/overlays/staging/zitadel-ingress.yaml -n $NAMESPACE
 
           echo "✅ Staging patches applied"
+
+      - name: Restart Zitadel deployment
+        env:
+          NAMESPACE: ${{ needs.setup.outputs.namespace }}
+        run: |
+          echo "🔄 Restarting Zitadel to pick up new configuration..."
+
+          # Delete existing pod to force recreation with new config
+          kubectl delete pod -l app=zitadel -n $NAMESPACE --force --grace-period=0 || true
+
+          # Wait a moment for the pod to be deleted
+          sleep 5
+
+          # Restart deployment
+          kubectl rollout restart deployment/zitadel -n $NAMESPACE
+
+          echo "✅ Zitadel restart initiated"
 
       - name: Wait for Zitadel deployment
         env:
