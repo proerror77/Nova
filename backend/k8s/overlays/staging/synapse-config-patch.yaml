@@ -28,9 +28,10 @@ data:
       name: psycopg2
       args:
         user: synapse
-        password: "POSTGRES_PASSWORD_PLACEHOLDER"
+        password: "synapse_staging_pwd"
         database: synapse
-        host: postgres
+        # Cross-namespace reference to PostgreSQL in nova-staging
+        host: postgres.nova-staging.svc.cluster.local
         port: 5432
         cp_min: 5
         cp_max: 10

@@ -16,7 +16,8 @@ data:
 
     Database:
       postgres:
-        Host: postgres
+        # Cross-namespace reference to PostgreSQL in nova-staging
+        Host: postgres.nova-staging.svc.cluster.local
         Port: 5432
         Database: zitadel
         MaxOpenConns: 10

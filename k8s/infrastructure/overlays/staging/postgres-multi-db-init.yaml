@@ -33,6 +33,12 @@ data:
     -- Future: dedicated social-service database (nova_social)
     SELECT 'CREATE DATABASE nova_social' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_social')\gexec
 
+    -- Zitadel IdP database (Matrix SSO)
+    SELECT 'CREATE DATABASE zitadel' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'zitadel')\gexec
+
+    -- Synapse Matrix homeserver database
+    SELECT 'CREATE DATABASE synapse' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'synapse')\gexec
+
   # 第二步：创建服务用户和权限
   02-create-service-users.sql: |
     -- 为每个微服务创建独立用户（使用最小权限原则）
@@ -133,6 +139,18 @@ data:
         CREATE USER nova_realtime_chat_svc WITH ENCRYPTED PASSWORD 'nova_realtime_chat_staging_pwd';
         GRANT ALL PRIVILEGES ON DATABASE nova_realtime_chat TO nova_realtime_chat_svc;
       END IF;
+
+      -- Zitadel IdP 用户 (Matrix SSO)
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'zitadel') THEN
+        CREATE USER zitadel WITH ENCRYPTED PASSWORD 'zitadel_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE zitadel TO zitadel;
+      END IF;
+
+      -- Synapse Matrix 用户
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'synapse') THEN
+        CREATE USER synapse WITH ENCRYPTED PASSWORD 'synapse_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE synapse TO synapse;
+      END IF;
     END
     $$;
 
@@ -204,6 +222,16 @@ data:
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+    -- Zitadel IdP 擴展
+    \c zitadel
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    -- Synapse Matrix 擴展
+    \c synapse
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
   # 数据库映射信息（用于参考）
   database-mapping.txt: |
     微服务 → 数据库映射表
@@ -223,6 +251,8 @@ data:
     13. identity-service → nova_identity
     14. trust-safety-service → nova_trust_safety
     15. realtime-chat-service → nova_realtime_chat
+    16. zitadel (Matrix SSO IdP) → zitadel
+    17. synapse (Matrix homeserver) → synapse
 
 ---
 # 更新 postgres 的 init script 卷来使用多数据库配置
