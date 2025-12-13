@@ -4,6 +4,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 /// Repository for Bookmark operations
+/// Uses the `saved_posts` table in the database
 #[derive(Clone)]
 pub struct BookmarkRepository {
     pool: PgPool,
@@ -18,11 +19,11 @@ impl BookmarkRepository {
     pub async fn create_bookmark(&self, user_id: Uuid, post_id: Uuid) -> Result<Bookmark> {
         let bookmark = sqlx::query_as::<_, Bookmark>(
             r#"
-            INSERT INTO bookmarks (user_id, post_id)
+            INSERT INTO saved_posts (user_id, post_id)
             VALUES ($1, $2)
-            ON CONFLICT (user_id, post_id) DO UPDATE
+            ON CONFLICT (post_id, user_id) DO UPDATE
             SET user_id = EXCLUDED.user_id
-            RETURNING id, user_id, post_id, bookmarked_at, collection_id
+            RETURNING id, user_id, post_id, created_at
             "#,
         )
         .bind(user_id)
@@ -37,7 +38,7 @@ impl BookmarkRepository {
     pub async fn delete_bookmark(&self, user_id: Uuid, post_id: Uuid) -> Result<bool> {
         let result = sqlx::query(
             r#"
-            DELETE FROM bookmarks
+            DELETE FROM saved_posts
             WHERE user_id = $1 AND post_id = $2
             "#,
         )
@@ -54,7 +55,7 @@ impl BookmarkRepository {
         let exists: bool = sqlx::query_scalar(
             r#"
             SELECT EXISTS(
-                SELECT 1 FROM bookmarks
+                SELECT 1 FROM saved_posts
                 WHERE user_id = $1 AND post_id = $2
             )
             "#,
@@ -71,7 +72,7 @@ impl BookmarkRepository {
     pub async fn get_bookmark_count(&self, post_id: Uuid) -> Result<i64> {
         let count: i64 = sqlx::query_scalar(
             r#"
-            SELECT COUNT(*) FROM bookmarks
+            SELECT COUNT(*) FROM saved_posts
             WHERE post_id = $1
             "#,
         )
@@ -91,10 +92,10 @@ impl BookmarkRepository {
     ) -> Result<Vec<Bookmark>> {
         let bookmarks = sqlx::query_as::<_, Bookmark>(
             r#"
-            SELECT id, user_id, post_id, bookmarked_at, collection_id
-            FROM bookmarks
+            SELECT id, user_id, post_id, created_at
+            FROM saved_posts
             WHERE user_id = $1
-            ORDER BY bookmarked_at DESC
+            ORDER BY created_at DESC
             LIMIT $2 OFFSET $3
             "#,
         )
@@ -111,7 +112,7 @@ impl BookmarkRepository {
     pub async fn get_user_bookmark_count(&self, user_id: Uuid) -> Result<i64> {
         let count: i64 = sqlx::query_scalar(
             r#"
-            SELECT COUNT(*) FROM bookmarks
+            SELECT COUNT(*) FROM saved_posts
             WHERE user_id = $1
             "#,
         )
@@ -132,9 +133,9 @@ impl BookmarkRepository {
         let post_ids: Vec<Uuid> = sqlx::query_scalar(
             r#"
             SELECT post_id
-            FROM bookmarks
+            FROM saved_posts
             WHERE user_id = $1
-            ORDER BY bookmarked_at DESC
+            ORDER BY created_at DESC
             LIMIT $2 OFFSET $3
             "#,
         )
@@ -160,7 +161,7 @@ impl BookmarkRepository {
         let bookmarked_ids: Vec<Uuid> = sqlx::query_scalar(
             r#"
             SELECT post_id
-            FROM bookmarks
+            FROM saved_posts
             WHERE user_id = $1 AND post_id = ANY($2)
             "#,
         )
