@@ -132,7 +132,7 @@ jobs:
           echo "Applying all K8s manifests..."
           kubectl apply -f k8s/microservices/alice-voice-service-serviceaccount.yaml -n ${{ env.NAMESPACE }}
           kubectl apply -f k8s/microservices/alice-voice-service-configmap.yaml -n ${{ env.NAMESPACE }}
-          kubectl apply -f k8s/microservices/alice-voice-service-secret.yaml -n ${{ env.NAMESPACE }}
+          kubectl apply -f k8s/microservices/alice-voice-service-externalsecret.yaml
           kubectl apply -f k8s/microservices/alice-voice-service-deployment.yaml -n ${{ env.NAMESPACE }}
           kubectl apply -f k8s/microservices/alice-voice-service-service.yaml -n ${{ env.NAMESPACE }}
           kubectl apply -f k8s/microservices/alice-voice-service-ingress.yaml -n ${{ env.NAMESPACE }}
