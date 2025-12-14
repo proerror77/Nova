@@ -178,6 +178,7 @@ struct LoginView: View {
                     .autocapitalization(.none)
                     .keyboardType(.emailAddress)
                     .autocorrectionDisabled()
+                    .textContentType(.username)
                     .accessibilityIdentifier("loginEmailTextField")
                     .focused($focusedField, equals: .email)
                     .onChange(of: email) { _, newValue in
@@ -213,12 +214,14 @@ struct LoginView: View {
                             .font(.system(size: 14, weight: .light))
                             .autocapitalization(.none)
                             .autocorrectionDisabled()
+                            .textContentType(.password)
                             .accessibilityIdentifier("loginPasswordTextField")
                             .focused($focusedField, equals: .password)
                     } else {
                         SecureField("", text: $password, prompt: Text(LocalizedStringKey("password")).foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77)))
                             .foregroundColor(.white)
                             .font(.system(size: 14, weight: .light))
+                            .textContentType(.password)
                             .accessibilityIdentifier("loginPasswordTextField")
                             .focused($focusedField, equals: .password)
                     }
