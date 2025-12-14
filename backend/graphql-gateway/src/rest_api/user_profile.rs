@@ -32,6 +32,8 @@ pub struct UpdateProfileRequest {
     pub date_of_birth: Option<String>,
     pub gender: Option<String>,
     pub website: Option<String>,
+    pub avatar_url: Option<String>,
+    pub cover_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -268,6 +270,7 @@ pub async fn update_profile(
     info!(
         user_id = %user_id,
         first_name = ?req.first_name,
+        avatar_url = ?req.avatar_url,
         "PUT /api/v2/users/{user_id}"
     );
 
@@ -285,8 +288,8 @@ pub async fn update_profile(
         user_id: user_id.to_string(),
         display_name,
         bio: req.bio.clone(),
-        avatar_url: None,
-        cover_photo_url: None,
+        avatar_url: req.avatar_url.clone(),
+        cover_photo_url: req.cover_url.clone(),
         location: req.location.clone(),
         private_account: None,
         // Extended profile fields

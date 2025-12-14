@@ -10,17 +10,13 @@ class ContentService {
     // MARK: - Posts
 
     func getPostsByAuthor(authorId: String, limit: Int = 20, offset: Int = 0) async throws -> GetPostsByAuthorResponse {
-        struct Request: Codable {
-            let author_id: String
-            let status: String?
-            let limit: Int
-            let offset: Int
-        }
-
-        let request = Request(author_id: authorId, status: nil, limit: limit, offset: offset)
-        return try await client.request(
-            endpoint: APIConfig.Content.postsByAuthor,
-            body: request
+        // Use GET /api/v2/content/user/{user_id} with query params
+        return try await client.get(
+            endpoint: APIConfig.Content.postsByUser(authorId),
+            queryParams: [
+                "limit": String(limit),
+                "offset": String(offset)
+            ]
         )
     }
 

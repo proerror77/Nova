@@ -262,7 +262,8 @@ pub async fn send_message(
         model: "gpt-4o-all".to_string(),
         messages: vec![OpenAIChatMessage {
             role: "user".to_string(),
-            content: req.message.clone(),
+            content: Some(req.message.clone()),
+            content_parts: None,
         }],
     };
 

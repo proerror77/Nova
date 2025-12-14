@@ -373,17 +373,18 @@ async fn main() -> std::io::Result<()> {
                 web::get().to(rest_api::get_guest_trending_feed),
             )
             // ✅ Content API (Posts)
+            // NOTE: Specific routes MUST be before generic {id} routes to prevent {id} from matching "user"
             .route(
                 "/api/v2/content",
                 web::post().to(rest_api::content::create_post),
             )
             .route(
-                "/api/v2/content/{id}",
-                web::get().to(rest_api::content::get_post),
-            )
-            .route(
                 "/api/v2/content/user/{user_id}",
                 web::get().to(rest_api::content::get_user_posts),
+            )
+            .route(
+                "/api/v2/content/{id}",
+                web::get().to(rest_api::content::get_post),
             )
             .route(
                 "/api/v2/content/{id}",
