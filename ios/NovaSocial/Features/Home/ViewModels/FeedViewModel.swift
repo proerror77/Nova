@@ -33,18 +33,8 @@ class FeedViewModel: ObservableObject {
     // Track ongoing bookmark operations to prevent concurrent calls for the same post
     private var ongoingBookmarkOperations: Set<String> = []
 
-    // MARK: - Public Methods
+    // MARK: - Initialization
 
-    /// Check if user is authenticated (has valid token and is not in guest mode)
-    private var isAuthenticated: Bool {
-        authManager.isAuthenticated && !authManager.isGuestMode
-    }
-
-    /// Load initial feed - uses Guest Feed (trending) when not authenticated
-    /// - Parameters:
-    ///   - algorithm: Feed ranking algorithm
-    ///   - isGuestFallback: Internal flag to indicate we already fell back to guest feed once.
-    ///     This prevents infinite retry loops when even guest feed returns unauthorized.
     init(
         feedService: FeedService = FeedService(),
         contentService: ContentService = ContentService(),
@@ -57,6 +47,19 @@ class FeedViewModel: ObservableObject {
         self.authManager = authManager ?? AuthenticationManager.shared
     }
 
+    // MARK: - Computed Properties
+
+    /// Check if user is authenticated (has valid token and is not in guest mode)
+    private var isAuthenticated: Bool {
+        authManager.isAuthenticated && !authManager.isGuestMode
+    }
+
+    // MARK: - Public Methods
+
+    /// Load initial feed - uses Guest Feed (trending) when not authenticated
+    /// - Parameters:
+    ///   - algorithm: Feed ranking algorithm
+    ///   - isGuestFallback: Internal flag to indicate we already fell back to guest feed once.
     func loadFeed(
         algorithm: FeedAlgorithm = .chronological,
         isGuestFallback: Bool = false
@@ -69,96 +72,36 @@ class FeedViewModel: ObservableObject {
         currentCursor = nil
 
         do {
-            // Use Guest Feed API when not authenticated, otherwise use authenticated Feed API
             let response: FeedResponse
             if isAuthenticated {
                 response = try await feedService.getFeed(algo: algorithm, limit: 20, cursor: nil)
             } else {
-                // Guest Mode: fetch trending posts without authentication
                 response = try await feedService.getTrendingFeed(limit: 20, cursor: nil)
             }
 
-            // Feed API now returns full post objects directly
-            self.postIds = response.postIds
-            self.currentCursor = response.cursor
-            self.hasMore = response.hasMore
-
-            // Convert raw posts to FeedPost objects directly
-            var allPosts = response.posts.map { FeedPost(from: $0) }
-
-            // Fetch bookmark status for authenticated users
-            if isAuthenticated, !allPosts.isEmpty {
-                let postIds = allPosts.map { $0.id }
-                if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) {
-                    allPosts = allPosts.map { post in
-                        bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
-                    }
-                }
-            }
-
-            // Client-side deduplication: Remove duplicate posts by ID
-            var seenIds = Set<String>()
-            self.posts = allPosts.filter { post in
-                guard !seenIds.contains(post.id) else { return false }
-                seenIds.insert(post.id)
-                return true
-            }
-
+            updateFeedState(from: response)
+            self.posts = await processAndDeduplicatePosts(response.posts.map { FeedPost(from: $0) })
             self.error = nil
+
         } catch let apiError as APIError {
-            // Handle unauthorized: try token refresh or fallback to guest mode
             if case .unauthorized = apiError, isAuthenticated, !isGuestFallback {
                 let refreshed = await authManager.attemptTokenRefresh()
                 if refreshed {
-                    // Retry after token refresh
                     isLoading = false
                     await loadFeed(algorithm: algorithm, isGuestFallback: isGuestFallback)
                     return
                 } else {
-                    // Token refresh failed - gracefully degrade to guest mode
                     await authManager.logout()
                     isLoading = false
                     await loadFeed(algorithm: algorithm, isGuestFallback: true)
                     return
                 }
             } else if case .serverError(let statusCode, _) = apiError, statusCode == 500 {
-                // Backend feed-service unreachable or gRPC error (e.g. \"tcp connect error\")
-                // Fallback: load guest/trending feed instead of showing a hard error.
-                do {
-                    let fallbackResponse = try await feedService.getTrendingFeed(limit: 20, cursor: nil)
-
-                    self.postIds = fallbackResponse.postIds
-                    self.currentCursor = fallbackResponse.cursor
-                    self.hasMore = fallbackResponse.hasMore
-
-                    var allPosts = fallbackResponse.posts.map { FeedPost(from: $0) }
-
-                    // Fetch bookmark status for authenticated users
-                    if isAuthenticated, !allPosts.isEmpty {
-                        let postIds = allPosts.map { $0.id }
-                        if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) {
-                            allPosts = allPosts.map { post in
-                                bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
-                            }
-                        }
-                    }
-
-                    var seenIds = Set<String>()
-                    self.posts = allPosts.filter { post in
-                        guard !seenIds.contains(post.id) else { return false }
-                        seenIds.insert(post.id)
-                        return true
-                    }
-
-                    self.error = nil
-                } catch {
-                    self.error = apiError.localizedDescription
-                    self.posts = []
-                }
+                // Fallback to trending feed on server error
+                await handleServerErrorFallback(originalError: apiError)
                 isLoading = false
                 return
             } else {
-                // Show error and stop retrying
                 self.error = apiError.localizedDescription
                 self.posts = []
             }
@@ -172,7 +115,6 @@ class FeedViewModel: ObservableObject {
 
     /// Load more posts (pagination)
     func loadMore() async {
-        // Note: Backend doesn't support cursor pagination yet, so this is disabled
         guard !isLoadingMore, hasMore else { return }
 
         isLoadingMore = true
@@ -184,52 +126,32 @@ class FeedViewModel: ObservableObject {
             self.currentCursor = response.cursor
             self.hasMore = response.hasMore
 
-            // Convert raw posts to FeedPost objects directly
-            var newPosts = response.posts.map { FeedPost(from: $0) }
-
-            // Fetch bookmark status for authenticated users
-            if isAuthenticated, !newPosts.isEmpty {
-                let postIds = newPosts.map { $0.id }
-                if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) {
-                    newPosts = newPosts.map { post in
-                        bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
-                    }
-                }
-            }
+            let newPosts = await enrichWithBookmarkStatus(response.posts.map { FeedPost(from: $0) })
 
             // Client-side deduplication: Only add posts that aren't already in the feed
             let existingIds = Set(self.posts.map { $0.id })
             let uniqueNewPosts = newPosts.filter { !existingIds.contains($0.id) }
 
-            // If no new unique posts, stop pagination (backend returned duplicates or empty)
             if uniqueNewPosts.isEmpty {
                 self.hasMore = false
-                #if DEBUG
-                print("[Feed] loadMore returned no new posts, stopping pagination")
-                #endif
+                FeedLogger.debug("loadMore returned no new posts, stopping pagination")
             } else {
                 self.posts.append(contentsOf: uniqueNewPosts)
             }
 
         } catch {
-            // Stop pagination on error to prevent infinite retry loop
-            // Backend doesn't support cursor pagination yet, so errors here are expected
             self.hasMore = false
-            #if DEBUG
-            print("[Feed] loadMore error (stopping pagination): \(error)")
-            #endif
+            FeedLogger.debug("loadMore error (stopping pagination): \(error)")
         }
 
         isLoadingMore = false
     }
 
     /// Refresh feed (pull-to-refresh)
-    /// 下拉刷新时静默忽略取消错误，只在真正的网络错误时显示提示
     func refresh() async {
         guard !isLoading else { return }
 
         isLoading = true
-        // 刷新时不立即清除错误，只有在成功或真正的错误时才更新
 
         do {
             let response: FeedResponse
@@ -239,56 +161,23 @@ class FeedViewModel: ObservableObject {
                 response = try await feedService.getTrendingFeed(limit: 20, cursor: nil)
             }
 
-            // 成功后更新数据
-            self.postIds = response.postIds
-            self.currentCursor = response.cursor
-            self.hasMore = response.hasMore
-
-            var allPosts = response.posts.map { FeedPost(from: $0) }
-
-            // Fetch bookmark status for authenticated users
-            if isAuthenticated, !allPosts.isEmpty {
-                let postIds = allPosts.map { $0.id }
-                if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) {
-                    allPosts = allPosts.map { post in
-                        bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
-                    }
-                }
-            }
-
-            var seenIds = Set<String>()
-            self.posts = allPosts.filter { post in
-                guard !seenIds.contains(post.id) else { return false }
-                seenIds.insert(post.id)
-                return true
-            }
-
-            // 成功时清除错误
+            updateFeedState(from: response)
+            self.posts = await processAndDeduplicatePosts(response.posts.map { FeedPost(from: $0) })
             self.error = nil
 
         } catch let apiError as APIError {
-            // 检查是否是取消错误（用户快速滑动导致）
-            if case .networkError(let underlyingError) = apiError {
-                let nsError = underlyingError as NSError
-                if nsError.code == NSURLErrorCancelled {
-                    // 静默忽略取消的请求，保持当前数据
-                    isLoading = false
-                    return
-                }
+            if isCancelledError(apiError) {
+                isLoading = false
+                return
             }
-            // 非取消错误：只有当前没有数据时才显示错误
             if posts.isEmpty {
                 self.error = apiError.localizedDescription
             }
         } catch {
-            let nsError = error as NSError
-            // 检查是否是取消错误
-            if nsError.code == NSURLErrorCancelled || nsError.localizedDescription.lowercased().contains("cancelled") {
-                // 静默忽略取消的请求
+            if isCancelledError(error) {
                 isLoading = false
                 return
             }
-            // 非取消错误：只有当前没有数据时才显示错误
             if posts.isEmpty {
                 self.error = "Failed to refresh: \(error.localizedDescription)"
             }
@@ -298,13 +187,16 @@ class FeedViewModel: ObservableObject {
     }
 
     /// Add a newly created post to the top of the feed (optimistic update)
-    /// This avoids the need to refresh the entire feed after posting
     func addNewPost(_ post: Post) {
+        let currentUser = AuthenticationManager.shared.currentUser
+        let authorName = currentUser?.displayName ?? currentUser?.username ?? "User \(post.authorId.prefix(8))"
+        let authorAvatar = currentUser?.avatarUrl
+
         let feedPost = FeedPost(
             id: post.id,
             authorId: post.authorId,
-            authorName: "User \(post.authorId.prefix(8))",
-            authorAvatar: nil,
+            authorName: authorName,
+            authorAvatar: authorAvatar,
             content: post.content,
             mediaUrls: post.mediaUrls ?? [],
             createdAt: post.createdDate,
@@ -315,7 +207,6 @@ class FeedViewModel: ObservableObject {
             isBookmarked: false
         )
 
-        // Add to the top of the feed
         self.posts.insert(feedPost, at: 0)
         self.postIds.insert(post.id, at: 0)
     }
@@ -330,27 +221,20 @@ class FeedViewModel: ObservableObject {
 
     /// Toggle like on a post
     func toggleLike(postId: String) async {
-        // Prevent concurrent like operations for the same post
         guard !ongoingLikeOperations.contains(postId) else {
-            #if DEBUG
-            print("[Feed] toggleLike skipped - operation already in progress for postId: \(postId)")
-            #endif
+            FeedLogger.debug("toggleLike skipped - operation already in progress for postId: \(postId)")
             return
         }
         ongoingLikeOperations.insert(postId)
         defer { ongoingLikeOperations.remove(postId) }
 
-        #if DEBUG
-        print("[Feed] toggleLike called for postId: \(postId)")
-        print("[Feed] currentUserId: \(currentUserId ?? "nil")")
-        print("[Feed] isAuthenticated: \(isAuthenticated)")
-        #endif
+        FeedLogger.debug("toggleLike called for postId: \(postId)")
+        FeedLogger.debug("currentUserId: \(currentUserId ?? "nil")")
+        FeedLogger.debug("isAuthenticated: \(isAuthenticated)")
 
         guard let index = posts.firstIndex(where: { $0.id == postId }),
               let userId = currentUserId else {
-            #if DEBUG
-            print("[Feed] toggleLike early return - postId not found or userId is nil")
-            #endif
+            FeedLogger.debug("toggleLike early return - postId not found or userId is nil")
             return
         }
 
@@ -370,62 +254,32 @@ class FeedViewModel: ObservableObject {
                 try await socialService.createLike(postId: postId, userId: userId)
             }
         } catch let error as APIError {
-            // Revert on failure
             posts[index] = post
-
-            // Handle specific error cases
-            switch error {
-            case .unauthorized:
-                // Session expired - logout to redirect to login page
-                await authManager.logout()
-                #if DEBUG
-                print("[Feed] Toggle like error: Session expired, logging out")
-                #endif
-            case .noConnection:
-                self.toastError = "No internet connection. Please try again."
-            case .serviceUnavailable:
-                self.toastError = "Service temporarily unavailable. Please try again later."
-                #if DEBUG
-                print("[Feed] Toggle like error: Service unavailable (503)")
-                #endif
-            default:
-                self.toastError = "Failed to like post. Please try again."
-                #if DEBUG
-                print("[Feed] Toggle like error: \(error)")
-                #endif
-            }
+            await handleSocialActionError(error, action: "like")
         } catch {
-            // Revert on failure
             posts[index] = post
             self.toastError = "Failed to like post. Please try again."
-            #if DEBUG
-            print("[Feed] Toggle like error: \(error)")
-            #endif
+            FeedLogger.debug("Toggle like error: \(error)")
         }
     }
 
     /// Share a post - records share to backend and returns post for native share sheet
-    /// - Returns: The post to share, or nil if not found
     func sharePost(postId: String) async -> FeedPost? {
         guard let index = posts.firstIndex(where: { $0.id == postId }),
               let userId = currentUserId else { return nil }
 
         let post = posts[index]
 
-        // Record share to backend (don't block on this)
         Task {
             do {
                 try await socialService.createShare(postId: postId, userId: userId)
-                // Update share count on success
                 await MainActor.run {
                     if let idx = posts.firstIndex(where: { $0.id == postId }) {
                         posts[idx] = posts[idx].copying(shareCount: posts[idx].shareCount + 1)
                     }
                 }
             } catch {
-                #if DEBUG
-                print("[Feed] Share post error: \(error)")
-                #endif
+                FeedLogger.debug("Share post error: \(error)")
             }
         }
 
@@ -434,26 +288,19 @@ class FeedViewModel: ObservableObject {
 
     /// Toggle bookmark on a post
     func toggleBookmark(postId: String) async {
-        // Prevent concurrent bookmark operations for the same post
         guard !ongoingBookmarkOperations.contains(postId) else {
-            #if DEBUG
-            print("[Feed] toggleBookmark skipped - operation already in progress for postId: \(postId)")
-            #endif
+            FeedLogger.debug("toggleBookmark skipped - operation already in progress for postId: \(postId)")
             return
         }
         ongoingBookmarkOperations.insert(postId)
         defer { ongoingBookmarkOperations.remove(postId) }
 
-        #if DEBUG
-        print("[Feed] toggleBookmark called for postId: \(postId)")
-        print("[Feed] currentUserId: \(currentUserId ?? "nil")")
-        #endif
+        FeedLogger.debug("toggleBookmark called for postId: \(postId)")
+        FeedLogger.debug("currentUserId: \(currentUserId ?? "nil")")
 
         guard let index = posts.firstIndex(where: { $0.id == postId }),
               let userId = currentUserId else {
-            #if DEBUG
-            print("[Feed] toggleBookmark early return - postId not found or userId is nil")
-            #endif
+            FeedLogger.debug("toggleBookmark early return - postId not found or userId is nil")
             return
         }
 
@@ -470,83 +317,140 @@ class FeedViewModel: ObservableObject {
                 try await socialService.createBookmark(postId: postId, userId: userId)
             }
         } catch let error as APIError {
-            // Handle specific error cases - some errors should keep local state
             switch error {
             case .unauthorized:
-                // Revert on auth error
                 posts[index] = post
-                // Session expired - logout to redirect to login page
                 await authManager.logout()
-                #if DEBUG
-                print("[Feed] Toggle bookmark error: Session expired, logging out")
-                #endif
+                FeedLogger.debug("Toggle bookmark error: Session expired, logging out")
             case .noConnection:
-                // Revert on connection error
                 posts[index] = post
                 self.toastError = "No internet connection. Please try again."
             case .notFound, .serverError, .serviceUnavailable:
-                // Backend bookmark API not deployed yet or temporarily unavailable - keep local state (don't revert)
-                #if DEBUG
-                print("[Feed] Bookmark API not available (\(error)), using local state only")
-                #endif
+                // Keep local state when backend API is unavailable
+                FeedLogger.debug("Bookmark API not available (\(error)), using local state only")
             default:
-                // Revert on other errors
                 posts[index] = post
                 self.toastError = "Failed to bookmark post. Please try again."
-                #if DEBUG
-                print("[Feed] Toggle bookmark error: \(error)")
-                #endif
+                FeedLogger.debug("Toggle bookmark error: \(error)")
             }
         } catch {
-            // Revert on unknown failure
             posts[index] = post
             self.toastError = "Failed to bookmark post. Please try again."
-            #if DEBUG
-            print("[Feed] Toggle bookmark error: \(error)")
-            #endif
+            FeedLogger.debug("Toggle bookmark error: \(error)")
         }
     }
 
-    // MARK: - Private Methods
+    // MARK: - Private Helper Methods
 
-    /// Fetch post details from content-service and social stats
+    /// Process posts: enrich with bookmark status and deduplicate
+    private func processAndDeduplicatePosts(_ posts: [FeedPost]) async -> [FeedPost] {
+        let enrichedPosts = await enrichWithBookmarkStatus(posts)
+        return deduplicatePosts(enrichedPosts)
+    }
+
+    /// Enrich posts with bookmark status for authenticated users
+    private func enrichWithBookmarkStatus(_ posts: [FeedPost]) async -> [FeedPost] {
+        guard isAuthenticated, !posts.isEmpty else { return posts }
+
+        let postIds = posts.map { $0.id }
+        guard let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) else {
+            return posts
+        }
+
+        return posts.map { post in
+            bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
+        }
+    }
+
+    /// Remove duplicate posts by ID
+    private func deduplicatePosts(_ posts: [FeedPost]) -> [FeedPost] {
+        var seenIds = Set<String>()
+        return posts.filter { post in
+            guard !seenIds.contains(post.id) else { return false }
+            seenIds.insert(post.id)
+            return true
+        }
+    }
+
+    /// Update feed state from response
+    private func updateFeedState(from response: FeedResponse) {
+        self.postIds = response.postIds
+        self.currentCursor = response.cursor
+        self.hasMore = response.hasMore
+    }
+
+    /// Handle server error by falling back to trending feed
+    private func handleServerErrorFallback(originalError: APIError) async {
+        do {
+            let fallbackResponse = try await feedService.getTrendingFeed(limit: 20, cursor: nil)
+            updateFeedState(from: fallbackResponse)
+            self.posts = await processAndDeduplicatePosts(fallbackResponse.posts.map { FeedPost(from: $0) })
+            self.error = nil
+        } catch {
+            self.error = originalError.localizedDescription
+            self.posts = []
+        }
+    }
+
+    /// Handle social action errors with appropriate user feedback
+    private func handleSocialActionError(_ error: APIError, action: String) async {
+        switch error {
+        case .unauthorized:
+            await authManager.logout()
+            FeedLogger.debug("Toggle \(action) error: Session expired, logging out")
+        case .noConnection:
+            self.toastError = "No internet connection. Please try again."
+        case .serviceUnavailable:
+            self.toastError = "Service temporarily unavailable. Please try again later."
+            FeedLogger.debug("Toggle \(action) error: Service unavailable (503)")
+        default:
+            self.toastError = "Failed to \(action) post. Please try again."
+            FeedLogger.debug("Toggle \(action) error: \(error)")
+        }
+    }
+
+    /// Check if error is a cancelled request error
+    private func isCancelledError(_ error: Error) -> Bool {
+        if let apiError = error as? APIError, case .networkError(let underlyingError) = apiError {
+            let nsError = underlyingError as NSError
+            if nsError.code == NSURLErrorCancelled {
+                return true
+            }
+        }
+        let nsError = error as NSError
+        return nsError.code == NSURLErrorCancelled || nsError.localizedDescription.lowercased().contains("cancelled")
+    }
+
+    /// Fetch post details from content-service and social stats (legacy method)
     private func fetchPostDetails(postIds: [String]) async -> [FeedPost] {
         guard !postIds.isEmpty else { return [] }
 
-        // Fetch content from content-service
         let rawPosts: [Post]
         do {
             rawPosts = try await contentService.getPostsByIds(postIds)
         } catch {
-            #if DEBUG
-            print("[Feed] Failed to fetch posts: \(error)")
-            #endif
+            FeedLogger.debug("Failed to fetch posts: \(error)")
             return []
         }
 
-        // Fetch social stats
         let stats: [String: PostStats]
         do {
             stats = try await socialService.batchGetStats(postIds: postIds)
         } catch {
-            #if DEBUG
-            print("[Feed] Failed to fetch stats: \(error)")
-            #endif
+            FeedLogger.debug("Failed to fetch stats: \(error)")
             stats = [:]
         }
 
-        // Convert to FeedPost with stats
         return rawPosts.map { post in
             let postStats = stats[post.id]
-            // Convert Unix timestamp (milliseconds) to Date
             let createdDate = Date(timeIntervalSince1970: Double(post.createdAt) / 1000.0)
             return FeedPost(
                 id: post.id,
                 authorId: post.creatorId,
-                authorName: "User \(post.creatorId.prefix(8))",  // TODO: Fetch user profile
+                authorName: "User \(post.creatorId.prefix(8))",
                 authorAvatar: nil,
                 content: post.content,
-                mediaUrls: [],  // TODO: Fetch media from post
+                mediaUrls: [],
                 createdAt: createdDate,
                 likeCount: postStats?.likeCount ?? 0,
                 commentCount: postStats?.commentCount ?? 0,
@@ -566,4 +470,28 @@ enum FeedState {
     case loaded
     case error(String)
     case empty
+}
+
+
+// MARK: - Feed Logger
+
+/// Unified logger for Feed-related debug output
+enum FeedLogger {
+    /// Log debug message (only in DEBUG builds)
+    static func debug(_ message: String) {
+        #if DEBUG
+        print("[Feed] \(message)")
+        #endif
+    }
+    
+    /// Log error with context
+    static func error(_ message: String, error: Error? = nil) {
+        #if DEBUG
+        if let error = error {
+            print("[Feed] ERROR: \(message) - \(error)")
+        } else {
+            print("[Feed] ERROR: \(message)")
+        }
+        #endif
+    }
 }

@@ -45,6 +45,14 @@ struct DesignTokens {
     )
     static let textOnAccent = Color.white
 
+    /// Interactive Element Colors
+    static let iconActive = accentColor  // Same as accent for active state
+    static let iconInactive = Color.dynamic(
+        light: UIColor(red: 0.38, green: 0.37, blue: 0.37, alpha: 1.0),
+        dark: UIColor(red: 0.62, green: 0.62, blue: 0.64, alpha: 1.0)
+    )
+    static let verifiedBadge = Color(red: 0.20, green: 0.60, blue: 1.0)
+    
     /// UI Element Colors
     static let borderColor = Color.dynamic(
         light: UIColor(red: 0.74, green: 0.74, blue: 0.74, alpha: 1.0),

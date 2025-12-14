@@ -15,32 +15,41 @@ struct FeedPostCard: View {
     @State private var currentImageIndex = 0
     @State private var isVideoVisible: Bool = true
 
+    /// Check if post author is current user and get their local avatar if available
+    private var localAvatarImage: UIImage? {
+        let currentUserId = AuthenticationManager.shared.currentUser?.id
+        if post.authorId == currentUserId {
+            return AvatarManager.shared.pendingAvatar
+        }
+        return nil
+    }
+
     var body: some View {
         VStack(spacing: 8) {
             // MARK: - User Info Header - tappable for card detail
             HStack {
                 HStack(spacing: 10) {
-                    // Avatar - 显示用户头像或默认头像
-                    AvatarView(image: nil, url: post.authorAvatar, size: 30)
+                    // Avatar - 显示用户头像或默认头像（优先使用本地头像）
+                    AvatarView(image: localAvatarImage, url: post.authorAvatar, size: 30)
 
                     // User Info
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
                             Text(post.authorName)
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(Color(red: 0.02, green: 0, blue: 0))
+                                .font(.system(size: DesignTokens.fontMedium, weight: .medium))
+                                .foregroundColor(DesignTokens.textPrimary)
 
                             // 认证标记 (可选)
                             Image(systemName: "checkmark.seal.fill")
-                                .font(.system(size: 10))
-                                .foregroundColor(Color(red: 0.20, green: 0.60, blue: 1.0))
+                                .font(.system(size: DesignTokens.iconSmall))
+                                .foregroundColor(DesignTokens.verifiedBadge)
                         }
 
                         // Time ago display (location removed - backend doesn't support it yet)
                         Text(post.createdAt.timeAgoDisplay())
-                            .font(.system(size: 10))
-                            .lineSpacing(13)
-                            .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
+                            .font(.system(size: DesignTokens.fontCaption + 1))
+                            .lineSpacing(DesignTokens.spacing13)
+                            .foregroundColor(DesignTokens.textTertiary)
                     }
                 }
                 .contentShape(Rectangle())
@@ -52,12 +61,10 @@ struct FeedPostCard: View {
                 Image("card-share-icon")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 24, height: 24)
+                    .frame(width: DesignTokens.iconLarge, height: DesignTokens.iconLarge)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        #if DEBUG
-                        print("[FeedPostCard] Share tapped for post: \(post.id)")
-                        #endif
+                        FeedPostCardLogger.debug("Share tapped for post: \(post.id)")
                         onShare()
                     }
                     .accessibilityLabel("Share")
@@ -86,54 +93,33 @@ struct FeedPostCard: View {
             // MARK: - Interaction Buttons - NO parent tap gesture here
             HStack(spacing: 0) {
                 // Like button
-                HStack(spacing: 6) {
-                    Image(systemName: post.isLiked ? "heart.fill" : "heart")
-                        .font(.system(size: 18))
-                    Text("\(post.likeCount)")
-                        .font(.system(size: 10))
-                }
-                .foregroundColor(post.isLiked ? Color(red: 0.81, green: 0.13, blue: 0.25) : Color(red: 0.38, green: 0.37, blue: 0.37))
-                .padding(.vertical, 12)
-                .padding(.horizontal, 12)
-                .background(Color.white.opacity(0.001)) // Invisible but tappable
-                .onTapGesture {
-                    #if DEBUG
-                    print("[FeedPostCard] Like tapped for post: \(post.id)")
-                    #endif
+                IconButton(
+                    icon: post.isLiked ? "heart.fill" : "heart",
+                    count: post.likeCount,
+                    isActive: post.isLiked
+                ) {
+                    FeedPostCardLogger.debug("Like tapped for post: \(post.id)")
                     onLike()
                 }
 
                 // Comment button
-                HStack(spacing: 6) {
-                    Image(systemName: "bubble.right")
-                        .font(.system(size: 18))
-                    Text("\(post.commentCount)")
-                        .font(.system(size: 10))
-                }
-                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
-                .padding(.vertical, 12)
-                .padding(.horizontal, 12)
-                .background(Color.white.opacity(0.001)) // Invisible but tappable
-                .onTapGesture {
-                    #if DEBUG
-                    print("[FeedPostCard] Comment tapped for post: \(post.id)")
-                    #endif
+                IconButton(
+                    icon: "bubble.right",
+                    count: post.commentCount,
+                    isActive: false
+                ) {
+                    FeedPostCardLogger.debug("Comment tapped for post: \(post.id)")
                     onComment()
                 }
 
                 // Bookmark button (no count - like Instagram, bookmarks are private)
-                Image(systemName: post.isBookmarked ? "bookmark.fill" : "bookmark")
-                    .font(.system(size: 18))
-                    .foregroundColor(post.isBookmarked ? Color(red: 0.81, green: 0.13, blue: 0.25) : Color(red: 0.38, green: 0.37, blue: 0.37))
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 12)
-                    .background(Color.white.opacity(0.001)) // Invisible but tappable
-                    .onTapGesture {
-                        #if DEBUG
-                        print("[FeedPostCard] Bookmark tapped for post: \(post.id)")
-                        #endif
-                        onBookmark()
-                    }
+                IconButton(
+                    icon: post.isBookmarked ? "bookmark.fill" : "bookmark",
+                    isActive: post.isBookmarked
+                ) {
+                    FeedPostCardLogger.debug("Bookmark tapped for post: \(post.id)")
+                    onBookmark()
+                }
 
                 Spacer()
             }
@@ -246,7 +232,7 @@ struct FeedPostCard: View {
                         switch phase {
                         case .empty:
                             Rectangle()
-                                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                .fill(DesignTokens.placeholderColor)
                                 .overlay(
                                     ProgressView()
                                         .tint(.white)
@@ -257,7 +243,7 @@ struct FeedPostCard: View {
                                 .scaledToFill()
                         case .failure:
                             Rectangle()
-                                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                .fill(DesignTokens.placeholderColor)
                                 .overlay(
                                     Image(systemName: "photo")
                                         .font(.system(size: 30))
@@ -330,7 +316,7 @@ struct FeedPostCard: View {
                 switch phase {
                 case .empty:
                     Rectangle()
-                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                        .fill(DesignTokens.placeholderColor)
                         .overlay(
                             ProgressView()
                                 .tint(.white)
@@ -341,7 +327,7 @@ struct FeedPostCard: View {
                         .scaledToFill()
                 case .failure:
                     Rectangle()
-                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                        .fill(DesignTokens.placeholderColor)
                         .overlay(
                             Image(systemName: "photo")
                                 .font(.system(size: 30))
@@ -366,8 +352,8 @@ struct FeedPostCard: View {
                 ForEach(0..<post.displayMediaUrls.count, id: \.self) { index in
                     Circle()
                         .fill(index == currentImageIndex ?
-                              Color(red: 0.81, green: 0.13, blue: 0.25) :
-                              Color(red: 0.85, green: 0.85, blue: 0.85))
+                              DesignTokens.indicatorActive :
+                              DesignTokens.indicatorInactive)
                         .frame(width: 6, height: 6)
                 }
             }
@@ -386,8 +372,8 @@ struct FeedPostCard: View {
                         ZStack {
                             Circle()
                                 .fill(index == currentImageIndex ?
-                                      Color(red: 0.81, green: 0.13, blue: 0.25) :
-                                      Color(red: 0.85, green: 0.85, blue: 0.85))
+                                      DesignTokens.indicatorActive :
+                                      DesignTokens.indicatorInactive)
                                 .frame(width: 8, height: 8)
                             
                             Image(systemName: "play.fill")
@@ -398,13 +384,24 @@ struct FeedPostCard: View {
                         // Image indicator (simple dot)
                         Circle()
                             .fill(index == currentImageIndex ?
-                                  Color(red: 0.81, green: 0.13, blue: 0.25) :
-                                  Color(red: 0.85, green: 0.85, blue: 0.85))
+                                  DesignTokens.indicatorActive :
+                                  DesignTokens.indicatorInactive)
                             .frame(width: 6, height: 6)
                     }
                 }
             }
         }
+    }
+}
+
+// MARK: - FeedPostCard Logger
+
+/// Unified logger for FeedPostCard debug output
+private enum FeedPostCardLogger {
+    static func debug(_ message: String) {
+        #if DEBUG
+        print("[FeedPostCard] \(message)")
+        #endif
     }
 }
 
