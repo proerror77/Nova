@@ -62,12 +62,18 @@ class ContentService {
 
     /// Get single post by ID using GET /api/v2/content/{id}
     func getPost(postId: String) async throws -> Post? {
+        struct Response: Codable {
+            let post: Post
+            let found: Bool?
+            // Note: Uses convertFromSnakeCase decoder strategy
+        }
+
         do {
-            let post: Post = try await client.request(
+            let response: Response = try await client.request(
                 endpoint: APIConfig.Content.getPost(postId),
                 method: "GET"
             )
-            return post
+            return response.post
         } catch APIError.notFound {
             return nil
         }

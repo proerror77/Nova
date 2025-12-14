@@ -67,8 +67,9 @@ class SocialService {
 
     func getPostLikes(postId: String, limit: Int = 20, offset: Int = 0) async throws -> (userIds: [String], totalCount: Int) {
         struct Response: Codable {
-            let user_ids: [String]
-            let total_count: Int
+            let userIds: [String]
+            let totalCount: Int
+            // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase
         }
 
         let response: Response = try await client.get(
@@ -79,7 +80,7 @@ class SocialService {
             ]
         )
 
-        return (response.user_ids, response.total_count)
+        return (response.userIds, response.totalCount)
     }
 
     func checkUserLiked(postId: String, userId: String) async throws -> Bool {
@@ -97,8 +98,9 @@ class SocialService {
     /// Get posts liked by a user (paginated)
     func getUserLikedPosts(userId: String, limit: Int = 20, offset: Int = 0) async throws -> (postIds: [String], total: Int) {
         struct Response: Codable {
-            let post_ids: [String]
+            let postIds: [String]
             let total: Int
+            // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase
         }
 
         let response: Response = try await client.get(
@@ -109,7 +111,7 @@ class SocialService {
             ]
         )
 
-        return (response.post_ids, response.total)
+        return (response.postIds, response.total)
     }
 
     // MARK: - Comments
@@ -244,8 +246,9 @@ class SocialService {
     /// Get user's bookmarked posts
     func getBookmarks(limit: Int = 20, offset: Int = 0) async throws -> (postIds: [String], totalCount: Int) {
         struct Response: Codable {
-            let post_ids: [String]
-            let total_count: Int
+            let postIds: [String]
+            let totalCount: Int
+            // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase
         }
 
         let response: Response = try await client.get(
@@ -256,7 +259,7 @@ class SocialService {
             ]
         )
 
-        return (response.post_ids, response.total_count)
+        return (response.postIds, response.totalCount)
     }
 
     /// Check if user has bookmarked a post
@@ -275,20 +278,25 @@ class SocialService {
     /// Batch check if user has bookmarked multiple posts
     func batchCheckBookmarked(postIds: [String]) async throws -> Set<String> {
         struct Request: Codable {
-            let post_ids: [String]
+            let postIds: [String]
+
+            enum CodingKeys: String, CodingKey {
+                case postIds = "post_ids"
+            }
         }
 
         struct Response: Codable {
-            let bookmarked_post_ids: [String]
+            let bookmarkedPostIds: [String]
+            // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase
         }
 
-        let request = Request(post_ids: postIds)
+        let request = Request(postIds: postIds)
         let response: Response = try await client.request(
             endpoint: APIConfig.Social.batchCheckBookmarked,
             body: request
         )
 
-        return Set(response.bookmarked_post_ids)
+        return Set(response.bookmarkedPostIds)
     }
 
     // MARK: - Polls (投票榜单)

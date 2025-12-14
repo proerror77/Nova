@@ -58,7 +58,16 @@ class ProfileData {
     }
 
     func loadContent(for tab: ContentTab) async {
-        guard let userId = userProfile?.id else { return }
+        guard let userId = userProfile?.id else {
+            #if DEBUG
+            print("[Profile] loadContent: userProfile is nil, returning early")
+            #endif
+            return
+        }
+
+        #if DEBUG
+        print("[Profile] loadContent for tab: \(tab), userId: \(userId)")
+        #endif
 
         isLoading = true
         errorMessage = nil
@@ -71,17 +80,26 @@ class ProfileData {
 
             case .saved:
                 // Get post IDs the user has bookmarked (uses JWT for current user)
+                #if DEBUG
+                print("[Profile] Calling getBookmarks...")
+                #endif
                 let (postIds, _) = try await socialService.getBookmarks()
                 #if DEBUG
-                print("[Profile] getBookmarks returned \(postIds.count) post IDs")
+                print("[Profile] getBookmarks returned \(postIds.count) post IDs: \(postIds)")
                 #endif
                 if !postIds.isEmpty {
+                    #if DEBUG
+                    print("[Profile] Calling getPostsByIds for \(postIds.count) posts...")
+                    #endif
                     savedPosts = try await contentService.getPostsByIds(postIds)
                     #if DEBUG
-                    print("[Profile] Loaded \(savedPosts.count) saved posts")
+                    print("[Profile] Loaded \(savedPosts.count) saved posts, savedPosts.isEmpty = \(savedPosts.isEmpty)")
                     #endif
                 } else {
                     savedPosts = []
+                    #if DEBUG
+                    print("[Profile] No bookmarks found")
+                    #endif
                 }
 
             case .liked:
@@ -109,10 +127,16 @@ class ProfileData {
                 }
             }
         } catch {
+            #if DEBUG
+            print("[Profile] Error loading content: \(error)")
+            #endif
             handleError(error)
         }
 
         isLoading = false
+        #if DEBUG
+        print("[Profile] loadContent finished. selectedTab=\(selectedTab), savedPosts.count=\(savedPosts.count), likedPosts.count=\(likedPosts.count), hasContent=\(hasContent)")
+        #endif
     }
 
     // MARK: - User Actions

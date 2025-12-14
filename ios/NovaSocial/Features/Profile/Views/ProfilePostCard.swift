@@ -176,7 +176,10 @@ struct ProfilePostCard: View {
                     mediaType: nil,
                     likeCount: 10,
                     commentCount: 5,
-                    shareCount: 2
+                    shareCount: 2,
+                    authorUsername: "simone_carter",
+                    authorDisplayName: "Simone Carter",
+                    authorAvatarUrl: nil
                 ),
                 username: "Simone Carter",
                 avatarUrl: nil
@@ -194,7 +197,10 @@ struct ProfilePostCard: View {
                     mediaType: nil,
                     likeCount: 25,
                     commentCount: 8,
-                    shareCount: 3
+                    shareCount: 3,
+                    authorUsername: "simone_carter",
+                    authorDisplayName: "Simone Carter",
+                    authorAvatarUrl: nil
                 ),
                 username: "Simone Carter",
                 avatarUrl: nil

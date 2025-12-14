@@ -22,7 +22,8 @@ struct ProfileView: View {
     @StateObject private var avatarManager = AvatarManager.shared
 
     // Access UserPostsManager for real-time post sync
-    private var userPostsManager: UserPostsManager { UserPostsManager.shared }
+    // NOTE: Must use @State (not computed property) for SwiftUI to observe @Observable changes
+    @State private var userPostsManager = UserPostsManager.shared
 
 
     // Computed property for user display
@@ -340,6 +341,7 @@ struct ProfileView: View {
                         }
                     } else {
                         // Saved/Liked 标签 - 使用 profileData
+                        // 注意：这里显示的是帖子作者信息，不是当前用户
                         if profileData.isLoading {
                             ProgressView()
                                 .padding(.top, 40)
@@ -348,8 +350,8 @@ struct ProfileView: View {
                                 ForEach(profileData.currentTabPosts) { post in
                                     ProfilePostCard(
                                         post: post,
-                                        username: displayUser?.displayName ?? displayUser?.username ?? "User",
-                                        avatarUrl: displayUser?.avatarUrl
+                                        username: post.displayAuthorName,
+                                        avatarUrl: post.authorAvatarUrl
                                     )
                                 }
                             }
