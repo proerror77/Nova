@@ -1,0 +1,217 @@
+# Pod Disruption Budgets for Production
+# Ensures minimum availability during voluntary disruptions
+# (node upgrades, deployments, scaling operations)
+
+---
+# Tier 1: Critical Services - Always maintain majority
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: identity-service-pdb
+  namespace: nova-production
+  labels:
+    app: identity-service
+    tier: critical
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: identity-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: graphql-gateway-pdb
+  namespace: nova-production
+  labels:
+    app: graphql-gateway
+    tier: critical
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: graphql-gateway
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: content-service-pdb
+  namespace: nova-production
+  labels:
+    app: content-service
+    tier: critical
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: content-service
+
+---
+# Tier 2: Traffic-sensitive Services - At least 1 available
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: feed-service-pdb
+  namespace: nova-production
+  labels:
+    app: feed-service
+    tier: traffic-sensitive
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: feed-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: media-service-pdb
+  namespace: nova-production
+  labels:
+    app: media-service
+    tier: traffic-sensitive
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: media-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: social-service-pdb
+  namespace: nova-production
+  labels:
+    app: social-service
+    tier: traffic-sensitive
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: social-service
+
+---
+# Tier 3: Supporting Services - At least 1 available
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: search-service-pdb
+  namespace: nova-production
+  labels:
+    app: search-service
+    tier: supporting
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: search-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: notification-service-pdb
+  namespace: nova-production
+  labels:
+    app: notification-service
+    tier: supporting
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: notification-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: analytics-service-pdb
+  namespace: nova-production
+  labels:
+    app: analytics-service
+    tier: supporting
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: analytics-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ranking-service-pdb
+  namespace: nova-production
+  labels:
+    app: ranking-service
+    tier: supporting
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: ranking-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: realtime-chat-service-pdb
+  namespace: nova-production
+  labels:
+    app: realtime-chat-service
+    tier: supporting
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: realtime-chat-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: graph-service-pdb
+  namespace: nova-production
+  labels:
+    app: graph-service
+    tier: supporting
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: graph-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: trust-safety-service-pdb
+  namespace: nova-production
+  labels:
+    app: trust-safety-service
+    tier: supporting
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: trust-safety-service
+
+---
+# Infrastructure - PgBouncer
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pgbouncer-pdb
+  namespace: nova-production
+  labels:
+    app: pgbouncer
+    tier: infrastructure
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: pgbouncer

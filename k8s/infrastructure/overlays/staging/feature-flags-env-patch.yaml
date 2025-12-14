@@ -1,0 +1,151 @@
+# Patch to inject feature flags into all deployments
+# This adds the feature flags ConfigMap as environment variables
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identity-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: identity-service
+        envFrom:
+        - configMapRef:
+            name: nova-feature-flags-env
+            optional: true
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphql-gateway
+spec:
+  template:
+    spec:
+      containers:
+      - name: graphql-gateway
+        envFrom:
+        - configMapRef:
+            name: nova-feature-flags-env
+            optional: true
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: content-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: content-service
+        envFrom:
+        - configMapRef:
+            name: nova-feature-flags-env
+            optional: true
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feed-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: feed-service
+        envFrom:
+        - configMapRef:
+            name: nova-feature-flags-env
+            optional: true
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: media-service
+        envFrom:
+        - configMapRef:
+            name: nova-feature-flags-env
+            optional: true
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: social-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: social-service
+        envFrom:
+        - configMapRef:
+            name: nova-feature-flags-env
+            optional: true
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: search-service
+        envFrom:
+        - configMapRef:
+            name: nova-feature-flags-env
+            optional: true
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: analytics-service
+        envFrom:
+        - configMapRef:
+            name: nova-feature-flags-env
+            optional: true
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: notification-service
+        envFrom:
+        - configMapRef:
+            name: nova-feature-flags-env
+            optional: true
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ranking-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: ranking-service
+        envFrom:
+        - configMapRef:
+            name: nova-feature-flags-env
+            optional: true

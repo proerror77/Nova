@@ -1,0 +1,77 @@
+# Feature Flags ConfigMap for Production Environment
+# More conservative than staging - features must be proven before enabling
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nova-feature-flags
+  namespace: nova-production
+  labels:
+    app.kubernetes.io/name: nova
+    app.kubernetes.io/component: feature-flags
+    app.kubernetes.io/environment: production
+  annotations:
+    description: "Production feature flags - enable with caution"
+data:
+  # ============================================
+  # Feature Gates - Boolean flags
+  # Only enable features that have been validated in staging
+  # ============================================
+  FEATURE_FLAGS: |
+    {
+      "new_feed_algorithm": false,
+      "ai_recommendations": false,
+      "enhanced_search": false,
+      "realtime_notifications": true,
+      "media_transcoding_v2": false,
+      "social_graph_v2": false,
+      "chat_reactions": false,
+      "content_moderation_ai": false,
+      "analytics_v2": false,
+      "cdn_optimization": true
+    }
+
+  # ============================================
+  # Gradual Rollout - Start with 0%, increase gradually
+  # ============================================
+  GRADUAL_ROLLOUT: |
+    {
+      "new_feed_algorithm": 0,
+      "ai_recommendations": 0,
+      "enhanced_search": 0,
+      "media_transcoding_v2": 0,
+      "social_graph_v2": 0,
+      "analytics_v2": 0
+    }
+
+  # ============================================
+  # Kill Switches - All disabled by default
+  # ============================================
+  KILL_SWITCHES: |
+    {
+      "disable_external_apis": false,
+      "disable_push_notifications": false,
+      "disable_media_upload": false,
+      "disable_realtime_features": false,
+      "read_only_mode": false,
+      "maintenance_mode": false
+    }
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nova-feature-flags-env
+  namespace: nova-production
+data:
+  # All features disabled by default in production
+  FEATURE_NEW_FEED_ALGORITHM: "false"
+  FEATURE_AI_RECOMMENDATIONS: "false"
+  FEATURE_ENHANCED_SEARCH: "false"
+  FEATURE_REALTIME_NOTIFICATIONS: "true"
+  FEATURE_MEDIA_TRANSCODING_V2: "false"
+  FEATURE_SOCIAL_GRAPH_V2: "false"
+  FEATURE_CHAT_REACTIONS: "false"
+  FEATURE_CONTENT_MODERATION_AI: "false"
+  FEATURE_ANALYTICS_V2: "false"
+  FEATURE_CDN_OPTIMIZATION: "true"

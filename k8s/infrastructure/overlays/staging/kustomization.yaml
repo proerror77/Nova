@@ -442,10 +442,30 @@ patches:
 # Note: ClickHouse 需要额外的网络隔离 patches
 
 # Staging replica configuration
-# All core services enabled with 1 replica
+# Critical services: 2 replicas for HA
+# Secondary services: 1 replica (acceptable brief interruption)
 replicas:
+# Infrastructure
 - count: 1
   name: pgbouncer
+
+# Tier 1: Critical Path - 2 replicas for HA
+- count: 2
+  name: identity-service      # Authentication critical
+- count: 2
+  name: graphql-gateway       # API entry point
+- count: 2
+  name: content-service       # Core content
+
+# Tier 2: Traffic-sensitive - 2 replicas
+- count: 2
+  name: feed-service
+- count: 2
+  name: media-service
+- count: 2
+  name: social-service
+
+# Tier 3: Secondary services - 1 replica
 - count: 1
   name: analytics-service
 - count: 1
@@ -455,25 +475,15 @@ replicas:
 - count: 1
   name: trust-safety-service
 - count: 1
-  name: social-service
-- count: 1
-  name: feed-service
-- count: 0
-  name: turn-server
-- count: 1
-  name: content-service
-- count: 1
   name: graph-service
-- count: 1
-  name: graphql-gateway
-- count: 1
-  name: identity-service
-- count: 1
-  name: media-service
 - count: 1
   name: notification-service
 - count: 1
   name: search-service
+
+# Disabled
+- count: 0
+  name: turn-server
 
 commonAnnotations:
   argocd.argoproj.io/compare-result: "false"

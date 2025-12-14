@@ -1,82 +1,221 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# ============================================
+# Nova Production Environment Configuration
+# ============================================
+# This overlay configures the production environment with:
+# - High availability (3+ replicas for critical services)
+# - Autoscaling (HPA for all services)
+# - Pod Disruption Budgets (guaranteed availability)
+# - Production-grade resources and limits
+
 namespace: nova-production
 
-bases:
+# Base resources
+resources:
   - ../../base/
+  - external-secret.yaml
+  - pdb-all-services.yaml
+  - hpa-production.yaml
+  - feature-flags-configmap.yaml
 
-commonLabels:
-  app.kubernetes.io/environment: production
+# Common labels for all resources
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/environment: production
+      app.kubernetes.io/managed-by: argocd
 
 commonAnnotations:
   description: "Nova Production Environment"
 
-# Production 的镜像使用 main 分支标签
+# ============================================
+# Production Images
+# Use release tags, not 'main' or 'latest'
+# ============================================
 images:
-  - name: auth-service
-    newTag: main
-  - name: content-service
-    newTag: main
-  - name: feed-service
-    newTag: main
-  - name: media-service
-    newTag: main
-  - name: messaging-service
-    newTag: main
-  - name: search-service
-    newTag: main
-  - name: streaming-service
-    newTag: main
+  # Tier 1: Critical Path
+  - name: nova/identity-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/identity-service
+    newTag: v1.0.0  # UPDATE: Set release tag before deploy
+  - name: nova/graphql-gateway
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/graphql-gateway
+    newTag: v1.0.0
+  - name: nova/content-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/content-service
+    newTag: v1.0.0
 
-# Production 的高副本数
+  # Tier 2: Traffic-sensitive
+  - name: nova/feed-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/feed-service
+    newTag: v1.0.0
+  - name: nova/media-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/media-service
+    newTag: v1.0.0
+  - name: nova/social-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/social-service
+    newTag: v1.0.0
+
+  # Tier 3: Supporting Services
+  - name: nova/search-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/search-service
+    newTag: v1.0.0
+  - name: nova/notification-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/notification-service
+    newTag: v1.0.0
+  - name: nova/analytics-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/analytics-service
+    newTag: v1.0.0
+  - name: nova/ranking-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/ranking-service
+    newTag: v1.0.0
+  - name: nova/realtime-chat-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/realtime-chat-service
+    newTag: v1.0.0
+  - name: nova/graph-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/graph-service
+    newTag: v1.0.0
+  - name: nova/trust-safety-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/trust-safety-service
+    newTag: v1.0.0
+
+# ============================================
+# Production Replica Configuration
+# Tier 1: 3+ replicas, Tier 2: 2-3, Tier 3: 2
+# ============================================
 replicas:
-  - name: auth-service
+  # Infrastructure
+  - name: pgbouncer
+    count: 2
+
+  # Tier 1: Critical Path - minimum 3 replicas
+  - name: identity-service
+    count: 3
+  - name: graphql-gateway
     count: 3
   - name: content-service
     count: 3
+
+  # Tier 2: Traffic-sensitive - minimum 2 replicas
   - name: feed-service
     count: 2
   - name: media-service
     count: 2
-  - name: messaging-service
-    count: 3
-  - name: search-service
-    count: 2
-  - name: streaming-service
+  - name: social-service
     count: 2
 
-# Production 的资源限制和 PDB
+  # Tier 3: Supporting services - minimum 2 replicas
+  - name: search-service
+    count: 2
+  - name: notification-service
+    count: 2
+  - name: analytics-service
+    count: 2
+  - name: ranking-service
+    count: 2
+  - name: realtime-chat-service
+    count: 2
+  - name: graph-service
+    count: 2
+  - name: trust-safety-service
+    count: 2
+
+# ============================================
+# Production Resource Limits
+# Higher resources than staging
+# ============================================
 patches:
+  # Tier 1: Critical services - higher resources
   - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: identity-service
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: graphql-gateway
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: content-service
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 150m
+            memory: 384Mi
+          limits:
+            cpu: 750m
+            memory: 768Mi
+
+  # Tier 2 & 3: Standard resources
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      labelSelector: "tier notin (critical)"
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+  # Image pull policy
+  - target:
+      group: apps
+      version: v1
       kind: Deployment
     patch: |-
       - op: replace
-        path: /spec/template/spec/containers/0/resources/limits/memory
-        value: "512Mi"
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/limits/cpu
-        value: "500m"
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/requests/memory
-        value: "256Mi"
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/requests/cpu
-        value: "100m"
-  - target:
-      kind: PodDisruptionBudget
-    patch: |-
-      - op: replace
-        path: /spec/minAvailable
-        value: 1
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
 
-# ConfigMap 覆盖
+# ============================================
+# Production ConfigMap
+# ============================================
 configMapGenerator:
   - name: nova-config
     behavior: merge
     literals:
       - ENVIRONMENT=production
       - LOG_LEVEL=warn
-      - DATABASE_POOL_SIZE=20
+      - DEBUG_MODE=false
+      - DATABASE_POOL_SIZE=50
       - ENABLE_METRICS=true
       - ENABLE_TRACING=true
+      - TRACE_SAMPLE_RATE=0.1
+      - CACHE_ENABLED=true
+      - API_RATE_LIMIT_ENABLED=true
+      - API_RATE_LIMIT_REQUESTS_PER_MINUTE=1000
+      - FEATURE_FLAGS_ENABLED=true
+      - CORS_ALLOWED_ORIGINS="https://nova.io,https://api.nova.io,https://app.nova.io"

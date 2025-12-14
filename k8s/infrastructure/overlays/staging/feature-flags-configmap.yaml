@@ -1,0 +1,103 @@
+# Feature Flags ConfigMap for Staging Environment
+# This provides a simple feature gate mechanism without external dependencies
+#
+# Usage in application:
+#   1. Mount this ConfigMap as environment variable or volume
+#   2. Parse FEATURE_FLAGS JSON in application startup
+#   3. Check feature status before enabling functionality
+#
+# Example (Rust):
+#   let flags: FeatureFlags = serde_json::from_str(&env::var("FEATURE_FLAGS")?)?;
+#   if flags.new_feed_algorithm { enable_new_algorithm(); }
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nova-feature-flags
+  namespace: nova-staging
+  labels:
+    app.kubernetes.io/name: nova
+    app.kubernetes.io/component: feature-flags
+    app.kubernetes.io/environment: staging
+  annotations:
+    description: "Feature flags for controlled rollout of new features"
+data:
+  # ============================================
+  # Feature Gates - Boolean flags
+  # ============================================
+  FEATURE_FLAGS: |
+    {
+      "new_feed_algorithm": true,
+      "ai_recommendations": false,
+      "enhanced_search": true,
+      "realtime_notifications": true,
+      "media_transcoding_v2": false,
+      "social_graph_v2": false,
+      "chat_reactions": true,
+      "content_moderation_ai": false,
+      "analytics_v2": false,
+      "cdn_optimization": true
+    }
+
+  # ============================================
+  # Gradual Rollout - Percentage-based (0-100)
+  # ============================================
+  GRADUAL_ROLLOUT: |
+    {
+      "new_feed_algorithm": 100,
+      "ai_recommendations": 0,
+      "enhanced_search": 100,
+      "media_transcoding_v2": 25,
+      "social_graph_v2": 10,
+      "analytics_v2": 50
+    }
+
+  # ============================================
+  # A/B Test Groups
+  # ============================================
+  AB_TEST_CONFIG: |
+    {
+      "feed_ranking_experiment": {
+        "enabled": true,
+        "variants": ["control", "ml_v1", "ml_v2"],
+        "weights": [50, 25, 25]
+      },
+      "ui_refresh_experiment": {
+        "enabled": false,
+        "variants": ["old", "new"],
+        "weights": [50, 50]
+      }
+    }
+
+  # ============================================
+  # Kill Switches - Emergency disable
+  # ============================================
+  KILL_SWITCHES: |
+    {
+      "disable_external_apis": false,
+      "disable_push_notifications": false,
+      "disable_media_upload": false,
+      "disable_realtime_features": false,
+      "read_only_mode": false,
+      "maintenance_mode": false
+    }
+
+---
+# Patch to add feature flags to all services
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nova-feature-flags-env
+  namespace: nova-staging
+data:
+  # Simple environment variable format for services that don't parse JSON
+  FEATURE_NEW_FEED_ALGORITHM: "true"
+  FEATURE_AI_RECOMMENDATIONS: "false"
+  FEATURE_ENHANCED_SEARCH: "true"
+  FEATURE_REALTIME_NOTIFICATIONS: "true"
+  FEATURE_MEDIA_TRANSCODING_V2: "false"
+  FEATURE_SOCIAL_GRAPH_V2: "false"
+  FEATURE_CHAT_REACTIONS: "true"
+  FEATURE_CONTENT_MODERATION_AI: "false"
+  FEATURE_ANALYTICS_V2: "false"
+  FEATURE_CDN_OPTIMIZATION: "true"

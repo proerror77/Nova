@@ -3651,6 +3651,7 @@ dependencies = [
  "lru",
  "md5",
  "num_cpus",
+ "once_cell",
  "opentelemetry-config",
  "pbjson-types",
  "prometheus",
