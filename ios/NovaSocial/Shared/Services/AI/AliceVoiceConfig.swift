@@ -17,9 +17,9 @@ enum AliceVoiceConfig {
     static let agoraAppCertificate = "YOUR_AGORA_APP_CERTIFICATE"
     
     // MARK: - TEN Agent 服務器配置
-    /// Alice Voice Service 後端服務器地址
+    /// Alice Voice Service 後端服務器地址（通過 GCE URL Map routeRules 進行 URL 重寫）
     /// 開發環境: http://localhost:8080
-    /// Staging 環境: https://api.staging.novaplatform.me/alice-voice
+    /// Staging 環境: http://34.8.163.8/alice-voice (通過主 API 網關)
     /// 生產環境: https://api.nova.social/alice-voice
     static var tenAgentServerURL: String {
         APIConfig.AliceVoice.baseURL
