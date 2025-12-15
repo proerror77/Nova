@@ -22,10 +22,10 @@ enum APIEnvironment {
                !stagingURL.hasPrefix("$(") {  // Skip unresolved build variables
                 return stagingURL
             }
-            // Default staging API: direct LB IP to bypass DNS/proxy issues
-            return "http://34.8.163.8"
+            // Staging API via Cloudflare DNS
+            return "http://api.staging.gcp.icered.com:8000"
         case .production:
-            return "https://api.nova.social"
+            return "http://api.icered.com:8000"
         }
     }
 
