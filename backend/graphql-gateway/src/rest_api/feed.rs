@@ -209,6 +209,7 @@ pub async fn get_feed_by_user(
         limit: query.limit.unwrap_or(20).min(100),
         cursor: query.cursor.clone().unwrap_or_default(),
         algorithm: query.algorithm.clone().unwrap_or_else(|| "v2".to_string()),
+        channel_id: query.channel_id.clone().unwrap_or_default(),
     });
 
     match feed_client.get_feed(grpc_request).await {
@@ -247,6 +248,7 @@ pub async fn get_explore_feed(
         limit: query.limit.unwrap_or(20).min(100),
         cursor: query.cursor.clone().unwrap_or_default(),
         algorithm: "explore".to_string(),
+        channel_id: String::new(),
     });
     match feed_client.get_feed(grpc_request).await {
         Ok(resp) => {
@@ -283,6 +285,7 @@ pub async fn get_trending_feed(
         limit: query.limit.unwrap_or(20).min(100),
         cursor: query.cursor.clone().unwrap_or_default(),
         algorithm: "trending".to_string(),
+        channel_id: String::new(),
     });
     match feed_client.get_feed(grpc_request).await {
         Ok(resp) => {
@@ -323,6 +326,7 @@ pub async fn get_guest_trending_feed(
         limit: query.limit.unwrap_or(20).min(100),
         cursor: query.cursor.clone().unwrap_or_default(),
         algorithm: "trending".to_string(),
+        channel_id: String::new(),
     });
 
     match feed_client.get_feed(grpc_request).await {
