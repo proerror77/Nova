@@ -873,7 +873,7 @@ struct NewPostView: View {
         do {
             // Step 1: Upload media (images and Live Photos with retry logic)
             var mediaUrls: [String] = []
-            var mediaType: String = "image"  // Default to image
+            // Note: mediaType tracking removed - backend determines type from URLs
             
             // Use new media items if available, otherwise fall back to legacy selectedImages
             let itemsToUpload: [PostMediaItem] = selectedMediaItems.isEmpty 
@@ -965,7 +965,7 @@ struct NewPostView: View {
                     // Add both URLs - image first, then video
                     mediaUrls.append(result.imageUrl)
                     mediaUrls.append(result.videoUrl)
-                    mediaType = "live_photo"  // Mark as Live Photo
+                    // Live Photo type is determined by backend from paired URLs
                     
                     #if DEBUG
                     print("[NewPost] Live Photo uploaded - Image: \(result.imageUrl), Video: \(result.videoUrl)")

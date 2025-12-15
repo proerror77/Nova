@@ -277,7 +277,7 @@ struct HomeView: View {
                             // 当前设置：每 4 个帖子后显示一次轮播图
                             ForEach(FeedLayoutBuilder.buildFeedItems(from: feedViewModel.posts)) { item in
                                 switch item {
-                                case .post(let index, let post):
+                                case .post(_, let post):
                                     FeedPostCard(
                                         post: post,
                                         showReportView: $showReportView,

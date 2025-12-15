@@ -113,8 +113,8 @@ class PushNotificationManager: NSObject, ObservableObject {
         if let aps = userInfo["aps"] as? [String: Any] {
             // Handle badge count
             if let badge = aps["badge"] as? Int {
-                Task { @MainActor in
-                    UIApplication.shared.applicationIconBadgeNumber = badge
+                Task {
+                    try? await UNUserNotificationCenter.current().setBadgeCount(badge)
                 }
             }
 
@@ -151,8 +151,8 @@ class PushNotificationManager: NSObject, ObservableObject {
 
     /// Clear badge count
     func clearBadge() {
-        Task { @MainActor in
-            UIApplication.shared.applicationIconBadgeNumber = 0
+        Task {
+            try? await UNUserNotificationCenter.current().setBadgeCount(0)
         }
     }
 

@@ -210,6 +210,7 @@ func messageEventContentFromMarkdown(md: String) -> Any { md }
 
 // MARK: - Matrix Service Protocol
 
+@MainActor
 protocol MatrixServiceProtocol: AnyObject {
     /// Current connection state
     var connectionState: MatrixConnectionState { get }
@@ -843,7 +844,7 @@ final class MatrixService: MatrixServiceProtocol {
 
             // Read file data
             let data = try Data(contentsOf: mediaURL)
-            let filename = mediaURL.lastPathComponent
+            _ = mediaURL.lastPathComponent  // Filename available for future use
 
             // Determine media type and create appropriate content
             if mimeType.hasPrefix("image/") {
@@ -1202,7 +1203,7 @@ final class MatrixService: MatrixServiceProtocol {
                     msgType = .notice
                 case .emote:
                     msgType = .emote
-                default:
+                @unknown default:
                     msgType = .text
                 }
 
@@ -1219,7 +1220,7 @@ final class MatrixService: MatrixServiceProtocol {
                     mediaInfo: nil
                 )
             }
-        default:
+        @unknown default:
             break
         }
 
@@ -1293,7 +1294,7 @@ private class RoomListEntriesListener: RoomListEntriesListenerProtocol {
                 entries.append(value)
             case .insert(_, let value):
                 entries.append(value)
-            default:
+            @unknown default:
                 break
             }
         }

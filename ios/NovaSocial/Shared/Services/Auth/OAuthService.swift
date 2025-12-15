@@ -329,6 +329,8 @@ extension OAuthService: ASAuthorizationControllerDelegate {
                 appleSignInContinuation?.resume(throwing: OAuthError.webAuthFailed("Apple Sign-In requires interaction"))
             case .unknown:
                 appleSignInContinuation?.resume(throwing: OAuthError.webAuthFailed("Unknown Apple Sign-In error"))
+            case .matchedExcludedCredential:
+                appleSignInContinuation?.resume(throwing: OAuthError.webAuthFailed("Credential excluded"))
             @unknown default:
                 appleSignInContinuation?.resume(throwing: OAuthError.webAuthFailed(error.localizedDescription))
             }

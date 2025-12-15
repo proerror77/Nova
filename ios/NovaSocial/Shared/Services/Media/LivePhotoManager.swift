@@ -12,9 +12,14 @@ struct LivePhotoData: Identifiable {
     let phLivePhoto: PHLivePhoto?
     
     /// Duration of the Live Photo video (typically ~3 seconds)
-    var videoDuration: TimeInterval? {
-        let asset = AVAsset(url: videoURL)
-        return asset.duration.seconds
+    func getVideoDuration() async -> TimeInterval? {
+        let asset = AVURLAsset(url: videoURL)
+        do {
+            let duration = try await asset.load(.duration)
+            return duration.seconds
+        } catch {
+            return nil
+        }
     }
 }
 

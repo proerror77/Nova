@@ -761,14 +761,52 @@ struct WebSocketConnectionData: Codable, Sendable {
 
 /// Client → Server: Typing start event
 struct TypingStartEvent: Codable, Sendable {
-    let type = "typing.start"
+    var type: String { "typing.start" }
     let data: TypingEventData
+
+    enum CodingKeys: String, CodingKey {
+        case type, data
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(type, forKey: .type)
+        try container.encode(data, forKey: .data)
+    }
+
+    init(data: TypingEventData) {
+        self.data = data
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.data = try container.decode(TypingEventData.self, forKey: .data)
+    }
 }
 
 /// Client → Server: Typing stop event
 struct TypingStopEvent: Codable, Sendable {
-    let type = "typing.stop"
+    var type: String { "typing.stop" }
     let data: TypingEventData
+
+    enum CodingKeys: String, CodingKey {
+        case type, data
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(type, forKey: .type)
+        try container.encode(data, forKey: .data)
+    }
+
+    init(data: TypingEventData) {
+        self.data = data
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.data = try container.decode(TypingEventData.self, forKey: .data)
+    }
 }
 
 /// Typing event data for client → server

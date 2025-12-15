@@ -450,7 +450,7 @@ struct PhoneRegistrationView: View {
 
             // Save auth tokens
             if let user = response.user {
-                await authManager.updateCurrentUser(user)
+                authManager.updateCurrentUser(user)
             }
 
             // Navigate to home

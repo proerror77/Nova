@@ -19,10 +19,7 @@ actor ImageCacheService {
     private var prefetchTasks: [String: Task<UIImage?, Never>] = [:]
 
     private init() {
-        setupCache()
-    }
-
-    private func setupCache() {
+        // Setup cache synchronously since these are non-isolated operations
         memoryCache.totalCostLimit = maxMemoryCacheSize
 
         // Setup disk cache directory
@@ -38,8 +35,14 @@ actor ImageCacheService {
     func loadImage(
         from urlString: String,
         targetSize: CGSize? = nil,
-        scale: CGFloat = UIScreen.main.scale
+        scale: CGFloat? = nil
     ) async -> UIImage? {
+        let displayScale: CGFloat
+        if let scale = scale {
+            displayScale = scale
+        } else {
+            displayScale = await MainActor.run { UIScreen.main.scale }
+        }
         let cacheKey = cacheKey(for: urlString, targetSize: targetSize)
 
         // Check memory cache
@@ -61,7 +64,7 @@ actor ImageCacheService {
 
             var image: UIImage?
             if let targetSize = targetSize {
-                image = downsample(data: data, to: targetSize, scale: scale)
+                image = downsample(data: data, to: targetSize, scale: displayScale)
             } else {
                 image = UIImage(data: data)
             }
