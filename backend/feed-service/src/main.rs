@@ -306,8 +306,12 @@ async fn main() -> io::Result<()> {
                     "mTLS disabled - TLS config not found: {}. Using development mode for testing only.",
                     e
                 );
-                if cfg!(debug_assertions) {
-                    tracing::info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
+                // Use runtime check instead of compile-time cfg! to allow staging without TLS
+                let is_dev = std::env::var("APP_ENV")
+                    .map(|v| v == "development" || v == "staging")
+                    .unwrap_or(false);
+                if is_dev {
+                    tracing::info!("Development/Staging mode: Starting without TLS (NOT FOR PRODUCTION)");
                     None
                 } else {
                     tracing::error!(
