@@ -265,9 +265,9 @@ impl CdcConsumer {
             "INSERT INTO follows_cdc (follower_id, followed_id, created_at, cdc_operation, cdc_timestamp, follow_count) VALUES ('{}', '{}', '{}', {}, '{}', {})",
             follower_id,
             followee_id,  // Variable is still named followee_id, but column is followed_id
-            created_at.format("%Y-%m-%d %H:%M:%S%.3f"),  // DateTime64(3) needs milliseconds
+            created_at.format("%Y-%m-%d %H:%M:%S"),  // DateTime format (no milliseconds)
             cdc_operation,
-            created_at.format("%Y-%m-%d %H:%M:%S%.3f"),  // cdc_timestamp is also DateTime64(3)
+            created_at.format("%Y-%m-%d %H:%M:%S"),  // cdc_timestamp DateTime format
             follow_count
         );
 
