@@ -128,6 +128,23 @@ pub struct GetFeedResponse {
     pub has_more: bool,
 }
 
+#[derive(Debug, Serialize)]
+pub struct RecommendedCreator {
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<String>,
+    pub relevance_score: f64,
+    pub follower_count: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GetRecommendedCreatorsResponse {
+    pub creators: Vec<RecommendedCreator>,
+}
+
 // ============================================================================
 // Comment Models (with author enrichment)
 // ============================================================================

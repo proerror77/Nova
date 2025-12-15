@@ -5,9 +5,9 @@ use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use std::collections::HashMap;
 use tracing::{error, info, warn};
 
-use super::models::{ErrorResponse, FeedPost, GetFeedResponse};
+use super::models::{ErrorResponse, FeedPost, GetFeedResponse, GetRecommendedCreatorsResponse, RecommendedCreator};
 use crate::clients::proto::auth::GetUserProfilesByIdsRequest;
-use crate::clients::proto::feed::GetFeedRequest as ProtoGetFeedRequest;
+use crate::clients::proto::feed::{GetFeedRequest as ProtoGetFeedRequest, GetRecommendedCreatorsRequest};
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
 
@@ -354,4 +354,89 @@ pub struct FeedQueryParams {
     pub cursor: Option<String>,
     pub algorithm: Option<String>,
     pub channel_id: Option<String>,  // Optional: Filter feed by channel (UUID or slug)
+}
+
+/// GET /api/v2/feed/recommended-creators
+///
+/// Returns recommended creators for the authenticated user.
+/// Query parameters:
+///   - limit: Number of creators to return (default: 20, max: 50)
+pub async fn get_recommended_creators(
+    req: HttpRequest,
+    clients: web::Data<ServiceClients>,
+    query: web::Query<RecommendedCreatorsQueryParams>,
+) -> Result<HttpResponse> {
+    let user_id = match req.extensions().get::<AuthenticatedUser>().copied() {
+        Some(AuthenticatedUser(id)) => id.to_string(),
+        None => return Ok(HttpResponse::Unauthorized().finish()),
+    };
+
+    let limit = query.limit.unwrap_or(20).min(50);
+
+    info!(
+        user_id = %user_id,
+        limit = %limit,
+        "GET /api/v2/feed/recommended-creators"
+    );
+
+    let mut feed_client = clients.feed_client();
+
+    let grpc_request = tonic::Request::new(GetRecommendedCreatorsRequest {
+        user_id: user_id.clone(),
+        limit,
+    });
+
+    match feed_client.get_recommended_creators(grpc_request).await {
+        Ok(response) => {
+            let grpc_response = response.into_inner();
+
+            let creators: Vec<RecommendedCreator> = grpc_response
+                .creators
+                .into_iter()
+                .map(|c| RecommendedCreator {
+                    id: c.id,
+                    name: c.name,
+                    avatar: if c.avatar.is_empty() { None } else { Some(c.avatar) },
+                    relevance_score: c.relevance_score,
+                    follower_count: c.follower_count,
+                    reason: if c.reason.is_empty() { None } else { Some(c.reason) },
+                })
+                .collect();
+
+            info!(
+                user_id = %user_id,
+                creator_count = creators.len(),
+                "Recommended creators retrieved successfully"
+            );
+
+            Ok(HttpResponse::Ok().json(GetRecommendedCreatorsResponse { creators }))
+        }
+        Err(status) => {
+            error!(
+                user_id = %user_id,
+                error = %status,
+                "Failed to get recommended creators from feed-service"
+            );
+
+            let error_response = match status.code() {
+                tonic::Code::NotFound => {
+                    HttpResponse::NotFound().json(ErrorResponse::new("User not found"))
+                }
+                tonic::Code::Unauthenticated => {
+                    HttpResponse::Unauthorized().json(ErrorResponse::new("Unauthorized"))
+                }
+                _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                    "Internal server error",
+                    status.message(),
+                )),
+            };
+
+            Ok(error_response)
+        }
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct RecommendedCreatorsQueryParams {
+    pub limit: Option<u32>,
 }

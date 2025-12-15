@@ -367,6 +367,10 @@ async fn main() -> std::io::Result<()> {
                 "/api/v2/feed/trending",
                 web::get().to(rest_api::get_trending_feed),
             )
+            .route(
+                "/api/v2/feed/recommended-creators",
+                web::get().to(rest_api::get_recommended_creators),
+            )
             // Guest Feed API (unauthenticated trending feed)
             .route(
                 "/api/v2/guest/feed/trending",
