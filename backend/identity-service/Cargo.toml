@@ -12,7 +12,7 @@ thiserror = "1.0"
 # gRPC
 tonic = "0.12"
 prost = "0.13"
-tonic-reflection = "0.12"
+tonic-reflection = "0.14"
 tonic-health = "0.12"  # P0-4: gRPC health check protocol
 
 # Database

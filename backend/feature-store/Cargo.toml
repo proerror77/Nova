@@ -24,7 +24,7 @@ dotenv = { workspace = true }
 tonic = { workspace = true }
 prost = { workspace = true }
 tonic-health = { workspace = true }
-tonic-reflection = "0.12"
+tonic-reflection = "0.14"
 
 # Feature-specific dependencies
 ndarray = "0.16"  # Vector operations for feature vectors
