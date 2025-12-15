@@ -54,6 +54,16 @@ spec:
         path: /health
         pathType: Exact
 
+      # Alice Voice Service - TEN Agent for voice chat
+      # Routes /alice-voice/* to alice-voice-service (bypasses JWT middleware)
+      - backend:
+          service:
+            name: alice-voice-service
+            port:
+              number: 8080
+        path: /alice-voice
+        pathType: Prefix
+
       # Guest feed (unauthenticated) - route directly to feed-service
       # This ensures /api/v2/guest/feed/trending is NOT blocked by GraphQL JWT middleware.
       - backend:
