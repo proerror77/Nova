@@ -1,0 +1,168 @@
+# ============================================
+# Profile Builder Batch Job CronJob
+# ============================================
+#
+# Periodically updates user profiles (用戶畫像) by:
+# 1. Fetching active users from ClickHouse
+# 2. Building interest tags from engagement history
+# 3. Building behavior patterns from watch events
+# 4. Optionally running LLM analysis for high-value users
+# 5. Caching results in Redis
+#
+# Schedule: Every 4 hours
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: profile-builder-batch
+  namespace: nova-staging
+  labels:
+    app: profile-builder
+    component: ranking
+spec:
+  schedule: "0 */4 * * *"  # Every 4 hours
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  successfulJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: profile-builder
+            component: ranking
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: ranking-service
+          containers:
+          - name: profile-builder
+            image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/ranking-service:latest
+            imagePullPolicy: Always
+            command: ["/app/ranking-service"]
+            args: ["--mode", "profile-batch"]
+            env:
+            # ============================================
+            # 應用配置
+            # ============================================
+            - name: RUST_LOG
+              value: "info,ranking_service=debug,ranking_service::jobs=debug"
+            - name: SERVICE_NAME
+              value: "profile-builder-batch"
+
+            # ============================================
+            # 批量任務配置
+            # ============================================
+            - name: PROFILE_BATCH_SIZE
+              value: "100"
+            - name: PROFILE_MAX_USERS
+              value: "10000"
+            - name: PROFILE_BATCH_DELAY_MS
+              value: "200"
+            - name: PROFILE_RUN_ONCE
+              value: "true"
+
+            # ============================================
+            # LLM 配置 (可選)
+            # ============================================
+            - name: PROFILE_LLM_ENABLED
+              value: "false"  # 設為 true 啟用 AI 分析
+            - name: PROFILE_LLM_MIN_ENGAGEMENT
+              value: "50"
+            - name: LLM_ENABLED
+              value: "false"
+            - name: LLM_PROVIDER
+              value: "anthropic"
+            - name: LLM_MODEL
+              value: "claude-3-haiku-20240307"
+            - name: LLM_MAX_TOKENS
+              value: "1024"
+            - name: LLM_TEMPERATURE
+              value: "0.3"
+            # LLM API Key (從 Secret 注入)
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-api-credentials
+                  key: ANTHROPIC_API_KEY
+                  optional: true
+
+            # ============================================
+            # ClickHouse 配置
+            # ============================================
+            - name: CLICKHOUSE_URL
+              value: "http://clickhouse.nova-staging.svc.cluster.local:8123"
+            - name: CLICKHOUSE_DATABASE
+              value: "nova_feed"
+            - name: CLICKHOUSE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: nova-clickhouse-credentials
+                  key: CLICKHOUSE_USER
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nova-clickhouse-credentials
+                  key: CLICKHOUSE_PASSWORD
+            - name: CLICKHOUSE_QUERY_TIMEOUT_MS
+              value: "60000"
+
+            # ============================================
+            # Redis 配置
+            # ============================================
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nova-redis-credentials
+                  key: REDIS_URL
+            - name: REDIS_POOL_SIZE
+              value: "5"
+
+            # ============================================
+            # gRPC TLS 配置 (客戶端)
+            # ============================================
+            - name: GRPC_TLS_ENABLED
+              value: "true"
+            - name: GRPC_TLS_CA_CERT_PATH
+              value: "/etc/nova/certs/ca.crt"
+            - name: GRPC_TLS_CLIENT_CERT_PATH
+              value: "/etc/nova/certs/client.crt"
+            - name: GRPC_TLS_CLIENT_KEY_PATH
+              value: "/etc/nova/certs/client.key"
+
+            resources:
+              requests:
+                cpu: "200m"
+                memory: "512Mi"
+              limits:
+                cpu: "1000m"
+                memory: "2Gi"
+
+            volumeMounts:
+            - name: grpc-mtls-shared
+              mountPath: /etc/nova/certs
+              readOnly: true
+
+          volumes:
+          - name: grpc-mtls-shared
+            secret:
+              secretName: grpc-mtls-shared
+
+---
+# ============================================
+# LLM API Credentials Secret (模板)
+# ============================================
+# 注意：實際部署時需要手動創建此 Secret
+# kubectl create secret generic llm-api-credentials \
+#   --from-literal=ANTHROPIC_API_KEY=your-api-key \
+#   -n nova-staging
+
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: llm-api-credentials
+#   namespace: nova-staging
+# type: Opaque
+# stringData:
+#   ANTHROPIC_API_KEY: "your-anthropic-api-key"
+#   OPENAI_API_KEY: "your-openai-api-key"

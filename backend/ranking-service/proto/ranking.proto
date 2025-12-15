@@ -10,6 +10,28 @@ service RankingService {
 
   // 召回候選集（僅召回階段）
   rpc RecallCandidates(RecallRequest) returns (RecallResponse);
+
+  // ============================================
+  // User Profile APIs (用戶畫像 API)
+  // ============================================
+
+  // 獲取用戶畫像
+  rpc GetUserProfile(GetUserProfileRequest) returns (GetUserProfileResponse);
+
+  // 更新用戶畫像（觸發重新計算）
+  rpc UpdateUserProfile(UpdateUserProfileRequest) returns (UpdateUserProfileResponse);
+
+  // 獲取 AI 生成的用戶人設
+  rpc GetUserPersona(GetUserPersonaRequest) returns (GetUserPersonaResponse);
+
+  // 批量更新用戶畫像
+  rpc BatchUpdateProfiles(BatchUpdateProfilesRequest) returns (BatchUpdateProfilesResponse);
+
+  // 獲取用戶興趣標籤
+  rpc GetUserInterests(GetUserInterestsRequest) returns (GetUserInterestsResponse);
+
+  // 獲取個性化內容推薦
+  rpc GetPersonalizedRecommendations(GetPersonalizedRecommendationsRequest) returns (GetPersonalizedRecommendationsResponse);
 }
 
 // Feed 排序請求
@@ -85,4 +107,146 @@ message Candidate {
   string post_id = 1;
   string recall_source = 2;
   float recall_weight = 3;  // 召回策略權重
+}
+
+// ============================================
+// User Profile Messages (用戶畫像消息)
+// ============================================
+
+// 獲取用戶畫像請求
+message GetUserProfileRequest {
+  string user_id = 1;
+  bool include_behavior = 2;  // 是否包含行為模式
+  bool include_interests = 3; // 是否包含興趣標籤
+}
+
+// 用戶畫像響應
+message GetUserProfileResponse {
+  UserProfile profile = 1;
+  bool from_cache = 2;
+}
+
+// 用戶畫像
+message UserProfile {
+  string user_id = 1;
+  repeated InterestTag interests = 2;
+  BehaviorPattern behavior = 3;
+  string created_at = 4;
+  string updated_at = 5;
+}
+
+// 興趣標籤
+message InterestTag {
+  string tag = 1;
+  float weight = 2;
+  int32 interaction_count = 3;
+  string last_interaction = 4;
+}
+
+// 行為模式
+message BehaviorPattern {
+  uint32 active_hours_bitmap = 1;
+  repeated int32 peak_hours = 2;
+  float avg_session_length_seconds = 3;
+  string preferred_video_length = 4;  // "very_short", "short", "medium", "long", "very_long"
+  float engagement_rate = 5;
+}
+
+// 更新用戶畫像請求
+message UpdateUserProfileRequest {
+  string user_id = 1;
+  bool force_rebuild = 2;  // 強制重建（忽略緩存）
+}
+
+// 更新用戶畫像響應
+message UpdateUserProfileResponse {
+  bool success = 1;
+  UserProfile profile = 2;
+  string error_message = 3;
+}
+
+// 獲取 AI 用戶人設請求
+message GetUserPersonaRequest {
+  string user_id = 1;
+  bool regenerate = 2;  // 是否重新生成
+}
+
+// AI 用戶人設響應
+message GetUserPersonaResponse {
+  UserPersona persona = 1;
+  bool from_cache = 2;
+}
+
+// AI 生成的用戶人設
+message UserPersona {
+  string user_id = 1;
+  string description = 2;  // 自然語言描述
+  repeated string primary_interests = 3;
+  ConsumptionPatterns consumption_patterns = 4;
+  PredictedPreferences predicted_preferences = 5;
+  string segment = 6;  // 用戶分群
+  float confidence = 7;
+  string generated_at = 8;
+  string model_used = 9;
+}
+
+// 內容消費模式
+message ConsumptionPatterns {
+  string preferred_length = 1;
+  string activity_pattern = 2;
+  string engagement_style = 3;
+  string discovery_preference = 4;
+}
+
+// AI 預測的偏好
+message PredictedPreferences {
+  repeated string likely_interests = 1;
+  repeated string disliked_topics = 2;
+  repeated int32 optimal_delivery_hours = 3;
+  repeated string format_preferences = 4;
+}
+
+// 批量更新用戶畫像請求
+message BatchUpdateProfilesRequest {
+  repeated string user_ids = 1;
+  int32 batch_size = 2;
+}
+
+// 批量更新用戶畫像響應
+message BatchUpdateProfilesResponse {
+  int32 success_count = 1;
+  int32 failure_count = 2;
+  repeated string failed_user_ids = 3;
+}
+
+// 獲取用戶興趣請求
+message GetUserInterestsRequest {
+  string user_id = 1;
+  int32 limit = 2;  // 返回數量限制
+  float min_weight = 3;  // 最小權重閾值
+}
+
+// 用戶興趣響應
+message GetUserInterestsResponse {
+  repeated InterestTag interests = 1;
+  int32 total_count = 2;
+}
+
+// 獲取個性化推薦請求
+message GetPersonalizedRecommendationsRequest {
+  string user_id = 1;
+  repeated string available_topics = 2;  // 可選的話題列表
+  int32 count = 3;
+}
+
+// 個性化推薦響應
+message GetPersonalizedRecommendationsResponse {
+  repeated ContentRecommendation recommendations = 1;
+}
+
+// 內容推薦
+message ContentRecommendation {
+  string topic = 1;
+  float relevance_score = 2;
+  string reason = 3;
 }
