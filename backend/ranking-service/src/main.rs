@@ -1,8 +1,10 @@
 use anyhow::{anyhow, Context, Result};
 use ranking_service::{
     grpc::{ranking_proto::ranking_service_server::RankingServiceServer, RankingServiceImpl},
+    jobs::run_profile_batch_job,
     Config, DiversityLayer, FeatureClient, RankingLayer, RecallLayer,
 };
+use std::env;
 use std::sync::Arc;
 use tonic::transport::Server;
 use tracing::{error, info, warn};
@@ -24,6 +26,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load config
     let config = Config::from_env().expect("Failed to load config");
+
+    // Check for run mode
+    let args: Vec<String> = env::args().collect();
+    let mode = if args.len() > 2 && args[1] == "--mode" {
+        args[2].as_str()
+    } else {
+        "server"
+    };
+
+    match mode {
+        "profile-batch" => {
+            info!("Starting in profile-batch mode");
+            return run_profile_batch(&config).await;
+        }
+        "server" | _ => {
+            info!("Starting in gRPC server mode");
+        }
+    }
 
     info!(
         "Starting {} on HTTP:{}, gRPC:{}",
@@ -62,6 +82,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create gRPC service
     let ranking_service = RankingServiceImpl::new(recall_layer, ranking_layer, diversity_layer);
+
+    // Initialize profile services (optional - fails gracefully if ClickHouse not configured)
+    if let Err(e) = ranking_service.init_profile_services(&config).await {
+        warn!(
+            error = %e,
+            "Failed to initialize profile services - profile APIs will be unavailable"
+        );
+    } else {
+        info!("Profile services initialized successfully");
+    }
 
     // Start gRPC server
     let addr = format!("0.0.0.0:{}", config.service.grpc_port)
@@ -120,4 +150,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })?;
 
     Ok(())
+}
+
+/// Run profile batch job (CronJob mode)
+/// Uses the standalone run_profile_batch_job function which handles all configuration
+async fn run_profile_batch(_config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    // The standalone function loads config from environment variables
+    // This is more flexible for Kubernetes CronJob deployment
+    run_profile_batch_job().await
 }

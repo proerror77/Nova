@@ -1,12 +1,17 @@
 use crate::models::{RankedPost, RecallStats};
 use crate::services::coarse_ranking::{CoarseCandidate, CoarseRankingLayer, UserFeatures};
 use crate::services::exploration::{NewContentPool, UCBExplorer};
+use crate::services::profile_builder::{
+    ClickHouseProfileDatabase, LlmProfileAnalyzer, ProfileDatabase, ProfileUpdater,
+    ProfileUpdaterConfig,
+};
 use crate::services::realtime::SessionInterestManager;
 use crate::services::{DiversityLayer, FeatureClient, RankingLayer, RecallLayer};
 use std::collections::HashSet;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tonic::{Request, Response, Status};
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 // Proto 生成的代碼
@@ -18,6 +23,18 @@ use ranking_proto::{
     ranking_service_server::RankingService, Candidate, PostFeatures, RankFeedRequest,
     RankFeedResponse, RankedPost as ProtoRankedPost, RecallRequest, RecallResponse,
     RecallStats as ProtoRecallStats,
+};
+
+// Profile-related proto types
+use ranking_proto::{
+    BatchUpdateProfilesRequest, BatchUpdateProfilesResponse, BehaviorPattern as ProtoBehavior,
+    ConsumptionPatterns as ProtoConsumption, ContentRecommendation as ProtoRecommendation,
+    GetPersonalizedRecommendationsRequest, GetPersonalizedRecommendationsResponse,
+    GetUserInterestsRequest, GetUserInterestsResponse, GetUserPersonaRequest,
+    GetUserPersonaResponse, GetUserProfileRequest, GetUserProfileResponse,
+    InterestTag as ProtoInterest, PredictedPreferences as ProtoPreferences,
+    UpdateUserProfileRequest, UpdateUserProfileResponse, UserPersona as ProtoPersona,
+    UserProfile as ProtoProfile,
 };
 
 /// 抖音风格 4 层 Ranking Pipeline 配置
@@ -58,6 +75,9 @@ pub struct RankingServiceImpl {
     exploration_pool: Arc<NewContentPool>,
     ucb_explorer: Arc<UCBExplorer>,
     session_interests: Arc<SessionInterestManager>,
+    // 用戶畫像服務
+    profile_updater: Arc<RwLock<Option<ProfileUpdater<ClickHouseProfileDatabase>>>>,
+    llm_analyzer: Arc<RwLock<Option<LlmProfileAnalyzer>>>,
     // 配置
     config: PipelineConfig,
 }
@@ -82,6 +102,8 @@ impl RankingServiceImpl {
             exploration_pool: Arc::new(NewContentPool::new(redis_client.clone())),
             ucb_explorer: Arc::new(UCBExplorer::new()),
             session_interests: Arc::new(SessionInterestManager::new(redis_client)),
+            profile_updater: Arc::new(RwLock::new(None)),
+            llm_analyzer: Arc::new(RwLock::new(None)),
             config: PipelineConfig::default(),
         }
     }
@@ -106,8 +128,54 @@ impl RankingServiceImpl {
             exploration_pool: Arc::new(exploration_pool),
             ucb_explorer: Arc::new(UCBExplorer::new()),
             session_interests: Arc::new(session_interests),
+            profile_updater: Arc::new(RwLock::new(None)),
+            llm_analyzer: Arc::new(RwLock::new(None)),
             config,
         }
+    }
+
+    /// 設置用戶畫像服務
+    pub async fn set_profile_updater(
+        &self,
+        updater: ProfileUpdater<ClickHouseProfileDatabase>,
+    ) {
+        let mut guard = self.profile_updater.write().await;
+        *guard = Some(updater);
+        info!("ProfileUpdater initialized");
+    }
+
+    /// 設置 LLM 分析器
+    pub async fn set_llm_analyzer(&self, analyzer: LlmProfileAnalyzer) {
+        let mut guard = self.llm_analyzer.write().await;
+        *guard = Some(analyzer);
+        info!("LlmProfileAnalyzer initialized");
+    }
+
+    /// 從配置初始化 Profile 服務
+    pub async fn init_profile_services(
+        &self,
+        config: &crate::config::Config,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // 初始化 ClickHouse 數據庫
+        let ch_db = Arc::new(ClickHouseProfileDatabase::from_config(&config.clickhouse));
+
+        // 初始化 Redis 客戶端
+        let redis_client = redis::Client::open(config.redis.url.as_str())?;
+
+        // 創建 ProfileUpdater
+        let profile_config = ProfileUpdaterConfig::default();
+        let updater = ProfileUpdater::new(ch_db, redis_client, profile_config);
+
+        self.set_profile_updater(updater).await;
+
+        // 初始化 LLM 分析器（如果啟用）
+        if config.llm.enabled {
+            if let Some(analyzer) = LlmProfileAnalyzer::from_config(&config.llm) {
+                self.set_llm_analyzer(analyzer).await;
+            }
+        }
+
+        Ok(())
     }
 
     /// 获取用户特征用于粗排
@@ -410,54 +478,154 @@ impl RankingService for RankingServiceImpl {
 
     async fn get_user_profile(
         &self,
-        request: Request<ranking_proto::GetUserProfileRequest>,
-    ) -> Result<Response<ranking_proto::GetUserProfileResponse>, Status> {
+        request: Request<GetUserProfileRequest>,
+    ) -> Result<Response<GetUserProfileResponse>, Status> {
         let req = request.into_inner();
         info!("GetUserProfile request: user_id={}", req.user_id);
 
-        // TODO: Implement with ProfileUpdater
-        // For now, return unimplemented
-        Err(Status::unimplemented(
-            "GetUserProfile not yet implemented - requires ProfileUpdater integration",
-        ))
+        // Parse user ID
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
+
+        // Get profile updater
+        let updater_guard = self.profile_updater.read().await;
+        let updater = updater_guard.as_ref().ok_or_else(|| {
+            Status::unavailable("ProfileUpdater not initialized")
+        })?;
+
+        // Try to load from cache first
+        match updater.load_profile_from_cache(user_id).await {
+            Ok(Some(profile)) => {
+                info!(user_id = %user_id, "Profile loaded from cache");
+                Ok(Response::new(GetUserProfileResponse {
+                    profile: Some(to_proto_profile(profile)),
+                    from_cache: true,
+                }))
+            }
+            Ok(None) => {
+                // No cache, need to build profile
+                warn!(user_id = %user_id, "Profile not in cache, building from scratch");
+
+                // For now, return empty profile - the batch job will populate it
+                // In production, you might want to trigger an async update
+                Err(Status::not_found(format!(
+                    "Profile not found for user {}. Run profile batch job to populate.",
+                    user_id
+                )))
+            }
+            Err(e) => {
+                error!(user_id = %user_id, error = %e, "Failed to load profile");
+                Err(Status::internal(format!("Failed to load profile: {}", e)))
+            }
+        }
     }
 
     async fn update_user_profile(
         &self,
-        request: Request<ranking_proto::UpdateUserProfileRequest>,
-    ) -> Result<Response<ranking_proto::UpdateUserProfileResponse>, Status> {
+        request: Request<UpdateUserProfileRequest>,
+    ) -> Result<Response<UpdateUserProfileResponse>, Status> {
         let req = request.into_inner();
         info!(
             "UpdateUserProfile request: user_id={}, force_rebuild={}",
             req.user_id, req.force_rebuild
         );
 
-        // TODO: Implement with ProfileUpdater
-        Err(Status::unimplemented(
-            "UpdateUserProfile not yet implemented - requires ProfileUpdater integration",
-        ))
+        // Parse user ID
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
+
+        // Get profile updater
+        let updater_guard = self.profile_updater.read().await;
+        let updater = updater_guard.as_ref().ok_or_else(|| {
+            Status::unavailable("ProfileUpdater not initialized")
+        })?;
+
+        // Update profile
+        match updater.update_user_profile(user_id).await {
+            Ok(profile) => {
+                info!(user_id = %user_id, "Profile updated successfully");
+                Ok(Response::new(UpdateUserProfileResponse {
+                    success: true,
+                    profile: Some(to_proto_profile(profile)),
+                    error_message: String::new(),
+                }))
+            }
+            Err(e) => {
+                error!(user_id = %user_id, error = %e, "Failed to update profile");
+                Ok(Response::new(UpdateUserProfileResponse {
+                    success: false,
+                    profile: None,
+                    error_message: e.to_string(),
+                }))
+            }
+        }
     }
 
     async fn get_user_persona(
         &self,
-        request: Request<ranking_proto::GetUserPersonaRequest>,
-    ) -> Result<Response<ranking_proto::GetUserPersonaResponse>, Status> {
+        request: Request<GetUserPersonaRequest>,
+    ) -> Result<Response<GetUserPersonaResponse>, Status> {
         let req = request.into_inner();
         info!(
             "GetUserPersona request: user_id={}, regenerate={}",
             req.user_id, req.regenerate
         );
 
-        // TODO: Implement with LlmProfileAnalyzer
-        Err(Status::unimplemented(
-            "GetUserPersona not yet implemented - requires LLM integration",
-        ))
+        // Parse user ID
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
+
+        // Get LLM analyzer
+        let analyzer_guard = self.llm_analyzer.read().await;
+        let analyzer = analyzer_guard.as_ref().ok_or_else(|| {
+            Status::unavailable("LLM analyzer not initialized. Enable LLM in config to use personas.")
+        })?;
+
+        // Get profile updater to load profile data
+        let updater_guard = self.profile_updater.read().await;
+        let updater = updater_guard.as_ref().ok_or_else(|| {
+            Status::unavailable("ProfileUpdater not initialized")
+        })?;
+
+        // If regenerate requested, invalidate cache
+        if req.regenerate {
+            analyzer.invalidate_cache(user_id).await;
+        }
+
+        // Load profile first (needed for persona generation)
+        let profile = match updater.load_profile_from_cache(user_id).await {
+            Ok(Some(profile)) => profile,
+            Ok(None) => {
+                return Err(Status::not_found(format!(
+                    "Profile not found for user {}. Update profile first.",
+                    user_id
+                )));
+            }
+            Err(e) => {
+                return Err(Status::internal(format!("Failed to load profile: {}", e)));
+            }
+        };
+
+        // Generate persona using LLM
+        match analyzer.analyze_profile(&profile).await {
+            Ok(persona) => {
+                info!(user_id = %user_id, "Persona generated successfully");
+                Ok(Response::new(GetUserPersonaResponse {
+                    persona: Some(to_proto_persona(persona)),
+                    from_cache: !req.regenerate,
+                }))
+            }
+            Err(e) => {
+                error!(user_id = %user_id, error = %e, "Failed to generate persona");
+                Err(Status::internal(format!("Failed to generate persona: {}", e)))
+            }
+        }
     }
 
     async fn batch_update_profiles(
         &self,
-        request: Request<ranking_proto::BatchUpdateProfilesRequest>,
-    ) -> Result<Response<ranking_proto::BatchUpdateProfilesResponse>, Status> {
+        request: Request<BatchUpdateProfilesRequest>,
+    ) -> Result<Response<BatchUpdateProfilesResponse>, Status> {
         let req = request.into_inner();
         info!(
             "BatchUpdateProfiles request: user_count={}, batch_size={}",
@@ -465,44 +633,185 @@ impl RankingService for RankingServiceImpl {
             req.batch_size
         );
 
-        // TODO: Implement with ProfileBatchJob
-        Err(Status::unimplemented(
-            "BatchUpdateProfiles not yet implemented - use CronJob for batch updates",
-        ))
+        // Get profile updater
+        let updater_guard = self.profile_updater.read().await;
+        let updater = updater_guard.as_ref().ok_or_else(|| {
+            Status::unavailable("ProfileUpdater not initialized")
+        })?;
+
+        // Parse user IDs
+        let user_ids: Vec<Uuid> = req
+            .user_ids
+            .iter()
+            .filter_map(|id| Uuid::parse_str(id).ok())
+            .collect();
+
+        let total_count = user_ids.len();
+        let mut success_count = 0;
+        let mut failed_user_ids: Vec<String> = Vec::new();
+
+        // Process in batches
+        for user_id in user_ids {
+            match updater.update_user_profile(user_id).await {
+                Ok(_) => success_count += 1,
+                Err(e) => {
+                    warn!(user_id = %user_id, error = %e, "Failed to update profile in batch");
+                    failed_user_ids.push(user_id.to_string());
+                }
+            }
+        }
+
+        let failure_count = (total_count - success_count) as i32;
+        info!(
+            success_count = success_count,
+            failure_count = failure_count,
+            "Batch update completed"
+        );
+
+        Ok(Response::new(BatchUpdateProfilesResponse {
+            success_count: success_count as i32,
+            failure_count,
+            failed_user_ids,
+        }))
     }
 
     async fn get_user_interests(
         &self,
-        request: Request<ranking_proto::GetUserInterestsRequest>,
-    ) -> Result<Response<ranking_proto::GetUserInterestsResponse>, Status> {
+        request: Request<GetUserInterestsRequest>,
+    ) -> Result<Response<GetUserInterestsResponse>, Status> {
         let req = request.into_inner();
+        let limit = if req.limit > 0 { req.limit as usize } else { 50 };
+        let min_weight = if req.min_weight > 0.0 { req.min_weight } else { 0.0 };
+
         info!(
-            "GetUserInterests request: user_id={}, limit={}",
-            req.user_id, req.limit
+            "GetUserInterests request: user_id={}, limit={}, min_weight={}",
+            req.user_id, limit, min_weight
         );
 
-        // TODO: Implement with ProfileUpdater
-        Err(Status::unimplemented(
-            "GetUserInterests not yet implemented - requires ProfileUpdater integration",
-        ))
+        // Parse user ID
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
+
+        // Get profile updater
+        let updater_guard = self.profile_updater.read().await;
+        let updater = updater_guard.as_ref().ok_or_else(|| {
+            Status::unavailable("ProfileUpdater not initialized")
+        })?;
+
+        // Load profile
+        match updater.load_profile_from_cache(user_id).await {
+            Ok(Some(profile)) => {
+                // Filter by min_weight and take limit
+                let interests: Vec<ProtoInterest> = profile
+                    .interests
+                    .into_iter()
+                    .filter(|i| i.weight >= min_weight as f64)
+                    .take(limit)
+                    .map(to_proto_interest)
+                    .collect();
+
+                let total_count = interests.len() as i32;
+                info!(user_id = %user_id, count = total_count, "User interests retrieved");
+
+                Ok(Response::new(GetUserInterestsResponse {
+                    interests,
+                    total_count,
+                }))
+            }
+            Ok(None) => {
+                Err(Status::not_found(format!(
+                    "Profile not found for user {}",
+                    user_id
+                )))
+            }
+            Err(e) => {
+                error!(user_id = %user_id, error = %e, "Failed to load interests");
+                Err(Status::internal(format!("Failed to load interests: {}", e)))
+            }
+        }
     }
 
     async fn get_personalized_recommendations(
         &self,
-        request: Request<ranking_proto::GetPersonalizedRecommendationsRequest>,
-    ) -> Result<Response<ranking_proto::GetPersonalizedRecommendationsResponse>, Status> {
+        request: Request<GetPersonalizedRecommendationsRequest>,
+    ) -> Result<Response<GetPersonalizedRecommendationsResponse>, Status> {
         let req = request.into_inner();
+        let count = if req.count > 0 { req.count as usize } else { 10 };
+
         info!(
             "GetPersonalizedRecommendations request: user_id={}, topic_count={}, count={}",
             req.user_id,
             req.available_topics.len(),
-            req.count
+            count
         );
 
-        // TODO: Implement with LlmProfileAnalyzer
-        Err(Status::unimplemented(
-            "GetPersonalizedRecommendations not yet implemented - requires LLM integration",
-        ))
+        // Parse user ID
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
+
+        // Validate input
+        if req.available_topics.is_empty() {
+            return Err(Status::invalid_argument("available_topics cannot be empty"));
+        }
+
+        // Get LLM analyzer
+        let analyzer_guard = self.llm_analyzer.read().await;
+        let analyzer = analyzer_guard.as_ref().ok_or_else(|| {
+            Status::unavailable("LLM analyzer not initialized. Enable LLM in config.")
+        })?;
+
+        // Get profile updater
+        let updater_guard = self.profile_updater.read().await;
+        let updater = updater_guard.as_ref().ok_or_else(|| {
+            Status::unavailable("ProfileUpdater not initialized")
+        })?;
+
+        // Load profile
+        let profile = match updater.load_profile_from_cache(user_id).await {
+            Ok(Some(profile)) => profile,
+            Ok(None) => {
+                return Err(Status::not_found(format!(
+                    "Profile not found for user {}. Update profile first.",
+                    user_id
+                )));
+            }
+            Err(e) => {
+                return Err(Status::internal(format!("Failed to load profile: {}", e)));
+            }
+        };
+
+        // Generate persona first (cached)
+        let persona = analyzer.analyze_profile(&profile).await.map_err(|e| {
+            Status::internal(format!("Failed to analyze profile: {}", e))
+        })?;
+
+        // Generate recommendations
+        match analyzer
+            .generate_recommendations(&persona, &req.available_topics, count)
+            .await
+        {
+            Ok(recs) => {
+                let recommendations: Vec<ProtoRecommendation> =
+                    recs.into_iter().map(to_proto_recommendation).collect();
+
+                info!(
+                    user_id = %user_id,
+                    count = recommendations.len(),
+                    "Personalized recommendations generated"
+                );
+
+                Ok(Response::new(GetPersonalizedRecommendationsResponse {
+                    recommendations,
+                }))
+            }
+            Err(e) => {
+                error!(user_id = %user_id, error = %e, "Failed to generate recommendations");
+                Err(Status::internal(format!(
+                    "Failed to generate recommendations: {}",
+                    e
+                )))
+            }
+        }
     }
 }
 
@@ -528,5 +837,103 @@ fn to_proto_recall_stats(stats: RecallStats) -> ProtoRecallStats {
         personalized_recall_count: stats.personalized_recall_count,
         total_candidates: stats.total_candidates,
         final_count: stats.final_count,
+    }
+}
+
+// ============================================
+// Profile Conversion Helpers
+// ============================================
+
+use crate::services::profile_builder::{
+    BehaviorPattern, ContentRecommendation, InterestTag, UserPersona, UserProfile,
+};
+
+/// Convert internal UserProfile to proto format
+fn to_proto_profile(profile: UserProfile) -> ProtoProfile {
+    ProtoProfile {
+        user_id: profile.user_id.to_string(),
+        interests: profile.interests.into_iter().map(to_proto_interest).collect(),
+        behavior: Some(to_proto_behavior(profile.behavior)),
+        created_at: profile.created_at.to_rfc3339(),
+        updated_at: profile.updated_at.to_rfc3339(),
+    }
+}
+
+/// Convert internal InterestTag to proto format
+fn to_proto_interest(tag: InterestTag) -> ProtoInterest {
+    ProtoInterest {
+        tag: tag.tag,
+        weight: tag.weight as f32,
+        interaction_count: tag.interaction_count as i32,
+        last_interaction: tag.last_interaction.to_rfc3339(),
+    }
+}
+
+/// Convert internal BehaviorPattern to proto format
+fn to_proto_behavior(behavior: BehaviorPattern) -> ProtoBehavior {
+    ProtoBehavior {
+        active_hours_bitmap: behavior.active_hours_bitmap,
+        peak_hours: behavior.peak_hours.into_iter().map(|h| h as i32).collect(),
+        avg_session_length_seconds: behavior.avg_session_length as f32,
+        preferred_video_length: behavior.preferred_video_length.as_str().to_string(),
+        engagement_rate: behavior.engagement_rate as f32,
+    }
+}
+
+/// Convert internal UserPersona to proto format
+fn to_proto_persona(persona: UserPersona) -> ProtoPersona {
+    ProtoPersona {
+        user_id: persona.user_id.to_string(),
+        description: persona.description,
+        primary_interests: persona.primary_interests,
+        consumption_patterns: Some(ProtoConsumption {
+            preferred_length: persona.consumption_patterns.preferred_length,
+            activity_pattern: persona.consumption_patterns.activity_pattern,
+            engagement_style: persona.consumption_patterns.engagement_style,
+            discovery_preference: persona.consumption_patterns.discovery_preference,
+        }),
+        predicted_preferences: Some(ProtoPreferences {
+            likely_interests: persona.predicted_preferences.likely_interests,
+            disliked_topics: persona.predicted_preferences.disliked_topics,
+            optimal_delivery_hours: persona
+                .predicted_preferences
+                .optimal_delivery_hours
+                .into_iter()
+                .map(|h| h as i32)
+                .collect(),
+            format_preferences: persona.predicted_preferences.format_preferences,
+        }),
+        segment: persona.segment.as_str().to_string(),
+        confidence: persona.confidence,
+        generated_at: persona.generated_at.to_rfc3339(),
+        model_used: persona.model_used,
+    }
+}
+
+/// Convert internal ContentRecommendation to proto format
+fn to_proto_recommendation(rec: ContentRecommendation) -> ProtoRecommendation {
+    ProtoRecommendation {
+        topic: rec.topic,
+        relevance_score: rec.relevance_score,
+        reason: rec.reason,
+    }
+}
+
+/// Extension trait for VideoLengthPreference
+trait VideoLengthExt {
+    fn as_str(&self) -> &'static str;
+}
+
+impl VideoLengthExt for crate::services::profile_builder::VideoLengthPreference {
+    fn as_str(&self) -> &'static str {
+        use crate::services::profile_builder::VideoLengthPreference;
+        match self {
+            VideoLengthPreference::VeryShort => "very_short",
+            VideoLengthPreference::Short => "short",
+            VideoLengthPreference::Medium => "medium",
+            VideoLengthPreference::Long => "long",
+            VideoLengthPreference::VeryLong => "very_long",
+            VideoLengthPreference::Mixed => "mixed",
+        }
     }
 }

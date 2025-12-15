@@ -14,4 +14,4 @@
 
 pub mod profile_batch;
 
-pub use profile_batch::{ProfileBatchJob, ProfileBatchConfig};
+pub use profile_batch::{run_profile_batch_job, ProfileBatchJob, ProfileBatchConfig};
