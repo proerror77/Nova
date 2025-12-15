@@ -131,17 +131,10 @@ class ChatViewModel: ObservableObject {
                 guard typingData.conversationId == self.conversationId,
                       typingData.userId != self.currentUserId else { return }
 
-                self.isOtherUserTyping = typingData.isTyping
-                self.typingUserName = typingData.username
-
-                // Auto-hide typing indicator after 3 seconds (server TTL)
                 if typingData.isTyping {
-                    self.typingTimer?.invalidate()
-                    self.typingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
-                        Task { @MainActor in
-                            self.isOtherUserTyping = false
-                        }
-                    }
+                    self.startTypingIndicator(userName: typingData.username)
+                } else {
+                    self.stopTypingIndicator()
                 }
             }
         }
@@ -197,16 +190,10 @@ class ChatViewModel: ObservableObject {
                 guard conversationId == self.conversationId else { return }
                 guard !userIds.contains(self.currentUserId) else { return }
 
-                self.isOtherUserTyping = !userIds.isEmpty
-
-                // 3 秒後自動隱藏
                 if !userIds.isEmpty {
-                    self.typingTimer?.invalidate()
-                    self.typingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
-                        Task { @MainActor in
-                            self.isOtherUserTyping = false
-                        }
-                    }
+                    self.startTypingIndicator()
+                } else {
+                    self.stopTypingIndicator()
                 }
             }
         }
@@ -458,12 +445,45 @@ class ChatViewModel: ObservableObject {
         chatService.sendTypingStop(conversationId: conversationId)
     }
 
+    /// Start typing indicator with auto-hide timer
+    /// - Parameter userName: Optional username to display
+    private func startTypingIndicator(userName: String? = nil) {
+        isOtherUserTyping = true
+        if let userName = userName {
+            typingUserName = userName
+        }
+
+        // Cancel existing timer and start new one
+        typingTimer?.invalidate()
+        typingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.isOtherUserTyping = false
+            }
+        }
+    }
+
+    /// Stop typing indicator and cancel timer
+    private func stopTypingIndicator() {
+        isOtherUserTyping = false
+        typingTimer?.invalidate()
+        typingTimer = nil
+    }
+
     // MARK: - Cleanup
 
     /// Disconnect WebSocket when view disappears
     func cleanup() {
         chatService.disconnectWebSocket()
+        chatService.onMessageReceived = nil
+        chatService.onTypingIndicator = nil
+        chatService.onReadReceipt = nil
+        MatrixBridgeService.shared.onMatrixMessage = nil
+        MatrixBridgeService.shared.onTypingIndicator = nil
         typingTimer?.invalidate()
         typingTimer = nil
+    }
+
+    deinit {
+        typingTimer?.invalidate()
     }
 }

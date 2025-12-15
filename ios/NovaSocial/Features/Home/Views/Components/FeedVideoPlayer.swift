@@ -111,7 +111,11 @@ struct FeedVideoPlayer: View {
             viewModel.prepare()
         }
         .onDisappear {
-            viewModel.pause()
+            // Cancel controls timer to prevent memory leak
+            controlsTimer?.invalidate()
+            controlsTimer = nil
+            // Cleanup viewModel resources
+            viewModel.cleanup()
         }
         .onChange(of: isVisible) { _, newValue in
             if newValue {
@@ -272,7 +276,7 @@ struct FeedVideoPlayer: View {
 final class FeedVideoPlayerViewModel: ObservableObject {
     let url: URL
     let autoPlay: Bool
-    
+
     @Published private(set) var player: AVPlayer?
     @Published private(set) var isPlaying = false
     @Published private(set) var isLoading = true
@@ -280,9 +284,10 @@ final class FeedVideoPlayerViewModel: ObservableObject {
     @Published private(set) var isMuted: Bool
     @Published private(set) var currentTime: TimeInterval = 0
     @Published private(set) var duration: TimeInterval = 0
-    
+
     private var timeObserver: Any?
     private var statusObserver: NSKeyValueObservation?
+    private var endTimeObserver: NSObjectProtocol?
     
     init(url: URL, autoPlay: Bool = true, isMuted: Bool = true) {
         self.url = url
@@ -324,8 +329,8 @@ final class FeedVideoPlayerViewModel: ObservableObject {
             }
         }
         
-        // Loop video
-        NotificationCenter.default.addObserver(
+        // Loop video - store observer reference for cleanup
+        endTimeObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: playerItem,
             queue: .main
@@ -335,7 +340,7 @@ final class FeedVideoPlayerViewModel: ObservableObject {
                 self?.player?.play()
             }
         }
-        
+
         self.player = avPlayer
     }
     
@@ -356,13 +361,26 @@ final class FeedVideoPlayerViewModel: ObservableObject {
     
     func cleanup() {
         pause()
+
+        // Remove time observer
         if let observer = timeObserver {
             player?.removeTimeObserver(observer)
+            timeObserver = nil
         }
+
+        // Remove NotificationCenter observer to prevent memory leak
+        if let observer = endTimeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            endTimeObserver = nil
+        }
+
+        // Invalidate status observer
         statusObserver?.invalidate()
+        statusObserver = nil
+
         player = nil
     }
-    
+
 }
 
 // MARK: - Video Player Layer (UIViewRepresentable)
