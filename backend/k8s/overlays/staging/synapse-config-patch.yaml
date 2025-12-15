@@ -10,7 +10,7 @@ data:
     # Synapse homeserver configuration - STAGING with OIDC
     # Auto-generated for Nova internal messaging
 
-    server_name: "staging.nova.app"
+    server_name: "staging.gcp.icered.com"
     pid_file: /data/homeserver.pid
 
     # Listeners
@@ -49,17 +49,17 @@ data:
     registration_shared_secret_path: "/secrets/registration_shared_secret"
 
     # OIDC SSO Configuration - disabled until DNS is configured
-    # TODO: Re-enable OIDC once id.staging.nova.app DNS is configured
+    # TODO: Re-enable OIDC once id.staging.gcp.icered.com DNS is configured
     # oidc_providers:
     #   - idp_id: nova
     #     idp_name: "Nova"
-    #     issuer: "https://id.staging.nova.app/"
+    #     issuer: "https://id.staging.gcp.icered.com/"
     #     ...
 
     # SSO settings (disabled without OIDC)
     # sso:
     #   client_whitelist:
-    #     - "https://matrix.staging.nova.app/"
+    #     - "https://matrix.staging.gcp.icered.com/"
     #     - "nova-staging://"
 
     # Session configuration for OIDC users

@@ -605,7 +605,7 @@ Return ONLY valid JSON, no other text."#,
             interests = interests_str,
             active_hours = behavior.active_hours_bitmap,
             peak_hours = peak_hours,
-            session_length = behavior.avg_session_length.as_secs_f64() / 60.0,
+            session_length = behavior.avg_session_length / 60.0,
             video_pref = behavior.preferred_video_length.as_str(),
             engagement_rate = behavior.engagement_rate * 100.0,
         )
@@ -699,7 +699,7 @@ impl VideoLengthExt for super::behavior_builder::VideoLengthPreference {
             super::behavior_builder::VideoLengthPreference::Medium => "medium (1-3min)",
             super::behavior_builder::VideoLengthPreference::Long => "long (3-10min)",
             super::behavior_builder::VideoLengthPreference::VeryLong => "very_long (>10min)",
-            super::behavior_builder::VideoLengthPreference::NoPreference => "no_preference",
+            super::behavior_builder::VideoLengthPreference::Mixed => "mixed (no clear preference)",
         }
     }
 }

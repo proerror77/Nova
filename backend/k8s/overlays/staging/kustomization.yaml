@@ -82,30 +82,72 @@ patches:
         value: "true"
       - op: replace
         path: /data/MATRIX_SERVICE_USER
-        value: "@nova-service:staging.nova.app"
+        value: "@nova-service:staging.gcp.icered.com"
       - op: replace
         path: /data/MATRIX_DEVICE_NAME
         value: "nova-realtime-chat-service-staging"
       - op: replace
         path: /data/MATRIX_SERVER_NAME
-        value: "staging.nova.app"
+        value: "staging.gcp.icered.com"
       - op: add
         path: /data/MATRIX_OIDC_ENABLED
         value: "true"
       - op: add
         path: /data/MATRIX_OIDC_ISSUER
-        value: "https://id.staging.nova.app"
+        value: "https://id.staging.gcp.icered.com"
       - op: add
         path: /data/MATRIX_OIDC_CLIENT_ID
         value: "synapse-nova-staging"
       - op: add
         path: /data/ZITADEL_EXTERNAL_DOMAIN
-        value: "id.staging.nova.app"
+        value: "id.staging.gcp.icered.com"
 
-# Staging image tags
+# Staging image tags - use full GAR registry path
 images:
+  # Backend services - remap to GAR
+  - name: nova-analytics-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/analytics-service
+    newTag: latest
+  - name: nova-content-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/content-service
+    newTag: latest
+  - name: nova-feed-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/feed-service
+    newTag: latest
+  - name: nova-graph-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/graph-service
+    newTag: latest
+  - name: nova-graphql-gateway
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/graphql-gateway
+    newTag: latest
+  - name: nova-identity-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/identity-service
+    newTag: latest
+  - name: nova-media-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/media-service
+    newTag: latest
+  - name: nova-notification-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/notification-service
+    newTag: latest
+  - name: nova-ranking-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/ranking-service
+    newTag: latest
   - name: nova-realtime-chat-service
-    newTag: staging
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/realtime-chat-service
+    newTag: latest
+  - name: nova-search-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/search-service
+    newTag: latest
+  - name: nova-social-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/social-service
+    newTag: latest
+  - name: nova-trust-safety-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/trust-safety-service
+    newTag: latest
+  - name: nova-streaming-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/streaming-service
+    newTag: latest
+  # Third-party services
   - name: matrixdotorg/synapse
     newTag: v1.98.0
   - name: ghcr.io/zitadel/zitadel

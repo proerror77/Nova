@@ -1306,8 +1306,8 @@ private class RoomListEntriesListener: RoomListEntriesListenerProtocol {
 
 struct MatrixConfiguration {
     /// Nova staging Matrix homeserver URL
-    /// Note: Updated to use public domain (matrix.staging.nova.app) for SSO flow
-    static let stagingHomeserver = "https://matrix.staging.nova.app"
+    /// Note: Updated to use public domain (matrix.staging.gcp.icered.com) for SSO flow
+    static let stagingHomeserver = "https://matrix.staging.gcp.icered.com"
 
     /// Nova production Matrix homeserver URL
     static let productionHomeserver = "https://matrix.nova.app"

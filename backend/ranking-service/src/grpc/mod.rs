@@ -403,6 +403,107 @@ impl RankingService for RankingServiceImpl {
             stats: Some(to_proto_recall_stats(stats)),
         }))
     }
+
+    // ============================================
+    // User Profile APIs (用戶畫像 API)
+    // ============================================
+
+    async fn get_user_profile(
+        &self,
+        request: Request<ranking_proto::GetUserProfileRequest>,
+    ) -> Result<Response<ranking_proto::GetUserProfileResponse>, Status> {
+        let req = request.into_inner();
+        info!("GetUserProfile request: user_id={}", req.user_id);
+
+        // TODO: Implement with ProfileUpdater
+        // For now, return unimplemented
+        Err(Status::unimplemented(
+            "GetUserProfile not yet implemented - requires ProfileUpdater integration",
+        ))
+    }
+
+    async fn update_user_profile(
+        &self,
+        request: Request<ranking_proto::UpdateUserProfileRequest>,
+    ) -> Result<Response<ranking_proto::UpdateUserProfileResponse>, Status> {
+        let req = request.into_inner();
+        info!(
+            "UpdateUserProfile request: user_id={}, force_rebuild={}",
+            req.user_id, req.force_rebuild
+        );
+
+        // TODO: Implement with ProfileUpdater
+        Err(Status::unimplemented(
+            "UpdateUserProfile not yet implemented - requires ProfileUpdater integration",
+        ))
+    }
+
+    async fn get_user_persona(
+        &self,
+        request: Request<ranking_proto::GetUserPersonaRequest>,
+    ) -> Result<Response<ranking_proto::GetUserPersonaResponse>, Status> {
+        let req = request.into_inner();
+        info!(
+            "GetUserPersona request: user_id={}, regenerate={}",
+            req.user_id, req.regenerate
+        );
+
+        // TODO: Implement with LlmProfileAnalyzer
+        Err(Status::unimplemented(
+            "GetUserPersona not yet implemented - requires LLM integration",
+        ))
+    }
+
+    async fn batch_update_profiles(
+        &self,
+        request: Request<ranking_proto::BatchUpdateProfilesRequest>,
+    ) -> Result<Response<ranking_proto::BatchUpdateProfilesResponse>, Status> {
+        let req = request.into_inner();
+        info!(
+            "BatchUpdateProfiles request: user_count={}, batch_size={}",
+            req.user_ids.len(),
+            req.batch_size
+        );
+
+        // TODO: Implement with ProfileBatchJob
+        Err(Status::unimplemented(
+            "BatchUpdateProfiles not yet implemented - use CronJob for batch updates",
+        ))
+    }
+
+    async fn get_user_interests(
+        &self,
+        request: Request<ranking_proto::GetUserInterestsRequest>,
+    ) -> Result<Response<ranking_proto::GetUserInterestsResponse>, Status> {
+        let req = request.into_inner();
+        info!(
+            "GetUserInterests request: user_id={}, limit={}",
+            req.user_id, req.limit
+        );
+
+        // TODO: Implement with ProfileUpdater
+        Err(Status::unimplemented(
+            "GetUserInterests not yet implemented - requires ProfileUpdater integration",
+        ))
+    }
+
+    async fn get_personalized_recommendations(
+        &self,
+        request: Request<ranking_proto::GetPersonalizedRecommendationsRequest>,
+    ) -> Result<Response<ranking_proto::GetPersonalizedRecommendationsResponse>, Status> {
+        let req = request.into_inner();
+        info!(
+            "GetPersonalizedRecommendations request: user_id={}, topic_count={}, count={}",
+            req.user_id,
+            req.available_topics.len(),
+            req.count
+        );
+
+        // TODO: Implement with LlmProfileAnalyzer
+        Err(Status::unimplemented(
+            "GetPersonalizedRecommendations not yet implemented - requires LLM integration",
+        ))
+    }
 }
 
 // Helper: 轉換為 Proto 格式

@@ -1,10 +1,10 @@
 # Matrix Well-Known Configuration for Client Auto-Discovery
 # This allows Matrix clients (including iOS app) to automatically discover
-# the homeserver configuration for staging.nova.app
+# the homeserver configuration for staging.gcp.icered.com
 #
 # Clients will fetch these from:
-#   https://staging.nova.app/.well-known/matrix/client
-#   https://staging.nova.app/.well-known/matrix/server
+#   https://staging.gcp.icered.com/.well-known/matrix/client
+#   https://staging.gcp.icered.com/.well-known/matrix/server
 
 ---
 # ConfigMap containing Matrix well-known JSON files
@@ -22,13 +22,13 @@ data:
   client: |
     {
       "m.homeserver": {
-        "base_url": "https://matrix.staging.nova.app"
+        "base_url": "https://matrix.staging.gcp.icered.com"
       },
       "m.identity_server": {
-        "base_url": "https://matrix.staging.nova.app"
+        "base_url": "https://matrix.staging.gcp.icered.com"
       },
       "org.matrix.msc3575.proxy": {
-        "url": "https://matrix.staging.nova.app"
+        "url": "https://matrix.staging.gcp.icered.com"
       }
     }
 
@@ -36,7 +36,7 @@ data:
   # Used for federation (though we have federation disabled)
   server: |
     {
-      "m.server": "matrix.staging.nova.app:443"
+      "m.server": "matrix.staging.gcp.icered.com:443"
     }
 
 ---
@@ -164,7 +164,7 @@ spec:
     app: matrix-well-known
 
 ---
-# Ingress for staging.nova.app well-known endpoints (using GCE Ingress)
+# Ingress for staging.gcp.icered.com well-known endpoints (using GCE Ingress)
 # This serves the well-known files from the main domain
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -177,7 +177,7 @@ metadata:
 spec:
   ingressClassName: gce
   rules:
-    - host: staging.nova.app
+    - host: staging.gcp.icered.com
       http:
         paths:
           - path: /.well-known/matrix/*
@@ -188,7 +188,7 @@ spec:
                 port:
                   number: 80
 ---
-# GKE Managed Certificate for staging.nova.app well-known
+# GKE Managed Certificate for staging.gcp.icered.com well-known
 apiVersion: networking.gke.io/v1
 kind: ManagedCertificate
 metadata:
@@ -196,4 +196,4 @@ metadata:
   namespace: nova-backend
 spec:
   domains:
-    - staging.nova.app
+    - staging.gcp.icered.com

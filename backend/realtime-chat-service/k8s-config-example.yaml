@@ -23,8 +23,8 @@ data:
   # Matrix Configuration (UPDATED)
   MATRIX_ENABLED: "true"
   MATRIX_HOMESERVER_URL: "http://matrix-synapse:8008"
-  MATRIX_SERVER_NAME: "staging.nova.app"
-  MATRIX_SERVICE_USER: "@nova-service:staging.nova.app"
+  MATRIX_SERVER_NAME: "staging.gcp.icered.com"
+  MATRIX_SERVICE_USER: "@nova-service:staging.gcp.icered.com"
   MATRIX_ACCESS_TOKEN: ""  # For E2EE messaging (existing)
   # MATRIX_ADMIN_TOKEN is in Secret below
 

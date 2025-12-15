@@ -9,7 +9,7 @@ metadata:
 spec:
   ingressClassName: gce
   rules:
-    - host: id.staging.nova.app
+    - host: id.staging.gcp.icered.com
       http:
         paths:
           - path: /
@@ -27,4 +27,4 @@ metadata:
   name: zitadel-staging-cert
 spec:
   domains:
-    - id.staging.nova.app
+    - id.staging.gcp.icered.com

@@ -7,7 +7,7 @@ metadata:
 data:
   zitadel.yaml: |
     # Zitadel runtime configuration - STAGING
-    ExternalDomain: "id.staging.nova.app"
+    ExternalDomain: "id.staging.gcp.icered.com"
     ExternalPort: 443
     ExternalSecure: true
 

@@ -9,7 +9,7 @@ metadata:
 spec:
   ingressClassName: gce
   rules:
-    - host: matrix.staging.nova.app
+    - host: matrix.staging.gcp.icered.com
       http:
         paths:
           - path: /
@@ -27,4 +27,4 @@ metadata:
   name: synapse-staging-cert
 spec:
   domains:
-    - matrix.staging.nova.app
+    - matrix.staging.gcp.icered.com

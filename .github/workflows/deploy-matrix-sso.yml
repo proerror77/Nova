@@ -609,7 +609,7 @@ jobs:
           echo "🧪 Testing OIDC Discovery endpoint..."
 
           # This will only work if Zitadel is externally accessible
-          curl -s --max-time 10 https://id.staging.nova.app/.well-known/openid-configuration | head -20 || \
+          curl -s --max-time 10 https://id.staging.gcp.icered.com/.well-known/openid-configuration | head -20 || \
             echo "⚠️  OIDC discovery not accessible (may need DNS/ingress setup)"
 
       - name: Deployment complete
@@ -620,8 +620,8 @@ jobs:
           echo "════════════════════════════════════════════════════"
           echo ""
           echo "Next steps:"
-          echo "1. Configure DNS for id.staging.nova.app → Zitadel Ingress"
-          echo "2. Configure DNS for matrix.staging.nova.app → Synapse Ingress"
+          echo "1. Configure DNS for id.staging.gcp.icered.com → Zitadel Ingress"
+          echo "2. Configure DNS for matrix.staging.gcp.icered.com → Synapse Ingress"
           echo "3. Access Zitadel console and configure OIDC Application"
           echo "4. Follow: backend/docs/ZITADEL_UI_SETUP_GUIDE.md"
           echo ""
