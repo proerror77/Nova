@@ -181,43 +181,29 @@ struct FeedPostCard: View {
             )
         } else if let firstUrl = post.mediaUrls.first {
             // Fallback to just showing the image if video URL is missing
-            AsyncImage(url: URL(string: firstUrl)) { phase in
-                switch phase {
-                case .success(let image):
-                    ZStack {
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(height: 500)
-                            .clipped()
-                        
-                        // Live Photo badge
-                        VStack {
-                            HStack {
-                                LivePhotoBadge()
-                                Spacer()
-                            }
+            CachedAsyncImage(url: URL(string: firstUrl)) { image in
+                ZStack {
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(height: 500)
+                        .clipped()
+
+                    // Live Photo badge
+                    VStack {
+                        HStack {
+                            LivePhotoBadge()
                             Spacer()
                         }
-                        .padding(12)
+                        Spacer()
                     }
-                case .empty:
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(height: 500)
-                        .overlay(ProgressView().tint(.white))
-                case .failure:
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(height: 500)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .font(.system(size: 30))
-                                .foregroundColor(.white.opacity(0.5))
-                        )
-                @unknown default:
-                    EmptyView()
+                    .padding(12)
                 }
+            } placeholder: {
+                Rectangle()
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(height: 500)
+                    .overlay(ProgressView().tint(.white))
             }
         }
     }
@@ -228,30 +214,17 @@ struct FeedPostCard: View {
         VStack(spacing: 8) {
             TabView(selection: $currentImageIndex) {
                 ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
-                    AsyncImage(url: URL(string: imageUrl)) { phase in
-                        switch phase {
-                        case .empty:
-                            Rectangle()
-                                .fill(DesignTokens.placeholderColor)
-                                .overlay(
-                                    ProgressView()
-                                        .tint(.white)
-                                )
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        case .failure:
-                            Rectangle()
-                                .fill(DesignTokens.placeholderColor)
-                                .overlay(
-                                    Image(systemName: "photo")
-                                        .font(.system(size: 30))
-                                        .foregroundColor(.white.opacity(0.5))
-                                )
-                        @unknown default:
-                            EmptyView()
-                        }
+                    CachedAsyncImage(url: URL(string: imageUrl)) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        Rectangle()
+                            .fill(DesignTokens.placeholderColor)
+                            .overlay(
+                                ProgressView()
+                                    .tint(.white)
+                            )
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
@@ -312,30 +285,17 @@ struct FeedPostCard: View {
                 ? post.thumbnailUrls[index]
                 : mediaUrl
 
-            AsyncImage(url: URL(string: displayUrl)) { phase in
-                switch phase {
-                case .empty:
-                    Rectangle()
-                        .fill(DesignTokens.placeholderColor)
-                        .overlay(
-                            ProgressView()
-                                .tint(.white)
-                        )
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    Rectangle()
-                        .fill(DesignTokens.placeholderColor)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .font(.system(size: 30))
-                                .foregroundColor(.white.opacity(0.5))
-                        )
-                @unknown default:
-                    EmptyView()
-                }
+            CachedAsyncImage(url: URL(string: displayUrl)) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+            } placeholder: {
+                Rectangle()
+                    .fill(DesignTokens.placeholderColor)
+                    .overlay(
+                        ProgressView()
+                            .tint(.white)
+                    )
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()

@@ -90,7 +90,7 @@ struct ProfilePostCard: View {
     @ViewBuilder
     private var avatarView: some View {
         if let urlString = avatarUrl, let url = URL(string: urlString) {
-            AsyncImage(url: url) { image in
+            CachedAsyncImage(url: url) { image in
                 image
                     .resizable()
                     .scaledToFill()
@@ -112,22 +112,15 @@ struct ProfilePostCard: View {
     private var imageSection: some View {
         Group {
             if let mediaUrls = post.mediaUrls, let firstUrl = mediaUrls.first, let url = URL(string: firstUrl) {
-                // 显示真实图片
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        imagePlaceholder
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(height: 180)
-                            .clipped()
-                    case .failure:
-                        imagePlaceholder
-                    @unknown default:
-                        imagePlaceholder
-                    }
+                // 显示真实图片 (使用缓存)
+                CachedAsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(height: 180)
+                        .clipped()
+                } placeholder: {
+                    imagePlaceholder
                 }
                 .frame(height: 180)
             } else {

@@ -191,27 +191,14 @@ struct PostDetailView: View {
                 // Image Carousel
                 TabView(selection: $currentImageIndex) {
                     ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
-                        AsyncImage(url: URL(string: imageUrl)) { phase in
-                            switch phase {
-                            case .empty:
-                                Rectangle()
-                                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                    .overlay(ProgressView().tint(.white))
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                            case .failure:
-                                Rectangle()
-                                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                    .overlay(
-                                        Image(systemName: "photo")
-                                            .font(.system(size: 40))
-                                            .foregroundColor(.white.opacity(0.5))
-                                    )
-                            @unknown default:
-                                EmptyView()
-                            }
+                        CachedAsyncImage(url: URL(string: imageUrl)) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        } placeholder: {
+                            Rectangle()
+                                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                .overlay(ProgressView().tint(.white))
                         }
                         .frame(maxWidth: .infinity)
                         .aspectRatio(3/4, contentMode: .fill)

@@ -138,17 +138,12 @@ struct FeedVideoPlayer: View {
     private var thumbnailView: some View {
         Group {
             if let thumbnailUrl = thumbnailUrl {
-                AsyncImage(url: thumbnailUrl) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure, .empty:
-                        placeholderView
-                    @unknown default:
-                        placeholderView
-                    }
+                CachedAsyncImage(url: thumbnailUrl) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    placeholderView
                 }
             } else {
                 placeholderView
