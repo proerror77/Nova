@@ -18,11 +18,11 @@ data:
   NEO4J_URI: bolt://neo4j:7687
   NEO4J_USER: neo4j
   USER_SERVICE_GRPC_URL: https://identity-service.nova-staging.svc.cluster.local:50051
-  RANKING_SERVICE_GRPC_URL: https://ranking-service.nova-staging.svc.cluster.local:9094
+  RANKING_SERVICE_GRPC_URL: https://ranking-service.nova-staging.svc.cluster.local:9011
   GRPC_IDENTITY_SERVICE_URL: https://identity-service.nova-staging.svc.cluster.local:50051
   GRPC_USER_SERVICE_URL: https://identity-service.nova-staging.svc.cluster.local:50051
   GRPC_CONTENT_SERVICE_URL: https://content-service.nova-staging.svc.cluster.local:9080
-  GRPC_RANKING_SERVICE_URL: https://ranking-service.nova-staging.svc.cluster.local:9094
+  GRPC_RANKING_SERVICE_URL: https://ranking-service.nova-staging.svc.cluster.local:9011
   GRPC_GRAPH_SERVICE_URL: https://graph-service.nova-staging.svc.cluster.local:9080
   GRPC_TLS_ENABLED: "true"
   GRPC_TLS_CA_CERT_PATH: /etc/nova/certs/ca.crt

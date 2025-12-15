@@ -146,8 +146,8 @@ final class AuthenticationManagerTests: XCTestCase {
                 refreshCallCount += 1
                 countLock.unlock()
 
-                // Simulate network delay
-                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                // Simulate network delay (synchronous)
+                Thread.sleep(forTimeInterval: 0.1)
 
                 // Return success response
                 let response = TestFixtures.makeAuthResponse()

@@ -102,7 +102,7 @@ spec:
         - name: GRPC_CHAT_SERVICE_URL
           value: "https://realtime-chat-service.nova-staging.svc.cluster.local:9095"
         - name: GRPC_RANKING_SERVICE_URL
-          value: "https://ranking-service.nova-staging.svc.cluster.local:9094"
+          value: "https://ranking-service.nova-staging.svc.cluster.local:9011"
         - name: GRPC_TRUST_SAFETY_SERVICE_URL
           value: "https://trust-safety-service.nova-staging.svc.cluster.local:50056"
 

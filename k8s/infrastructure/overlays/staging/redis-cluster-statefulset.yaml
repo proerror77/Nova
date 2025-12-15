@@ -1,7 +1,9 @@
-# Redis Cluster StatefulSet for Nova Staging
-# 3-node Redis Cluster with persistence for caching, sessions, and rate limiting
+# Redis Standalone for Nova Staging
+# Single-node Redis with persistence for caching, sessions, and rate limiting
 # Used by: notification-service, ranking-service, realtime-chat-service
-# Ports: 6379 (client), 16379 (gossip protocol)
+# Port: 6379
+# NOTE: Staging uses standalone mode (replicas: 1) for simplicity.
+#       For production, consider Redis Cluster with 3+ nodes.
 
 ---
 apiVersion: v1
@@ -13,26 +15,30 @@ metadata:
     app: redis-cluster
 data:
   redis.conf: |
-    # Redis Cluster configuration
+    # Redis Standalone configuration for Staging
     port 6379
-    cluster-enabled yes
-    cluster-config-file /var/lib/redis/nodes.conf
-    cluster-node-timeout 15000
+    bind 0.0.0.0
 
-    # Persistence
+    # Disable cluster mode for single-node staging
+    cluster-enabled no
+
+    # Persistence - RDB snapshots
     save 900 1
     save 300 10
     save 60 10000
+    dbfilename dump.rdb
+    dir /var/lib/redis
 
-    # AOF persistence
+    # AOF persistence for durability
     appendonly yes
     appendfsync everysec
+    appendfilename "appendonly.aof"
 
     # Memory management
     maxmemory 450mb
     maxmemory-policy allkeys-lru
 
-    # Timeout
+    # Timeout and keepalive
     timeout 300
     tcp-keepalive 300
 
@@ -42,76 +48,45 @@ data:
     # Databases
     databases 16
 
-    # Replication
-    min-slaves-to-write 1
-    min-slaves-max-lag 10
-
-    # Security
-    requirepass ""
-
-    # Cluster specific
-    cluster-require-full-coverage no
-    cluster-migration-barrier 1
+    # Security (no password for staging)
+    # For production, use: requirepass <strong-password>
+    protected-mode no
 
   redis-init.sh: |
     #!/bin/bash
     set -e
 
-    echo "Redis Cluster Initialization - $(date)"
+    echo "Redis Standalone Initialization - $(date)"
     echo "========================================"
 
-    REDIS_HOME="/var/lib/redis"
-    CLUSTER_NODES=3
+    REDIS_HOST="redis-cluster-0.redis-cluster-headless.nova-staging.svc.cluster.local"
 
-    # Wait for all pods to be ready
-    echo "Waiting for all Redis pods to be ready..."
-    for i in $(seq 0 $((CLUSTER_NODES - 1))); do
-      POD="redis-cluster-$i"
-      echo "Waiting for $POD..."
+    # Wait for Redis to be ready
+    echo "Waiting for Redis to be ready..."
+    for retry in $(seq 1 30); do
+      if redis-cli -h "$REDIS_HOST" -p 6379 ping 2>/dev/null | grep -q PONG; then
+        echo "✓ Redis is ready"
+        break
+      fi
 
-      for retry in $(seq 1 30); do
-        if redis-cli -h "$POD.redis-cluster-headless.nova-staging.svc.cluster.local" -p 6379 ping 2>/dev/null | grep -q PONG; then
-          echo "✓ $POD is ready"
-          break
-        fi
-
-        if [ $retry -eq 30 ]; then
-          echo "❌ $POD timeout"
-          exit 1
-        fi
-
-        echo "  Attempt $retry/30..."
-        sleep 1
-      done
-    done
-
-    echo ""
-    echo "All pods ready. Creating cluster topology..."
-
-    # Build node list
-    NODES=""
-    for i in $(seq 0 $((CLUSTER_NODES - 1))); do
-      NODE_IP=$(getent hosts redis-cluster-$i.redis-cluster-headless.nova-staging.svc.cluster.local | awk '{print $1}')
-      if [ -z "$NODE_IP" ]; then
-        echo "Failed to resolve redis-cluster-$i hostname"
+      if [ $retry -eq 30 ]; then
+        echo "❌ Redis timeout"
         exit 1
       fi
-      NODES="$NODES $NODE_IP:6379"
+
+      echo "  Attempt $retry/30..."
+      sleep 2
     done
-
-    echo "Nodes: $NODES"
-
-    # Create cluster
-    echo "Creating Redis Cluster..."
-    redis-cli --cluster create $NODES --cluster-replicas 1 --cluster-yes || true
 
     echo ""
     echo "========================================"
-    echo "✅ Redis Cluster Initialization Complete"
-    echo "Cluster Info:"
-    redis-cli -h redis-cluster-0.redis-cluster-headless.nova-staging.svc.cluster.local -p 6379 cluster info
-    echo "Cluster Nodes:"
-    redis-cli -h redis-cluster-0.redis-cluster-headless.nova-staging.svc.cluster.local -p 6379 cluster nodes
+    echo "✅ Redis Initialization Complete"
+    echo ""
+    echo "Redis Info:"
+    redis-cli -h "$REDIS_HOST" -p 6379 INFO server | head -10
+    echo ""
+    echo "Memory Info:"
+    redis-cli -h "$REDIS_HOST" -p 6379 INFO memory | grep -E "used_memory_human|maxmemory_human"
 
 ---
 apiVersion: v1
@@ -130,10 +105,6 @@ spec:
   - name: client
     port: 6379
     targetPort: 6379
-    protocol: TCP
-  - name: gossip
-    port: 16379
-    targetPort: 16379
     protocol: TCP
 
 ---
@@ -207,9 +178,6 @@ spec:
         ports:
         - name: client
           containerPort: 6379
-          protocol: TCP
-        - name: gossip
-          containerPort: 16379
           protocol: TCP
 
         env:
@@ -294,11 +262,105 @@ spec:
           storage: 10Gi
 
 ---
-# Redis Cluster initialization Job
-# NOTE: 在 nova-staging 環境中，Redis Cluster 已經手動初始化完成並驗證
-# cluster_state:ok。為了避免重複初始化導致 Job 失敗與 Pod Error 噪音，
-# 這裡暫時不自動建立 redis-cluster-init Job。如需在新環境初始化，請參考
-# STAGING_DEPLOYMENT_GUIDE.md 中的步驟手動執行。
+# Redis initialization Job - verifies Redis is ready and performs health check
+# This Job is idempotent and can be safely re-run
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: redis-init
+  namespace: nova-staging
+  labels:
+    app: redis-cluster
+    component: init
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: redis-init
+    spec:
+      restartPolicy: Never
+      initContainers:
+      - name: wait-for-redis
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for Redis StatefulSet to be ready..."
+          for i in $(seq 1 60); do
+            if nc -z redis-cluster-0.redis-cluster-headless.nova-staging.svc.cluster.local 6379 2>/dev/null; then
+              echo "✓ Redis port 6379 is open"
+              exit 0
+            fi
+            echo "  Attempt $i/60, retrying..."
+            sleep 2
+          done
+          echo "❌ Redis is not ready"
+          exit 1
+      containers:
+      - name: redis-init
+        image: redis:7-alpine
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "🔴 Redis Initialization - $(date)"
+          echo "========================================"
+
+          REDIS_HOST="redis-cluster-0.redis-cluster-headless.nova-staging.svc.cluster.local"
+
+          # Verify Redis is responding
+          echo "Verifying Redis connection..."
+          if ! redis-cli -h "$REDIS_HOST" -p 6379 ping | grep -q PONG; then
+            echo "❌ Redis is not responding to PING"
+            exit 1
+          fi
+          echo "✓ Redis PING successful"
+
+          # Check Redis mode (should be standalone, not cluster)
+          echo ""
+          echo "Checking Redis mode..."
+          MODE=$(redis-cli -h "$REDIS_HOST" -p 6379 INFO cluster 2>/dev/null | grep cluster_enabled | cut -d: -f2 | tr -d '\r')
+          if [ "$MODE" = "1" ]; then
+            echo "⚠️  Warning: Redis is running in cluster mode but staging expects standalone"
+          else
+            echo "✓ Redis is running in standalone mode (expected for staging)"
+          fi
+
+          # Display Redis info
+          echo ""
+          echo "========================================"
+          echo "📊 Redis Server Info:"
+          redis-cli -h "$REDIS_HOST" -p 6379 INFO server | grep -E "redis_version|os:|arch_bits|process_id|uptime"
+
+          echo ""
+          echo "💾 Memory Info:"
+          redis-cli -h "$REDIS_HOST" -p 6379 INFO memory | grep -E "used_memory_human|maxmemory_human|mem_fragmentation"
+
+          echo ""
+          echo "💿 Persistence Info:"
+          redis-cli -h "$REDIS_HOST" -p 6379 INFO persistence | grep -E "rdb_|aof_"
+
+          echo ""
+          echo "📈 Stats:"
+          redis-cli -h "$REDIS_HOST" -p 6379 INFO stats | grep -E "total_connections|instantaneous_ops|keyspace"
+
+          echo ""
+          echo "========================================"
+          echo "✅ Redis Initialization Complete"
+          echo "Redis is ready to accept connections at:"
+          echo "  - redis-cluster.nova-staging.svc.cluster.local:6379"
+          echo "  - redis-cluster-0.redis-cluster-headless.nova-staging.svc.cluster.local:6379"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
 
 ---
 # Prometheus ServiceMonitor for Redis metrics (optional)
@@ -315,5 +377,5 @@ data:
     exec redis_exporter \
       -redis.addr=redis-cluster-0.redis-cluster-headless.nova-staging.svc.cluster.local:6379 \
       -redis.password="" \
-      -namespace=redis_cluster \
+      -namespace=redis \
       -check-single-stream
