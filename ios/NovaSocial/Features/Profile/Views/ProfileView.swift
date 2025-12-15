@@ -18,12 +18,12 @@ struct ProfileView: View {
     @State private var showAccountSwitcher = false  // 账户切换弹窗
     @State private var showMyQRCode = false  // 我的二维码弹窗
 
-    // Access AvatarManager
-    @StateObject private var avatarManager = AvatarManager.shared
+    // Access AvatarManager - use singleton directly instead of @StateObject to avoid memory duplication
+    private var avatarManager: AvatarManager { AvatarManager.shared }
 
     // Access UserPostsManager for real-time post sync
-    // NOTE: Must use @State (not computed property) for SwiftUI to observe @Observable changes
-    @State private var userPostsManager = UserPostsManager.shared
+    // NOTE: Access singleton directly for @Observable objects to ensure single source of truth
+    private var userPostsManager: UserPostsManager { UserPostsManager.shared }
 
 
     // Computed property for user display
@@ -244,7 +244,7 @@ struct ProfileView: View {
                     isVerified: displayUser?.safeIsVerified ?? false,
                     followingCount: displayUser?.safeFollowingCount ?? 0,
                     followersCount: displayUser?.safeFollowerCount ?? 0,
-                    postsCount: displayUser?.safePostCount ?? 0,
+                    postsCount: userPostsManager.postCount,
                     layout: userInfoLayout
                 )
             }

@@ -12,35 +12,21 @@ struct CarouselCardItem: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            // Image section (top)
+            // Image section (top) - using CachedAsyncImage for disk caching
             if let urlString = imageUrl, let url = URL(string: urlString) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        ProgressView()
-                            .frame(width: 235, height: 250)
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 235, height: 250)
-                            .clipped()
-                            .cornerRadius(5)
-                    case .failure:
-                        Image(imageAssetName)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 235, height: 250)
-                            .clipped()
-                            .cornerRadius(5)
-                    @unknown default:
-                        Image(imageAssetName)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 235, height: 250)
-                            .clipped()
-                            .cornerRadius(5)
-                    }
+                CachedAsyncImage(
+                    url: url,
+                    targetSize: CGSize(width: 235 * 2, height: 250 * 2)  // 2x for Retina displays
+                ) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 235, height: 250)
+                        .clipped()
+                        .cornerRadius(5)
+                } placeholder: {
+                    ProgressView()
+                        .frame(width: 235, height: 250)
                 }
             } else {
                 Image(imageAssetName)

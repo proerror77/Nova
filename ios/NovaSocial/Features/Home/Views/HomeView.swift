@@ -23,13 +23,12 @@ struct HomeView: View {
     @State private var showWrite = false
     @State private var selectedPostForDetail: FeedPost?
     @State private var showPostDetail = false
-    @State private var selectedChannel: String = "Fashion"  // 当前选中的 Channel
     @State private var showToast = false
     @State private var showShareSheet = false
     @State private var selectedPostForShare: FeedPost?
 
-    // Channel 列表
-    private let channels = ["Fashion", "Travel", "Fitness", "Pets", "Study", "Career", "Tech"]
+    // NOTE: Channels are now loaded dynamically via feedViewModel.channels
+    // Old hardcoded channels removed - using backend API instead
 
     var body: some View {
         ZStack {
@@ -381,20 +380,31 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Channel Bar
+    // MARK: - Channel Bar (Dynamic from Backend)
     private var channelBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 24) {
-                ForEach(channels, id: \.self) { channel in
+                // "For You" option - shows all content (no channel filter)
+                Button(action: {
+                    Task { await feedViewModel.selectChannel(nil) }
+                }) {
+                    Text("For You")
+                        .font(.system(size: 14))
+                        .lineSpacing(20)
+                        .foregroundColor(feedViewModel.selectedChannelId == nil ? .black : Color(red: 0.53, green: 0.53, blue: 0.53))
+                        .fontWeight(feedViewModel.selectedChannelId == nil ? .medium : .regular)
+                }
+
+                // Dynamic channels from backend
+                ForEach(feedViewModel.channels) { channel in
                     Button(action: {
-                        selectedChannel = channel
-                        // TODO: 根据 channel 筛选 feed
+                        Task { await feedViewModel.selectChannel(channel.id) }
                     }) {
-                        Text(channel)
+                        Text(channel.name)
                             .font(.system(size: 14))
                             .lineSpacing(20)
-                            .foregroundColor(selectedChannel == channel ? .black : Color(red: 0.53, green: 0.53, blue: 0.53))
-                            .fontWeight(selectedChannel == channel ? .medium : .regular)
+                            .foregroundColor(feedViewModel.selectedChannelId == channel.id ? .black : Color(red: 0.53, green: 0.53, blue: 0.53))
+                            .fontWeight(feedViewModel.selectedChannelId == channel.id ? .medium : .regular)
                     }
                 }
             }
@@ -402,6 +412,12 @@ struct HomeView: View {
         }
         .frame(height: 36)
         .background(.white)
+        .task {
+            // Load channels when view appears
+            if feedViewModel.channels.isEmpty {
+                await feedViewModel.loadChannels()
+            }
+        }
     }
 }
 

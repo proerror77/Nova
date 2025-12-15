@@ -15,6 +15,11 @@ class FeedViewModel: ObservableObject {
     @Published var toastError: String?  // Transient error for toast notifications
     @Published var hasMore = true
 
+    // MARK: - Channel State
+    @Published var channels: [FeedChannel] = []
+    @Published var selectedChannelId: String? = nil  // nil = "For You" / all content
+    @Published var isLoadingChannels = false
+
     // MARK: - Private Properties
 
     private let feedService: FeedService
@@ -74,7 +79,8 @@ class FeedViewModel: ObservableObject {
         do {
             let response: FeedResponse
             if isAuthenticated {
-                response = try await feedService.getFeed(algo: algorithm, limit: 20, cursor: nil)
+                // Pass channel filter if selected
+                response = try await feedService.getFeed(algo: algorithm, limit: 20, cursor: nil, channelId: selectedChannelId)
             } else {
                 response = try await feedService.getTrendingFeed(limit: 20, cursor: nil)
             }
@@ -156,7 +162,8 @@ class FeedViewModel: ObservableObject {
         do {
             let response: FeedResponse
             if isAuthenticated {
-                response = try await feedService.getFeed(algo: currentAlgorithm, limit: 20, cursor: nil)
+                // Pass channel filter if selected
+                response = try await feedService.getFeed(algo: currentAlgorithm, limit: 20, cursor: nil, channelId: selectedChannelId)
             } else {
                 response = try await feedService.getTrendingFeed(limit: 20, cursor: nil)
             }
@@ -184,6 +191,46 @@ class FeedViewModel: ObservableObject {
         }
 
         isLoading = false
+    }
+
+    // MARK: - Channel Management
+
+    /// Load available channels from backend
+    func loadChannels() async {
+        guard !isLoadingChannels else { return }
+        isLoadingChannels = true
+
+        do {
+            channels = try await feedService.getChannels(enabledOnly: true)
+            FeedLogger.debug("Loaded \(channels.count) channels")
+        } catch {
+            FeedLogger.error("Failed to load channels", error: error)
+            // Use fallback channels when API is unavailable
+            channels = FeedChannel.fallbackChannels
+        }
+
+        isLoadingChannels = false
+    }
+
+    /// Select a channel and reload feed
+    /// - Parameter channelId: Channel ID to filter by, or nil for "For You" (all content)
+    func selectChannel(_ channelId: String?) async {
+        guard selectedChannelId != channelId else { return }
+
+        selectedChannelId = channelId
+
+        // Track channel selection for analytics
+        if let channelId = channelId,
+           let channel = channels.first(where: { $0.id == channelId }) {
+            FeedLogger.debug("Selected channel: \(channel.name) (\(channelId))")
+            // TODO: Add analytics tracking
+            // AnalyticsService.shared.track(.channelTabClick, properties: ["channel_id": channelId, "channel_name": channel.name])
+        } else {
+            FeedLogger.debug("Selected: For You (all content)")
+        }
+
+        // Reload feed with new channel filter
+        await loadFeed(algorithm: currentAlgorithm)
     }
 
     /// Add a newly created post to the top of the feed (optimistic update)
@@ -363,7 +410,19 @@ class FeedViewModel: ObservableObject {
     }
 
     /// Remove duplicate posts by ID
+    /// Runs on background thread to avoid blocking UI with large datasets
     private func deduplicatePosts(_ posts: [FeedPost]) -> [FeedPost] {
+        // For small datasets, process directly
+        guard posts.count > 50 else {
+            var seenIds = Set<String>()
+            return posts.filter { post in
+                guard !seenIds.contains(post.id) else { return false }
+                seenIds.insert(post.id)
+                return true
+            }
+        }
+
+        // For large datasets, process on background thread (handled by caller)
         var seenIds = Set<String>()
         return posts.filter { post in
             guard !seenIds.contains(post.id) else { return false }

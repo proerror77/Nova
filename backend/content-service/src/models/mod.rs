@@ -194,6 +194,23 @@ pub struct Channel {
     pub description: Option<String>,
     pub category: Option<String>,
     pub subscriber_count: i64,
+    pub slug: Option<String>,
+    pub icon_url: Option<String>,
+    pub display_order: Option<i32>,
+    pub is_enabled: Option<bool>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+// ============================================
+// Post-Channel Association
+// ============================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct PostChannel {
+    pub post_id: Uuid,
+    pub channel_id: Uuid,
+    pub confidence: f32,
+    pub tagged_by: String,
+    pub created_at: DateTime<Utc>,
 }

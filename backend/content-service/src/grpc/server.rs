@@ -1,3 +1,4 @@
+use base64::Engine;
 use crate::cache::{ContentCache, FeedCache};
 use crate::db::channel_repo;
 use crate::grpc::AuthClient;
@@ -61,6 +62,10 @@ fn convert_channel_to_proto(channel: &DbChannel) -> Channel {
         description: channel.description.clone().unwrap_or_default(),
         category: channel.category.clone().unwrap_or_default(),
         subscriber_count: channel.subscriber_count as u32,
+        slug: channel.slug.clone().unwrap_or_default(),
+        icon_url: channel.icon_url.clone().unwrap_or_default(),
+        display_order: channel.display_order.unwrap_or(100),
+        is_enabled: channel.is_enabled.unwrap_or(true),
     }
 }
 
@@ -542,16 +547,104 @@ impl ContentService for ContentServiceImpl {
             Some(req.category.as_str())
         };
 
-        let (channels, total) = channel_repo::list_channels(&self.db_pool, category, limit, offset)
-            .await
-            .map_err(|e| {
-                tracing::error!(error=%e, "list_channels failed");
-                Status::internal("failed to list channels")
-            })?;
+        let (channels, total) = channel_repo::list_channels(
+            &self.db_pool,
+            category,
+            req.enabled_only,
+            limit,
+            offset,
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!(error=%e, "list_channels failed");
+            Status::internal("failed to list channels")
+        })?;
 
         Ok(Response::new(ListChannelsResponse {
             channels: channels.iter().map(convert_channel_to_proto).collect(),
             total: total as i32,
+        }))
+    }
+
+    async fn list_posts_by_channel(
+        &self,
+        request: Request<ListPostsByChannelRequest>,
+    ) -> Result<Response<ListPostsByChannelResponse>, Status> {
+        let req = request.into_inner();
+        let limit = req.limit.clamp(1, 100) as i64;
+
+        // Resolve channel_id (could be UUID or slug)
+        let channel_id = channel_repo::resolve_channel_id(&self.db_pool, &req.channel_id)
+            .await
+            .map_err(|e| {
+                tracing::error!(error=%e, "resolve_channel_id failed");
+                Status::internal("failed to resolve channel")
+            })?
+            .ok_or_else(|| Status::not_found("channel not found"))?;
+
+        // Parse cursor if provided (format: "post_id:created_at_timestamp")
+        let (cursor_post_id, cursor_created_at) = if req.cursor.is_empty() {
+            (None, None)
+        } else {
+            // Decode base64 cursor
+            let decoded = base64::Engine::decode(
+                &base64::engine::general_purpose::STANDARD,
+                &req.cursor,
+            )
+            .map_err(|_| Status::invalid_argument("invalid cursor format"))?;
+
+            let cursor_str = String::from_utf8(decoded)
+                .map_err(|_| Status::invalid_argument("invalid cursor encoding"))?;
+
+            let parts: Vec<&str> = cursor_str.split(':').collect();
+            if parts.len() != 2 {
+                return Err(Status::invalid_argument("invalid cursor format"));
+            }
+
+            let post_id = Uuid::parse_str(parts[0])
+                .map_err(|_| Status::invalid_argument("invalid cursor post_id"))?;
+            let created_at = parts[1]
+                .parse::<i64>()
+                .map_err(|_| Status::invalid_argument("invalid cursor timestamp"))?;
+
+            (Some(post_id), Some(created_at))
+        };
+
+        let (post_ids, has_more) = channel_repo::list_posts_by_channel(
+            &self.db_pool,
+            channel_id,
+            limit,
+            cursor_post_id,
+            cursor_created_at,
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!(error=%e, "list_posts_by_channel failed");
+            Status::internal("failed to list posts by channel")
+        })?;
+
+        // Build next cursor from last post if there are more results
+        let next_cursor = if has_more && !post_ids.is_empty() {
+            // Get the last post's created_at for cursor
+            let last_post_id = post_ids.last().unwrap();
+            let last_created_at = sqlx::query_scalar::<_, i64>(
+                "SELECT EXTRACT(EPOCH FROM created_at)::bigint FROM posts WHERE id = $1",
+            )
+            .bind(last_post_id)
+            .fetch_one(&self.db_pool)
+            .await
+            .unwrap_or(0);
+
+            let cursor_data = format!("{}:{}", last_post_id, last_created_at);
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, cursor_data)
+        } else {
+            String::new()
+        };
+
+        Ok(Response::new(ListPostsByChannelResponse {
+            post_ids: post_ids.iter().map(|id| id.to_string()).collect(),
+            next_cursor,
+            has_more,
         }))
     }
 

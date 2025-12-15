@@ -112,11 +112,14 @@ pub async fn get_feed(
     let cursor = query.cursor.clone().unwrap_or_default();
     let algorithm = query.algorithm.clone().unwrap_or_else(|| "v2".to_string());
 
+    let channel_id = query.channel_id.clone().unwrap_or_default();
+
     info!(
         user_id = %user_id,
         limit = %limit,
         cursor = %cursor,
         algorithm = %algorithm,
+        channel_id = %channel_id,
         "GET /api/v2/feed"
     );
 
@@ -128,6 +131,7 @@ pub async fn get_feed(
         limit,
         cursor,
         algorithm,
+        channel_id,
     });
 
     match feed_client.get_feed(grpc_request).await {
@@ -345,4 +349,5 @@ pub struct FeedQueryParams {
     pub limit: Option<u32>,
     pub cursor: Option<String>,
     pub algorithm: Option<String>,
+    pub channel_id: Option<String>,  // Optional: Filter feed by channel (UUID or slug)
 }

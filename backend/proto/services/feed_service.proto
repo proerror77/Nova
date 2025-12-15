@@ -49,6 +49,7 @@ message GetFeedRequest {
   uint32 limit = 2;
   string cursor = 3;  // Base64 encoded pagination cursor
   string algorithm = 4;  // Algorithm variant: "ch", "v2", "hybrid", etc.
+  string channel_id = 5;  // Optional: Filter feed by channel (UUID or slug)
 }
 
 // FeedPost represents a single post in the feed

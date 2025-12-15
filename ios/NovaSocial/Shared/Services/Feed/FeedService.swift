@@ -14,8 +14,9 @@ class FeedService {
     ///   - algo: Algorithm type ("ch" for chronological, "time" for time-based)
     ///   - limit: Number of posts to fetch (1-100, default 20)
     ///   - cursor: Pagination cursor from previous response
+    ///   - channelId: Optional channel ID or slug to filter feed by channel
     /// - Returns: FeedResponse containing post IDs and pagination info
-    func getFeed(algo: FeedAlgorithm = .chronological, limit: Int = 20, cursor: String? = nil) async throws -> FeedResponse {
+    func getFeed(algo: FeedAlgorithm = .chronological, limit: Int = 20, cursor: String? = nil, channelId: String? = nil) async throws -> FeedResponse {
         var queryParams: [String: String] = [
             "algo": algo.rawValue,
             "limit": String(min(max(limit, 1), 100))
@@ -25,8 +26,40 @@ class FeedService {
             queryParams["cursor"] = cursor
         }
 
+        // Add channel filter if provided
+        if let channelId = channelId {
+            queryParams["channel_id"] = channelId
+        }
+
         // Use unified APIClient.get() for consistent error handling and auth
         return try await client.get(endpoint: APIConfig.Feed.getFeed, queryParams: queryParams)
+    }
+
+    // MARK: - Channels
+
+    /// Fetch available channels for feed navigation
+    /// - Parameters:
+    ///   - enabledOnly: If true, only return enabled channels (default: true)
+    ///   - limit: Maximum number of channels to return (default: 50)
+    /// - Returns: Array of FeedChannel sorted by display order
+    func getChannels(enabledOnly: Bool = true, limit: Int = 50) async throws -> [FeedChannel] {
+        var queryParams: [String: String] = [
+            "limit": String(limit),
+            "enabled_only": String(enabledOnly)
+        ]
+
+        struct Response: Codable {
+            let channels: [FeedChannel]
+            let total: Int?
+        }
+
+        let response: Response = try await client.get(
+            endpoint: APIConfig.Channels.getAllChannels,
+            queryParams: queryParams
+        )
+
+        // Sort by display order (lower = first)
+        return response.channels.sorted { $0.displayOrder < $1.displayOrder }
     }
 
     // MARK: - Guest Feed (No Authentication)
@@ -542,4 +575,58 @@ struct RankingContext: Codable {
         case deviceType = "device_type"
         case timeOfDay = "time_of_day"
     }
+}
+
+// MARK: - Channel Models
+
+/// Channel for feed navigation and filtering
+/// Represents a content category or topic that users can browse
+struct FeedChannel: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let slug: String
+    let description: String?
+    let category: String?
+    let iconUrl: String?
+    let displayOrder: Int
+    let isEnabled: Bool
+    let subscriberCount: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case slug
+        case description
+        case category
+        case iconUrl = "icon_url"
+        case displayOrder = "display_order"
+        case isEnabled = "is_enabled"
+        case subscriberCount = "subscriber_count"
+    }
+
+    // Default initializer for fallback/mock data
+    init(id: String, name: String, slug: String, description: String? = nil,
+         category: String? = nil, iconUrl: String? = nil,
+         displayOrder: Int = 100, isEnabled: Bool = true, subscriberCount: Int? = nil) {
+        self.id = id
+        self.name = name
+        self.slug = slug
+        self.description = description
+        self.category = category
+        self.iconUrl = iconUrl
+        self.displayOrder = displayOrder
+        self.isEnabled = isEnabled
+        self.subscriberCount = subscriberCount
+    }
+
+    // Fallback channels when API is unavailable
+    static let fallbackChannels: [FeedChannel] = [
+        FeedChannel(id: "fashion", name: "Fashion", slug: "fashion", displayOrder: 1),
+        FeedChannel(id: "travel", name: "Travel", slug: "travel", displayOrder: 2),
+        FeedChannel(id: "fitness", name: "Fitness", slug: "fitness", displayOrder: 3),
+        FeedChannel(id: "pets", name: "Pets", slug: "pets", displayOrder: 4),
+        FeedChannel(id: "study", name: "Study", slug: "study", displayOrder: 5),
+        FeedChannel(id: "career", name: "Career", slug: "career", displayOrder: 6),
+        FeedChannel(id: "tech", name: "Tech", slug: "tech", displayOrder: 7)
+    ]
 }

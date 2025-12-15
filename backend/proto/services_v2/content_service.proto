@@ -111,12 +111,17 @@ message Channel {
   string description = 3;
   string category = 4;
   uint32 subscriber_count = 5;
+  string slug = 6;              // URL-friendly unique identifier
+  string icon_url = 7;          // Channel icon image URL
+  int32 display_order = 8;      // Ordering priority (lower = first)
+  bool is_enabled = 9;          // Whether channel is visible to users
 }
 
 message ListChannelsRequest {
   int32 limit = 1;
   int32 offset = 2;
   string category = 3;
+  bool enabled_only = 4;  // If true, only return channels where is_enabled=true
 }
 
 message ListChannelsResponse {
@@ -131,6 +136,19 @@ message GetChannelRequest {
 message GetChannelResponse {
   Channel channel = 1;
   bool found = 2;
+}
+
+// ListPostsByChannel - Get posts associated with a specific channel
+message ListPostsByChannelRequest {
+  string channel_id = 1;  // Channel UUID or slug
+  int32 limit = 2;
+  string cursor = 3;      // Base64 encoded pagination cursor (post_id:created_at)
+}
+
+message ListPostsByChannelResponse {
+  repeated string post_ids = 1;
+  string next_cursor = 2;
+  bool has_more = 3;
 }
 
 service ContentService {
@@ -213,6 +231,12 @@ service ContentService {
   rpc GetChannel(GetChannelRequest) returns (GetChannelResponse) {
     option (google.api.http) = {
       get: "/api/v2/channels/{id}"
+    };
+  }
+
+  rpc ListPostsByChannel(ListPostsByChannelRequest) returns (ListPostsByChannelResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/channels/{channel_id}/posts"
     };
   }
 }

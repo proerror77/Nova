@@ -122,14 +122,22 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
         let req = request.into_inner();
         let user_id = req.user_id.clone();
         let algorithm = req.algorithm.clone();
+        let channel_id = req.channel_id.clone();
+
+        // Build cache key that includes channel_id when present
+        let cache_key_algo = if channel_id.is_empty() {
+            algorithm.clone()
+        } else {
+            format!("{}:channel:{}", algorithm, channel_id)
+        };
 
         info!(
-            "Getting feed for user: {} (algo: {}, limit: {})",
-            user_id, algorithm, req.limit
+            "Getting feed for user: {} (algo: {}, limit: {}, channel: {})",
+            user_id, algorithm, req.limit, if channel_id.is_empty() { "all" } else { &channel_id }
         );
 
         // Step 1: Check Redis cache
-        match self.cache.get_feed(&user_id, &algorithm).await {
+        match self.cache.get_feed(&user_id, &cache_key_algo).await {
             Ok(Some(cached)) => {
                 debug!(
                     "Cache hit for user {} with algorithm {}",
@@ -180,9 +188,9 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
         .min(100)
         .max(1);
 
-        // Fetch recent posts from content-service
+        // Fetch posts from content-service (with optional channel filter)
         let posts = match self
-            .fetch_posts_from_content_service(limit as i32, &user_id)
+            .fetch_posts_from_content_service(limit as i32, &user_id, &channel_id)
             .await
         {
             Ok(p) => p,
@@ -204,7 +212,7 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
 
         if let Err(e) = self
             .cache
-            .set_feed(&user_id, &algorithm, &cached_feed)
+            .set_feed(&user_id, &cache_key_algo, &cached_feed)
             .await
         {
             warn!("Failed to cache feed for user {}: {}", user_id, e);
@@ -352,37 +360,86 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
 impl RecommendationServiceImpl {
     /// Fetch posts from content-service
     ///
-    /// 1. Call ListRecentPosts to get post IDs
+    /// 1. Call ListRecentPosts or ListPostsByChannel to get post IDs
     /// 2. Call GetPostsByIds to get full post details
     /// 3. Convert to CachedPost format
     async fn fetch_posts_from_content_service(
         &self,
         limit: i32,
         _user_id: &str,
+        channel_id: &str,
     ) -> Result<Vec<CachedFeedPost>, Status> {
         use grpc_clients::nova::content_service::v2::{
             GetPostsByIdsRequest, ListRecentPostsRequest,
         };
         use grpc_clients::nova::social_service::v2::BatchGetCountsRequest;
 
-        // Step 1: Get recent post IDs from content-service
+        // Step 1: Get post IDs from content-service
+        // If channel_id is provided, fetch posts by channel; otherwise fetch recent posts
         let mut content_client = self.grpc_pool.content();
 
-        let list_request = ListRecentPostsRequest {
-            limit,
-            exclude_user_id: String::new(), // Don't exclude any user for now
+        let post_ids = if channel_id.is_empty() {
+            // No channel filter - get recent posts
+            let list_request = ListRecentPostsRequest {
+                limit,
+                exclude_user_id: String::new(),
+            };
+
+            let list_response = content_client
+                .list_recent_posts(list_request)
+                .await
+                .map_err(|e| {
+                    error!("list_recent_posts failed: {}", e);
+                    Status::internal(format!("Failed to list recent posts: {}", e))
+                })?
+                .into_inner();
+
+            list_response.post_ids
+        } else {
+            // Channel filter - get posts by channel from content-service
+            use grpc_clients::nova::content_service::v2::ListPostsByChannelRequest;
+
+            let channel_request = ListPostsByChannelRequest {
+                channel_id: channel_id.to_string(),
+                limit,
+                cursor: String::new(), // No cursor for initial load
+            };
+
+            match content_client.list_posts_by_channel(channel_request).await {
+                Ok(response) => {
+                    let inner = response.into_inner();
+                    info!(
+                        "Channel filter: {} posts found for channel {}",
+                        inner.post_ids.len(),
+                        channel_id
+                    );
+                    inner.post_ids
+                }
+                Err(e) => {
+                    // Graceful degradation: fall back to recent posts if channel query fails
+                    warn!(
+                        "list_posts_by_channel failed for {}: {}, falling back to recent posts",
+                        channel_id, e
+                    );
+
+                    let list_request = ListRecentPostsRequest {
+                        limit,
+                        exclude_user_id: String::new(),
+                    };
+
+                    content_client
+                        .list_recent_posts(list_request)
+                        .await
+                        .map_err(|e| {
+                            error!("list_recent_posts fallback failed: {}", e);
+                            Status::internal(format!("Failed to list recent posts: {}", e))
+                        })?
+                        .into_inner()
+                        .post_ids
+                }
+            }
         };
 
-        let list_response = content_client
-            .list_recent_posts(list_request)
-            .await
-            .map_err(|e| {
-                error!("list_recent_posts failed: {}", e);
-                Status::internal(format!("Failed to list recent posts: {}", e))
-            })?
-            .into_inner();
-
-        let post_ids = list_response.post_ids;
         if post_ids.is_empty() {
             debug!("No recent posts found");
             return Ok(vec![]);

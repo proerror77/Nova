@@ -18,6 +18,17 @@ class APIClient {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = APIConfig.current.timeout
         config.timeoutIntervalForResource = APIConfig.current.resourceTimeout
+
+        // Configure URLCache for HTTP response caching
+        // Memory: 20MB, Disk: 100MB - reduces redundant network requests
+        let cache = URLCache(
+            memoryCapacity: 20_000_000,
+            diskCapacity: 100_000_000,
+            diskPath: "api_cache"
+        )
+        config.urlCache = cache
+        config.requestCachePolicy = .useProtocolCachePolicy
+
         self.session = URLSession(configuration: config)
     }
 

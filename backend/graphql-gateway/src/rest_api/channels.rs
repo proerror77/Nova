@@ -22,6 +22,11 @@ pub struct Channel {
     pub category: String,
     pub subscriber_count: u32,
     pub is_subscribed: bool,
+    pub slug: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon_url: Option<String>,
+    pub display_order: i32,
+    pub is_enabled: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -37,6 +42,11 @@ pub struct ChannelSubscriptionRequest {
 
 /// GET /api/v2/channels
 /// Get all channels with pagination
+/// Query parameters:
+///   - limit: Number of channels to return (default: 50)
+///   - offset: Pagination offset (default: 0)
+///   - category: Filter by category (optional)
+///   - enabled_only: Only return enabled channels (default: true)
 pub async fn get_all_channels(
     query: web::Query<std::collections::HashMap<String, String>>,
     clients: web::Data<ServiceClients>,
@@ -44,7 +54,7 @@ pub async fn get_all_channels(
     let limit = query
         .get("limit")
         .and_then(|l| l.parse::<u32>().ok())
-        .unwrap_or(20);
+        .unwrap_or(50);
 
     let offset = query
         .get("offset")
@@ -53,10 +63,17 @@ pub async fn get_all_channels(
 
     let category = query.get("category").cloned().unwrap_or_default();
 
+    // Default to enabled_only=true for client requests
+    let enabled_only = query
+        .get("enabled_only")
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(true);
+
     info!(
         limit = limit,
         offset = offset,
         category = %category,
+        enabled_only = enabled_only,
         "GET /api/v2/channels"
     );
 
@@ -65,23 +82,32 @@ pub async fn get_all_channels(
         limit: limit as i32,
         offset: offset as i32,
         category,
+        enabled_only,
     };
 
     match content_client.list_channels(req).await {
         Ok(resp) => {
             let inner = resp.into_inner();
-            let channels = inner
+            let mut channels: Vec<Channel> = inner
                 .channels
                 .into_iter()
                 .map(|c| Channel {
                     id: c.id,
                     name: c.name,
-                    description: Some(c.description),
+                    description: if c.description.is_empty() { None } else { Some(c.description) },
                     category: c.category,
                     subscriber_count: c.subscriber_count,
                     is_subscribed: false,
+                    slug: c.slug,
+                    icon_url: if c.icon_url.is_empty() { None } else { Some(c.icon_url) },
+                    display_order: c.display_order,
+                    is_enabled: c.is_enabled,
                 })
                 .collect();
+
+            // Sort by display_order (ascending) for consistent ordering
+            channels.sort_by_key(|c| c.display_order);
+
             Ok(HttpResponse::Ok().json(ChannelsListResponse {
                 total: inner.total as u32,
                 channels,
@@ -115,15 +141,18 @@ pub async fn get_channel_details(
                     "error": "channel_not_found"
                 })));
             }
-            // Safe: checked is_none() above at line 113
             let c = inner.channel.expect("channel was just checked");
             Ok(HttpResponse::Ok().json(Channel {
                 id: c.id,
                 name: c.name,
-                description: Some(c.description),
+                description: if c.description.is_empty() { None } else { Some(c.description) },
                 category: c.category,
                 subscriber_count: c.subscriber_count,
                 is_subscribed: false,
+                slug: c.slug,
+                icon_url: if c.icon_url.is_empty() { None } else { Some(c.icon_url) },
+                display_order: c.display_order,
+                is_enabled: c.is_enabled,
             }))
         }
         Err(e) => {
