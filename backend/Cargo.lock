@@ -3619,6 +3619,7 @@ dependencies = [
  "dotenv",
  "envy",
  "error-types",
+ "event-schema",
  "grpc-health",
  "grpc-metrics",
  "grpc-tls",

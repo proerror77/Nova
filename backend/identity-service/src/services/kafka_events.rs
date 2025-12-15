@@ -55,8 +55,9 @@ impl KafkaEventProducer {
             created_at: Utc::now(),
         };
 
-        let envelope =
-            EventEnvelope::new("identity-service", event).with_correlation_id(Uuid::new_v4());
+        // P1: Include event_type for reliable event routing
+        let envelope = EventEnvelope::new_with_type("identity-service", "UserCreatedEvent", event)
+            .with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
     }
@@ -69,8 +70,10 @@ impl KafkaEventProducer {
             invalidate_all_sessions: true,
         };
 
+        // P1: Include event_type for reliable event routing
         let envelope =
-            EventEnvelope::new("identity-service", event).with_correlation_id(Uuid::new_v4());
+            EventEnvelope::new_with_type("identity-service", "PasswordChangedEvent", event)
+                .with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
     }
@@ -83,8 +86,9 @@ impl KafkaEventProducer {
             method: "totp".to_string(),
         };
 
-        let envelope =
-            EventEnvelope::new("identity-service", event).with_correlation_id(Uuid::new_v4());
+        // P1: Include event_type for reliable event routing
+        let envelope = EventEnvelope::new_with_type("identity-service", "TwoFAEnabledEvent", event)
+            .with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
     }
@@ -102,8 +106,9 @@ impl KafkaEventProducer {
             soft_delete,
         };
 
-        let envelope =
-            EventEnvelope::new("identity-service", event).with_correlation_id(Uuid::new_v4());
+        // P1: Include event_type for reliable event routing
+        let envelope = EventEnvelope::new_with_type("identity-service", "UserDeletedEvent", event)
+            .with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
     }
@@ -131,8 +136,10 @@ impl KafkaEventProducer {
             updated_at: Utc::now(),
         };
 
+        // P1: Include event_type for reliable event routing
         let envelope =
-            EventEnvelope::new("identity-service", event).with_correlation_id(Uuid::new_v4());
+            EventEnvelope::new_with_type("identity-service", "UserProfileUpdatedEvent", event)
+                .with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
     }

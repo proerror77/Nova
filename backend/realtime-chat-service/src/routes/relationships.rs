@@ -64,12 +64,20 @@ pub async fn block_user(
     user: User,
     body: web::Json<BlockUserRequest>,
 ) -> Result<HttpResponse, AppError> {
-    // Create GraphClient and RelationshipServiceV2
+    // Create GraphClient, IdentityClient and RelationshipServiceV2
     let graph_client = state
         .graph_client
         .as_ref()
         .ok_or_else(|| AppError::StartServer("graph_client not initialized".to_string()))?;
-    let service = RelationshipServiceV2::new((**graph_client).clone(), state.db.clone());
+    let identity_client = state
+        .identity_client
+        .as_ref()
+        .ok_or_else(|| AppError::StartServer("identity_client not initialized".to_string()))?;
+    let service = RelationshipServiceV2::new(
+        (**graph_client).clone(),
+        (**identity_client).clone(),
+        state.db.clone(),
+    );
 
     let blocked = service.block_user(user.id, body.user_id).await?;
 
@@ -96,12 +104,20 @@ pub async fn unblock_user(
 ) -> Result<HttpResponse, AppError> {
     let blocked_id = path.into_inner();
 
-    // Create GraphClient and RelationshipServiceV2
+    // Create GraphClient, IdentityClient and RelationshipServiceV2
     let graph_client = state
         .graph_client
         .as_ref()
         .ok_or_else(|| AppError::StartServer("graph_client not initialized".to_string()))?;
-    let service = RelationshipServiceV2::new((**graph_client).clone(), state.db.clone());
+    let identity_client = state
+        .identity_client
+        .as_ref()
+        .ok_or_else(|| AppError::StartServer("identity_client not initialized".to_string()))?;
+    let service = RelationshipServiceV2::new(
+        (**graph_client).clone(),
+        (**identity_client).clone(),
+        state.db.clone(),
+    );
 
     let unblocked = service.unblock_user(user.id, blocked_id).await?;
 
@@ -129,12 +145,20 @@ pub async fn get_blocked_users(
     let limit = query.limit.unwrap_or(50).min(100);
     let offset = query.offset.unwrap_or(0);
 
-    // Create GraphClient and RelationshipServiceV2
+    // Create GraphClient, IdentityClient and RelationshipServiceV2
     let graph_client = state
         .graph_client
         .as_ref()
         .ok_or_else(|| AppError::StartServer("graph_client not initialized".to_string()))?;
-    let service = RelationshipServiceV2::new((**graph_client).clone(), state.db.clone());
+    let identity_client = state
+        .identity_client
+        .as_ref()
+        .ok_or_else(|| AppError::StartServer("identity_client not initialized".to_string()))?;
+    let service = RelationshipServiceV2::new(
+        (**graph_client).clone(),
+        (**identity_client).clone(),
+        state.db.clone(),
+    );
 
     let blocked_user_ids = service.get_blocked_users(user.id, limit, offset).await?;
 
@@ -178,12 +202,20 @@ pub async fn get_relationship(
 
 /// Get DM privacy settings
 /// GET /api/v1/settings/privacy
+///
+/// P0: Reads from identity-service (single source of truth)
 #[get("/settings/privacy")]
 pub async fn get_privacy_settings(
     state: web::Data<AppState>,
     user: User,
 ) -> Result<HttpResponse, AppError> {
-    let settings = RelationshipService::get_dm_settings(&state.db, user.id).await?;
+    // P0: Read from identity-service (single source of truth)
+    let identity_client = state
+        .identity_client
+        .as_ref()
+        .ok_or_else(|| AppError::StartServer("identity_client not initialized".to_string()))?;
+
+    let settings = identity_client.get_dm_settings(user.id).await?;
 
     Ok(HttpResponse::Ok().json(DmSettingsResponse {
         dm_permission: settings.dm_permission,
@@ -192,17 +224,20 @@ pub async fn get_privacy_settings(
 
 /// Update DM privacy settings
 /// PUT /api/v1/settings/privacy
+///
+/// P0: This endpoint is DEPRECATED. Updates should go through identity-service API.
+/// Clients should call PUT /api/v2/auth/users/{user_id}/settings instead.
 #[put("/settings/privacy")]
 pub async fn update_privacy_settings(
-    state: web::Data<AppState>,
-    user: User,
-    body: web::Json<UpdateDmPermissionRequest>,
+    _state: web::Data<AppState>,
+    _user: User,
+    _body: web::Json<UpdateDmPermissionRequest>,
 ) -> Result<HttpResponse, AppError> {
-    RelationshipService::update_dm_settings(&state.db, user.id, &body.dm_permission).await?;
-
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "success": true,
-        "dm_permission": body.dm_permission
+    // P0: Return error directing clients to use identity-service API
+    Ok(HttpResponse::Gone().json(serde_json::json!({
+        "success": false,
+        "error": "This endpoint is deprecated. Use PUT /api/v2/auth/users/{user_id}/settings instead.",
+        "migration": "dm_permission updates should go through identity-service API"
     })))
 }
 

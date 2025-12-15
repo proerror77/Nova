@@ -4,6 +4,7 @@ pub mod e2ee;
 pub mod e2ee_message_service;
 pub mod encryption;
 pub mod graph_client;
+pub mod identity_client;
 pub mod identity_event_consumer;
 pub mod key_exchange;
 pub mod location_service;
@@ -23,6 +24,7 @@ pub use e2ee_message_service::{
     E2eeMessage, E2eeMessageError, E2eeMessageService, SendE2eeMessageRequest,
 };
 pub use graph_client::GraphClient;
+pub use identity_client::IdentityClient;
 pub use identity_event_consumer::{IdentityEventConsumer, IdentityEventConsumerConfig};
 pub use matrix_admin::MatrixAdminClient;
 pub use matrix_voip_service::{IceCandidate, MatrixVoipService};

@@ -6,7 +6,7 @@ mod repository;
 
 use anyhow::{anyhow, Context, Result};
 use config::Config;
-use consumers::SocialEventsConsumer;
+use consumers::{IdentityEventsConsumer, SocialEventsConsumer};
 use grpc::server::graph::graph_service_server::GraphServiceServer;
 use grpc::GraphServiceImpl;
 use nova_cache::NovaCache;
@@ -88,7 +88,9 @@ async fn main() -> Result<()> {
         info!("✅ Connected to Neo4j successfully");
 
         // Create PostgreSQL repository
-        let postgres_repo = PostgresGraphRepository::new(pg_pool);
+        let postgres_repo = PostgresGraphRepository::new(pg_pool.clone());
+        // Clone for identity events consumer
+        let postgres_repo_for_consumer = PostgresGraphRepository::new(pg_pool);
 
         // Create dual-write repository (non-strict mode: Neo4j failures don't break writes)
         let dual_repo = DualWriteRepository::new(
@@ -133,8 +135,8 @@ async fn main() -> Result<()> {
         let graph_service =
             GraphServiceImpl::new_with_trait(repo, config.internal_write_token.clone());
 
-        // Spawn Kafka consumer for social events if configured
-        spawn_kafka_consumer_if_enabled(repo_for_consumer, &config);
+        // Spawn Kafka consumers for social and identity events if configured
+        spawn_kafka_consumers_if_enabled(repo_for_consumer, Some(postgres_repo_for_consumer), &config);
 
         // Setup and start server (rest of the code continues below)
         start_grpc_server(graph_service, &config).await?;
@@ -171,8 +173,8 @@ async fn main() -> Result<()> {
                 // Clone repo for Kafka consumer
                 let repo_for_consumer = repo.clone();
 
-                // Spawn Kafka consumer for social events if configured
-                spawn_kafka_consumer_if_enabled(repo_for_consumer, &config);
+                // Spawn Kafka consumers (no PostgreSQL in legacy mode)
+                spawn_kafka_consumers_if_enabled(repo_for_consumer, None, &config);
 
                 GraphServiceImpl::new_with_trait(repo, config.internal_write_token.clone())
             }
@@ -184,8 +186,8 @@ async fn main() -> Result<()> {
                 // Clone repo for Kafka consumer
                 let repo_for_consumer = repo.clone();
 
-                // Spawn Kafka consumer for social events if configured
-                spawn_kafka_consumer_if_enabled(repo_for_consumer, &config);
+                // Spawn Kafka consumers (no PostgreSQL in legacy mode)
+                spawn_kafka_consumers_if_enabled(repo_for_consumer, None, &config);
 
                 GraphServiceImpl::new_with_trait(repo, config.internal_write_token.clone())
             }
@@ -262,9 +264,10 @@ async fn start_grpc_server(graph_service: GraphServiceImpl, config: &Config) -> 
     Ok(())
 }
 
-/// Spawn Kafka consumer for social events if environment variables are configured
-fn spawn_kafka_consumer_if_enabled(
+/// Spawn Kafka consumers for social and identity events if environment variables are configured
+fn spawn_kafka_consumers_if_enabled(
     repo: Arc<dyn repository::GraphRepositoryTrait + Send + Sync>,
+    postgres_repo: Option<PostgresGraphRepository>,
     _config: &Config,
 ) {
     let kafka_enabled = std::env::var("KAFKA_ENABLED")
@@ -273,40 +276,73 @@ fn spawn_kafka_consumer_if_enabled(
         == "true";
 
     if !kafka_enabled {
-        info!("Kafka consumer disabled (KAFKA_ENABLED not set to true)");
+        info!("Kafka consumers disabled (KAFKA_ENABLED not set to true)");
         return;
     }
 
     let brokers = match std::env::var("KAFKA_BROKERS") {
         Ok(b) if !b.is_empty() => b,
         _ => {
-            warn!("KAFKA_BROKERS not set or empty - Kafka consumer disabled");
+            warn!("KAFKA_BROKERS not set or empty - Kafka consumers disabled");
             return;
         }
     };
 
-    let group_id = std::env::var("KAFKA_CONSUMER_GROUP")
-        .unwrap_or_else(|_| "graph-service-social-events".to_string());
-
     let topic_prefix = std::env::var("KAFKA_TOPIC_PREFIX").unwrap_or_else(|_| "nova".to_string());
-    let topic = format!("{}.social.events", topic_prefix);
 
-    info!(
-        "Starting Kafka consumer: brokers={}, group={}, topic={}",
-        brokers, group_id, topic
-    );
+    // Spawn Social Events Consumer
+    {
+        let group_id = std::env::var("KAFKA_CONSUMER_GROUP")
+            .unwrap_or_else(|_| "graph-service-social-events".to_string());
+        let topic = format!("{}.social.events", topic_prefix);
+        let brokers = brokers.clone();
+        let repo = repo.clone();
 
-    tokio::spawn(async move {
-        match SocialEventsConsumer::new(&brokers, &group_id, &topic, repo) {
-            Ok(consumer) => {
-                info!("✅ Kafka consumer initialized successfully");
-                if let Err(e) = consumer.start().await {
-                    error!("Kafka consumer failed: {}", e);
+        info!(
+            "Starting Social Events Kafka consumer: brokers={}, group={}, topic={}",
+            brokers, group_id, topic
+        );
+
+        tokio::spawn(async move {
+            match SocialEventsConsumer::new(&brokers, &group_id, &topic, repo) {
+                Ok(consumer) => {
+                    info!("✅ Social Events Kafka consumer initialized");
+                    if let Err(e) = consumer.start().await {
+                        error!("Social Events Kafka consumer failed: {}", e);
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to create Social Events Kafka consumer: {}", e);
                 }
             }
-            Err(e) => {
-                error!("Failed to create Kafka consumer: {}", e);
+        });
+    }
+
+    // Spawn Identity Events Consumer (P1: user sync from identity-service)
+    if let Some(pg_repo) = postgres_repo {
+        let group_id = std::env::var("KAFKA_IDENTITY_CONSUMER_GROUP")
+            .unwrap_or_else(|_| "graph-service-identity-events".to_string());
+        let topic = format!("{}.identity.events", topic_prefix);
+
+        info!(
+            "Starting Identity Events Kafka consumer: brokers={}, group={}, topic={}",
+            brokers, group_id, topic
+        );
+
+        tokio::spawn(async move {
+            match IdentityEventsConsumer::new(&brokers, &group_id, &topic, pg_repo) {
+                Ok(consumer) => {
+                    info!("✅ Identity Events Kafka consumer initialized (P1: user sync)");
+                    if let Err(e) = consumer.start().await {
+                        error!("Identity Events Kafka consumer failed: {}", e);
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to create Identity Events Kafka consumer: {}", e);
+                }
             }
-        }
-    });
+        });
+    } else {
+        warn!("Identity Events consumer not started (PostgreSQL not available in legacy mode)");
+    }
 }

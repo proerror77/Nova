@@ -1,5 +1,6 @@
 use crate::error::AppError;
 use crate::services::graph_client::GraphClient;
+use crate::services::identity_client::IdentityClient;
 use chrono::{DateTime, Utc};
 use deadpool_postgres::Pool;
 use serde::{Deserialize, Serialize};
@@ -93,14 +94,20 @@ pub struct RelationshipService;
 
 /// P0 Migration: RelationshipServiceV2 uses gRPC for block/follow operations
 /// This is the target state - block/follow queries go through graph-service
+///
+/// **IMPORTANT**: dm_permission is now read from identity-service (single source of truth)
+/// Do NOT use local database for dm_permission reads or writes.
 pub struct RelationshipServiceV2 {
     graph_client: GraphClient,
+    identity_client: IdentityClient,
+    /// Kept for potential fallback during migration; not actively used
+    #[allow(dead_code)]
     db: Pool,
 }
 
 impl RelationshipServiceV2 {
-    pub fn new(graph_client: GraphClient, db: Pool) -> Self {
-        Self { graph_client, db }
+    pub fn new(graph_client: GraphClient, identity_client: IdentityClient, db: Pool) -> Self {
+        Self { graph_client, identity_client, db }
     }
 
     /// Check if sender can message recipient (uses graph-service gRPC)
@@ -123,8 +130,8 @@ impl RelationshipServiceV2 {
             return Ok(CanMessageResult::Blocked);
         }
 
-        // 2. Get recipient's DM permission settings (still from local DB for now)
-        let settings = RelationshipService::get_dm_settings(&self.db, recipient_id).await?;
+        // 2. Get recipient's DM permission settings from identity-service (SINGLE SOURCE OF TRUTH)
+        let settings = self.identity_client.get_dm_settings(recipient_id).await?;
 
         match settings.dm_permission.as_str() {
             "anyone" => Ok(CanMessageResult::Allowed),
@@ -385,7 +392,15 @@ impl RelationshipService {
         Ok(count == 2) // Two records = mutual follow
     }
 
-    /// Get DM permission settings for a user
+    /// Get DM permission settings for a user (LOCAL DATABASE)
+    /// 
+    /// **DEPRECATED**: Use `IdentityClient::get_dm_settings()` instead.
+    /// The single source of truth for dm_permission is identity-service.
+    /// This method is kept for backward compatibility during migration.
+    #[deprecated(
+        since = "P0-migration",
+        note = "Use IdentityClient::get_dm_settings() instead. identity-service is the single source of truth."
+    )]
     pub async fn get_dm_settings(
         db: &Pool,
         user_id: Uuid,
@@ -404,33 +419,26 @@ impl RelationshipService {
         })
     }
 
-    /// Update DM permission settings for a user
+    /// Update DM permission settings for a user (LOCAL DATABASE)
+    /// 
+    /// **DEPRECATED**: Use identity-service API (`PUT /api/v2/auth/users/{user_id}/settings`) instead.
+    /// The single source of truth for dm_permission is identity-service.
+    /// This method should NOT be called - all updates should go through identity-service.
+    #[deprecated(
+        since = "P0-migration",
+        note = "Use identity-service UpdateUserSettings API instead. identity-service is the single source of truth."
+    )]
     pub async fn update_dm_settings(
-        db: &Pool,
-        user_id: Uuid,
-        dm_permission: &str,
+        _db: &Pool,
+        _user_id: Uuid,
+        _dm_permission: &str,
     ) -> Result<(), AppError> {
-        // Validate permission value
-        if !["anyone", "followers", "mutuals", "nobody"].contains(&dm_permission) {
-            return Err(AppError::BadRequest(format!(
-                "Invalid dm_permission: {}. Must be one of: anyone, followers, mutuals, nobody",
-                dm_permission
-            )));
-        }
-
-        let client = db.get().await?;
-        client.execute(
-            r#"
-            INSERT INTO user_settings (user_id, dm_permission)
-            VALUES ($1, $2)
-            ON CONFLICT (user_id) DO UPDATE SET dm_permission = $2, updated_at = NOW()
-            "#,
-            &[&user_id, &dm_permission],
-        )
-        .await
-        .map_err(|e| AppError::Database(format!("update_dm_settings failed: {}", e)))?;
-
-        Ok(())
+        // P0: This method is deprecated. Updates should go through identity-service.
+        // Return error to prevent accidental local writes.
+        Err(AppError::BadRequest(
+            "dm_permission updates must go through identity-service API. \
+             Use PUT /api/v2/auth/users/{user_id}/settings instead.".to_string()
+        ))
     }
 
     /// Block a user

@@ -2,8 +2,8 @@ use crate::{
     config::Config,
     redis_client::RedisClient,
     services::{
-        encryption::EncryptionService, graph_client::GraphClient, key_exchange::KeyExchangeService,
-        matrix_client::MatrixClient, MegolmService, OlmService,
+        encryption::EncryptionService, graph_client::GraphClient, identity_client::IdentityClient,
+        key_exchange::KeyExchangeService, matrix_client::MatrixClient, MegolmService, OlmService,
     },
     websocket::ConnectionRegistry,
 };
@@ -28,4 +28,7 @@ pub struct AppState {
     pub matrix_client: Option<Arc<MatrixClient>>,
     /// Graph client for block/follow operations via graph-service
     pub graph_client: Option<Arc<GraphClient>>,
+    /// Identity client for user settings (dm_permission) via identity-service
+    /// P0: Single source of truth for dm_permission
+    pub identity_client: Option<Arc<IdentityClient>>,
 }

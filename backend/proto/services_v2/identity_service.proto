@@ -5,16 +5,21 @@ import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
 
 // ============================================================================
-// Identity Service - Authentication & Authorization
+// Identity Service - Authentication, Authorization & User Identity
 //
-// Owns: sessions, refresh_tokens, revoked_tokens
+// Owns: users, user_profiles, user_settings, sessions, refresh_tokens, revoked_tokens
 // Responsibilities:
-//   - User registration (creates user in user-service via event)
+//   - User registration and identity management
 //   - Login/Logout (session management)
 //   - Token validation and refresh
 //   - Password reset
+//   - User profile management (display_name, bio, avatar_url, etc.)
+//   - User settings management (dm_permission, notifications, privacy, etc.)
 //
-// Does NOT own: user profiles, user settings (belongs to user-service)
+// P0 Migration Note: user_profiles and user_settings have been consolidated into
+// identity-service as the SINGLE SOURCE OF TRUTH. Other services should read
+// user settings via identity-service gRPC API, not maintain local copies.
+// See: backend/docs/zitadel-nova-integration.md
 // ============================================================================
 
 service IdentityService {

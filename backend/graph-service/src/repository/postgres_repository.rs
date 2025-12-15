@@ -23,8 +23,67 @@ impl PostgresGraphRepository {
         Ok(true)
     }
 
+    /// P1: Ensure user exists in the local users table before creating relationships
+    /// This avoids FK constraint violations when follow/block/mute events arrive
+    /// before user sync events from identity-service.
+    async fn ensure_user_exists(&self, user_id: Uuid) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO users (id, username, created_at, updated_at)
+            VALUES ($1, $1::text, NOW(), NOW())
+            ON CONFLICT (id) DO NOTHING
+            "#,
+        )
+        .bind(user_id)
+        .execute(&self.pool)
+        .await
+        .context("Failed to ensure user exists in PostgreSQL")?;
+        Ok(())
+    }
+
+    /// Upsert user with full details (called from identity event consumer)
+    pub async fn upsert_user(&self, user_id: Uuid, username: &str) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO users (id, username, created_at, updated_at)
+            VALUES ($1, $2, NOW(), NOW())
+            ON CONFLICT (id) DO UPDATE SET
+                username = EXCLUDED.username,
+                updated_at = NOW()
+            "#,
+        )
+        .bind(user_id)
+        .bind(username)
+        .execute(&self.pool)
+        .await
+        .context("Failed to upsert user in PostgreSQL")?;
+
+        debug!("Upserted user in PostgreSQL: {} ({})", user_id, username);
+        Ok(())
+    }
+
+    /// Soft delete user (called from identity event consumer)
+    pub async fn soft_delete_user(&self, user_id: Uuid) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE users SET deleted_at = NOW(), updated_at = NOW()
+            WHERE id = $1
+            "#,
+        )
+        .bind(user_id)
+        .execute(&self.pool)
+        .await
+        .context("Failed to soft delete user in PostgreSQL")?;
+
+        debug!("Soft deleted user in PostgreSQL: {}", user_id);
+        Ok(())
+    }
+
     /// Create follow relationship (source of truth)
     pub async fn create_follow(&self, follower_id: Uuid, followee_id: Uuid) -> Result<()> {
+        // P1: Ensure both users exist before creating the relationship
+        self.ensure_user_exists(follower_id).await?;
+        self.ensure_user_exists(followee_id).await?;
         sqlx::query(
             r#"
             INSERT INTO follows (follower_id, following_id, created_at)
@@ -63,6 +122,10 @@ impl PostgresGraphRepository {
 
     /// Create mute relationship
     pub async fn create_mute(&self, muter_id: Uuid, mutee_id: Uuid) -> Result<()> {
+        // P1: Ensure both users exist before creating the relationship
+        self.ensure_user_exists(muter_id).await?;
+        self.ensure_user_exists(mutee_id).await?;
+
         sqlx::query(
             r#"
             INSERT INTO mutes (muter_id, muted_id, created_at)
@@ -95,6 +158,10 @@ impl PostgresGraphRepository {
 
     /// Create block relationship
     pub async fn create_block(&self, blocker_id: Uuid, blocked_id: Uuid) -> Result<()> {
+        // P1: Ensure both users exist before creating the relationship
+        self.ensure_user_exists(blocker_id).await?;
+        self.ensure_user_exists(blocked_id).await?;
+
         sqlx::query(
             r#"
             INSERT INTO blocks (blocker_id, blocked_id, created_at)

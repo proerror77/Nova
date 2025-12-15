@@ -122,15 +122,10 @@ pub async fn get_matrix_token(
     let matrix_config = &config.matrix;
 
     // Generate Matrix user ID from Nova user ID
+    // P0: Use server_name (not homeserver_url) to ensure consistent MXID generation
+    // This matches the logic in matrix_admin.rs:user_id_to_mxid()
     let nova_user_id = user.id;
-    let homeserver_domain = matrix_config.homeserver_url
-        .trim_start_matches("https://")
-        .trim_start_matches("http://")
-        .split('/')
-        .next()
-        .unwrap_or("matrix.local");
-
-    let matrix_user_id = format!("@nova-{}:{}", nova_user_id, homeserver_domain);
+    let matrix_user_id = format!("@nova-{}:{}", nova_user_id, matrix_config.server_name);
 
     // In a production environment, we would:
     // 1. Check if user already has a Matrix account

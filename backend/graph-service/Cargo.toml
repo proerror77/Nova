@@ -59,6 +59,7 @@ rdkafka.workspace = true
 
 # Shared libraries
 error-types = { path = "../libs/error-types" }
+event-schema = { path = "../libs/event-schema" }
 transactional-outbox = { path = "../libs/transactional-outbox" }
 grpc-metrics = { path = "../libs/grpc-metrics" }
 grpc-health = { path = "../libs/grpc-health" }

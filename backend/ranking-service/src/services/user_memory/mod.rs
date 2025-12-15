@@ -52,6 +52,8 @@ pub mod insight_generator;
 pub mod interest_explorer;
 pub mod memory_store;
 pub mod predictive_engine;
+#[cfg(test)]
+mod tests;
 
 pub use insight_generator::{InsightGenerator, UserInsight};
 pub use interest_explorer::{InterestExplorer, ExplorationResult, LatentInterest};

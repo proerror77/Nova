@@ -99,6 +99,8 @@ class UserService {
     }
 
     /// Update user settings
+    /// NOTE: Uses identity-service as the SINGLE SOURCE OF TRUTH
+    /// All settings including dm_permission are managed by identity-service
     func updateSettings(
         userId: String,
         emailNotifications: Bool? = nil,
@@ -109,7 +111,8 @@ class UserService {
         darkMode: Bool? = nil,
         privacyLevel: PrivacyLevel? = nil,
         allowMessages: Bool? = nil,
-        showOnlineStatus: Bool? = nil
+        showOnlineStatus: Bool? = nil,
+        dmPermission: DmPermission? = nil
     ) async throws -> UserSettings {
         struct UpdateSettingsResponse: Codable {
             let settings: UserSettings
@@ -125,7 +128,8 @@ class UserService {
             darkMode: darkMode,
             privacyLevel: privacyLevel?.rawValue,
             allowMessages: allowMessages,
-            showOnlineStatus: showOnlineStatus
+            showOnlineStatus: showOnlineStatus,
+            dmPermission: dmPermission?.rawValue
         )
 
         let response: UpdateSettingsResponse = try await client.request(
@@ -135,6 +139,15 @@ class UserService {
         )
 
         return response.settings
+    }
+
+    /// Convenience method to update DM permission only
+    /// - Parameters:
+    ///   - userId: User ID
+    ///   - permission: DM permission setting
+    /// - Returns: Updated user settings
+    func updateDmPermission(userId: String, permission: DmPermission) async throws -> UserSettings {
+        return try await updateSettings(userId: userId, dmPermission: permission)
     }
 
     /// Convenience method to update dark mode only

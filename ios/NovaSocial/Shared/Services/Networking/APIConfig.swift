@@ -22,8 +22,9 @@ enum APIEnvironment {
                !stagingURL.hasPrefix("$(") {  // Skip unresolved build variables
                 return stagingURL
             }
-            // Staging API via Cloudflare DNS
-            return "http://api.staging.gcp.icered.com:8000"
+            // Staging API via GKE Ingress IP (34.8.163.8)
+            // Note: api.staging.gcp.icered.com DNS may resolve to VPN proxy IP which doesn't work in iOS Simulator
+            return "http://34.8.163.8"
         case .production:
             return "http://api.icered.com:8000"
         }
@@ -268,14 +269,16 @@ struct APIConfig {
         static func getProfile(_ id: String) -> String { "/api/v2/users/\(id)" }
     }
 
-    // MARK: - User Settings API
+    // MARK: - User Settings API (identity-service - SINGLE SOURCE OF TRUTH)
     struct Settings {
         /// GET /api/v2/auth/users/{id}/settings 獲取用戶設定
-        /// NOTE: HTTP 網關目前將使用者設定掛在 auth-service 之下，
-        /// 對應 backend/proto/services/auth_service.proto GetUserSettings。
-        /// 如果之後遷移到 user-service，請同步更新為 /api/v2/users/{id}/settings。
+        /// NOTE: identity-service is the SINGLE SOURCE OF TRUTH for all user settings
+        /// including dm_permission (P0 migration completed).
+        /// Do NOT use Relationships.getPrivacySettings - it is deprecated.
         static func getSettings(_ userId: String) -> String { "/api/v2/auth/users/\(userId)/settings" }
         /// PUT /api/v2/auth/users/{id}/settings 更新用戶設定
+        /// NOTE: identity-service is the SINGLE SOURCE OF TRUTH.
+        /// Use this endpoint for all settings updates including dm_permission.
         static func updateSettings(_ userId: String) -> String { "/api/v2/auth/users/\(userId)/settings" }
     }
 
@@ -472,8 +475,13 @@ struct APIConfig {
         static func getRelationship(_ userId: String) -> String { "/api/v2/relationships/\(userId)" }
 
         // Privacy Settings
-        static let getPrivacySettings = "/api/v2/settings/privacy"  // GET 獲取私訊權限設定
-        static let updatePrivacySettings = "/api/v2/settings/privacy"  // PUT 更新私訊權限 {dm_permission: "anyone"|"followers"|"mutuals"|"nobody"}
+        // ⚠️ DEPRECATED: Use APIConfig.Settings.getSettings/updateSettings instead
+        // dm_permission is now managed by identity-service (SINGLE SOURCE OF TRUTH)
+        // These endpoints will be removed in a future version
+        @available(*, deprecated, message: "Use APIConfig.Settings.getSettings instead. dm_permission is now in identity-service.")
+        static let getPrivacySettings = "/api/v2/settings/privacy"
+        @available(*, deprecated, message: "Use APIConfig.Settings.updateSettings instead. dm_permission is now in identity-service.")
+        static let updatePrivacySettings = "/api/v2/settings/privacy"
 
         // Message Requests (when dm_permission restricts non-followers)
         static let getMessageRequests = "/api/v2/message-requests"  // GET 獲取待處理的訊息請求

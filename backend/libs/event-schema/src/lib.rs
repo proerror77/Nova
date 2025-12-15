@@ -31,6 +31,10 @@ pub struct EventEnvelope<T> {
     pub source: String,
     /// Correlation ID for distributed tracing
     pub correlation_id: Option<Uuid>,
+    /// Event type identifier (e.g., "UserDeletedEvent", "UserProfileUpdatedEvent")
+    /// P1: Added to avoid guessing event type from payload fields
+    #[serde(default)]
+    pub event_type: Option<String>,
     /// Actual event payload
     pub data: T,
 }
@@ -43,12 +47,32 @@ impl<T> EventEnvelope<T> {
             schema_version: SCHEMA_VERSION,
             source: source.into(),
             correlation_id: None,
+            event_type: None,
+            data,
+        }
+    }
+
+    /// Create a new envelope with explicit event type
+    /// P1: Preferred constructor for better event routing
+    pub fn new_with_type(source: impl Into<String>, event_type: impl Into<String>, data: T) -> Self {
+        Self {
+            event_id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            schema_version: SCHEMA_VERSION,
+            source: source.into(),
+            correlation_id: None,
+            event_type: Some(event_type.into()),
             data,
         }
     }
 
     pub fn with_correlation_id(mut self, correlation_id: Uuid) -> Self {
         self.correlation_id = Some(correlation_id);
+        self
+    }
+
+    pub fn with_event_type(mut self, event_type: impl Into<String>) -> Self {
+        self.event_type = Some(event_type.into());
         self
     }
 }

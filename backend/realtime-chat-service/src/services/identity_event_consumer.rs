@@ -143,22 +143,36 @@ impl IdentityEventConsumer {
             AppError::StartServer(format!("Invalid JSON in Kafka message: {}", e))
         })?;
 
-        // Extract event type from the 'data' field structure
-        // We need to inspect the payload to determine which event type it is
+        // P1: Prefer explicit event_type field if present
+        if let Some(event_type) = envelope_value.get("event_type").and_then(|v| v.as_str()) {
+            return match event_type {
+                "UserDeletedEvent" => self.handle_user_deleted(payload_str).await,
+                "UserProfileUpdatedEvent" => self.handle_user_profile_updated(payload_str).await,
+                _ => {
+                    // Unknown event type, skip silently
+                    // This allows us to ignore other events like UserCreatedEvent, PasswordChangedEvent, etc.
+                    Ok(())
+                }
+            };
+        }
+
+        // Fallback: Legacy field inspection for backward compatibility
+        // Remove this fallback once all producers include event_type
         if let Some(data) = envelope_value.get("data") {
             // Check for UserDeletedEvent by looking for 'deleted_at' and 'soft_delete' fields
             if data.get("deleted_at").is_some() && data.get("soft_delete").is_some() {
+                warn!("Legacy event format detected (no event_type field). Consider updating producer to include event_type.");
                 return self.handle_user_deleted(payload_str).await;
             }
 
             // Check for UserProfileUpdatedEvent by looking for 'username' and 'updated_at' fields
             if data.get("username").is_some() && data.get("updated_at").is_some() && data.get("display_name").is_some() {
+                warn!("Legacy event format detected (no event_type field). Consider updating producer to include event_type.");
                 return self.handle_user_profile_updated(payload_str).await;
             }
         }
 
         // Unknown event type, skip silently
-        // This allows us to ignore other events like UserCreatedEvent, PasswordChangedEvent, etc.
         Ok(())
     }
 

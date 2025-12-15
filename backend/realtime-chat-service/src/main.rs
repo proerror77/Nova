@@ -12,6 +12,7 @@ use realtime_chat_service::{
     services::{
         encryption::EncryptionService,
         graph_client::GraphClient,
+        identity_client::IdentityClient,
         key_exchange::KeyExchangeService,
         megolm_service::MegolmService,
         olm_service::{AccountEncryptionKey, OlmService},
@@ -181,6 +182,22 @@ async fn main() -> Result<(), error::AppError> {
         }
     };
 
+    // Initialize IdentityClient for user settings (dm_permission) via identity-service
+    // P0: Single source of truth for dm_permission
+    let identity_client = match IdentityClient::new().await {
+        Ok(client) => {
+            tracing::info!("✅ Identity gRPC client initialized (dm_permission source of truth)");
+            Some(Arc::new(client))
+        }
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "Failed to initialize Identity gRPC client, dm_permission checks will use defaults"
+            );
+            None
+        }
+    };
+
     // Initialize Matrix client (optional, when MATRIX_ENABLED=true)
     let matrix_client = if cfg.matrix.enabled {
         match realtime_chat_service::services::matrix_client::MatrixClient::new(cfg.matrix.clone()).await {
@@ -224,6 +241,7 @@ async fn main() -> Result<(), error::AppError> {
         megolm_service,
         matrix_client,
         graph_client,
+        identity_client,
     };
 
     // Start Redis Streams listener for cross-instance fanout
