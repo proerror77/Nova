@@ -221,8 +221,8 @@ impl CdcConsumer {
             "INSERT INTO posts_cdc (id, user_id, content, media_url, created_at, cdc_timestamp, is_deleted) VALUES ('{}', '{}', '{}', {}, '{}', {}, {})",
             post_id,
             author_id,
-            content.replace('\'', "''"),
-            media_url.map(|u| format!("'{}'", u.replace('\'', "''"))).unwrap_or_else(|| "NULL".to_string()),
+            Self::escape_clickhouse_str(&content),
+            media_url.map(|u| format!("'{}'", Self::escape_clickhouse_str(&u))).unwrap_or_else(|| "NULL".to_string()),
             created_at.format("%Y-%m-%d %H:%M:%S"),
             cdc_timestamp,
             is_deleted
@@ -317,7 +317,7 @@ impl CdcConsumer {
             comment_id,
             post_id,
             user_id,
-            content.replace('\'', "''"),
+            Self::escape_clickhouse_str(&content),
             created_at.format("%Y-%m-%d %H:%M:%S"),
             cdc_timestamp,
             is_deleted
@@ -376,6 +376,13 @@ impl CdcConsumer {
             user_id, post_id, op
         );
         Ok(())
+    }
+
+    /// Escape a string for ClickHouse SQL queries.
+    /// Escapes single quotes (') and question marks (?) which are interpreted
+    /// as parameter placeholders by the clickhouse crate.
+    fn escape_clickhouse_str(s: &str) -> String {
+        s.replace('\'', "''").replace('?', "\\?")
     }
 
     fn extract_field<T>(data: &Value, field: &str) -> Result<T>
