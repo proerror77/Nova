@@ -96,3 +96,14 @@ vendor/
 .backup/
 infra/ten-agent-repo/
 infra/ten-agent-repo/
+
+# Temporary test files
+*-response.json
+*-payload.json
+user-creds.json
+backup-*.yaml
+*.backup
+
+# Local test scripts (should be in scripts/ if needed)
+test-*.sh
+do-*.sh
