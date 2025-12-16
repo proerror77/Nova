@@ -123,7 +123,7 @@ spec:
 
       containers:
         - name: graphql-gateway
-          image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/graphql-gateway:latest
+          image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/graphql-gateway:latest
           imagePullPolicy: Always
 
           securityContext:
