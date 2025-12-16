@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
 use crate::clients::proto::search::{
-    GetSearchSuggestionsRequest, GetTrendingTopicsRequest, SearchAllRequest, SearchContentRequest,
-    SearchHashtagsRequest, SearchUsersRequest,
+    FullTextSearchRequest, GetSearchSuggestionsRequest, GetTrendingSearchesRequest,
+    SearchHashtagsRequest, SearchPostsRequest, SearchUsersRequest,
 };
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
@@ -188,6 +188,7 @@ pub struct TrendingTopic {
 
 /// GET /api/v2/search
 /// Unified search across content, users, and hashtags
+/// Uses full_text_search which returns mixed results
 pub async fn search_all(
     req: HttpRequest,
     clients: web::Data<ServiceClients>,
@@ -211,81 +212,82 @@ pub async fn search_all(
 
     let mut search_client = clients.search_client();
 
-    let grpc_request = tonic::Request::new(SearchAllRequest {
+    let grpc_request = tonic::Request::new(FullTextSearchRequest {
         query: query.q.clone(),
-        limit_per_type: query.limit_per_type,
+        limit: query.limit_per_type * 3, // Approximate total
+        offset: 0,
+        filters: None,
     });
 
-    match search_client.search_all(grpc_request).await {
+    match search_client.full_text_search(grpc_request).await {
         Ok(response) => {
             let inner = response.into_inner();
 
-            let content: Vec<ContentResult> = inner
-                .content
-                .into_iter()
-                .map(|c| ContentResult {
-                    id: c.id,
-                    content_type: format!("{:?}", c.r#type),
-                    title: if c.title.is_empty() {
-                        None
-                    } else {
-                        Some(c.title)
-                    },
-                    content: c.content,
-                    author_id: c.author_id,
-                    author_username: if c.author_username.is_empty() {
-                        None
-                    } else {
-                        Some(c.author_username)
-                    },
-                    author_avatar: if c.author_avatar.is_empty() {
-                        None
-                    } else {
-                        Some(c.author_avatar)
-                    },
-                    media_urls: c.media_urls,
-                    like_count: c.like_count,
-                    comment_count: c.comment_count,
-                    relevance_score: c.relevance_score,
-                    created_at: c.created_at.map(|t| t.seconds).unwrap_or(0),
-                })
-                .collect();
+            // FullTextSearchResponse returns SearchResult items with type field
+            // We need to separate them into content, users, and hashtags
+            let mut content: Vec<ContentResult> = Vec::new();
+            let mut users: Vec<UserResult> = Vec::new();
+            let mut hashtags: Vec<HashtagResult> = Vec::new();
 
-            let users: Vec<UserResult> = inner
-                .users
-                .into_iter()
-                .map(|u| UserResult {
-                    id: u.id,
-                    username: u.username,
-                    display_name: u.display_name,
-                    bio: if u.bio.is_empty() { None } else { Some(u.bio) },
-                    avatar_url: if u.avatar_url.is_empty() {
-                        None
-                    } else {
-                        Some(u.avatar_url)
-                    },
-                    is_verified: u.is_verified,
-                    follower_count: u.follower_count,
-                    relevance_score: u.relevance_score,
-                })
-                .collect();
-
-            let hashtags: Vec<HashtagResult> = inner
-                .hashtags
-                .into_iter()
-                .map(|h| HashtagResult {
-                    tag: h.tag,
-                    post_count: h.post_count,
-                    usage_count_24h: h.usage_count_24h,
-                    is_trending: h.is_trending,
-                })
-                .collect();
+            for result in inner.results {
+                match result.r#type.as_str() {
+                    "post" => {
+                        content.push(ContentResult {
+                            id: result.id,
+                            content_type: "post".to_string(),
+                            title: if result.title.is_empty() {
+                                None
+                            } else {
+                                Some(result.title)
+                            },
+                            content: result.description,
+                            author_id: String::new(),
+                            author_username: None,
+                            author_avatar: None,
+                            media_urls: vec![],
+                            like_count: 0,
+                            comment_count: 0,
+                            relevance_score: result.relevance_score as f64,
+                            created_at: result.created_at,
+                        });
+                    }
+                    "user" => {
+                        users.push(UserResult {
+                            id: result.id,
+                            username: result.title.clone(),
+                            display_name: result.title.clone(),
+                            bio: if result.description.is_empty() {
+                                None
+                            } else {
+                                Some(result.description)
+                            },
+                            avatar_url: if result.thumbnail_url.is_empty() {
+                                None
+                            } else {
+                                Some(result.thumbnail_url)
+                            },
+                            is_verified: false,
+                            follower_count: 0,
+                            relevance_score: result.relevance_score as f64,
+                        });
+                    }
+                    "hashtag" => {
+                        hashtags.push(HashtagResult {
+                            tag: result.title,
+                            post_count: 0,
+                            usage_count_24h: 0,
+                            is_trending: false,
+                        });
+                    }
+                    _ => {}
+                }
+            }
 
             Ok(HttpResponse::Ok().json(SearchAllResponse {
                 content,
                 users,
                 hashtags,
-                total_results: inner.total_results,
+                total_results: inner.total_count,
             }))
         }
         Err(status) => {
@@ -325,37 +327,36 @@ pub async fn search_content(
 
     let mut search_client = clients.search_client();
 
-    // Build filter
-    let filter =
-        query.verified_only.map(
-            |verified_only| crate::clients::proto::search::SearchFilter {
-                types: vec![],
-                author_ids: vec![],
-                hashtags: vec![],
-                from: None,
-                to: None,
-                verified_only,
-            },
-        );
-
-    let grpc_request = tonic::Request::new(SearchContentRequest {
-        query: query.q.clone(),
-        filter,
-        sort: None,
-        limit: query.limit,
-        offset: query.offset,
+    // Build filter (SearchFilters in new proto)
+    let filters = query.verified_only.map(|verified_only| {
+        crate::clients::proto::search::SearchFilters {
+            content_type: String::new(),
+            date_from: 0,
+            date_to: 0,
+            hashtags: vec![],
+            language: String::new(),
+            verified_only,
+            sort_by: String::new(),
+        }
     });
 
-    match search_client.search_content(grpc_request).await {
+    let grpc_request = tonic::Request::new(SearchPostsRequest {
+        query: query.q.clone(),
+        limit: query.limit,
+        offset: query.offset,
+        filters,
+    });
+
+    match search_client.search_posts(grpc_request).await {
         Ok(response) => {
             let inner = response.into_inner();
 
             let results: Vec<ContentResult> = inner
-                .results
+                .posts
                 .into_iter()
                 .map(|c| ContentResult {
                     id: c.id,
-                    content_type: format!("{:?}", c.r#type),
+                    content_type: "post".to_string(),
                     title: if c.title.is_empty() {
                         None
                     } else {
@@ -363,28 +364,22 @@ pub async fn search_content(
                     },
                     content: c.content,
                     author_id: c.author_id,
-                    author_username: if c.author_username.is_empty() {
-                        None
-                    } else {
-                        Some(c.author_username)
-                    },
-                    author_avatar: if c.author_avatar.is_empty() {
-                        None
-                    } else {
-                        Some(c.author_avatar)
-                    },
-                    media_urls: c.media_urls,
+                    author_username: None,
+                    author_avatar: None,
+                    media_urls: vec![],
                     like_count: c.like_count,
                     comment_count: c.comment_count,
-                    relevance_score: c.relevance_score,
-                    created_at: c.created_at.map(|t| t.seconds).unwrap_or(0),
+                    relevance_score: c.relevance_score as f64,
+                    created_at: c.created_at,
                 })
                 .collect();
+
+            let has_more = results.len() as i32 >= query.limit;
 
             Ok(HttpResponse::Ok().json(SearchContentResponse {
                 results,
                 total_count: inner.total_count,
-                has_more: inner.has_more,
+                has_more,
             }))
         }
         Err(status) => {
@@ -424,21 +419,12 @@ pub async fn search_users_full(
 
     let mut search_client = clients.search_client();
 
-    let filter = if query.verified_only.is_some() || query.min_followers.is_some() {
-        Some(crate::clients::proto::search::UserSearchFilter {
-            verified_only: query.verified_only.unwrap_or(false),
-            min_followers: query.min_followers.unwrap_or(0),
-            location: String::new(),
-        })
-    } else {
-        None
-    };
-
+    // New proto has verified_only as direct field, no UserSearchFilter
     let grpc_request = tonic::Request::new(SearchUsersRequest {
         query: query.q.clone(),
-        filter,
         limit: query.limit,
         offset: query.offset,
+        verified_only: query.verified_only.unwrap_or(false),
     });
 
     match search_client.search_users(grpc_request).await {
@@ -446,10 +432,10 @@ pub async fn search_users_full(
             let inner = response.into_inner();
 
             let results: Vec<UserResult> = inner
-                .results
+                .users
                 .into_iter()
                 .map(|u| UserResult {
-                    id: u.id,
+                    id: u.user_id,
                     username: u.username,
                     display_name: u.display_name,
                     bio: if u.bio.is_empty() { None } else { Some(u.bio) },
@@ -460,14 +446,16 @@ pub async fn search_users_full(
                     },
                     is_verified: u.is_verified,
                     follower_count: u.follower_count,
-                    relevance_score: u.relevance_score,
+                    relevance_score: u.relevance_score as f64,
                 })
                 .collect();
+
+            let has_more = results.len() as i32 >= query.limit;
 
             Ok(HttpResponse::Ok().json(SearchUsersResponse {
                 results,
                 total_count: inner.total_count,
-                has_more: inner.has_more,
+                has_more,
             }))
         }
         Err(status) => {
@@ -506,10 +494,11 @@ pub async fn search_hashtags(
 
     let mut search_client = clients.search_client();
 
+    // New proto doesn't have trending_only field
     let grpc_request = tonic::Request::new(SearchHashtagsRequest {
         query: query.q.clone(),
         limit: query.limit,
-        trending_only: query.trending_only.unwrap_or(false),
+        offset: 0,
     });
 
     match search_client.search_hashtags(grpc_request).await {
@@ -517,13 +506,13 @@ pub async fn search_hashtags(
             let inner = response.into_inner();
 
             let results: Vec<HashtagResult> = inner
-                .results
+                .hashtags
                 .into_iter()
                 .map(|h| HashtagResult {
                     tag: h.tag,
-                    post_count: h.post_count,
-                    usage_count_24h: h.usage_count_24h,
-                    is_trending: h.is_trending,
+                    post_count: h.post_count as i64,
+                    usage_count_24h: h.usage_count as i64,
+                    is_trending: h.trending_status == "trending",
                 })
                 .collect();
 
@@ -565,8 +554,9 @@ pub async fn get_suggestions(
 
     let mut search_client = clients.search_client();
 
+    // New proto uses partial_query instead of query
     let grpc_request = tonic::Request::new(GetSearchSuggestionsRequest {
-        query: query.q.clone(),
+        partial_query: query.q.clone(),
         limit: query.limit,
     });
 
@@ -579,8 +569,8 @@ pub async fn get_suggestions(
                 .into_iter()
                 .map(|s| SearchSuggestion {
                     text: s.text,
-                    suggestion_type: format!("{:?}", s.r#type),
-                    frequency: s.frequency,
+                    suggestion_type: s.r#type,
+                    frequency: s.popularity as i64, // popularity instead of frequency
                 })
                 .collect();
 
@@ -599,7 +589,7 @@ pub async fn get_suggestions(
 }
 
 /// GET /api/v2/search/trending
-/// Get trending topics/hashtags
+/// Get trending searches (not hashtags/topics)
 pub async fn get_trending_topics(
     clients: web::Data<ServiceClients>,
     query: web::Query<TrendingQuery>,
@@ -613,23 +603,25 @@ pub async fn get_trending_topics(
 
     let mut search_client = clients.search_client();
 
-    let grpc_request = tonic::Request::new(GetTrendingTopicsRequest {
+    // New proto uses GetTrendingSearchesRequest
+    let grpc_request = tonic::Request::new(GetTrendingSearchesRequest {
         limit: query.limit,
-        location: query.location.clone().unwrap_or_default(),
+        time_window: "24h".to_string(), // Default to 24h window
     });
 
-    match search_client.get_trending_topics(grpc_request).await {
+    match search_client.get_trending_searches(grpc_request).await {
         Ok(response) => {
             let inner = response.into_inner();
 
+            // Map trending searches to topics format
             let topics: Vec<TrendingTopic> = inner
-                .topics
+                .searches
                 .into_iter()
                 .map(|t| TrendingTopic {
-                    tag: t.tag,
-                    post_count: t.post_count,
-                    usage_count_24h: t.usage_count_24h,
-                    trend_score: t.trend_score,
+                    tag: t.query,
+                    post_count: 0,
+                    usage_count_24h: t.search_count as i64,
+                    trend_score: t.trend_score as f64,
                 })
                 .collect();
 

@@ -62,7 +62,8 @@ pub mod proto {
     }
 
     pub mod search {
-        tonic::include_proto!("nova.search.v1");
+        // Uses proto/services/search_service.proto to match deployed search-service
+        tonic::include_proto!("nova.search_service.v2");
     }
 
     pub mod notification {

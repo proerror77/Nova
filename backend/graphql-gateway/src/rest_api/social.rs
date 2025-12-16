@@ -15,7 +15,7 @@
 /// POST /api/v2/chat/groups/create - Create group chat
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use crate::clients::proto::auth::{
     auth_service_client::AuthServiceClient, GenerateInviteRequest, GetCurrentDeviceRequest,
@@ -100,7 +100,7 @@ fn current_device_from_request(req: &HttpRequest) -> Device {
 }
 
 /// GET /api/v2/search/users?q={query}
-/// Search users - with fallback to identity-service when search-service fails
+/// Search users via search-service
 pub async fn search_users(
     query: web::Query<SearchRequest>,
     clients: web::Data<ServiceClients>,
@@ -109,13 +109,12 @@ pub async fn search_users(
 
     let limit = query.limit.unwrap_or(20) as i32;
 
-    // Try search-service first
     let mut search_client = clients.search_client();
     let req = tonic::Request::new(crate::clients::proto::search::SearchUsersRequest {
         query: query.q.clone(),
-        filter: None,
         limit,
         offset: 0,
+        verified_only: false,
     });
 
     match clients
@@ -125,10 +124,10 @@ pub async fn search_users(
         Ok(resp) => {
             // Transform response to match iOS expected format
             let users: Vec<UserCard> = resp
-                .results
+                .users
                 .into_iter()
                 .map(|u| UserCard {
-                    id: u.id,
+                    id: u.user_id,
                     username: u.username,
                     display_name: if u.display_name.is_empty() {
                         None
@@ -151,48 +150,12 @@ pub async fn search_users(
             })))
         }
         Err(e) => {
-            warn!("search_users via search-service failed, falling back to identity-service: {}", e);
-
-            // Fallback to identity-service ListUsers
-            let mut auth_client = clients.auth_client();
-            let fallback_req = tonic::Request::new(crate::clients::proto::auth::ListUsersRequest {
-                limit,
-                offset: 0,
-                search: query.q.clone(),
-            });
-
-            match auth_client.list_users(fallback_req).await {
-                Ok(resp) => {
-                    let inner = resp.into_inner();
-                    // Note: ListUsersResponse.User only has basic fields (id, username, email)
-                    // Profile fields (display_name, avatar_url, bio) are not available here
-                    let users: Vec<UserCard> = inner
-                        .users
-                        .into_iter()
-                        .map(|u| UserCard {
-                            id: u.id,
-                            username: u.username.clone(),
-                            display_name: Some(u.username), // Use username as display name fallback
-                            avatar_url: None,
-                            bio: None,
-                            is_following: false,
-                        })
-                        .collect();
-
-                    Ok(HttpResponse::Ok().json(serde_json::json!({
-                        "users": users,
-                        "total": inner.total_count,
-                    })))
-                }
-                Err(fallback_err) => {
-                    error!("search_users fallback to identity-service also failed: {}", fallback_err);
-                    Ok(HttpResponse::ServiceUnavailable().json(serde_json::json!({
-                        "users": [],
-                        "total": 0,
-                        "error": "Search service unavailable",
-                    })))
-                }
-            }
+            error!("search_users failed: {}", e);
+            Ok(HttpResponse::ServiceUnavailable().json(serde_json::json!({
+                "users": [],
+                "total": 0,
+                "error": "Search service unavailable",
+            })))
         }
     }
 }
@@ -213,7 +176,7 @@ pub async fn get_recommendations(
     // Placeholder: until recommendation RPC is available, degrade gracefully
     let mut search_client = clients.search_client();
     let req = tonic::Request::new(crate::clients::proto::search::GetSearchSuggestionsRequest {
-        query: "".to_string(),
+        partial_query: "".to_string(),
         limit: limit as i32,
     });
 
