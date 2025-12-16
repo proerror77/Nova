@@ -8,6 +8,7 @@ enum AppPage: Equatable {
     case forgotPassword
     case resetPassword(token: String)
     case createAccount
+    case phoneRegistration
     case home
     case rankingList
     case search

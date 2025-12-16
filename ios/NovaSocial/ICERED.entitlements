@@ -7,5 +7,9 @@
 		<string>webcredentials:icered.com</string>
 		<string>webcredentials:app.icered.com</string>
 	</array>
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>
