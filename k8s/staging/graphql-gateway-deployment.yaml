@@ -155,11 +155,25 @@ spec:
             - name: SERVER_PORT
               value: "8080"
 
-            # Service endpoints
-            - name: AUTH_SERVICE_URL
+            # Service endpoints (using GRPC_ prefix for GrpcConfig compatibility)
+            - name: GRPC_IDENTITY_SERVICE_URL
               value: "http://identity-service.nova-staging.svc.cluster.local:50051"
-            - name: GRAPH_SERVICE_URL
+            - name: GRPC_GRAPH_SERVICE_URL
               value: "http://graph-service.nova-staging.svc.cluster.local:9080"
+            - name: GRPC_CHAT_SERVICE_URL
+              value: "http://realtime-chat-service.nova-staging.svc.cluster.local:9085"
+            - name: GRPC_NOTIFICATION_SERVICE_URL
+              value: "http://notification-service.nova-staging.svc.cluster.local:9080"
+            - name: GRPC_CONTENT_SERVICE_URL
+              value: "http://content-service.nova-staging.svc.cluster.local:9080"
+            - name: GRPC_FEED_SERVICE_URL
+              value: "http://feed-service.nova-staging.svc.cluster.local:9080"
+            - name: GRPC_SOCIAL_SERVICE_URL
+              value: "http://social-service.nova-staging.svc.cluster.local:9006"
+            - name: GRPC_MEDIA_SERVICE_URL
+              value: "http://media-service.nova-staging.svc.cluster.local:9080"
+            - name: GRPC_SEARCH_SERVICE_URL
+              value: "http://search-service.nova-staging.svc.cluster.local:9080"
 
             # Kafka configuration
             - name: KAFKA_BROKERS

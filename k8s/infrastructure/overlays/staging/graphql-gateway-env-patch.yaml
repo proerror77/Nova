@@ -47,12 +47,11 @@ spec:
           value: "https://realtime-chat-service.nova-staging.svc.cluster.local:9095"
 
         # ============================================================
-        # Legacy environment variables (for backward compatibility)
-        # Used by notification/graph services not yet in GrpcConfig
+        # Notification and Graph services (now using GrpcConfig)
         # ============================================================
-        - name: NOTIFICATION_SERVICE_URL
+        - name: GRPC_NOTIFICATION_SERVICE_URL
           value: "http://notification-service.nova-staging.svc.cluster.local:9093"
-        - name: GRAPH_SERVICE_URL
+        - name: GRPC_GRAPH_SERVICE_URL
           value: "http://graph-service.nova-staging.svc.cluster.local:9080"
 
         # ============================================================
