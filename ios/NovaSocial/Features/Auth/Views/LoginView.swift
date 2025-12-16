@@ -1,9 +1,27 @@
 import SwiftUI
-import AuthenticationServices
 
 // MARK: - Login View
 
 struct LoginView: View {
+    // MARK: - Design Constants
+    private enum Layout {
+        static let contentOffset: CGFloat = 200
+        static let inputFieldHeight: CGFloat = 49
+        static let buttonHeight: CGFloat = 46
+        static let buttonCornerRadius: CGFloat = 31.5
+        static let fieldCornerRadius: CGFloat = 6
+        static let fieldSpacing: CGFloat = 28
+        static let errorOffset: CGFloat = 32
+    }
+
+    private enum Colors {
+        static let placeholder = Color(white: 0.77)
+        static let secondaryText = Color(white: 0.53)
+        static let disabledText = Color(white: 0.40)
+        static let errorText = Color(red: 1, green: 0.4, blue: 0.4)
+        static let fieldBorder = Color.white.opacity(0.3)
+    }
+
     // MARK: - Binding
     @Binding var currentPage: AppPage
 
@@ -12,10 +30,8 @@ struct LoginView: View {
     @State private var password = ""
     @State private var isLoading = false
     @State private var isGoogleLoading = false
-    @State private var isAppleLoading = false
     @State private var errorMessage: String?
     @State private var showPassword = false
-    @State private var showForgotPassword = false
 
     // MARK: - Validation State
     @State private var emailError: String?
@@ -24,13 +40,20 @@ struct LoginView: View {
     // MARK: - Focus State
     @FocusState private var focusedField: Field?
 
-    enum Field {
+    private enum Field {
         case email
         case password
     }
 
-    // Access global AuthenticationManager
+    // MARK: - Environment
     @EnvironmentObject private var authManager: AuthenticationManager
+
+    // MARK: - Computed Properties
+    /// Forgot Password 按钮启用条件：email 格式正确且无错误
+    private var isForgotPasswordEnabled: Bool {
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmedEmail.isEmpty && isValidEmail(trimmedEmail) && emailError == nil
+    }
 
     var body: some View {
         ZStack {
@@ -48,112 +71,97 @@ struct LoginView: View {
                 .ignoresSafeArea()
 
             // Main Content
-            GeometryReader { geometry in
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 0) {
-                        // ============================================
-                        // 📐 整体内容垂直位置调整
-                        // 修改下面的 offset 值来调整整体位置
-                        // 正值 = 向下移动，负值 = 向上移动
-                        // ============================================
-                        let contentVerticalOffset: CGFloat = 140
+            VStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    // Logo Section
+                    logoSection
 
-                        // 内容容器
-                        VStack(spacing: 0) {
-                            // Logo Section
-                            logoSection
+                    Spacer()
+                        .frame(height: 40.h)
 
-                            Spacer()
-                                .frame(height: 40)
+                    // Welcome Text
+                    Text("Welcome to Icered")
+                        .font(.system(size: 30.f, weight: .bold))
+                        .foregroundColor(.white)
 
-                            // Welcome Text
-                            Text("Welcome to Icered")
-                                .font(.system(size: 30, weight: .bold))
-                                .foregroundColor(.white)
+                    Spacer()
+                        .frame(height: 36.h)
 
-                            Spacer()
-                                .frame(height: 36)
+                    // Input Fields
+                    VStack(spacing: 28.h) {
+                        // Email Field
+                        emailTextField
 
-                            // Input Fields
-                            VStack(spacing: 16) {
-                                // Email Field
-                                emailTextField
-
-                                // Password Field
-                                passwordTextField
-                            }
-                            .padding(.horizontal, 16)
-
-                            // Forgot Password
-                            HStack {
-                                Spacer()
-                                Button(action: {
-                                    showForgotPassword = true
-                                }) {
-                                    Text(LocalizedStringKey("Forgot_Password"))
-                                        .font(.system(size: 12, weight: .light))
-                                        .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
-                                }
-                            }
-                            .padding(.horizontal, 20)
-                            .padding(.top, 12)
-
-                            // Error Message
-                            if let errorMessage = errorMessage {
-                                Text(LocalizedStringKey(errorMessage))
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.red)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 40)
-                                    .padding(.top, 12)
-                            }
-
-                            Spacer()
-                                .frame(height: 32)
-
-                            // Buttons
-                            VStack(spacing: 16) {
-                                // Sign In Button
-                                signInButton
-
-                                // Create Account Button
-                                createAccountButton
-
-                                // Divider
-                                orDivider
-
-                                // Social Sign-In Buttons
-                                socialSignInButtons
-                            }
-                            .padding(.horizontal, 16)
-                        }
-                        .offset(y: contentVerticalOffset)
-
-                        Spacer()
+                        // Password Field
+                        passwordTextField
                     }
-                    .frame(minHeight: geometry.size.height)
+                    .padding(.horizontal, 16.w)
+
+                    // Forgot Password
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            currentPage = .forgotPassword
+                        }) {
+                            Text(LocalizedStringKey("Forgot_Password"))
+                                .font(.system(size: 12.f, weight: .light))
+                                .foregroundColor(isForgotPasswordEnabled ? Colors.placeholder : Colors.disabledText)
+                        }
+                        .disabled(!isForgotPasswordEnabled)
+                    }
+                    .padding(.horizontal, 20.w)
+                    .padding(.top, 12.h)
+
+                    // Error Message - 使用固定高度容器，避免影响按钮位置
+                    Text(errorMessage != nil ? LocalizedStringKey(errorMessage!) : " ")
+                        .font(.system(size: 12.f))
+                        .foregroundColor(.red)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 20.w)
+                        .frame(minHeight: 20.h)
+                        .opacity(errorMessage != nil ? 1 : 0)
+
+                    Spacer()
+                        .frame(height: 12.h)
+
+                    // Buttons
+                    VStack(spacing: 12.h) {
+                        // Log In Button
+                        logInButton
+
+                        // Google & Apple Buttons (side by side)
+                        HStack(spacing: 11.w) {
+                            googleButton
+                            appleButton
+                        }
+
+                        // Create Account Button
+                        createAccountButton
+                    }
+                    .padding(.horizontal, 16.w)
                 }
-                .scrollDismissesKeyboard(.interactively)
+                .offset(y: Layout.contentOffset.h)
+
+                Spacer()
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
             .onTapGesture {
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                focusedField = nil
             }
         }
         .ignoresSafeArea(.keyboard)
-        .fullScreenCover(isPresented: $showForgotPassword) {
-            ForgotPasswordView()
-                .environmentObject(authManager)
-        }
     }
 
     // MARK: - Logo Section
     private var logoSection: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 4.s) {
             Image("Logo-R")
                 .resizable()
                 .scaledToFit()
-                .frame(height: 90)
+                .frame(height: 50.s)
                 .colorInvert()
                 .brightness(1)
         }
@@ -161,115 +169,165 @@ struct LoginView: View {
 
     // MARK: - Email TextField
     private var emailTextField: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.clear)
-                    .frame(height: 49)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(emailError != nil ? Color.red : Color.white.opacity(0.3), lineWidth: emailError != nil ? 1 : 0.5)
-                    )
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: Layout.fieldCornerRadius.s)
+                .fill(Color.clear)
+                .frame(height: Layout.inputFieldHeight.h)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Layout.fieldCornerRadius.s)
+                        .stroke(emailError != nil ? Color.red : Colors.fieldBorder, lineWidth: emailError != nil ? 1 : 0.5)
+                )
 
-                TextField("", text: $email, prompt: Text(LocalizedStringKey("email_or_phone_number")).foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77)))
-                    .foregroundColor(.white)
-                    .font(.system(size: 14, weight: .light))
-                    .padding(.horizontal, 16)
-                    .autocapitalization(.none)
-                    .keyboardType(.emailAddress)
-                    .autocorrectionDisabled()
-                    .textContentType(.username)
-                    .accessibilityIdentifier("loginEmailTextField")
-                    .focused($focusedField, equals: .email)
-                    .onChange(of: email) { _, newValue in
-                        validateEmailRealtime(newValue)
-                    }
-            }
+            TextField("", text: $email, prompt: Text(LocalizedStringKey("email or phone number")).foregroundColor(Colors.placeholder))
+                .foregroundColor(.white)
+                .font(.system(size: 14.f, weight: .light))
+                .padding(.horizontal, 16.w)
+                .autocapitalization(.none)
+                .keyboardType(.emailAddress)
+                .autocorrectionDisabled()
+                .accessibilityIdentifier("loginEmailTextField")
+                .focused($focusedField, equals: .email)
+                .onChange(of: email) { _, newValue in
+                    validateEmailRealtime(newValue)
+                }
 
             if let error = emailError {
                 Text(LocalizedStringKey(error))
-                    .font(.system(size: 11))
-                    .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
-                    .padding(.leading, 4)
+                    .font(.system(size: 11.f))
+                    .foregroundColor(Colors.errorText)
+                    .padding(.leading, 4.w)
+                    .offset(y: Layout.errorOffset.h)
             }
         }
     }
 
     // MARK: - Password TextField
     private var passwordTextField: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.clear)
-                    .frame(height: 49)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(passwordError != nil ? Color.red : Color.white.opacity(0.3), lineWidth: passwordError != nil ? 1 : 0.5)
-                    )
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: Layout.fieldCornerRadius.s)
+                .fill(Color.clear)
+                .frame(height: Layout.inputFieldHeight.h)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Layout.fieldCornerRadius.s)
+                        .stroke(passwordError != nil ? Color.red : Colors.fieldBorder, lineWidth: passwordError != nil ? 1 : 0.5)
+                )
 
-                HStack {
-                    if showPassword {
-                        TextField("", text: $password, prompt: Text(LocalizedStringKey("password")).foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77)))
-                            .foregroundColor(.white)
-                            .font(.system(size: 14, weight: .light))
-                            .autocapitalization(.none)
-                            .autocorrectionDisabled()
-                            .textContentType(.password)
-                            .accessibilityIdentifier("loginPasswordTextField")
-                            .focused($focusedField, equals: .password)
-                    } else {
-                        SecureField("", text: $password, prompt: Text(LocalizedStringKey("password")).foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77)))
-                            .foregroundColor(.white)
-                            .font(.system(size: 14, weight: .light))
-                            .textContentType(.password)
-                            .accessibilityIdentifier("loginPasswordTextField")
-                            .focused($focusedField, equals: .password)
-                    }
-
-                    Button(action: {
-                        showPassword.toggle()
-                    }) {
-                        Text(showPassword ? "HIDE" : "SHOW")
-                            .font(.system(size: 12, weight: .light))
-                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                    }
+            HStack {
+                if showPassword {
+                    TextField("", text: $password, prompt: Text(LocalizedStringKey("password")).foregroundColor(Colors.placeholder))
+                        .foregroundColor(.white)
+                        .font(.system(size: 14.f, weight: .light))
+                        .autocapitalization(.none)
+                        .autocorrectionDisabled()
+                        .accessibilityIdentifier("loginPasswordTextField")
+                        .focused($focusedField, equals: .password)
+                } else {
+                    SecureField("", text: $password, prompt: Text(LocalizedStringKey("password")).foregroundColor(Colors.placeholder))
+                        .foregroundColor(.white)
+                        .font(.system(size: 14.f, weight: .light))
+                        .accessibilityIdentifier("loginPasswordTextField")
+                        .focused($focusedField, equals: .password)
                 }
-                .padding(.horizontal, 16)
+
+                Text(showPassword ? "HIDE" : "SHOW")
+                    .font(.system(size: 12.f, weight: .light))
+                    .foregroundColor(Colors.secondaryText)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        showPassword.toggle()
+                    }
             }
+            .padding(.horizontal, 16.w)
 
             if let error = passwordError {
                 Text(LocalizedStringKey(error))
-                    .font(.system(size: 11))
-                    .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
-                    .padding(.leading, 4)
+                    .font(.system(size: 11.f))
+                    .foregroundColor(Colors.errorText)
+                    .padding(.leading, 4.w)
+                    .offset(y: Layout.errorOffset.h)
             }
         }
     }
 
-    // MARK: - Sign In Button
-    private var signInButton: some View {
+    // MARK: - Log In Button
+    private var logInButton: some View {
         Button(action: {
             Task {
                 await handleLogin()
             }
         }) {
-            HStack(spacing: 8) {
+            HStack(spacing: 8.w) {
                 if isLoading {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .black))
                         .scaleEffect(0.9)
                 }
-                Text(LocalizedStringKey("Sign_In"))
-                    .font(.system(size: 20, weight: .bold))
+                Text("Log in")
+                    .font(Font.custom("Helvetica Neue", size: 17.f).weight(.bold))
+                    .lineSpacing(20)
                     .foregroundColor(.black)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 46)
+            .frame(height: Layout.buttonHeight.h)
             .background(Color.white)
-            .cornerRadius(31.50)
+            .cornerRadius(Layout.buttonCornerRadius.s)
         }
         .disabled(isLoading || isGoogleLoading)
-        .accessibilityIdentifier("signInButton")
+        .accessibilityIdentifier("logInButton")
+    }
+
+    // MARK: - Google Button (Icon Only)
+    private var googleButton: some View {
+        Button(action: {
+            Task {
+                await handleGoogleSignIn()
+            }
+        }) {
+            ZStack {
+                if isGoogleLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(0.9)
+                } else {
+                    Text("G")
+                        .font(.system(size: 20.f, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: Layout.buttonHeight.h)
+            .background(Color.clear)
+            .cornerRadius(65.s)
+            .overlay(
+                RoundedRectangle(cornerRadius: 65.s)
+                    .stroke(Color.white, lineWidth: 0.5)
+            )
+        }
+        .disabled(isLoading || isGoogleLoading)
+        .accessibilityIdentifier("googleButton")
+    }
+
+    // MARK: - Apple Button (Icon Only)
+    private var appleButton: some View {
+        Button(action: {
+            Task {
+                await handleAppleSignIn()
+            }
+        }) {
+            Image(systemName: "apple.logo")
+                .font(.system(size: 20.f, weight: .medium))
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: Layout.buttonHeight.h)
+                .background(Color.clear)
+                .cornerRadius(65.s)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 65.s)
+                        .stroke(Color.white, lineWidth: 0.5)
+                )
+        }
+        .disabled(isLoading || isGoogleLoading)
+        .accessibilityIdentifier("appleButton")
     }
 
     // MARK: - Create Account Button
@@ -277,100 +335,20 @@ struct LoginView: View {
         Button(action: {
             currentPage = .welcome
         }) {
-            Text(LocalizedStringKey("Create_An_Account"))
-                .font(.system(size: 16, weight: .medium))
+            Text("Create account")
+                .font(Font.custom("Helvetica Neue", size: 17.f).weight(.bold))
+                .lineSpacing(20)
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
-                .frame(height: 46)
+                .frame(height: Layout.buttonHeight.h)
+                .background(Color.clear)
+                .cornerRadius(40.s)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 31.50)
-                        .stroke(Color.white.opacity(0.5), lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: 40.s)
+                        .stroke(Color.white, lineWidth: 0.5)
                 )
         }
         .accessibilityIdentifier("createAccountButton")
-    }
-
-    // MARK: - Or Divider
-    private var orDivider: some View {
-        HStack(spacing: 16) {
-            Rectangle()
-                .fill(Color.white.opacity(0.3))
-                .frame(height: 0.5)
-
-            Text("OR")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(Color.white.opacity(0.6))
-
-            Rectangle()
-                .fill(Color.white.opacity(0.3))
-                .frame(height: 0.5)
-        }
-        .padding(.vertical, 8)
-    }
-
-    // MARK: - Social Sign-In Buttons
-    private var socialSignInButtons: some View {
-        VStack(spacing: 12) {
-            // Apple Sign-In Button
-            Button(action: {
-                Task {
-                    await handleAppleSignIn()
-                }
-            }) {
-                HStack(spacing: 12) {
-                    if isAppleLoading {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(0.8)
-                    } else {
-                        Image(systemName: "apple.logo")
-                            .font(.system(size: 18, weight: .medium))
-                    }
-                    Text("Sign in with Apple")
-                        .font(.system(size: 16, weight: .medium))
-                }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 46)
-                .background(Color.black)
-                .cornerRadius(31.50)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 31.50)
-                        .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
-                )
-            }
-            .disabled(isLoading || isGoogleLoading || isAppleLoading)
-            .accessibilityIdentifier("appleSignInButton")
-
-            // Google Sign-In Button
-            Button(action: {
-                Task {
-                    await handleGoogleSignIn()
-                }
-            }) {
-                HStack(spacing: 12) {
-                    if isGoogleLoading {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .black))
-                            .scaleEffect(0.8)
-                    } else {
-                        Image("google-logo")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 18, height: 18)
-                    }
-                    Text("Sign in with Google")
-                        .font(.system(size: 16, weight: .medium))
-                }
-                .foregroundColor(.black)
-                .frame(maxWidth: .infinity)
-                .frame(height: 46)
-                .background(Color.white)
-                .cornerRadius(31.50)
-            }
-            .disabled(isLoading || isGoogleLoading || isAppleLoading)
-            .accessibilityIdentifier("googleSignInButton")
-        }
     }
 
     // MARK: - Actions
@@ -425,14 +403,13 @@ struct LoginView: View {
     }
 
     private func handleAppleSignIn() async {
-        isAppleLoading = true
+        isLoading = true
         errorMessage = nil
 
         do {
             let _ = try await authManager.loginWithApple()
             // Success - AuthenticationManager will update isAuthenticated
         } catch {
-            // Check if user cancelled
             let errorDesc = error.localizedDescription.lowercased()
             if errorDesc.contains("cancel") {
                 // User cancelled, no error message needed
@@ -441,29 +418,26 @@ struct LoginView: View {
             }
         }
 
-        isAppleLoading = false
+        isLoading = false
     }
 
     // MARK: - Validation
 
     private func validateLogin() -> Bool {
-        let trimmedIdentifier = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if trimmedIdentifier.isEmpty {
-            errorMessage = "Please_enter_your_email"
+            if trimmedEmail.isEmpty {
+                errorMessage = "Please_enter_your_email"
             return false
         }
 
-        // Allow both username and email formats
-        // Username: alphanumeric with optional underscores/dots, 3+ chars
-        // Email: standard email format
-        if !isValidIdentifier(trimmedIdentifier) {
-            errorMessage = "Please_enter_a_valid_email"
+            if !isValidEmail(trimmedEmail) {
+                errorMessage = "Please_enter_a_valid_email"
             return false
         }
 
-        if password.isEmpty {
-            errorMessage = "Please_enter_your_password"
+            if password.isEmpty {
+                errorMessage = "Please_enter_your_password"
             return false
         }
 
@@ -476,7 +450,7 @@ struct LoginView: View {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             emailError = nil  // Don't show error for empty field until submit
-        } else if !isValidIdentifier(trimmed) {
+        } else if !isValidEmail(trimmed) {
             emailError = "Invalid_email_format"
         } else {
             emailError = nil
@@ -485,18 +459,6 @@ struct LoginView: View {
 
     // MARK: - Validation Helpers
 
-    /// Validates if input is a valid email OR username
-    /// Backend accepts both formats for login
-    private func isValidIdentifier(_ identifier: String) -> Bool {
-        // Check if it's a valid email
-        if isValidEmail(identifier) {
-            return true
-        }
-        // Check if it's a valid username (alphanumeric, underscores, dots, 3-30 chars)
-        let usernameRegex = #"^[A-Za-z0-9._]{3,30}$"#
-        return identifier.range(of: usernameRegex, options: .regularExpression) != nil
-    }
-
     private func isValidEmail(_ email: String) -> Bool {
         // Basic email format validation using regex
         let emailRegex = #"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"#
@@ -504,9 +466,15 @@ struct LoginView: View {
     }
 }
 
-// MARK: - Preview
+// MARK: - Previews
 
-#Preview {
+#Preview("Login - Default") {
     LoginView(currentPage: .constant(.login))
         .environmentObject(AuthenticationManager.shared)
+}
+
+#Preview("Login - Dark Mode") {
+    LoginView(currentPage: .constant(.login))
+        .environmentObject(AuthenticationManager.shared)
+        .preferredColorScheme(.dark)
 }

@@ -120,3 +120,30 @@ private struct InteractionButton: View {
         }
     }
 }
+
+// MARK: - Previews
+
+#Preview("CommentCard - Default") {
+    @Previewable @State var showReport = false
+
+    CommentCardItem(
+        hasExtraField: false,
+        imageAssetName: "PollCard-1",
+        showReportView: $showReport
+    )
+    .padding()
+    .background(DesignTokens.backgroundColor)
+}
+
+#Preview("CommentCard - Dark Mode") {
+    @Previewable @State var showReport = false
+
+    CommentCardItem(
+        hasExtraField: false,
+        imageAssetName: "PollCard-1",
+        showReportView: $showReport
+    )
+    .padding()
+    .background(DesignTokens.backgroundColor)
+    .preferredColorScheme(.dark)
+}

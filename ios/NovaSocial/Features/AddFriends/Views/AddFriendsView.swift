@@ -86,18 +86,15 @@ class AddFriendsViewModel {
                 #if DEBUG
                 print("[AddFriendsView] Search service error (\(statusCode)), trying fallback...")
                 #endif
-                // 備用方案：直接通過用戶名查找（不顯示錯誤，因為有 fallback）
+                // 備用方案：直接通過用戶名查找
                 await searchUserByUsernameFallback()
             } else if case APIError.unauthorized = error {
                 #if DEBUG
                 print("[AddFriendsView] Search unauthorized, trying fallback...")
                 #endif
-                // 備用方案：直接通過用戶名查找（不顯示錯誤，因為有 fallback）
                 await searchUserByUsernameFallback()
             } else {
-                // 只有在無法 fallback 的錯誤才顯示錯誤訊息
                 errorMessage = "搜索失败: \(error.localizedDescription)"
-                searchResults = []
                 #if DEBUG
                 print("❌ Search failed: \(error)")
                 #endif
@@ -113,18 +110,12 @@ class AddFriendsViewModel {
             // 嘗試通過精確用戶名查找
             let user = try await userService.getUserByUsername(searchQuery.lowercased())
             searchResults = [user]
-            // 成功找到用戶，清除錯誤訊息
-            errorMessage = nil
             #if DEBUG
             print("[AddFriendsView] Fallback search found user: \(user.username)")
             #endif
         } catch {
             // 如果找不到精確匹配，顯示空結果而非錯誤
             searchResults = []
-            // 只在真的找不到用戶時才顯示友善的提示（不顯示技術錯誤）
-            if !searchQuery.isEmpty {
-                errorMessage = nil // 不顯示錯誤，用空結果表示沒找到
-            }
             #if DEBUG
             print("[AddFriendsView] Fallback search: no user found for '\(searchQuery)'")
             #endif
@@ -220,10 +211,26 @@ class AddFriendsViewModel {
         let userProfile = UserProfile(
             id: creator.id,
             username: creator.username,
+            email: nil,
             displayName: creator.displayName,
             bio: nil,
             avatarUrl: creator.avatarUrl,
-            isVerified: creator.isVerified
+            coverUrl: nil,
+            website: nil,
+            location: nil,
+            isVerified: creator.isVerified,
+            isPrivate: nil,
+            isBanned: nil,
+            followerCount: nil,
+            followingCount: nil,
+            postCount: nil,
+            createdAt: nil,
+            updatedAt: nil,
+            deletedAt: nil,
+            firstName: nil,
+            lastName: nil,
+            dateOfBirth: nil,
+            gender: nil
         )
         await startChat(with: userProfile)
     }
@@ -726,6 +733,15 @@ struct RecommendedCreatorCard: View {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("AddFriends - Default") {
     AddFriendsView(currentPage: .constant(.addFriends))
+        .environmentObject(AuthenticationManager.shared)
+}
+
+#Preview("AddFriends - Dark Mode") {
+    AddFriendsView(currentPage: .constant(.addFriends))
+        .environmentObject(AuthenticationManager.shared)
+        .preferredColorScheme(.dark)
 }

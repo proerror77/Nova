@@ -346,7 +346,15 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("Location - Default") {
     @Previewable @State var showLocation = true
     LocationView(showLocation: $showLocation)
+}
+
+#Preview("Location - Dark Mode") {
+    @Previewable @State var showLocation = true
+    LocationView(showLocation: $showLocation)
+        .preferredColorScheme(.dark)
 }

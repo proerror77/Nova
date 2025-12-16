@@ -12,7 +12,7 @@ struct InviteFriendsView: View {
 
     // 分享内容
     private var shareMessage: String {
-        "Join me on ICERED! \(invitationLink)"
+        "Join me on Icered! \(invitationLink)"
     }
 
     var body: some View {
@@ -116,6 +116,15 @@ struct InviteFriendsView: View {
     }
 }
 
-#Preview {
-    InviteFriendsView(currentPage: .constant(.setting))
+// MARK: - Previews
+
+#Preview("InviteFriends - Default") {
+    InviteFriendsView(currentPage: .constant(.inviteFriends))
+        .environmentObject(AuthenticationManager.shared)
+}
+
+#Preview("InviteFriends - Dark Mode") {
+    InviteFriendsView(currentPage: .constant(.inviteFriends))
+        .environmentObject(AuthenticationManager.shared)
+        .preferredColorScheme(.dark)
 }

@@ -1,5 +1,6 @@
 import SwiftUI
 import Foundation
+import PhotosUI
 
 // MARK: - HomeView
 
@@ -16,9 +17,11 @@ struct HomeView: View {
     @State private var showPhotoOptions = false
     @State private var showComments = false
     @State private var selectedPostForComment: FeedPost?
-    @State private var showImagePicker = false
+    @State private var showSystemPhotoPicker = false  // 直接打开系统相册
+    @State private var selectedPhotosFromPicker: [PhotosPickerItem] = []  // 系统相册选择的照片
     @State private var showCamera = false
-    @State private var selectedImage: UIImage?
+    @State private var selectedMediaItems: [PostMediaItem] = []
+    @State private var cameraImage: UIImage?  // 相机拍摄的单张图片
     @State private var showGenerateImage = false
     @State private var showWrite = false
     @State private var selectedPostForDetail: FeedPost?
@@ -26,6 +29,10 @@ struct HomeView: View {
     @State private var showToast = false
     @State private var showShareSheet = false
     @State private var selectedPostForShare: FeedPost?
+
+    // MARK: - UserProfile 导航状态
+    @State private var showUserProfile = false
+    @State private var selectedUserId: String = ""
 
     // NOTE: Channels are now loaded dynamically via feedViewModel.channels
     // Old hardcoded channels removed - using backend API instead
@@ -42,13 +49,19 @@ struct HomeView: View {
             } else if showNewPost {
                 NewPostView(
                     showNewPost: $showNewPost,
-                    initialImage: selectedImage,
+                    initialMediaItems: selectedMediaItems,
+                    initialCameraImage: cameraImage,
                     onPostSuccess: { newPost in
                         // Post 成功后直接添加到 Feed 顶部（优化版本，不需要重新加载整个feed）
                         feedViewModel.addNewPost(newPost)
                     }
                 )
                 .transition(.identity)
+                .onDisappear {
+                    // 清除选择的媒体项
+                    selectedMediaItems = []
+                    cameraImage = nil
+                }
             } else if showGenerateImage {
                 GenerateImage01View(showGenerateImage: $showGenerateImage)
                     .transition(.identity)
@@ -62,19 +75,20 @@ struct HomeView: View {
                         showPostDetail = false
                         selectedPostForDetail = nil
                     },
-                    onLike: {
-                        Task { await feedViewModel.toggleLike(postId: post.id) }
-                    },
-                    onComment: {
-                        selectedPostForComment = post
-                        showComments = true
-                    },
-                    onShare: {
-                        Task { await feedViewModel.sharePost(postId: post.id) }
-                    },
-                    onBookmark: {
-                        Task { await feedViewModel.toggleBookmark(postId: post.id) }
+                    onAvatarTapped: { authorId in
+                        // 从帖子详情页点击头像跳转用户主页
+                        showPostDetail = false
+                        selectedPostForDetail = nil
+                        selectedUserId = authorId
+                        showUserProfile = true
                     }
+                )
+                .transition(.identity)
+            } else if showUserProfile {
+                // MARK: - UserProfile 页面
+                UserProfileView(
+                    showUserProfile: $showUserProfile,
+                    userId: selectedUserId
                 )
                 .transition(.identity)
             } else {
@@ -86,7 +100,8 @@ struct HomeView: View {
                 PhotoOptionsModal(
                     isPresented: $showPhotoOptions,
                     onChoosePhoto: {
-                        showImagePicker = true
+                        // 直接打开系统相册选择器
+                        showSystemPhotoPicker = true
                     },
                     onTakePhoto: {
                         showCamera = true
@@ -99,28 +114,6 @@ struct HomeView: View {
                     }
                 )
             }
-
-            // MARK: - Toast Notification for Transient Errors
-            if showToast, let toastMessage = feedViewModel.toastError {
-                VStack {
-                    Spacer()
-                    HStack {
-                        Image(systemName: "exclamationmark.circle.fill")
-                            .foregroundColor(.white)
-                        Text(toastMessage)
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.white)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color.black.opacity(0.85))
-                    .cornerRadius(8)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 100) // Above tab bar
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .zIndex(999)
-            }
         }
         .animation(.none, value: showNotification)
         .animation(.none, value: showSearch)
@@ -128,70 +121,70 @@ struct HomeView: View {
         .animation(.none, value: showGenerateImage)
         .animation(.none, value: showWrite)
         .animation(.none, value: showPostDetail)
+        .animation(.none, value: showUserProfile)
         .navigationBarBackButtonHidden(true)
         .sheet(isPresented: $showReportView) {
             ReportModal(isPresented: $showReportView, showThankYouView: $showThankYouView)
         }
-        .sheet(item: $selectedPostForComment) { post in
-            CommentSheetView(post: post, isPresented: .constant(true))
-                .onDisappear {
-                    selectedPostForComment = nil
-                }
-        }
-        .sheet(isPresented: $showImagePicker) {
-            ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
-        }
-        .sheet(isPresented: $showCamera) {
-            ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
-        }
-        .sheet(isPresented: $showShareSheet) {
-            if let post = selectedPostForShare {
-                ActivityShareSheet(
-                    activityItems: ShareContentBuilder.buildShareItems(for: post),
-                    onComplete: { completed in
-                        showShareSheet = false
-                        selectedPostForShare = nil
-                        #if DEBUG
-                        print("[Share] Share completed: \(completed)")
-                        #endif
+        .sheet(isPresented: $showComments) {
+            if let post = selectedPostForComment {
+                CommentSheetView(
+                    post: post,
+                    isPresented: $showComments,
+                    onAvatarTapped: { userId in
+                        // 从评论弹窗点击头像跳转用户主页
+                        selectedUserId = userId
+                        showUserProfile = true
                     }
                 )
-                .presentationDetents([.medium, .large])
             }
         }
-        .onChange(of: selectedImage) { oldValue, newValue in
-            // 选择/拍摄照片后，自动跳转到NewPostView
+        .sheet(isPresented: $showCamera) {
+            ImagePicker(sourceType: .camera, selectedImage: $cameraImage)
+        }
+        .photosPicker(
+            isPresented: $showSystemPhotoPicker,
+            selection: $selectedPhotosFromPicker,
+            maxSelectionCount: 5,
+            matching: .any(of: [.images, .livePhotos])
+        )
+        .onChange(of: cameraImage) { oldValue, newValue in
+            // 相机拍摄后，跳转到NewPostView
             if newValue != nil {
                 showNewPost = true
             }
         }
-        .onChange(of: feedViewModel.toastError) { oldValue, newValue in
-            // Show toast when error appears, auto-dismiss after 3 seconds
-            if newValue != nil {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    showToast = true
-                }
-                // Auto-dismiss after 3 seconds
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        showToast = false
-                        feedViewModel.toastError = nil
+        .onChange(of: selectedPhotosFromPicker) { oldValue, newValue in
+            // 从系统相册选择后，加载图片并跳转到 NewPostView
+            guard !newValue.isEmpty else { return }
+            Task {
+                do {
+                    let mediaItems = try await LivePhotoManager.shared.loadMedia(from: newValue, maxCount: 5)
+                    await MainActor.run {
+                        selectedMediaItems = mediaItems
+                        selectedPhotosFromPicker = []  // 清空以便下次选择
+                        showNewPost = true
                     }
+                } catch {
+                    #if DEBUG
+                    print("[HomeView] Failed to load photos: \(error)")
+                    #endif
+                    selectedPhotosFromPicker = []
                 }
             }
         }
-        .onAppear {
+        .task {
             // Load feed when view appears
             if feedViewModel.posts.isEmpty {
-                Task { await feedViewModel.loadFeed() }
+                await feedViewModel.loadFeed()
             }
         }
     }
 
     var homeContent: some View {
         ZStack {
-            // 背景色 - 浅灰色 (与 Message 页面一致)
-            DesignTokens.backgroundColor
+            // 背景色 - 白色
+            Color.white
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -203,7 +196,7 @@ struct HomeView: View {
                             .foregroundColor(DesignTokens.textPrimary)
                     }
                     Spacer()
-                    Image("ICERED-icon")
+                    Image("Icered-icon")
                         .resizable()
                         .scaledToFit()
                         .frame(height: 18)
@@ -223,7 +216,7 @@ struct HomeView: View {
 
                 // MARK: - 可滚动内容区
                 ScrollView {
-                        LazyVStack(spacing: DesignTokens.spacing20) {
+                        VStack(spacing: DesignTokens.spacing20) {
                             // MARK: - Promo Banner (活动/广告区域)
                             PromoBannerView(onTap: {
                                 // TODO: 处理广告点击事件
@@ -250,10 +243,12 @@ struct HomeView: View {
 
                                     if error.contains("Session expired") || error.contains("login") {
                                         // Session expired - show login button
-                                        Button("Login") {
+                                        Button {
                                             Task {
                                                 await authManager.logout()
                                             }
+                                        } label: {
+                                            Text("Login")
                                         }
                                         .font(.system(size: DesignTokens.fontMedium, weight: .medium))
                                         .foregroundColor(DesignTokens.textOnAccent)
@@ -276,7 +271,7 @@ struct HomeView: View {
                             // 当前设置：每 4 个帖子后显示一次轮播图
                             ForEach(FeedLayoutBuilder.buildFeedItems(from: feedViewModel.posts)) { item in
                                 switch item {
-                                case .post(_, let post):
+                                case .post(let index, let post):
                                     FeedPostCard(
                                         post: post,
                                         showReportView: $showReportView,
@@ -285,23 +280,27 @@ struct HomeView: View {
                                             selectedPostForComment = post
                                             showComments = true
                                         },
-                                        onShare: {
-                                            Task {
-                                                // Record share to backend and get post for native share sheet
-                                                if let postToShare = await feedViewModel.sharePost(postId: post.id) {
-                                                    await MainActor.run {
-                                                        selectedPostForShare = postToShare
-                                                        showShareSheet = true
-                                                    }
-                                                }
-                                            }
-                                        },
+                                        onShare: { Task { await feedViewModel.sharePost(postId: post.id) } },
                                         onBookmark: { Task { await feedViewModel.toggleBookmark(postId: post.id) } },
-                                        onCardTap: {
-                                            selectedPostForDetail = post
-                                            showPostDetail = true
+                                        onAvatarTapped: { authorId in
+                                            // 点击头像跳转到用户主页
+                                            selectedUserId = authorId
+                                            showUserProfile = true
                                         }
                                     )
+                                    // 让卡片左右贴边显示
+                                    .padding(.horizontal, -DesignTokens.spacing16)
+                                    .ignoresSafeArea(.container, edges: .horizontal)
+                                    .onTapGesture {
+                                        selectedPostForDetail = post
+                                        showPostDetail = true
+                                    }
+                                    .onAppear {
+                                        // Auto-load more when reaching near the end (3 posts before)
+                                        if index >= feedViewModel.posts.count - 3 && feedViewModel.hasMore && !feedViewModel.isLoadingMore {
+                                            Task { await feedViewModel.loadMore() }
+                                        }
+                                    }
 
                                 case .carousel:
                                     HottestBankerSection(onSeeAllTapped: {
@@ -341,15 +340,6 @@ struct HomeView: View {
                                 .padding(.vertical, 40)
                             }
 
-                            // Pagination trigger - explicit trigger point
-                            if feedViewModel.hasMore && !feedViewModel.isLoadingMore {
-                                Color.clear
-                                    .frame(height: 1)
-                                    .onAppear {
-                                        Task { await feedViewModel.loadMore() }
-                                    }
-                            }
-
                             // MARK: - Loading More Indicator
                             if feedViewModel.isLoadingMore {
                                 HStack {
@@ -374,7 +364,7 @@ struct HomeView: View {
                     .frame(height: 0) // ← 调整 ScrollView 下方的间距
             }
             .safeAreaInset(edge: .bottom) {
-                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions)
+                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)
                     .padding(.top, 80)
             }
         }
@@ -421,8 +411,15 @@ struct HomeView: View {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("Home - Default") {
     HomeView(currentPage: .constant(.home))
         .environmentObject(AuthenticationManager.shared)
 }
 
+#Preview("Home - Dark Mode") {
+    HomeView(currentPage: .constant(.home))
+        .environmentObject(AuthenticationManager.shared)
+        .preferredColorScheme(.dark)
+}

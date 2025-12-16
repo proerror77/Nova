@@ -9,6 +9,7 @@ struct ProfileSettingView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
 
     // Picker sheets
+    @State private var showGenderPicker = false
     @State private var showLocationPicker = false
     @State private var showDatePicker = false
 
@@ -107,6 +108,9 @@ struct ProfileSettingView: View {
                 }
             }
         }
+        .sheet(isPresented: $showGenderPicker) {
+            GenderPickerView(selectedGender: $viewModel.gender, isPresented: $showGenderPicker)
+        }
         .sheet(isPresented: $showLocationPicker) {
             LocationPickerView(selectedLocation: $viewModel.location, isPresented: $showLocationPicker)
         }
@@ -119,25 +123,13 @@ struct ProfileSettingView: View {
     private var topNavigationBar: some View {
         HStack {
             Button(action: {
-                // Auto-save on exit if there are changes
-                Task {
-                    if viewModel.hasChanges && viewModel.canSave {
-                        _ = await viewModel.saveProfile()
-                    }
-                    currentPage = .setting
-                }
+                currentPage = .setting
             }) {
-                if viewModel.isSaving {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                } else {
-                    Image(systemName: "chevron.left")
-                        .frame(width: 24, height: 24)
-                        .foregroundColor(.black)
-                }
+                Image(systemName: "chevron.left")
+                    .frame(width: 24, height: 24)
+                    .foregroundColor(.black)
             }
             .frame(width: 50, alignment: .leading)
-            .disabled(viewModel.isSaving)
 
             Spacer()
 
@@ -148,9 +140,26 @@ struct ProfileSettingView: View {
 
             Spacer()
 
-            // Empty spacer for balance
-            Color.clear
-                .frame(width: 50)
+            Button(action: {
+                Task {
+                    let success = await viewModel.saveProfile()
+                    if success {
+                        currentPage = .setting
+                    }
+                }
+            }) {
+                if viewModel.isSaving {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                } else {
+                    Text("Save")
+                        .font(.system(size: 14))
+                        .lineSpacing(20)
+                        .foregroundColor(viewModel.canSave ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.53, green: 0.53, blue: 0.53))
+                }
+            }
+            .frame(width: 50, alignment: .trailing)
+            .disabled(viewModel.isSaving || !viewModel.canSave)
         }
         .frame(height: 60)
         .padding(.horizontal, 20)
@@ -290,44 +299,31 @@ struct ProfileSettingView: View {
         .shadow(color: cardShadowColor, radius: cardShadowRadius, x: 0, y: cardShadowY)
     }
 
-    // MARK: - Gender Card (Inline Menu)
+    // MARK: - Gender Card
     private var genderCard: some View {
-        HStack {
-            Text("Gender")
-                .font(labelFont)
-                .lineSpacing(19)
-                .foregroundColor(labelColor)
-                .frame(width: 100, alignment: .leading)
+        Button(action: {
+            showGenderPicker = true
+        }) {
+            HStack {
+                Text("Gender")
+                    .font(labelFont)
+                    .lineSpacing(19)
+                    .foregroundColor(labelColor)
+                    .frame(width: 100, alignment: .leading)
 
-            Spacer()
+                Text(viewModel.gender.displayName)
+                    .font(valueFont)
+                    .foregroundColor(.black)
 
-            Menu {
-                ForEach(Gender.selectableCases, id: \.self) { gender in
-                    Button(action: {
-                        viewModel.gender = gender
-                    }) {
-                        HStack {
-                            Text(gender.displayName)
-                            if viewModel.gender == gender {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Text(viewModel.gender.displayName)
-                        .font(valueFont)
-                        .foregroundColor(.black)
+                Spacer()
 
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 10))
-                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
         .background(.white)
         .cornerRadius(cardCornerRadius)
         .shadow(color: cardShadowColor, radius: cardShadowRadius, x: 0, y: cardShadowY)
@@ -411,6 +407,13 @@ struct ProfileSettingView: View {
     }
 }
 
-#Preview {
-    ProfileSettingView(currentPage: .constant(.setting))
+// MARK: - Previews
+
+#Preview("ProfileSetting - Default") {
+    ProfileSettingView(currentPage: .constant(.profileSetting))
+}
+
+#Preview("ProfileSetting - Dark Mode") {
+    ProfileSettingView(currentPage: .constant(.profileSetting))
+        .preferredColorScheme(.dark)
 }

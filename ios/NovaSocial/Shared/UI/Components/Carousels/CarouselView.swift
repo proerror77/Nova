@@ -302,6 +302,13 @@ struct CarouselView: View {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("Carousel - Default") {
     CarouselView()
+}
+
+#Preview("Carousel - Dark Mode") {
+    CarouselView()
+        .preferredColorScheme(.dark)
 }

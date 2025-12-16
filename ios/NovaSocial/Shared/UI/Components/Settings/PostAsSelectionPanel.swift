@@ -11,6 +11,8 @@ struct PostAsSelectionPanel: View {
     let realName: String
     let username: String
     let avatarUrl: String?
+    var onRealNameTap: (() -> Void)? = nil
+    var onAliasTap: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,7 +24,7 @@ struct PostAsSelectionPanel: View {
                 isSelected: selectedType == .realName,
                 borderColor: Color(red: 0.82, green: 0.11, blue: 0.26)
             ) {
-                selectedType = .realName
+                onRealNameTap?()
             }
 
             // 分隔线
@@ -37,7 +39,7 @@ struct PostAsSelectionPanel: View {
                 isSelected: selectedType == .alias,
                 borderColor: Color(red: 0.37, green: 0.37, blue: 0.37)
             ) {
-                selectedType = .alias
+                onAliasTap?()
             }
         }
         .padding(.horizontal, 16)
@@ -96,22 +98,10 @@ struct PostAsOptionRow: View {
 
                 Spacer()
 
-                // 选择指示器 - 放大到 22x22
-                ZStack {
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 22, height: 22)
-                        .overlay(
-                            Circle()
-                                .stroke(Color(red: 0.82, green: 0.13, blue: 0.25), lineWidth: isSelected ? 1.5 : 1)
-                        )
-
-                    if isSelected {
-                        Circle()
-                            .fill(Color(red: 0.82, green: 0.13, blue: 0.25))
-                            .frame(width: 14, height: 14)
-                    }
-                }
+                // 箭头指示器
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .foregroundColor(DesignTokens.textSecondary)
             }
             .padding(.vertical, 16)
         }

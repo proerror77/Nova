@@ -327,12 +327,358 @@ struct FeedLivePhotoPlayer: View {
     }
 }
 
-// MARK: - Preview
+// MARK: - Previews
 
-#Preview("Live Photo Badge") {
+#Preview("LivePhotoBadge - Default") {
     ZStack {
         Color.gray
         LivePhotoBadge()
     }
     .frame(width: 200, height: 200)
+}
+
+#Preview("LivePhotoBadge - Dark Mode") {
+    ZStack {
+        Color.gray
+        LivePhotoBadge()
+    }
+    .frame(width: 200, height: 200)
+    .preferredColorScheme(.dark)
+}
+
+// MARK: - Media Preview View
+
+/// 全屏媒体预览视图 - 支持普通图片和 Live Photo
+/// 可复用于 NewPost、Feed、Chat 等场景
+struct MediaPreviewView: View {
+    let mediaItem: PostMediaItem
+    @Binding var isPresented: Bool
+    var onDelete: (() -> Void)? = nil
+
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+
+    // Live Photo 播放状态
+    @State private var isPlayingLivePhoto = false
+    @State private var player: AVPlayer?
+
+    var body: some View {
+        ZStack {
+            // 背景
+            Color.black
+                .ignoresSafeArea()
+                .onTapGesture {
+                    dismissPreview()
+                }
+
+            // 媒体内容
+            GeometryReader { geometry in
+                ZStack {
+                    switch mediaItem {
+                    case .image(let image):
+                        imagePreview(image: image, geometry: geometry)
+
+                    case .livePhoto(let data):
+                        livePhotoPreview(data: data, geometry: geometry)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            // 顶部导航栏
+            VStack {
+                topBar
+                Spacer()
+
+                // 底部提示（Live Photo）
+                if case .livePhoto = mediaItem {
+                    bottomHint
+                }
+            }
+        }
+        .statusBar(hidden: true)
+        .onDisappear {
+            stopLivePhotoPlayback()
+        }
+    }
+
+    // MARK: - Image Preview
+
+    private func imagePreview(image: UIImage, geometry: GeometryProxy) -> some View {
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFit()
+            .scaleEffect(scale)
+            .offset(offset)
+            .gesture(
+                MagnificationGesture()
+                    .onChanged { value in
+                        let delta = value / lastScale
+                        lastScale = value
+                        scale = min(max(scale * delta, 1), 4)
+                    }
+                    .onEnded { _ in
+                        lastScale = 1.0
+                        if scale < 1 {
+                            withAnimation(.spring()) {
+                                scale = 1
+                                offset = .zero
+                            }
+                        }
+                    }
+            )
+            .simultaneousGesture(
+                DragGesture()
+                    .onChanged { value in
+                        if scale > 1 {
+                            offset = CGSize(
+                                width: lastOffset.width + value.translation.width,
+                                height: lastOffset.height + value.translation.height
+                            )
+                        } else {
+                            // 下滑关闭
+                            if value.translation.height > 0 {
+                                offset = CGSize(width: 0, height: value.translation.height)
+                            }
+                        }
+                    }
+                    .onEnded { value in
+                        if scale > 1 {
+                            lastOffset = offset
+                        } else {
+                            // 下滑超过 100 则关闭
+                            if value.translation.height > 100 {
+                                dismissPreview()
+                            } else {
+                                withAnimation(.spring()) {
+                                    offset = .zero
+                                }
+                            }
+                        }
+                    }
+            )
+            .onTapGesture(count: 2) {
+                withAnimation(.spring()) {
+                    if scale > 1 {
+                        scale = 1
+                        offset = .zero
+                        lastOffset = .zero
+                    } else {
+                        scale = 2
+                    }
+                }
+            }
+    }
+
+    // MARK: - Live Photo Preview
+
+    private func livePhotoPreview(data: LivePhotoData, geometry: GeometryProxy) -> some View {
+        ZStack {
+            // 静态图片
+            Image(uiImage: data.stillImage)
+                .resizable()
+                .scaledToFit()
+                .scaleEffect(scale)
+                .offset(offset)
+
+            // 视频播放层
+            if isPlayingLivePhoto, let player = player {
+                VideoPlayerLayer(player: player)
+                    .scaledToFit()
+                    .scaleEffect(scale)
+                    .offset(offset)
+            }
+
+            // Live Photo 徽章
+            if !isPlayingLivePhoto {
+                VStack {
+                    HStack {
+                        LivePhotoBadge()
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(16)
+            }
+        }
+        .gesture(
+            MagnificationGesture()
+                .onChanged { value in
+                    let delta = value / lastScale
+                    lastScale = value
+                    scale = min(max(scale * delta, 1), 4)
+                }
+                .onEnded { _ in
+                    lastScale = 1.0
+                    if scale < 1 {
+                        withAnimation(.spring()) {
+                            scale = 1
+                            offset = .zero
+                        }
+                    }
+                }
+        )
+        .simultaneousGesture(
+            DragGesture()
+                .onChanged { value in
+                    if scale > 1 {
+                        offset = CGSize(
+                            width: lastOffset.width + value.translation.width,
+                            height: lastOffset.height + value.translation.height
+                        )
+                    } else {
+                        if value.translation.height > 0 {
+                            offset = CGSize(width: 0, height: value.translation.height)
+                        }
+                    }
+                }
+                .onEnded { value in
+                    if scale > 1 {
+                        lastOffset = offset
+                    } else {
+                        if value.translation.height > 100 {
+                            dismissPreview()
+                        } else {
+                            withAnimation(.spring()) {
+                                offset = .zero
+                            }
+                        }
+                    }
+                }
+        )
+        .onLongPressGesture(minimumDuration: 0.1, pressing: { pressing in
+            if pressing {
+                startLivePhotoPlayback(data: data)
+            } else {
+                stopLivePhotoPlayback()
+            }
+        }, perform: {})
+        .onTapGesture(count: 2) {
+            withAnimation(.spring()) {
+                if scale > 1 {
+                    scale = 1
+                    offset = .zero
+                    lastOffset = .zero
+                } else {
+                    scale = 2
+                }
+            }
+        }
+    }
+
+    // MARK: - Top Bar
+
+    private var topBar: some View {
+        HStack {
+            // 关闭按钮
+            Button(action: {
+                dismissPreview()
+            }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.white)
+                    .frame(width: 40, height: 40)
+                    .background(Color.black.opacity(0.5))
+                    .clipShape(Circle())
+            }
+
+            Spacer()
+
+            // 删除按钮（如果提供了回调）
+            if let onDelete = onDelete {
+                Button(action: {
+                    onDelete()
+                    dismissPreview()
+                }) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white)
+                        .frame(width: 40, height: 40)
+                        .background(Color.red.opacity(0.8))
+                        .clipShape(Circle())
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+    }
+
+    // MARK: - Bottom Hint
+
+    private var bottomHint: some View {
+        HStack {
+            Image(systemName: "hand.tap.fill")
+                .font(.system(size: 14))
+            Text("Long press to play Live Photo")
+                .font(.system(size: 14))
+        }
+        .foregroundColor(.white.opacity(0.8))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.black.opacity(0.5))
+        .cornerRadius(20)
+        .padding(.bottom, 40)
+    }
+
+    // MARK: - Live Photo Playback
+
+    private func startLivePhotoPlayback(data: LivePhotoData) {
+        guard !isPlayingLivePhoto else { return }
+
+        if player == nil {
+            player = AVPlayer(url: data.videoURL)
+        }
+
+        player?.seek(to: .zero)
+        player?.play()
+
+        withAnimation(.easeInOut(duration: 0.15)) {
+            isPlayingLivePhoto = true
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: player?.currentItem,
+            queue: .main
+        ) { _ in
+            stopLivePhotoPlayback()
+        }
+    }
+
+    private func stopLivePhotoPlayback() {
+        player?.pause()
+        withAnimation(.easeInOut(duration: 0.15)) {
+            isPlayingLivePhoto = false
+        }
+    }
+
+    // MARK: - Dismiss
+
+    private func dismissPreview() {
+        stopLivePhotoPlayback()
+        withAnimation(.easeOut(duration: 0.2)) {
+            isPresented = false
+        }
+    }
+}
+
+// MARK: - Media Preview Previews
+
+#Preview("MediaPreview - Image") {
+    MediaPreviewView(
+        mediaItem: .image(UIImage(systemName: "photo")!),
+        isPresented: .constant(true)
+    )
+}
+
+#Preview("MediaPreview - With Delete") {
+    MediaPreviewView(
+        mediaItem: .image(UIImage(systemName: "photo")!),
+        isPresented: .constant(true),
+        onDelete: {
+            print("Delete tapped")
+        }
+    )
 }

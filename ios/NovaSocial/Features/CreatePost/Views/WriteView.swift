@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 写作视图 - 纯文字内容创作
+/// 文字转图片视图 - Text to Image
 struct WriteView: View {
     @Binding var showWrite: Bool
     var currentPage: Binding<AppPage>? = nil
@@ -10,7 +10,7 @@ struct WriteView: View {
     var body: some View {
         ZStack {
             // 背景色
-            DesignTokens.backgroundColor
+            Color.white
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -22,6 +22,7 @@ struct WriteView: View {
 
                 // MARK: - 文本输入框
                 ZStack {
+                    // 边框容器
                     Rectangle()
                         .foregroundColor(.clear)
                         .frame(width: 323, height: 564)
@@ -31,34 +32,22 @@ struct WriteView: View {
                                 .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 1)
                         )
 
-                    // TextEditor with placeholder
-                    VStack(spacing: 0) {
-                        Spacer()
-
-                        ZStack(alignment: .topLeading) {
-                            if textContent.isEmpty {
-                                Text("Write something...")
-                                    .font(.system(size: 25, weight: .medium))
-                                    .lineSpacing(20)
-                                    .italic()
-                                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                                    .padding(.top, 8)
-                                    .padding(.leading, 5)
-                            }
-
-                            TextEditor(text: $textContent)
-                                .font(.system(size: 25, weight: .medium))
-                                .lineSpacing(20)
-                                .foregroundColor(.black)
-                                .scrollContentBackground(.hidden)
-                                .background(Color.clear)
-                                .focused($isTextFieldFocused)
-                        }
-                        .frame(height: 60)
-
-                        Spacer()
-                    }
-                    .frame(width: 303, height: 544)
+                    // TextField 多行文本输入 - 自动换行，整体居中
+                    TextField(
+                        "",
+                        text: $textContent,
+                        prompt: Text("Write something...")
+                            .font(.system(size: 25, weight: .medium))
+                            .italic()
+                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53)),
+                        axis: .vertical
+                    )
+                    .font(.system(size: 25, weight: .medium))
+                    .foregroundColor(.black)
+                    .multilineTextAlignment(.leading)
+                    .focused($isTextFieldFocused)
+                    .frame(width: 260)
+                    .lineLimit(1...20)
                 }
 
                 Spacer()
@@ -70,26 +59,22 @@ struct WriteView: View {
                     print("Text to Image tapped with content: \(textContent)")
                     #endif
                 }) {
-                    HStack(spacing: 8) {
-                        Text("Text to Image")
-                            .font(.system(size: 16, weight: .medium))
-                            .lineSpacing(20)
-                            .foregroundColor(.white)
-                    }
-                    .padding(EdgeInsets(top: 20, leading: 153, bottom: 20, trailing: 153))
-                    .frame(width: 343, height: 46)
-                    .background(Color(red: 0.87, green: 0.11, blue: 0.26))
-                    .cornerRadius(31.50)
+                    Text("Image")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white)
                 }
+                .frame(width: 343, height: 46)
+                .background(Color(red: 0.87, green: 0.11, blue: 0.26))
+                .cornerRadius(31.50)
                 .padding(.bottom, 40)
             }
         }
         .onAppear {
-            // 自动聚焦到文本框
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 isTextFieldFocused = true
             }
         }
+        .ignoresSafeArea(.keyboard)
         .contentShape(Rectangle())
         .onTapGesture {
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
@@ -99,7 +84,7 @@ struct WriteView: View {
     // MARK: - Top Navigation Bar
     private var topNavigationBar: some View {
         HStack {
-            // 返回按钮
+            // 关闭按钮
             Button(action: {
                 if let currentPage = currentPage {
                     currentPage.wrappedValue = .home
@@ -116,7 +101,7 @@ struct WriteView: View {
             Spacer()
 
             // 标题
-            Text("Write")
+            Text("Text to Image")
                 .font(.system(size: 20, weight: .bold))
                 .foregroundColor(.black)
 
@@ -132,8 +117,9 @@ struct WriteView: View {
     }
 }
 
-// MARK: - Preview
+// MARK: - Previews
 
-#Preview {
+#Preview("Text to Image") {
     WriteView(showWrite: .constant(true))
+        .environmentObject(AuthenticationManager.shared)
 }

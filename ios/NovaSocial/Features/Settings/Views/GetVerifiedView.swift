@@ -91,6 +91,13 @@ struct GetVerifiedView: View {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("GetVerified - Default") {
     GetVerifiedView(currentPage: .constant(.getVerified))
+}
+
+#Preview("GetVerified - Dark Mode") {
+    GetVerifiedView(currentPage: .constant(.getVerified))
+        .preferredColorScheme(.dark)
 }

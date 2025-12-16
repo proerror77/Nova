@@ -237,6 +237,13 @@ struct GenerateImage01View: View {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("GenerateImage - Default") {
     GenerateImage01View(showGenerateImage: .constant(true))
+}
+
+#Preview("GenerateImage - Dark Mode") {
+    GenerateImage01View(showGenerateImage: .constant(true))
+        .preferredColorScheme(.dark)
 }

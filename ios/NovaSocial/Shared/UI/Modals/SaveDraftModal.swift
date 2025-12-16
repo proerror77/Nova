@@ -72,7 +72,9 @@ struct SaveDraftModal: View {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("SaveDraft - Default") {
     ZStack {
         Color.gray.opacity(0.3)
             .ignoresSafeArea()
@@ -83,4 +85,18 @@ struct SaveDraftModal: View {
             onYes: {}
         )
     }
+}
+
+#Preview("SaveDraft - Dark Mode") {
+    ZStack {
+        Color.gray.opacity(0.3)
+            .ignoresSafeArea()
+
+        SaveDraftModal(
+            isPresented: .constant(true),
+            onNo: {},
+            onYes: {}
+        )
+    }
+    .preferredColorScheme(.dark)
 }

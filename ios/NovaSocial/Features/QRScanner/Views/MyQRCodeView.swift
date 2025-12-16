@@ -145,7 +145,13 @@ private struct ShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("MyQRCode - Default") {
     MyQRCodeView()
-        .environmentObject(AuthenticationManager.shared)
+}
+
+#Preview("MyQRCode - Dark Mode") {
+    MyQRCodeView()
+        .preferredColorScheme(.dark)
 }

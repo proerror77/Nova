@@ -171,8 +171,9 @@ struct NameSelectorModal: View {
     }
 }
 
-// MARK: - Preview
-#Preview {
+// MARK: - Previews
+
+#Preview("NameSelector - Default") {
     @Previewable @State var isPresented = true
     @Previewable @State var selectedType: NameDisplayType = .realName
 
@@ -183,4 +184,15 @@ struct NameSelectorModal: View {
     .environmentObject(AuthenticationManager.shared)
 }
 
+#Preview("NameSelector - Dark Mode") {
+    @Previewable @State var isPresented = true
+    @Previewable @State var selectedType: NameDisplayType = .realName
+
+    NameSelectorModal(
+        isPresented: $isPresented,
+        selectedNameType: $selectedType
+    )
+    .environmentObject(AuthenticationManager.shared)
+    .preferredColorScheme(.dark)
+}
 

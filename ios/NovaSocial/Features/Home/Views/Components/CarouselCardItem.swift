@@ -7,8 +7,7 @@ struct CarouselCardItem: View {
     let name: String
     let company: String
     let votes: String
-    var imageAssetName: String = "PollCard-1"
-    var imageUrl: String? = nil
+    let imageAssetName: String
 
     var body: some View {
         VStack(spacing: 18) {
@@ -88,8 +87,9 @@ struct CarouselCardItem: View {
     }
 }
 
-// MARK: - Preview
-#Preview {
+// MARK: - Previews
+
+#Preview("CarouselCard - Default") {
     VStack(spacing: 0) {
         // MARK: - 标题部分
         HStack {
@@ -145,4 +145,45 @@ struct CarouselCardItem: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(DesignTokens.backgroundColor)
+}
+
+#Preview("CarouselCard - Dark Mode") {
+    VStack(spacing: 0) {
+        HStack {
+            Text("Hottest Banker in H.K.")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(.black)
+
+            Spacer()
+
+            Button(action: {}) {
+                Text("View more")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.black)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 16)
+        .padding(.top, 0)
+        .padding(.bottom, 5)
+
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 20) {
+                CarouselCardItem(
+                    rankNumber: "1",
+                    name: "Lucy Liu",
+                    company: "Morgan Stanley",
+                    votes: "2293",
+                    imageAssetName: "PollCard-1"
+                )
+            }
+            .padding(.horizontal, 16)
+        }
+        .frame(height: 360)
+
+        Spacer()
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(DesignTokens.backgroundColor)
+    .preferredColorScheme(.dark)
 }

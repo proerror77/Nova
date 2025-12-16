@@ -30,7 +30,15 @@ struct PromoBannerView: View {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("PromoBanner - Default") {
     PromoBannerView()
         .background(DesignTokens.backgroundColor)
+}
+
+#Preview("PromoBanner - Dark Mode") {
+    PromoBannerView()
+        .background(DesignTokens.backgroundColor)
+        .preferredColorScheme(.dark)
 }

@@ -78,8 +78,17 @@ struct ThankYouModal: View {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("ThankYou - Default") {
     @Previewable @State var showThankYouView = true
     @Previewable @State var isPresented = true
     ThankYouModal(showThankYouView: $showThankYouView, isPresented: $isPresented)
+}
+
+#Preview("ThankYou - Dark Mode") {
+    @Previewable @State var showThankYouView = true
+    @Previewable @State var isPresented = true
+    ThankYouModal(showThankYouView: $showThankYouView, isPresented: $isPresented)
+        .preferredColorScheme(.dark)
 }

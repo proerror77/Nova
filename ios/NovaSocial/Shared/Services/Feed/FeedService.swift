@@ -554,6 +554,24 @@ struct FeedPost: Identifiable, Codable {
             isBookmarked: isBookmarked ?? self.isBookmarked
         )
     }
+
+    /// Create FeedPost from content-service Post model (for Profile page navigation)
+    init(from post: Post, authorName: String, authorAvatar: String?) {
+        self.id = post.id
+        self.authorId = post.authorId
+        self.authorName = authorName
+        self.authorAvatar = authorAvatar
+        self.content = post.content
+        self.mediaUrls = post.mediaUrls ?? []
+        self.thumbnailUrls = post.mediaUrls ?? []
+        self.mediaType = FeedMediaType.from(urls: post.mediaUrls ?? [])
+        self.createdAt = Date(timeIntervalSince1970: Double(post.createdAt))
+        self.likeCount = post.likeCount ?? 0
+        self.commentCount = post.commentCount ?? 0
+        self.shareCount = post.shareCount ?? 0
+        self.isLiked = false
+        self.isBookmarked = false
+    }
 }
 
 // MARK: - Recommendation Models
