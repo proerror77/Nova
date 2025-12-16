@@ -12,7 +12,7 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 
 # APNs client
-apns2 = "0.1"
+a2 = "0.10"
 
 # Error handling
 thiserror = { workspace = true }

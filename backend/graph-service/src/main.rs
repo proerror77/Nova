@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
     info!("Starting Graph Service");
 
     // Load configuration
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     let config = Config::from_env().context("Failed to load configuration")?;
 
     info!(

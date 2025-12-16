@@ -62,7 +62,7 @@ pub struct RecallConfig {
 
 impl Config {
     pub fn from_env() -> Result<Self, envy::Error> {
-        dotenv::dotenv().ok();
+        dotenvy::dotenv().ok();
 
         Ok(Config {
             service: ServiceConfig {

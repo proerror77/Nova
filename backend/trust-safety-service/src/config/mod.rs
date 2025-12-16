@@ -28,7 +28,7 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> Result<Self, envy::Error> {
-        dotenv::dotenv().ok();
+        dotenvy::dotenv().ok();
 
         Ok(Self {
             grpc_port: env::var("GRPC_PORT")

@@ -113,14 +113,14 @@ mime = "0.3"
 qrcode = "0.14"
 reqwest = { version = "0.11", features = ["json"] }
 urlencoding = "2.1"
-validator = "0.16"
-utoipa = "4.2"
+validator = "0.20"
+utoipa = "5.4"
 tracing-actix-web = "0.7"
 tonic-health = "0.12"
 redis = { version = "0.25", features = ["aio", "tokio-comp", "connection-manager"] }
 async-trait = "0.1"
 config = "0.14"
-dotenv = "0.15"
+dotenvy = "0.15"
 dashmap = "6.1"
 envy = "0.4"
 

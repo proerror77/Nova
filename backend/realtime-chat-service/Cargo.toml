@@ -96,7 +96,7 @@ tower = "0.4"
 tonic-health = "0.12"
 
 # OpenAPI
-utoipa = "4.2"
+utoipa = "5.4"
 
 [package]
 name = "realtime-chat-service"
@@ -191,7 +191,7 @@ prometheus = { workspace = true }
 
 # OpenAPI
 utoipa = { workspace = true }
-utoipa-swagger-ui = { version = "5", features = ["actix-web"] }
+utoipa-swagger-ui = { version = "9", features = ["actix-web"] }
 
 # AWS
 aws-sdk-s3 = "1.9"

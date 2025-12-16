@@ -23,7 +23,7 @@ async-graphql-actix-web = "7.0"
 # Web framework
 actix-web = { workspace = true }
 actix-cors = "0.7"
-actix-multipart = "0.4"
+actix-multipart = "0.7"
 
 # gRPC clients (to call backend services)
 tonic = { workspace = true }
@@ -42,7 +42,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 
 # Environment
-dotenv = "0.15"
+dotenvy = "0.15"
 
 # Database pool (for caching/session)
 sqlx = { workspace = true, features = ["runtime-tokio", "postgres"] }

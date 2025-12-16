@@ -33,9 +33,10 @@ pub async fn upload_media(
     let mut total_bytes: usize = 0;
     while let Some(item) = payload.next().await {
         if let Ok(mut field) = item {
-            let cd = field.content_disposition();
-            if let Some(name) = cd.get_filename() {
-                filename = name.to_string();
+            if let Some(cd) = field.content_disposition() {
+                if let Some(name) = cd.get_filename() {
+                    filename = name.to_string();
+                }
             }
             // Drain stream to avoid blocking client; actual bytes not stored in gateway.
             while let Some(chunk_res) = field.next().await {

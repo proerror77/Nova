@@ -54,8 +54,8 @@ md5 = "0.7"
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs"] }
 
 # OpenAPI
-utoipa = { version = "4", features = ["chrono", "uuid"] }
-utoipa-swagger-ui = { version = "5", features = ["actix-web"] }
+utoipa = { version = "5.4", features = ["chrono", "uuid"] }
+utoipa-swagger-ui = { version = "9", features = ["actix-web"] }
 elasticsearch = "8.19.0-alpha.1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 url = "2"

@@ -31,7 +31,7 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-dotenv = { workspace = true }
+dotenvy = { workspace = true }
 envy = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
@@ -52,7 +52,7 @@ clickhouse = { workspace = true }
 # MEDIA PROCESSING (from media-service, video-service)
 # ============================================================================
 futures = "0.3"
-actix-multipart = "0.4"
+actix-multipart = "0.7"
 image = "0.24"
 bytes = "1.5"
 
@@ -74,7 +74,7 @@ urlencoding = { workspace = true }
 actix-ws = "0.2"
 actix-web-actors = "4.3"
 actix = "0.13"
-validator = { version = "0.16", features = ["derive"] }
+validator = { version = "0.20", features = ["derive"] }
 
 # ============================================================================
 # AWS DEPENDENCIES (consolidated, using latest versions)
@@ -100,8 +100,8 @@ tonic-health = "0.10"  # P0-4: gRPC health check protocol
 # ============================================================================
 # API DOCUMENTATION
 # ============================================================================
-utoipa = { version = "4.2", features = ["chrono", "uuid"] }  # Added features from streaming-service
-utoipa-swagger-ui = { version = "6.0", features = ["actix-web"] }
+utoipa = { version = "5.4", features = ["chrono", "uuid"] }  # Added features from streaming-service
+utoipa-swagger-ui = { version = "9", features = ["actix-web"] }
 
 # ============================================================================
 # UTILITIES

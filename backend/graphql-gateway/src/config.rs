@@ -87,7 +87,7 @@ impl Config {
     /// 2. Environment variables (fallback)
     /// 3. .env file (local development)
     pub async fn from_env() -> Result<Self> {
-        dotenv::dotenv().ok();
+        dotenvy::dotenv().ok();
 
         let jwt = Self::load_jwt_config().await?;
 

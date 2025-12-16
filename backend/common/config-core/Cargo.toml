@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 # Configuration management
 config = { version = "0.14", features = ["toml", "yaml", "json"] }
-dotenv = "0.15"
+dotenvy = "0.15"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

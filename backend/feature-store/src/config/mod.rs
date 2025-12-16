@@ -34,7 +34,7 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> Result<Self, config::ConfigError> {
-        dotenv::dotenv().ok();
+        dotenvy::dotenv().ok();
 
         let config = config::Config::builder()
             .set_default("http_host", "0.0.0.0")?

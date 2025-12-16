@@ -32,7 +32,7 @@ async fn main() -> Result<()> {
     info!("Starting PostgreSQL → Neo4j migration");
 
     // Load configuration
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     let database_url = env::var("DATABASE_URL").context("DATABASE_URL not set")?;
     let neo4j_uri = env::var("NEO4J_URI").context("NEO4J_URI not set")?;
     let neo4j_user = env::var("NEO4J_USER").context("NEO4J_USER not set")?;
@@ -60,7 +60,6 @@ async fn main() -> Result<()> {
     // Connect to Neo4j
     info!("Connecting to Neo4j...");
     let neo4j_graph = Graph::new(&neo4j_uri, &neo4j_user, &neo4j_password)
-        .await
         .context("Failed to connect to Neo4j")?;
 
     info!("Connected to Neo4j");

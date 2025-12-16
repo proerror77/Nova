@@ -138,7 +138,7 @@ impl BaseConfig {
     /// Example: `NOVA_DATABASE_HOST=localhost`
     pub fn load(config_path: Option<&Path>) -> ServiceResult<Self> {
         // Load .env file if it exists (for local development)
-        dotenv::dotenv().ok();
+        dotenvy::dotenv().ok();
 
         let environment = std::env::var("ENVIRONMENT")
             .or_else(|_| std::env::var("ENV"))

@@ -37,7 +37,6 @@ async fn main() -> Result<()> {
 
     info!("🔗 Connecting to Neo4j: {}", neo4j_uri);
     let neo4j_graph = Graph::new(&neo4j_uri, &neo4j_user, &neo4j_password)
-        .await
         .context("Failed to connect to Neo4j")?;
 
     // Parse command
@@ -109,7 +108,7 @@ async fn main() -> Result<()> {
             }
 
             // Check Neo4j
-            let neo4j_graph = Graph::new(&neo4j_uri, &neo4j_user, &neo4j_password).await?;
+            let neo4j_graph = Graph::new(&neo4j_uri, &neo4j_user, &neo4j_password)?;
             let mut result = neo4j_graph
                 .execute(neo4rs::query("MATCH (n) RETURN count(n) as total"))
                 .await?;
@@ -140,7 +139,7 @@ async fn main() -> Result<()> {
             info!("  Follows: {}", pg_follows);
 
             // Neo4j stats
-            let neo4j_graph = Graph::new(&neo4j_uri, &neo4j_user, &neo4j_password).await?;
+            let neo4j_graph = Graph::new(&neo4j_uri, &neo4j_user, &neo4j_password)?;
 
             let mut result = neo4j_graph
                 .execute(neo4rs::query("MATCH (u:User) RETURN count(u) as total"))

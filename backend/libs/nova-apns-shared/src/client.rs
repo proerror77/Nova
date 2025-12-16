@@ -1,7 +1,8 @@
-use std::sync::{Arc, Mutex};
+use std::fs::File;
+use std::sync::Arc;
 
-use apns2::{ApnsSync, NotificationBuilder, Priority};
-use tokio::task;
+use a2::{Client, ClientConfig, DefaultNotificationBuilder, Endpoint, NotificationBuilder, NotificationOptions, Priority};
+use tokio::sync::Mutex;
 use tracing::{error, info};
 
 use crate::config::ApnsConfig;
@@ -54,8 +55,9 @@ pub type DynPushProvider = Box<dyn PushProvider>;
 /// Apple Push Notification Service (APNs) provider
 #[derive(Clone)]
 pub struct ApnsPush {
-    inner: Arc<Mutex<ApnsSync>>,
+    inner: Arc<Mutex<Client>>,
     topic: String,
+    is_production: bool,
 }
 
 impl ApnsPush {
@@ -67,13 +69,23 @@ impl ApnsPush {
     /// # Returns
     /// `Ok(ApnsPush)` if initialization succeeds, `Err(ApnsError)` if certificate loading fails
     pub fn new(cfg: &ApnsConfig) -> Result<Self, ApnsError> {
-        let mut client =
-            ApnsSync::with_certificate(&cfg.certificate_path, cfg.certificate_passphrase.clone())
-                .map_err(|e| {
-                ApnsError::StartServer(format!("failed to initialize APNs client: {e}"))
-            })?;
+        let mut file = File::open(&cfg.certificate_path).map_err(|e| {
+            ApnsError::StartServer(format!("failed to open certificate file: {e}"))
+        })?;
 
-        client.set_production(cfg.is_production);
+        let password = cfg.certificate_passphrase.as_deref().unwrap_or("");
+
+        let endpoint = if cfg.is_production {
+            Endpoint::Production
+        } else {
+            Endpoint::Sandbox
+        };
+
+        let client_config = ClientConfig::new(endpoint);
+
+        let client = Client::certificate(&mut file, password, client_config).map_err(|e| {
+            ApnsError::StartServer(format!("failed to initialize APNs client: {e}"))
+        })?;
 
         info!(
             "Initialized APNs client for bundle_id={}, production={}",
@@ -83,6 +95,7 @@ impl ApnsPush {
         Ok(Self {
             inner: Arc::new(Mutex::new(client)),
             topic: cfg.bundle_id.clone(),
+            is_production: cfg.is_production,
         })
     }
 
@@ -108,42 +121,40 @@ impl PushProvider for ApnsPush {
         body: String,
         badge: Option<u32>,
     ) -> Result<(), ApnsError> {
-        let topic = self.topic.clone();
-        let client = self.inner.clone();
+        let device_token_prefix = device_token.chars().take(8).collect::<String>();
 
-        // APNs client is synchronous, so we run it in a blocking task
-        task::spawn_blocking(move || {
-            // Extract token prefix before moving device_token
-            let device_token_prefix = device_token.chars().take(8).collect::<String>();
+        let mut builder = DefaultNotificationBuilder::new()
+            .set_title(&title)
+            .set_body(&body)
+            .set_sound("default");
 
-            let mut builder = NotificationBuilder::new(topic, device_token);
-            builder = builder.title(&title).body(&body).sound("default");
+        if let Some(badge_count) = badge {
+            builder = builder.set_badge(badge_count);
+        }
 
-            if let Some(badge_count) = badge {
-                builder = builder.badge(badge_count);
+        let options = NotificationOptions {
+            apns_topic: Some(&self.topic),
+            apns_priority: Some(Priority::High),
+            ..Default::default()
+        };
+
+        let payload = builder.build(&device_token, options);
+
+        let client = self.inner.lock().await;
+
+        match client.send(payload).await {
+            Ok(response) => {
+                info!(
+                    "APNs notification sent successfully to token {} (apns_id: {:?})",
+                    device_token_prefix, response.apns_id
+                );
+                Ok(())
             }
-
-            builder = builder.priority(Priority::High);
-
-            let notification = builder.build();
-
-            let guard = client.lock().map_err(|_| ApnsError::Internal)?;
-
-            guard
-                .send(notification)
-                .map_err(|e| {
-                    error!("APNs send failed for token {}: {}", device_token_prefix, e);
-                    ApnsError::Config(format!("APNs send failed: {e}"))
-                })
-                .map(|apns_id| {
-                    info!(
-                        "APNs notification sent successfully to token {} (apns_id: {:?})",
-                        device_token_prefix, apns_id
-                    );
-                })
-        })
-        .await
-        .map_err(|_| ApnsError::Internal)?
+            Err(e) => {
+                error!("APNs send failed for token {}: {}", device_token_prefix, e);
+                Err(ApnsError::Config(format!("APNs send failed: {e}")))
+            }
+        }
     }
 }
 

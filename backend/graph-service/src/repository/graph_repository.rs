@@ -15,7 +15,6 @@ pub struct GraphRepository {
 impl GraphRepository {
     pub async fn new(uri: &str, user: &str, password: &str) -> Result<Self> {
         let graph = Graph::new(uri, user, password)
-            .await
             .context("Failed to connect to Neo4j")?;
 
         Ok(Self {

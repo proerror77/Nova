@@ -44,7 +44,7 @@ prometheus = { version = "0.13", features = ["process"] }
 
 # Configuration
 config = "0.14"
-dotenv = "0.15"
+dotenvy = "0.15"
 aws-secrets = { path = "../libs/aws-secrets" }
 
 # AWS SDK (for SNS SMS delivery)
@@ -72,7 +72,7 @@ sha2 = "0.10"
 governor = "0.6"
 
 # Validation
-validator = { version = "0.18", features = ["derive"] }
+validator = { version = "0.20", features = ["derive"] }
 regex = "1.10"
 zxcvbn = "2"
 
@@ -102,8 +102,8 @@ tower-http = { version = "0.6", features = ["cors", "trace"] }
 hyper = "1.4"
 
 # API documentation (optional - for future HTTP endpoints)
-utoipa = { version = "4", features = ["chrono", "uuid"], optional = true }
-utoipa-swagger-ui = { version = "5", features = ["actix-web"], optional = true }
+utoipa = { version = "5.4", features = ["chrono", "uuid"], optional = true }
+utoipa-swagger-ui = { version = "9", features = ["actix-web"], optional = true }
 
 [build-dependencies]
 tonic-build = "0.12"

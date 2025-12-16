@@ -27,7 +27,7 @@ thiserror.workspace = true
 anyhow.workspace = true
 redis.workspace = true
 async-trait.workspace = true
-dotenv.workspace = true
+dotenvy.workspace = true
 envy.workspace = true
 
 # ML dependencies

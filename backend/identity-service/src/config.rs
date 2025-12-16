@@ -46,7 +46,7 @@ impl Settings {
     pub async fn load() -> Result<Self> {
         // Load .env file in development
         if cfg!(debug_assertions) {
-            dotenv::dotenv().ok();
+            dotenvy::dotenv().ok();
             info!("Loaded .env file for development");
         }
 
