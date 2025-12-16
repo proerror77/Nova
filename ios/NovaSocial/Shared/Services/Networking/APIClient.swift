@@ -60,6 +60,18 @@ class APIClient {
         config.urlCache = cache
         config.requestCachePolicy = .useProtocolCachePolicy
 
+        // HTTP/2 connection pooling optimization
+        // Enable HTTP pipelining for better connection reuse
+        config.httpShouldUsePipelining = true
+        // Max concurrent connections per host (default is 6, but explicit for clarity)
+        config.httpMaximumConnectionsPerHost = 6
+        // Enable connection reuse (keep-alive)
+        config.httpShouldSetCookies = true
+        // Allow cellular access
+        config.allowsCellularAccess = true
+        // Use HTTP/2 when available (default in modern iOS, but explicit)
+        config.multipathServiceType = .none  // Multipath disabled for better HTTP/2 behavior
+
         self.session = URLSession(configuration: config)
     }
 

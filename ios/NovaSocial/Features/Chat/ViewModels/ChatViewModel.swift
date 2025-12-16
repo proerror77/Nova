@@ -106,8 +106,8 @@ class ChatViewModel: ObservableObject {
     func setupWebSocketCallbacks() {
         // New message received
         chatService.onMessageReceived = { [weak self] newMessage in
-            guard let self = self else { return }
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
                 // Avoid duplicates
                 guard !self.messages.contains(where: { $0.id == newMessage.id }) else { return }
                 self.messages.append(ChatMessage(from: newMessage, currentUserId: self.currentUserId))
@@ -125,8 +125,8 @@ class ChatViewModel: ObservableObject {
 
         // Typing indicator received
         chatService.onTypingIndicator = { [weak self] typingData in
-            guard let self = self else { return }
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
                 // Only show if it's for this conversation and not from me
                 guard typingData.conversationId == self.conversationId,
                       typingData.userId != self.currentUserId else { return }
@@ -141,8 +141,8 @@ class ChatViewModel: ObservableObject {
 
         // Read receipt received
         chatService.onReadReceipt = { [weak self] readData in
-            guard let self = self else { return }
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
                 guard readData.conversationId == self.conversationId else { return }
 
                 // Update message status to "read" for messages up to lastReadMessageId
@@ -157,8 +157,8 @@ class ChatViewModel: ObservableObject {
     /// Setup Matrix Bridge message handler for E2EE messages
     func setupMatrixMessageHandler() {
         MatrixBridgeService.shared.onMatrixMessage = { [weak self] conversationId, matrixMessage in
-            guard let self = self else { return }
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
                 // 只處理當前會話的訊息
                 guard conversationId == self.conversationId else { return }
 
@@ -185,8 +185,8 @@ class ChatViewModel: ObservableObject {
 
         // Matrix 打字指示器
         MatrixBridgeService.shared.onTypingIndicator = { [weak self] conversationId, userIds in
-            guard let self = self else { return }
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
                 guard conversationId == self.conversationId else { return }
                 guard !userIds.contains(self.currentUserId) else { return }
 
@@ -455,9 +455,11 @@ class ChatViewModel: ObservableObject {
 
         // Cancel existing timer and start new one
         typingTimer?.invalidate()
+        typingTimer = nil
         typingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.isOtherUserTyping = false
+                self?.typingTimer = nil
             }
         }
     }

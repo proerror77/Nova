@@ -1,5 +1,35 @@
 import Foundation
 
+// MARK: - WebSocket State Actor (Thread-safe WebSocket management)
+
+/// Actor for thread-safe WebSocket state management
+private actor WebSocketStateManager {
+    private var webSocketTask: URLSessionWebSocketTask?
+    private var isConnected: Bool = false
+
+    func getTask() -> URLSessionWebSocketTask? {
+        return webSocketTask
+    }
+
+    func setTask(_ task: URLSessionWebSocketTask?) {
+        webSocketTask = task
+    }
+
+    func getIsConnected() -> Bool {
+        return isConnected
+    }
+
+    func setIsConnected(_ connected: Bool) {
+        isConnected = connected
+    }
+
+    func cancelTask() {
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        webSocketTask = nil
+        isConnected = false
+    }
+}
+
 // MARK: - Chat Service
 
 /// Chat Service - 聊天消息服务
@@ -15,9 +45,8 @@ final class ChatService {
 
     private let client = APIClient.shared
 
-    // WebSocket属性（nonisolated以避免并发问题）
-    nonisolated private var webSocketTask: URLSessionWebSocketTask?
-    nonisolated private var isConnected = false
+    // Thread-safe WebSocket state manager
+    private let wsStateManager = WebSocketStateManager()
 
     /// WebSocket消息接收回调
     /// 当收到新消息时，会调用这个闭包
@@ -655,10 +684,13 @@ final class ChatService {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
         // 创建WebSocket任务
-        webSocketTask = URLSession.shared.webSocketTask(with: request)
-        webSocketTask?.resume()
+        let task = URLSession.shared.webSocketTask(with: request)
+        task.resume()
 
-        isConnected = true
+        Task {
+            await wsStateManager.setTask(task)
+            await wsStateManager.setIsConnected(true)
+        }
 
         Task { @MainActor in
             self.onConnectionStatusChanged?(true)
@@ -669,14 +701,14 @@ final class ChatService {
         #endif
 
         // 开始接收消息
-        receiveMessage()
+        receiveMessage(task: task)
     }
 
     /// 断开WebSocket连接
     func disconnectWebSocket() {
-        webSocketTask?.cancel(with: .goingAway, reason: nil)
-        webSocketTask = nil
-        isConnected = false
+        Task {
+            await wsStateManager.cancelTask()
+        }
 
         Task { @MainActor in
             self.onConnectionStatusChanged?(false)
@@ -688,8 +720,8 @@ final class ChatService {
     }
 
     /// 接收WebSocket消息（递归调用）
-    private func receiveMessage() {
-        webSocketTask?.receive { [weak self] result in
+    private func receiveMessage(task: URLSessionWebSocketTask) {
+        task.receive { [weak self] result in
             guard let self = self else { return }
 
             switch result {
@@ -706,9 +738,7 @@ final class ChatService {
                 }
 
                 // 继续接收下一条消息
-                Task { [weak self] in
-                    self?.receiveMessage()
-                }
+                self.receiveMessage(task: task)
 
             case .failure(let error):
                 #if DEBUG
@@ -716,8 +746,10 @@ final class ChatService {
                 #endif
 
                 // 连接断开
+                Task {
+                    await self.wsStateManager.setIsConnected(false)
+                }
                 Task { @MainActor in
-                    self.isConnected = false
                     self.onConnectionStatusChanged?(false)
                 }
             }
@@ -823,54 +855,48 @@ final class ChatService {
     /// Send typing start event
     /// - Parameter conversationId: Conversation ID
     func sendTypingStart(conversationId: String) {
-        guard isConnected, let task = webSocketTask else { return }
-        
-        let event = TypingStartEvent(data: TypingEventData(conversationId: conversationId))
-        
-        do {
-            let encoder = JSONEncoder()
-            encoder.keyEncodingStrategy = .convertToSnakeCase
-            let data = try encoder.encode(event)
-            if let text = String(data: data, encoding: .utf8) {
-                task.send(.string(text)) { error in
-                    if let error = error {
-                        #if DEBUG
-                        print("[ChatService] Failed to send typing.start: \(error)")
-                        #endif
-                    }
+        Task {
+            guard await wsStateManager.getIsConnected(),
+                  let task = await wsStateManager.getTask() else { return }
+
+            let event = TypingStartEvent(data: TypingEventData(conversationId: conversationId))
+
+            do {
+                let encoder = JSONEncoder()
+                encoder.keyEncodingStrategy = .convertToSnakeCase
+                let data = try encoder.encode(event)
+                if let text = String(data: data, encoding: .utf8) {
+                    try await task.send(.string(text))
                 }
+            } catch {
+                #if DEBUG
+                print("[ChatService] Failed to send typing.start: \(error)")
+                #endif
             }
-        } catch {
-            #if DEBUG
-            print("[ChatService] Failed to encode typing.start: \(error)")
-            #endif
         }
     }
-    
+
     /// Send typing stop event
     /// - Parameter conversationId: Conversation ID
     func sendTypingStop(conversationId: String) {
-        guard isConnected, let task = webSocketTask else { return }
-        
-        let event = TypingStopEvent(data: TypingEventData(conversationId: conversationId))
-        
-        do {
-            let encoder = JSONEncoder()
-            encoder.keyEncodingStrategy = .convertToSnakeCase
-            let data = try encoder.encode(event)
-            if let text = String(data: data, encoding: .utf8) {
-                task.send(.string(text)) { error in
-                    if let error = error {
-                        #if DEBUG
-                        print("[ChatService] Failed to send typing.stop: \(error)")
-                        #endif
-                    }
+        Task {
+            guard await wsStateManager.getIsConnected(),
+                  let task = await wsStateManager.getTask() else { return }
+
+            let event = TypingStopEvent(data: TypingEventData(conversationId: conversationId))
+
+            do {
+                let encoder = JSONEncoder()
+                encoder.keyEncodingStrategy = .convertToSnakeCase
+                let data = try encoder.encode(event)
+                if let text = String(data: data, encoding: .utf8) {
+                    try await task.send(.string(text))
                 }
+            } catch {
+                #if DEBUG
+                print("[ChatService] Failed to send typing.stop: \(error)")
+                #endif
             }
-        } catch {
-            #if DEBUG
-            print("[ChatService] Failed to encode typing.stop: \(error)")
-            #endif
         }
     }
 
@@ -1224,8 +1250,9 @@ final class ChatService {
     // MARK: - Cleanup
 
     deinit {
-        // 简单取消WebSocket任务，不调用@MainActor方法
-        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        // Actor-based cleanup handled asynchronously
+        // Note: Cannot await in deinit, but disconnectWebSocket() will handle cleanup
+        // If needed, call disconnectWebSocket() explicitly before releasing ChatService
     }
 }
 

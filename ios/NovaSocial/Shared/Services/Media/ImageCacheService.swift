@@ -32,6 +32,7 @@ actor ImageCacheService {
     // MARK: - Public API
 
     /// Load an image with optional downsampling
+    /// Uses APIClient's session for connection pooling and HTTP caching benefits
     func loadImage(
         from urlString: String,
         targetSize: CGSize? = nil,
@@ -60,7 +61,8 @@ actor ImageCacheService {
         guard let url = URL(string: urlString) else { return nil }
 
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            // Use APIClient's session for HTTP/2 connection pooling and caching
+            let (data, _) = try await APIClient.shared.session.data(from: url)
 
             var image: UIImage?
             if let targetSize = targetSize {

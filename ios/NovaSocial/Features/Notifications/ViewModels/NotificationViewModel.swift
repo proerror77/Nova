@@ -7,29 +7,58 @@ import SwiftUI
 class NotificationViewModel: ObservableObject {
     // MARK: - Published Properties
 
-    @Published var notifications: [NotificationItem] = []
+    @Published var notifications: [NotificationItem] = [] {
+        didSet {
+            // Invalidate cached groups when notifications change
+            invalidateGroupedCache()
+        }
+    }
     @Published var isLoading = false
     @Published var isLoadingMore = false
     @Published var error: String?
     @Published var hasMore = true
     @Published var unreadCount = 0
 
-    // MARK: - Grouped Notifications
+    // MARK: - Cached Grouped Notifications
+
+    private var _cachedTodayNotifications: [NotificationItem]?
+    private var _cachedLastSevenDaysNotifications: [NotificationItem]?
+    private var _cachedLastThirtyDaysNotifications: [NotificationItem]?
+    private var _cachedOlderNotifications: [NotificationItem]?
 
     var todayNotifications: [NotificationItem] {
-        notifications.filter { isToday($0.timestamp) }
+        if let cached = _cachedTodayNotifications { return cached }
+        let result = notifications.filter { isToday($0.timestamp) }
+        _cachedTodayNotifications = result
+        return result
     }
 
     var lastSevenDaysNotifications: [NotificationItem] {
-        notifications.filter { isLastSevenDays($0.timestamp) && !isToday($0.timestamp) }
+        if let cached = _cachedLastSevenDaysNotifications { return cached }
+        let result = notifications.filter { isLastSevenDays($0.timestamp) && !isToday($0.timestamp) }
+        _cachedLastSevenDaysNotifications = result
+        return result
     }
 
     var lastThirtyDaysNotifications: [NotificationItem] {
-        notifications.filter { isLastThirtyDays($0.timestamp) && !isLastSevenDays($0.timestamp) && !isToday($0.timestamp) }
+        if let cached = _cachedLastThirtyDaysNotifications { return cached }
+        let result = notifications.filter { isLastThirtyDays($0.timestamp) && !isLastSevenDays($0.timestamp) && !isToday($0.timestamp) }
+        _cachedLastThirtyDaysNotifications = result
+        return result
     }
 
     var olderNotifications: [NotificationItem] {
-        notifications.filter { !isLastThirtyDays($0.timestamp) }
+        if let cached = _cachedOlderNotifications { return cached }
+        let result = notifications.filter { !isLastThirtyDays($0.timestamp) }
+        _cachedOlderNotifications = result
+        return result
+    }
+
+    private func invalidateGroupedCache() {
+        _cachedTodayNotifications = nil
+        _cachedLastSevenDaysNotifications = nil
+        _cachedLastThirtyDaysNotifications = nil
+        _cachedOlderNotifications = nil
     }
 
     // MARK: - Private Properties
@@ -124,15 +153,39 @@ class NotificationViewModel: ObservableObject {
 
     /// Mark a notification as read
     func markAsRead(notificationId: String) async {
+        // Optimistic local update first
+        if let index = notifications.firstIndex(where: { $0.id == notificationId }),
+           !notifications[index].isRead {
+            // Create updated notification with isRead = true
+            let old = notifications[index]
+            var updatedNotification = NotificationItem(
+                id: old.id,
+                type: old.type,
+                message: old.message,
+                timestamp: old.timestamp,
+                isRead: true,
+                relatedUserId: old.relatedUserId,
+                relatedPostId: old.relatedPostId,
+                relatedCommentId: old.relatedCommentId
+            )
+            updatedNotification.userAvatarUrl = old.userAvatarUrl
+            updatedNotification.userName = old.userName
+            updatedNotification.postThumbnailUrl = old.postThumbnailUrl
+            notifications[index] = updatedNotification
+
+            // Decrement unread count
+            if unreadCount > 0 {
+                unreadCount -= 1
+            }
+        }
+
+        // Send to server (fire and forget - don't block UI)
         do {
             try await notificationService.markAsRead(notificationId: notificationId)
-            // Update local state
-            if notifications.firstIndex(where: { $0.id == notificationId }) != nil {
-                // NotificationItem is a struct with let isRead, so we refresh the list
-                await refresh()
-            }
         } catch {
-            print("NotificationViewModel: Failed to mark as read - \(error)")
+            print("NotificationViewModel: Failed to mark as read on server - \(error)")
+            // Note: We keep local state updated even if server call fails
+            // The next refresh will sync the correct state
         }
     }
 

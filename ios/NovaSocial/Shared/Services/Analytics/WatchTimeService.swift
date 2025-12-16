@@ -137,6 +137,12 @@ class WatchTimeService: ObservableObject {
     /// Start a new session (call on app launch)
     func startSession() {
         sessionId = UUID().uuidString
+
+        // Restart auto-send timer if not running
+        if autoSendTimer == nil {
+            setupAutoSend()
+        }
+
         print("[WatchTime] New session started: \(sessionId)")
     }
 
@@ -147,10 +153,20 @@ class WatchTimeService: ObservableObject {
             endWatching(contentId: session.contentId)
         }
 
+        // Stop auto-send timer to prevent background execution
+        autoSendTimer?.invalidate()
+        autoSendTimer = nil
+
         // Send all pending events
         Task { await sendPendingEvents() }
 
         print("[WatchTime] Session ended: \(sessionId)")
+    }
+
+    deinit {
+        autoSendTimer?.invalidate()
+        autoSendTimer = nil
+        cancellables.removeAll()
     }
 
     // MARK: - Private Methods
