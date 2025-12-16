@@ -96,7 +96,7 @@ pub async fn start_google_oauth(
     let mut identity_client = clients.identity_client();
 
     let grpc_request = tonic::Request::new(GrpcStartOAuthFlowRequest {
-        provider: OAuthProvider::Google as i32,
+        provider: OAuthProvider::OauthProviderGoogle as i32,
         redirect_uri: req.redirect_uri.clone(),
         invite_code: req.invite_code.clone().unwrap_or_default(),
     });
@@ -196,7 +196,7 @@ pub async fn start_apple_oauth(
     let mut identity_client = clients.identity_client();
 
     let grpc_request = tonic::Request::new(GrpcStartOAuthFlowRequest {
-        provider: OAuthProvider::Apple as i32,
+        provider: OAuthProvider::OauthProviderApple as i32,
         redirect_uri: req.redirect_uri.clone(),
         invite_code: req.invite_code.clone().unwrap_or_default(),
     });
@@ -284,9 +284,12 @@ pub async fn complete_apple_oauth(
 /// POST /api/v2/auth/oauth/apple/native
 /// Apple native Sign-In (for iOS app using ASAuthorizationController)
 /// This endpoint handles the native Apple Sign-In flow without web redirect
+///
+/// TODO: Implement when AppleNativeSignIn gRPC method is added to identity-service proto
+#[allow(dead_code)]
 pub async fn apple_native_sign_in(
     req: web::Json<AppleNativeSignInRequest>,
-    clients: web::Data<ServiceClients>,
+    _clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
     info!(
         user_identifier = %req.user_identifier,
@@ -294,61 +297,10 @@ pub async fn apple_native_sign_in(
         "POST /api/v2/auth/oauth/apple/native"
     );
 
-    let mut identity_client = clients.identity_client();
-
-    // Use the AppleNativeSignIn gRPC method if available
-    // For now, we'll use the CompleteOAuthFlow with special handling
-    let grpc_request =
-        tonic::Request::new(crate::clients::proto::identity::AppleNativeSignInRequest {
-            identity_token: req.identity_token.clone(),
-            user_identifier: req.user_identifier.clone(),
-            email: req.email.clone(),
-            given_name: req.full_name.as_ref().and_then(|n| n.given_name.clone()),
-            family_name: req.full_name.as_ref().and_then(|n| n.family_name.clone()),
-            invite_code: req.invite_code.clone().unwrap_or_default(),
-        });
-
-    match identity_client.apple_native_sign_in(grpc_request).await {
-        Ok(response) => {
-            let inner = response.into_inner();
-            info!(
-                user_id = %inner.user_id,
-                is_new_user = inner.is_new_user,
-                "Apple native sign-in completed"
-            );
-
-            Ok(HttpResponse::Ok().json(OAuthCallbackResponse {
-                user_id: inner.user_id.clone(),
-                token: inner.access_token,
-                refresh_token: if inner.refresh_token.is_empty() {
-                    None
-                } else {
-                    Some(inner.refresh_token)
-                },
-                expires_in: inner.expires_at,
-                is_new_user: inner.is_new_user,
-                user: Some(OAuthUserProfile {
-                    id: inner.user_id,
-                    username: inner.username,
-                    email: inner.email,
-                }),
-            }))
-        }
-        Err(status) => {
-            error!(error = %status, "Apple native sign-in failed");
-
-            let error_response = match status.code() {
-                tonic::Code::InvalidArgument => HttpResponse::BadRequest().json(
-                    ErrorResponse::with_message("Invalid Apple credentials", status.message()),
-                ),
-                tonic::Code::Unauthenticated => HttpResponse::Unauthorized().json(
-                    ErrorResponse::with_message("Apple sign-in failed", status.message()),
-                ),
-                _ => HttpResponse::InternalServerError()
-                    .json(ErrorResponse::with_message("OAuth error", status.message())),
-            };
-
-            Ok(error_response)
-        }
-    }
+    // TODO: Implement when AppleNativeSignIn gRPC method is added to identity-service proto
+    // For now, return not implemented
+    Ok(HttpResponse::NotImplemented().json(ErrorResponse::with_message(
+        "Not implemented",
+        "Apple native sign-in is not yet implemented. Please use the web OAuth flow.",
+    )))
 }
