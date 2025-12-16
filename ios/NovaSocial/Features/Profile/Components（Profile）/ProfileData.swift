@@ -69,17 +69,20 @@ class ProfileData {
                 posts = response.posts
 
             case .saved:
-                _ = try await contentService.getUserBookmarks(userId: userId)
-                // API returns postIds, need to fetch actual posts if needed
-                // For now, we leave savedPosts empty if we only have IDs
-                savedPosts = []
-                // TODO: Fetch full post data using postIds if available
+                let bookmarksResponse = try await contentService.getUserBookmarks(userId: userId)
+                if !bookmarksResponse.postIds.isEmpty {
+                    savedPosts = try await contentService.getPostsByIds(bookmarksResponse.postIds)
+                } else {
+                    savedPosts = []
+                }
 
             case .liked:
-                // TODO: Need to fetch liked posts
-                // SocialService provides user IDs who liked a post, not posts liked by a user
-                // This may need a different endpoint or approach
-                likedPosts = []
+                let (postIds, _) = try await socialService.getUserLikedPosts(userId: userId)
+                if !postIds.isEmpty {
+                    likedPosts = try await contentService.getPostsByIds(postIds)
+                } else {
+                    likedPosts = []
+                }
             }
         } catch {
             handleError(error)
