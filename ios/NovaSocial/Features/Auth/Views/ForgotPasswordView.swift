@@ -3,15 +3,32 @@ import SwiftUI
 // MARK: - Forgot Password View
 
 struct ForgotPasswordView: View {
+    // MARK: - Design Constants
+    private enum Layout {
+        static let contentOffset: CGFloat = 120
+        static let inputFieldHeight: CGFloat = 49
+        static let buttonHeight: CGFloat = 46
+        static let buttonCornerRadius: CGFloat = 31.5
+        static let fieldCornerRadius: CGFloat = 6
+        static let errorOffset: CGFloat = 32
+    }
+
+    private enum Colors {
+        static let placeholder = Color(white: 0.77)
+        static let errorText = Color(red: 1, green: 0.4, blue: 0.4)
+        static let fieldBorder = Color.white.opacity(0.3)
+    }
+
+    // MARK: - Binding
+    @Binding var currentPage: AppPage
+
     // MARK: - Environment
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var authManager: AuthenticationManager
 
     // MARK: - State
     @State private var email = ""
     @State private var isLoading = false
-    @State private var errorMessage: String?
-    @State private var successMessage: String?
+    @State private var showSuccessAlert = false
     @State private var emailError: String?
 
     // MARK: - Focus State
@@ -36,26 +53,7 @@ struct ForgotPasswordView: View {
             GeometryReader { geometry in
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
-                        let contentVerticalOffset: CGFloat = 120
-
                         VStack(spacing: 0) {
-                            // Back button
-                            HStack {
-                                Button(action: {
-                                    dismiss()
-                                }) {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "chevron.left")
-                                            .font(.system(size: 16, weight: .medium))
-                                        Text(LocalizedStringKey("Back"))
-                                            .font(.system(size: 16, weight: .medium))
-                                    }
-                                    .foregroundColor(.white)
-                                }
-                                Spacer()
-                            }
-                            .padding(.horizontal, 16)
-
                             Spacer()
                                 .frame(height: 40)
 
@@ -77,7 +75,7 @@ struct ForgotPasswordView: View {
                             // Description
                             Text(LocalizedStringKey("Forgot_Password_Description"))
                                 .font(.system(size: 14, weight: .light))
-                                .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
+                                .foregroundColor(Colors.placeholder)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 40)
 
@@ -87,32 +85,6 @@ struct ForgotPasswordView: View {
                             // Email Input
                             emailTextField
                                 .padding(.horizontal, 16)
-
-                            // Error Message
-                            if let errorMessage = errorMessage {
-                                Text(LocalizedStringKey(errorMessage))
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.red)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 40)
-                                    .padding(.top, 12)
-                            }
-
-                            // Success Message
-                            if let successMessage = successMessage {
-                                VStack(spacing: 8) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 40))
-                                        .foregroundColor(.green)
-
-                                    Text(LocalizedStringKey(successMessage))
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.green)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal, 40)
-                                }
-                                .padding(.top, 24)
-                            }
 
                             Spacer()
                                 .frame(height: 32)
@@ -127,7 +99,7 @@ struct ForgotPasswordView: View {
                             // Back to Login Button
                             backToLoginButton
                         }
-                        .offset(y: contentVerticalOffset)
+                        .offset(y: Layout.contentOffset)
 
                         Spacer()
                     }
@@ -140,8 +112,15 @@ struct ForgotPasswordView: View {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
         }
-        .ignoresSafeArea(.keyboard)
         .navigationBarHidden(true)
+        .alert("", isPresented: $showSuccessAlert) {
+            Button("OK") {
+                // 跳转到 ResetPassword 页面（使用空 token，实际 token 从邮件链接获取）
+                currentPage = .resetPassword(token: "")
+            }
+        } message: {
+            Text(LocalizedStringKey("Password_Reset_Email_Sent"))
+        }
     }
 
     // MARK: - Logo Section
@@ -158,35 +137,36 @@ struct ForgotPasswordView: View {
 
     // MARK: - Email TextField
     private var emailTextField: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.clear)
-                    .frame(height: 49)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(emailError != nil ? Color.red : Color.white.opacity(0.3), lineWidth: emailError != nil ? 1 : 0.5)
-                    )
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: Layout.fieldCornerRadius)
+                .fill(Color.clear)
+                .frame(height: Layout.inputFieldHeight)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Layout.fieldCornerRadius)
+                        .stroke(emailError != nil ? Color.red : Colors.fieldBorder, lineWidth: emailError != nil ? 1 : 0.5)
+                )
 
-                TextField("", text: $email, prompt: Text(LocalizedStringKey("Enter_Your_Email")).foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77)))
-                    .foregroundColor(.white)
-                    .font(.system(size: 14, weight: .light))
-                    .padding(.horizontal, 16)
-                    .autocapitalization(.none)
-                    .keyboardType(.emailAddress)
-                    .autocorrectionDisabled()
-                    .accessibilityIdentifier("forgotPasswordEmailTextField")
-                    .focused($isEmailFocused)
-                    .onChange(of: email) { _, newValue in
-                        validateEmailRealtime(newValue)
-                    }
-            }
+            TextField("", text: $email, prompt: Text(LocalizedStringKey("Enter_Your_Email")).foregroundColor(Colors.placeholder))
+                .foregroundColor(.white)
+                .font(.system(size: 14, weight: .light))
+                .padding(.horizontal, 16)
+                .autocapitalization(.none)
+                .keyboardType(.emailAddress)
+                .autocorrectionDisabled()
+                .accessibilityIdentifier("forgotPasswordEmailTextField")
+                .focused($isEmailFocused)
+                .onChange(of: email) { _, newValue in
+                    validateEmailRealtime(newValue)
+                }
 
             if let error = emailError {
                 Text(LocalizedStringKey(error))
                     .font(.system(size: 11))
-                    .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
+                    .foregroundColor(Colors.errorText)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.leading, 4)
+                    .offset(y: Layout.errorOffset)
             }
         }
     }
@@ -209,23 +189,24 @@ struct ForgotPasswordView: View {
                     .foregroundColor(.black)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 46)
+            .frame(height: Layout.buttonHeight)
             .background(Color.white)
-            .cornerRadius(31.50)
+            .cornerRadius(Layout.buttonCornerRadius)
         }
-        .disabled(isLoading || successMessage != nil)
-        .opacity(successMessage != nil ? 0.5 : 1.0)
+        .disabled(isLoading)
+        .opacity(isLoading ? 0.5 : 1.0)
         .accessibilityIdentifier("sendResetLinkButton")
     }
 
     // MARK: - Back to Login Button
     private var backToLoginButton: some View {
         Button(action: {
-            dismiss()
+            currentPage = .login
         }) {
             Text(LocalizedStringKey("Back_To_Login"))
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
+                .font(.system(size: 12, weight: .medium))
+                .underline()
+                .foregroundColor(.white)
         }
     }
 
@@ -235,16 +216,15 @@ struct ForgotPasswordView: View {
         guard validateEmail() else { return }
 
         isLoading = true
-        errorMessage = nil
-        successMessage = nil
+        emailError = nil
 
         do {
             try await authManager.requestPasswordReset(email: email.trimmingCharacters(in: .whitespacesAndNewlines))
-            successMessage = "Password_Reset_Email_Sent"
+            showSuccessAlert = true
         } catch {
             // Always show success message to prevent email enumeration
             // The backend also always returns success
-            successMessage = "Password_Reset_Email_Sent"
+            showSuccessAlert = true
 
             #if DEBUG
             print("[ForgotPasswordView] Request error (hidden from user): \(error)")
@@ -260,12 +240,12 @@ struct ForgotPasswordView: View {
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if trimmedEmail.isEmpty {
-            errorMessage = "Please_enter_your_email"
+            emailError = "Please_enter_your_email"
             return false
         }
 
         if !isValidEmail(trimmedEmail) {
-            errorMessage = "Please_enter_a_valid_email"
+            emailError = "Invalid_email_format"
             return false
         }
 
@@ -289,9 +269,15 @@ struct ForgotPasswordView: View {
     }
 }
 
-// MARK: - Preview
+// MARK: - Previews
 
-#Preview {
-    ForgotPasswordView()
+#Preview("ForgotPassword - Default") {
+    ForgotPasswordView(currentPage: .constant(.forgotPassword))
         .environmentObject(AuthenticationManager.shared)
+}
+
+#Preview("ForgotPassword - Dark Mode") {
+    ForgotPasswordView(currentPage: .constant(.forgotPassword))
+        .environmentObject(AuthenticationManager.shared)
+        .preferredColorScheme(.dark)
 }

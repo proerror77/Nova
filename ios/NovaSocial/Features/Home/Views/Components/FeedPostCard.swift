@@ -1,5 +1,4 @@
 import SwiftUI
-import AVKit
 
 // MARK: - Feed Post Card (Dynamic Data)
 
@@ -10,363 +9,192 @@ struct FeedPostCard: View {
     var onComment: () -> Void = {}
     var onShare: () -> Void = {}
     var onBookmark: () -> Void = {}
-    var onCardTap: () -> Void = {}
+    var onAvatarTapped: ((String) -> Void)?  // 点击头像回调，传入 authorId
 
     @State private var currentImageIndex = 0
-    @State private var isVideoVisible: Bool = true
-
-    /// Check if post author is current user and get their local avatar if available
-    private var localAvatarImage: UIImage? {
-        let currentUserId = AuthenticationManager.shared.currentUser?.id
-        if post.authorId == currentUserId {
-            return AvatarManager.shared.pendingAvatar
-        }
-        return nil
-    }
 
     var body: some View {
         VStack(spacing: 8) {
-            // MARK: - User Info Header - tappable for card detail
+            // MARK: - User Info Header
             HStack {
                 HStack(spacing: 10) {
-                    // Avatar - 显示用户头像或默认头像（优先使用本地头像）
-                    AvatarView(image: localAvatarImage, url: post.authorAvatar, size: 30)
+                    // Avatar - 显示用户头像或默认头像（可点击跳转用户主页）
+                    AvatarView(image: nil, url: post.authorAvatar, size: 30)
+                        .onTapGesture {
+                            onAvatarTapped?(post.authorId)
+                        }
 
-                    // User Info
+                    // User Info（用户名也可点击）
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
                             Text(post.authorName)
-                                .font(.system(size: DesignTokens.fontMedium, weight: .medium))
-                                .foregroundColor(DesignTokens.textPrimary)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(Color(red: 0.02, green: 0, blue: 0))
+                                .onTapGesture {
+                                    onAvatarTapped?(post.authorId)
+                                }
 
                             // 认证标记 (可选)
                             Image(systemName: "checkmark.seal.fill")
-                                .font(.system(size: DesignTokens.iconSmall))
-                                .foregroundColor(DesignTokens.verifiedBadge)
+                                .font(.system(size: 10))
+                                .foregroundColor(Color(red: 0.20, green: 0.60, blue: 1.0))
                         }
 
-                        // Time ago display (location removed - backend doesn't support it yet)
-                        Text(post.createdAt.timeAgoDisplay())
-                            .font(.system(size: DesignTokens.fontCaption + 1))
-                            .lineSpacing(DesignTokens.spacing13)
-                            .foregroundColor(DesignTokens.textTertiary)
+                        HStack(spacing: 9) {
+                            Text(post.createdAt.timeAgoDisplay())
+                                .font(.system(size: 10))
+                                .lineSpacing(13)
+                                .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
+
+                            Text("Location")
+                                .font(.system(size: 10))
+                                .lineSpacing(13)
+                                .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
+                        }
                     }
                 }
-                .contentShape(Rectangle())
-                .onTapGesture { onCardTap() }
 
                 Spacer()
 
                 // Share Button
-                Image("card-share-icon")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: DesignTokens.iconLarge, height: DesignTokens.iconLarge)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        FeedPostCardLogger.debug("Share tapped for post: \(post.id)")
-                        onShare()
-                    }
-                    .accessibilityLabel("Share")
+                Button(action: onShare) {
+                    Image("card-share-icon")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 18, height: 18)
+                }
+                .accessibilityLabel("Share")
             }
             .padding(.horizontal, 16)
 
-            // MARK: - Post Media (Images or Video) - tappable for card detail
+            // MARK: - Post Images (375x500)
             if !post.displayMediaUrls.isEmpty {
-                mediaContent
-                    .contentShape(Rectangle())
-                    .onTapGesture { onCardTap() }
+                VStack(spacing: 8) {
+                    TabView(selection: $currentImageIndex) {
+                        ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
+                            AsyncImage(url: URL(string: imageUrl)) { phase in
+                                switch phase {
+                                case .empty:
+                                    Rectangle()
+                                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                        .overlay(
+                                            ProgressView()
+                                                .tint(.white)
+                                        )
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                case .failure:
+                                    Rectangle()
+                                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                        .overlay(
+                                            Image(systemName: "photo")
+                                                .font(.system(size: 30))
+                                                .foregroundColor(.white.opacity(0.5))
+                                        )
+                                @unknown default:
+                                    EmptyView()
+                                }
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .clipped()
+                            .tag(index)
+                        }
+                    }
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .frame(height: 500)
+
+                    // 自定义页面指示器
+                    if post.displayMediaUrls.count > 1 {
+                        HStack(spacing: 11) {
+                            ForEach(0..<post.displayMediaUrls.count, id: \.self) { index in
+                                Circle()
+                                    .fill(index == currentImageIndex ?
+                                          Color(red: 0.81, green: 0.13, blue: 0.25) :
+                                          Color(red: 0.85, green: 0.85, blue: 0.85))
+                                    .frame(width: 6, height: 6)
+                            }
+                        }
+                    }
+                }
             }
 
-            // MARK: - Post Content Text - tappable for card detail
-            if !post.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(post.content)
-                    .font(.system(size: 16, weight: .medium))
-                    .lineSpacing(20)
-                    .foregroundColor(.black)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .contentShape(Rectangle())
-                    .onTapGesture { onCardTap() }
+            // MARK: - Post Content & Interaction
+            VStack(alignment: .leading, spacing: 10) {
+                // Post Content Text
+                if !post.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(post.content)
+                        .font(.system(size: 16, weight: .medium))
+                        .lineSpacing(20)
+                        .foregroundColor(.black)
+                }
+
+                // Interaction Buttons
+                HStack(spacing: 20) {
+                    // Like button
+                    Button(action: onLike) {
+                        HStack(spacing: 6) {
+                            Image(post.isLiked ? "Like-on" : "Like-off")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                                .animation(.spring(response: 0.25, dampingFraction: 0.8), value: post.isLiked)
+                            Text("\(post.likeCount)")
+                                .font(.system(size: 10))
+                                .lineSpacing(20)
+                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        }
+                    }
+                    .accessibilityLabel("Like, \(post.likeCount) likes")
+
+            // Comment button
+            Button(action: onComment) {
+                        HStack(spacing: 6) {
+                            Image("card-comment-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                            Text("\(post.commentCount)")
+                                .font(.system(size: 10))
+                                .lineSpacing(20)
+                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        }
+                    }
+                    .accessibilityLabel("Comments, \(post.commentCount)")
+
+                    // Bookmark/Star button
+                    Button(action: onBookmark) {
+                        HStack(spacing: 6) {
+                            Image(post.isBookmarked ? "Save-on" : "Save-off")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                                .animation(.spring(response: 0.25, dampingFraction: 0.8), value: post.isBookmarked)
+                            Text("\(post.shareCount)")
+                                .font(.system(size: 10))
+                                .lineSpacing(20)
+                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        }
+                    }
+                    .accessibilityLabel("Bookmark")
+
+            Spacer()
+                }
             }
-
-            // MARK: - Interaction Buttons - NO parent tap gesture here
-            HStack(spacing: 0) {
-                // Like button
-                IconButton(
-                    icon: post.isLiked ? "heart.fill" : "heart",
-                    count: post.likeCount,
-                    isActive: post.isLiked
-                ) {
-                    FeedPostCardLogger.debug("Like tapped for post: \(post.id)")
-                    onLike()
-                }
-
-                // Comment button
-                IconButton(
-                    icon: "bubble.right",
-                    count: post.commentCount,
-                    isActive: false
-                ) {
-                    FeedPostCardLogger.debug("Comment tapped for post: \(post.id)")
-                    onComment()
-                }
-
-                // Bookmark button (no count - like Instagram, bookmarks are private)
-                IconButton(
-                    icon: post.isBookmarked ? "bookmark.fill" : "bookmark",
-                    isActive: post.isBookmarked
-                ) {
-                    FeedPostCardLogger.debug("Bookmark tapped for post: \(post.id)")
-                    onBookmark()
-                }
-
-                Spacer()
-            }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 16)
             .padding(.bottom, 14)
         }
         .padding(.top, 14)
-        .background(Color.white)
-        // NO card-level tap gesture - each area has its own
+        .background(.white)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Post by \(post.authorName)")
     }
-    
-    // MARK: - Media Content View
-    
-    @ViewBuilder
-    private var mediaContent: some View {
-        switch post.mediaType {
-        case .video:
-            // Single video post - show video player
-            if let videoUrl = post.firstVideoUrl {
-                FeedVideoPlayer(
-                    url: videoUrl,
-                    thumbnailUrl: post.videoThumbnailUrl,
-                    autoPlay: true,
-                    isMuted: true,
-                    height: 500,
-                    isVisible: isVideoVisible
-                )
-                .trackVisibility(id: "\(post.id)_video", threshold: 0.5) { visible in
-                    isVideoVisible = visible
-                }
-            }
-            
-        case .livePhoto:
-            // Live Photo - show with press-to-play interaction
-            livePhotoContent
-            
-        case .mixed:
-            // Mixed content - show carousel with video support
-            mixedMediaCarousel
-            
-        case .image:
-            // Image only - show image carousel
-            imageCarousel
-        }
-    }
-    
-    // MARK: - Live Photo Content
-    
-    @ViewBuilder
-    private var livePhotoContent: some View {
-        // Live Photo has 2 URLs: image first, video second
-        if post.mediaUrls.count >= 2 {
-            FeedLivePhotoPlayer(
-                imageUrl: post.mediaUrls[0],
-                videoUrl: post.mediaUrls[1],
-                height: 500
-            )
-        } else if let firstUrl = post.mediaUrls.first {
-            // Fallback to just showing the image if video URL is missing
-            CachedAsyncImage(url: URL(string: firstUrl)) { image in
-                ZStack {
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .frame(height: 500)
-                        .clipped()
-
-                    // Live Photo badge
-                    VStack {
-                        HStack {
-                            LivePhotoBadge()
-                            Spacer()
-                        }
-                        Spacer()
-                    }
-                    .padding(12)
-                }
-            } placeholder: {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.3))
-                    .frame(height: 500)
-                    .overlay(ProgressView().tint(.white))
-            }
-        }
-    }
-    
-    // MARK: - Image Carousel
-    
-    private var imageCarousel: some View {
-        VStack(spacing: 8) {
-            TabView(selection: $currentImageIndex) {
-                ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
-                    CachedAsyncImage(url: URL(string: imageUrl)) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } placeholder: {
-                        Rectangle()
-                            .fill(DesignTokens.placeholderColor)
-                            .overlay(
-                                ProgressView()
-                                    .tint(.white)
-                            )
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-                    .tag(index)
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .frame(height: 500)
-
-            // Custom page indicator
-            pageIndicator
-        }
-    }
-    
-    // MARK: - Mixed Media Carousel (Images + Videos)
-
-    @ViewBuilder
-    private var mixedMediaCarousel: some View {
-        VStack(spacing: 8) {
-            TabView(selection: $currentImageIndex) {
-                ForEach(Array(post.mediaUrls.enumerated()), id: \.offset) { index, mediaUrl in
-                    mixedMediaItem(index: index, mediaUrl: mediaUrl)
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .frame(height: 500)
-
-            // Custom page indicator with video dots
-            mixedMediaPageIndicator
-        }
-    }
-
-    @ViewBuilder
-    private func mixedMediaItem(index: Int, mediaUrl: String) -> some View {
-        let isVideo = FeedMediaType.from(url: mediaUrl) == .video
-
-        if isVideo, let url = URL(string: mediaUrl) {
-            // Video item
-            let thumbnailUrl: URL? = post.thumbnailUrls.indices.contains(index)
-                ? URL(string: post.thumbnailUrls[index])
-                : nil
-
-            FeedVideoPlayer(
-                url: url,
-                thumbnailUrl: thumbnailUrl,
-                autoPlay: currentImageIndex == index,
-                isMuted: true,
-                height: 500,
-                isVisible: isVideoVisible
-            )
-            .trackVisibility(id: "\(post.id)_video_\(index)", threshold: 0.5) { visible in
-                isVideoVisible = visible
-            }
-            .tag(index)
-        } else {
-            // Image item
-            let displayUrl: String = post.thumbnailUrls.indices.contains(index)
-                ? post.thumbnailUrls[index]
-                : mediaUrl
-
-            CachedAsyncImage(url: URL(string: displayUrl)) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-            } placeholder: {
-                Rectangle()
-                    .fill(DesignTokens.placeholderColor)
-                    .overlay(
-                        ProgressView()
-                            .tint(.white)
-                    )
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
-            .tag(index)
-        }
-    }
-    
-    // MARK: - Page Indicators
-    
-    @ViewBuilder
-    private var pageIndicator: some View {
-        if post.displayMediaUrls.count > 1 {
-            HStack(spacing: 11) {
-                ForEach(0..<post.displayMediaUrls.count, id: \.self) { index in
-                    Circle()
-                        .fill(index == currentImageIndex ?
-                              DesignTokens.indicatorActive :
-                              DesignTokens.indicatorInactive)
-                        .frame(width: 6, height: 6)
-                }
-            }
-        }
-    }
-    
-    @ViewBuilder
-    private var mixedMediaPageIndicator: some View {
-        if post.mediaUrls.count > 1 {
-            HStack(spacing: 11) {
-                ForEach(0..<post.mediaUrls.count, id: \.self) { index in
-                    let isVideo = FeedMediaType.from(url: post.mediaUrls[index]) == .video
-                    
-                    if isVideo {
-                        // Video indicator (small play icon)
-                        ZStack {
-                            Circle()
-                                .fill(index == currentImageIndex ?
-                                      DesignTokens.indicatorActive :
-                                      DesignTokens.indicatorInactive)
-                                .frame(width: 8, height: 8)
-                            
-                            Image(systemName: "play.fill")
-                                .font(.system(size: 4))
-                                .foregroundColor(index == currentImageIndex ? .white : .gray)
-                        }
-                    } else {
-                        // Image indicator (simple dot)
-                        Circle()
-                            .fill(index == currentImageIndex ?
-                                  DesignTokens.indicatorActive :
-                                  DesignTokens.indicatorInactive)
-                            .frame(width: 6, height: 6)
-                    }
-                }
-            }
-        }
-    }
 }
 
-// MARK: - FeedPostCard Logger
+// MARK: - Previews
 
-/// Unified logger for FeedPostCard debug output
-private enum FeedPostCardLogger {
-    static func debug(_ message: String) {
-        #if DEBUG
-        print("[FeedPostCard] \(message)")
-        #endif
-    }
-}
-
-// MARK: - Preview
-#Preview("Image Post") {
+#Preview("FeedPostCard - Default") {
     @Previewable @State var showReport = false
 
     ScrollView {
@@ -375,73 +203,30 @@ private enum FeedPostCardLogger {
                 post: FeedPost.preview,
                 showReportView: $showReport
             )
+            .padding(.horizontal, -DesignTokens.spacing16)
+            .ignoresSafeArea(.container, edges: .horizontal)
         }
         .padding(.horizontal, 16)
     }
     .background(Color(red: 0.97, green: 0.97, blue: 0.97))
 }
 
-#Preview("Video Post") {
-    @Previewable @State var showReport = false
-
-    ScrollView {
-        VStack(spacing: 16) {
-            // Video post (short video like IG, max 60 seconds)
-            FeedPostCard(
-                post: FeedPost.previewVideo,
-                showReportView: $showReport
-            )
-        }
-        .padding(.horizontal, 16)
-    }
-    .background(Color(red: 0.97, green: 0.97, blue: 0.97))
-}
-
-#Preview("Mixed Media Post") {
-    @Previewable @State var showReport = false
-
-    ScrollView {
-        VStack(spacing: 16) {
-            // Mixed content (images + video)
-            FeedPostCard(
-                post: FeedPost.previewMixed,
-                showReportView: $showReport
-            )
-        }
-        .padding(.horizontal, 16)
-    }
-    .background(Color(red: 0.97, green: 0.97, blue: 0.97))
-}
-
-#Preview("Text Only Post") {
+#Preview("FeedPostCard - Dark Mode") {
     @Previewable @State var showReport = false
 
     ScrollView {
         VStack(spacing: 16) {
             FeedPostCard(
-                post: FeedPost.previewTextOnly,
+                post: FeedPost.preview,
                 showReportView: $showReport
             )
+            .padding(.horizontal, -DesignTokens.spacing16)
+            .ignoresSafeArea(.container, edges: .horizontal)
         }
         .padding(.horizontal, 16)
     }
     .background(Color(red: 0.97, green: 0.97, blue: 0.97))
-}
-
-#Preview("Live Photo Post") {
-    @Previewable @State var showReport = false
-
-    ScrollView {
-        VStack(spacing: 16) {
-            // Live Photo post - press and hold to play
-            FeedPostCard(
-                post: FeedPost.previewLivePhoto,
-                showReportView: $showReport
-            )
-        }
-        .padding(.horizontal, 16)
-    }
-    .background(Color(red: 0.97, green: 0.97, blue: 0.97))
+    .preferredColorScheme(.dark)
 }
 
 // MARK: - Preview Data
@@ -460,7 +245,6 @@ extension FeedPost {
                 "https://picsum.photos/403/536",
                 "https://picsum.photos/404/537"
             ],
-            mediaType: .image,
             createdAt: Date().addingTimeInterval(-5400), // 1d30m ago
             likeCount: 2234,
             commentCount: 1232,
@@ -478,82 +262,12 @@ extension FeedPost {
             authorAvatar: nil,
             content: "Just finished reading an amazing book!",
             mediaUrls: [],
-            mediaType: .image,
             createdAt: Date().addingTimeInterval(-7200),
             likeCount: 56,
             commentCount: 8,
             shareCount: 3,
             isLiked: false,
             isBookmarked: true
-        )
-    }
-    
-    /// Preview with video content (short video like IG Reels, max 60 seconds)
-    static var previewVideo: FeedPost {
-        FeedPost(
-            id: "preview-3",
-            authorId: "user-789",
-            authorName: "Video Creator",
-            authorAvatar: "https://picsum.photos/100/101",
-            content: "Check out this amazing sunset! 🌅",
-            mediaUrls: [
-                // Sample short video (< 60 seconds)
-                "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
-            ],
-            mediaType: .video,
-            createdAt: Date().addingTimeInterval(-3600),
-            likeCount: 5678,
-            commentCount: 432,
-            shareCount: 789,
-            isLiked: true,
-            isBookmarked: false
-        )
-    }
-    
-    /// Preview with mixed content (images + video)
-    static var previewMixed: FeedPost {
-        FeedPost(
-            id: "preview-4",
-            authorId: "user-101",
-            authorName: "Mixed Media",
-            authorAvatar: "https://picsum.photos/100/102",
-            content: "Some photos and a video from my trip!",
-            mediaUrls: [
-                "https://picsum.photos/400/533",
-                "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-                "https://picsum.photos/401/534"
-            ],
-            mediaType: .mixed,
-            createdAt: Date().addingTimeInterval(-1800),
-            likeCount: 1234,
-            commentCount: 567,
-            shareCount: 234,
-            isLiked: false,
-            isBookmarked: true
-        )
-    }
-    
-    /// Preview with Live Photo content
-    static var previewLivePhoto: FeedPost {
-        FeedPost(
-            id: "preview-5",
-            authorId: "user-202",
-            authorName: "Live Photo Fan",
-            authorAvatar: "https://picsum.photos/100/103",
-            content: "Check out this Live Photo! Press and hold to play ✨",
-            mediaUrls: [
-                // First URL is the still image
-                "https://picsum.photos/400/533",
-                // Second URL is the short video (~3 seconds)
-                "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
-            ],
-            mediaType: .livePhoto,
-            createdAt: Date().addingTimeInterval(-900),
-            likeCount: 3456,
-            commentCount: 234,
-            shareCount: 567,
-            isLiked: false,
-            isBookmarked: false
         )
     }
 }

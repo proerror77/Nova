@@ -141,6 +141,13 @@ struct SimpleCarouselView: View {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("SimpleCarousel - Default") {
     SimpleCarouselView()
+}
+
+#Preview("SimpleCarousel - Dark Mode") {
+    SimpleCarouselView()
+        .preferredColorScheme(.dark)
 }

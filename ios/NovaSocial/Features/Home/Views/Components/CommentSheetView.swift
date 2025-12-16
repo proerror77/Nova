@@ -5,7 +5,7 @@ import SwiftUI
 struct CommentSheetView: View {
     let post: FeedPost
     @Binding var isPresented: Bool
-    @Environment(\.dismiss) private var dismiss
+    var onAvatarTapped: ((String) -> Void)?  // 点击头像回调
     @State private var commentText = ""
     @State private var comments: [SocialComment] = []
     @State private var isLoading = false
@@ -63,7 +63,14 @@ struct CommentSheetView: View {
                                 .padding(.bottom, DesignTokens.spacing8)
 
                             ForEach(comments) { comment in
-                                SocialCommentRow(comment: comment)
+                                SocialCommentRow(
+                                    comment: comment,
+                                    onAvatarTapped: { userId in
+                                        // 关闭评论弹窗，触发头像点击回调
+                                        isPresented = false
+                                        onAvatarTapped?(userId)
+                                    }
+                                )
                             }
                         }
                     }
@@ -112,7 +119,7 @@ struct CommentSheetView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Close") {
-                        dismiss()
+                        isPresented = false
                     }
                     .foregroundColor(DesignTokens.accentColor)
                 }
@@ -132,24 +139,18 @@ struct CommentSheetView: View {
             comments = result.comments
             totalCount = result.totalCount
         } catch let apiError as APIError {
-            print("❌ Failed to load comments for post \(post.id): \(apiError)")
             switch apiError {
             case .unauthorized:
-                error = "Authentication error. Please try logging out and back in."
+                error = "Please login to view comments"
             case .notFound:
                 // No comments yet - not an error
                 comments = []
                 totalCount = 0
-            case .serverError:
-                error = "Server error. Please try again later."
-            case .networkError:
-                error = "Network connection error. Please check your internet connection."
             default:
-                error = "Failed to load comments. Please try again."
+                error = "Failed to load comments"
             }
         } catch {
-            print("❌ Unexpected error loading comments: \(error)")
-            self.error = "An unexpected error occurred. Please try again."
+            self.error = "Network error"
         }
 
         isLoading = false
@@ -164,27 +165,10 @@ struct CommentSheetView: View {
             comments.insert(newComment, at: 0)
             totalCount += 1
             commentText = ""
-        } catch let apiError as APIError {
-            print("❌ Failed to post comment for post \(post.id): \(apiError)")
-            // Show error briefly with specific messaging
-            switch apiError {
-            case .unauthorized:
-                self.error = "Please login to post comments"
-            case .serverError:
-                self.error = "Server error. Please try again."
-            case .networkError:
-                self.error = "Network error. Check your connection."
-            default:
-                self.error = "Failed to post comment. Please try again."
-            }
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                self.error = nil
-            }
         } catch {
-            print("❌ Unexpected error posting comment: \(error)")
+            // Show error briefly
             self.error = "Failed to post comment"
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 self.error = nil
             }
         }
@@ -193,26 +177,48 @@ struct CommentSheetView: View {
     }
 }
 
+// MARK: - Previews
+
+#Preview("CommentSheet - Default") {
+    CommentSheetView(
+        post: FeedPost.preview,
+        isPresented: .constant(true)
+    )
+}
+
+#Preview("CommentSheet - Dark Mode") {
+    CommentSheetView(
+        post: FeedPost.preview,
+        isPresented: .constant(true)
+    )
+    .preferredColorScheme(.dark)
+}
+
 // MARK: - Social Comment Row
 
 struct SocialCommentRow: View {
     let comment: SocialComment
+    var onAvatarTapped: ((String) -> Void)?  // 点击头像回调
 
     var body: some View {
         HStack(alignment: .top, spacing: DesignTokens.spacing12) {
-            // Avatar - show real avatar if available, otherwise placeholder
-            AvatarView(
-                image: nil,
-                url: comment.authorAvatarUrl,
-                size: DesignTokens.avatarSmall
-            )
+            // Avatar (点击跳转用户主页)
+            Circle()
+                .fill(DesignTokens.avatarPlaceholder)
+                .frame(width: DesignTokens.avatarSmall, height: DesignTokens.avatarSmall)
+                .onTapGesture {
+                    onAvatarTapped?(comment.userId)
+                }
 
             VStack(alignment: .leading, spacing: DesignTokens.spacing4) {
                 HStack {
-                    // Use displayAuthorName which has proper fallback logic
-                    Text(comment.displayAuthorName)
+                    // 用户名 (点击跳转用户主页)
+                    Text("User \(comment.userId.prefix(8))")
                         .font(.system(size: DesignTokens.fontMedium, weight: .semibold))
                         .foregroundColor(.black)
+                        .onTapGesture {
+                            onAvatarTapped?(comment.userId)
+                        }
 
                     Text(comment.createdDate.timeAgoDisplay())
                         .font(.system(size: DesignTokens.fontSmall))

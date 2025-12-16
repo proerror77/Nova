@@ -8,12 +8,38 @@ struct NewChatView: View {
     @State private var selectedUsers: [SearchedUser] = []
     @State private var searchResults: [SearchedUser] = []
     @State private var friends: [SearchedUser] = []
+    @State private var starredFriends: [SearchedUser] = []
     @State private var isLoading = false
     @State private var isCreating = false
     @State private var errorMessage: String?
     @State private var showChat = false
     @State private var createdConversationId: String = ""
     @State private var createdConversationName: String = ""
+
+    @State private var isPreviewMode = false  // 追踪预览模式状态
+
+    // MARK: - 预览模式配置 (开发调试用)
+    // 🎨 在模拟器上运行时启用预览模式，方便调试UI
+    #if DEBUG
+    private static var usePreviewMode: Bool {
+        #if targetEnvironment(simulator)
+        return false  // 关闭模拟器预览模式，使用真实API
+        #else
+        return false
+        #endif
+    }
+    #else
+    private static let usePreviewMode = false
+    #endif
+
+    // MARK: - Computed Properties
+
+    /// Group friends by first letter of display name
+    private var groupedFriends: [Character: [SearchedUser]] {
+        Dictionary(grouping: friends) { user in
+            user.displayName.first?.uppercased().first ?? "#"
+        }
+    }
 
     // MARK: - Services
     private let chatService = ChatService()
@@ -191,29 +217,64 @@ struct NewChatView: View {
                                 }
                             }
                         } else {
-                            // Show Friends List
-                            if friends.isEmpty {
-                                Text("Search for users to start a chat")
-                                    .font(Font.custom("Helvetica Neue", size: 14))
-                                    .foregroundColor(DesignTokens.textSecondary)
-                                    .padding(.top, 40)
-                            } else {
+                            // MARK: - Select an existing group
+                            Button(action: {
+                                // TODO: Navigate to group selection
+                            }) {
                                 HStack {
-                                    Text("Friends")
+                                    Text("Select an existing group")
                                         .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
-                                        .foregroundColor(DesignTokens.textSecondary)
+                                        .foregroundColor(DesignTokens.textPrimary)
                                     Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(DesignTokens.textMuted)
                                 }
                                 .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
+                                .frame(height: 60)
+                                .frame(maxWidth: .infinity)
+                                .background(DesignTokens.backgroundColor)
+                                .overlay(
+                                    Rectangle()
+                                        .frame(height: 0.2)
+                                        .foregroundColor(DesignTokens.borderColor),
+                                    alignment: .bottom
+                                )
+                            }
 
-                                ForEach(friends) { user in
+                            // MARK: - Starred Friends Section
+                            if !starredFriends.isEmpty {
+                                SectionHeader(title: "Starred Friends")
+
+                                ForEach(starredFriends) { user in
                                     UserRow(
                                         user: user,
                                         isSelected: selectedUsers.contains(user)
                                     )
                                     .onTapGesture {
                                         toggleUserSelection(user)
+                                    }
+                                }
+                            }
+
+                            // MARK: - Friends List (grouped by letter)
+                            if friends.isEmpty && starredFriends.isEmpty {
+                                Text("Search for users to start a chat")
+                                    .font(Font.custom("Helvetica Neue", size: 14))
+                                    .foregroundColor(DesignTokens.textSecondary)
+                                    .padding(.top, 40)
+                            } else {
+                                ForEach(groupedFriends.keys.sorted(), id: \.self) { letter in
+                                    SectionHeader(title: String(letter))
+
+                                    ForEach(groupedFriends[letter] ?? []) { user in
+                                        UserRow(
+                                            user: user,
+                                            isSelected: selectedUsers.contains(user)
+                                        )
+                                        .onTapGesture {
+                                            toggleUserSelection(user)
+                                        }
                                     }
                                 }
                             }
@@ -268,6 +329,22 @@ struct NewChatView: View {
     }
 
     private func loadFriends() async {
+        // 🎨 预览模式：使用模拟数据进行UI调试
+        if Self.usePreviewMode {
+            print("🎨 [NewChatView] Preview Mode enabled - using mock data")
+            await MainActor.run {
+                loadMockData()
+                isLoading = false
+                errorMessage = nil
+                isPreviewMode = true
+            }
+            return
+        }
+
+        await MainActor.run {
+            isPreviewMode = false
+        }
+
         isLoading = true
         errorMessage = nil
 
@@ -279,13 +356,32 @@ struct NewChatView: View {
             print("[NewChatView] Loaded \(friends.count) friends")
             #endif
         } catch {
-            // Friends loading failed is non-critical, just log
+            errorMessage = "Failed to load friends: \(error.localizedDescription)"
             #if DEBUG
             print("[NewChatView] Failed to load friends: \(error)")
             #endif
         }
 
         isLoading = false
+    }
+
+    private func loadMockData() {
+        // Mock starred friends
+        starredFriends = [
+            SearchedUser(id: "1", username: "bruce_li", displayName: "Bruce Li", avatarUrl: nil),
+            SearchedUser(id: "2", username: "alice_wang", displayName: "Alice Wang", avatarUrl: nil),
+        ]
+
+        // Mock friends list (grouped by letter)
+        friends = [
+            SearchedUser(id: "3", username: "adam_chen", displayName: "Adam Chen", avatarUrl: nil),
+            SearchedUser(id: "4", username: "amy_liu", displayName: "Amy Liu", avatarUrl: nil),
+            SearchedUser(id: "5", username: "bob_zhang", displayName: "Bob Zhang", avatarUrl: nil),
+            SearchedUser(id: "6", username: "bella_wu", displayName: "Bella Wu", avatarUrl: nil),
+            SearchedUser(id: "7", username: "charlie_lee", displayName: "Charlie Lee", avatarUrl: nil),
+            SearchedUser(id: "8", username: "david_huang", displayName: "David Huang", avatarUrl: nil),
+            SearchedUser(id: "9", username: "emma_lin", displayName: "Emma Lin", avatarUrl: nil),
+        ]
     }
 
     private func createConversation() async {
@@ -464,6 +560,33 @@ struct SelectedUserChip: View {
     }
 }
 
-#Preview {
+// MARK: - Section Header
+struct SectionHeader: View {
+    let title: String
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
+                .foregroundColor(DesignTokens.textSecondary)
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity)
+        .background(DesignTokens.backgroundColor)
+    }
+}
+
+// MARK: - Previews
+
+#Preview("NewChat - Default") {
     NewChatView(currentPage: .constant(.newChat))
+        .environmentObject(AuthenticationManager.shared)
+}
+
+#Preview("NewChat - Dark Mode") {
+    NewChatView(currentPage: .constant(.newChat))
+        .environmentObject(AuthenticationManager.shared)
+        .preferredColorScheme(.dark)
 }

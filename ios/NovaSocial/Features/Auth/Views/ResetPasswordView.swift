@@ -5,8 +5,28 @@ import SwiftUI
 /// View for resetting password using a token from email link
 /// Typically accessed via deep link: nova://reset-password?token=xxx
 struct ResetPasswordView: View {
+    // MARK: - Design Constants
+    private enum Layout {
+        static let contentOffset: CGFloat = 120
+        static let inputFieldHeight: CGFloat = 49
+        static let buttonHeight: CGFloat = 46
+        static let buttonCornerRadius: CGFloat = 31.5
+        static let fieldCornerRadius: CGFloat = 6
+        static let fieldSpacing: CGFloat = 28
+        static let errorOffset: CGFloat = 32
+    }
+
+    private enum Colors {
+        static let placeholder = Color(white: 0.77)
+        static let secondaryText = Color(white: 0.53)
+        static let errorText = Color(red: 1, green: 0.4, blue: 0.4)
+        static let fieldBorder = Color.white.opacity(0.3)
+    }
+
+    // MARK: - Binding
+    @Binding var currentPage: AppPage
+
     // MARK: - Environment
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var authManager: AuthenticationManager
 
     // MARK: - Properties
@@ -19,47 +39,31 @@ struct ResetPasswordView: View {
     @State private var errorMessage: String?
     @State private var successMessage: String?
     @State private var showPassword = false
+    @State private var showConfirmPassword = false
     @State private var passwordError: String?
     @State private var confirmPasswordError: String?
 
     // MARK: - Focus State
     @FocusState private var focusedField: Field?
 
-    enum Field {
+    private enum Field {
         case password
         case confirmPassword
     }
 
     var body: some View {
         ZStack {
-            // Background Image
-            Image("Registration-background")
-                .resizable()
-                .scaledToFill()
-                .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
-                .clipped()
-                .ignoresSafeArea(.all)
-
-            // Dark overlay
-            Color.black
-                .opacity(0.4)
-                .ignoresSafeArea()
+            // Background
+            backgroundView
 
             // Main Content
             GeometryReader { geometry in
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
-                        let contentVerticalOffset: CGFloat = 120
-
                         VStack(spacing: 0) {
-                            Spacer()
-                                .frame(height: 60)
-
-                            // Logo Section
+                            Spacer().frame(height: 60)
                             logoSection
-
-                            Spacer()
-                                .frame(height: 40)
+                            Spacer().frame(height: 40)
 
                             // Title
                             Text(LocalizedStringKey("Reset_Password_Title"))
@@ -67,77 +71,40 @@ struct ResetPasswordView: View {
                                 .foregroundColor(.white)
                                 .multilineTextAlignment(.center)
 
-                            Spacer()
-                                .frame(height: 16)
+                            Spacer().frame(height: 16)
 
                             // Description
                             Text(LocalizedStringKey("Reset_Password_Description"))
                                 .font(.system(size: 14, weight: .light))
-                                .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
+                                .foregroundColor(Colors.placeholder)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 40)
 
-                            Spacer()
-                                .frame(height: 36)
+                            Spacer().frame(height: 36)
 
                             // Password Input Fields
-                            VStack(spacing: 16) {
+                            VStack(spacing: Layout.fieldSpacing) {
                                 passwordTextField
                                 confirmPasswordTextField
                             }
                             .padding(.horizontal, 16)
 
                             // Error Message
-                            if let errorMessage = errorMessage {
-                                Text(LocalizedStringKey(errorMessage))
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.red)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 40)
-                                    .padding(.top, 12)
-                            }
+                            errorMessageView
 
                             // Success Message
                             if let successMessage = successMessage {
-                                VStack(spacing: 16) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 50))
-                                        .foregroundColor(.green)
-
-                                    Text(LocalizedStringKey(successMessage))
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.green)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal, 40)
-
-                                    // Back to Login button after success
-                                    Button(action: {
-                                        dismiss()
-                                    }) {
-                                        Text(LocalizedStringKey("Back_To_Login"))
-                                            .font(.system(size: 16, weight: .bold))
-                                            .foregroundColor(.black)
-                                            .frame(maxWidth: .infinity)
-                                            .frame(height: 46)
-                                            .background(Color.white)
-                                            .cornerRadius(31.50)
-                                    }
-                                    .padding(.horizontal, 16)
-                                    .padding(.top, 16)
-                                }
-                                .padding(.top, 24)
+                                successView(message: successMessage)
                             }
 
                             if successMessage == nil {
-                                Spacer()
-                                    .frame(height: 32)
-
-                                // Submit Button
-                                submitButton
-                                    .padding(.horizontal, 16)
+                                Spacer().frame(height: 12)
+                                submitButton.padding(.horizontal, 16)
+                                Spacer().frame(height: 16)
+                                backToLoginButton
                             }
                         }
-                        .offset(y: contentVerticalOffset)
+                        .offset(y: Layout.contentOffset)
 
                         Spacer()
                     }
@@ -146,12 +113,69 @@ struct ResetPasswordView: View {
                 .scrollDismissesKeyboard(.interactively)
             }
             .contentShape(Rectangle())
-            .onTapGesture {
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            }
+            .onTapGesture { dismissKeyboard() }
         }
-        .ignoresSafeArea(.keyboard)
         .navigationBarHidden(true)
+    }
+
+    // MARK: - Background View
+    private var backgroundView: some View {
+        ZStack {
+            Image("Registration-background")
+                .resizable()
+                .scaledToFill()
+                .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
+                .clipped()
+                .ignoresSafeArea(.all)
+
+            Color.black.opacity(0.4).ignoresSafeArea()
+        }
+    }
+
+    // MARK: - Error Message View
+    private var errorMessageView: some View {
+        Text(errorMessage ?? " ")
+            .font(.system(size: 12))
+            .foregroundColor(.red)
+            .multilineTextAlignment(.center)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 20)
+            .frame(minHeight: 36)
+            .opacity(errorMessage != nil ? 1 : 0)
+            .padding(.top, 12)
+    }
+
+    // MARK: - Success View
+    private func successView(message: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 50))
+                .foregroundColor(.green)
+
+            Text(LocalizedStringKey(message))
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.green)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+
+            Button(action: { currentPage = .login }) {
+                Text(LocalizedStringKey("Back_To_Login"))
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: Layout.buttonHeight)
+                    .background(Color.white)
+                    .cornerRadius(Layout.buttonCornerRadius)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+        }
+        .padding(.top, 24)
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
     // MARK: - Logo Section
@@ -168,47 +192,46 @@ struct ResetPasswordView: View {
 
     // MARK: - Password TextField
     private var passwordTextField: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.clear)
-                    .frame(height: 49)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(passwordError != nil ? Color.red : Color.white.opacity(0.3), lineWidth: passwordError != nil ? 1 : 0.5)
-                    )
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: Layout.fieldCornerRadius)
+                .fill(Color.clear)
+                .frame(height: Layout.inputFieldHeight)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Layout.fieldCornerRadius)
+                        .stroke(passwordError != nil ? Color.red : Colors.fieldBorder, lineWidth: passwordError != nil ? 1 : 0.5)
+                )
 
-                HStack {
-                    if showPassword {
-                        TextField("", text: $newPassword, prompt: Text(LocalizedStringKey("New_Password")).foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77)))
-                            .foregroundColor(.white)
-                            .font(.system(size: 14, weight: .light))
-                            .autocapitalization(.none)
-                            .autocorrectionDisabled()
-                            .focused($focusedField, equals: .password)
-                    } else {
-                        SecureField("", text: $newPassword, prompt: Text(LocalizedStringKey("New_Password")).foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77)))
-                            .foregroundColor(.white)
-                            .font(.system(size: 14, weight: .light))
-                            .focused($focusedField, equals: .password)
-                    }
-
-                    Button(action: {
-                        showPassword.toggle()
-                    }) {
-                        Text(showPassword ? "HIDE" : "SHOW")
-                            .font(.system(size: 12, weight: .light))
-                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                    }
+            HStack {
+                if showPassword {
+                    TextField("", text: $newPassword, prompt: Text(LocalizedStringKey("New_Password")).foregroundColor(Colors.placeholder))
+                        .foregroundColor(.white)
+                        .font(.system(size: 14, weight: .light))
+                        .autocapitalization(.none)
+                        .autocorrectionDisabled()
+                        .focused($focusedField, equals: .password)
+                } else {
+                    SecureField("", text: $newPassword, prompt: Text(LocalizedStringKey("New_Password")).foregroundColor(Colors.placeholder))
+                        .foregroundColor(.white)
+                        .font(.system(size: 14, weight: .light))
+                        .focused($focusedField, equals: .password)
                 }
-                .padding(.horizontal, 16)
+
+                Button(action: {
+                    showPassword.toggle()
+                }) {
+                    Text(showPassword ? "HIDE" : "SHOW")
+                        .font(.system(size: 12, weight: .light))
+                        .foregroundColor(Colors.secondaryText)
+                }
             }
+            .padding(.horizontal, 16)
 
             if let error = passwordError {
                 Text(LocalizedStringKey(error))
                     .font(.system(size: 11))
-                    .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
+                    .foregroundColor(Colors.errorText)
                     .padding(.leading, 4)
+                    .offset(y: Layout.errorOffset)
             }
         }
         .onChange(of: newPassword) { _, _ in
@@ -218,38 +241,46 @@ struct ResetPasswordView: View {
 
     // MARK: - Confirm Password TextField
     private var confirmPasswordTextField: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.clear)
-                    .frame(height: 49)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(confirmPasswordError != nil ? Color.red : Color.white.opacity(0.3), lineWidth: confirmPasswordError != nil ? 1 : 0.5)
-                    )
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: Layout.fieldCornerRadius)
+                .fill(Color.clear)
+                .frame(height: Layout.inputFieldHeight)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Layout.fieldCornerRadius)
+                        .stroke(confirmPasswordError != nil ? Color.red : Colors.fieldBorder, lineWidth: confirmPasswordError != nil ? 1 : 0.5)
+                )
 
-                if showPassword {
-                    TextField("", text: $confirmPassword, prompt: Text(LocalizedStringKey("Confirm_New_Password")).foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77)))
+            HStack {
+                if showConfirmPassword {
+                    TextField("", text: $confirmPassword, prompt: Text(LocalizedStringKey("Confirm_New_Password")).foregroundColor(Colors.placeholder))
                         .foregroundColor(.white)
                         .font(.system(size: 14, weight: .light))
                         .autocapitalization(.none)
                         .autocorrectionDisabled()
-                        .padding(.horizontal, 16)
                         .focused($focusedField, equals: .confirmPassword)
                 } else {
-                    SecureField("", text: $confirmPassword, prompt: Text(LocalizedStringKey("Confirm_New_Password")).foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77)))
+                    SecureField("", text: $confirmPassword, prompt: Text(LocalizedStringKey("Confirm_New_Password")).foregroundColor(Colors.placeholder))
                         .foregroundColor(.white)
                         .font(.system(size: 14, weight: .light))
-                        .padding(.horizontal, 16)
                         .focused($focusedField, equals: .confirmPassword)
                 }
+
+                Button(action: {
+                    showConfirmPassword.toggle()
+                }) {
+                    Text(showConfirmPassword ? "HIDE" : "SHOW")
+                        .font(.system(size: 12, weight: .light))
+                        .foregroundColor(Colors.secondaryText)
+                }
             }
+            .padding(.horizontal, 16)
 
             if let error = confirmPasswordError {
                 Text(LocalizedStringKey(error))
                     .font(.system(size: 11))
-                    .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
+                    .foregroundColor(Colors.errorText)
                     .padding(.leading, 4)
+                    .offset(y: Layout.errorOffset)
             }
         }
         .onChange(of: confirmPassword) { _, _ in
@@ -275,12 +306,24 @@ struct ResetPasswordView: View {
                     .foregroundColor(.black)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 46)
+            .frame(height: Layout.buttonHeight)
             .background(Color.white)
-            .cornerRadius(31.50)
+            .cornerRadius(Layout.buttonCornerRadius)
         }
         .disabled(isLoading)
         .accessibilityIdentifier("resetPasswordButton")
+    }
+
+    // MARK: - Back to Login Button
+    private var backToLoginButton: some View {
+        Button(action: {
+            currentPage = .login
+        }) {
+            Text(LocalizedStringKey("Back_To_Login"))
+                .font(.system(size: 12, weight: .medium))
+                .underline()
+                .foregroundColor(.white)
+        }
     }
 
     // MARK: - Actions
@@ -348,9 +391,15 @@ struct ResetPasswordView: View {
     }
 }
 
-// MARK: - Preview
+// MARK: - Previews
 
-#Preview {
-    ResetPasswordView(resetToken: "test_token")
+#Preview("ResetPassword - Default") {
+    ResetPasswordView(currentPage: .constant(.resetPassword(token: "test")), resetToken: "test_token")
         .environmentObject(AuthenticationManager.shared)
+}
+
+#Preview("ResetPassword - Dark Mode") {
+    ResetPasswordView(currentPage: .constant(.resetPassword(token: "test")), resetToken: "test_token")
+        .environmentObject(AuthenticationManager.shared)
+        .preferredColorScheme(.dark)
 }

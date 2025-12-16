@@ -11,12 +11,13 @@ struct SplashScreenView: View {
             DesignTokens.accentColor
                 .ignoresSafeArea()
 
-            // ICERED 文字
-            Text("ICERED")
-                .font(.system(size: 48, weight: .medium, design: .default))
+            // Icered 图标
+            Image("Icered-icon")
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 220, height: 220)
                 .foregroundColor(.white)
-                .tracking(8)
-                .kerning(8)
         }
         .task {
             // 1.5秒后检查登录状态并跳转
@@ -38,6 +39,15 @@ struct SplashScreenView: View {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("Splash - Default") {
     SplashScreenView(currentPage: .constant(.splash))
+        .environmentObject(AuthenticationManager.shared)
+}
+
+#Preview("Splash - Dark Mode") {
+    SplashScreenView(currentPage: .constant(.splash))
+        .environmentObject(AuthenticationManager.shared)
+        .preferredColorScheme(.dark)
 }

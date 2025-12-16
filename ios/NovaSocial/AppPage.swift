@@ -1,10 +1,12 @@
 import SwiftUI
 
 /// 应用页面枚举
-enum AppPage {
+enum AppPage: Equatable {
     case splash
     case welcome
     case login
+    case forgotPassword
+    case resetPassword(token: String)
     case createAccount
     case home
     case rankingList
@@ -16,12 +18,13 @@ enum AppPage {
     case alice
     case setting
     case profileSetting
+    case aliasName
     case devices
     case inviteFriends
     case myChannels
     case addFriends
     case newChat
-    case groupChat
     case write
     case getVerified
+    case groupChat
 }

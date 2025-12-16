@@ -269,6 +269,11 @@ struct MessageBubbleView: View {
     let message: ChatMessage
     var audioPlayer: AudioPlayerService? = nil
 
+    // 设计规范颜色
+    private let myBubbleColor = Color(red: 0.91, green: 0.20, blue: 0.34)  // 红色气泡
+    private let otherBubbleColor = Color(red: 0.92, green: 0.92, blue: 0.92)  // 灰色气泡
+    private let otherTextColor = Color(red: 0.34, green: 0.34, blue: 0.34)  // 深灰色文字
+
     var body: some View {
         if message.isFromMe {
             myMessageView
@@ -277,20 +282,22 @@ struct MessageBubbleView: View {
         }
     }
 
+    // MARK: - 我的消息（右侧）
     private var myMessageView: some View {
-        HStack(spacing: 6) {
+        HStack(alignment: .top, spacing: 10) {
             Spacer()
 
             messageContent
 
-            DefaultAvatarView(size: 50)
+            DefaultAvatarView(size: 40)
         }
         .padding(.horizontal, 16)
     }
 
+    // MARK: - 对方消息（左侧）
     private var otherMessageView: some View {
-        HStack(spacing: 6) {
-            DefaultAvatarView(size: 50)
+        HStack(alignment: .top, spacing: 10) {
+            DefaultAvatarView(size: 40)
 
             otherMessageContent
 
@@ -306,18 +313,22 @@ struct MessageBubbleView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(maxWidth: 200, maxHeight: 200)
-                .cornerRadius(12)
+                .cornerRadius(14)
         } else if let location = message.location {
             LocationMessageView(location: location)
         } else if message.audioData != nil || message.audioUrl != nil, let player = audioPlayer {
             VoiceMessageView(message: message, isFromMe: true, audioPlayer: player)
         } else {
             Text(message.text)
-                .font(Font.custom("Helvetica Neue", size: 18))
-                .foregroundColor(DesignTokens.textPrimary)
-                .padding(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
-                .background(DesignTokens.chatBubbleOther)
-                .cornerRadius(23)
+                .font(Font.custom("Helvetica Neue", size: 16))
+                .lineSpacing(4)
+                .foregroundColor(.white)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
+                .background(myBubbleColor)
+                .cornerRadius(14)
+                .frame(maxWidth: 260, alignment: .trailing)
         }
     }
 
@@ -328,18 +339,22 @@ struct MessageBubbleView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(maxWidth: 200, maxHeight: 200)
-                .cornerRadius(12)
+                .cornerRadius(14)
         } else if let location = message.location {
             LocationMessageView(location: location)
         } else if message.audioData != nil || message.audioUrl != nil, let player = audioPlayer {
             VoiceMessageView(message: message, isFromMe: false, audioPlayer: player)
         } else {
             Text(message.text)
-                .font(.system(size: 18))
-                .foregroundColor(DesignTokens.textPrimary)
-                .padding(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
-                .background(DesignTokens.chatBubbleOther)
-                .cornerRadius(23)
+                .font(Font.custom("Helvetica Neue", size: 16))
+                .lineSpacing(4)
+                .foregroundColor(otherTextColor)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
+                .background(otherBubbleColor)
+                .cornerRadius(14)
+                .frame(maxWidth: 260, alignment: .leading)
         }
     }
 }
@@ -382,42 +397,97 @@ struct ChatView: View {
         return formatter
     }()
 
-    // MARK: - ViewModel
-    @StateObject private var viewModel: ChatViewModel
+    // MARK: - 预览模式配置 (开发调试用)
+    // 🎨 在模拟器上运行时启用预览模式，方便调试UI
+    #if DEBUG
+    private static var useChatPreviewMode: Bool {
+        #if targetEnvironment(simulator)
+        return false  // 关闭模拟器预览模式，使用真实API
+        #else
+        return false
+        #endif
+    }
+    #else
+    private static let useChatPreviewMode = false
+    #endif
 
-    // MARK: - Required Properties
+    // MARK: - Mock Data for UI Preview
+    private static var mockMessages: [ChatMessage] {
+        let calendar = Calendar.current
+        let now = Date()
+        let baseDate = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: now) ?? now
+
+        return [
+            ChatMessage(localText: "Hello, how are you bro~", isFromMe: false),
+            ChatMessage(localText: "Have you been busy recently?", isFromMe: false),
+            ChatMessage(localText: "Not bad. There's a new project recently and I'm extremely busy", isFromMe: true),
+            ChatMessage(localText: "Is there dinner time tonight? There is a project that you might be interested in", isFromMe: false),
+        ]
+    }
+
+    // MARK: - Dependencies & Required Properties
+    /// 聊天服务 - 负责发送/接收消息、WebSocket连接
+    /// ⚠️ 这是连接后端API的关键，不要替换成其他Service
+    @State private var chatService = ChatService()
+
+    /// 媒体服务 - 负责图片/视频上传
+    private let mediaService = MediaService()
+
+    /// 必需参数
     @Binding var showChat: Bool
+    let conversationId: String  // ← 从上级View传入，标识当前聊天对象
+    var userName: String = "User"
 
-    // MARK: - UI State (kept in View)
+    // MARK: - State
+    @State private var messageText = ""
     @State private var showUserProfile = false
+    @State private var messages: [ChatMessage] = []
     @State private var showAttachmentOptions = false
     @FocusState private var isInputFocused: Bool
 
-    // Photo/Camera related
+    // Loading states
+    @State private var isLoadingHistory = false
+    @State private var isSending = false
+    @State private var isUploadingImage = false
+    @State private var error: String?
+    @State private var isPreviewMode = false  // 追踪预览模式状态
+
+    // Matrix E2EE status
+    @State private var isMatrixE2EEEnabled = false
+    
+    // Typing indicator state
+    @State private var isOtherUserTyping = false
+    @State private var typingUserName: String = ""
+    @State private var typingTimer: Timer?
+    
+    // Pagination
+    @State private var hasMoreMessages = true
+    @State private var nextCursor: String?
+
+
+    // 相册相关
     @State private var selectedPhotoItem: PhotosPickerItem?
+
+    // 相机相关
     @State private var showCamera = false
     @State private var cameraImage: UIImage?
     @State private var showCameraPermissionAlert = false
 
-    // Location related
+    // 位置相关
     @StateObject private var locationManager = ChatLocationManager()
-    @State private var showLocationAlert = false
 
-    // Voice recording related
+    // 语音录制相关
     @State private var audioRecorder = AudioRecorderService()
     @State private var audioPlayer = AudioPlayerService()
     @State private var isRecordingVoice = false
     @State private var showMicrophonePermissionAlert = false
+    @State private var showLocationAlert = false
 
-    // MARK: - Init
-    init(showChat: Binding<Bool>, conversationId: String, userName: String, otherUserId: String = "") {
-        self._showChat = showChat
-        self._viewModel = StateObject(wrappedValue: ChatViewModel(
-            conversationId: conversationId,
-            userName: userName,
-            otherUserId: otherUserId
-        ))
+    // 当前用户ID（从Keychain获取）
+    private var currentUserId: String {
+        KeychainService.shared.get(.userId) ?? "unknown"
     }
+
 
     var body: some View {
         ZStack {
@@ -437,7 +507,10 @@ struct ChatView: View {
             }
         }
         .fullScreenCover(isPresented: $showUserProfile) {
-            UserProfileView(showUserProfile: $showUserProfile, userId: viewModel.otherUserId)
+            UserProfileView(
+                showUserProfile: $showUserProfile,
+                userId: conversationId  // 使用会话ID（实际项目中应传入对方用户ID）
+            )
         }
         .fullScreenCover(isPresented: $showCamera) {
             CameraView(image: $cameraImage)
@@ -454,9 +527,7 @@ struct ChatView: View {
         .alert("Share Location", isPresented: $showLocationAlert) {
             Button("Share") {
                 if let location = locationManager.location {
-                    Task {
-                        await viewModel.sendLocationMessage(location)
-                    }
+                    sendLocationMessage(location: location)
                 }
             }
             Button("Cancel", role: .cancel) {}
@@ -487,10 +558,12 @@ struct ChatView: View {
             transaction.disablesAnimations = true
         }
         .task {
-            await viewModel.loadChatData()
+            // ✅ 使用.task而非.onAppear - 自动处理取消
+            await loadChatData()
         }
         .onDisappear {
-            viewModel.cleanup()
+            // 断开WebSocket连接
+            chatService.disconnectWebSocket()
         }
     }
 
@@ -507,23 +580,23 @@ struct ChatView: View {
 
             HStack(spacing: 13) {
                 // 头像 - alice 使用自定义图片，其他用户使用默认头像
-                if viewModel.userName.lowercased() == "alice" {
+                if userName.lowercased() == "alice" {
                     Image("alice-avatar")
                         .resizable()
                         .scaledToFill()
-                        .frame(width: 50, height: 50)
+                        .frame(width: 40, height: 40)
                         .clipShape(Circle())
                 } else {
-                    DefaultAvatarView(size: 50)
+                    DefaultAvatarView(size: 40)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(viewModel.userName)
+                    Text(userName)
                         .font(.system(size: 20, weight: .medium))
                         .foregroundColor(DesignTokens.textPrimary)
 
                     // Matrix E2EE 狀態指示器
-                    if viewModel.isMatrixE2EEEnabled {
+                    if isMatrixE2EEEnabled {
                         HStack(spacing: 4) {
                             Image(systemName: "lock.shield.fill")
                                 .font(.system(size: 10))
@@ -556,14 +629,31 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 16) {
+                    // MARK: - 预览模式提示（仅在DEBUG模式显示）
+                    #if DEBUG
+                    if isPreviewMode {
+                        HStack(spacing: 8) {
+                            Image(systemName: "eye.fill")
+                                .font(.system(size: 12))
+                            Text("Preview Mode - Mock Data (Simulator)")
+                                .font(.system(size: 12, weight: .medium))
+                            Spacer()
+                        }
+                        .foregroundColor(.orange)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.orange.opacity(0.1))
+                    }
+                    #endif
+
                     // 加载状态指示器
-                    if viewModel.isLoadingHistory {
+                    if isLoadingHistory {
                         ProgressView("Loading messages...")
                             .padding()
                     }
 
                     // 错误提示
-                    if let error = viewModel.error {
+                    if let error = error {
                         VStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle")
                                 .font(.system(size: 30))
@@ -573,7 +663,7 @@ struct ChatView: View {
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
                             Button("Retry") {
-                                Task { await viewModel.loadChatData() }
+                                Task { await loadChatData() }
                             }
                             .buttonStyle(.bordered)
                         }
@@ -581,17 +671,18 @@ struct ChatView: View {
                     }
 
                     Text(currentDateString())
-                        .font(.system(size: 12))
-                        .foregroundColor(DesignTokens.textMuted)
+                        .font(Font.custom("Helvetica Neue", size: 12))
+                        .lineSpacing(20)
+                        .foregroundColor(Color(red: 0.59, green: 0.59, blue: 0.59))
                         .padding(.top, 16)
 
-                    ForEach(viewModel.messages) { message in
+                    ForEach(messages) { message in
                         MessageBubbleView(message: message, audioPlayer: audioPlayer)
                             .id(message.id)
                     }
 
                     // Sending indicator
-                    if viewModel.isSending {
+                    if isSending {
                         HStack {
                             Spacer()
                             ProgressView()
@@ -603,36 +694,36 @@ struct ChatView: View {
                         }
                         .padding(.horizontal)
                     }
-
+                    
                     // Typing indicator
-                    if viewModel.isOtherUserTyping {
+                    if isOtherUserTyping {
                         HStack(spacing: 6) {
                             DefaultAvatarView(size: 30)
-
+                            
                             HStack(spacing: 4) {
-                                Text("\(viewModel.typingUserName.isEmpty ? viewModel.userName : viewModel.typingUserName) is typing")
+                                Text("\(typingUserName.isEmpty ? userName : typingUserName) is typing")
                                     .font(Font.custom("Helvetica Neue", size: 14))
                                     .foregroundColor(DesignTokens.textMuted)
                                     .italic()
-
+                                
                                 // Animated dots
                                 TypingDotsView()
                             }
                             .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
                             .background(DesignTokens.chatBubbleOther.opacity(0.5))
                             .cornerRadius(16)
-
+                            
                             Spacer()
                         }
                         .padding(.horizontal, 16)
                         .transition(.opacity)
-                        .animation(.easeInOut(duration: 0.2), value: viewModel.isOtherUserTyping)
+                        .animation(.easeInOut(duration: 0.2), value: isOtherUserTyping)
                     }
                 }
                 .padding(.bottom, 16)
             }
-            .onChange(of: viewModel.messages.count) { _, _ in
-                if let lastMessage = viewModel.messages.last {
+            .onChange(of: messages.count) { _, _ in
+                if let lastMessage = messages.last {
                     withAnimation {
                         proxy.scrollTo(lastMessage.id, anchor: .bottom)
                     }
@@ -722,23 +813,21 @@ struct ChatView: View {
                                 .foregroundColor(DesignTokens.textMuted)
                         }
 
-                        TextField("Type a message...", text: $viewModel.messageText)
+                        TextField("Type a message...", text: $messageText)
                             .font(Font.custom("Helvetica Neue", size: 16))
                             .foregroundColor(DesignTokens.textPrimary)
                             .focused($isInputFocused)
                             .onSubmit {
-                                Task {
-                                    await viewModel.sendMessage()
-                                }
+                                sendMessage()
                             }
-                            .onChange(of: viewModel.messageText) { oldValue, newValue in
+                            .onChange(of: messageText) { oldValue, newValue in
                                 // Send typing indicator when user starts typing
                                 if oldValue.isEmpty && !newValue.isEmpty {
-                                    viewModel.sendTypingStart()
+                                    chatService.sendTypingStart(conversationId: conversationId)
                                 }
                                 // Send typing stop when text is cleared
                                 if !oldValue.isEmpty && newValue.isEmpty {
-                                    viewModel.sendTypingStop()
+                                    chatService.sendTypingStop(conversationId: conversationId)
                                 }
                             }
                     }
@@ -757,13 +846,11 @@ struct ChatView: View {
                     if isRecordingVoice {
                         stopAndSendVoiceMessage()
                     } else {
-                        Task {
-                            await viewModel.sendMessage()
-                        }
+                        sendMessage()
                     }
                 }) {
                     Circle()
-                        .fill(isRecordingVoice ? Color.red : (viewModel.messageText.isEmpty ? Color.gray : Color(red: 0.91, green: 0.18, blue: 0.30)))
+                        .fill(isRecordingVoice ? Color.red : (messageText.isEmpty ? Color.gray : Color(red: 0.91, green: 0.18, blue: 0.30)))
                         .frame(width: 33, height: 33)
                         .overlay(
                             Image(systemName: isRecordingVoice ? "stop.fill" : "paperplane.fill")
@@ -771,7 +858,7 @@ struct ChatView: View {
                                 .foregroundColor(.white)
                         )
                 }
-                .disabled(!isRecordingVoice && viewModel.messageText.isEmpty)
+                .disabled(!isRecordingVoice && messageText.isEmpty)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -839,8 +926,9 @@ struct ChatView: View {
             do {
                 if let data = try await newItem?.loadTransferable(type: Data.self),
                    let image = UIImage(data: data) {
-                    await viewModel.sendImageMessage(image)
-                    showAttachmentOptions = false
+                    await MainActor.run {
+                        sendImageMessage(image: image)
+                    }
                 }
             } catch {
                 print("Failed to load photo: \(error.localizedDescription)")
@@ -851,23 +939,378 @@ struct ChatView: View {
 
     private func handleCameraImage(_ newImage: UIImage?) {
         if let image = newImage {
-            Task {
-                await viewModel.sendImageMessage(image)
-            }
+            sendImageMessage(image: image)
             cameraImage = nil
         }
     }
 
     private func handleLocationUpdate(_ newLocation: CLLocationCoordinate2D?) {
         if let location = newLocation, showLocationAlert {
-            Task {
-                await viewModel.sendLocationMessage(location)
-            }
+            sendLocationMessage(location: location)
             showLocationAlert = false
         }
     }
 
-    // MARK: - Helper Methods
+    // MARK: - API Calls
+
+    /// Load chat data (message history + WebSocket connection)
+    private func loadChatData() async {
+        // 🎨 预览模式：使用模拟数据进行UI调试
+        if Self.useChatPreviewMode {
+            print("🎨 [ChatView] Preview Mode enabled - using mock data")
+            await MainActor.run {
+                self.messages = Self.mockMessages
+                self.isLoadingHistory = false
+                self.error = nil
+                self.isPreviewMode = true
+            }
+            return
+        }
+
+        await MainActor.run {
+            self.isPreviewMode = false
+        }
+
+        isLoadingHistory = true
+        error = nil
+
+        do {
+            // 0. 檢查並啟用 Matrix E2EE
+            chatService.enableMatrixE2EE()
+            isMatrixE2EEEnabled = MatrixBridgeService.shared.isInitialized
+
+            #if DEBUG
+            print("[ChatView] Matrix E2EE enabled: \(isMatrixE2EEEnabled)")
+            #endif
+
+            // 1. Get message history
+            let response = try await chatService.getMessages(conversationId: conversationId, limit: 50)
+
+            // 2. Convert to UI messages
+            messages = response.messages.map { ChatMessage(from: $0, currentUserId: currentUserId) }
+
+            // 3. Store pagination info
+            hasMoreMessages = response.hasMore
+            nextCursor = response.nextCursor
+
+            // 4. Setup WebSocket callbacks
+            setupWebSocketCallbacks()
+
+            // 5. Connect WebSocket
+            chatService.connectWebSocket()
+
+            // 6. Mark messages as read
+            if let lastMessage = messages.last {
+                try? await chatService.markAsRead(conversationId: conversationId, messageId: lastMessage.id)
+            }
+
+            // 7. Setup Matrix message handler (如果已啟用)
+            if isMatrixE2EEEnabled {
+                setupMatrixMessageHandler()
+            }
+
+            #if DEBUG
+            print("[ChatView] Loaded \(messages.count) messages for conversation \(conversationId)")
+            #endif
+
+        } catch {
+            self.error = "Failed to load messages: \(error.localizedDescription)"
+            #if DEBUG
+            print("[ChatView] Load error: \(error)")
+            #endif
+        }
+
+        isLoadingHistory = false
+    }
+    
+    /// Setup WebSocket event callbacks
+    private func setupWebSocketCallbacks() {
+        // New message received
+        chatService.onMessageReceived = { newMessage in
+            Task { @MainActor in
+                // Avoid duplicates
+                guard !self.messages.contains(where: { $0.id == newMessage.id }) else { return }
+                self.messages.append(ChatMessage(from: newMessage, currentUserId: self.currentUserId))
+                
+                // Clear typing indicator when message is received
+                self.isOtherUserTyping = false
+                
+                // Mark as read
+                try? await self.chatService.markAsRead(
+                    conversationId: self.conversationId,
+                    messageId: newMessage.id
+                )
+            }
+        }
+        
+        // Typing indicator received
+        chatService.onTypingIndicator = { typingData in
+            Task { @MainActor in
+                // Only show if it's for this conversation and not from me
+                guard typingData.conversationId == self.conversationId,
+                      typingData.userId != self.currentUserId else { return }
+                
+                self.isOtherUserTyping = typingData.isTyping
+                self.typingUserName = typingData.username
+                
+                // Auto-hide typing indicator after 3 seconds (server TTL)
+                if typingData.isTyping {
+                    self.typingTimer?.invalidate()
+                    self.typingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+                        Task { @MainActor in
+                            self.isOtherUserTyping = false
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Read receipt received
+        chatService.onReadReceipt = { readData in
+            Task { @MainActor in
+                guard readData.conversationId == self.conversationId else { return }
+                
+                // Update message status to "read" for messages up to lastReadMessageId
+                // This enables showing double checkmarks in the UI
+                #if DEBUG
+                print("[ChatView] Read receipt: \(readData.userId) read up to \(readData.lastReadMessageId)")
+                #endif
+            }
+        }
+    }
+
+    /// Setup Matrix Bridge message handler for E2EE messages
+    private func setupMatrixMessageHandler() {
+        MatrixBridgeService.shared.onMatrixMessage = { [self] conversationId, matrixMessage in
+            Task { @MainActor in
+                // 只處理當前會話的訊息
+                guard conversationId == self.conversationId else { return }
+
+                // 避免重複
+                guard !self.messages.contains(where: { $0.id == matrixMessage.id }) else { return }
+
+                // 轉換 Matrix 訊息為 Nova 訊息格式
+                guard let novaMessage = MatrixBridgeService.shared.convertToNovaMessage(
+                    matrixMessage,
+                    conversationId: conversationId
+                ) else { return }
+
+                // 添加到 UI
+                self.messages.append(ChatMessage(from: novaMessage, currentUserId: self.currentUserId))
+
+                // 清除打字指示器
+                self.isOtherUserTyping = false
+
+                #if DEBUG
+                print("[ChatView] Matrix E2EE message received: \(matrixMessage.id)")
+                #endif
+            }
+        }
+
+        // Matrix 打字指示器
+        MatrixBridgeService.shared.onTypingIndicator = { [self] conversationId, userIds in
+            Task { @MainActor in
+                guard conversationId == self.conversationId else { return }
+                guard !userIds.contains(self.currentUserId) else { return }
+
+                self.isOtherUserTyping = !userIds.isEmpty
+
+                // 3 秒後自動隱藏
+                if !userIds.isEmpty {
+                    self.typingTimer?.invalidate()
+                    self.typingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+                        Task { @MainActor in
+                            self.isOtherUserTyping = false
+                        }
+                    }
+                }
+            }
+        }
+
+        #if DEBUG
+        print("[ChatView] Matrix message handler setup complete")
+        #endif
+    }
+    
+    /// Load more messages (pagination)
+    private func loadMoreMessages() async {
+        guard hasMoreMessages, let cursor = nextCursor, !isLoadingHistory else { return }
+        
+        isLoadingHistory = true
+        
+        do {
+            let response = try await chatService.getMessages(
+                conversationId: conversationId,
+                limit: 50,
+                cursor: cursor
+            )
+            
+            // Prepend older messages
+            let olderMessages = response.messages.map { ChatMessage(from: $0, currentUserId: currentUserId) }
+            messages.insert(contentsOf: olderMessages, at: 0)
+            
+            hasMoreMessages = response.hasMore
+            nextCursor = response.nextCursor
+            
+        } catch {
+            #if DEBUG
+            print("[ChatView] Load more error: \(error)")
+            #endif
+        }
+        
+        isLoadingHistory = false
+    }
+
+    // MARK: - Send Text Message
+    /// 發送文字訊息，優先使用 Matrix E2EE（如果可用）
+    private func sendMessage() {
+        let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty, !isSending else { return }
+
+        // Stop typing indicator
+        chatService.sendTypingStop(conversationId: conversationId)
+
+        // Add to UI immediately (optimistic update)
+        let localMessage = ChatMessage(localText: trimmedText, isFromMe: true)
+        messages.append(localMessage)
+
+        messageText = ""
+        showAttachmentOptions = false
+
+        // Send to server asynchronously
+        Task {
+            isSending = true
+            do {
+                // 使用 sendSecureMessage，自動嘗試 Matrix E2EE
+                // 如果 Matrix 不可用，會自動 fallback 到 REST API
+                let sentMessage = try await chatService.sendSecureMessage(
+                    conversationId: conversationId,
+                    content: trimmedText,
+                    type: .text,
+                    preferE2EE: true  // 優先使用端到端加密
+                )
+
+                // Replace local message with server response
+                if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
+                    messages[index] = ChatMessage(from: sentMessage, currentUserId: currentUserId)
+                }
+
+                #if DEBUG
+                let encryptionStatus = sentMessage.encryptionVersion == 3 ? "Matrix E2EE" : "REST API"
+                print("[ChatView] Message sent via \(encryptionStatus): \(sentMessage.id)")
+                #endif
+
+            } catch {
+                // Send failed - mark message as failed (TODO: add retry UI)
+                #if DEBUG
+                print("[ChatView] Failed to send message: \(error)")
+                #endif
+                // Could remove failed message or add retry button here
+            }
+            isSending = false
+        }
+    }
+
+    // MARK: - 发送图片消息
+    /// 完整图片上传流程：压缩 → 上传到 MediaService → 发送消息
+    private func sendImageMessage(image: UIImage) {
+        // 压缩图片
+        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+            #if DEBUG
+            print("[ChatView] Failed to compress image")
+            #endif
+            error = "Failed to compress image"
+            return
+        }
+
+        // 立即添加到本地 UI（乐观更新）
+        let localMessage = ChatMessage(localText: "", isFromMe: true, image: image)
+        messages.append(localMessage)
+        showAttachmentOptions = false
+
+        // 异步上传并发送
+        Task {
+            isUploadingImage = true
+
+            do {
+                // 1. 上传图片到 MediaService
+                let filename = "chat_image_\(UUID().uuidString).jpg"
+                let mediaUrl = try await mediaService.uploadImage(imageData: imageData, filename: filename)
+
+                #if DEBUG
+                print("[ChatView] Image uploaded: \(mediaUrl)")
+                #endif
+
+                // 2. 发送带 mediaUrl 的消息到聊天服务
+                let sentMessage = try await chatService.sendMessage(
+                    conversationId: conversationId,
+                    content: mediaUrl,  // 图片 URL 作为内容
+                    type: .image,
+                    mediaUrl: mediaUrl
+                )
+
+                // 3. 替换本地消息为服务器返回的消息
+                if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
+                    // 保留本地图片用于显示，同时更新消息 ID
+                    var updatedMessage = ChatMessage(from: sentMessage, currentUserId: currentUserId)
+                    updatedMessage.image = image  // 保留本地图片
+                    messages[index] = updatedMessage
+                }
+
+                #if DEBUG
+                print("[ChatView] Image message sent: \(sentMessage.id)")
+                #endif
+
+            } catch {
+                #if DEBUG
+                print("[ChatView] Failed to send image: \(error)")
+                #endif
+
+                // 上传失败 - 标记消息为失败状态
+                self.error = "Failed to send image"
+
+                // 可选：移除失败的消息或添加重试按钮
+                // messages.removeAll { $0.id == localMessage.id }
+            }
+
+            isUploadingImage = false
+        }
+    }
+
+    // MARK: - 发送位置消息
+    /// 发送位置消息到会话
+    private func sendLocationMessage(location: CLLocationCoordinate2D) {
+        // 立即添加到本地 UI（乐观更新）
+        let localMessage = ChatMessage(localText: "", isFromMe: true, location: location)
+        messages.append(localMessage)
+        showAttachmentOptions = false
+
+        Task {
+            isSending = true
+
+            do {
+                // 使用 ChatService 的位置分享 API
+                try await chatService.shareLocation(
+                    conversationId: conversationId,
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                    accuracy: nil
+                )
+
+                #if DEBUG
+                print("[ChatView] Location shared: \(location.latitude), \(location.longitude)")
+                #endif
+
+            } catch {
+                #if DEBUG
+                print("[ChatView] Failed to share location: \(error)")
+                #endif
+                self.error = "Failed to share location"
+            }
+
+            isSending = false
+        }
+    }
 
     // MARK: - 获取当前日期字符串
     private func currentDateString() -> String {
@@ -915,7 +1358,7 @@ struct ChatView: View {
                 if !audioRecorder.permissionGranted {
                     showMicrophonePermissionAlert = true
                 } else if let errorMsg = audioRecorder.errorMessage {
-                    viewModel.error = errorMsg
+                    error = errorMsg
                 }
             }
         }
@@ -934,7 +1377,7 @@ struct ChatView: View {
     private func stopAndSendVoiceMessage() {
         guard let result = audioRecorder.stopRecording() else {
             isRecordingVoice = false
-            viewModel.error = "Failed to save recording"
+            error = "Failed to save recording"
             return
         }
 
@@ -945,13 +1388,68 @@ struct ChatView: View {
             #if DEBUG
             print("[ChatView] Recording too short: \(result.duration)s")
             #endif
-            viewModel.error = "Recording too short"
+            error = "Recording too short"
             audioRecorder.cleanupTempFiles()
             return
         }
 
+        sendVoiceMessage(audioData: result.data, duration: result.duration, url: result.url)
+    }
+
+    /// 发送语音消息
+    private func sendVoiceMessage(audioData: Data, duration: TimeInterval, url: URL) {
+        // 立即添加到本地 UI（乐观更新）
+        let localMessage = ChatMessage(
+            localText: "",
+            isFromMe: true,
+            audioData: audioData,
+            audioDuration: duration,
+            audioUrl: url
+        )
+        messages.append(localMessage)
+        showAttachmentOptions = false
+
         Task {
-            await viewModel.sendVoiceMessage(audioData: result.data, duration: result.duration, url: result.url)
+            isSending = true
+
+            do {
+                // 1. 上传音频到 MediaService
+                let filename = "voice_\(UUID().uuidString).m4a"
+                let mediaUrl = try await mediaService.uploadAudio(audioData: audioData, filename: filename)
+
+                #if DEBUG
+                print("[ChatView] Voice uploaded: \(mediaUrl)")
+                #endif
+
+                // 2. 发送带 mediaUrl 的消息到聊天服务
+                let sentMessage = try await chatService.sendMessage(
+                    conversationId: conversationId,
+                    content: String(format: "%.1f", duration),  // 时长作为内容（用于预览）
+                    type: .audio,
+                    mediaUrl: mediaUrl
+                )
+
+                // 3. 替换本地消息为服务器返回的消息
+                if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
+                    var updatedMessage = ChatMessage(from: sentMessage, currentUserId: currentUserId)
+                    updatedMessage.audioData = audioData
+                    updatedMessage.audioDuration = duration
+                    updatedMessage.audioUrl = url
+                    messages[index] = updatedMessage
+                }
+
+                #if DEBUG
+                print("[ChatView] Voice message sent: \(sentMessage.id)")
+                #endif
+
+            } catch {
+                #if DEBUG
+                print("[ChatView] Failed to send voice: \(error)")
+                #endif
+                self.error = "Failed to send voice message"
+            }
+
+            isSending = false
             audioRecorder.cleanupTempFiles()
         }
     }
@@ -964,10 +1462,21 @@ struct ChatView: View {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("Chat - Default") {
     ChatView(
         showChat: .constant(true),
         conversationId: "preview_conversation_123",
         userName: "Alice AI"
     )
+}
+
+#Preview("Chat - Dark Mode") {
+    ChatView(
+        showChat: .constant(true),
+        conversationId: "preview_conversation_123",
+        userName: "Alice AI"
+    )
+    .preferredColorScheme(.dark)
 }

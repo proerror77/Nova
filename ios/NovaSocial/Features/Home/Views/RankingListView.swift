@@ -4,29 +4,6 @@ import SwiftUI
 
 struct RankingListView: View {
     @Binding var currentPage: AppPage
-    var pollId: String? = nil
-    var pollTitle: String = "Hottest Banker in H.K."
-
-    @State private var candidates: [PollCandidate] = []
-    @State private var isLoading = true
-    @State private var errorMessage: String?
-    @State private var searchText = ""
-    @State private var hasVoted = false
-    @State private var votedCandidateId: String?
-    @State private var isVoting = false
-
-    private let socialService = SocialService()
-
-    // Filtered candidates based on search
-    private var filteredCandidates: [PollCandidate] {
-        if searchText.isEmpty {
-            return candidates
-        }
-        return candidates.filter { candidate in
-            candidate.name.localizedCaseInsensitiveContains(searchText) ||
-            (candidate.description?.localizedCaseInsensitiveContains(searchText) ?? false)
-        }
-    }
 
     var body: some View {
         ZStack {
@@ -48,7 +25,7 @@ struct RankingListView: View {
                     Spacer()
 
                     VStack(spacing: 5) {
-                        Text(pollTitle)
+                        Text("Hottest Banker in H.K.")
                             .font(.system(size: 16, weight: .bold))
                             .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
                         Text("Corporate Poll")
@@ -85,9 +62,10 @@ struct RankingListView: View {
                             Image(systemName: "magnifyingglass")
                                 .font(.system(size: 15))
                                 .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
-                            TextField("Search", text: $searchText)
+                            Text("Search")
                                 .font(.system(size: 15))
-                                .foregroundColor(.black)
+                                .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
+                            Spacer()
                         }
                         .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
                         .frame(height: 32)
@@ -97,167 +75,128 @@ struct RankingListView: View {
 
                         // Ranking List Items
                         VStack(spacing: 16) {
-                            if isLoading {
-                                // Loading state
-                                ForEach(0..<5, id: \.self) { index in
-                                    RankingListItem(
-                                        rank: "\(index + 1)",
-                                        name: "Loading...",
-                                        company: "",
-                                        votes: "--",
-                                        percentage: "--%",
-                                        rankColor: Color(red: 0.68, green: 0.68, blue: 0.68),
-                                        hasFullIndicators: false,
-                                        isVoted: false,
-                                        onVote: {}
-                                    )
-                                    .redacted(reason: .placeholder)
-                                }
-                            } else if let error = errorMessage {
-                                Text(error)
-                                    .foregroundColor(.gray)
-                                    .padding()
-                            } else if filteredCandidates.isEmpty {
-                                Text(searchText.isEmpty ? "No candidates available" : "No results found")
-                                    .foregroundColor(.gray)
-                                    .padding()
-                            } else {
-                                ForEach(filteredCandidates) { candidate in
-                                    RankingListItem(
-                                        rank: "\(candidate.rank)",
-                                        name: candidate.name,
-                                        company: candidate.description ?? "",
-                                        votes: "\(candidate.voteCount)",
-                                        percentage: String(format: "%.0f%%", candidate.votePercentage),
-                                        rankColor: rankColor(for: candidate.rank),
-                                        hasFullIndicators: candidate.rank <= 3,
-                                        hasFirstIndicator: candidate.rank == 1,
-                                        avatarUrl: candidate.avatarUrl,
-                                        isVoted: votedCandidateId == candidate.id,
-                                        onVote: {
-                                            Task {
-                                                await voteForCandidate(candidate)
-                                            }
-                                        }
-                                    )
-                                    .disabled(isVoting)
-                                }
-                            }
+                            // Rank 1
+                            RankingListItem(
+                                rank: "1",
+                                name: "Lucy Liu",
+                                company: "Morgan Stanley",
+                                votes: "166",
+                                percentage: "30%",
+                                rankColor: Color(red: 0.82, green: 0.13, blue: 0.25),
+                                hasFullIndicators: true
+                            )
+
+                            // Rank 2
+                            RankingListItem(
+                                rank: "2",
+                                name: "Lucy Liu",
+                                company: "Morgan Stanley",
+                                votes: "166",
+                                percentage: "30%",
+                                rankColor: Color(red: 0.82, green: 0.13, blue: 0.25),
+                                hasFullIndicators: false,
+                                hasFirstIndicator: false
+                            )
+
+                            // Rank 3
+                            RankingListItem(
+                                rank: "3",
+                                name: "Lucy Liu",
+                                company: "Morgan Stanley",
+                                votes: "166",
+                                percentage: "30%",
+                                rankColor: Color(red: 0.82, green: 0.13, blue: 0.25),
+                                hasFullIndicators: true
+                            )
+
+                            // Rank 4
+                            RankingListItem(
+                                rank: "4",
+                                name: "Lucy Liu",
+                                company: "Morgan Stanley",
+                                votes: "166",
+                                percentage: "30%",
+                                rankColor: Color(red: 0.68, green: 0.68, blue: 0.68),
+                                hasFullIndicators: false
+                            )
+
+                            // Rank 5
+                            RankingListItem(
+                                rank: "5",
+                                name: "Lucy Liu",
+                                company: "Morgan Stanley",
+                                votes: "166",
+                                percentage: "30%",
+                                rankColor: Color(red: 0.68, green: 0.68, blue: 0.68),
+                                hasFullIndicators: true
+                            )
+
+                            // Rank 6
+                            RankingListItem(
+                                rank: "6",
+                                name: "Lucy Liu",
+                                company: "Morgan Stanley",
+                                votes: "166",
+                                percentage: "30%",
+                                rankColor: Color(red: 0.68, green: 0.68, blue: 0.68),
+                                hasFullIndicators: true
+                            )
+
+                            // Rank 7
+                            RankingListItem(
+                                rank: "7",
+                                name: "Lucy Liu",
+                                company: "Morgan Stanley",
+                                votes: "166",
+                                percentage: "30%",
+                                rankColor: Color(red: 0.68, green: 0.68, blue: 0.68),
+                                hasFullIndicators: true
+                            )
+
+                            // Rank 8
+                            RankingListItem(
+                                rank: "8",
+                                name: "Lucy Liu",
+                                company: "Morgan Stanley",
+                                votes: "166",
+                                percentage: "30%",
+                                rankColor: Color(red: 0.68, green: 0.68, blue: 0.68),
+                                hasFullIndicators: true
+                            )
+
+                            // Rank 9
+                            RankingListItem(
+                                rank: "9",
+                                name: "Lucy Liu",
+                                company: "Morgan Stanley",
+                                votes: "166",
+                                percentage: "30%",
+                                rankColor: Color(red: 0.68, green: 0.68, blue: 0.68),
+                                hasFullIndicators: true
+                            )
                         }
                         .padding(.horizontal, 16)
 
                         // Vote again notice
-                        if hasVoted {
-                            ZStack {
-                                Rectangle()
-                                    .foregroundColor(.clear)
-                                    .frame(height: 31)
-                                    .background(Color(red: 0.74, green: 0.74, blue: 0.74))
-                                    .cornerRadius(99)
-                                Text("You may vote again in 24h")
-                                    .font(.system(size: 13))
-                                    .foregroundColor(.white)
-                            }
-                            .frame(maxWidth: 280)
-                            .padding(.top, 24)
-                            .padding(.bottom, 32)
-                        } else {
-                            Spacer()
-                                .frame(height: 32)
+                        ZStack {
+                            Rectangle()
+                                .foregroundColor(.clear)
+                                .frame(height: 31)
+                                .background(Color(red: 0.74, green: 0.74, blue: 0.74))
+                                .cornerRadius(99)
+                            Text("Comfire you may vote again on 24h")
+                                .font(.system(size: 13))
+                                .foregroundColor(.white)
                         }
+                        .frame(maxWidth: 280)
+                        .padding(.top, 24)
+                        .padding(.bottom, 32)
                     }
                 }
             }
         }
         .frame(maxWidth: .infinity)
         .navigationBarBackButtonHidden(true)
-        .task {
-            await loadData()
-        }
-    }
-
-    // MARK: - Data Loading
-
-    private func loadData() async {
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            // Determine which poll to load
-            let targetPollId: String
-            if let id = pollId {
-                targetPollId = id
-            } else {
-                // Get trending polls and use the first one
-                let trendingPolls = try await socialService.getTrendingPolls(limit: 1)
-                guard let firstPoll = trendingPolls.first else {
-                    errorMessage = "No polls available"
-                    isLoading = false
-                    return
-                }
-                targetPollId = firstPoll.id
-            }
-
-            // Load rankings for the poll
-            candidates = try await socialService.getPollRankings(pollId: targetPollId, limit: 20)
-
-            // Check if user has already voted
-            hasVoted = try await socialService.checkPollVoted(pollId: targetPollId)
-
-        } catch {
-            print("Error loading ranking data: \(error)")
-            errorMessage = "Failed to load rankings"
-        }
-
-        isLoading = false
-    }
-
-    // MARK: - Voting
-
-    private func voteForCandidate(_ candidate: PollCandidate) async {
-        guard !isVoting else { return }
-
-        isVoting = true
-
-        do {
-            // Determine which poll to vote on
-            let targetPollId: String
-            if let id = pollId {
-                targetPollId = id
-            } else {
-                let trendingPolls = try await socialService.getTrendingPolls(limit: 1)
-                guard let firstPoll = trendingPolls.first else {
-                    isVoting = false
-                    return
-                }
-                targetPollId = firstPoll.id
-            }
-
-            // Submit vote
-            try await socialService.voteOnPoll(pollId: targetPollId, candidateId: candidate.id)
-
-            // Update local state
-            votedCandidateId = candidate.id
-            hasVoted = true
-
-            // Reload data to get updated vote counts
-            await loadData()
-
-        } catch {
-            print("Error voting: \(error)")
-            // Could show an alert here
-        }
-
-        isVoting = false
-    }
-
-    // MARK: - Helpers
-
-    private func rankColor(for rank: Int) -> Color {
-        if rank <= 3 {
-            return Color(red: 0.82, green: 0.13, blue: 0.25) // Red for top 3
-        }
-        return Color(red: 0.68, green: 0.68, blue: 0.68) // Gray for others
     }
 }
 
@@ -272,9 +211,6 @@ struct RankingListItem: View {
     let rankColor: Color
     var hasFullIndicators: Bool = true
     var hasFirstIndicator: Bool = true
-    var avatarUrl: String? = nil
-    var isVoted: Bool = false
-    var onVote: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 12) {
@@ -284,35 +220,10 @@ struct RankingListItem: View {
                 .foregroundColor(rankColor)
                 .frame(width: 45, alignment: .center)
 
-            // Avatar
-            if let urlString = avatarUrl, let url = URL(string: urlString) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        Circle()
-                            .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                            .frame(width: 48, height: 48)
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 48, height: 48)
-                            .clipShape(Circle())
-                    case .failure:
-                        Circle()
-                            .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                            .frame(width: 48, height: 48)
-                    @unknown default:
-                        Circle()
-                            .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                            .frame(width: 48, height: 48)
-                    }
-                }
-            } else {
-                Circle()
-                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                    .frame(width: 48, height: 48)
-            }
+            // Avatar - smaller size
+            Circle()
+                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                .frame(width: 48, height: 48)
 
             // Name, company, and progress
             VStack(alignment: .leading, spacing: 3) {
@@ -357,18 +268,15 @@ struct RankingListItem: View {
 
             Spacer()
 
-            // Heart icon and percentage - tappable for voting
-            Button(action: onVote) {
-                VStack(spacing: 4) {
-                    Image(systemName: isVoted ? "heart.fill" : "heart")
-                        .font(.system(size: 24))
-                        .foregroundColor(isVoted ? Color(red: 0.82, green: 0.13, blue: 0.25) : Color(red: 0.2, green: 0.2, blue: 0.2))
-                    Text(percentage)
-                        .font(.system(size: 9))
-                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                }
+            // Heart icon and percentage - smaller
+            VStack(spacing: 4) {
+                Image(systemName: "heart")
+                    .font(.system(size: 24))
+                    .foregroundColor(Color(red: 0.2, green: 0.2, blue: 0.2))
+                Text(percentage)
+                    .font(.system(size: 9))
+                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
             }
-            .buttonStyle(PlainButtonStyle())
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 0)
@@ -378,6 +286,13 @@ struct RankingListItem: View {
     }
 }
 
-#Preview {
-    RankingListView(currentPage: .constant(.home))
+// MARK: - Previews
+
+#Preview("RankingList - Default") {
+    RankingListView(currentPage: .constant(.rankingList))
+}
+
+#Preview("RankingList - Dark Mode") {
+    RankingListView(currentPage: .constant(.rankingList))
+        .preferredColorScheme(.dark)
 }

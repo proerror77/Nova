@@ -34,3 +34,20 @@ struct GenderPickerView: View {
         }
     }
 }
+
+// MARK: - Previews
+
+#Preview("GenderPicker - Default") {
+    @Previewable @State var selectedGender: Gender = .notSet
+    @Previewable @State var isPresented = true
+
+    GenderPickerView(selectedGender: $selectedGender, isPresented: $isPresented)
+}
+
+#Preview("GenderPicker - Dark Mode") {
+    @Previewable @State var selectedGender: Gender = .notSet
+    @Previewable @State var isPresented = true
+
+    GenderPickerView(selectedGender: $selectedGender, isPresented: $isPresented)
+        .preferredColorScheme(.dark)
+}

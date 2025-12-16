@@ -302,7 +302,13 @@ class QRScannerController: UIViewController {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("QRCodeScanner - Default") {
     QRCodeScannerView(isPresented: .constant(true))
-        .environmentObject(AuthenticationManager.shared)
+}
+
+#Preview("QRCodeScanner - Dark Mode") {
+    QRCodeScannerView(isPresented: .constant(true))
+        .preferredColorScheme(.dark)
 }

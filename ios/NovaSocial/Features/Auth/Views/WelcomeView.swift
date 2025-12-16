@@ -1,15 +1,32 @@
 import SwiftUI
 
 struct WelcomeView: View {
+    // MARK: - Design Constants
+    private enum Layout {
+        static let contentOffset: CGFloat = 200
+        static let buttonHeight: CGFloat = 46
+        static let buttonCornerRadius: CGFloat = 43
+    }
+
+    private enum Colors {
+        static let placeholder = Color(white: 0.77)
+        static let secondaryText = Color(white: 0.53)
+        static let inputBackground = Color(white: 0.27).opacity(0.45)
+        static let inputBorder = Color(white: 0.53)
+    }
+
+    // MARK: - Binding
     @Binding var currentPage: AppPage
+
+    // MARK: - State
     @State private var inviteCode = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+
+    // MARK: - Focus State
     @FocusState private var isInputFocused: Bool
 
-    /// 整体内容垂直偏移（负值上移，正值下移）
-    private let contentVerticalOffset: CGFloat = -50
-
+    // MARK: - Computed Properties
     private var isInviteCodeValid: Bool { inviteCode.count == 8 }
 
     var body: some View {
@@ -24,20 +41,27 @@ struct WelcomeView: View {
 
             Color.black.opacity(0.4).ignoresSafeArea()
 
-            // Content
+            // Content - 与 LoginView 保持一致的布局结构
             VStack(spacing: 0) {
-                logoSection
-                Spacer().frame(height: 40)
-                titleSection
-                Spacer().frame(height: 28)
-                inviteCodeInput.padding(.horizontal, 16)
-                errorMessageView
-                Spacer().frame(height: 24)
-                doneButton.padding(.horizontal, 16)
-                Spacer().frame(height: 20)
-                goBackButton
+                VStack(spacing: 0) {
+                    logoSection
+                    Spacer().frame(height: 40)
+                    titleSection
+                    Spacer().frame(height: 28)
+                    inviteCodeInput.padding(.horizontal, 16)
+                    errorMessageView
+                    Spacer().frame(height: 24)
+                    doneButton.padding(.horizontal, 16)
+                    Spacer().frame(height: 20)
+                    notifyMeButton
+                    Spacer().frame(height: 12)
+                    goBackButton
+                }
+                .offset(y: Layout.contentOffset)
+
+                Spacer()
             }
-            .offset(y: contentVerticalOffset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .contentShape(Rectangle())
         .onTapGesture { isInputFocused = false }
@@ -50,7 +74,7 @@ struct WelcomeView: View {
         Image("Logo-R")
             .resizable()
             .scaledToFit()
-            .frame(height: 90)
+            .frame(height: 50)
             .colorInvert()
             .brightness(1)
     }
@@ -64,7 +88,7 @@ struct WelcomeView: View {
             Text("lf you have an invite code\nEnter it below.")
                 .font(.system(size: 14, weight: .light))
                 .multilineTextAlignment(.center)
-                .foregroundColor(Color(white: 0.77))
+                .foregroundColor(Colors.placeholder)
         }
     }
 
@@ -95,23 +119,26 @@ struct WelcomeView: View {
             }
             .allowsHitTesting(false)
         }
-        .frame(maxWidth: .infinity, minHeight: 46)
-        .background(Color(white: 0.27).opacity(0.45))
-        .cornerRadius(43)
-        .overlay(RoundedRectangle(cornerRadius: 43).stroke(Color(white: 0.53), lineWidth: 0.5))
+        .frame(maxWidth: .infinity, minHeight: Layout.buttonHeight)
+        .background(Colors.inputBackground)
+        .cornerRadius(Layout.buttonCornerRadius)
+        .overlay(RoundedRectangle(cornerRadius: Layout.buttonCornerRadius).stroke(Colors.inputBorder, lineWidth: 0.5))
         .onTapGesture { isInputFocused = true }
     }
 
     @ViewBuilder
     private var errorMessageView: some View {
-        if let errorMessage {
-            Text(LocalizedStringKey(errorMessage))
-                .font(.system(size: 12))
-                .foregroundColor(.red)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-                .padding(.top, 12)
-        }
+        // 使用固定高度容器，避免影响其他元素位置
+        Text(errorMessage != nil ? LocalizedStringKey(errorMessage!) : " ")
+            .font(.system(size: 12))
+            .foregroundColor(.red)
+            .multilineTextAlignment(.center)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 20)
+            .frame(minHeight: 20)
+            .opacity(errorMessage != nil ? 1 : 0)
+            .padding(.top, 12)
     }
 
     private var doneButton: some View {
@@ -126,9 +153,9 @@ struct WelcomeView: View {
                     .font(.system(size: 20, weight: .bold))
                     .foregroundColor(.black)
             }
-            .frame(maxWidth: .infinity, minHeight: 46)
+            .frame(maxWidth: .infinity, minHeight: Layout.buttonHeight)
             .background(Color.white.opacity(isInviteCodeValid ? 1 : 0.5))
-            .cornerRadius(43)
+            .cornerRadius(Layout.buttonCornerRadius)
         }
         .disabled(!isInviteCodeValid || isLoading)
     }
@@ -140,6 +167,20 @@ struct WelcomeView: View {
                 .underline()
                 .foregroundColor(.white)
         }
+    }
+
+    private var notifyMeButton: some View {
+        HStack(spacing: 6) {
+            Image("bell")
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 12, height: 12)
+            Text("Join the waitlist and get notified when access opens.")
+                .font(Font.custom("Inter", size: 12))
+                .foregroundColor(Colors.secondaryText)
+        }
+        .foregroundColor(Colors.secondaryText)
     }
 
     // MARK: - Validation
@@ -204,6 +245,15 @@ struct WelcomeView: View {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("Welcome - Default") {
     WelcomeView(currentPage: .constant(.welcome))
+        .environmentObject(AuthenticationManager.shared)
+}
+
+#Preview("Welcome - Dark Mode") {
+    WelcomeView(currentPage: .constant(.welcome))
+        .environmentObject(AuthenticationManager.shared)
+        .preferredColorScheme(.dark)
 }

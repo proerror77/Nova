@@ -9,6 +9,99 @@ struct ConversationPreview: Identifiable {
     let unreadCount: Int
     let hasUnread: Bool
     let isEncrypted: Bool  // E2EE status indicator
+    let avatarUrl: String?  // 头像URL（可选）
+
+    init(id: String, userName: String, lastMessage: String, time: String, unreadCount: Int, hasUnread: Bool, isEncrypted: Bool, avatarUrl: String? = nil) {
+        self.id = id
+        self.userName = userName
+        self.lastMessage = lastMessage
+        self.time = time
+        self.unreadCount = unreadCount
+        self.hasUnread = hasUnread
+        self.isEncrypted = isEncrypted
+        self.avatarUrl = avatarUrl
+    }
+}
+
+// MARK: - Mock Data for UI Preview (开发阶段用于调试UI)
+extension ConversationPreview {
+    /// 模拟会话数据 - 用于开发阶段预览UI
+    static var mockConversations: [ConversationPreview] {
+        [
+            ConversationPreview(
+                id: "mock-alice",
+                userName: "Alice",
+                lastMessage: "Hi! I'm your AI assistant. How can I help you today?",
+                time: "Just now",
+                unreadCount: 1,
+                hasUnread: true,
+                isEncrypted: false
+            ),
+            ConversationPreview(
+                id: "mock-1",
+                userName: "Emma Watson",
+                lastMessage: "That sounds great! Let's meet tomorrow 🎉",
+                time: "09:41 PM",
+                unreadCount: 2,
+                hasUnread: true,
+                isEncrypted: true
+            ),
+            ConversationPreview(
+                id: "mock-2",
+                userName: "James Chen",
+                lastMessage: "Did you see the new project update?",
+                time: "08:30 PM",
+                unreadCount: 0,
+                hasUnread: false,
+                isEncrypted: true
+            ),
+            ConversationPreview(
+                id: "mock-3",
+                userName: "Sophie Miller",
+                lastMessage: "Thanks for your help! 🙏",
+                time: "Yesterday",
+                unreadCount: 0,
+                hasUnread: false,
+                isEncrypted: false
+            ),
+            ConversationPreview(
+                id: "mock-4",
+                userName: "Design Team",
+                lastMessage: "Lucy: The new mockups are ready for review",
+                time: "Yesterday",
+                unreadCount: 5,
+                hasUnread: true,
+                isEncrypted: false
+            ),
+            ConversationPreview(
+                id: "mock-5",
+                userName: "Michael Brown",
+                lastMessage: "See you at the gym tomorrow morning!",
+                time: "Tuesday",
+                unreadCount: 0,
+                hasUnread: false,
+                isEncrypted: true
+            ),
+            ConversationPreview(
+                id: "mock-6",
+                userName: "Sarah Johnson",
+                lastMessage: "The restaurant was amazing! We should go again.",
+                time: "Monday",
+                unreadCount: 0,
+                hasUnread: false,
+                isEncrypted: false
+            ),
+            ConversationPreview(
+                id: "mock-7",
+                userName: "Tech News",
+                lastMessage: "Breaking: Apple announces new AI features...",
+                time: "12/10",
+                unreadCount: 12,
+                hasUnread: true,
+                isEncrypted: false
+            )
+        ]
+    }
 }
 
 struct MessageView: View {
@@ -26,13 +119,40 @@ struct MessageView: View {
     @State private var showGenerateImage = false
     @State private var showWrite = false
 
+    // MARK: - UserProfile 导航状态
+    @State private var showUserProfile = false
+    @State private var selectedUserId: String = ""
+
     // 会话预览数据 - 从API获取
     @State private var conversations: [ConversationPreview] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var isPreviewMode = false  // 追踪预览模式状态
+
+    // MARK: - Search State
+    @State private var searchText = ""
+    @State private var isSearching = false
+    @State private var searchResults: [UserProfile] = []
+    @State private var isSearchLoading = false
+    @FocusState private var isSearchFocused: Bool
+
+    // MARK: - 预览模式配置 (开发调试用)
+    // 🎨 在模拟器上运行时启用预览模式，方便调试UI
+    #if DEBUG
+    private static var useMessagePreviewMode: Bool {
+        #if targetEnvironment(simulator)
+        return false  // 关闭模拟器预览模式，使用真实API
+        #else
+        return false
+        #endif
+    }
+    #else
+    private static let useMessagePreviewMode = false
+    #endif
 
     // ChatService 实例
     private let chatService = ChatService()
+    private let friendsService = FriendsService()
 
     init(currentPage: Binding<AppPage>) {
         self._currentPage = currentPage
@@ -40,6 +160,22 @@ struct MessageView: View {
 
     // MARK: - 从API加载会话列表
     private func loadConversations() async {
+        // 🎨 预览模式：使用模拟数据进行UI调试
+        if Self.useMessagePreviewMode {
+            print("🎨 [MessageView] Preview Mode enabled - using mock data")
+            await MainActor.run {
+                self.conversations = ConversationPreview.mockConversations
+                self.isLoading = false
+                self.errorMessage = nil
+                self.isPreviewMode = true
+            }
+            return
+        }
+
+        await MainActor.run {
+            self.isPreviewMode = false
+        }
+
         print("🚀 [MessageView] loadConversations() starting...")
         isLoading = true
         errorMessage = nil
@@ -123,6 +259,70 @@ struct MessageView: View {
         }
     }
 
+    // MARK: - Search Functions
+    private func performSearch(query: String) async {
+        guard !query.isEmpty else {
+            await MainActor.run {
+                searchResults = []
+            }
+            return
+        }
+
+        await MainActor.run {
+            isSearchLoading = true
+        }
+
+        // 在预览模式下使用本地过滤
+        if Self.useMessagePreviewMode {
+            await MainActor.run {
+                // 模拟搜索延迟
+                searchResults = getMockSearchResults(query: query)
+                isSearchLoading = false
+            }
+            return
+        }
+
+        do {
+            let users = try await friendsService.searchUsers(query: query, limit: 20)
+            await MainActor.run {
+                searchResults = users
+                isSearchLoading = false
+            }
+        } catch {
+            print("❌ [MessageView] Search failed: \(error)")
+            await MainActor.run {
+                searchResults = []
+                isSearchLoading = false
+            }
+        }
+    }
+
+    private func getMockSearchResults(query: String) -> [UserProfile] {
+        let mockUsers = [
+            UserProfile(id: "mock-brody", username: "Brody", displayName: "Brody", bio: "Dude, I just saw.", avatarUrl: nil, followerCount: 150, followingCount: 120, postCount: 45),
+            UserProfile(id: "mock-blaine", username: "Blaine", displayName: "Blaine", bio: "Hey bro, are you free later?", avatarUrl: nil, followerCount: 200, followingCount: 180, postCount: 78),
+            UserProfile(id: "mock-bella", username: "Bella", displayName: "Bella", bio: "Living my best life", avatarUrl: nil, followerCount: 500, followingCount: 350, postCount: 120),
+            UserProfile(id: "mock-brian", username: "Brian", displayName: "Brian", bio: "Tech enthusiast", avatarUrl: nil, followerCount: 300, followingCount: 250, postCount: 60)
+        ]
+
+        return mockUsers.filter { user in
+            let name = user.displayName ?? user.username
+            return name.lowercased().contains(query.lowercased()) ||
+                   user.username.lowercased().contains(query.lowercased())
+        }
+    }
+
+    private func startConversationWithUser(_ user: UserProfile) {
+        // 设置选中的用户信息并跳转到聊天页面
+        selectedConversationId = user.id
+        selectedUserName = user.displayName ?? user.username
+        searchText = ""
+        isSearching = false
+        searchResults = []
+        isSearchFocused = false
+        showChat = true
+    }
+
     var body: some View {
         ZStack {
             // 条件渲染：根据状态即时切换视图
@@ -134,7 +334,7 @@ struct MessageView: View {
                 )
                 .transition(.identity)
             } else if showNewPost {
-                NewPostView(showNewPost: $showNewPost, initialImage: selectedImage)
+                NewPostView(showNewPost: $showNewPost, initialCameraImage: selectedImage)
                     .transition(.identity)
             } else if showGenerateImage {
                 GenerateImage01View(showGenerateImage: $showGenerateImage)
@@ -142,6 +342,13 @@ struct MessageView: View {
             } else if showWrite {
                 WriteView(showWrite: $showWrite)
                     .transition(.identity)
+            } else if showUserProfile {
+                // MARK: - UserProfile 页面
+                UserProfileView(
+                    showUserProfile: $showUserProfile,
+                    userId: selectedUserId
+                )
+                .transition(.identity)
             } else {
                 messageContent
             }
@@ -174,6 +381,7 @@ struct MessageView: View {
         .animation(.none, value: showNewPost)
         .animation(.none, value: showGenerateImage)
         .animation(.none, value: showWrite)
+        .animation(.none, value: showUserProfile)
         .sheet(isPresented: $showQRScanner) {
             QRCodeScannerView(isPresented: $showQRScanner)
         }
@@ -243,18 +451,89 @@ struct MessageView: View {
                         .font(.system(size: 15))
                         .foregroundColor(DesignTokens.textSecondary)
 
-                    Text(LocalizedStringKey("Search"))
-                        .font(.system(size: 15))
-                        .foregroundColor(DesignTokens.textSecondary)
+                    TextField("Search", text: $searchText)
+                        .font(Font.custom("Helvetica Neue", size: 14))
+                        .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        .focused($isSearchFocused)
+                        .onChange(of: searchText) { _, newValue in
+                            isSearching = !newValue.isEmpty
+                            if !newValue.isEmpty {
+                                Task {
+                                    await performSearch(query: newValue)
+                                }
+                            } else {
+                                searchResults = []
+                            }
+                        }
 
-                    Spacer()
+                    if !searchText.isEmpty {
+                        Button(action: {
+                            searchText = ""
+                            isSearching = false
+                            searchResults = []
+                            isSearchFocused = false
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(DesignTokens.textSecondary)
+                        }
+                    }
                 }
                 .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
                 .frame(height: 32)
-                .background(DesignTokens.tileBackground)
+                .background(Color(red: 0.91, green: 0.91, blue: 0.91))
                 .cornerRadius(32)
                 .padding(EdgeInsets(top: 12, leading: 18, bottom: 16, trailing: 18))
 
+                // MARK: - 预览模式提示（仅在DEBUG模式显示）
+                #if DEBUG
+                if isPreviewMode {
+                    HStack(spacing: 8) {
+                        Image(systemName: "eye.fill")
+                            .font(.system(size: 12))
+                        Text("Preview Mode - Mock Data (Simulator)")
+                            .font(.system(size: 12, weight: .medium))
+                        Spacer()
+                    }
+                    .foregroundColor(.orange)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.orange.opacity(0.1))
+                }
+                #endif
+
+                // MARK: - 搜索结果 / 消息列表
+                if isSearching {
+                    // 搜索结果列表
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            if isSearchLoading {
+                                ProgressView()
+                                    .padding(.top, 40)
+                            } else if searchResults.isEmpty && !searchText.isEmpty {
+                                VStack(spacing: 12) {
+                                    Image(systemName: "magnifyingglass")
+                                        .font(.system(size: 32))
+                                        .foregroundColor(DesignTokens.textSecondary)
+                                    Text("No results found")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(DesignTokens.textSecondary)
+                                }
+                                .padding(.top, 60)
+                            } else {
+                                ForEach(searchResults, id: \.id) { user in
+                                    SearchResultRow(
+                                        user: user,
+                                        onMessageTapped: {
+                                            // 开始与该用户的对话
+                                            startConversationWithUser(user)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
                 // MARK: - 消息列表
                 ScrollView {
                     VStack(spacing: 2) {
@@ -323,8 +602,17 @@ struct MessageView: View {
                                     unreadCount: convo.unreadCount,
                                     showMessagePreview: true,
                                     showTimeAndBadge: convo.hasUnread,
-                                    isEncrypted: convo.isEncrypted
+                                    isEncrypted: convo.isEncrypted,
+                                    userId: convo.id,  // 使用会话ID（实际项目中应传入对方用户ID）
+                                    onAvatarTapped: { userId in
+                                        // 点击头像跳转用户主页（排除 Alice）
+                                        if convo.userName.lowercased() != "alice" {
+                                            selectedUserId = userId
+                                            showUserProfile = true
+                                        }
+                                    }
                                 )
+                                .contentShape(Rectangle())
                                 .onTapGesture {
                                     // alice 跳转到 Alice 页面，其他用户跳转到 Chat 页面
                                     if convo.userName.lowercased() == "alice" {
@@ -344,11 +632,12 @@ struct MessageView: View {
                             }
                         }
                     }
+                    .padding(.bottom, DesignTokens.bottomBarHeight + DesignTokens.spacing12 + 40)
                 }
-                .padding(.bottom, DesignTokens.bottomBarHeight + DesignTokens.spacing12)
+                } // End of else (non-searching state)
             }
             .safeAreaInset(edge: .bottom) {
-                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions)
+                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)
             }
         }
     }
@@ -412,7 +701,7 @@ struct MessageView: View {
                                         .resizable()
                                         .scaledToFit()
                                         .frame(width: 28, height: 28)
-                                    Text(LocalizedStringKey("Start Group Chat"))
+                                    Text(LocalizedStringKey("New Chat"))
                                         .font(.system(size: 14))
                                         .foregroundColor(DesignTokens.textPrimary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -468,18 +757,25 @@ struct MessageListItem: View {
     var showMessagePreview: Bool = true
     var showTimeAndBadge: Bool = true
     var isEncrypted: Bool = false  // E2EE status indicator
+    var userId: String = ""  // 用户ID（用于跳转用户主页）
+    var onAvatarTapped: ((String) -> Void)?  // 点击头像回调
 
     var body: some View {
         HStack(spacing: 12) {
-            // 头像 - alice 使用自定义图片，其他用户使用默认头像
-            if name.lowercased() == "alice" {
-                Image("alice-avatar")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 63, height: 63)
-                    .clipShape(Circle())
-            } else {
-                DefaultAvatarView(size: 63)
+            // 头像 - alice 使用自定义图片，其他用户使用默认头像（可点击跳转用户主页）
+            Group {
+                if name.lowercased() == "alice" {
+                    Image("alice-avatar")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 50, height: 50)
+                        .clipShape(Circle())
+                } else {
+                    DefaultAvatarView(size: 50)
+                }
+            }
+            .onTapGesture {
+                onAvatarTapped?(userId)
             }
 
             // 消息内容
@@ -531,14 +827,75 @@ struct MessageListItem: View {
     }
 }
 
-#Preview {
-    struct PreviewWrapper: View {
-        @State private var currentPage: AppPage = .message
+// MARK: - Search Result Row
+struct SearchResultRow: View {
+    let user: UserProfile
+    let onMessageTapped: () -> Void
 
-        var body: some View {
-            MessageView(currentPage: $currentPage)
+    var body: some View {
+        HStack(spacing: 13) {
+            // 用户头像
+            if let avatarUrl = user.avatarUrl, let url = URL(string: avatarUrl) {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Circle()
+                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                }
+                .frame(width: 50, height: 50)
+                .clipShape(Circle())
+            } else {
+                Circle()
+                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                    .frame(width: 50, height: 50)
+            }
+
+            // 用户信息
+            VStack(alignment: .leading, spacing: 5) {
+                Text(user.displayName ?? user.username)
+                    .font(Font.custom("Helvetica Neue", size: 18).weight(.bold))
+                    .lineSpacing(20)
+                    .foregroundColor(.black)
+
+                Text(user.bio ?? "")
+                    .font(Font.custom("Helvetica Neue", size: 14))
+                    .lineSpacing(20)
+                    .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            // Message 按钮
+            Button(action: onMessageTapped) {
+                Text("Message")
+                    .font(Font.custom("Helvetica Neue", size: 12))
+                    .foregroundColor(.black)
+            }
+            .padding(.horizontal, 26)
+            .padding(.vertical, 7)
+            .overlay(
+                RoundedRectangle(cornerRadius: 57)
+                    .stroke(.black, lineWidth: 0.5)
+            )
         }
+        .padding(.horizontal, 18)
+        .frame(height: 80)
+        .background(DesignTokens.backgroundColor)
     }
+}
 
-    return PreviewWrapper()
+// MARK: - Previews
+
+#Preview("Message - Default") {
+    MessageView(currentPage: .constant(.message))
+        .environmentObject(AuthenticationManager.shared)
+}
+
+#Preview("Message - Dark Mode") {
+    MessageView(currentPage: .constant(.message))
+        .environmentObject(AuthenticationManager.shared)
+        .preferredColorScheme(.dark)
 }

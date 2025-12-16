@@ -62,7 +62,9 @@ struct AvatarView: View {
     }
 }
 
-#Preview("Default Avatar") {
+// MARK: - Previews
+
+#Preview("Avatar - Default") {
     VStack(spacing: 20) {
         DefaultAvatarView(size: 136)
         DefaultAvatarView(size: 100)
@@ -73,6 +75,23 @@ struct AvatarView: View {
     .background(Color.black.opacity(0.3))
 }
 
-#Preview("Avatar View - No Image") {
+#Preview("Avatar - Dark Mode") {
+    VStack(spacing: 20) {
+        DefaultAvatarView(size: 136)
+        DefaultAvatarView(size: 100)
+        DefaultAvatarView(size: 60)
+        DefaultAvatarView(size: 40)
+    }
+    .padding()
+    .background(Color.black.opacity(0.3))
+    .preferredColorScheme(.dark)
+}
+
+#Preview("AvatarView - No Image") {
     AvatarView(image: nil, url: nil, size: 100)
+}
+
+#Preview("AvatarView - Dark Mode") {
+    AvatarView(image: nil, url: nil, size: 100)
+        .preferredColorScheme(.dark)
 }

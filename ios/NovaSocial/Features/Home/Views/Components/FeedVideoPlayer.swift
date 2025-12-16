@@ -27,27 +27,23 @@ struct FeedVideoPlayer: View {
     let autoPlay: Bool
     let isMuted: Bool
     let height: CGFloat
-    let isVisible: Bool
-
+    
     @StateObject private var viewModel: FeedVideoPlayerViewModel
     @State private var showControls = false
     @State private var controlsTimer: Timer?
-    @State private var wasPlayingBeforeHidden = false
-
+    
     init(
         url: URL,
         thumbnailUrl: URL? = nil,
         autoPlay: Bool = true,
         isMuted: Bool = true,
-        height: CGFloat = 500,
-        isVisible: Bool = true
+        height: CGFloat = 500
     ) {
         self.url = url
         self.thumbnailUrl = thumbnailUrl
         self.autoPlay = autoPlay
         self.isMuted = isMuted
         self.height = height
-        self.isVisible = isVisible
         _viewModel = StateObject(wrappedValue: FeedVideoPlayerViewModel(url: url, autoPlay: autoPlay, isMuted: isMuted))
     }
     
@@ -111,25 +107,7 @@ struct FeedVideoPlayer: View {
             viewModel.prepare()
         }
         .onDisappear {
-            // Cancel controls timer to prevent memory leak
-            controlsTimer?.invalidate()
-            controlsTimer = nil
-            // Cleanup viewModel resources
-            viewModel.cleanup()
-        }
-        .onChange(of: isVisible) { _, newValue in
-            if newValue {
-                // Became visible
-                if wasPlayingBeforeHidden && autoPlay {
-                    viewModel.play()
-                } else if autoPlay && viewModel.isReady {
-                    viewModel.play()
-                }
-            } else {
-                // Became hidden
-                wasPlayingBeforeHidden = viewModel.isPlaying
-                viewModel.pause()
-            }
+            viewModel.pause()
         }
     }
     
@@ -138,12 +116,17 @@ struct FeedVideoPlayer: View {
     private var thumbnailView: some View {
         Group {
             if let thumbnailUrl = thumbnailUrl {
-                CachedAsyncImage(url: thumbnailUrl) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
-                    placeholderView
+                AsyncImage(url: thumbnailUrl) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure, .empty:
+                        placeholderView
+                    @unknown default:
+                        placeholderView
+                    }
                 }
             } else {
                 placeholderView
@@ -271,7 +254,7 @@ struct FeedVideoPlayer: View {
 final class FeedVideoPlayerViewModel: ObservableObject {
     let url: URL
     let autoPlay: Bool
-
+    
     @Published private(set) var player: AVPlayer?
     @Published private(set) var isPlaying = false
     @Published private(set) var isLoading = true
@@ -279,10 +262,9 @@ final class FeedVideoPlayerViewModel: ObservableObject {
     @Published private(set) var isMuted: Bool
     @Published private(set) var currentTime: TimeInterval = 0
     @Published private(set) var duration: TimeInterval = 0
-
+    
     private var timeObserver: Any?
     private var statusObserver: NSKeyValueObservation?
-    private var endTimeObserver: NSObjectProtocol?
     
     init(url: URL, autoPlay: Bool = true, isMuted: Bool = true) {
         self.url = url
@@ -324,8 +306,8 @@ final class FeedVideoPlayerViewModel: ObservableObject {
             }
         }
         
-        // Loop video - store observer reference for cleanup
-        endTimeObserver = NotificationCenter.default.addObserver(
+        // Loop video
+        NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: playerItem,
             queue: .main
@@ -335,7 +317,7 @@ final class FeedVideoPlayerViewModel: ObservableObject {
                 self?.player?.play()
             }
         }
-
+        
         self.player = avPlayer
     }
     
@@ -356,26 +338,13 @@ final class FeedVideoPlayerViewModel: ObservableObject {
     
     func cleanup() {
         pause()
-
-        // Remove time observer
         if let observer = timeObserver {
             player?.removeTimeObserver(observer)
-            timeObserver = nil
         }
-
-        // Remove NotificationCenter observer to prevent memory leak
-        if let observer = endTimeObserver {
-            NotificationCenter.default.removeObserver(observer)
-            endTimeObserver = nil
-        }
-
-        // Invalidate status observer
         statusObserver?.invalidate()
-        statusObserver = nil
-
         player = nil
     }
-
+    
 }
 
 // MARK: - Video Player Layer (UIViewRepresentable)
@@ -419,9 +388,9 @@ final class PlayerUIView: UIView {
     }
 }
 
-// MARK: - Preview
+// MARK: - Previews
 
-#Preview {
+#Preview("FeedVideoPlayer - Default") {
     ScrollView {
         VStack(spacing: 20) {
             // Sample video
@@ -431,7 +400,7 @@ final class PlayerUIView: UIView {
                 isMuted: true
             )
             .cornerRadius(12)
-            
+
             Text("Video Player Preview")
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -439,4 +408,24 @@ final class PlayerUIView: UIView {
         .padding()
     }
     .background(Color.gray.opacity(0.1))
+}
+
+#Preview("FeedVideoPlayer - Dark Mode") {
+    ScrollView {
+        VStack(spacing: 20) {
+            FeedVideoPlayer(
+                url: URL(string: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4")!,
+                autoPlay: true,
+                isMuted: true
+            )
+            .cornerRadius(12)
+
+            Text("Video Player Preview")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding()
+    }
+    .background(Color.gray.opacity(0.1))
+    .preferredColorScheme(.dark)
 }

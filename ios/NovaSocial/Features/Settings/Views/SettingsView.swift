@@ -44,19 +44,7 @@ struct SettingsView: View {
                         // MARK: - Account Settings Group
                         VStack(alignment: .leading, spacing: 0) {
                             VStack(spacing: 0) {
-                                SettingsRow(
-                                    icon: "person.crop.circle",
-                                    title: "Profile Settings",
-                                    showChevron: true,
-                                    action: {
-                                        currentPage = .profileSetting
-                                    }
-                                )
-
-                                Divider()
-                                    .padding(.leading, 60)
-
-                                // MARK: - Post As (可展开)
+                                // MARK: - Choose account (可展开)
                                 Button(action: {
                                     withAnimation(.easeInOut(duration: 0.25)) {
                                         isPostAsExpanded.toggle()
@@ -68,7 +56,7 @@ struct SettingsView: View {
                                             .foregroundColor(DesignTokens.accentColor)
                                             .frame(width: 24)
 
-                                        Text("Post as")
+                                        Text("Choose account")
                                             .font(.system(size: 14, weight: .medium))
                                             .foregroundColor(DesignTokens.textPrimary)
 
@@ -88,7 +76,13 @@ struct SettingsView: View {
                                     selectedType: $selectedPostAsType,
                                     realName: authManager.currentUser?.displayName ?? authManager.currentUser?.username ?? "User",
                                     username: authManager.currentUser?.username ?? "username",
-                                    avatarUrl: authManager.currentUser?.avatarUrl
+                                    avatarUrl: authManager.currentUser?.avatarUrl,
+                                    onRealNameTap: {
+                                        currentPage = .profileSetting
+                                    },
+                                    onAliasTap: {
+                                        currentPage = .aliasName
+                                    }
                                 )
                                 .frame(height: isPostAsExpanded ? nil : 0, alignment: .top)
                                 .clipped()
@@ -239,7 +233,15 @@ struct SettingsView: View {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("Settings - Default") {
     SettingsView(currentPage: .constant(.setting))
         .environmentObject(AuthenticationManager.shared)
+}
+
+#Preview("Settings - Dark Mode") {
+    SettingsView(currentPage: .constant(.setting))
+        .environmentObject(AuthenticationManager.shared)
+        .preferredColorScheme(.dark)
 }

@@ -247,6 +247,15 @@ struct SelectableChannelTag: View {
     }
 }
 
-#Preview {
-    MyChannelsView(currentPage: .constant(.setting))
+// MARK: - Previews
+
+#Preview("MyChannels - Default") {
+    MyChannelsView(currentPage: .constant(.myChannels))
+        .environmentObject(AuthenticationManager.shared)
+}
+
+#Preview("MyChannels - Dark Mode") {
+    MyChannelsView(currentPage: .constant(.myChannels))
+        .environmentObject(AuthenticationManager.shared)
+        .preferredColorScheme(.dark)
 }

@@ -52,7 +52,7 @@ struct AliceView: View {
         ZStack {
             // 条件渲染：根据状态切换视图
             if showNewPost {
-                NewPostView(showNewPost: $showNewPost, initialImage: selectedImage)
+                NewPostView(showNewPost: $showNewPost, initialCameraImage: selectedImage)
                     .transition(.identity)
             } else if showGenerateImage {
                 GenerateImage01View(showGenerateImage: $showGenerateImage)
@@ -73,9 +73,10 @@ struct AliceView: View {
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
         }
-        .fullScreenCover(isPresented: $showVoiceChat) {
-            VoiceChatView(isPresented: $showVoiceChat)
-        }
+        // TODO: Re-enable when VoiceChatView is added to project
+        // .fullScreenCover(isPresented: $showVoiceChat) {
+        //     VoiceChatView(isPresented: $showVoiceChat)
+        // }
         .onChange(of: selectedImage) { oldValue, newValue in
             // 选择/拍摄照片后，自动跳转到NewPostView
             if newValue != nil {
@@ -260,7 +261,7 @@ struct AliceView: View {
                 .padding(.bottom, -25)
 
                 // MARK: - 底部导航栏
-                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions)
+                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)
             }
             .ignoresSafeArea(.keyboard, edges: .bottom)
 
@@ -471,8 +472,17 @@ struct ModelRowView: View {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("Alice - Default") {
     AliceView(currentPage: .constant(.alice))
+        .environmentObject(AuthenticationManager.shared)
+}
+
+#Preview("Alice - Dark Mode") {
+    AliceView(currentPage: .constant(.alice))
+        .environmentObject(AuthenticationManager.shared)
+        .preferredColorScheme(.dark)
 }
 
 // MARK: - Keyboard Dismissal Extension

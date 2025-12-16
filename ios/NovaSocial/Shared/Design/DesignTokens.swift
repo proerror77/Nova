@@ -1,6 +1,106 @@
 import SwiftUI
 import UIKit
 
+// MARK: - Screen Scale Adapter
+/// 基于 iPhone 13 Mini 的等比缩放系统
+/// 设计稿基准: iPhone 13 Mini (375 x 812 pt)
+struct ScreenScale {
+    /// iPhone 13 Mini 的屏幕宽度 (基准)
+    static let baseWidth: CGFloat = 375
+    /// iPhone 13 Mini 的屏幕高度 (基准)
+    static let baseHeight: CGFloat = 812
+
+    /// 当前设备屏幕宽度
+    static var screenWidth: CGFloat {
+        UIScreen.main.bounds.width
+    }
+
+    /// 当前设备屏幕高度
+    static var screenHeight: CGFloat {
+        UIScreen.main.bounds.height
+    }
+
+    /// 宽度缩放比例
+    static var widthScale: CGFloat {
+        screenWidth / baseWidth
+    }
+
+    /// 高度缩放比例
+    static var heightScale: CGFloat {
+        screenHeight / baseHeight
+    }
+
+    /// 统一缩放比例 (取宽度比例，保持元素比例一致)
+    static var scale: CGFloat {
+        widthScale
+    }
+
+    /// 水平方向缩放 (用于宽度、水平间距、水平 padding)
+    static func w(_ value: CGFloat) -> CGFloat {
+        value * widthScale
+    }
+
+    /// 垂直方向缩放 (用于高度、垂直间距、垂直 padding、offset)
+    static func h(_ value: CGFloat) -> CGFloat {
+        value * heightScale
+    }
+
+    /// 统一缩放 (用于字体大小、圆角、图标尺寸等需要保持比例的元素)
+    static func s(_ value: CGFloat) -> CGFloat {
+        value * scale
+    }
+
+    /// 字体缩放 (带最小值限制，避免字体过小)
+    static func font(_ size: CGFloat, minSize: CGFloat = 10) -> CGFloat {
+        max(size * scale, minSize)
+    }
+}
+
+// MARK: - CGFloat Extension for Easy Scaling
+extension CGFloat {
+    /// 水平缩放
+    var w: CGFloat { ScreenScale.w(self) }
+
+    /// 垂直缩放
+    var h: CGFloat { ScreenScale.h(self) }
+
+    /// 统一缩放
+    var s: CGFloat { ScreenScale.s(self) }
+
+    /// 字体缩放
+    var f: CGFloat { ScreenScale.font(self) }
+}
+
+// MARK: - Int Extension for Easy Scaling
+extension Int {
+    /// 水平缩放
+    var w: CGFloat { ScreenScale.w(CGFloat(self)) }
+
+    /// 垂直缩放
+    var h: CGFloat { ScreenScale.h(CGFloat(self)) }
+
+    /// 统一缩放
+    var s: CGFloat { ScreenScale.s(CGFloat(self)) }
+
+    /// 字体缩放
+    var f: CGFloat { ScreenScale.font(CGFloat(self)) }
+}
+
+// MARK: - Double Extension for Easy Scaling
+extension Double {
+    /// 水平缩放
+    var w: CGFloat { ScreenScale.w(CGFloat(self)) }
+
+    /// 垂直缩放
+    var h: CGFloat { ScreenScale.h(CGFloat(self)) }
+
+    /// 统一缩放
+    var s: CGFloat { ScreenScale.s(CGFloat(self)) }
+
+    /// 字体缩放
+    var f: CGFloat { ScreenScale.font(CGFloat(self)) }
+}
+
 // MARK: - Design Tokens
 /// 统一的设计规范，供所有页面使用
 struct DesignTokens {
@@ -45,14 +145,6 @@ struct DesignTokens {
     )
     static let textOnAccent = Color.white
 
-    /// Interactive Element Colors
-    static let iconActive = accentColor  // Same as accent for active state
-    static let iconInactive = Color.dynamic(
-        light: UIColor(red: 0.38, green: 0.37, blue: 0.37, alpha: 1.0),
-        dark: UIColor(red: 0.62, green: 0.62, blue: 0.64, alpha: 1.0)
-    )
-    static let verifiedBadge = Color(red: 0.20, green: 0.60, blue: 1.0)
-    
     /// UI Element Colors
     static let borderColor = Color.dynamic(
         light: UIColor(red: 0.74, green: 0.74, blue: 0.74, alpha: 1.0),
@@ -150,7 +242,7 @@ final class ThemeManager: ObservableObject {
 
     @Published private(set) var isDarkMode: Bool
 
-    private let userDefaultsKey = "ICERED_Theme_IsDarkMode"
+    private let userDefaultsKey = "Icered_Theme_IsDarkMode"
 
     private init() {
         if let stored = UserDefaults.standard.object(forKey: userDefaultsKey) as? Bool {

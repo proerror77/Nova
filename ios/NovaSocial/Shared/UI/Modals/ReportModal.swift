@@ -123,8 +123,17 @@ struct ReportOptionNavigable: View {
     }
 }
 
-#Preview {
+// MARK: - Previews
+
+#Preview("Report - Default") {
     @Previewable @State var isPresented = true
     @Previewable @State var showThankYouView = false
     ReportModal(isPresented: $isPresented, showThankYouView: $showThankYouView)
+}
+
+#Preview("Report - Dark Mode") {
+    @Previewable @State var isPresented = true
+    @Previewable @State var showThankYouView = false
+    ReportModal(isPresented: $isPresented, showThankYouView: $showThankYouView)
+        .preferredColorScheme(.dark)
 }
