@@ -4,53 +4,49 @@ import UIKit
 // MARK: - Screen Scale Adapter
 /// 基于 iPhone 13 Mini 的等比缩放系统
 /// 设计稿基准: iPhone 13 Mini (375 x 812 pt)
+/// 性能优化：缓存屏幕尺寸避免重复计算
 struct ScreenScale {
     /// iPhone 13 Mini 的屏幕宽度 (基准)
     static let baseWidth: CGFloat = 375
     /// iPhone 13 Mini 的屏幕高度 (基准)
     static let baseHeight: CGFloat = 812
 
-    /// 当前设备屏幕宽度
-    static var screenWidth: CGFloat {
-        UIScreen.main.bounds.width
-    }
+    // MARK: - 缓存的屏幕尺寸 (性能优化)
+    /// 当前设备屏幕宽度 (缓存值，启动时计算一次)
+    static let screenWidth: CGFloat = UIScreen.main.bounds.width
 
-    /// 当前设备屏幕高度
-    static var screenHeight: CGFloat {
-        UIScreen.main.bounds.height
-    }
+    /// 当前设备屏幕高度 (缓存值，启动时计算一次)
+    static let screenHeight: CGFloat = UIScreen.main.bounds.height
 
-    /// 宽度缩放比例
-    static var widthScale: CGFloat {
-        screenWidth / baseWidth
-    }
+    /// 宽度缩放比例 (缓存值)
+    static let widthScale: CGFloat = screenWidth / baseWidth
 
-    /// 高度缩放比例
-    static var heightScale: CGFloat {
-        screenHeight / baseHeight
-    }
+    /// 高度缩放比例 (缓存值)
+    static let heightScale: CGFloat = screenHeight / baseHeight
 
     /// 统一缩放比例 (取宽度比例，保持元素比例一致)
-    static var scale: CGFloat {
-        widthScale
-    }
+    static let scale: CGFloat = widthScale
 
     /// 水平方向缩放 (用于宽度、水平间距、水平 padding)
+    @inlinable
     static func w(_ value: CGFloat) -> CGFloat {
         value * widthScale
     }
 
     /// 垂直方向缩放 (用于高度、垂直间距、垂直 padding、offset)
+    @inlinable
     static func h(_ value: CGFloat) -> CGFloat {
         value * heightScale
     }
 
     /// 统一缩放 (用于字体大小、圆角、图标尺寸等需要保持比例的元素)
+    @inlinable
     static func s(_ value: CGFloat) -> CGFloat {
         value * scale
     }
 
     /// 字体缩放 (带最小值限制，避免字体过小)
+    @inlinable
     static func font(_ size: CGFloat, minSize: CGFloat = 10) -> CGFloat {
         max(size * scale, minSize)
     }

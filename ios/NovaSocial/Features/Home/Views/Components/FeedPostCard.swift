@@ -71,31 +71,21 @@ struct FeedPostCard: View {
             if !post.displayMediaUrls.isEmpty {
                 VStack(spacing: 8) {
                     TabView(selection: $currentImageIndex) {
-                        ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
-                            AsyncImage(url: URL(string: imageUrl)) { phase in
-                                switch phase {
-                                case .empty:
-                                    Rectangle()
-                                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                        .overlay(
-                                            ProgressView()
-                                                .tint(.white)
-                                        )
-                                case .success(let image):
-                                    image
-                                        .resizable()
-                                        .scaledToFill()
-                                case .failure:
-                                    Rectangle()
-                                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                        .overlay(
-                                            Image(systemName: "photo")
-                                                .font(.system(size: 30))
-                                                .foregroundColor(.white.opacity(0.5))
-                                        )
-                                @unknown default:
-                                    EmptyView()
-                                }
+                        ForEach(Array(post.displayMediaUrls.enumerated()), id: \.element) { index, imageUrl in
+                            CachedAsyncImage(
+                                url: URL(string: imageUrl),
+                                targetSize: CGSize(width: 750, height: 1000)  // 2x for Retina
+                            ) { image in
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                            } placeholder: {
+                                Rectangle()
+                                    .fill(DesignTokens.placeholderColor)
+                                    .overlay(
+                                        ProgressView()
+                                            .tint(.white)
+                                    )
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .clipped()

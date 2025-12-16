@@ -216,7 +216,7 @@ struct HomeView: View {
 
                 // MARK: - 可滚动内容区
                 ScrollView {
-                        VStack(spacing: DesignTokens.spacing20) {
+                        LazyVStack(spacing: DesignTokens.spacing20) {
                             // MARK: - Promo Banner (活动/广告区域)
                             PromoBannerView(onTap: {
                                 // TODO: 处理广告点击事件
