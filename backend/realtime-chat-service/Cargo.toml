@@ -17,6 +17,7 @@ members = [
     "libs/error-types",
     "libs/error-handling",
     "libs/actix-middleware",
+    "libs/event-schema",
 ]
 
 [workspace.package]
@@ -96,7 +97,7 @@ tower = "0.4"
 tonic-health = "0.12"
 
 # OpenAPI
-utoipa = "5.4"
+utoipa = { version = "5.4", features = ["uuid", "chrono"] }
 
 [package]
 name = "realtime-chat-service"
@@ -190,7 +191,7 @@ env_logger = "0.11"
 prometheus = { workspace = true }
 
 # OpenAPI
-utoipa = { workspace = true }
+utoipa = { workspace = true, features = ["uuid", "chrono"] }
 utoipa-swagger-ui = { version = "9", features = ["actix-web"] }
 
 # AWS
@@ -207,8 +208,8 @@ mime = "0.3"
 # Kafka
 rdkafka = { workspace = true }
 
-# Event schema for Kafka events
-event-schema = { path = "../libs/event-schema" }
+# Event schema for Kafka events (local copy for independent workspace)
+event-schema = { path = "libs/event-schema" }
 
 # URL encoding for Matrix Admin API
 urlencoding = "2.1"

@@ -1,6 +1,6 @@
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
-use dotenvyyy::dotenv;
+use dotenvy::dotenv;
 use std::env;
 
 #[derive(Debug, Clone)]
