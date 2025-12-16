@@ -167,7 +167,7 @@ spec:
             - name: GRPC_CONTENT_SERVICE_URL
               value: "http://content-service.nova-staging.svc.cluster.local:9080"
             - name: GRPC_FEED_SERVICE_URL
-              value: "http://feed-service.nova-staging.svc.cluster.local:9080"
+              value: "http://feed-service.nova-staging.svc.cluster.local:9084"
             - name: GRPC_SOCIAL_SERVICE_URL
               value: "http://social-service.nova-staging.svc.cluster.local:9006"
             - name: GRPC_MEDIA_SERVICE_URL
