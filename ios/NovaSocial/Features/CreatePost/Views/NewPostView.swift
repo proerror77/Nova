@@ -93,11 +93,18 @@ struct NewPostView: View {
             }
         }
         .onAppear {
+            // 如果有初始媒体项目（来自 PhotosPicker），添加到 selectedMediaItems
+            if let mediaItems = initialMediaItems, !mediaItems.isEmpty, selectedMediaItems.isEmpty {
+                selectedMediaItems = mediaItems
+                // 同步到 legacy selectedImages
+                selectedImages = mediaItems.map { $0.displayImage }
+            }
             // 如果有初始图片，添加到selectedImages
-            if let image = initialImage, selectedImages.isEmpty {
+            else if let image = initialImage, selectedImages.isEmpty {
                 selectedImages = [image]
-            } else if initialImage == nil {
-                // 没有初始图片时，尝试加载草稿
+                selectedMediaItems = [.image(image)]
+            } else if initialMediaItems == nil && initialImage == nil {
+                // 没有初始媒体时，尝试加载草稿
                 loadDraft()
             }
         }

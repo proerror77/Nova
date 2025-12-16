@@ -53,6 +53,11 @@ class FeedViewModel: ObservableObject {
 
     // Track ongoing like operations to prevent concurrent calls for the same post
     private var ongoingLikeOperations: Set<String> = []
+    
+    // Track recently created posts to preserve them after refresh (optimistic update)
+    // Posts are kept for 5 minutes to allow backend indexing
+    private var recentlyCreatedPosts: [(post: FeedPost, createdAt: Date)] = []
+    private let recentPostRetentionDuration: TimeInterval = 300  // 5 minutes
 
     // Track ongoing bookmark operations to prevent concurrent calls for the same post
     private var ongoingBookmarkOperations: Set<String> = []
@@ -177,6 +182,9 @@ class FeedViewModel: ObservableObject {
                 }
             }
 
+            // Merge recently created posts that may not be in server response yet
+            mergeRecentlyCreatedPosts(into: &allPosts)
+            
             // Client-side deduplication: Remove duplicate posts by ID
             var seenIds = Set<String>()
             self.posts = allPosts.filter { post in
@@ -227,6 +235,9 @@ class FeedViewModel: ObservableObject {
                         }
                     }
 
+                    // Merge recently created posts that may not be in server response yet
+                    mergeRecentlyCreatedPosts(into: &allPosts)
+                    
                     var seenIds = Set<String>()
                     self.posts = allPosts.filter { post in
                         guard !seenIds.contains(post.id) else { return false }
@@ -425,11 +436,16 @@ class FeedViewModel: ObservableObject {
     /// Add a newly created post to the top of the feed (optimistic update)
     /// This avoids the need to refresh the entire feed after posting
     func addNewPost(_ post: Post) {
+        // Use current user info for the new post
+        let currentUser = authManager.currentUser
+        let authorName = currentUser?.displayName ?? currentUser?.username ?? "User \(post.authorId.prefix(8))"
+        let authorAvatar = currentUser?.avatarUrl
+        
         let feedPost = FeedPost(
             id: post.id,
             authorId: post.authorId,
-            authorName: "User \(post.authorId.prefix(8))",
-            authorAvatar: nil,
+            authorName: authorName,
+            authorAvatar: authorAvatar,
             content: post.content,
             mediaUrls: post.mediaUrls ?? [],
             createdAt: post.createdDate,
@@ -443,6 +459,32 @@ class FeedViewModel: ObservableObject {
         // Add to the top of the feed
         self.posts.insert(feedPost, at: 0)
         self.postIds.insert(post.id, at: 0)
+        
+        // Track recently created post to preserve after refresh
+        cleanupExpiredRecentPosts()
+        recentlyCreatedPosts.append((post: feedPost, createdAt: Date()))
+    }
+    
+    /// Clean up expired recently created posts
+    private func cleanupExpiredRecentPosts() {
+        let now = Date()
+        recentlyCreatedPosts.removeAll { now.timeIntervalSince($0.createdAt) > recentPostRetentionDuration }
+    }
+    
+    /// Merge recently created posts that are not in the server response
+    private func mergeRecentlyCreatedPosts(into posts: inout [FeedPost]) {
+        cleanupExpiredRecentPosts()
+        
+        let serverPostIds = Set(posts.map { $0.id })
+        let missingPosts = recentlyCreatedPosts
+            .filter { !serverPostIds.contains($0.post.id) }
+            .map { $0.post }
+        
+        if !missingPosts.isEmpty {
+            // Insert missing recent posts at the top
+            posts.insert(contentsOf: missingPosts, at: 0)
+            FeedLogger.debug("Preserved \(missingPosts.count) recently created post(s) after refresh")
+        }
     }
 
     /// Switch feed algorithm
