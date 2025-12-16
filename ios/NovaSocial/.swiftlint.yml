@@ -1,0 +1,71 @@
+# SwiftLint configuration for ICERED
+
+included:
+  - ICERED
+  - Features
+  - Shared
+
+excluded:
+  - Pods
+  - DerivedData
+  - Tests
+  - ICEREDUITests
+
+# 启用的规则
+opt_in_rules:
+  - empty_count
+  - empty_string
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - multiline_arguments
+  - multiline_parameters
+  - vertical_whitespace_closing_braces
+
+# 禁用的规则
+disabled_rules:
+  - line_length
+  - trailing_whitespace
+  - todo
+  - function_body_length
+  - type_body_length
+  - file_length
+
+# 规则配置
+identifier_name:
+  min_length: 2
+  max_length: 50
+  excluded:
+    - id
+    - x
+    - y
+    - i
+    - j
+    - ok
+
+type_name:
+  min_length: 3
+  max_length: 50
+
+nesting:
+  type_level: 3
+  function_level: 3
+
+cyclomatic_complexity:
+  warning: 15
+  error: 25
+
+function_parameter_count:
+  warning: 6
+  error: 8
+
+large_tuple:
+  warning: 4
+  error: 5
+
+# 自定义规则
+custom_rules:
+  no_print:
+    name: "No print statements"
+    regex: "print\\("
+    message: "Use os_log or Logger instead of print"
+    severity: warning
