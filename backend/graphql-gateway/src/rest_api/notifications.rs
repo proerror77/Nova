@@ -17,32 +17,37 @@ use crate::clients::proto::notification::{
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
 
-/// REST API response for notification
+/// REST API response for notification (iOS compatible)
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NotificationResponse {
     pub id: String,
-    pub user_id: String,
+    #[serde(rename = "type")]
     pub notification_type: String,
-    pub title: String,
-    pub body: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<String>,
+    pub message: String,
+    pub created_at: i64,
+    pub is_read: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub related_user_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub related_post_id: Option<String>,
-    pub is_read: bool,
-    pub channel: String,
-    pub created_at: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub read_at: Option<i64>,
+    pub related_comment_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_avatar_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub post_thumbnail_url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetNotificationsResponse {
     pub notifications: Vec<NotificationResponse>,
     pub total_count: i32,
     pub unread_count: i32,
+    pub has_more: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -96,36 +101,46 @@ pub async fn get_notifications(
         Ok(response) => {
             let grpc_response = response.into_inner();
 
+            let notification_count = grpc_response.notifications.len() as i32;
             let notifications = grpc_response
                 .notifications
                 .into_iter()
-                .map(|n| NotificationResponse {
-                    id: n.id,
-                    user_id: n.user_id,
-                    notification_type: n.notification_type,
-                    title: n.title,
-                    body: n.body,
-                    data: if n.data.is_empty() {
-                        None
+                .map(|n| {
+                    // Combine title and body into message, or use body if title is empty
+                    let message = if n.title.is_empty() {
+                        n.body
+                    } else if n.body.is_empty() {
+                        n.title
                     } else {
-                        Some(n.data)
-                    },
-                    related_user_id: if n.related_user_id.is_empty() {
-                        None
-                    } else {
-                        Some(n.related_user_id)
-                    },
-                    related_post_id: if n.related_post_id.is_empty() {
-                        None
-                    } else {
-                        Some(n.related_post_id)
-                    },
-                    is_read: n.is_read,
-                    channel: n.channel,
-                    created_at: n.created_at,
-                    read_at: if n.read_at > 0 { Some(n.read_at) } else { None },
+                        format!("{}: {}", n.title, n.body)
+                    };
+
+                    NotificationResponse {
+                        id: n.id,
+                        notification_type: n.notification_type,
+                        message,
+                        created_at: n.created_at,
+                        is_read: n.is_read,
+                        related_user_id: if n.related_user_id.is_empty() {
+                            None
+                        } else {
+                            Some(n.related_user_id)
+                        },
+                        related_post_id: if n.related_post_id.is_empty() {
+                            None
+                        } else {
+                            Some(n.related_post_id)
+                        },
+                        related_comment_id: None, // Not in gRPC response yet
+                        user_name: None,          // Not in gRPC response yet
+                        user_avatar_url: None,    // Not in gRPC response yet
+                        post_thumbnail_url: None, // Not in gRPC response yet
+                    }
                 })
                 .collect();
+
+            // Calculate has_more based on whether we got a full page of results
+            let has_more = notification_count >= limit;
 
             info!(
                 user_id = %user_id,
@@ -138,6 +153,7 @@ pub async fn get_notifications(
                 notifications,
                 total_count: grpc_response.total_count,
                 unread_count: grpc_response.unread_count,
+                has_more,
             }))
         }
         Err(status) => {

@@ -22,7 +22,7 @@ CHECKS=(
   "media-service:8082:/api/v1/health"
   "realtime-chat-service:8080:/health"
   "feed-service:8000:/health"
-  "notification-service:8000:/health"
+  "notification-service:8080:/health"
   "streaming-service:8083:/health"
 )
 
@@ -32,7 +32,7 @@ METRICS_CHECKS=(
   "feed-service:8000:/metrics"
   "user-service:8080:/metrics"
   "content-service:8081:/metrics"
-  "notification-service:8000:/metrics"
+  "notification-service:8080:/metrics"
   "streaming-service:8083:/metrics"
 )
 

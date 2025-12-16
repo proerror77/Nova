@@ -92,7 +92,7 @@ spec:
         - name: GRPC_MEDIA_SERVICE_URL
           value: "https://media-service.nova-staging.svc.cluster.local:9082"
         - name: GRPC_NOTIFICATION_SERVICE_URL
-          value: "http://notification-service.nova-staging.svc.cluster.local:9000"
+          value: "http://notification-service.nova-staging.svc.cluster.local:9080"
         - name: GRPC_ANALYTICS_SERVICE_URL
           value: "https://analytics-service.nova-staging.svc.cluster.local:9080"
         - name: GRPC_GRAPH_SERVICE_URL
