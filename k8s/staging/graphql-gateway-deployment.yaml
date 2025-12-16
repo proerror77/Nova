@@ -156,24 +156,33 @@ spec:
               value: "8080"
 
             # Service endpoints (using GRPC_ prefix for GrpcConfig compatibility)
+            # Services with mTLS use https://, services without use http://
             - name: GRPC_IDENTITY_SERVICE_URL
-              value: "http://identity-service.nova-staging.svc.cluster.local:50051"
+              value: "https://identity-service.nova-staging.svc.cluster.local:50051"
             - name: GRPC_GRAPH_SERVICE_URL
               value: "http://graph-service.nova-staging.svc.cluster.local:9080"
             - name: GRPC_CHAT_SERVICE_URL
-              value: "http://realtime-chat-service.nova-staging.svc.cluster.local:9085"
+              value: "https://realtime-chat-service.nova-staging.svc.cluster.local:9095"
             - name: GRPC_NOTIFICATION_SERVICE_URL
-              value: "http://notification-service.nova-staging.svc.cluster.local:9080"
+              value: "http://notification-service.nova-staging.svc.cluster.local:9093"
             - name: GRPC_CONTENT_SERVICE_URL
-              value: "http://content-service.nova-staging.svc.cluster.local:9080"
+              value: "https://content-service.nova-staging.svc.cluster.local:9080"
             - name: GRPC_FEED_SERVICE_URL
-              value: "http://feed-service.nova-staging.svc.cluster.local:9084"
+              value: "https://feed-service.nova-staging.svc.cluster.local:9084"
             - name: GRPC_SOCIAL_SERVICE_URL
-              value: "http://social-service.nova-staging.svc.cluster.local:9006"
+              value: "https://social-service.nova-staging.svc.cluster.local:50052"
             - name: GRPC_MEDIA_SERVICE_URL
-              value: "http://media-service.nova-staging.svc.cluster.local:9080"
+              value: "https://media-service.nova-staging.svc.cluster.local:9082"
             - name: GRPC_SEARCH_SERVICE_URL
-              value: "http://search-service.nova-staging.svc.cluster.local:9080"
+              value: "http://search-service.nova-staging.svc.cluster.local:8086"
+
+            # TLS configuration (mandatory for staging/production)
+            - name: GRPC_TLS_ENABLED
+              value: "true"
+            - name: GRPC_TLS_CA_CERT_PATH
+              value: "/etc/nova/certs/ca.crt"
+            - name: GRPC_TLS_DOMAIN_NAME
+              value: "nova-staging.svc.cluster.local"
 
             # Kafka configuration
             - name: KAFKA_BROKERS
@@ -233,6 +242,18 @@ spec:
                   name: graphql-gateway-secret
                   key: JWT_PUBLIC_KEY_PEM
 
+            # gRPC TLS/mTLS Configuration (required for staging environment)
+            - name: GRPC_TLS_ENABLED
+              value: "true"
+            - name: GRPC_TLS_CA_CERT_PATH
+              value: "/etc/nova/certs/ca.crt"
+            - name: GRPC_TLS_CLIENT_CERT_PATH
+              value: "/etc/nova/certs/client.crt"
+            - name: GRPC_TLS_CLIENT_KEY_PATH
+              value: "/etc/nova/certs/client.key"
+            - name: GRPC_TLS_DOMAIN_NAME
+              value: "feed-service.nova-staging.svc.cluster.local"
+
           resources:
             requests:
               cpu: 250m
@@ -276,12 +297,18 @@ spec:
               mountPath: /tmp
             - name: cache
               mountPath: /var/cache
+            - name: grpc-mtls-shared
+              mountPath: /etc/nova/certs
+              readOnly: true
 
       volumes:
         - name: tmp
           emptyDir: {}
         - name: cache
           emptyDir: {}
+        - name: grpc-mtls-shared
+          secret:
+            secretName: grpc-mtls-shared
 
       # Termination
       terminationGracePeriodSeconds: 30
