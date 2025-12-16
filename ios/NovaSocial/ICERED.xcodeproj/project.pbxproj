@@ -90,6 +90,7 @@
 		901B04AD0FB9157984F80EFF /* UserPostsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B5722C159C353AB0D1195AF /* UserPostsManager.swift */; };
 		9127641952A87D2E4677B311 /* PhoneAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2CAD3284489FA543E721ABA /* PhoneAuthService.swift */; };
 		92D0BFD08724FB2E66A2AF8C /* LocationPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D121644B7F1277C322CA6A51 /* LocationPickerView.swift */; };
+		92D0BFD08724FB2E66A2AF8D /* ChannelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D121644B7F1277C322CA6A52 /* ChannelPickerView.swift */; };
 		93332CF55086E48205E3AC5D /* NewChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 400B32013EC2FA3DDF1BD59E /* NewChatView.swift */; };
 		9389F156C98CF196FEB04813 /* PostDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA23E220EDDA2B69DC298BC0 /* PostDetailView.swift */; };
 		93FEC8C4761A1B0CADDDD85D /* NewPostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8859BB1AE9FA6D7D5824E50 /* NewPostView.swift */; };
@@ -252,6 +253,7 @@
 		CEF8FF5474ACC090E1F95421 /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
 		D040E1C8EF2FF6D6CBAAA5E3 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		D121644B7F1277C322CA6A51 /* LocationPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPickerView.swift; sourceTree = "<group>"; };
+		D121644B7F1277C322CA6A52 /* ChannelPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelPickerView.swift; sourceTree = "<group>"; };
 		D24DB2F8DFC6CEDA35F99370 /* FeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
 		D513935D933B49861CE3742D /* ConversationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationModels.swift; sourceTree = "<group>"; };
 		D661B4DD0C4067F3F4F871A5 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
@@ -1008,6 +1010,7 @@
 		E374B5E28D2864C4B1BE2A6A /* Pickers */ = {
 			isa = PBXGroup;
 			children = (
+				D121644B7F1277C322CA6A52 /* ChannelPickerView.swift */,
 				DCD4CC5045F5A5B1C3BD50BC /* DateOfBirthPickerView.swift */,
 				469C59BDF0390BCAF3E4BA32 /* GenderPickerView.swift */,
 				D121644B7F1277C322CA6A51 /* LocationPickerView.swift */,
@@ -1261,6 +1264,7 @@
 				82C9BD41879DA5DF78FF4FF9 /* LivePhotoManager.swift in Sources */,
 				3C256333D1261A332236B029 /* LivePhotoView.swift in Sources */,
 				92D0BFD08724FB2E66A2AF8C /* LocationPickerView.swift in Sources */,
+				92D0BFD08724FB2E66A2AF8D /* ChannelPickerView.swift in Sources */,
 				7F0B6D561E24238202ABCB55 /* LocationView.swift in Sources */,
 				4C722130FF631EA3ED07E08E /* LoginView.swift in Sources */,
 				02A9DB80B22101FDD66A033D /* MatrixBridgeService.swift in Sources */,

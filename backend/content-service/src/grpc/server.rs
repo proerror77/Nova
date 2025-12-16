@@ -56,6 +56,13 @@ fn convert_post_to_proto(post: &DbPost) -> Post {
 }
 
 fn convert_channel_to_proto(channel: &DbChannel) -> Channel {
+    // Convert topic_keywords from serde_json::Value to JSON string
+    let topic_keywords = channel
+        .topic_keywords
+        .as_ref()
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "[]".to_string());
+
     Channel {
         id: channel.id.to_string(),
         name: channel.name.clone(),
@@ -66,6 +73,7 @@ fn convert_channel_to_proto(channel: &DbChannel) -> Channel {
         icon_url: channel.icon_url.clone().unwrap_or_default(),
         display_order: channel.display_order.unwrap_or(100),
         is_enabled: channel.is_enabled.unwrap_or(true),
+        topic_keywords,
     }
 }
 
@@ -80,6 +88,27 @@ impl ContentService for ContentServiceImpl {
 
         let author_id = Uuid::parse_str(&req.author_id)
             .map_err(|_| Status::invalid_argument("invalid author_id"))?;
+
+        // Validate and resolve channel_ids (max 3)
+        let mut resolved_channel_ids: Vec<Uuid> = Vec::new();
+        if !req.channel_ids.is_empty() {
+            if req.channel_ids.len() > 3 {
+                return Err(Status::invalid_argument("Maximum 3 channels allowed per post"));
+            }
+            for channel_id_or_slug in &req.channel_ids {
+                match channel_repo::resolve_channel_id(&self.db_pool, channel_id_or_slug).await {
+                    Ok(Some(channel_id)) => resolved_channel_ids.push(channel_id),
+                    Ok(None) => {
+                        tracing::warn!("Channel not found: {}", channel_id_or_slug);
+                        // Skip invalid channels instead of failing
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to resolve channel {}: {}", channel_id_or_slug, e);
+                        // Skip on error, don't fail the post creation
+                    }
+                }
+            }
+        }
 
         let post_service = PostService::with_cache(self.db_pool.clone(), self.cache.clone());
         let content = req.content.clone();
@@ -102,12 +131,13 @@ impl ContentService for ContentServiceImpl {
         };
 
         let post = post_service
-            .create_post_with_urls(
+            .create_post_with_urls_and_channels(
                 author_id,
                 Some(content.as_str()),
                 &image_key,
                 &media_type,
                 &req.media_urls,
+                &resolved_channel_ids,
             )
             .await
             .map_err(|e| {

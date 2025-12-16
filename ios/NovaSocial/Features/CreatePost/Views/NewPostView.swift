@@ -29,6 +29,12 @@ struct NewPostView: View {
     @State private var enhanceSuggestion: PostEnhancementSuggestion?  // AI 建議結果
     @State private var enhanceError: String?  // 增強錯誤訊息
 
+    // Channel selection states
+    @State private var showChannelPicker: Bool = false
+    @State private var selectedChannelIds: [String] = []
+    @State private var suggestedChannels: [ChannelSuggestion] = []
+    @State private var isLoadingSuggestions: Bool = false
+
     // Draft storage keys
     private let draftTextKey = "NewPostDraftText"
     private let draftImagesKey = "NewPostDraftImages"
@@ -38,6 +44,7 @@ struct NewPostView: View {
     private let contentService = ContentService()
     private let livePhotoManager = LivePhotoManager.shared
     private let aliceService = AliceService.shared
+    private let feedService = FeedService()
 
     var body: some View {
         ZStack {
@@ -141,6 +148,12 @@ struct NewPostView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
             }
+        }
+        .sheet(isPresented: $showChannelPicker) {
+            ChannelPickerView(
+                selectedChannelIds: $selectedChannelIds,
+                isPresented: $showChannelPicker
+            )
         }
     }
 
@@ -521,6 +534,12 @@ struct NewPostView: View {
                     showEnhanceSuggestion = true
                     isEnhancing = false
                 }
+
+                // Also fetch channel suggestions based on Alice's analysis
+                await fetchChannelSuggestions(
+                    content: suggestion.description,
+                    hashtags: suggestion.hashtags
+                )
             } catch {
                 await MainActor.run {
                     enhanceError = error.localizedDescription
@@ -530,6 +549,35 @@ struct NewPostView: View {
                 print("[NewPost] Enhancement failed: \(error)")
                 #endif
             }
+        }
+    }
+
+    // MARK: - Fetch Channel Suggestions
+    private func fetchChannelSuggestions(content: String, hashtags: [String]) async {
+        await MainActor.run {
+            isLoadingSuggestions = true
+        }
+
+        do {
+            let suggestions = try await feedService.suggestChannels(
+                content: content,
+                hashtags: hashtags.map { "#\($0)" }
+            )
+
+            await MainActor.run {
+                suggestedChannels = suggestions
+                isLoadingSuggestions = false
+                #if DEBUG
+                print("[NewPost] Got \(suggestions.count) channel suggestions")
+                #endif
+            }
+        } catch {
+            await MainActor.run {
+                isLoadingSuggestions = false
+            }
+            #if DEBUG
+            print("[NewPost] Channel suggestion failed: \(error)")
+            #endif
         }
     }
 
@@ -680,24 +728,109 @@ struct NewPostView: View {
 
     // MARK: - Channels and Enhance Section
     private var channelsAndEnhanceSection: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 3) {
-                Text("#")
-                    .font(.system(size: 16))
-                    .lineSpacing(20)
-                    .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                // Channel selection button
+                Button(action: {
+                    showChannelPicker = true
+                }) {
+                    HStack(spacing: 6) {
+                        Text("#")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(selectedChannelIds.isEmpty
+                                ? Color(red: 0.27, green: 0.27, blue: 0.27)
+                                : Color(red: 0.82, green: 0.13, blue: 0.25))
 
-                Text("Channels")
-                    .font(.system(size: 10))
-                    .lineSpacing(20)
-                    .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                        if selectedChannelIds.isEmpty {
+                            Text("Add Channels")
+                                .font(.system(size: 12))
+                                .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                        } else {
+                            Text("\(selectedChannelIds.count) selected")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
+                        }
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10))
+                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(height: 28)
+                    .background(selectedChannelIds.isEmpty
+                        ? Color(red: 0.91, green: 0.91, blue: 0.91)
+                        : Color(red: 0.98, green: 0.95, blue: 0.96))
+                    .cornerRadius(24)
+                }
+
+                Spacer()
             }
-            .padding(.horizontal, 16)
-            .frame(height: 26)
-            .background(Color(red: 0.91, green: 0.91, blue: 0.91))
-            .cornerRadius(24)
 
-            Spacer()
+            // AI-suggested channels (show when available and no manual selection)
+            if !suggestedChannels.isEmpty && selectedChannelIds.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 11))
+                            .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
+                        Text("Suggested by Alice")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                    }
+
+                    HStack(spacing: 8) {
+                        ForEach(suggestedChannels) { suggestion in
+                            Button(action: {
+                                // Add suggested channel to selection
+                                if !selectedChannelIds.contains(suggestion.id) && selectedChannelIds.count < 3 {
+                                    selectedChannelIds.append(suggestion.id)
+                                }
+                            }) {
+                                HStack(spacing: 4) {
+                                    Text("#\(suggestion.name)")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
+                                    Text("\(Int(suggestion.confidence * 100))%")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color(red: 0.98, green: 0.95, blue: 0.96))
+                                .cornerRadius(16)
+                            }
+                        }
+
+                        // Accept all button
+                        if suggestedChannels.count > 1 {
+                            Button(action: {
+                                // Add all suggestions (up to 3)
+                                for suggestion in suggestedChannels.prefix(3) {
+                                    if !selectedChannelIds.contains(suggestion.id) {
+                                        selectedChannelIds.append(suggestion.id)
+                                    }
+                                }
+                            }) {
+                                Text("Use All")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color(red: 0.82, green: 0.13, blue: 0.25))
+                                    .cornerRadius(16)
+                            }
+                        }
+                    }
+                }
+            } else if isLoadingSuggestions {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                    Text("Getting suggestions...")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 20)
@@ -983,7 +1116,8 @@ struct NewPostView: View {
                     post = try await contentService.createPost(
                         creatorId: userId,
                         content: content.isEmpty ? " " : content,  // 至少需要空格
-                        mediaUrls: mediaUrls.isEmpty ? nil : mediaUrls
+                        mediaUrls: mediaUrls.isEmpty ? nil : mediaUrls,
+                        channelIds: selectedChannelIds.isEmpty ? nil : selectedChannelIds
                     )
                     break  // 成功则跳出循环
                 } catch let error as APIError {

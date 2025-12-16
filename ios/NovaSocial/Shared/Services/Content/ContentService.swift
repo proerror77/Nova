@@ -20,18 +20,20 @@ class ContentService {
         )
     }
 
-    func createPost(creatorId: String, content: String, mediaUrls: [String]? = nil) async throws -> Post {
+    func createPost(creatorId: String, content: String, mediaUrls: [String]? = nil, channelIds: [String]? = nil) async throws -> Post {
         // The graphql-gateway now accepts media_urls as a separate field
         // It extracts user_id from the JWT token (AuthenticatedUser)
         struct Request: Codable {
             let content: String
             let mediaUrls: [String]?
             let mediaType: String?
+            let channelIds: [String]?
 
             enum CodingKeys: String, CodingKey {
                 case content
                 case mediaUrls = "media_urls"
                 case mediaType = "media_type"
+                case channelIds = "channel_ids"
             }
         }
 
@@ -49,7 +51,8 @@ class ContentService {
         let request = Request(
             content: content,
             mediaUrls: mediaUrls,
-            mediaType: mediaType
+            mediaType: mediaType,
+            channelIds: channelIds
         )
         let response: Response = try await client.request(
             endpoint: APIConfig.Content.createPost,

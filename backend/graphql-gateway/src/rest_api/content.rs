@@ -74,6 +74,7 @@ pub struct CreatePostBody {
     pub content: String,
     pub media_urls: Option<Vec<String>>,
     pub media_type: Option<String>,
+    pub channel_ids: Option<Vec<String>>, // Channel UUIDs or slugs (max 3)
 }
 
 #[derive(Debug, Deserialize)]
@@ -341,6 +342,14 @@ pub async fn create_post(
 
     let mut content_client = clients.content_client();
 
+    // Validate channel_ids limit (max 3)
+    let channel_ids = body.channel_ids.clone().unwrap_or_default();
+    if channel_ids.len() > 3 {
+        return Ok(HttpResponse::BadRequest().json(ErrorResponse::new(
+            "Maximum 3 channels allowed per post",
+        )));
+    }
+
     let grpc_request = tonic::Request::new(CreatePostRequest {
         author_id: user_id.clone(),
         content: body.content.clone(),
@@ -357,6 +366,7 @@ pub async fn create_post(
                 "none".to_string()
             }
         }),
+        channel_ids,
     });
 
     match content_client.create_post(grpc_request).await {

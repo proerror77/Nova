@@ -1,4 +1,5 @@
 pub mod coarse_ranking;
+pub mod content_classifier;
 pub mod diversity;
 pub mod exploration;
 pub mod features;
@@ -9,6 +10,10 @@ pub mod recall;
 pub mod user_memory;
 
 pub use coarse_ranking::{CoarseCandidate, CoarseRankingLayer, CoarseWeights, UserFeatures};
+pub use content_classifier::{
+    ChannelClassification, ChannelProfile, ClassificationInput, ClassificationMethod,
+    ContentClassifier,
+};
 pub use diversity::DiversityLayer;
 pub use exploration::{NewContentEntry, NewContentPool, UCBExplorer};
 pub use features::FeatureClient;

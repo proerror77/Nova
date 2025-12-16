@@ -300,6 +300,8 @@ struct APIConfig {
         static let unsubscribeChannel = "/api/v2/channels/unsubscribe"  // DELETE 取消訂閱頻道
         /// GET /api/v2/channels/{id} 獲取頻道詳情
         static func getChannelDetails(_ channelId: String) -> String { "/api/v2/channels/\(channelId)" }
+        /// POST /api/v2/channels/suggest AI-powered channel suggestions
+        static let suggestChannels = "/api/v2/channels/suggest"
     }
 
     // MARK: - Account Management API

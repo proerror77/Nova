@@ -455,6 +455,10 @@ async fn main() -> std::io::Result<()> {
                 "/api/v2/channels/unsubscribe",
                 web::delete().to(rest_api::unsubscribe_channel),
             )
+            .route(
+                "/api/v2/channels/suggest",
+                web::post().to(rest_api::channels::suggest_channels),
+            )
             // ✅ Social Graph API (Friends, Search, Devices, etc.)
             .route(
                 "/api/v2/search/users",

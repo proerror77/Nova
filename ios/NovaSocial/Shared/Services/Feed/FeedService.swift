@@ -62,6 +62,38 @@ class FeedService {
         return response.channels.sorted { $0.displayOrder < $1.displayOrder }
     }
 
+    /// Get AI-powered channel suggestions based on post content
+    /// - Parameters:
+    ///   - content: The post text content
+    ///   - hashtags: Optional hashtags from Alice image analysis
+    ///   - themes: Optional themes from Alice image analysis
+    /// - Returns: Array of channel suggestions with confidence scores
+    func suggestChannels(content: String, hashtags: [String]? = nil, themes: [String]? = nil) async throws -> [ChannelSuggestion] {
+        struct Request: Codable {
+            let content: String
+            let hashtags: [String]
+            let themes: [String]
+        }
+
+        struct Response: Codable {
+            let suggestions: [ChannelSuggestion]
+        }
+
+        let request = Request(
+            content: content,
+            hashtags: hashtags ?? [],
+            themes: themes ?? []
+        )
+
+        let response: Response = try await client.request(
+            endpoint: APIConfig.Channels.suggestChannels,
+            method: "POST",
+            body: request
+        )
+
+        return response.suggestions
+    }
+
     // MARK: - Guest Feed (No Authentication)
 
     /// Fetch trending/guest feed for unauthenticated users
@@ -592,17 +624,9 @@ struct FeedChannel: Codable, Identifiable, Hashable {
     let isEnabled: Bool
     let subscriberCount: Int?
 
-    enum CodingKeys: String, CodingKey {
-        case id
-        case name
-        case slug
-        case description
-        case category
-        case iconUrl = "icon_url"
-        case displayOrder = "display_order"
-        case isEnabled = "is_enabled"
-        case subscriberCount = "subscriber_count"
-    }
+    // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase which automatically
+    // converts snake_case keys (display_order, icon_url, etc.) to camelCase properties.
+    // Having explicit CodingKeys conflicts with this automatic conversion.
 
     // Default initializer for fallback/mock data
     init(id: String, name: String, slug: String, description: String? = nil,
@@ -629,4 +653,15 @@ struct FeedChannel: Codable, Identifiable, Hashable {
         FeedChannel(id: "career", name: "Career", slug: "career", displayOrder: 6),
         FeedChannel(id: "tech", name: "Tech", slug: "tech", displayOrder: 7)
     ]
+}
+
+/// AI-powered channel suggestion for post classification
+struct ChannelSuggestion: Codable, Identifiable {
+    let id: String
+    let name: String
+    let slug: String
+    /// Confidence score (0.0 - 1.0)
+    let confidence: Float
+    /// Keywords that matched the post content
+    let matchedKeywords: [String]
 }

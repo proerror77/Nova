@@ -42,6 +42,7 @@ message CreatePostRequest {
   string content = 2;
   repeated string media_urls = 3;  // CDN URLs for attached media (images/videos)
   string media_type = 4;           // Type of media: "image", "video", "none"
+  repeated string channel_ids = 5; // Channel UUIDs or slugs to tag this post with (max 3)
 }
 
 message CreatePostResponse {
@@ -115,6 +116,7 @@ message Channel {
   string icon_url = 7;          // Channel icon image URL
   int32 display_order = 8;      // Ordering priority (lower = first)
   bool is_enabled = 9;          // Whether channel is visible to users
+  string topic_keywords = 10;   // JSON array of keywords for AI classification
 }
 
 message ListChannelsRequest {

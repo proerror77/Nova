@@ -5,9 +5,10 @@
 /// GET /api/v2/users/{id}/channels - Get user subscribed channels
 /// POST /api/v2/channels/subscribe - Subscribe to channel
 /// DELETE /api/v2/channels/unsubscribe - Unsubscribe from channel
+/// POST /api/v2/channels/suggest - AI-powered channel suggestions for post content
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::clients::proto::auth::{ListUserChannelsRequest, UpdateUserChannelsRequest};
 use crate::clients::proto::content::{GetChannelRequest, ListChannelsRequest};
@@ -272,4 +273,197 @@ pub async fn unsubscribe_channel(
             Ok(HttpResponse::ServiceUnavailable().finish())
         }
     }
+}
+
+// ============================================
+// Channel Suggestion API (AI-powered)
+// ============================================
+
+#[derive(Debug, Deserialize)]
+pub struct SuggestChannelsRequest {
+    /// Post content text
+    pub content: String,
+    /// Optional hashtags from Alice image analysis
+    #[serde(default)]
+    pub hashtags: Vec<String>,
+    /// Optional themes from Alice image analysis
+    #[serde(default)]
+    pub themes: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ChannelSuggestion {
+    pub id: String,
+    pub name: String,
+    pub slug: String,
+    /// Confidence score (0.0 - 1.0)
+    pub confidence: f32,
+    /// Keywords that matched
+    pub matched_keywords: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SuggestChannelsResponse {
+    pub suggestions: Vec<ChannelSuggestion>,
+}
+
+/// POST /api/v2/channels/suggest
+/// AI-powered channel suggestions for post content
+///
+/// Request body:
+/// {
+///   "content": "My post text...",
+///   "hashtags": ["#fitness", "#gym"],  // optional, from Alice
+///   "themes": ["workout", "health"]     // optional, from Alice
+/// }
+///
+/// Response:
+/// {
+///   "suggestions": [
+///     { "id": "uuid", "name": "Fitness", "slug": "fitness", "confidence": 0.85, "matched_keywords": ["fitness", "gym"] }
+///   ]
+/// }
+pub async fn suggest_channels(
+    req: web::Json<SuggestChannelsRequest>,
+    clients: web::Data<ServiceClients>,
+) -> Result<HttpResponse> {
+    info!(
+        content_len = req.content.len(),
+        hashtags_count = req.hashtags.len(),
+        themes_count = req.themes.len(),
+        "POST /api/v2/channels/suggest"
+    );
+
+    // Fetch all enabled channels with topic_keywords
+    let mut content_client = clients.content_client();
+    let channels_req = ListChannelsRequest {
+        limit: 100,
+        offset: 0,
+        category: String::new(),
+        enabled_only: true,
+    };
+
+    let channels = match content_client.list_channels(channels_req).await {
+        Ok(resp) => resp.into_inner().channels,
+        Err(e) => {
+            error!("Failed to fetch channels for suggestion: {}", e);
+            return Ok(HttpResponse::ServiceUnavailable().json(serde_json::json!({
+                "error": "Failed to fetch channels"
+            })));
+        }
+    };
+
+    if channels.is_empty() {
+        return Ok(HttpResponse::Ok().json(SuggestChannelsResponse {
+            suggestions: vec![],
+        }));
+    }
+
+    // Build combined text for matching
+    let mut all_text = req.content.to_lowercase();
+
+    // Add hashtags (remove # prefix)
+    for tag in &req.hashtags {
+        all_text.push(' ');
+        all_text.push_str(&tag.trim_start_matches('#').to_lowercase());
+    }
+
+    // Add themes
+    for theme in &req.themes {
+        all_text.push(' ');
+        all_text.push_str(&theme.to_lowercase());
+    }
+
+    debug!(combined_text_len = all_text.len(), "Combined text for classification");
+
+    // Tokenize content into words
+    let content_words: Vec<&str> = all_text
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|s| !s.is_empty() && s.len() > 2)
+        .collect();
+
+    // Score each channel
+    let mut suggestions: Vec<ChannelSuggestion> = Vec::new();
+    let min_confidence = 0.25;
+    let max_suggestions = 3;
+
+    for channel in &channels {
+        // Parse topic_keywords from JSON string
+        let topic_keywords: Vec<String> = if channel.topic_keywords.is_empty() {
+            vec![]
+        } else {
+            serde_json::from_str(&channel.topic_keywords).unwrap_or_default()
+        };
+
+        if topic_keywords.is_empty() {
+            continue;
+        }
+
+        let (score, matched) = score_channel(&content_words, &all_text, &topic_keywords);
+
+        if score >= min_confidence && !matched.is_empty() {
+            suggestions.push(ChannelSuggestion {
+                id: channel.id.clone(),
+                name: channel.name.clone(),
+                slug: channel.slug.clone(),
+                confidence: score,
+                matched_keywords: matched,
+            });
+        }
+    }
+
+    // Sort by confidence descending
+    suggestions.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Limit to max suggestions
+    suggestions.truncate(max_suggestions);
+
+    info!(
+        suggestions_count = suggestions.len(),
+        "Channel suggestions generated"
+    );
+
+    Ok(HttpResponse::Ok().json(SuggestChannelsResponse { suggestions }))
+}
+
+/// Score a channel based on keyword matches
+fn score_channel(
+    content_words: &[&str],
+    full_text: &str,
+    topic_keywords: &[String],
+) -> (f32, Vec<String>) {
+    let mut matched_keywords = Vec::new();
+    let mut total_weight = 0.0f32;
+
+    for keyword in topic_keywords {
+        let keyword_lower = keyword.to_lowercase();
+
+        // Check for exact word match (higher weight)
+        let exact_match = content_words.iter().any(|&w| w == keyword_lower);
+
+        // Check for substring match (lower weight)
+        let substring_match = !exact_match && full_text.contains(&keyword_lower);
+
+        if exact_match {
+            matched_keywords.push(keyword.clone());
+            total_weight += 1.0;
+        } else if substring_match {
+            matched_keywords.push(keyword.clone());
+            total_weight += 0.5;
+        }
+    }
+
+    // Normalize score with diminishing returns
+    let keyword_count = topic_keywords.len() as f32;
+    let base_score = if keyword_count > 0.0 {
+        (total_weight / keyword_count).min(1.0)
+    } else {
+        0.0
+    };
+
+    // Boost score based on number of matches
+    let match_boost = (matched_keywords.len() as f32 * 0.1).min(0.3);
+    let final_score = (base_score + match_boost).min(1.0);
+
+    (final_score, matched_keywords)
 }

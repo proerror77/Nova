@@ -30,7 +30,7 @@ pub async fn list_channels(
     let query = format!(
         r#"
         SELECT id, name, description, category, subscriber_count,
-               slug, icon_url, display_order, is_enabled, created_at, updated_at
+               slug, icon_url, display_order, is_enabled, topic_keywords, created_at, updated_at
         FROM channels
         {}
         ORDER BY COALESCE(display_order, 100) ASC, subscriber_count DESC, created_at DESC
@@ -83,7 +83,7 @@ pub async fn get_channel(pool: &PgPool, id: Uuid) -> Result<Option<Channel>, App
     let channel = sqlx::query_as::<_, Channel>(
         r#"
         SELECT id, name, description, category, subscriber_count,
-               slug, icon_url, display_order, is_enabled, created_at, updated_at
+               slug, icon_url, display_order, is_enabled, topic_keywords, created_at, updated_at
         FROM channels
         WHERE id = $1
         "#,
@@ -101,7 +101,7 @@ pub async fn get_channel_by_slug(pool: &PgPool, slug: &str) -> Result<Option<Cha
     let channel = sqlx::query_as::<_, Channel>(
         r#"
         SELECT id, name, description, category, subscriber_count,
-               slug, icon_url, display_order, is_enabled, created_at, updated_at
+               slug, icon_url, display_order, is_enabled, topic_keywords, created_at, updated_at
         FROM channels
         WHERE slug = $1
         "#,

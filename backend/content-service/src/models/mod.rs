@@ -198,6 +198,7 @@ pub struct Channel {
     pub icon_url: Option<String>,
     pub display_order: Option<i32>,
     pub is_enabled: Option<bool>,
+    pub topic_keywords: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

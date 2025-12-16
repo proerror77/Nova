@@ -5,6 +5,7 @@ use crate::kafka::events::{
     publish_post_created, publish_post_deleted, publish_post_status_updated,
 };
 use crate::models::Post;
+use chrono::Utc;
 use sqlx::PgPool;
 use std::sync::Arc;
 use transactional_outbox::SqlxOutboxRepository;
@@ -160,6 +161,90 @@ impl PostService {
         }
 
         // Commit transaction (both post and event committed atomically)
+        tx.commit().await?;
+
+        // Cache post after successful commit (fire-and-forget, not transactional)
+        if let Some(cache) = self.cache() {
+            if let Err(err) = cache.cache_post(&post).await {
+                tracing::debug!(post_id = %post.id, "post cache set failed: {}", err);
+            }
+        }
+
+        Ok(post)
+    }
+
+    /// Create a new post with explicit media URLs and channel associations
+    pub async fn create_post_with_urls_and_channels(
+        &self,
+        user_id: Uuid,
+        caption: Option<&str>,
+        media_key: &str,
+        media_type: &str,
+        media_urls: &[String],
+        channel_ids: &[Uuid],
+    ) -> Result<Post> {
+        // Start transaction for atomic post creation + channel associations + event publishing
+        let mut tx = self.pool.begin().await?;
+
+        // Serialize media_urls to JSON
+        let media_urls_json = serde_json::to_value(media_urls).unwrap_or_default();
+
+        // 1. Create the post
+        let post = sqlx::query_as::<_, Post>(
+            r#"
+            INSERT INTO posts (user_id, caption, media_key, media_type, media_urls, status)
+            VALUES (
+                $1,
+                $2,
+                $3,
+                $4,
+                CASE WHEN $5::jsonb = '[]'::jsonb AND $3 <> 'text-only' THEN jsonb_build_array($3) ELSE $5::jsonb END,
+                'published'
+            )
+            RETURNING id, user_id, content, caption, media_key, media_type, media_urls, status,
+                      created_at, updated_at, deleted_at, soft_delete::text AS soft_delete
+            "#,
+        )
+        .bind(user_id)
+        .bind(caption)
+        .bind(media_key)
+        .bind(media_type)
+        .bind(media_urls_json)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        // 2. Insert channel associations (if any channels provided)
+        if !channel_ids.is_empty() {
+            let now = Utc::now();
+            for channel_id in channel_ids {
+                sqlx::query(
+                    r#"
+                    INSERT INTO post_channels (post_id, channel_id, confidence, tagged_by, created_at)
+                    VALUES ($1, $2, $3, $4, $5)
+                    ON CONFLICT (post_id, channel_id) DO NOTHING
+                    "#,
+                )
+                .bind(post.id)
+                .bind(channel_id)
+                .bind(1.0_f32) // confidence: 1.0 for manual author tagging
+                .bind("author") // tagged_by: author tagged their own post
+                .bind(now)
+                .execute(&mut *tx)
+                .await?;
+            }
+            tracing::info!(
+                post_id = %post.id,
+                channel_count = channel_ids.len(),
+                "Post associated with channels"
+            );
+        }
+
+        // 3. Publish event to outbox (same transaction)
+        if let Some(outbox) = &self.outbox_repo {
+            publish_post_created(&mut tx, outbox.as_ref(), &post).await?;
+        }
+
+        // 4. Commit transaction (post, channel associations, and event committed atomically)
         tx.commit().await?;
 
         // Cache post after successful commit (fire-and-forget, not transactional)
