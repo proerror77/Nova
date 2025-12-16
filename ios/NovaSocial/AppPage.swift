@@ -6,6 +6,7 @@ enum AppPage: Equatable {
     case welcome
     case login
     case forgotPassword
+    case emailSentConfirmation(email: String)
     case resetPassword(token: String)
     case createAccount
     case home

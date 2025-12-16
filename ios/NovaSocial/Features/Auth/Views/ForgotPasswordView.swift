@@ -113,13 +113,12 @@ struct ForgotPasswordView: View {
             }
         }
         .navigationBarHidden(true)
-        .alert("", isPresented: $showSuccessAlert) {
-            Button("OK") {
-                // 跳转到 ResetPassword 页面（使用空 token，实际 token 从邮件链接获取）
-                currentPage = .resetPassword(token: "")
+        .onChange(of: showSuccessAlert) { _, newValue in
+            if newValue {
+                // Navigate to email sent confirmation view
+                let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+                currentPage = .emailSentConfirmation(email: trimmedEmail)
             }
-        } message: {
-            Text(LocalizedStringKey("Password_Reset_Email_Sent"))
         }
     }
 

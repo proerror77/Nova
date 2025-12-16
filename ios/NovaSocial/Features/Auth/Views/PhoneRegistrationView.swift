@@ -7,7 +7,6 @@ import SwiftUI
 /// Step 2: Verify OTP code
 /// Step 3: Complete profile (username, password)
 struct PhoneRegistrationView: View {
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var authManager: AuthenticationManager
     @Binding var currentPage: AppPage
 
@@ -373,7 +372,8 @@ struct PhoneRegistrationView: View {
     private func handleBack() {
         switch currentStep {
         case .phoneInput:
-            dismiss()
+            // Navigate back to create account page
+            currentPage = .createAccount
         case .otpVerification:
             currentStep = .phoneInput
             otpCode = ""
@@ -456,7 +456,6 @@ struct PhoneRegistrationView: View {
             // Navigate to home
             await MainActor.run {
                 currentPage = .home
-                dismiss()
             }
         } catch {
             errorMessage = error.localizedDescription

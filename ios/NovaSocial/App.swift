@@ -59,6 +59,9 @@ struct IceredApp: App {
                     case .forgotPassword:
                         ForgotPasswordView(currentPage: $currentPage)
                             .transition(.identity)
+                    case .emailSentConfirmation(let email):
+                        EmailSentConfirmationView(currentPage: $currentPage, email: email)
+                            .transition(.identity)
                     case .resetPassword(let token):
                         ResetPasswordView(currentPage: $currentPage, resetToken: token)
                             .transition(.identity)

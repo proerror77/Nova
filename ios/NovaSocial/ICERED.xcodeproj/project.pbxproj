@@ -130,6 +130,7 @@
 		E703C7313E17C9B58A056F35 /* UserService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5E70390640C08938059D9CF /* UserService.swift */; };
 		EB0FE1C0C133317FDCEF80FE /* DateExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = E35DC62777A5472A407CC9A8 /* DateExtension.swift */; };
 		EDF27D6C1C9AE2719C3D6FE9 /* ForgotPasswordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11D90E19EB8E81DACA13AAB /* ForgotPasswordView.swift */; };
+		99BB4B49924BB48E28560035 /* EmailSentConfirmationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76D0E0843119B94AF1AA2AF5 /* EmailSentConfirmationView.swift */; };
 		EEBF79C69078D7BD5A9E44DB /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BA9A27686FBAD37E301363D /* ShareSheet.swift */; };
 		V15181L17YBU1LD5RC5ABCD1 /* VisibilityTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = V15181L17Y7R4CK3R5W1F7A1 /* VisibilityTracker.swift */; };
 		T4PP4BL3BTN5W1F7B8C9D0E1 /* TappableButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = T4PP4BL3BTN5W1F7B8C9D0F2 /* TappableButton.swift */; };
@@ -249,6 +250,7 @@
 		AEE69E5CD9B931C1CE6C4C48 /* ReportModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportModal.swift; sourceTree = "<group>"; };
 		AF7C3F1FF4F4ED65A51E66E2 /* WriteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WriteView.swift; sourceTree = "<group>"; };
 		B11D90E19EB8E81DACA13AAB /* ForgotPasswordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgotPasswordView.swift; sourceTree = "<group>"; };
+		76D0E0843119B94AF1AA2AF5 /* EmailSentConfirmationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailSentConfirmationView.swift; sourceTree = "<group>"; };
 		B140AB4127BB17B46A837D83 /* CarouselCardItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarouselCardItem.swift; sourceTree = "<group>"; };
 		B5F979ECFA4B86BB5CF751BB /* E2EEService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2EEService.swift; sourceTree = "<group>"; };
 		BD70ACA67B0E1699EDB5099B /* FormRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormRow.swift; sourceTree = "<group>"; };
@@ -978,6 +980,7 @@
 			children = (
 				36A22EF01EE6C23DBFD7BBE2 /* CreateAccountView.swift */,
 				B11D90E19EB8E81DACA13AAB /* ForgotPasswordView.swift */,
+				76D0E0843119B94AF1AA2AF5 /* EmailSentConfirmationView.swift */,
 				31C506816FBC6DA8C0428370 /* LoginView.swift */,
 				F413929E863DA61C476F44D6 /* PhoneRegistrationView.swift */,
 				36F012F2E478BE330431A7E0 /* ResetPasswordView.swift */,
@@ -1304,6 +1307,7 @@
 				D200816F952844B6819764EC /* FeedVideoPlayer.swift in Sources */,
 				2475D6EC167A437816556776 /* FeedViewModel.swift in Sources */,
 				EDF27D6C1C9AE2719C3D6FE9 /* ForgotPasswordView.swift in Sources */,
+				99BB4B49924BB48E28560035 /* EmailSentConfirmationView.swift in Sources */,
 				E554EFD2A94C43A8F074917B /* FormRow.swift in Sources */,
 				B758D4147BCE8D66A7CCF166 /* FriendsService.swift in Sources */,
 				41F6B4399375507FD4982497 /* GenderPickerView.swift in Sources */,
