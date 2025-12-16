@@ -299,8 +299,10 @@ pub async fn apple_native_sign_in(
 
     // TODO: Implement when AppleNativeSignIn gRPC method is added to identity-service proto
     // For now, return not implemented
-    Ok(HttpResponse::NotImplemented().json(ErrorResponse::with_message(
-        "Not implemented",
-        "Apple native sign-in is not yet implemented. Please use the web OAuth flow.",
-    )))
+    Ok(
+        HttpResponse::NotImplemented().json(ErrorResponse::with_message(
+            "Not implemented",
+            "Apple native sign-in is not yet implemented. Please use the web OAuth flow.",
+        )),
+    )
 }

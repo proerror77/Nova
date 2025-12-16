@@ -425,24 +425,23 @@ pub async fn enhance_post(
                     Ok(openai_response) => {
                         if let Some(choice) = openai_response.choices.first() {
                             // Parse the structured response from AI
-                            let enhance_response = match parse_enhance_response(
-                                &choice.message.content,
-                            ) {
-                                Ok(response) => response,
-                                Err(e) => {
-                                    warn!(
+                            let enhance_response =
+                                match parse_enhance_response(&choice.message.content) {
+                                    Ok(response) => response,
+                                    Err(e) => {
+                                        warn!(
                                         "Failed to parse enhancement response: {}, using fallback",
                                         e
                                     );
-                                    // Fallback: return raw content as description
-                                    AliceEnhanceResponse {
-                                        description: choice.message.content.clone(),
-                                        hashtags: vec![],
-                                        trending_topics: None,
-                                        alternative_descriptions: None,
+                                        // Fallback: return raw content as description
+                                        AliceEnhanceResponse {
+                                            description: choice.message.content.clone(),
+                                            hashtags: vec![],
+                                            trending_topics: None,
+                                            alternative_descriptions: None,
+                                        }
                                     }
-                                }
-                            };
+                                };
 
                             // Store in cache
                             {
