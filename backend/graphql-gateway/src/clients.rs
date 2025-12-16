@@ -182,16 +182,15 @@ impl ServiceClients {
                 cfg.make_endpoint(&cfg.search_service.url)
                     .map_err(|e| ServiceError::ConnectionError(e.to_string()))?,
             )),
-            // notification and graph services use default endpoints (not yet in GrpcConfig)
-            notification_channel: Arc::new(Self::create_channel(
-                &std::env::var("NOTIFICATION_SERVICE_URL").unwrap_or_else(|_| {
-                    "http://notification-service.nova-staging.svc.cluster.local:50051".to_string()
-                }),
+            // notification-service uses plain HTTP (no TLS) - now uses GrpcConfig
+            notification_channel: Arc::new(Self::create_channel_from_endpoint(
+                cfg.make_endpoint(&cfg.notification_service.url)
+                    .map_err(|e| ServiceError::ConnectionError(e.to_string()))?,
             )),
-            graph_channel: Arc::new(Self::create_channel(
-                &std::env::var("GRAPH_SERVICE_URL").unwrap_or_else(|_| {
-                    "http://graph-service.nova-staging.svc.cluster.local:9080".to_string()
-                }),
+            // graph-service uses mTLS like other services
+            graph_channel: Arc::new(Self::create_channel_from_endpoint(
+                cfg.make_endpoint(&cfg.graph_service.url)
+                    .map_err(|e| ServiceError::ConnectionError(e.to_string()))?,
             )),
             auth_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
             content_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
