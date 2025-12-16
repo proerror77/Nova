@@ -166,18 +166,6 @@ class FeedViewModel: ObservableObject {
 
             // Convert raw posts to FeedPost objects directly
             var allPosts = response.posts.map { FeedPost(from: $0) }
-            
-            #if DEBUG
-            // Debug: Log media URLs for each post
-            for post in allPosts {
-                if !post.mediaUrls.isEmpty {
-                    print("[FeedDebug] Post \(post.id.prefix(8)): mediaUrls=\(post.mediaUrls.count), thumbnailUrls=\(post.thumbnailUrls.count), displayUrls=\(post.displayMediaUrls.count)")
-                    for (i, url) in post.displayMediaUrls.enumerated() {
-                        print("[FeedDebug]   [\(i)] \(url.prefix(80))...")
-                    }
-                }
-            }
-            #endif
 
             // Fetch bookmark status for authenticated users
             if isAuthenticated, !allPosts.isEmpty {
