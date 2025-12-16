@@ -173,6 +173,7 @@ impl ContentMutation {
             content,
             media_urls: vec![],
             media_type: String::new(),
+            channel_ids: vec![],
         });
 
         let response = client
