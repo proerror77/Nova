@@ -26,9 +26,9 @@ spec:
         - name: GRPC_CONTENT_SERVICE_URL
           value: "https://content-service.nova-staging.svc.cluster.local:9080"
 
-        # Search service - HTTP only (no gRPC in staging)
+        # Search service - gRPC port 9086 (HTTP is 8086)
         - name: GRPC_SEARCH_SERVICE_URL
-          value: "http://search-service.nova-staging.svc.cluster.local:8086"
+          value: "http://search-service.nova-staging.svc.cluster.local:9086"
 
         # Media service - gRPC port 9082 with mTLS
         - name: GRPC_MEDIA_SERVICE_URL
@@ -52,7 +52,7 @@ spec:
         - name: GRPC_NOTIFICATION_SERVICE_URL
           value: "http://notification-service.nova-staging.svc.cluster.local:9093"
         - name: GRPC_GRAPH_SERVICE_URL
-          value: "http://graph-service.nova-staging.svc.cluster.local:9080"
+          value: "https://graph-service.nova-staging.svc.cluster.local:9080"
 
         # ============================================================
         # TLS/mTLS Configuration
