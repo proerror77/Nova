@@ -73,10 +73,9 @@ struct AliceView: View {
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
         }
-        // TODO: Re-enable when VoiceChatView is added to project
-        // .fullScreenCover(isPresented: $showVoiceChat) {
-        //     VoiceChatView(isPresented: $showVoiceChat)
-        // }
+        .fullScreenCover(isPresented: $showVoiceChat) {
+            VoiceChatView(isPresented: $showVoiceChat)
+        }
         .onChange(of: selectedImage) { oldValue, newValue in
             // 选择/拍摄照片后，自动跳转到NewPostView
             if newValue != nil {
