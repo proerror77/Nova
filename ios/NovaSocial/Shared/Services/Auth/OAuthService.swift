@@ -76,8 +76,22 @@ class OAuthService: NSObject {
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw OAuthError.startFlowFailed
+        }
+
+        #if DEBUG
+        print("[OAuth] Start flow response status: \(httpResponse.statusCode)")
+        if let responseString = String(data: data, encoding: .utf8) {
+            print("[OAuth] Start flow response: \(responseString)")
+        }
+        #endif
+
+        if httpResponse.statusCode != 200 {
+            // Try to parse error message
+            if let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
+                throw OAuthError.serverError(errorResponse.message ?? errorResponse.error ?? "Start flow failed")
+            }
             throw OAuthError.startFlowFailed
         }
 
@@ -121,36 +135,62 @@ class OAuthService: NSObject {
         return try JSONDecoder().decode(OAuthCallbackResponse.self, from: data)
     }
 
-    // MARK: - Google Sign-In (Web-based flow)
+    // MARK: - Google Sign-In (Web-based flow with backend proxy)
 
     /// Perform Google Sign-In using ASWebAuthenticationSession
+    /// Uses backend proxy flow: Google redirects to backend, backend exchanges tokens and redirects to iOS
     func signInWithGoogle() async throws -> OAuthCallbackResponse {
         // 1. Start flow to get authorization URL
         let startResponse = try await startOAuthFlow(provider: .google)
 
         // 2. Present web authentication session
+        // The callback will come from the backend with tokens (not from Google with code)
         let callbackURL = try await presentWebAuth(
             url: URL(string: startResponse.authorizationUrl)!,
             callbackScheme: "icered"
         )
 
-        // 3. Extract code and state from callback URL
-        guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
-              let code = components.queryItems?.first(where: { $0.name == "code" })?.value,
-              let returnedState = components.queryItems?.first(where: { $0.name == "state" })?.value else {
+        // 3. Parse callback URL - backend redirects with tokens directly
+        guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
             throw OAuthError.invalidCallback
         }
 
-        // Verify state matches
-        guard returnedState == startResponse.state else {
-            throw OAuthError.stateMismatch
+        // Check for error in callback
+        if let error = components.queryItems?.first(where: { $0.name == "error" })?.value {
+            let message = components.queryItems?.first(where: { $0.name == "message" })?.value ?? error
+            throw OAuthError.serverError(message)
         }
 
-        // 4. Exchange code for tokens
-        return try await completeOAuthFlow(
-            provider: .google,
-            code: code,
-            state: startResponse.state
+        // Extract tokens from callback URL (backend proxy flow)
+        guard let userId = components.queryItems?.first(where: { $0.name == "user_id" })?.value,
+              let token = components.queryItems?.first(where: { $0.name == "token" })?.value else {
+            throw OAuthError.invalidCallback
+        }
+
+        let refreshToken = components.queryItems?.first(where: { $0.name == "refresh_token" })?.value
+        let expiresInString = components.queryItems?.first(where: { $0.name == "expires_in" })?.value
+        let expiresIn = Int64(expiresInString ?? "3600") ?? 3600
+        let isNewUserString = components.queryItems?.first(where: { $0.name == "is_new_user" })?.value
+        let isNewUser = isNewUserString == "true"
+        let username = components.queryItems?.first(where: { $0.name == "username" })?.value ?? ""
+        let email = components.queryItems?.first(where: { $0.name == "email" })?.value
+
+        // Build response from callback parameters
+        let user = UserProfile(
+            id: userId,
+            username: username,
+            email: email,
+            displayName: nil,
+            avatarUrl: nil
+        )
+
+        return OAuthCallbackResponse(
+            userId: userId,
+            token: token,
+            refreshToken: refreshToken,
+            expiresIn: expiresIn,
+            isNewUser: isNewUser,
+            user: user
         )
     }
 
@@ -300,9 +340,18 @@ class OAuthService: NSObject {
 
     // MARK: - Helpers
 
+    /// Returns the redirect URI based on the OAuth flow type
+    /// For backend proxy flow (Google), we use the backend URL
+    /// For native flow (Apple), we use the custom URL scheme
     private func getRedirectUri(for provider: OAuthProvider) -> String {
-        // Use custom URL scheme for iOS callback
-        return "icered://oauth/\(provider.rawValue)/callback"
+        switch provider {
+        case .google:
+            // Backend proxy flow - Google redirects to backend, backend redirects to iOS
+            return "\(APIConfig.current.baseURL)/api/v2/auth/oauth/google/callback"
+        case .apple:
+            // Apple uses native flow, but for web-based fallback use custom scheme
+            return "icered://oauth/apple/callback"
+        }
     }
 }
 

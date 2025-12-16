@@ -67,6 +67,7 @@ futures-util = "0.3"
 base64 = "0.22"
 async-trait = "0.1"  # ✅ P0-5: For DataLoader trait implementations
 reqwest = { workspace = true }  # For HTTP API calls (Alice AI)
+urlencoding = "2.1"  # URL encoding for OAuth redirects
 
 # Rate limiting
 governor = { workspace = true }  # ✅ P0-3: Added for GraphQL Gateway rate limiting

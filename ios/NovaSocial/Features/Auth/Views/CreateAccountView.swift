@@ -37,6 +37,8 @@ struct CreateAccountView: View {
     @State private var showConfirmPassword = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var selectedAvatar: UIImage?
+    @State private var isGoogleLoading = false
+    @State private var isAppleLoading = false
 
     // MARK: - Focus State
     @FocusState private var focusedField: Field?
@@ -296,38 +298,61 @@ struct CreateAccountView: View {
                                             .stroke(.white, lineWidth: 0.20)
                                     )
                             }
+                            .disabled(isLoading || isGoogleLoading || isAppleLoading)
 
                             // Apple button
                             Button(action: {
-                                // TODO: Apple login
+                                Task {
+                                    await handleAppleSignIn()
+                                }
                             }) {
-                                Image(systemName: "apple.logo")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(.white)
-                                    .frame(width: Layout.socialButtonSize, height: Layout.socialButtonSize)
-                                    .cornerRadius(Layout.socialButtonCornerRadius)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: Layout.socialButtonCornerRadius)
-                                            .inset(by: 0.20)
-                                            .stroke(.white, lineWidth: 0.20)
-                                    )
+                                ZStack {
+                                    if isAppleLoading {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(0.8)
+                                    } else {
+                                        Image(systemName: "apple.logo")
+                                            .font(.system(size: 20))
+                                            .foregroundColor(.white)
+                                    }
+                                }
+                                .frame(width: Layout.socialButtonSize, height: Layout.socialButtonSize)
+                                .cornerRadius(Layout.socialButtonCornerRadius)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: Layout.socialButtonCornerRadius)
+                                        .inset(by: 0.20)
+                                        .stroke(.white, lineWidth: 0.20)
+                                )
                             }
+                            .disabled(isLoading || isGoogleLoading || isAppleLoading)
 
                             // Google button
                             Button(action: {
-                                // TODO: Google login
+                                Task {
+                                    await handleGoogleSignIn()
+                                }
                             }) {
-                                Text("G")
-                                    .font(.system(size: 20, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .frame(width: Layout.socialButtonSize, height: Layout.socialButtonSize)
-                                    .cornerRadius(Layout.socialButtonCornerRadius)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: Layout.socialButtonCornerRadius)
-                                            .inset(by: 0.20)
-                                            .stroke(.white, lineWidth: 0.20)
-                                    )
+                                ZStack {
+                                    if isGoogleLoading {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(0.8)
+                                    } else {
+                                        Text("G")
+                                            .font(.system(size: 20, weight: .bold))
+                                            .foregroundColor(.white)
+                                    }
+                                }
+                                .frame(width: Layout.socialButtonSize, height: Layout.socialButtonSize)
+                                .cornerRadius(Layout.socialButtonCornerRadius)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: Layout.socialButtonCornerRadius)
+                                        .inset(by: 0.20)
+                                        .stroke(.white, lineWidth: 0.20)
+                                )
                             }
+                            .disabled(isLoading || isGoogleLoading || isAppleLoading)
                         }
                         .offset(x: 0.50, y: 263)
 
@@ -449,6 +474,58 @@ struct CreateAccountView: View {
         }
 
         isLoading = false
+    }
+
+    // MARK: - Google Sign-In
+
+    private func handleGoogleSignIn() async {
+        isGoogleLoading = true
+        errorMessage = nil
+
+        do {
+            let _ = try await authManager.loginWithGoogle()
+            // Success - AuthenticationManager will update isAuthenticated
+            // Navigate to home
+            await MainActor.run {
+                currentPage = .home
+            }
+        } catch {
+            // Check if user cancelled
+            let errorDesc = error.localizedDescription.lowercased()
+            if errorDesc.contains("cancel") {
+                // User cancelled, no error message needed
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        }
+
+        isGoogleLoading = false
+    }
+
+    // MARK: - Apple Sign-In
+
+    private func handleAppleSignIn() async {
+        isAppleLoading = true
+        errorMessage = nil
+
+        do {
+            let _ = try await authManager.loginWithApple()
+            // Success - AuthenticationManager will update isAuthenticated
+            // Navigate to home
+            await MainActor.run {
+                currentPage = .home
+            }
+        } catch {
+            // Check if user cancelled
+            let errorDesc = error.localizedDescription.lowercased()
+            if errorDesc.contains("cancel") {
+                // User cancelled, no error message needed
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        }
+
+        isAppleLoading = false
     }
 
     // MARK: - Validation

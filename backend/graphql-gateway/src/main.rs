@@ -336,6 +336,35 @@ async fn main() -> std::io::Result<()> {
                 "/api/v2/auth/phone/login",
                 web::post().to(rest_api::phone_auth::phone_login),
             )
+            // ✅ OAuth Authentication API (Google, Apple)
+            .route(
+                "/api/v2/auth/oauth/google/start",
+                web::post().to(rest_api::oauth::google_oauth_start),
+            )
+            .route(
+                "/api/v2/auth/oauth/google/callback",
+                web::post().to(rest_api::oauth::google_oauth_callback_post),
+            )
+            .route(
+                "/api/v2/auth/oauth/google/callback",
+                web::get().to(rest_api::oauth::google_oauth_callback_get),
+            )
+            .route(
+                "/api/v2/auth/oauth/apple/start",
+                web::post().to(rest_api::oauth::apple_oauth_start),
+            )
+            .route(
+                "/api/v2/auth/oauth/apple/callback",
+                web::post().to(rest_api::oauth::apple_oauth_callback_post),
+            )
+            .route(
+                "/api/v2/auth/oauth/apple/callback",
+                web::get().to(rest_api::oauth::apple_oauth_callback_get),
+            )
+            .route(
+                "/api/v2/auth/oauth/apple/native",
+                web::post().to(rest_api::oauth::apple_native_sign_in),
+            )
             // ✅ Identity/Password Management API
             .route(
                 "/api/v2/identity/password/change",
