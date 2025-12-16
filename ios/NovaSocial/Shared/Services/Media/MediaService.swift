@@ -7,9 +7,20 @@ typealias UploadProgressCallback = (Double) -> Void
 
 /// Result of a batch upload operation
 struct BatchUploadResult {
-    let successfulUrls: [String]
+    /// Map of original index to uploaded URL (preserves order mapping)
+    let urlsByIndex: [Int: String]
     let failedIndices: [Int]
     let errors: [Int: Error]
+    
+    /// Convenience: URLs sorted by original index
+    var successfulUrls: [String] {
+        urlsByIndex.sorted { $0.key < $1.key }.map { $0.value }
+    }
+    
+    /// Get URL for a specific original index
+    func url(for index: Int) -> String? {
+        urlsByIndex[index]
+    }
 }
 
 // MARK: - Media Service
@@ -59,10 +70,10 @@ class MediaService {
         progressCallback: UploadProgressCallback? = nil
     ) async -> BatchUploadResult {
         guard !images.isEmpty else {
-            return BatchUploadResult(successfulUrls: [], failedIndices: [], errors: [:])
+            return BatchUploadResult(urlsByIndex: [:], failedIndices: [], errors: [:])
         }
         
-        var successfulUrls: [String?] = Array(repeating: nil, count: images.count)
+        var urlsByIndex: [Int: String] = [:]
         var failedIndices: [Int] = []
         var errors: [Int: Error] = [:]
         var completedCount = 0
@@ -108,7 +119,7 @@ class MediaService {
                 
                 switch result {
                 case .success(let url):
-                    successfulUrls[index] = url
+                    urlsByIndex[index] = url
                 case .failure(let error):
                     failedIndices.append(index)
                     errors[index] = error
@@ -128,7 +139,7 @@ class MediaService {
         }
         
         return BatchUploadResult(
-            successfulUrls: successfulUrls.compactMap { $0 },
+            urlsByIndex: urlsByIndex,
             failedIndices: failedIndices.sorted(),
             errors: errors
         )

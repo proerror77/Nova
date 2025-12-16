@@ -1170,18 +1170,14 @@ struct NewPostView: View {
                     }
                 )
                 
-                // Process results maintaining order
+                // Process results maintaining order using urlsByIndex mapping
                 for (arrayIndex, imageInfo) in regularImages.enumerated() {
-                    if arrayIndex < batchResult.successfulUrls.count && !batchResult.failedIndices.contains(arrayIndex) {
-                        // Find the URL for this index
-                        let urlIndex = (0..<arrayIndex).filter { !batchResult.failedIndices.contains($0) }.count
-                        if urlIndex < batchResult.successfulUrls.count {
-                            uploadResults.append((index: imageInfo.index, urls: [batchResult.successfulUrls[urlIndex]]))
-                        }
+                    if let url = batchResult.url(for: arrayIndex) {
+                        uploadResults.append((index: imageInfo.index, urls: [url]))
                     }
                 }
                 
-                completedItems += regularImages.count - batchResult.failedIndices.count
+                completedItems += batchResult.urlsByIndex.count
                 
                 // Check for failures
                 if !batchResult.failedIndices.isEmpty {
