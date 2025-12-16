@@ -43,6 +43,8 @@ struct ProfileFollowingView: View {
     @State private var isLoadingFollowers = false
     @State private var followingHasMore = false
     @State private var followersHasMore = false
+    @State private var followingError: String? = nil
+    @State private var followersError: String? = nil
 
     // MARK: - Services
     private let graphService = GraphService()
@@ -103,6 +105,9 @@ struct ProfileFollowingView: View {
                     followersContent
                 }
             }
+            .refreshable {
+                await loadInitialData()
+            }
 
             Spacer()
         }
@@ -110,6 +115,16 @@ struct ProfileFollowingView: View {
         .task {
             await loadInitialData()
         }
+    }
+
+    // MARK: - 用戶顯示名稱
+    private var displayUsername: String {
+        if !username.isEmpty && username != "User" {
+            return username
+        }
+        return authManager.currentUser?.displayName
+            ?? authManager.currentUser?.username
+            ?? "User"
     }
 
     // MARK: - 加载初始数据
@@ -122,16 +137,24 @@ struct ProfileFollowingView: View {
 
     // MARK: - 加载 Following 列表（当前用户关注的人）
     private func loadFollowing() async {
-        guard let currentUserId = authManager.currentUser?.id else { return }
+        guard let currentUserId = authManager.currentUser?.id else {
+            await MainActor.run {
+                followingError = "請先登入"
+            }
+            return
+        }
 
-        isLoadingFollowing = true
+        await MainActor.run {
+            isLoadingFollowing = true
+            followingError = nil
+        }
 
         do {
             // 1. 获取当前用户关注的用户 ID 列表
             let result = try await graphService.getFollowing(userId: currentUserId, limit: 50, offset: 0)
             followingHasMore = result.hasMore
 
-            // 2. 批量获取用户详细信息
+            // 2. 批量获取用户详细信息（並行處理提升速度）
             let users = await fetchUserProfiles(userIds: result.userIds)
 
             // 3. 转换为 FollowUser 模型
@@ -160,22 +183,31 @@ struct ProfileFollowingView: View {
             #endif
             await MainActor.run {
                 isLoadingFollowing = false
+                followingError = "載入失敗，請下拉重試"
             }
         }
     }
 
     // MARK: - 加载 Followers 列表（关注当前用户的人）
     private func loadFollowers() async {
-        guard let currentUserId = authManager.currentUser?.id else { return }
+        guard let currentUserId = authManager.currentUser?.id else {
+            await MainActor.run {
+                followersError = "請先登入"
+            }
+            return
+        }
 
-        isLoadingFollowers = true
+        await MainActor.run {
+            isLoadingFollowers = true
+            followersError = nil
+        }
 
         do {
             // 1. 获取关注当前用户的用户 ID 列表
             let result = try await graphService.getFollowers(userId: currentUserId, limit: 50, offset: 0)
             followersHasMore = result.hasMore
 
-            // 2. 批量获取用户详细信息
+            // 2. 批量获取用户详细信息（並行處理提升速度）
             let users = await fetchUserProfiles(userIds: result.userIds)
 
             // 3. 检查当前用户是否关注了这些用户
@@ -211,6 +243,7 @@ struct ProfileFollowingView: View {
             #endif
             await MainActor.run {
                 isLoadingFollowers = false
+                followersError = "載入失敗，請下拉重試"
             }
         }
     }
@@ -287,7 +320,7 @@ struct ProfileFollowingView: View {
 
             Spacer()
 
-            Text(username)
+            Text(displayUsername)
                 .font(.system(size: 24, weight: .medium))
                 .foregroundColor(.black)
 
@@ -365,8 +398,38 @@ struct ProfileFollowingView: View {
     private var followingContent: some View {
         LazyVStack(spacing: 0) {
             if isLoadingFollowing {
-                ProgressView()
-                    .padding(.top, 40)
+                VStack(spacing: 12) {
+                    ProgressView()
+                    Text("載入中...")
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 40)
+            } else if let error = followingError {
+                // 錯誤狀態
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 48))
+                        .foregroundColor(.orange)
+                    Text(error)
+                        .font(.system(size: 16))
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                    Button(action: {
+                        Task { await loadFollowing() }
+                    }) {
+                        Text("重試")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 8)
+                            .background(Color(red: 0.87, green: 0.11, blue: 0.26))
+                            .cornerRadius(20)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 60)
             } else if filteredFollowing.isEmpty {
                 // 空状态
                 VStack(spacing: 12) {
@@ -404,8 +467,38 @@ struct ProfileFollowingView: View {
     private var followersContent: some View {
         LazyVStack(spacing: 0) {
             if isLoadingFollowers {
-                ProgressView()
-                    .padding(.top, 40)
+                VStack(spacing: 12) {
+                    ProgressView()
+                    Text("載入中...")
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 40)
+            } else if let error = followersError {
+                // 錯誤狀態
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 48))
+                        .foregroundColor(.orange)
+                    Text(error)
+                        .font(.system(size: 16))
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                    Button(action: {
+                        Task { await loadFollowers() }
+                    }) {
+                        Text("重試")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 8)
+                            .background(Color(red: 0.87, green: 0.11, blue: 0.26))
+                            .cornerRadius(20)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 60)
             } else if filteredFollowers.isEmpty {
                 // 空状态
                 VStack(spacing: 12) {
