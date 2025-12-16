@@ -1,11 +1,12 @@
 # Staging ingress for Matrix Synapse (using GCE Ingress)
+# Also serves well-known endpoint for staging.gcp.icered.com (shared IP to save quota)
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: matrix-synapse-ingress
   annotations:
     kubernetes.io/ingress.class: gce
-    networking.gke.io/managed-certificates: synapse-staging-cert
+    networking.gke.io/managed-certificates: synapse-staging-cert,nova-staging-well-known-cert
 spec:
   ingressClassName: gce
   rules:
@@ -19,6 +20,16 @@ spec:
                 name: matrix-synapse
                 port:
                   number: 8008
+    - host: staging.gcp.icered.com
+      http:
+        paths:
+          - path: /.well-known/matrix
+            pathType: Prefix
+            backend:
+              service:
+                name: matrix-well-known
+                port:
+                  number: 80
 ---
 # GKE Managed Certificate for Synapse
 apiVersion: networking.gke.io/v1
@@ -28,3 +39,12 @@ metadata:
 spec:
   domains:
     - matrix.staging.gcp.icered.com
+---
+# GKE Managed Certificate for Well-Known (staging.gcp.icered.com)
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: nova-staging-well-known-cert
+spec:
+  domains:
+    - staging.gcp.icered.com
