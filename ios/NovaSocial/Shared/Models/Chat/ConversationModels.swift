@@ -288,14 +288,20 @@ enum MessageStatus: String, Codable, Sendable {
 // MARK: - API Request/Response Models
 
 /// Request to create a new conversation
-/// Maps to API: POST /api/v1/conversations
+/// Maps to API: POST /api/v2/chat/conversations
 struct CreateConversationRequest: Codable, Sendable {
-    let type: ConversationType
+    let conversationType: Int  // 0 = direct, 1 = group
     let participantIds: [String]  // User IDs to add
     let name: String?  // Required for groups, null for direct
     
+    init(type: ConversationType, participantIds: [String], name: String?) {
+        self.conversationType = type == .direct ? 0 : 1
+        self.participantIds = participantIds
+        self.name = name
+    }
+    
     enum CodingKeys: String, CodingKey {
-        case type
+        case conversationType = "conversation_type"
         case participantIds = "participant_ids"
         case name
     }
