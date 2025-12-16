@@ -8,6 +8,7 @@ struct CarouselCardItem: View {
     let company: String
     let votes: String
     let imageAssetName: String
+    var imageUrl: String? = nil  // Optional URL for remote images
 
     var body: some View {
         VStack(spacing: 18) {

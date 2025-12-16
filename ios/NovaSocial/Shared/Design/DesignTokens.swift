@@ -167,6 +167,10 @@ struct DesignTokens {
     static let indicatorActive = Color(red: 0.82, green: 0.11, blue: 0.26)
     static let indicatorInactive = Color(red: 0.73, green: 0.73, blue: 0.73)
 
+    /// Icon Colors
+    static let iconActive = Color(red: 0.82, green: 0.11, blue: 0.26)
+    static let iconInactive = Color(red: 0.73, green: 0.73, blue: 0.73)
+
     /// Chat Colors
     static let chatBubbleOther = Color.dynamic(
         light: UIColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1.0),

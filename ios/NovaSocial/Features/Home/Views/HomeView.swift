@@ -50,7 +50,7 @@ struct HomeView: View {
                 NewPostView(
                     showNewPost: $showNewPost,
                     initialMediaItems: selectedMediaItems,
-                    initialCameraImage: cameraImage,
+                    initialImage: cameraImage,
                     onPostSuccess: { newPost in
                         // Post 成功后直接添加到 Feed 顶部（优化版本，不需要重新加载整个feed）
                         feedViewModel.addNewPost(newPost)

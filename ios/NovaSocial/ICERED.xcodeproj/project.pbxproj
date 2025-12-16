@@ -113,7 +113,6 @@
 		C0480BCF2E42D001DE512CB6 /* PushNotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21DD82679F813BE27BFE6092 /* PushNotificationManager.swift */; };
 		C0F39A0A6B4D0B1E03D02017 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = "TEMP_B22EE1DB-BC02-4624-9638-B2FED88AC8E5" /* PrivacyInfo.xcprivacy */; };
 		C14F2A4B72CAD50242535A72 /* CommunicationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FC3601C5DCD3158E371A0D5 /* CommunicationService.swift */; };
-		C2F8125A11FCF6539808A26C /* ProfilePostCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C740D00C1DD6CF49E4F0A37 /* ProfilePostCard.swift */; };
 		C5BCFFB06545187FF2579AA3 /* DevicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20DAD625E4C0EF4A01010AE7 /* DevicesView.swift */; };
 		C6D562180DEC83593F48A910 /* NameSelectorModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = E26FCF7308D047749F56999C /* NameSelectorModal.swift */; };
 		C7656F0B6780081D00E6AF0F /* E2EEService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5F979ECFA4B86BB5CF751BB /* E2EEService.swift */; };
@@ -144,6 +143,17 @@
 		F573A16EBB5F33CFDC196FC0 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 391055A01BC7ADD0944EE229 /* README.md */; };
 		F87C58656F5FD03A8C3345EB /* NotificationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97F7FCDB6FA0CE2782E24A74 /* NotificationViewModel.swift */; };
 		FE5A7851F73E4DAE93743284 /* MyChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7716AC8A2A67A629B5AA6D /* MyChannelsView.swift */; };
+		B230BF96701D200CF0CA3FED /* UserProfileActionButtons.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26F7627AF4EA2B954CF68B19 /* UserProfileActionButtons.swift */; };
+		006ED84FD31451075B3DDD9C /* UserProfileContentSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 538C1CA36C8FE15783B21ED2 /* UserProfileContentSection.swift */; };
+		65A710227698B32664A63221 /* UserProfileFollowersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36FEF07EA46CE46872F0F79 /* UserProfileFollowersView.swift */; };
+		FA98E2E43250807E8BB1CAC7 /* UserProfileFollowingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2CF0215556259C7D0B94F5C /* UserProfileFollowingView.swift */; };
+		861D2B39A55F4C153634A560 /* UserProfilePostCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78069DB61BEDB6F710C21D51 /* UserProfilePostCard.swift */; };
+		658C76306EBECFDD71A2B9B5 /* UserProfileTopNavigationBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79F07F0392B988D690457606 /* UserProfileTopNavigationBar.swift */; };
+		0A2E3A76675CF8E03D383CD0 /* UserProfileUserInfoSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5617DE5AB6BB8F66AD58494F /* UserProfileUserInfoSection.swift */; };
+		F124E830129428C11F739B00 /* ProfileFollowersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E09F7BF4F12CFF4B4FD265A5 /* ProfileFollowersView.swift */; };
+		9C820A93FFCE9B813524E9E3 /* ProfileFollowingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAC1AD6AB5FE33D066601A22 /* ProfileFollowingView.swift */; };
+		5EFA795DE41B6BBC958CB0DA /* ProfilePostCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76D6F3BF6565308BF902ABC6 /* ProfilePostCard.swift */; };
+		EC516B87CB7AEC823B0452E5 /* AliasNameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FC5E19D89B8FA60350293E0 /* AliasNameView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -192,7 +202,6 @@
 		3BF00417178D0B6283A9E6F3 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		3C3AD3B56FD470BDD566CA47 /* DeviceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceService.swift; sourceTree = "<group>"; };
 		3C4BE13F136F4EEE21D1B806 /* APIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIConfig.swift; sourceTree = "<group>"; };
-		3C740D00C1DD6CF49E4F0A37 /* ProfilePostCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilePostCard.swift; sourceTree = "<group>"; };
 		400B32013EC2FA3DDF1BD59E /* NewChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewChatView.swift; sourceTree = "<group>"; };
 		433BCB5B24D6C3D1565C289F /* SearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchService.swift; sourceTree = "<group>"; };
 		469C59BDF0390BCAF3E4BA32 /* GenderPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenderPickerView.swift; sourceTree = "<group>"; };
@@ -288,6 +297,17 @@
 		"TEMP_B22EE1DB-BC02-4624-9638-B2FED88AC8E5" /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		"TEMP_CF428DCC-07DB-4266-A59F-08A7ED470EDF" /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
 		"TEMP_E63568BF-A7D7-4C7A-89DF-4EFED8C18428" /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		26F7627AF4EA2B954CF68B19 /* UserProfileActionButtons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileActionButtons.swift; sourceTree = "<group>"; };
+		538C1CA36C8FE15783B21ED2 /* UserProfileContentSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileContentSection.swift; sourceTree = "<group>"; };
+		B36FEF07EA46CE46872F0F79 /* UserProfileFollowersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileFollowersView.swift; sourceTree = "<group>"; };
+		D2CF0215556259C7D0B94F5C /* UserProfileFollowingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileFollowingView.swift; sourceTree = "<group>"; };
+		78069DB61BEDB6F710C21D51 /* UserProfilePostCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfilePostCard.swift; sourceTree = "<group>"; };
+		79F07F0392B988D690457606 /* UserProfileTopNavigationBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileTopNavigationBar.swift; sourceTree = "<group>"; };
+		5617DE5AB6BB8F66AD58494F /* UserProfileUserInfoSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileUserInfoSection.swift; sourceTree = "<group>"; };
+		E09F7BF4F12CFF4B4FD265A5 /* ProfileFollowersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileFollowersView.swift; sourceTree = "<group>"; };
+		EAC1AD6AB5FE33D066601A22 /* ProfileFollowingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileFollowingView.swift; sourceTree = "<group>"; };
+		76D6F3BF6565308BF902ABC6 /* ProfilePostCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilePostCard.swift; sourceTree = "<group>"; };
+		1FC5E19D89B8FA60350293E0 /* AliasNameView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AliasNameView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -682,6 +702,8 @@
 		732652E34C03C2F08EF41646 /* Profile */ = {
 			isa = PBXGroup;
 			children = (
+				2D1F1ED7B209ABA691198CA5 /* Components（Profile） */,
+				E2400BC9D5B5353C51719621 /* Components（UserProfile） */,
 				AC22F42911AB53124FB16480 /* Views */,
 			);
 			path = Profile;
@@ -833,7 +855,6 @@
 			children = (
 				5762CD35798707845E339714 /* AccountSwitcherSheet.swift */,
 				E5F063A093BCAB41B793415F /* ProfileData.swift */,
-				3C740D00C1DD6CF49E4F0A37 /* ProfilePostCard.swift */,
 				825B4A1F409795796A47A504 /* ProfileTopNavigationBar.swift */,
 				49E80DEE083E86CD070766CC /* ProfileUserInfoSection.swift */,
 				CE44BE89D96953ABCAA2E34E /* ProfileView.swift */,
@@ -856,6 +877,7 @@
 			isa = PBXGroup;
 			children = (
 				20DAD625E4C0EF4A01010AE7 /* DevicesView.swift */,
+				1FC5E19D89B8FA60350293E0 /* AliasNameView.swift */,
 				7382F96F698E0CDC89B99912 /* GetVerifiedView.swift */,
 				75ADA8314EFFF10E30AEE448 /* InviteFriendsView.swift */,
 				9C7716AC8A2A67A629B5AA6D /* MyChannelsView.swift */,
@@ -1099,6 +1121,30 @@
 			path = NovaSocial;
 			sourceTree = "<group>";
 		};
+		E2400BC9D5B5353C51719621 /* Components（UserProfile） */ = {
+			isa = PBXGroup;
+			children = (
+				26F7627AF4EA2B954CF68B19 /* UserProfileActionButtons.swift */,
+				538C1CA36C8FE15783B21ED2 /* UserProfileContentSection.swift */,
+				B36FEF07EA46CE46872F0F79 /* UserProfileFollowersView.swift */,
+				D2CF0215556259C7D0B94F5C /* UserProfileFollowingView.swift */,
+				78069DB61BEDB6F710C21D51 /* UserProfilePostCard.swift */,
+				79F07F0392B988D690457606 /* UserProfileTopNavigationBar.swift */,
+				5617DE5AB6BB8F66AD58494F /* UserProfileUserInfoSection.swift */,
+			);
+			path = "Components（UserProfile）";
+			sourceTree = "<group>";
+		};
+		2D1F1ED7B209ABA691198CA5 /* Components（Profile） */ = {
+			isa = PBXGroup;
+			children = (
+				E09F7BF4F12CFF4B4FD265A5 /* ProfileFollowersView.swift */,
+				EAC1AD6AB5FE33D066601A22 /* ProfileFollowingView.swift */,
+				76D6F3BF6565308BF902ABC6 /* ProfilePostCard.swift */,
+			);
+			path = "Components（Profile）";
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -1204,6 +1250,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EC516B87CB7AEC823B0452E5 /* AliasNameView.swift in Sources */,
+				B230BF96701D200CF0CA3FED /* UserProfileActionButtons.swift in Sources */,
+				006ED84FD31451075B3DDD9C /* UserProfileContentSection.swift in Sources */,
+				65A710227698B32664A63221 /* UserProfileFollowersView.swift in Sources */,
+				FA98E2E43250807E8BB1CAC7 /* UserProfileFollowingView.swift in Sources */,
+				861D2B39A55F4C153634A560 /* UserProfilePostCard.swift in Sources */,
+				658C76306EBECFDD71A2B9B5 /* UserProfileTopNavigationBar.swift in Sources */,
+				0A2E3A76675CF8E03D383CD0 /* UserProfileUserInfoSection.swift in Sources */,
+				F124E830129428C11F739B00 /* ProfileFollowersView.swift in Sources */,
+				9C820A93FFCE9B813524E9E3 /* ProfileFollowingView.swift in Sources */,
+				5EFA795DE41B6BBC958CB0DA /* ProfilePostCard.swift in Sources */,
 				22E0C78030CDE594A3351101 /* APIClient.swift in Sources */,
 				5D3CEE9D7C0E99FCE63E6D0D /* APIConfig.swift in Sources */,
 				ACF209A76A3C5E01292691FB /* APIError.swift in Sources */,
@@ -1289,7 +1346,6 @@
 				124E367C3D6397C95405BDAF /* PostAsSelectionPanel.swift in Sources */,
 				9389F156C98CF196FEB04813 /* PostDetailView.swift in Sources */,
 				9618F12F74A70D9629855613 /* ProfileData.swift in Sources */,
-				C2F8125A11FCF6539808A26C /* ProfilePostCard.swift in Sources */,
 				5C3150E93366A7CA710BAA24 /* ProfileSettingView.swift in Sources */,
 				42E9CA3EF110B66F38467879 /* ProfileSettingViewModel.swift in Sources */,
 				A912922B6BBA2DF988E0EB03 /* ProfileTopNavigationBar.swift in Sources */,

@@ -52,7 +52,7 @@ struct AliceView: View {
         ZStack {
             // 条件渲染：根据状态切换视图
             if showNewPost {
-                NewPostView(showNewPost: $showNewPost, initialCameraImage: selectedImage)
+                NewPostView(showNewPost: $showNewPost, initialImage: selectedImage)
                     .transition(.identity)
             } else if showGenerateImage {
                 GenerateImage01View(showGenerateImage: $showGenerateImage)

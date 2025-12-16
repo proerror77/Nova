@@ -1090,10 +1090,10 @@ struct ChatView: View {
                 guard !self.messages.contains(where: { $0.id == matrixMessage.id }) else { return }
 
                 // 轉換 Matrix 訊息為 Nova 訊息格式
-                guard let novaMessage = MatrixBridgeService.shared.convertToNovaMessage(
+                let novaMessage = MatrixBridgeService.shared.convertToNovaMessage(
                     matrixMessage,
                     conversationId: conversationId
-                ) else { return }
+                )
 
                 // 添加到 UI
                 self.messages.append(ChatMessage(from: novaMessage, currentUserId: self.currentUserId))

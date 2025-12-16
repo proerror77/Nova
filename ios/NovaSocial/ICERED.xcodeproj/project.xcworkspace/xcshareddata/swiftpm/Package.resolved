@@ -1,5 +1,5 @@
 {
-  "originHash" : "0fba6882ef5669326fd3765a5e0291e0cbe9a500b39322a3c91f17d93ab0881e",
+  "originHash" : "869df6e8e97c64309ac929d83a81b2c8b2090f0d6c5490575147fe0d05aaf6f2",
   "pins" : [
     {
       "identity" : "agorainfra_ios",
@@ -17,15 +17,6 @@
       "state" : {
         "revision" : "26ecb3247b017cd17412b5e0922a049a0ac98815",
         "version" : "4.5.0"
-      }
-    },
-    {
-      "identity" : "matrix-rust-components-swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/matrix-org/matrix-rust-components-swift",
-      "state" : {
-        "revision" : "081c8b433e7df1c4690fb5d2a3fa505a2f21fd97",
-        "version" : "25.11.11"
       }
     }
   ],

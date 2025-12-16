@@ -1,6 +1,25 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Feed Logger
+enum FeedLogger {
+    static func debug(_ message: String) {
+        #if DEBUG
+        print("[Feed] \(message)")
+        #endif
+    }
+
+    static func error(_ message: String, error: Error? = nil) {
+        #if DEBUG
+        if let error = error {
+            print("[Feed] ERROR: \(message) - \(error)")
+        } else {
+            print("[Feed] ERROR: \(message)")
+        }
+        #endif
+    }
+}
+
 // MARK: - Feed ViewModel
 
 @MainActor
@@ -556,7 +575,6 @@ class FeedViewModel: ObservableObject {
 
     // MARK: - Private Methods
 
-<<<<<<< HEAD
     /// Process posts: enrich with bookmark status and deduplicate
     private func processAndDeduplicatePosts(_ posts: [FeedPost]) async -> [FeedPost] {
         let enrichedPosts = await enrichWithBookmarkStatus(posts)

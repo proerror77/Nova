@@ -169,14 +169,6 @@ struct NotificationView: View {
     }
 }
 
-// MARK: - 按钮类型枚举
-enum NotificationButtonType {
-    case message
-    case follow
-    case followBack
-    case none
-}
-
 // MARK: - 通知列表项组件
 struct NotificationListItem: View {
     let userName: String

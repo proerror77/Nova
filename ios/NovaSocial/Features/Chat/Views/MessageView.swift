@@ -334,7 +334,7 @@ struct MessageView: View {
                 )
                 .transition(.identity)
             } else if showNewPost {
-                NewPostView(showNewPost: $showNewPost, initialCameraImage: selectedImage)
+                NewPostView(showNewPost: $showNewPost, initialImage: selectedImage)
                     .transition(.identity)
             } else if showGenerateImage {
                 GenerateImage01View(showGenerateImage: $showGenerateImage)

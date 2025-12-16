@@ -60,7 +60,7 @@ struct ProfileView: View {
             if showNewPost {
                 NewPostView(
                     showNewPost: $showNewPost,
-                    initialCameraImage: selectedImage,
+                    initialImage: selectedImage,
                     onPostSuccess: { post in
                         // 实时同步新帖子到 UserPostsManager
                         userPostsManager.addNewPost(post)
@@ -273,7 +273,7 @@ struct ProfileView: View {
                     isVerified: displayUser?.safeIsVerified ?? false,
                     followingCount: displayUser?.safeFollowingCount ?? 0,
                     followersCount: displayUser?.safeFollowerCount ?? 0,
-                    postsCount: userPostsManager.postCount,
+                    likesCount: userPostsManager.postCount,
                     layout: userInfoLayout,
                     onFollowingTapped: {
                         showFollowing = true  // 点击 Following 跳转

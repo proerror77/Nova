@@ -3,6 +3,7 @@ import PhotosUI
 
 struct NewPostView: View {
     @Binding var showNewPost: Bool
+    var initialMediaItems: [PostMediaItem]? = nil  // Live Photo items from PhotosPicker
     var initialImage: UIImage? = nil  // 从PhotoOptionsModal传入的图片
     var onPostSuccess: ((Post) -> Void)? = nil  // 成功发布后的回调，传递创建的Post对象
     @EnvironmentObject private var authManager: AuthenticationManager
