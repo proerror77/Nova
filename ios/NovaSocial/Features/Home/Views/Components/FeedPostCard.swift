@@ -71,7 +71,7 @@ struct FeedPostCard: View {
             if !post.displayMediaUrls.isEmpty {
                 VStack(spacing: 8) {
                     TabView(selection: $currentImageIndex) {
-                        ForEach(Array(post.displayMediaUrls.enumerated()), id: \.element) { index, imageUrl in
+                        ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
                             CachedAsyncImage(
                                 url: URL(string: imageUrl),
                                 targetSize: CGSize(width: 750, height: 1000)  // 2x for Retina
