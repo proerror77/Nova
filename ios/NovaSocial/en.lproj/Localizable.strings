@@ -117,6 +117,17 @@
 "Invalid_Reset_Token" = "This password reset link is invalid or has expired. Please request a new one.";
 "Password_Too_Short" = "Password must be at least 8 characters";
 
+// MARK: - Email Sent Confirmation
+"Email_Sent_Title" = "Check Your Email";
+"Email_Sent_Description" = "We've sent a password reset link to:";
+"Check_Email_Instruction_1" = "Open your email inbox";
+"Check_Email_Instruction_2" = "Click the reset link in the email";
+"Check_Email_Instruction_3" = "Create your new password";
+"Open_Email_App" = "Open Email App";
+"Resend_Email" = "Didn't receive the email? Resend";
+"Email_Resent_Title" = "Email Sent";
+"Email_Resent_Message" = "We've sent another password reset email. Please check your inbox.";
+
 // MARK: - Group Chat
 "group_chat.title" = "New Group Chat";
 "group_chat.create" = "Create";

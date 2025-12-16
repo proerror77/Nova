@@ -90,13 +90,50 @@ impl EmailService {
     /// * `recipient` - Email address
     /// * `token` - Password reset token (opaque string)
     pub async fn send_password_reset_email(&self, recipient: &str, token: &str) -> Result<()> {
-        let link = self.build_password_reset_link(token);
+        let web_link = self.build_password_reset_link(token);
+        let ios_link = format!("nova://reset-password?token={}", token);
         let subject = "Nova 密碼重設通知";
-        let body = format!(
-            "我們收到你的密碼重設申請。\n\n請點擊以下連結完成密碼重設：\n{}\n\n若非本人操作，請立即忽略此郵件或聯絡客服協助。",
-            link
+
+        // HTML email with both web and iOS deep links
+        let html_body = format!(
+            r#"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px; color: #333;">
+    <h2>密碼重設申請</h2>
+    <p>我們收到你的密碼重設申請。</p>
+    <p>請點擊以下按鈕完成密碼重設：</p>
+    <p style="margin: 30px 0;">
+        <a href="{ios_link}" style="background-color: #000; color: #fff; padding: 14px 28px; text-decoration: none; border-radius: 25px; display: inline-block;">在 App 中重設密碼</a>
+    </p>
+    <p style="color: #666; font-size: 14px;">
+        如果按鈕無法使用，請複製以下連結到瀏覽器：<br>
+        <a href="{web_link}" style="color: #007AFF;">{web_link}</a>
+    </p>
+    <p style="color: #999; font-size: 12px; margin-top: 30px;">
+        此連結將在 1 小時後失效。<br>
+        若非本人操作，請立即忽略此郵件或聯絡客服協助。
+    </p>
+</body>
+</html>"#,
+            ios_link = ios_link,
+            web_link = web_link
         );
-        self.send_mail(recipient, subject, &body).await
+
+        let text_body = format!(
+            "我們收到你的密碼重設申請。\n\n\
+            請點擊以下連結完成密碼重設：\n\
+            iOS App: {}\n\
+            網頁版: {}\n\n\
+            此連結將在 1 小時後失效。\n\
+            若非本人操作，請立即忽略此郵件或聯絡客服協助。",
+            ios_link, web_link
+        );
+
+        self.send_html_email(recipient, subject, &html_body, &text_body).await
     }
 
     /// Generate random backup verification code
