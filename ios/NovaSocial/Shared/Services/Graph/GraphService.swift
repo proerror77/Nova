@@ -10,44 +10,42 @@ class GraphService {
     // MARK: - Get Relationships
 
     func getFollowers(userId: String, limit: Int = 20, offset: Int = 0) async throws -> (userIds: [String], totalCount: Int, hasMore: Bool) {
-        struct Request: Codable {
-            let user_id: String
-            let limit: Int
-            let offset: Int
-        }
-
         struct Response: Codable {
             let user_ids: [String]
             let total_count: Int
             let has_more: Bool
         }
 
-        let request = Request(user_id: userId, limit: limit, offset: offset)
-        let response: Response = try await client.request(
-            endpoint: APIConfig.Graph.followers,
-            body: request
+        // Backend expects GET request with query parameters
+        // Use /api/v2/graph/followers/{user_id} for specific user
+        let endpoint = "\(APIConfig.Graph.followers)/\(userId)"
+        let response: Response = try await client.get(
+            endpoint: endpoint,
+            queryParams: [
+                "limit": String(limit),
+                "offset": String(offset)
+            ]
         )
 
         return (response.user_ids, response.total_count, response.has_more)
     }
 
     func getFollowing(userId: String, limit: Int = 20, offset: Int = 0) async throws -> (userIds: [String], totalCount: Int, hasMore: Bool) {
-        struct Request: Codable {
-            let user_id: String
-            let limit: Int
-            let offset: Int
-        }
-
         struct Response: Codable {
             let user_ids: [String]
             let total_count: Int
             let has_more: Bool
         }
 
-        let request = Request(user_id: userId, limit: limit, offset: offset)
-        let response: Response = try await client.request(
-            endpoint: APIConfig.Graph.following,
-            body: request
+        // Backend expects GET request with query parameters
+        // Use /api/v2/graph/following/{user_id} for specific user
+        let endpoint = "\(APIConfig.Graph.following)/\(userId)"
+        let response: Response = try await client.get(
+            endpoint: endpoint,
+            queryParams: [
+                "limit": String(limit),
+                "offset": String(offset)
+            ]
         )
 
         return (response.user_ids, response.total_count, response.has_more)
