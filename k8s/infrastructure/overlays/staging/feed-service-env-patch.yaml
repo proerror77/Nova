@@ -37,15 +37,25 @@ spec:
         # gRPC 服务 URL 配置 (mTLS)
         # ============================================================
         - name: GRPC_IDENTITY_SERVICE_URL
-          value: "http://identity-service:50051"
+          value: "https://identity-service.nova-staging.svc.cluster.local:50051"
         - name: GRPC_SOCIAL_SERVICE_URL
           value: "https://social-service.nova-staging.svc.cluster.local:50052"
         - name: GRPC_RANKING_SERVICE_URL
-          value: "http://ranking-service:9011"
+          value: "https://ranking-service.nova-staging.svc.cluster.local:9011"
         - name: GRPC_CONTENT_SERVICE_URL
           value: "https://content-service.nova-staging.svc.cluster.local:9080"
         - name: GRPC_GRAPH_SERVICE_URL
           value: "https://graph-service.nova-staging.svc.cluster.local:9080"
+        - name: GRPC_FEED_SERVICE_URL
+          value: "https://feed-service.nova-staging.svc.cluster.local:9084"
+        - name: GRPC_SEARCH_SERVICE_URL
+          value: "http://search-service.nova-staging.svc.cluster.local:9086"
+        - name: GRPC_MEDIA_SERVICE_URL
+          value: "https://media-service.nova-staging.svc.cluster.local:9082"
+        - name: GRPC_TRUST_SAFETY_SERVICE_URL
+          value: "http://trust-safety-service.nova-staging.svc.cluster.local:50056"
+        - name: GRPC_FEATURE_STORE_URL
+          value: "http://feature-store.nova-staging.svc.cluster.local:9089"
         - name: REDIS_URL
           value: "redis://redis.nova-staging.svc.cluster.local:6379"
 
@@ -57,6 +67,20 @@ spec:
         - name: GRPC_IDENTITY_SERVICE_TIER
           value: "1"
         - name: GRPC_GRAPH_SERVICE_TIER
+          value: "1"
+        - name: GRPC_FEED_SERVICE_TIER
+          value: "2"
+        - name: GRPC_SEARCH_SERVICE_TIER
+          value: "1"
+        - name: GRPC_MEDIA_SERVICE_TIER
+          value: "1"
+        - name: GRPC_FEATURE_STORE_TIER
+          value: "2"
+        - name: GRPC_TRUST_SAFETY_SERVICE_TIER
+          value: "1"
+        - name: GRPC_RANKING_SERVICE_TIER
+          value: "1"
+        - name: GRPC_SOCIAL_SERVICE_TIER
           value: "1"
 
         # ============================================================
