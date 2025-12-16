@@ -138,7 +138,7 @@ prometheus = "0.13"
 governor = "0.6"
 
 # Tower middleware (for gRPC)
-tower = "0.4"
+tower = "0.5"
 
 # AWS SDK
 aws-config = "1.1"

@@ -13,7 +13,7 @@ tokio.workspace = true
 
 # HTTP2 transport (required for gRPC)
 hyper = { version = "1.0", features = ["full"] }
-tower = { version = "0.4", features = ["full"] }
+tower = { version = "0.5", features = ["full"] }
 
 # Error handling
 thiserror = "1.0"

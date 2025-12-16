@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 tokio = { workspace = true, features = ["time", "macros", "rt"] }
-tower = { version = "0.4", features = ["timeout", "limit", "retry", "buffer"] }
+tower = { version = "0.5", features = ["timeout", "limit", "retry", "buffer"] }
 tower-layer = "0.3"
 tonic = { workspace = true }
 futures-util = "0.3"
