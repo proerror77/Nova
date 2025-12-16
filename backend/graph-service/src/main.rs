@@ -136,7 +136,11 @@ async fn main() -> Result<()> {
             GraphServiceImpl::new_with_trait(repo, config.internal_write_token.clone());
 
         // Spawn Kafka consumers for social and identity events if configured
-        spawn_kafka_consumers_if_enabled(repo_for_consumer, Some(postgres_repo_for_consumer), &config);
+        spawn_kafka_consumers_if_enabled(
+            repo_for_consumer,
+            Some(postgres_repo_for_consumer),
+            &config,
+        );
 
         // Setup and start server (rest of the code continues below)
         start_grpc_server(graph_service, &config).await?;

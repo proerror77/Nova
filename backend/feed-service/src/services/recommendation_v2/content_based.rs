@@ -104,10 +104,7 @@ impl ContentBasedModel {
             return Ok(HashMap::new());
         }
 
-        let extension = file_path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
+        let extension = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
         match extension {
             "json" => Self::load_from_json(file_path),
@@ -224,10 +221,14 @@ impl ContentBasedModel {
         let dir = Path::new(dir_path);
 
         // Try different file extensions
-        let post_features_path = ["post_features.json", "post_features.bin", "post_features.parquet"]
-            .iter()
-            .map(|f| dir.join(f))
-            .find(|p| p.exists());
+        let post_features_path = [
+            "post_features.json",
+            "post_features.bin",
+            "post_features.parquet",
+        ]
+        .iter()
+        .map(|f| dir.join(f))
+        .find(|p| p.exists());
 
         let user_profiles_path = ["user_profiles.json", "user_profiles.bin"]
             .iter()

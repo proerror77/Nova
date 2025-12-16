@@ -25,9 +25,7 @@ pub use ranking::RankingLayer;
 pub use realtime::{SessionInterest, SessionInterestManager, SessionTracker};
 pub use recall::RecallLayer;
 pub use user_memory::{
-    UserMemorySystem, MemoryStore, ShortTermMemory, LongTermMemory, SemanticMemory,
-    InterestExplorer, ExplorationResult, LatentInterest,
-    InsightGenerator, UserInsight,
-    PredictiveEngine, Prediction, PredictionType,
-    UserEvent, EventType, UserMemoryView, MemorySystemConfig,
+    EventType, ExplorationResult, InsightGenerator, InterestExplorer, LatentInterest,
+    LongTermMemory, MemoryStore, MemorySystemConfig, Prediction, PredictionType, PredictiveEngine,
+    SemanticMemory, ShortTermMemory, UserEvent, UserInsight, UserMemorySystem, UserMemoryView,
 };

@@ -5,9 +5,13 @@ use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use std::collections::HashMap;
 use tracing::{error, info, warn};
 
-use super::models::{ErrorResponse, FeedPost, GetFeedResponse, GetRecommendedCreatorsResponse, RecommendedCreator};
+use super::models::{
+    ErrorResponse, FeedPost, GetFeedResponse, GetRecommendedCreatorsResponse, RecommendedCreator,
+};
 use crate::clients::proto::auth::GetUserProfilesByIdsRequest;
-use crate::clients::proto::feed::{GetFeedRequest as ProtoGetFeedRequest, GetRecommendedCreatorsRequest};
+use crate::clients::proto::feed::{
+    GetFeedRequest as ProtoGetFeedRequest, GetRecommendedCreatorsRequest,
+};
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
 
@@ -353,7 +357,7 @@ pub struct FeedQueryParams {
     pub limit: Option<u32>,
     pub cursor: Option<String>,
     pub algorithm: Option<String>,
-    pub channel_id: Option<String>,  // Optional: Filter feed by channel (UUID or slug)
+    pub channel_id: Option<String>, // Optional: Filter feed by channel (UUID or slug)
 }
 
 /// GET /api/v2/feed/recommended-creators
@@ -396,10 +400,18 @@ pub async fn get_recommended_creators(
                 .map(|c| RecommendedCreator {
                     id: c.id,
                     name: c.name,
-                    avatar: if c.avatar.is_empty() { None } else { Some(c.avatar) },
+                    avatar: if c.avatar.is_empty() {
+                        None
+                    } else {
+                        Some(c.avatar)
+                    },
                     relevance_score: c.relevance_score,
                     follower_count: c.follower_count,
-                    reason: if c.reason.is_empty() { None } else { Some(c.reason) },
+                    reason: if c.reason.is_empty() {
+                        None
+                    } else {
+                        Some(c.reason)
+                    },
                 })
                 .collect();
 

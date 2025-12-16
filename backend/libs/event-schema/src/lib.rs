@@ -54,7 +54,11 @@ impl<T> EventEnvelope<T> {
 
     /// Create a new envelope with explicit event type
     /// P1: Preferred constructor for better event routing
-    pub fn new_with_type(source: impl Into<String>, event_type: impl Into<String>, data: T) -> Self {
+    pub fn new_with_type(
+        source: impl Into<String>,
+        event_type: impl Into<String>,
+        data: T,
+    ) -> Self {
         Self {
             event_id: Uuid::new_v4(),
             timestamp: Utc::now(),

@@ -258,8 +258,8 @@ impl CdcConsumer {
 
         // Match actual ClickHouse table schema (nova_feed.follows_cdc):
         // followed_id (not followee_id), cdc_operation (not is_deleted), follow_count
-        let cdc_operation = if *op == CdcOperation::Delete { 2 } else { 1 };  // 1=INSERT, 2=DELETE
-        let follow_count: i8 = if *op == CdcOperation::Delete { -1 } else { 1 };  // For SummingMergeTree
+        let cdc_operation = if *op == CdcOperation::Delete { 2 } else { 1 }; // 1=INSERT, 2=DELETE
+        let follow_count: i8 = if *op == CdcOperation::Delete { -1 } else { 1 }; // For SummingMergeTree
 
         let query = format!(
             "INSERT INTO follows_cdc (follower_id, followed_id, created_at, cdc_operation, cdc_timestamp, follow_count) VALUES ('{}', '{}', '{}', {}, '{}', {})",

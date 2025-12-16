@@ -1,10 +1,10 @@
-use base64::Engine;
 use crate::cache::{ContentCache, FeedCache};
 use crate::db::channel_repo;
 use crate::grpc::AuthClient;
 use crate::models::{Channel as DbChannel, Post as DbPost};
 use crate::services::feed_ranking::FeedRankingService;
 use crate::services::posts::PostService;
+use base64::Engine;
 use grpc_clients::nova::content_service::v2::content_service_server::{
     ContentService, ContentServiceServer,
 };
@@ -93,7 +93,9 @@ impl ContentService for ContentServiceImpl {
         let mut resolved_channel_ids: Vec<Uuid> = Vec::new();
         if !req.channel_ids.is_empty() {
             if req.channel_ids.len() > 3 {
-                return Err(Status::invalid_argument("Maximum 3 channels allowed per post"));
+                return Err(Status::invalid_argument(
+                    "Maximum 3 channels allowed per post",
+                ));
             }
             for channel_id_or_slug in &req.channel_ids {
                 match channel_repo::resolve_channel_id(&self.db_pool, channel_id_or_slug).await {
@@ -577,18 +579,13 @@ impl ContentService for ContentServiceImpl {
             Some(req.category.as_str())
         };
 
-        let (channels, total) = channel_repo::list_channels(
-            &self.db_pool,
-            category,
-            req.enabled_only,
-            limit,
-            offset,
-        )
-        .await
-        .map_err(|e| {
-            tracing::error!(error=%e, "list_channels failed");
-            Status::internal("failed to list channels")
-        })?;
+        let (channels, total) =
+            channel_repo::list_channels(&self.db_pool, category, req.enabled_only, limit, offset)
+                .await
+                .map_err(|e| {
+                    tracing::error!(error=%e, "list_channels failed");
+                    Status::internal("failed to list channels")
+                })?;
 
         Ok(Response::new(ListChannelsResponse {
             channels: channels.iter().map(convert_channel_to_proto).collect(),
@@ -617,11 +614,9 @@ impl ContentService for ContentServiceImpl {
             (None, None)
         } else {
             // Decode base64 cursor
-            let decoded = base64::Engine::decode(
-                &base64::engine::general_purpose::STANDARD,
-                &req.cursor,
-            )
-            .map_err(|_| Status::invalid_argument("invalid cursor format"))?;
+            let decoded =
+                base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &req.cursor)
+                    .map_err(|_| Status::invalid_argument("invalid cursor format"))?;
 
             let cursor_str = String::from_utf8(decoded)
                 .map_err(|_| Status::invalid_argument("invalid cursor encoding"))?;

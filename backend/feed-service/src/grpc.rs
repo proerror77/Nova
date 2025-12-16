@@ -133,7 +133,14 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
 
         info!(
             "Getting feed for user: {} (algo: {}, limit: {}, channel: {})",
-            user_id, algorithm, req.limit, if channel_id.is_empty() { "all" } else { &channel_id }
+            user_id,
+            algorithm,
+            req.limit,
+            if channel_id.is_empty() {
+                "all"
+            } else {
+                &channel_id
+            }
         );
 
         // Step 1: Check Redis cache

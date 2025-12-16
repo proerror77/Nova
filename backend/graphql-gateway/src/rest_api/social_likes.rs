@@ -39,8 +39,9 @@ pub async fn create_like(
         Ok(_) => HttpResponse::Ok().json(serde_json::json!({"success": true})),
         Err(e) => {
             error!("create_like failed: {}", e);
-            HttpResponse::ServiceUnavailable()
-                .json(serde_json::json!({"success": false, "error": "Service temporarily unavailable"}))
+            HttpResponse::ServiceUnavailable().json(
+                serde_json::json!({"success": false, "error": "Service temporarily unavailable"}),
+            )
         }
     }
 }
@@ -69,8 +70,9 @@ pub async fn delete_like(
         Ok(_) => HttpResponse::Ok().json(serde_json::json!({"success": true})),
         Err(e) => {
             error!("delete_like failed: {}", e);
-            HttpResponse::ServiceUnavailable()
-                .json(serde_json::json!({"success": false, "error": "Service temporarily unavailable"}))
+            HttpResponse::ServiceUnavailable().json(
+                serde_json::json!({"success": false, "error": "Service temporarily unavailable"}),
+            )
         }
     }
 }
@@ -101,8 +103,9 @@ pub async fn delete_like_legacy(
         Ok(_) => HttpResponse::Ok().json(serde_json::json!({"success": true})),
         Err(e) => {
             error!("delete_like failed: {}", e);
-            HttpResponse::ServiceUnavailable()
-                .json(serde_json::json!({"success": false, "error": "Service temporarily unavailable"}))
+            HttpResponse::ServiceUnavailable().json(
+                serde_json::json!({"success": false, "error": "Service temporarily unavailable"}),
+            )
         }
     }
 }
@@ -532,8 +535,9 @@ pub async fn create_bookmark(
         })),
         Err(e) => {
             error!("create_bookmark failed: {}", e);
-            HttpResponse::ServiceUnavailable()
-                .json(serde_json::json!({"success": false, "error": "Service temporarily unavailable"}))
+            HttpResponse::ServiceUnavailable().json(
+                serde_json::json!({"success": false, "error": "Service temporarily unavailable"}),
+            )
         }
     }
 }
@@ -562,8 +566,9 @@ pub async fn delete_bookmark(
         Ok(resp) => HttpResponse::Ok().json(serde_json::json!({"success": resp.success})),
         Err(e) => {
             error!("delete_bookmark failed: {}", e);
-            HttpResponse::ServiceUnavailable()
-                .json(serde_json::json!({"success": false, "error": "Service temporarily unavailable"}))
+            HttpResponse::ServiceUnavailable().json(
+                serde_json::json!({"success": false, "error": "Service temporarily unavailable"}),
+            )
         }
     }
 }
@@ -600,8 +605,9 @@ pub async fn get_bookmarks(
         })),
         Err(e) => {
             error!("get_bookmarks failed: {}", e);
-            HttpResponse::ServiceUnavailable()
-                .json(serde_json::json!({"success": false, "error": "Service temporarily unavailable"}))
+            HttpResponse::ServiceUnavailable().json(
+                serde_json::json!({"success": false, "error": "Service temporarily unavailable"}),
+            )
         }
     }
 }
@@ -630,8 +636,9 @@ pub async fn check_bookmarked(
         Ok(resp) => HttpResponse::Ok().json(serde_json::json!({"bookmarked": resp.bookmarked})),
         Err(e) => {
             error!("check_bookmarked failed: {}", e);
-            HttpResponse::ServiceUnavailable()
-                .json(serde_json::json!({"success": false, "error": "Service temporarily unavailable"}))
+            HttpResponse::ServiceUnavailable().json(
+                serde_json::json!({"success": false, "error": "Service temporarily unavailable"}),
+            )
         }
     }
 }
@@ -663,8 +670,9 @@ pub async fn batch_check_bookmarked(
             .json(serde_json::json!({"bookmarked_post_ids": resp.bookmarked_post_ids})),
         Err(e) => {
             error!("batch_check_bookmarked failed: {}", e);
-            HttpResponse::ServiceUnavailable()
-                .json(serde_json::json!({"success": false, "error": "Service temporarily unavailable"}))
+            HttpResponse::ServiceUnavailable().json(
+                serde_json::json!({"success": false, "error": "Service temporarily unavailable"}),
+            )
         }
     }
 }

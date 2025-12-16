@@ -425,10 +425,15 @@ pub async fn enhance_post(
                     Ok(openai_response) => {
                         if let Some(choice) = openai_response.choices.first() {
                             // Parse the structured response from AI
-                            let enhance_response = match parse_enhance_response(&choice.message.content) {
+                            let enhance_response = match parse_enhance_response(
+                                &choice.message.content,
+                            ) {
                                 Ok(response) => response,
                                 Err(e) => {
-                                    warn!("Failed to parse enhancement response: {}, using fallback", e);
+                                    warn!(
+                                        "Failed to parse enhancement response: {}, using fallback",
+                                        e
+                                    );
                                     // Fallback: return raw content as description
                                     AliceEnhanceResponse {
                                         description: choice.message.content.clone(),
@@ -547,9 +552,8 @@ fn parse_enhance_response(content: &str) -> std::result::Result<AliceEnhanceResp
                     })
                     .unwrap_or_default();
 
-                let trending_topics: Option<Vec<String>> = json["trending_topics"]
-                    .as_array()
-                    .map(|arr| {
+                let trending_topics: Option<Vec<String>> =
+                    json["trending_topics"].as_array().map(|arr| {
                         arr.iter()
                             .filter_map(|v| v.as_str().map(|s| s.to_string()))
                             .collect()

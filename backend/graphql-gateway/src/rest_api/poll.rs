@@ -188,9 +188,10 @@ pub async fn create_poll(
 
     // Create request with user_id in metadata
     let mut grpc_req = Request::new(req);
-    grpc_req
-        .metadata_mut()
-        .insert("x-user-id", user_id.parse().expect("Invalid user_id header"));
+    grpc_req.metadata_mut().insert(
+        "x-user-id",
+        user_id.parse().expect("Invalid user_id header"),
+    );
 
     match clients
         .call_social(|| {
@@ -403,9 +404,10 @@ pub async fn vote_on_poll(
 
     // Create request with user_id in metadata
     let mut grpc_req = Request::new(req);
-    grpc_req
-        .metadata_mut()
-        .insert("x-user-id", user_id.parse().expect("Invalid user_id header"));
+    grpc_req.metadata_mut().insert(
+        "x-user-id",
+        user_id.parse().expect("Invalid user_id header"),
+    );
 
     match clients
         .call_social(|| {
@@ -475,9 +477,10 @@ pub async fn unvote(
 
     // Create request with user_id in metadata
     let mut grpc_req = Request::new(req);
-    grpc_req
-        .metadata_mut()
-        .insert("x-user-id", user_id.parse().expect("Invalid user_id header"));
+    grpc_req.metadata_mut().insert(
+        "x-user-id",
+        user_id.parse().expect("Invalid user_id header"),
+    );
 
     match clients
         .call_social(|| {
@@ -522,9 +525,10 @@ pub async fn check_voted(
 
     // Create request with user_id in metadata
     let mut grpc_req = Request::new(req);
-    grpc_req
-        .metadata_mut()
-        .insert("x-user-id", user_id.parse().expect("Invalid user_id header"));
+    grpc_req.metadata_mut().insert(
+        "x-user-id",
+        user_id.parse().expect("Invalid user_id header"),
+    );
 
     match clients
         .call_social(|| {
@@ -814,9 +818,10 @@ pub async fn add_candidate(
 
     // Create request with user_id in metadata
     let mut grpc_req = Request::new(req);
-    grpc_req
-        .metadata_mut()
-        .insert("x-user-id", user_id.parse().expect("Invalid user_id header"));
+    grpc_req.metadata_mut().insert(
+        "x-user-id",
+        user_id.parse().expect("Invalid user_id header"),
+    );
 
     match clients
         .call_social(|| {
@@ -889,9 +894,10 @@ pub async fn remove_candidate(
     };
 
     let mut grpc_req = Request::new(req);
-    grpc_req
-        .metadata_mut()
-        .insert("x-user-id", user_id.parse().expect("Invalid user_id header"));
+    grpc_req.metadata_mut().insert(
+        "x-user-id",
+        user_id.parse().expect("Invalid user_id header"),
+    );
 
     match clients
         .call_social(|| {
@@ -941,9 +947,10 @@ pub async fn close_poll(
     };
 
     let mut grpc_req = Request::new(req);
-    grpc_req
-        .metadata_mut()
-        .insert("x-user-id", user_id.parse().expect("Invalid user_id header"));
+    grpc_req.metadata_mut().insert(
+        "x-user-id",
+        user_id.parse().expect("Invalid user_id header"),
+    );
 
     match clients
         .call_social(|| {
@@ -992,9 +999,10 @@ pub async fn delete_poll(
     };
 
     let mut grpc_req = Request::new(req);
-    grpc_req
-        .metadata_mut()
-        .insert("x-user-id", user_id.parse().expect("Invalid user_id header"));
+    grpc_req.metadata_mut().insert(
+        "x-user-id",
+        user_id.parse().expect("Invalid user_id header"),
+    );
 
     match clients
         .call_social(|| {

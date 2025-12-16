@@ -73,12 +73,7 @@ impl UCBExplorer {
     ///
     /// # Returns
     /// UCB score (higher = should be shown more)
-    pub fn ucb_score(
-        &self,
-        impressions: u32,
-        engagements: u32,
-        total_impressions: u32,
-    ) -> f64 {
+    pub fn ucb_score(&self, impressions: u32, engagements: u32, total_impressions: u32) -> f64 {
         // New content with no impressions gets maximum exploration bonus
         if impressions == 0 {
             return f64::MAX;
@@ -158,11 +153,7 @@ impl UCBExplorer {
     ///
     /// # Returns
     /// Selected content IDs sorted by UCB score
-    pub fn select_for_exploration(
-        &self,
-        pool: &[(Uuid, u32, u32)],
-        count: usize,
-    ) -> Vec<Uuid> {
+    pub fn select_for_exploration(&self, pool: &[(Uuid, u32, u32)], count: usize) -> Vec<Uuid> {
         if pool.is_empty() || count == 0 {
             return Vec::new();
         }
@@ -195,11 +186,7 @@ impl UCBExplorer {
     /// Beta(α, β) where:
     /// - α = engagements + 1 (successes)
     /// - β = impressions - engagements + 1 (failures)
-    pub fn thompson_sample(
-        &self,
-        impressions: u32,
-        engagements: u32,
-    ) -> f64 {
+    pub fn thompson_sample(&self, impressions: u32, engagements: u32) -> f64 {
         // Use mean of Beta distribution as deterministic approximation
         // Mean = α / (α + β)
         let alpha = engagements as f64 + 1.0;
@@ -217,9 +204,7 @@ pub enum GraduationDecision {
         final_score: f64,
     },
     /// Content should continue in exploration
-    ContinueExploration {
-        remaining_impressions: u32,
-    },
+    ContinueExploration { remaining_impressions: u32 },
     /// Content should be demoted/archived
     Demote {
         reason: DemotionReason,
@@ -258,7 +243,7 @@ mod tests {
 
         // High engagement content
         let score_high = explorer.ucb_score(100, 50, 10000); // 50% engagement
-        let score_low = explorer.ucb_score(100, 5, 10000);   // 5% engagement
+        let score_low = explorer.ucb_score(100, 5, 10000); // 5% engagement
 
         assert!(score_high > score_low);
     }
@@ -281,7 +266,10 @@ mod tests {
 
         // Not enough impressions
         let decision = explorer.should_graduate(50, 2);
-        assert!(matches!(decision, GraduationDecision::ContinueExploration { .. }));
+        assert!(matches!(
+            decision,
+            GraduationDecision::ContinueExploration { .. }
+        ));
 
         // Good engagement, should graduate
         let decision = explorer.should_graduate(100, 5); // 5% engagement > 2%
@@ -307,10 +295,10 @@ mod tests {
         let explorer = UCBExplorer::new();
 
         let pool = vec![
-            (Uuid::new_v4(), 100, 50),  // 50% engagement, medium confidence
-            (Uuid::new_v4(), 10, 2),    // 20% engagement, low confidence (high exploration bonus)
-            (Uuid::new_v4(), 1000, 100),// 10% engagement, high confidence
-            (Uuid::new_v4(), 0, 0),     // New content, should be first
+            (Uuid::new_v4(), 100, 50),   // 50% engagement, medium confidence
+            (Uuid::new_v4(), 10, 2),     // 20% engagement, low confidence (high exploration bonus)
+            (Uuid::new_v4(), 1000, 100), // 10% engagement, high confidence
+            (Uuid::new_v4(), 0, 0),      // New content, should be first
         ];
 
         let selected = explorer.select_for_exploration(&pool, 2);
@@ -326,7 +314,7 @@ mod tests {
 
         // High engagement
         let score_high = explorer.thompson_sample(100, 80); // 80%
-        // Low engagement
+                                                            // Low engagement
         let score_low = explorer.thompson_sample(100, 20); // 20%
 
         assert!(score_high > score_low);

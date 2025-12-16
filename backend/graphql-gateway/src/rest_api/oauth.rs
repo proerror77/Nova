@@ -113,10 +113,8 @@ pub async fn start_google_oauth(
         }
         Err(status) => {
             error!(error = %status, "Failed to start Google OAuth flow");
-            Ok(HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                "OAuth error",
-                status.message(),
-            )))
+            Ok(HttpResponse::InternalServerError()
+                .json(ErrorResponse::with_message("OAuth error", status.message())))
         }
     }
 }
@@ -171,12 +169,11 @@ pub async fn complete_google_oauth(
                 tonic::Code::InvalidArgument => HttpResponse::BadRequest().json(
                     ErrorResponse::with_message("Invalid OAuth request", status.message()),
                 ),
-                tonic::Code::Unauthenticated => HttpResponse::Unauthorized()
-                    .json(ErrorResponse::with_message("OAuth failed", status.message())),
-                _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                    "OAuth error",
-                    status.message(),
-                )),
+                tonic::Code::Unauthenticated => HttpResponse::Unauthorized().json(
+                    ErrorResponse::with_message("OAuth failed", status.message()),
+                ),
+                _ => HttpResponse::InternalServerError()
+                    .json(ErrorResponse::with_message("OAuth error", status.message())),
             };
 
             Ok(error_response)
@@ -216,10 +213,8 @@ pub async fn start_apple_oauth(
         }
         Err(status) => {
             error!(error = %status, "Failed to start Apple OAuth flow");
-            Ok(HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                "OAuth error",
-                status.message(),
-            )))
+            Ok(HttpResponse::InternalServerError()
+                .json(ErrorResponse::with_message("OAuth error", status.message())))
         }
     }
 }
@@ -274,12 +269,11 @@ pub async fn complete_apple_oauth(
                 tonic::Code::InvalidArgument => HttpResponse::BadRequest().json(
                     ErrorResponse::with_message("Invalid OAuth request", status.message()),
                 ),
-                tonic::Code::Unauthenticated => HttpResponse::Unauthorized()
-                    .json(ErrorResponse::with_message("OAuth failed", status.message())),
-                _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                    "OAuth error",
-                    status.message(),
-                )),
+                tonic::Code::Unauthenticated => HttpResponse::Unauthorized().json(
+                    ErrorResponse::with_message("OAuth failed", status.message()),
+                ),
+                _ => HttpResponse::InternalServerError()
+                    .json(ErrorResponse::with_message("OAuth error", status.message())),
             };
 
             Ok(error_response)
@@ -304,16 +298,15 @@ pub async fn apple_native_sign_in(
 
     // Use the AppleNativeSignIn gRPC method if available
     // For now, we'll use the CompleteOAuthFlow with special handling
-    let grpc_request = tonic::Request::new(
-        crate::clients::proto::identity::AppleNativeSignInRequest {
+    let grpc_request =
+        tonic::Request::new(crate::clients::proto::identity::AppleNativeSignInRequest {
             identity_token: req.identity_token.clone(),
             user_identifier: req.user_identifier.clone(),
             email: req.email.clone(),
             given_name: req.full_name.as_ref().and_then(|n| n.given_name.clone()),
             family_name: req.full_name.as_ref().and_then(|n| n.family_name.clone()),
             invite_code: req.invite_code.clone().unwrap_or_default(),
-        },
-    );
+        });
 
     match identity_client.apple_native_sign_in(grpc_request).await {
         Ok(response) => {
@@ -348,12 +341,11 @@ pub async fn apple_native_sign_in(
                 tonic::Code::InvalidArgument => HttpResponse::BadRequest().json(
                     ErrorResponse::with_message("Invalid Apple credentials", status.message()),
                 ),
-                tonic::Code::Unauthenticated => HttpResponse::Unauthorized()
-                    .json(ErrorResponse::with_message("Apple sign-in failed", status.message())),
-                _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                    "OAuth error",
-                    status.message(),
-                )),
+                tonic::Code::Unauthenticated => HttpResponse::Unauthorized().json(
+                    ErrorResponse::with_message("Apple sign-in failed", status.message()),
+                ),
+                _ => HttpResponse::InternalServerError()
+                    .json(ErrorResponse::with_message("OAuth error", status.message())),
             };
 
             Ok(error_response)

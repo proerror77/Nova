@@ -23,7 +23,7 @@ pub struct ClickHouseConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct LlmConfig {
     pub enabled: bool,
-    pub provider: String,  // "openai", "anthropic", "local"
+    pub provider: String, // "openai", "anthropic", "local"
     pub api_key: String,
     pub model: String,
     pub embedding_model: String,
@@ -121,10 +121,8 @@ impl Config {
                     .unwrap_or_else(|_| "http://localhost:8123".to_string()),
                 database: env::var("CLICKHOUSE_DATABASE")
                     .unwrap_or_else(|_| "nova_feed".to_string()),
-                username: env::var("CLICKHOUSE_USERNAME")
-                    .unwrap_or_else(|_| "default".to_string()),
-                password: env::var("CLICKHOUSE_PASSWORD")
-                    .unwrap_or_else(|_| "".to_string()),
+                username: env::var("CLICKHOUSE_USERNAME").unwrap_or_else(|_| "default".to_string()),
+                password: env::var("CLICKHOUSE_PASSWORD").unwrap_or_else(|_| "".to_string()),
                 query_timeout_ms: env::var("CLICKHOUSE_QUERY_TIMEOUT_MS")
                     .unwrap_or_else(|_| "30000".to_string())
                     .parse()
@@ -135,10 +133,8 @@ impl Config {
                     .unwrap_or_else(|_| "false".to_string())
                     .parse()
                     .unwrap_or(false),
-                provider: env::var("LLM_PROVIDER")
-                    .unwrap_or_else(|_| "anthropic".to_string()),
-                api_key: env::var("LLM_API_KEY")
-                    .unwrap_or_else(|_| "".to_string()),
+                provider: env::var("LLM_PROVIDER").unwrap_or_else(|_| "anthropic".to_string()),
+                api_key: env::var("LLM_API_KEY").unwrap_or_else(|_| "".to_string()),
                 model: env::var("LLM_MODEL")
                     .unwrap_or_else(|_| "claude-3-haiku-20240307".to_string()),
                 embedding_model: env::var("LLM_EMBEDDING_MODEL")

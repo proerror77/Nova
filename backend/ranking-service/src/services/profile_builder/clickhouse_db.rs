@@ -140,12 +140,8 @@ impl ProfileDatabase for ClickHouseProfileDatabase {
 
         debug!(user_id = %user_id, "Fetching engagement signals from ClickHouse");
 
-        let rows: Vec<EngagementRow> = self
-            .client
-            .query(&query)
-            .fetch_all()
-            .await
-            .map_err(|e| {
+        let rows: Vec<EngagementRow> =
+            self.client.query(&query).fetch_all().await.map_err(|e| {
                 error!(error = %e, "Failed to fetch engagement signals");
                 ProfileBuilderError::ClickHouseError(e.to_string())
             })?;
@@ -203,15 +199,10 @@ impl ProfileDatabase for ClickHouseProfileDatabase {
 
         debug!(user_id = %user_id, "Fetching session events from ClickHouse");
 
-        let rows: Vec<SessionRow> = self
-            .client
-            .query(&query)
-            .fetch_all()
-            .await
-            .map_err(|e| {
-                error!(error = %e, "Failed to fetch session events");
-                ProfileBuilderError::ClickHouseError(e.to_string())
-            })?;
+        let rows: Vec<SessionRow> = self.client.query(&query).fetch_all().await.map_err(|e| {
+            error!(error = %e, "Failed to fetch session events");
+            ProfileBuilderError::ClickHouseError(e.to_string())
+        })?;
 
         debug!(
             user_id = %user_id,
@@ -264,12 +255,8 @@ impl ProfileDatabase for ClickHouseProfileDatabase {
 
         debug!(user_id = %user_id, "Fetching content views from ClickHouse");
 
-        let rows: Vec<ContentViewRow> = self
-            .client
-            .query(&query)
-            .fetch_all()
-            .await
-            .map_err(|e| {
+        let rows: Vec<ContentViewRow> =
+            self.client.query(&query).fetch_all().await.map_err(|e| {
                 error!(error = %e, "Failed to fetch content views");
                 ProfileBuilderError::ClickHouseError(e.to_string())
             })?;
@@ -320,14 +307,10 @@ impl ProfileDatabase for ClickHouseProfileDatabase {
                 self.database, user_id, tag.tag, tag.weight, version
             );
 
-            self.client
-                .query(&query)
-                .execute()
-                .await
-                .map_err(|e| {
-                    warn!(error = %e, tag = %tag.tag, "Failed to save interest tag");
-                    ProfileBuilderError::ClickHouseError(e.to_string())
-                })?;
+            self.client.query(&query).execute().await.map_err(|e| {
+                warn!(error = %e, tag = %tag.tag, "Failed to save interest tag");
+                ProfileBuilderError::ClickHouseError(e.to_string())
+            })?;
         }
 
         debug!(
@@ -357,10 +340,7 @@ impl ProfileDatabase for ClickHouseProfileDatabase {
 
 impl ClickHouseProfileDatabase {
     /// Fetch pre-aggregated user interests from materialized view
-    pub async fn fetch_aggregated_interests(
-        &self,
-        user_id: Uuid,
-    ) -> Result<Vec<(String, f64)>> {
+    pub async fn fetch_aggregated_interests(&self, user_id: Uuid) -> Result<Vec<(String, f64)>> {
         let query = format!(
             r#"
             SELECT
@@ -422,7 +402,10 @@ impl ClickHouseProfileDatabase {
             .await
             .map_err(|e| ProfileBuilderError::ClickHouseError(e.to_string()))?;
 
-        Ok(rows.into_iter().map(|r| (r.hour, r.activity_count)).collect())
+        Ok(rows
+            .into_iter()
+            .map(|r| (r.hour, r.activity_count))
+            .collect())
     }
 
     /// Fetch users that need profile updates (active users without recent profile update)

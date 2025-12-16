@@ -345,9 +345,8 @@ pub async fn create_post(
     // Validate channel_ids limit (max 3)
     let channel_ids = body.channel_ids.clone().unwrap_or_default();
     if channel_ids.len() > 3 {
-        return Ok(HttpResponse::BadRequest().json(ErrorResponse::new(
-            "Maximum 3 channels allowed per post",
-        )));
+        return Ok(HttpResponse::BadRequest()
+            .json(ErrorResponse::new("Maximum 3 channels allowed per post")));
     }
 
     let grpc_request = tonic::Request::new(CreatePostRequest {

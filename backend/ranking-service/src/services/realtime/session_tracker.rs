@@ -194,7 +194,11 @@ impl SessionTracker {
 
         // Trim to max size
         let _: () = conn
-            .ltrim(self.views_key(session_id), 0, self.max_recent_views as isize)
+            .ltrim(
+                self.views_key(session_id),
+                0,
+                self.max_recent_views as isize,
+            )
             .await
             .map_err(|e| RealtimeError::RedisError(e.to_string()))?;
 

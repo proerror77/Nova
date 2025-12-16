@@ -10,7 +10,7 @@
 //
 // 結合規則引擎 + LLM 進行多維度預測
 
-use super::memory_store::{LongTermMemory, MemoryStore, ShortTermMemory, InterestTrend};
+use super::memory_store::{InterestTrend, LongTermMemory, MemoryStore, ShortTermMemory};
 use super::{MemoryError, PredictionConfig};
 use crate::services::profile_builder::LlmProfileAnalyzer;
 use chrono::{DateTime, Timelike, Utc};
@@ -73,7 +73,8 @@ impl PredictiveEngine {
 
         // 5. LLM 增強預測 (如果啟用)
         if self.config.use_llm_enhancement {
-            if let Ok(llm_predictions) = self.llm_enhanced_prediction(&short_term, &long_term).await {
+            if let Ok(llm_predictions) = self.llm_enhanced_prediction(&short_term, &long_term).await
+            {
                 predictions.extend(llm_predictions);
             }
         }
@@ -83,7 +84,9 @@ impl PredictiveEngine {
 
         // 排序
         predictions.sort_by(|a, b| {
-            b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal)
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         // 緩存結果
@@ -159,7 +162,8 @@ impl PredictiveEngine {
         let patterns = &long_term.behavior_patterns;
 
         // 找出活躍高峰時段
-        let peak_hours: Vec<(usize, u32)> = patterns.active_hours
+        let peak_hours: Vec<(usize, u32)> = patterns
+            .active_hours
             .iter()
             .enumerate()
             .filter(|(_, &count)| count > 0)
@@ -182,7 +186,8 @@ impl PredictiveEngine {
                     confidence: 0.5 + (relative_activity * 0.4),
                     reasoning: format!(
                         "用戶在 {:02}:00 時段活躍度高 (相對活躍度: {:.0}%)",
-                        hour, relative_activity * 100.0
+                        hour,
+                        relative_activity * 100.0
                     ),
                     time_horizon: TimeHorizon::Daily,
                     predicted_at: Utc::now(),
@@ -192,7 +197,11 @@ impl PredictiveEngine {
 
         // 基於當前時間推薦
         let current_hour = Utc::now().hour() as usize;
-        let current_activity = patterns.active_hours.get(current_hour).copied().unwrap_or(0);
+        let current_activity = patterns
+            .active_hours
+            .get(current_hour)
+            .copied()
+            .unwrap_or(0);
 
         if current_activity > 0 {
             predictions.push(Prediction {
@@ -220,11 +229,20 @@ impl PredictiveEngine {
         // 時長偏好 (基於 preferred_duration_range)
         let (min_dur, max_dur) = prefs.preferred_duration_range;
         let duration_hint = if max_dur > 60 {
-            ("長視頻", format!("用戶偏好 {}-{} 秒的較長內容", min_dur, max_dur))
+            (
+                "長視頻",
+                format!("用戶偏好 {}-{} 秒的較長內容", min_dur, max_dur),
+            )
         } else if max_dur > 30 {
-            ("中等長度", format!("用戶偏好 {}-{} 秒的中等長度內容", min_dur, max_dur))
+            (
+                "中等長度",
+                format!("用戶偏好 {}-{} 秒的中等長度內容", min_dur, max_dur),
+            )
         } else {
-            ("短視頻", format!("用戶偏好 {}-{} 秒的短內容", min_dur, max_dur))
+            (
+                "短視頻",
+                format!("用戶偏好 {}-{} 秒的短內容", min_dur, max_dur),
+            )
         };
 
         predictions.push(Prediction {
@@ -311,8 +329,14 @@ impl PredictiveEngine {
 
         // 基於互動模式預測
         let recent_events = &short_term.events;
-        let like_count = recent_events.iter().filter(|e| e.event_type == "like").count();
-        let comment_count = recent_events.iter().filter(|e| e.event_type == "comment").count();
+        let like_count = recent_events
+            .iter()
+            .filter(|e| e.event_type == "like")
+            .count();
+        let comment_count = recent_events
+            .iter()
+            .filter(|e| e.event_type == "comment")
+            .count();
 
         if like_count > 3 {
             predictions.push(Prediction {
@@ -345,9 +369,10 @@ impl PredictiveEngine {
         short_term: &ShortTermMemory,
         long_term: &LongTermMemory,
     ) -> Result<Vec<Prediction>, MemoryError> {
-        let _llm = self.llm.as_ref().ok_or_else(|| {
-            MemoryError::Llm("LLM not configured".to_string())
-        })?;
+        let _llm = self
+            .llm
+            .as_ref()
+            .ok_or_else(|| MemoryError::Llm("LLM not configured".to_string()))?;
 
         // TODO: 實際調用 LLM 進行深度預測
         // 目前返回基於規則的增強預測
@@ -355,7 +380,8 @@ impl PredictiveEngine {
         let mut predictions = Vec::new();
 
         // 綜合分析：結合興趣趨勢和行為模式
-        let rising_interests: Vec<_> = long_term.stable_interests
+        let rising_interests: Vec<_> = long_term
+            .stable_interests
             .iter()
             .filter(|(_, info)| matches!(info.trend, InterestTrend::Rising))
             .map(|(tag, _)| tag.clone())
@@ -389,7 +415,9 @@ impl PredictiveEngine {
             ("旅行", vec!["攝影", "戶外運動", "文化探索"]),
             ("投資", vec!["創業", "房地產", "財務自由"]),
             ("編程", vec!["開源", "職涯發展", "技術管理"]),
-        ].into_iter().collect();
+        ]
+        .into_iter()
+        .collect();
 
         for interest in rising_interests {
             if let Some(evolutions) = evolution_paths.get(interest.as_str()) {
@@ -465,13 +493,16 @@ impl PredictiveEngine {
         let mut hourly_interests = Vec::new();
 
         // 取權重最高的幾個興趣
-        let mut sorted_interests: Vec<_> = long_term.stable_interests
+        let mut sorted_interests: Vec<_> = long_term
+            .stable_interests
             .iter()
             .filter(|(_, info)| info.weight > 0.3)
             .collect();
 
         sorted_interests.sort_by(|a, b| {
-            b.1.weight.partial_cmp(&a.1.weight).unwrap_or(std::cmp::Ordering::Equal)
+            b.1.weight
+                .partial_cmp(&a.1.weight)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         for (tag, info) in sorted_interests.into_iter().take(3) {
@@ -490,11 +521,14 @@ impl PredictiveEngine {
     /// 緩存預測結果
     async fn cache_prediction(&self, user_id: Uuid, predictions: Vec<Prediction>) {
         let mut cache = self.prediction_cache.write().await;
-        cache.insert(user_id, CachedPrediction {
-            predictions,
-            cached_at: Utc::now(),
-            ttl_seconds: 300, // 5 分鐘緩存
-        });
+        cache.insert(
+            user_id,
+            CachedPrediction {
+                predictions,
+                cached_at: Utc::now(),
+                ttl_seconds: 300, // 5 分鐘緩存
+            },
+        );
 
         // 清理過期緩存
         cache.retain(|_, v| !v.is_expired());

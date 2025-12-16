@@ -311,7 +311,9 @@ async fn main() -> io::Result<()> {
                     .map(|v| v == "development" || v == "staging")
                     .unwrap_or(false);
                 if is_dev {
-                    tracing::info!("Development/Staging mode: Starting without TLS (NOT FOR PRODUCTION)");
+                    tracing::info!(
+                        "Development/Staging mode: Starting without TLS (NOT FOR PRODUCTION)"
+                    );
                     None
                 } else {
                     tracing::error!(

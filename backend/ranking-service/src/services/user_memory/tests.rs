@@ -16,8 +16,8 @@ mod tests {
     async fn test_memory_system_flow() {
         // 注意: 此測試需要 Redis 連接
         // 如果沒有 Redis，測試會被跳過
-        let redis_url = std::env::var("REDIS_URL")
-            .unwrap_or_else(|_| "redis://localhost:6379".to_string());
+        let redis_url =
+            std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
         let redis = match redis::Client::open(redis_url.clone()) {
             Ok(client) => {
@@ -196,8 +196,8 @@ mod tests {
     /// 測試時間衰減
     #[test]
     fn test_time_decay() {
-        use memory_store::MemoryStore;
         use chrono::Duration;
+        use memory_store::MemoryStore;
 
         // 30 分鐘前的事件應該有較低的權重
         let now = Utc::now();

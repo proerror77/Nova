@@ -213,8 +213,11 @@ impl ProfileBatchJob {
 
         // Create profile updater
         let updater_config = ProfileUpdaterConfig::default();
-        let updater =
-            ProfileUpdater::new(self.ch_db.clone(), self.redis_client.clone(), updater_config);
+        let updater = ProfileUpdater::new(
+            self.ch_db.clone(),
+            self.redis_client.clone(),
+            updater_config,
+        );
 
         // Process users in batches
         for (batch_idx, batch) in users.chunks(self.config.batch_size as usize).enumerate() {

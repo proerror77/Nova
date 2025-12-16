@@ -179,22 +179,26 @@ impl Config {
                     .unwrap_or(150 * 1024 * 1024),
                 allowed_image_types: std::env::var("UPLOAD_ALLOWED_IMAGE_TYPES")
                     .map(|v| v.split(',').map(|s| s.trim().to_string()).collect())
-                    .unwrap_or_else(|_| vec![
-                        "image/jpeg".to_string(),
-                        "image/png".to_string(),
-                        "image/gif".to_string(),
-                        "image/webp".to_string(),
-                        "image/heic".to_string(),
-                        "image/heif".to_string(),
-                    ]),
+                    .unwrap_or_else(|_| {
+                        vec![
+                            "image/jpeg".to_string(),
+                            "image/png".to_string(),
+                            "image/gif".to_string(),
+                            "image/webp".to_string(),
+                            "image/heic".to_string(),
+                            "image/heif".to_string(),
+                        ]
+                    }),
                 allowed_video_types: std::env::var("UPLOAD_ALLOWED_VIDEO_TYPES")
                     .map(|v| v.split(',').map(|s| s.trim().to_string()).collect())
-                    .unwrap_or_else(|_| vec![
-                        "video/mp4".to_string(),
-                        "video/quicktime".to_string(),
-                        "video/webm".to_string(),
-                        "video/x-msvideo".to_string(),
-                    ]),
+                    .unwrap_or_else(|_| {
+                        vec![
+                            "video/mp4".to_string(),
+                            "video/quicktime".to_string(),
+                            "video/webm".to_string(),
+                            "video/x-msvideo".to_string(),
+                        ]
+                    }),
             },
         })
     }

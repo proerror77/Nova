@@ -29,9 +29,10 @@ impl InsightGenerator {
 
     /// 生成用戶洞察
     pub async fn generate(&self, memory: &UserMemoryView) -> Result<UserInsight, MemoryError> {
-        let llm = self.llm.as_ref().ok_or_else(|| {
-            MemoryError::Llm("LLM analyzer not configured".to_string())
-        })?;
+        let llm = self
+            .llm
+            .as_ref()
+            .ok_or_else(|| MemoryError::Llm("LLM analyzer not configured".to_string()))?;
 
         // 構建分析 Prompt
         let prompt = self.build_insight_prompt(memory);
@@ -63,7 +64,11 @@ impl InsightGenerator {
         if let Ok(ref lt) = memory.long_term {
             prompt.push_str("\n## 長期興趣\n");
             let mut interests: Vec<_> = lt.stable_interests.iter().collect();
-            interests.sort_by(|a, b| b.1.weight.partial_cmp(&a.1.weight).unwrap_or(std::cmp::Ordering::Equal));
+            interests.sort_by(|a, b| {
+                b.1.weight
+                    .partial_cmp(&a.1.weight)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
 
             for (tag, info) in interests.iter().take(15) {
                 let trend_str = match info.trend {
@@ -78,7 +83,9 @@ impl InsightGenerator {
             }
 
             prompt.push_str("\n## 行為模式\n");
-            let peak_hours: Vec<_> = lt.behavior_patterns.active_hours
+            let peak_hours: Vec<_> = lt
+                .behavior_patterns
+                .active_hours
                 .iter()
                 .enumerate()
                 .filter(|(_, &c)| c > 0)
@@ -97,7 +104,8 @@ impl InsightGenerator {
             prompt.push_str(&format!("核心興趣: {:?}\n", sem.core_interests));
         }
 
-        prompt.push_str(r#"
+        prompt.push_str(
+            r#"
 ## 任務
 請分析以上數據，生成 JSON 格式的用戶洞察：
 
@@ -116,7 +124,8 @@ impl InsightGenerator {
 }
 
 只返回 JSON，不要其他文字。
-"#);
+"#,
+        );
 
         prompt
     }
@@ -152,7 +161,9 @@ impl InsightGenerator {
     /// 基於規則的分析 (當 LLM 不可用時的備選)
     fn rule_based_analysis(&self, insight: &mut UserInsight, memory: &UserMemoryView) {
         // 分析興趣
-        let top_interests: Vec<String> = memory.short_term.instant_interests
+        let top_interests: Vec<String> = memory
+            .short_term
+            .instant_interests
             .iter()
             .take(5)
             .map(|(tag, _)| tag.clone())
@@ -180,9 +191,10 @@ impl InsightGenerator {
         insight.deep_interests = self.infer_deep_interests(&top_interests);
 
         // 行為洞察
-        insight.behavior_insights = vec![
-            format!("當前 Session 有 {} 個互動事件", memory.short_term.events.len()),
-        ];
+        insight.behavior_insights = vec![format!(
+            "當前 Session 有 {} 個互動事件",
+            memory.short_term.events.len()
+        )];
 
         // 內容偏好
         insight.content_preferences = ContentPreferenceInsight {
@@ -248,7 +260,9 @@ impl InsightGenerator {
             ("健身", vec!["戶外運動", "冥想", "營養學"]),
             ("投資", vec!["創業", "房地產", "被動收入"]),
             ("遊戲", vec!["遊戲開發", "直播", "電競產業"]),
-        ].into_iter().collect();
+        ]
+        .into_iter()
+        .collect();
 
         for interest in interests {
             if let Some(expansions) = expansion_map.get(interest.as_str()) {

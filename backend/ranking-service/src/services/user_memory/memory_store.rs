@@ -7,7 +7,7 @@
 // 2. Long-Term Memory (長期記憶) - 持久化，重要模式
 // 3. Semantic Memory (語義記憶) - LLM 總結的高層理解
 
-use super::{MemoryError, UserEvent, EventType};
+use super::{EventType, MemoryError, UserEvent};
 use chrono::{DateTime, Duration, Timelike, Utc};
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
@@ -58,7 +58,11 @@ impl MemoryStore {
     // ============================================
 
     /// 添加事件到短期記憶
-    pub async fn add_to_short_term(&self, user_id: Uuid, event: &UserEvent) -> Result<(), MemoryError> {
+    pub async fn add_to_short_term(
+        &self,
+        user_id: Uuid,
+        event: &UserEvent,
+    ) -> Result<(), MemoryError> {
         let mut conn = self.redis.get_multiplexed_async_connection().await?;
         let key = self.short_term_key(user_id);
 
@@ -71,10 +75,14 @@ impl MemoryStore {
         let _: () = conn.lpush(&key, &event_json).await?;
 
         // 限制列表長度
-        let _: () = conn.ltrim(&key, 0, self.config.short_term_max_events as isize - 1).await?;
+        let _: () = conn
+            .ltrim(&key, 0, self.config.short_term_max_events as isize - 1)
+            .await?;
 
         // 設置 TTL
-        let _: () = conn.expire(&key, self.config.short_term_ttl_secs as i64).await?;
+        let _: () = conn
+            .expire(&key, self.config.short_term_ttl_secs as i64)
+            .await?;
 
         debug!(user_id = %user_id, event_type = ?event.event_type, "Added to short-term memory");
         Ok(())
@@ -118,9 +126,10 @@ impl MemoryStore {
     /// 整合短期記憶到長期記憶
     pub async fn consolidate_to_long_term(&self, user_id: Uuid) -> Result<(), MemoryError> {
         let short_term = self.get_short_term(user_id).await?;
-        let mut long_term = self.get_long_term(user_id).await.unwrap_or_else(|_| {
-            LongTermMemory::new(user_id)
-        });
+        let mut long_term = self
+            .get_long_term(user_id)
+            .await
+            .unwrap_or_else(|_| LongTermMemory::new(user_id));
 
         // 整合興趣
         for (tag, weight) in &short_term.instant_interests {
@@ -149,9 +158,13 @@ impl MemoryStore {
         let json: Option<String> = conn.get(&key).await?;
 
         match json {
-            Some(data) => serde_json::from_str(&data)
-                .map_err(|e| MemoryError::Serialization(e.to_string())),
-            None => Err(MemoryError::NotFound(format!("Long-term memory not found for user {}", user_id))),
+            Some(data) => {
+                serde_json::from_str(&data).map_err(|e| MemoryError::Serialization(e.to_string()))
+            }
+            None => Err(MemoryError::NotFound(format!(
+                "Long-term memory not found for user {}",
+                user_id
+            ))),
         }
     }
 
@@ -160,8 +173,8 @@ impl MemoryStore {
         let mut conn = self.redis.get_multiplexed_async_connection().await?;
         let key = self.long_term_key(memory.user_id);
 
-        let json = serde_json::to_string(memory)
-            .map_err(|e| MemoryError::Serialization(e.to_string()))?;
+        let json =
+            serde_json::to_string(memory).map_err(|e| MemoryError::Serialization(e.to_string()))?;
 
         let ttl_secs = self.config.long_term_ttl_days as i64 * 86400;
         let _: () = conn.set_ex(&key, &json, ttl_secs as u64).await?;
@@ -195,8 +208,8 @@ impl MemoryStore {
         let mut conn = self.redis.get_multiplexed_async_connection().await?;
         let key = self.semantic_key(memory.user_id);
 
-        let json = serde_json::to_string(memory)
-            .map_err(|e| MemoryError::Serialization(e.to_string()))?;
+        let json =
+            serde_json::to_string(memory).map_err(|e| MemoryError::Serialization(e.to_string()))?;
 
         let ttl_secs = self.config.long_term_ttl_days as i64 * 86400;
         let _: () = conn.set_ex(&key, &json, ttl_secs as u64).await?;
@@ -387,7 +400,8 @@ impl LongTermMemory {
 
     /// 更新興趣
     pub fn update_interest(&mut self, tag: &str, weight: f32) {
-        let info = self.stable_interests
+        let info = self
+            .stable_interests
             .entry(tag.to_string())
             .or_insert_with(|| InterestInfo::new(tag));
 
@@ -569,14 +583,18 @@ mod tests {
     #[test]
     fn test_memory_event_weight() {
         // Test engagement scores
-        assert!(MemoryEvent {
-            event_id: "1".to_string(),
-            event_type: "Purchase".to_string(),
-            content_id: None,
-            tags: vec![],
-            engagement_score: 1.0,
-            session_id: "s1".to_string(),
-            timestamp: Utc::now(),
-        }.weight() == 1.0);
+        assert!(
+            MemoryEvent {
+                event_id: "1".to_string(),
+                event_type: "Purchase".to_string(),
+                content_id: None,
+                tags: vec![],
+                engagement_score: 1.0,
+                session_id: "s1".to_string(),
+                timestamp: Utc::now(),
+            }
+            .weight()
+                == 1.0
+        );
     }
 }
