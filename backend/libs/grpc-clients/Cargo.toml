@@ -40,7 +40,7 @@ uuid = { version = "1.7", features = ["v4", "serde"] }
 lazy_static = "1.4"
 
 # Metrics
-prometheus = "0.13"
+prometheus = "0.14"
 
 [build-dependencies]
 tonic-build = "0.12"

@@ -12,7 +12,7 @@ futures-util = "0.3"
 thiserror = { workspace = true }
 tracing = { workspace = true }
 parking_lot = "0.12"
-prometheus = { version = "0.13", optional = true }
+prometheus = { version = "0.14", optional = true }
 once_cell = { version = "1.19", optional = true }
 rand = "0.8"
 

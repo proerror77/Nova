@@ -132,7 +132,7 @@ serial_test = "3.0"
 testcontainers = "0.17"
 
 # Metrics
-prometheus = "0.13"
+prometheus = "0.14"
 
 # Rate limiting
 governor = "0.6"

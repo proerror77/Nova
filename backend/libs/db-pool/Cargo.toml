@@ -9,7 +9,7 @@ license.workspace = true
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio-rustls", "uuid", "chrono", "migrate", "macros"] }
 tokio.workspace = true
 tracing.workspace = true
-prometheus = "0.13"
+prometheus = "0.14"
 lazy_static = "1.4"
 
 [dev-dependencies]
