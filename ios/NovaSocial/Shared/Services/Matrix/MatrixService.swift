@@ -6,7 +6,8 @@ import UIKit  // For UIDevice
 // TODO: Remove these stubs once MatrixRustSDK is properly integrated via SPM
 // These are placeholder types to allow the app to compile without the SDK
 
-#if !canImport(MatrixRustSDK)
+// MatrixRustSDK stub types - SDK not yet integrated
+// Note: #if !canImport(MatrixRustSDK) doesn't work correctly in Xcode
 class Client {
     func userId() -> String { "" }
     func rooms() -> [Room] { [] }
@@ -190,7 +191,6 @@ protocol RoomListEntriesListenerProtocol: AnyObject {
 }
 
 func messageEventContentFromMarkdown(md: String) -> Any { md }
-#endif
 
 // MARK: - Matrix Service
 //
