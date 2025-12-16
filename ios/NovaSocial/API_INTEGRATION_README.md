@@ -302,7 +302,11 @@ Use ViewModel preview helper:
 
 ## TODO
 
-- [ ] Implement authentication service and token management
+- [x] Implement OAuth authentication (Google, Apple Sign-In)
+  - Backend OAuth REST API endpoints implemented
+  - iOS Sign in with Apple entitlement configured
+  - Apple native sign-in endpoint for ASAuthorizationController
+- [ ] Implement iOS OAuth client integration (AuthenticationManager)
 - [ ] Implement user profile service (separate from GraphService)
   - User profile fetching
   - Profile updates (avatar, bio, etc.)

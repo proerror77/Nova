@@ -1,7 +1,7 @@
 # Nova API Reference
 
 **Version**: 2.0
-**Last Updated**: 2025-11-30
+**Last Updated**: 2025-12-16
 **Base URL**: `https://api.nova.social` (Production) | Staging ELB
 
 ---
@@ -64,6 +64,16 @@
 | POST | `/api/v2/auth/refresh` | Refresh access token | Refresh Token |
 | POST | `/api/v2/auth/logout` | Logout, revoke token | JWT |
 
+### OAuth Authentication /api/v2/auth/oauth/*
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/v2/auth/oauth/google/start` | Start Google OAuth flow | - |
+| POST | `/api/v2/auth/oauth/google/callback` | Complete Google OAuth | - |
+| POST | `/api/v2/auth/oauth/apple/start` | Start Apple OAuth flow | - |
+| POST | `/api/v2/auth/oauth/apple/callback` | Complete Apple OAuth | - |
+| POST | `/api/v2/auth/oauth/apple/native` | iOS native Apple Sign-In | - |
+
 **Request: Register**
 ```json
 {
@@ -84,6 +94,63 @@
     "id": "uuid",
     "username": "johndoe",
     "display_name": "John Doe"
+  }
+}
+```
+
+**Request: Start OAuth (Google/Apple)**
+```json
+{
+  "redirect_uri": "novasocial://oauth/callback",
+  "invite_code": "OPTIONAL_INVITE_CODE"
+}
+```
+
+**Response: Start OAuth**
+```json
+{
+  "authorization_url": "https://accounts.google.com/o/oauth2/v2/auth?...",
+  "state": "random_state_string"
+}
+```
+
+**Request: Complete OAuth (Google/Apple)**
+```json
+{
+  "code": "authorization_code_from_provider",
+  "state": "state_from_start_response",
+  "redirect_uri": "novasocial://oauth/callback",
+  "invite_code": "OPTIONAL_INVITE_CODE"
+}
+```
+
+**Request: Apple Native Sign-In (iOS)**
+```json
+{
+  "authorization_code": "code_from_ASAuthorizationController",
+  "identity_token": "jwt_identity_token_from_apple",
+  "user_identifier": "unique_user_id_from_apple",
+  "email": "user@example.com",
+  "full_name": {
+    "given_name": "John",
+    "family_name": "Doe"
+  },
+  "invite_code": "OPTIONAL_INVITE_CODE"
+}
+```
+
+**Response: OAuth Callback / Apple Native**
+```json
+{
+  "user_id": "uuid",
+  "token": "eyJhbGciOiJSUzI1NiIs...",
+  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2g...",
+  "expires_in": 3600,
+  "is_new_user": true,
+  "user": {
+    "id": "uuid",
+    "username": "johndoe",
+    "email": "john@example.com"
   }
 }
 ```
