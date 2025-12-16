@@ -220,7 +220,7 @@ impl GrpcConfig {
             },
             chat_service: ServiceEndpoint {
                 url: env::var("GRPC_CHAT_SERVICE_URL")
-                    .unwrap_or_else(|_| "http://realtime-chat-service:9085".to_string()),
+                    .unwrap_or_else(|_| "http://realtime-chat-service:9086".to_string()),
                 tier: DependencyTier::from_env("GRPC_CHAT_SERVICE_TIER", default_tier1),
             },
             ranking_service: ServiceEndpoint {
