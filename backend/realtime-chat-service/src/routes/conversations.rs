@@ -59,9 +59,12 @@ pub async fn create_conversation(
 ) -> Result<HttpResponse, AppError> {
     // Security: Can only create conversations with yourself or another user
     // For now, we allow creation. In future, might want to verify user_a == authenticated user
+    // P0: Pass graph_client and identity_client for dm_permission check via identity-service SSOT
     let id = ConversationService::create_direct_conversation(
         &state.db,
         &state.auth_client,
+        state.graph_client.as_ref(),
+        state.identity_client.as_ref(),
         body.user_a,
         body.user_b,
     )

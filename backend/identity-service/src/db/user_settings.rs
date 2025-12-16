@@ -236,5 +236,6 @@ pub async fn get_dm_permission(pool: &PgPool, user_id: Uuid) -> Result<String, I
     .map_err(|e| IdentityError::Database(e.to_string()))?;
 
     // Return default if not found
-    Ok(result.unwrap_or_else(|| "anyone".to_string()))
+    // P1: Default to "mutuals" (more restrictive) for security
+    Ok(result.unwrap_or_else(|| "mutuals".to_string()))
 }

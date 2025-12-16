@@ -1,8 +1,11 @@
-use crate::services::relationship_service::{CanMessageResult, RelationshipService};
+use crate::services::graph_client::GraphClient;
+use crate::services::identity_client::IdentityClient;
+use crate::services::relationship_service::{CanMessageResult, RelationshipServiceV2};
 use chrono::{DateTime, Utc};
 use grpc_clients::AuthClient;
 use serde::{Deserialize, Serialize};
 use deadpool_postgres::Pool;
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -50,9 +53,13 @@ pub struct ConversationService;
 impl ConversationService {
     /// Create a direct (1:1) conversation between two users
     /// Performs authorization checks based on recipient's DM settings and block status
+    ///
+    /// P0: Uses identity-service as SSOT for dm_permission via RelationshipServiceV2
     pub async fn create_direct_conversation(
         db: &Pool,
         auth_client: &AuthClient,
+        graph_client: Option<&Arc<GraphClient>>,
+        identity_client: Option<&Arc<IdentityClient>>,
         initiator: Uuid,
         recipient: Uuid,
     ) -> Result<Uuid, crate::error::AppError> {
@@ -80,7 +87,25 @@ impl ConversationService {
         }
 
         // Authorization check: can initiator message recipient?
-        let can_message = RelationshipService::can_message(db, initiator, recipient).await?;
+        // P0: Use RelationshipServiceV2 which reads dm_permission from identity-service (SSOT)
+        let can_message = match (graph_client, identity_client) {
+            (Some(gc), Some(ic)) => {
+                let relationship_service = RelationshipServiceV2::new(
+                    (**gc).clone(),
+                    (**ic).clone(),
+                    db.clone(),
+                );
+                relationship_service.can_message(initiator, recipient).await?
+            }
+            _ => {
+                // Fallback: If clients not available, allow messaging (graceful degradation)
+                // This maintains backwards compatibility during migration
+                tracing::warn!(
+                    "graph_client or identity_client not available, skipping DM permission check"
+                );
+                CanMessageResult::Allowed
+            }
+        };
 
         match can_message {
             CanMessageResult::Allowed => {

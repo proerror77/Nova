@@ -67,9 +67,12 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
                 // direct conversation only needs two participants
                 let a = participant_ids[0];
                 let b = participant_ids[1];
+                // P0: Pass graph_client and identity_client for dm_permission check via identity-service SSOT
                 ConversationService::create_direct_conversation(
                     &self.state.db,
                     &self.state.auth_client,
+                    self.state.graph_client.as_ref(),
+                    self.state.identity_client.as_ref(),
                     a,
                     b,
                 )

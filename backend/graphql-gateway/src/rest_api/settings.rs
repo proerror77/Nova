@@ -96,9 +96,10 @@ pub async fn get_settings(
                 )
             } else {
                 // Return default settings if none exist
+                // P1: Default to "mutuals" (more restrictive) for security
                 Ok(HttpResponse::Ok().json(UserSettingsResponse {
                     user_id: user_id.clone(),
-                    dm_permission: "anyone".to_string(),
+                    dm_permission: "mutuals".to_string(),
                     email_notifications: true,
                     push_notifications: true,
                     marketing_emails: false,
