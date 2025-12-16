@@ -72,9 +72,9 @@ class FeedViewModel: ObservableObject {
 
         guard !urls.isEmpty else { return }
 
-        // Run prefetch asynchronously to avoid blocking main actor
+        // Run prefetch asynchronously with low priority to avoid blocking main actor
         Task.detached(priority: .utility) { [urls, prefetchTargetSize] in
-            await ImageCacheService.shared.prefetch(urls: urls, targetSize: prefetchTargetSize)
+            await ImageCacheService.shared.prefetch(urls: urls, targetSize: prefetchTargetSize, priority: .low)
         }
     }
 
@@ -82,6 +82,35 @@ class FeedViewModel: ObservableObject {
     func onPostAppear(at index: Int) {
         // Prefetch images for the next 5 posts
         prefetchImagesForPosts(posts, startIndex: index + 1, count: 5)
+    }
+
+    /// Smart prefetch with visibility tracking for optimal performance
+    func onVisiblePostsChanged(visibleIndices: Set<Int>) {
+        guard !posts.isEmpty else { return }
+        
+        let sortedIndices = visibleIndices.sorted()
+        guard let firstVisible = sortedIndices.first,
+              let lastVisible = sortedIndices.last else { return }
+        
+        // Get URLs for currently visible posts (high priority)
+        let visibleUrls = sortedIndices
+            .filter { $0 < posts.count }
+            .flatMap { posts[$0].displayMediaUrls }
+        
+        // Get URLs for upcoming posts (prefetch with low priority)
+        let prefetchStart = lastVisible + 1
+        let prefetchEnd = min(prefetchStart + 8, posts.count)
+        let upcomingUrls = (prefetchStart..<prefetchEnd)
+            .flatMap { posts[$0].displayMediaUrls }
+        
+        // Use smart prefetch for optimal loading
+        Task.detached(priority: .utility) { [visibleUrls, upcomingUrls, prefetchTargetSize] in
+            await ImageCacheService.shared.smartPrefetch(
+                visibleUrls: visibleUrls,
+                upcomingUrls: upcomingUrls,
+                targetSize: prefetchTargetSize
+            )
+        }
     }
 
     // MARK: - Public Methods

@@ -16,6 +16,8 @@ struct NewPostView: View {
     @State private var selectedMediaItems: [PostMediaItem] = []  // Live Photo support
     @State private var isProcessingMedia = false  // Live Photo processing indicator
     @State private var isPosting = false
+    @State private var uploadProgress: Double = 0.0  // Upload progress (0.0 to 1.0)
+    @State private var uploadStatus: String = ""  // Upload status message
     @State private var postError: String?
     @State private var showNameSelector = false  // 控制名称选择弹窗
     @State private var selectedNameType: NameDisplayType = .realName  // 选择的名称类型
@@ -195,9 +197,23 @@ struct NewPostView: View {
                 }
             }) {
                 if isPosting {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: Color(red: 0.87, green: 0.11, blue: 0.26)))
-                        .scaleEffect(0.8)
+                    HStack(spacing: 4) {
+                        // Circular progress indicator with percentage
+                        ZStack {
+                            Circle()
+                                .stroke(Color.gray.opacity(0.2), lineWidth: 2)
+                            Circle()
+                                .trim(from: 0, to: uploadProgress)
+                                .stroke(Color(red: 0.87, green: 0.11, blue: 0.26), lineWidth: 2)
+                                .rotationEffect(.degrees(-90))
+                                .animation(.linear(duration: 0.2), value: uploadProgress)
+                        }
+                        .frame(width: 18, height: 18)
+                        
+                        Text("\(Int(uploadProgress * 100))%")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
+                    }
                 } else {
                     Text("Post")
                         .font(.system(size: 14))
@@ -206,7 +222,7 @@ struct NewPostView: View {
                 }
             }
             .disabled(!canPost || isPosting)
-            .frame(width: 36)
+            .frame(minWidth: 36)
         }
         .frame(height: DesignTokens.topBarHeight)
         .padding(.horizontal, 16)
@@ -990,6 +1006,29 @@ struct NewPostView: View {
             image.draw(in: CGRect(origin: .zero, size: newSize))
         }
     }
+    
+    // MARK: - 异步调整图片大小（在背景线程执行）
+    private func resizeImageForUploadAsync(_ image: UIImage, maxDimension: CGFloat = 1024) async -> UIImage {
+        // Run image processing on a background thread to avoid blocking UI
+        return await Task.detached(priority: .userInitiated) {
+            let size = image.size
+            
+            // 如果图片已经足够小，直接返回
+            if size.width <= maxDimension && size.height <= maxDimension {
+                return image
+            }
+            
+            // 计算缩放比例
+            let ratio = min(maxDimension / size.width, maxDimension / size.height)
+            let newSize = CGSize(width: size.width * ratio, height: size.height * ratio)
+            
+            // 使用 UIGraphicsImageRenderer 进行高质量缩放
+            let renderer = UIGraphicsImageRenderer(size: newSize)
+            return renderer.image { _ in
+                image.draw(in: CGRect(origin: .zero, size: newSize))
+            }
+        }.value
+    }
 
     // MARK: - 提交帖子
     private func submitPost() async {
@@ -1003,111 +1042,221 @@ struct NewPostView: View {
 
         isPosting = true
         postError = nil
+        uploadProgress = 0.0
+        uploadStatus = "Preparing..."
 
         do {
-            // Step 1: Upload media (images and Live Photos with retry logic)
+            // Step 1: Upload media (images and Live Photos) - now with parallel uploads!
             var mediaUrls: [String] = []
-            // Note: mediaType tracking removed - backend determines type from URLs
             
             // Use new media items if available, otherwise fall back to legacy selectedImages
             let itemsToUpload: [PostMediaItem] = selectedMediaItems.isEmpty 
                 ? selectedImages.map { .image($0) } 
                 : selectedMediaItems
             
-            for mediaItem in itemsToUpload {
-                switch mediaItem {
+            guard !itemsToUpload.isEmpty else {
+                // No media to upload, skip to post creation
+                uploadProgress = 0.5
+                uploadStatus = "Creating post..."
+                
+                // Jump to Step 2 (post creation) below
+                let content = postText.trimmingCharacters(in: .whitespacesAndNewlines)
+                var post: Post?
+                var lastError: Error?
+
+                for attempt in 1...3 {
+                    do {
+                        post = try await contentService.createPost(
+                            creatorId: userId,
+                            content: content.isEmpty ? " " : content,
+                            mediaUrls: nil,
+                            channelIds: selectedChannelIds.isEmpty ? nil : selectedChannelIds
+                        )
+                        break
+                    } catch let error as APIError {
+                        lastError = error
+                        if case .serverError(let statusCode, _) = error, statusCode == 503 {
+                            if attempt < 3 {
+                                try await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000)
+                                continue
+                            }
+                        }
+                        throw error
+                    }
+                }
+
+                guard let createdPost = post else {
+                    throw lastError ?? APIError.serverError(statusCode: 503, message: "Service unavailable")
+                }
+
+                await MainActor.run {
+                    isPosting = false
+                    uploadProgress = 1.0
+                    clearDraft()
+                    showNewPost = false
+                    onPostSuccess?(createdPost)
+                }
+                return
+            }
+            
+            // Separate regular images from Live Photos for different handling
+            var regularImages: [(data: Data, filename: String, index: Int)] = []
+            var livePhotos: [(data: LivePhotoData, index: Int)] = []
+            
+            // Process images in parallel on background thread for faster preparation
+            await MainActor.run {
+                uploadStatus = "Processing images..."
+            }
+            
+            // Collect images and live photos first
+            var imagesToProcess: [(image: UIImage, index: Int)] = []
+            for (index, item) in itemsToUpload.enumerated() {
+                switch item {
                 case .image(let image):
-                    // Regular image upload
-                    let resizedImage = resizeImageForUpload(image)
-                    if let imageData = resizedImage.jpegData(compressionQuality: 0.3) {
-                        #if DEBUG
-                        print("[NewPost] Uploading image: \(imageData.count / 1024) KB")
-                        #endif
-
-                        var mediaUrl: String?
-                        var lastError: Error?
-
-                        for attempt in 1...3 {
-                            do {
-                                mediaUrl = try await mediaService.uploadImage(
-                                    imageData: imageData,
-                                    filename: "post_\(UUID().uuidString).jpg"
-                                )
-                                break
-                            } catch let error as APIError {
-                                lastError = error
-                                if case .serverError(let statusCode, _) = error, statusCode == 503 {
-                                    #if DEBUG
-                                    print("[NewPost] Image upload attempt \(attempt) failed with 503, retrying...")
-                                    #endif
-                                    if attempt < 3 {
-                                        try await Task.sleep(nanoseconds: UInt64(attempt) * 2_000_000_000)
-                                        continue
-                                    }
-                                }
-                                throw error
-                            }
-                        }
-
-                        guard let uploadedUrl = mediaUrl else {
-                            throw lastError ?? APIError.serverError(statusCode: 503, message: "Image upload failed")
-                        }
-
-                        mediaUrls.append(uploadedUrl)
-                    }
-                    
+                    imagesToProcess.append((image: image, index: index))
                 case .livePhoto(let livePhotoData):
-                    // Live Photo upload (both image and video)
-                    #if DEBUG
-                    print("[NewPost] Uploading Live Photo...")
-                    #endif
-                    
-                    let resizedImage = resizeImageForUpload(livePhotoData.stillImage)
-                    guard let imageData = resizedImage.jpegData(compressionQuality: 0.5) else {
-                        continue
-                    }
-                    
-                    var livePhotoResult: LivePhotoUploadResult?
-                    var lastError: Error?
-                    
-                    for attempt in 1...3 {
-                        do {
-                            livePhotoResult = try await mediaService.uploadLivePhoto(
-                                imageData: imageData,
-                                videoURL: livePhotoData.videoURL
-                            )
-                            break
-                        } catch let error as APIError {
-                            lastError = error
-                            if case .serverError(let statusCode, _) = error, statusCode == 503 {
-                                #if DEBUG
-                                print("[NewPost] Live Photo upload attempt \(attempt) failed with 503, retrying...")
-                                #endif
-                                if attempt < 3 {
-                                    try await Task.sleep(nanoseconds: UInt64(attempt) * 2_000_000_000)
-                                    continue
-                                }
+                    livePhotos.append((data: livePhotoData, index: index))
+                }
+            }
+            
+            // Process images in parallel on background threads
+            if !imagesToProcess.isEmpty {
+                await withTaskGroup(of: (data: Data, filename: String, index: Int)?.self) { group in
+                    for imageInfo in imagesToProcess {
+                        group.addTask {
+                            // Perform resize and compression on background thread
+                            let resizedImage = await self.resizeImageForUploadAsync(imageInfo.image)
+                            if let imageData = resizedImage.jpegData(compressionQuality: 0.6) {
+                                return (data: imageData, filename: "post_\(UUID().uuidString).jpg", index: imageInfo.index)
                             }
-                            throw error
+                            return nil
                         }
                     }
                     
-                    guard let result = livePhotoResult else {
-                        throw lastError ?? APIError.serverError(statusCode: 503, message: "Live Photo upload failed")
+                    for await result in group {
+                        if let result = result {
+                            regularImages.append(result)
+                        }
                     }
+                }
+                // Sort by original index to maintain order
+                regularImages.sort { $0.index < $1.index }
+            }
+            
+            let totalItems = regularImages.count + livePhotos.count
+            var completedItems = 0
+            var uploadResults: [(index: Int, urls: [String])] = []
+            
+            // Upload regular images in parallel
+            if !regularImages.isEmpty {
+                await MainActor.run {
+                    uploadStatus = "Uploading images..."
+                }
+                
+                #if DEBUG
+                print("[NewPost] Starting parallel upload of \(regularImages.count) images")
+                #endif
+                
+                let imagesToUpload = regularImages.map { (data: $0.data, filename: $0.filename) }
+                let batchResult = await mediaService.uploadImagesInParallel(
+                    images: imagesToUpload,
+                    maxConcurrent: 5,
+                    progressCallback: { [totalItems] progress in
+                        Task { @MainActor in
+                            // Calculate overall progress (images take 80% of progress)
+                            let imageWeight = Double(regularImages.count) / Double(totalItems)
+                            self.uploadProgress = progress * 0.8 * imageWeight
+                        }
+                    }
+                )
+                
+                // Process results maintaining order
+                for (arrayIndex, imageInfo) in regularImages.enumerated() {
+                    if arrayIndex < batchResult.successfulUrls.count && !batchResult.failedIndices.contains(arrayIndex) {
+                        // Find the URL for this index
+                        let urlIndex = (0..<arrayIndex).filter { !batchResult.failedIndices.contains($0) }.count
+                        if urlIndex < batchResult.successfulUrls.count {
+                            uploadResults.append((index: imageInfo.index, urls: [batchResult.successfulUrls[urlIndex]]))
+                        }
+                    }
+                }
+                
+                completedItems += regularImages.count - batchResult.failedIndices.count
+                
+                // Check for failures
+                if !batchResult.failedIndices.isEmpty {
+                    #if DEBUG
+                    print("[NewPost] \(batchResult.failedIndices.count) image(s) failed to upload")
+                    #endif
+                    // Continue with successful uploads rather than failing entirely
+                }
+            }
+            
+            // Upload Live Photos (these need sequential handling due to image+video pairing)
+            for (livePhotoIndex, livePhotoInfo) in livePhotos.enumerated() {
+                await MainActor.run {
+                    uploadStatus = "Uploading Live Photo \(livePhotoIndex + 1)/\(livePhotos.count)..."
+                }
+                
+                let resizedImage = resizeImageForUpload(livePhotoInfo.data.stillImage)
+                guard let imageData = resizedImage.jpegData(compressionQuality: 0.5) else {
+                    continue
+                }
+                
+                var livePhotoResult: LivePhotoUploadResult?
+                var lastError: Error?
+                
+                for attempt in 1...3 {
+                    do {
+                        livePhotoResult = try await mediaService.uploadLivePhoto(
+                            imageData: imageData,
+                            videoURL: livePhotoInfo.data.videoURL
+                        )
+                        break
+                    } catch let error as APIError {
+                        lastError = error
+                        if case .serverError(let statusCode, _) = error, statusCode == 503 {
+                            #if DEBUG
+                            print("[NewPost] Live Photo upload attempt \(attempt) failed with 503, retrying...")
+                            #endif
+                            if attempt < 3 {
+                                try await Task.sleep(nanoseconds: UInt64(attempt) * 2_000_000_000)
+                                continue
+                            }
+                        }
+                        throw error
+                    }
+                }
+                
+                if let result = livePhotoResult {
+                    uploadResults.append((index: livePhotoInfo.index, urls: [result.imageUrl, result.videoUrl]))
+                    completedItems += 1
                     
-                    // Add both URLs - image first, then video
-                    mediaUrls.append(result.imageUrl)
-                    mediaUrls.append(result.videoUrl)
-                    // Live Photo type is determined by backend from paired URLs
+                    await MainActor.run {
+                        let progress = Double(completedItems) / Double(totalItems)
+                        uploadProgress = 0.8 * progress
+                    }
                     
                     #if DEBUG
                     print("[NewPost] Live Photo uploaded - Image: \(result.imageUrl), Video: \(result.videoUrl)")
                     #endif
                 }
             }
+            
+            // Sort results by original index to maintain order
+            uploadResults.sort { $0.index < $1.index }
+            mediaUrls = uploadResults.flatMap { $0.urls }
+            
+            #if DEBUG
+            print("[NewPost] Upload complete: \(mediaUrls.count) URLs")
+            #endif
 
             // Step 2: 创建帖子 (带重试逻辑处理 503 错误)
+            await MainActor.run {
+                uploadProgress = 0.85
+                uploadStatus = "Creating post..."
+            }
+            
             let content = postText.trimmingCharacters(in: .whitespacesAndNewlines)
             var post: Post?
             var lastError: Error?
@@ -1142,6 +1291,8 @@ struct NewPostView: View {
 
             // Step 3: 成功后关闭页面并触发刷新回调
             await MainActor.run {
+                uploadProgress = 1.0
+                uploadStatus = "Done!"
                 isPosting = false
                 // 发帖成功后清除草稿
                 clearDraft()
@@ -1153,6 +1304,8 @@ struct NewPostView: View {
         } catch {
             await MainActor.run {
                 isPosting = false
+                uploadProgress = 0.0
+                uploadStatus = ""
                 postError = "Failed to create post: \(error.localizedDescription)"
             }
         }
