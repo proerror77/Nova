@@ -40,7 +40,7 @@ impl AuthClient {
     pub fn from_pool(pool: Arc<GrpcClientPool>) -> Self {
         Self {
             client: pool.auth(),
-            request_timeout: Duration::from_millis(500), // Optimized for EXISTS check
+            request_timeout: Duration::from_millis(2000), // Increased from 500ms for network resilience
         }
     }
 
@@ -51,7 +51,7 @@ impl AuthClient {
     pub fn new(channel: Channel) -> Self {
         Self {
             client: TonicAuthServiceClient::new(channel),
-            request_timeout: Duration::from_millis(500),
+            request_timeout: Duration::from_millis(2000), // Increased from 500ms for network resilience
         }
     }
 
@@ -76,7 +76,7 @@ impl AuthClient {
 
         Ok(Self {
             client,
-            request_timeout: Duration::from_millis(500),
+            request_timeout: Duration::from_millis(2000), // Increased from 500ms for network resilience
         })
     }
 
