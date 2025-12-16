@@ -57,6 +57,33 @@ class FeedViewModel: ObservableObject {
     // Track ongoing bookmark operations to prevent concurrent calls for the same post
     private var ongoingBookmarkOperations: Set<String> = []
 
+    // Image prefetch target size for feed cards
+    private let prefetchTargetSize = CGSize(width: 750, height: 1000)
+
+    // MARK: - Image Prefetching
+
+    /// Prefetch images for upcoming posts to improve scroll performance
+    private func prefetchImagesForPosts(_ posts: [FeedPost], startIndex: Int = 0, count: Int = 5) {
+        let endIndex = min(startIndex + count, posts.count)
+        guard startIndex < endIndex else { return }
+
+        let upcomingPosts = posts[startIndex..<endIndex]
+        let urls = upcomingPosts.flatMap { $0.displayMediaUrls }
+
+        guard !urls.isEmpty else { return }
+
+        // Run prefetch asynchronously to avoid blocking main actor
+        Task.detached(priority: .utility) { [urls, prefetchTargetSize] in
+            await ImageCacheService.shared.prefetch(urls: urls, targetSize: prefetchTargetSize)
+        }
+    }
+
+    /// Called when a post appears on screen - prefetch next batch
+    func onPostAppear(at index: Int) {
+        // Prefetch images for the next 5 posts
+        prefetchImagesForPosts(posts, startIndex: index + 1, count: 5)
+    }
+
     // MARK: - Public Methods
 
     /// Check if user is authenticated (has valid token and is not in guest mode)
@@ -129,6 +156,9 @@ class FeedViewModel: ObservableObject {
                 return true
             }
 
+            // Prefetch images for first batch of posts
+            prefetchImagesForPosts(self.posts, startIndex: 0, count: 10)
+
             self.error = nil
         } catch let apiError as APIError {
             // Handle unauthorized: try token refresh or fallback to guest mode
@@ -146,8 +176,8 @@ class FeedViewModel: ObservableObject {
                     await loadFeed(algorithm: algorithm, isGuestFallback: true)
                     return
                 }
-            } else if case .serverError(let statusCode, _) = apiError, statusCode == 500 {
-                // Backend feed-service unreachable or gRPC error (e.g. \"tcp connect error\")
+            } else if case .serverError(let statusCode, _) = apiError, (500...503).contains(statusCode) {
+                // Backend feed-service unreachable, bad gateway (502), or service unavailable (503)
                 // Fallback: load guest/trending feed instead of showing a hard error.
                 do {
                     let fallbackResponse = try await feedService.getTrendingFeed(limit: 20, cursor: nil)

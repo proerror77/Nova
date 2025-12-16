@@ -415,7 +415,16 @@ enum FeedMediaType: String, Codable {
 
 /// Feed post with full details for UI display
 /// Note: Uses APIClient's convertFromSnakeCase for automatic key mapping
-struct FeedPost: Identifiable, Codable {
+/// Equatable for efficient SwiftUI diffing
+struct FeedPost: Identifiable, Codable, Equatable {
+    // MARK: - Equatable (only compare fields that affect UI)
+    static func == (lhs: FeedPost, rhs: FeedPost) -> Bool {
+        lhs.id == rhs.id &&
+        lhs.likeCount == rhs.likeCount &&
+        lhs.commentCount == rhs.commentCount &&
+        lhs.isLiked == rhs.isLiked &&
+        lhs.isBookmarked == rhs.isBookmarked
+    }
     let id: String
     let authorId: String
     let authorName: String

@@ -27,6 +27,11 @@ enum APIError: Error, LocalizedError {
         case .decodingError:
             return "Failed to process server response"
         case .serverError(let statusCode, let message):
+            // For 5xx server errors, show a user-friendly message instead of raw server response
+            // (which may contain HTML from load balancers/proxies)
+            if statusCode >= 500 {
+                return "Server error (\(statusCode)): The server is temporarily unavailable. Please try again later."
+            }
             return "Server error (\(statusCode)): \(message)"
         case .unauthorized:
             return "Session expired. Please login again."

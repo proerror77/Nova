@@ -484,6 +484,8 @@ class ChatViewModel: ObservableObject {
     }
 
     deinit {
+        // Ensure timer is fully cleaned up
+        // Note: WebSocket cleanup is handled in cleanup() which should be called by the view
         typingTimer?.invalidate()
     }
 }

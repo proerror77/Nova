@@ -296,6 +296,9 @@ struct HomeView: View {
                                         showPostDetail = true
                                     }
                                     .onAppear {
+                                        // Prefetch images for upcoming posts
+                                        feedViewModel.onPostAppear(at: index)
+
                                         // Auto-load more when reaching near the end (3 posts before)
                                         if index >= feedViewModel.posts.count - 3 && feedViewModel.hasMore && !feedViewModel.isLoadingMore {
                                             Task { await feedViewModel.loadMore() }
