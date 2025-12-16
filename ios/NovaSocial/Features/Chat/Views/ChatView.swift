@@ -5,53 +5,6 @@ import MapKit
 import Combine
 import AVFoundation
 
-// MARK: - 消息UI模型
-/// UI层的消息模型，包含后端Message + UI特定字段（图片、位置、语音）
-struct ChatMessage: Identifiable, Equatable {
-    let id: String  // 改为String以匹配后端Message.id
-    let backendMessage: Message?  // 后端消息对象（可选，本地消息可能还没发送）
-    let text: String
-    let isFromMe: Bool
-    let timestamp: Date
-    var image: UIImage?
-    var location: CLLocationCoordinate2D?
-    var audioData: Data?  // 语音消息数据
-    var audioDuration: TimeInterval?  // 语音时长（秒）
-    var audioUrl: URL?  // 语音文件 URL
-
-    static func == (lhs: ChatMessage, rhs: ChatMessage) -> Bool {
-        lhs.id == rhs.id
-    }
-
-    /// 从后端Message创建ChatMessage
-    init(from message: Message, currentUserId: String) {
-        self.id = message.id
-        self.backendMessage = message
-        self.text = message.content
-        self.isFromMe = message.senderId == currentUserId
-        self.timestamp = message.createdAt
-        self.image = nil  // 图片需要单独加载
-        self.location = nil  // TODO: 解析location类型消息
-        self.audioData = nil
-        self.audioDuration = nil
-        self.audioUrl = nil
-    }
-
-    /// 创建本地消息（发送前）
-    init(localText: String, isFromMe: Bool = true, image: UIImage? = nil, location: CLLocationCoordinate2D? = nil, audioData: Data? = nil, audioDuration: TimeInterval? = nil, audioUrl: URL? = nil) {
-        self.id = UUID().uuidString
-        self.backendMessage = nil
-        self.text = localText
-        self.isFromMe = isFromMe
-        self.timestamp = Date()
-        self.image = image
-        self.location = location
-        self.audioData = audioData
-        self.audioDuration = audioDuration
-        self.audioUrl = audioUrl
-    }
-}
-
 // MARK: - 聊天位置管理器
 class ChatLocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
@@ -87,7 +40,7 @@ class ChatLocationManager: NSObject, ObservableObject, CLLocationManagerDelegate
     }
 }
 
-// MARK: - 相机视图
+// MARK: - 相機視圖
 struct CameraView: UIViewControllerRepresentable {
     @Binding var image: UIImage?
     @Environment(\.dismiss) var dismiss
@@ -101,53 +54,29 @@ struct CameraView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
         let parent: CameraView
-
-        init(_ parent: CameraView) {
-            self.parent = parent
-        }
-
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-            if let image = info[.originalImage] as? UIImage {
-                parent.image = image
-            }
+        init(_ parent: CameraView) { self.parent = parent }
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage { parent.image = image }
             parent.dismiss()
         }
-
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            parent.dismiss()
-        }
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { parent.dismiss() }
     }
 }
 
-// MARK: - 位置标注
-struct LocationAnnotation: Identifiable {
-    let id = UUID()
-    let coordinate: CLLocationCoordinate2D
-}
-
-// MARK: - 位置消息预览视图
+// MARK: - 位置消息預覽視圖
 struct LocationMessageView: View {
     let location: CLLocationCoordinate2D
-
     var body: some View {
-        let region = MKCoordinateRegion(
-            center: location,
-            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-        )
-
+        let region = MKCoordinateRegion(center: location, span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01))
         VStack(spacing: 4) {
-            // iOS 17+ new Map initializer with content builder (no annotations needed here)
             Map(initialPosition: .region(region)) { }
                 .frame(width: 180, height: 120)
                 .cornerRadius(12)
                 .disabled(true)
-
             Text("My Location")
                 .font(.system(size: 12))
                 .foregroundColor(DesignTokens.textPrimary)
@@ -158,18 +87,14 @@ struct LocationMessageView: View {
     }
 }
 
-// MARK: - 语音消息视图
+// MARK: - 語音消息視圖
 struct VoiceMessageView: View {
     let message: ChatMessage
     let isFromMe: Bool
     let audioPlayer: AudioPlayerService
-
     @State private var isPlaying = false
 
-    private var duration: TimeInterval {
-        message.audioDuration ?? 0
-    }
-
+    private var duration: TimeInterval { message.audioDuration ?? 0 }
     private var formattedDuration: String {
         let minutes = Int(duration) / 60
         let seconds = Int(duration) % 60
@@ -178,31 +103,23 @@ struct VoiceMessageView: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            // Play/Pause button
-            Button(action: {
-                togglePlayback()
-            }) {
+            Button(action: { togglePlayback() }) {
                 Circle()
                     .fill(isFromMe ? Color.white.opacity(0.3) : Color(red: 0.91, green: 0.18, blue: 0.30))
                     .frame(width: 36, height: 36)
                     .overlay(
                         Image(systemName: isCurrentlyPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 14))
-                            .foregroundColor(isFromMe ? .white : .white)
+                            .foregroundColor(.white)
                     )
             }
-
-            // Waveform visualization (static)
             HStack(spacing: 2) {
-                ForEach(0..<12, id: \.self) { index in
+                ForEach(0..<12, id: \.self) { _ in
                     RoundedRectangle(cornerRadius: 1)
                         .fill(isFromMe ? Color.white.opacity(0.7) : DesignTokens.textMuted)
                         .frame(width: 3, height: CGFloat.random(in: 8...20))
                 }
-            }
-            .frame(height: 24)
-
-            // Duration
+            }.frame(height: 24)
             Text(isCurrentlyPlaying ? formatCurrentTime() : formattedDuration)
                 .font(Font.custom("Helvetica Neue", size: 12).monospacedDigit())
                 .foregroundColor(isFromMe ? Color.white.opacity(0.8) : DesignTokens.textMuted)
@@ -212,183 +129,114 @@ struct VoiceMessageView: View {
         .cornerRadius(20)
     }
 
-    private var isCurrentlyPlaying: Bool {
-        audioPlayer.playingMessageId == message.id && audioPlayer.isPlaying
-    }
-
+    private var isCurrentlyPlaying: Bool { audioPlayer.playingMessageId == message.id && audioPlayer.isPlaying }
     private func formatCurrentTime() -> String {
         let time = audioPlayer.currentTime
-        let minutes = Int(time) / 60
-        let seconds = Int(time) % 60
-        return String(format: "%d:%02d", minutes, seconds)
+        return String(format: "%d:%02d", Int(time) / 60, Int(time) % 60)
     }
-
     private func togglePlayback() {
-        if isCurrentlyPlaying {
-            audioPlayer.pause()
-        } else if audioPlayer.playingMessageId == message.id {
-            audioPlayer.resume()
-        } else {
-            // Start new playback
-            if let url = message.audioUrl {
-                audioPlayer.play(url: url, messageId: message.id)
-            } else if let data = message.audioData {
-                audioPlayer.play(data: data, messageId: message.id)
-            }
-        }
+        if isCurrentlyPlaying { audioPlayer.pause() }
+        else if audioPlayer.playingMessageId == message.id { audioPlayer.resume() }
+        else if let url = message.audioUrl { audioPlayer.play(url: url, messageId: message.id) }
+        else if let data = message.audioData { audioPlayer.play(data: data, messageId: message.id) }
     }
 }
 
-// MARK: - 消息气泡视图
 // MARK: - Typing Dots Animation
 struct TypingDotsView: View {
     @State private var animationPhase = 0
-    
     var body: some View {
         HStack(spacing: 3) {
-            ForEach(0..<3) { index in
+            ForEach(0..<3, id: \.self) { index in
                 Circle()
                     .fill(DesignTokens.textMuted)
                     .frame(width: 6, height: 6)
                     .scaleEffect(animationPhase == index ? 1.2 : 0.8)
-                    .animation(
-                        .easeInOut(duration: 0.4)
-                        .repeatForever(autoreverses: true)
-                        .delay(Double(index) * 0.15),
-                        value: animationPhase
-                    )
+                    .animation(.easeInOut(duration: 0.4).repeatForever(autoreverses: true).delay(Double(index) * 0.15), value: animationPhase)
             }
         }
-        .onAppear {
-            animationPhase = 2
-        }
+        .onAppear { animationPhase = 2 }
     }
 }
 
+// MARK: - 消息氣泡視圖
 struct MessageBubbleView: View {
     let message: ChatMessage
     var audioPlayer: AudioPlayerService? = nil
-
-    // 设计规范颜色
-    private let myBubbleColor = Color(red: 0.91, green: 0.20, blue: 0.34)  // 红色气泡
-    private let otherBubbleColor = Color(red: 0.92, green: 0.92, blue: 0.92)  // 灰色气泡
-    private let otherTextColor = Color(red: 0.34, green: 0.34, blue: 0.34)  // 深灰色文字
+    private let myBubbleColor = Color(red: 0.91, green: 0.20, blue: 0.34)
+    private let otherBubbleColor = Color(red: 0.92, green: 0.92, blue: 0.92)
+    private let otherTextColor = Color(red: 0.34, green: 0.34, blue: 0.34)
 
     var body: some View {
-        if message.isFromMe {
-            myMessageView
-        } else {
-            otherMessageView
-        }
+        if message.isFromMe { myMessageView } else { otherMessageView }
     }
 
-    // MARK: - 我的消息（右侧）
     private var myMessageView: some View {
         HStack(alignment: .top, spacing: 10) {
             Spacer()
-
             messageContent
-
             DefaultAvatarView(size: 40)
-        }
-        .padding(.horizontal, 16)
+        }.padding(.horizontal, 16)
     }
 
-    // MARK: - 对方消息（左侧）
     private var otherMessageView: some View {
         HStack(alignment: .top, spacing: 10) {
             DefaultAvatarView(size: 40)
-
             otherMessageContent
-
             Spacer()
-        }
-        .padding(.horizontal, 16)
+        }.padding(.horizontal, 16)
     }
 
-    @ViewBuilder
-    private var messageContent: some View {
+    @ViewBuilder private var messageContent: some View {
         if let image = message.image {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: 200, maxHeight: 200)
-                .cornerRadius(14)
+            Image(uiImage: image).resizable().scaledToFit().frame(maxWidth: 200, maxHeight: 200).cornerRadius(14)
         } else if let location = message.location {
             LocationMessageView(location: location)
         } else if message.audioData != nil || message.audioUrl != nil, let player = audioPlayer {
             VoiceMessageView(message: message, isFromMe: true, audioPlayer: player)
         } else {
             Text(message.text)
-                .font(Font.custom("Helvetica Neue", size: 16))
-                .lineSpacing(4)
-                .foregroundColor(.white)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
+                .font(Font.custom("Helvetica Neue", size: 16)).lineSpacing(4).foregroundColor(.white)
+                .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                 .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
-                .background(myBubbleColor)
-                .cornerRadius(14)
-                .frame(maxWidth: 260, alignment: .trailing)
+                .background(myBubbleColor).cornerRadius(14).frame(maxWidth: 260, alignment: .trailing)
         }
     }
 
-    @ViewBuilder
-    private var otherMessageContent: some View {
+    @ViewBuilder private var otherMessageContent: some View {
         if let image = message.image {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: 200, maxHeight: 200)
-                .cornerRadius(14)
+            Image(uiImage: image).resizable().scaledToFit().frame(maxWidth: 200, maxHeight: 200).cornerRadius(14)
         } else if let location = message.location {
             LocationMessageView(location: location)
         } else if message.audioData != nil || message.audioUrl != nil, let player = audioPlayer {
             VoiceMessageView(message: message, isFromMe: false, audioPlayer: player)
         } else {
             Text(message.text)
-                .font(Font.custom("Helvetica Neue", size: 16))
-                .lineSpacing(4)
-                .foregroundColor(otherTextColor)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
+                .font(Font.custom("Helvetica Neue", size: 16)).lineSpacing(4).foregroundColor(otherTextColor)
+                .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                 .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
-                .background(otherBubbleColor)
-                .cornerRadius(14)
-                .frame(maxWidth: 260, alignment: .leading)
+                .background(otherBubbleColor).cornerRadius(14).frame(maxWidth: 260, alignment: .leading)
         }
     }
 }
 
-// MARK: - 附件选项按钮
+// MARK: - 附件選項按鈕
 struct AttachmentOptionButton: View {
     let icon: String
     let title: String
     let action: () -> Void
-
     var body: some View {
-        VStack(spacing: 4) {
-            Rectangle()
-                .foregroundColor(.clear)
-                .frame(width: 60, height: 60)
-                .background(DesignTokens.surface)
-                .cornerRadius(10)
-                .overlay(
-                    Image(systemName: icon)
-                        .font(.system(size: 24))
-                        .foregroundColor(DesignTokens.textPrimary)
-                )
-            Text(title)
-                .font(.system(size: 12))
-                .lineSpacing(20)
-                .foregroundColor(DesignTokens.textPrimary)
-        }
-        .frame(width: 60)
-        .onTapGesture {
-            action()
-        }
+        VStack(spacing: 8) {
+            ZStack {
+                Circle().fill(Color(red: 0.96, green: 0.96, blue: 0.96)).frame(width: 56, height: 56)
+                Image(systemName: icon).font(.system(size: 24)).foregroundColor(DesignTokens.textPrimary)
+            }
+            Text(title).font(.system(size: 12)).lineSpacing(20).foregroundColor(DesignTokens.textPrimary)
+        }.frame(width: 60).onTapGesture { action() }
     }
 }
 
+// MARK: - ChatView
 struct ChatView: View {
     // MARK: - Static Properties
     private static let dateFormatter: DateFormatter = {

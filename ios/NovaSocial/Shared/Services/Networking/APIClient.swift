@@ -1,10 +1,31 @@
 import Foundation
 
+// MARK: - Request Deduplication Actor (Swift 6 Safe)
+/// Actor for thread-safe request deduplication storage
+private actor RequestDeduplicationStore {
+    private var inflightRequests: [String: Task<Data, Error>] = [:]
+
+    func getExistingTask(for key: String) -> Task<Data, Error>? {
+        return inflightRequests[key]
+    }
+
+    func storeTask(_ task: Task<Data, Error>, for key: String) {
+        inflightRequests[key] = task
+    }
+
+    func removeTask(for key: String) {
+        inflightRequests.removeValue(forKey: key)
+    }
+}
+
 // MARK: - API Client
 
 /// Base HTTP client for all API requests
 /// Handles authentication, JSON encoding/decoding, and error handling
-/// Automatically refreshes expired tokens on 401 responses
+/// Features:
+/// - Automatic token refresh on 401 responses
+/// - Request deduplication (同時相同請求只發一次)
+/// - Exponential backoff retry for transient errors
 class APIClient {
     static let shared = APIClient()
 
@@ -13,6 +34,16 @@ class APIClient {
     /// Shared URLSession for all API requests - use this instead of creating new sessions
     let session: URLSession
     private var authToken: String?
+
+    // MARK: - Request Deduplication (請求去重) - Actor-based for Swift 6 compatibility
+    private let deduplicationStore = RequestDeduplicationStore()
+
+    // MARK: - Retry Configuration (重試配置)
+    private let maxRetryAttempts = 3
+    private let baseRetryDelay: TimeInterval = 0.5  // 500ms base delay
+
+    /// 可重試的錯誤類型
+    private let retryableStatusCodes: Set<Int> = [408, 429, 500, 502, 503, 504]
 
     private init() {
         let config = URLSessionConfiguration.default
@@ -30,6 +61,22 @@ class APIClient {
         config.requestCachePolicy = .useProtocolCachePolicy
 
         self.session = URLSession(configuration: config)
+    }
+
+    // MARK: - Request Key Generation (生成請求唯一鍵)
+    private func requestKey(for request: URLRequest) -> String {
+        let method = request.httpMethod ?? "GET"
+        let url = request.url?.absoluteString ?? ""
+        let bodyHash = request.httpBody?.hashValue ?? 0
+        return "\(method):\(url):\(bodyHash)"
+    }
+
+    // MARK: - Exponential Backoff Delay (指數退避延遲)
+    private func retryDelay(attempt: Int) -> TimeInterval {
+        // Exponential backoff: 0.5s, 1s, 2s + jitter
+        let exponentialDelay = baseRetryDelay * pow(2.0, Double(attempt))
+        let jitter = Double.random(in: 0...0.3) * exponentialDelay
+        return min(exponentialDelay + jitter, 10.0)  // Cap at 10 seconds
     }
 
     func setAuthToken(_ token: String) {
@@ -141,77 +188,175 @@ class APIClient {
         return try await executeRequest(request)
     }
 
-    /// Execute request and handle response
-    /// Automatically attempts token refresh on 401 and retries once
-    private func executeRequest<T: Decodable>(_ request: URLRequest, isRetry: Bool = false) async throws -> T {
-        do {
-            let (data, response) = try await session.data(for: request)
+    /// Execute request with deduplication and retry
+    /// - Deduplicates identical concurrent requests (只發送一次)
+    /// - Retries transient errors with exponential backoff
+    /// - Automatically attempts token refresh on 401
+    private func executeRequest<T: Decodable>(
+        _ request: URLRequest,
+        isRetry: Bool = false,
+        enableDeduplication: Bool = true
+    ) async throws -> T {
+        let key = requestKey(for: request)
 
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw APIError.invalidResponse
+        // MARK: - Request Deduplication (Actor-based for Swift 6)
+        if enableDeduplication && request.httpMethod == "GET" {
+            // Check for inflight request
+            if let existingTask = await deduplicationStore.getExistingTask(for: key) {
+                #if DEBUG
+                print("[API] 🔄 Deduplicating request: \(request.url?.path ?? "?")")
+                #endif
+                let data = try await existingTask.value
+                return try decodeResponse(data)
+            }
+
+            // Create new task and store it
+            let task = Task<Data, Error> {
+                try await self.performRequestWithRetry(request, isTokenRetry: isRetry)
+            }
+            await deduplicationStore.storeTask(task, for: key)
+
+            do {
+                let data = try await task.value
+                await deduplicationStore.removeTask(for: key)
+                return try decodeResponse(data)
+            } catch {
+                await deduplicationStore.removeTask(for: key)
+                throw error
+            }
+        }
+
+        // Non-GET requests or deduplication disabled
+        let data = try await performRequestWithRetry(request, isTokenRetry: isRetry)
+        return try decodeResponse(data)
+    }
+
+    /// Perform request with exponential backoff retry
+    private func performRequestWithRetry(
+        _ request: URLRequest,
+        isTokenRetry: Bool = false,
+        attempt: Int = 0
+    ) async throws -> Data {
+        do {
+            return try await performSingleRequest(request, isTokenRetry: isTokenRetry)
+        } catch let error as APIError {
+            // Check if error is retryable
+            let shouldRetry = isRetryableError(error) && attempt < maxRetryAttempts
+
+            if shouldRetry {
+                let delay = retryDelay(attempt: attempt)
+                #if DEBUG
+                print("[API] ⏳ Retry \(attempt + 1)/\(maxRetryAttempts) after \(String(format: "%.2f", delay))s for: \(request.url?.path ?? "?")")
+                #endif
+
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                return try await performRequestWithRetry(request, isTokenRetry: isTokenRetry, attempt: attempt + 1)
+            }
+
+            throw error
+        } catch {
+            // Network errors - check if retryable
+            if attempt < maxRetryAttempts, isRetryableNetworkError(error) {
+                let delay = retryDelay(attempt: attempt)
+                #if DEBUG
+                print("[API] ⏳ Network retry \(attempt + 1)/\(maxRetryAttempts) after \(String(format: "%.2f", delay))s")
+                #endif
+
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                return try await performRequestWithRetry(request, isTokenRetry: isTokenRetry, attempt: attempt + 1)
+            }
+
+            throw error
+        }
+    }
+
+    /// Check if API error is retryable
+    private func isRetryableError(_ error: APIError) -> Bool {
+        switch error {
+        case .timeout, .serviceUnavailable:
+            return true
+        case .serverError(let statusCode, _):
+            return retryableStatusCodes.contains(statusCode)
+        default:
+            return false
+        }
+    }
+
+    /// Check if network error is retryable
+    private func isRetryableNetworkError(_ error: Error) -> Bool {
+        guard let urlError = error as? URLError else { return false }
+        switch urlError.code {
+        case .timedOut, .networkConnectionLost, .notConnectedToInternet:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Perform single request (核心請求邏輯)
+    private func performSingleRequest(_ request: URLRequest, isTokenRetry: Bool) async throws -> Data {
+        let (data, response) = try await session.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+
+        #if DEBUG
+        if APIFeatureFlags.enableRequestLogging {
+            print("[\(request.httpMethod ?? "?")] \(request.url?.absoluteString ?? "?") -> \(httpResponse.statusCode)")
+        }
+        #endif
+
+        switch httpResponse.statusCode {
+        case 200...299:
+            return data
+        case 401:
+            // Attempt token refresh on 401, but only once to prevent infinite loops
+            if !isTokenRetry {
+                #if DEBUG
+                print("[API] 401 received, attempting token refresh...")
+                #endif
+
+                let refreshSucceeded = await AuthenticationManager.shared.attemptTokenRefresh()
+
+                if refreshSucceeded {
+                    #if DEBUG
+                    print("[API] Token refreshed, retrying request...")
+                    #endif
+
+                    // Rebuild request with new token
+                    var retryRequest = request
+                    if let newToken = authToken {
+                        retryRequest.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+                    }
+
+                    // Retry with isTokenRetry=true to prevent infinite loop
+                    return try await performSingleRequest(retryRequest, isTokenRetry: true)
+                }
             }
 
             #if DEBUG
-            if APIFeatureFlags.enableRequestLogging {
-                print("[\(request.httpMethod ?? "?")] \(request.url?.absoluteString ?? "?") -> \(httpResponse.statusCode)")
-            }
+            print("[API] Token refresh failed or already retried, throwing unauthorized")
             #endif
-
-            switch httpResponse.statusCode {
-            case 200...299:
-                return try decodeResponse(data)
-            case 401:
-                // Attempt token refresh on 401, but only once to prevent infinite loops
-                if !isRetry {
-                    #if DEBUG
-                    print("[API] 401 received, attempting token refresh...")
-                    #endif
-
-                    let refreshSucceeded = await AuthenticationManager.shared.attemptTokenRefresh()
-
-                    if refreshSucceeded {
-                        #if DEBUG
-                        print("[API] Token refreshed, retrying request...")
-                        #endif
-
-                        // Rebuild request with new token
-                        var retryRequest = request
-                        if let newToken = authToken {
-                            retryRequest.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
-                        }
-
-                        // Retry with isRetry=true to prevent infinite loop
-                        return try await executeRequest(retryRequest, isRetry: true)
-                    }
-                }
-
+            throw APIError.unauthorized
+        case 404:
+            throw APIError.notFound
+        case 408, 504:
+            throw APIError.timeout
+        case 429:
+            // Rate limited - extract retry-after if available
+            if let retryAfter = httpResponse.value(forHTTPHeaderField: "Retry-After"),
+               let seconds = Double(retryAfter) {
                 #if DEBUG
-                print("[API] Token refresh failed or already retried, throwing unauthorized")
+                print("[API] Rate limited, retry after \(seconds)s")
                 #endif
-                throw APIError.unauthorized
-            case 404:
-                throw APIError.notFound
-            case 408, 504:
-                throw APIError.timeout
-            case 503:
-                throw APIError.serviceUnavailable
-            default:
-                let message = String(data: data, encoding: .utf8) ?? "Unknown error"
-                throw APIError.serverError(statusCode: httpResponse.statusCode, message: message)
             }
-        } catch let error as APIError {
-            throw error
-        } catch let urlError as URLError {
-            switch urlError.code {
-            case .timedOut:
-                throw APIError.timeout
-            case .notConnectedToInternet, .networkConnectionLost:
-                throw APIError.noConnection
-            default:
-                throw APIError.networkError(urlError)
-            }
-        } catch {
-            throw APIError.networkError(error)
+            throw APIError.serverError(statusCode: 429, message: "Rate limited")
+        case 503:
+            throw APIError.serviceUnavailable
+        default:
+            let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+            throw APIError.serverError(statusCode: httpResponse.statusCode, message: message)
         }
     }
 

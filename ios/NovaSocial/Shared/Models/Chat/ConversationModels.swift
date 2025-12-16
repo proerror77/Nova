@@ -1,4 +1,6 @@
 import Foundation
+import SwiftUI
+import CoreLocation
 
 // MARK: - Conversation Models
 
@@ -839,4 +841,67 @@ enum ChatError: LocalizedError {
             return "Invalid conversation ID format."
         }
     }
+}
+
+
+// MARK: - Chat UI Models
+
+/// UI層的消息模型，包含後端Message + UI特定字段（圖片、位置、語音）
+struct ChatMessage: Identifiable, Equatable {
+    let id: String
+    let backendMessage: Message?
+    let text: String
+    let isFromMe: Bool
+    let timestamp: Date
+    var image: UIImage?
+    var location: CLLocationCoordinate2D?
+    var audioData: Data?
+    var audioDuration: TimeInterval?
+    var audioUrl: URL?
+
+    static func == (lhs: ChatMessage, rhs: ChatMessage) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    /// 從後端Message創建ChatMessage
+    init(from message: Message, currentUserId: String) {
+        self.id = message.id
+        self.backendMessage = message
+        self.text = message.content
+        self.isFromMe = message.senderId == currentUserId
+        self.timestamp = message.createdAt
+        self.image = nil
+        self.location = nil
+        self.audioData = nil
+        self.audioDuration = nil
+        self.audioUrl = nil
+    }
+
+    /// 創建本地消息（發送前）
+    init(
+        localText: String,
+        isFromMe: Bool = true,
+        image: UIImage? = nil,
+        location: CLLocationCoordinate2D? = nil,
+        audioData: Data? = nil,
+        audioDuration: TimeInterval? = nil,
+        audioUrl: URL? = nil
+    ) {
+        self.id = UUID().uuidString
+        self.backendMessage = nil
+        self.text = localText
+        self.isFromMe = isFromMe
+        self.timestamp = Date()
+        self.image = image
+        self.location = location
+        self.audioData = audioData
+        self.audioDuration = audioDuration
+        self.audioUrl = audioUrl
+    }
+}
+
+// MARK: - 位置標註
+struct LocationAnnotation: Identifiable {
+    let id = UUID()
+    let coordinate: CLLocationCoordinate2D
 }

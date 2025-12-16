@@ -2,6 +2,49 @@ import SwiftUI
 import Foundation
 import PhotosUI
 
+// MARK: - HomeView Navigation State Machine
+
+/// 全螢幕導航狀態 (互斥)
+enum HomeFullScreenDestination: Equatable {
+    case home
+    case notification
+    case search
+    case newPost
+    case generateImage
+    case write
+    case postDetail(FeedPost)
+    case userProfile(String)
+
+    static func == (lhs: HomeFullScreenDestination, rhs: HomeFullScreenDestination) -> Bool {
+        switch (lhs, rhs) {
+        case (.home, .home), (.notification, .notification), (.search, .search),
+             (.newPost, .newPost), (.generateImage, .generateImage), (.write, .write):
+            return true
+        case (.postDetail(let lPost), .postDetail(let rPost)):
+            return lPost.id == rPost.id
+        case (.userProfile(let lId), .userProfile(let rId)):
+            return lId == rId
+        default:
+            return false
+        }
+    }
+}
+
+/// Sheet 彈窗狀態
+enum HomeSheetType: Identifiable {
+    case report
+    case comments(FeedPost)
+    case camera
+
+    var id: String {
+        switch self {
+        case .report: return "report"
+        case .comments(let post): return "comments_\(post.id)"
+        case .camera: return "camera"
+        }
+    }
+}
+
 // MARK: - HomeView
 
 struct HomeView: View {
@@ -9,89 +52,136 @@ struct HomeView: View {
     @EnvironmentObject private var authManager: AuthenticationManager
     @Environment(\.dismiss) var dismiss
     @StateObject private var feedViewModel = FeedViewModel()
-    @State private var showReportView = false
-    @State private var showThankYouView = false
-    @State private var showNewPost = false
-    @State private var showSearch = false
-    @State private var showNotification = false
-    @State private var showPhotoOptions = false
-    @State private var showComments = false
-    @State private var selectedPostForComment: FeedPost?
-    @State private var showSystemPhotoPicker = false  // 直接打开系统相册
-    @State private var selectedPhotosFromPicker: [PhotosPickerItem] = []  // 系统相册选择的照片
-    @State private var showCamera = false
-    @State private var selectedMediaItems: [PostMediaItem] = []
-    @State private var cameraImage: UIImage?  // 相机拍摄的单张图片
-    @State private var showGenerateImage = false
-    @State private var showWrite = false
-    @State private var selectedPostForDetail: FeedPost?
-    @State private var showPostDetail = false
-    @State private var showToast = false
-    @State private var showShareSheet = false
-    @State private var selectedPostForShare: FeedPost?
 
-    // MARK: - UserProfile 导航状态
-    @State private var showUserProfile = false
-    @State private var selectedUserId: String = ""
+    // MARK: - Consolidated Navigation State (原本 24 個變數 → 6 個)
+    @State private var fullScreenDestination: HomeFullScreenDestination = .home
+    @State private var activeSheet: HomeSheetType?
+    @State private var showPhotoOptions = false
+    @State private var showSystemPhotoPicker = false
+    @State private var selectedPhotosFromPicker: [PhotosPickerItem] = []
+    @State private var showThankYouView = false
+
+    // MARK: - Media Data State (保持獨立，因為是實際數據)
+    @State private var selectedMediaItems: [PostMediaItem] = []
+    @State private var cameraImage: UIImage?
 
     // NOTE: Channels are now loaded dynamically via feedViewModel.channels
     // Old hardcoded channels removed - using backend API instead
 
+    // MARK: - Binding Helpers (橋接新舊 API)
+    private var showNotificationBinding: Binding<Bool> {
+        Binding(
+            get: { fullScreenDestination == .notification },
+            set: { if !$0 { fullScreenDestination = .home } }
+        )
+    }
+
+    private var showSearchBinding: Binding<Bool> {
+        Binding(
+            get: { fullScreenDestination == .search },
+            set: { if !$0 { fullScreenDestination = .home } }
+        )
+    }
+
+    private var showNewPostBinding: Binding<Bool> {
+        Binding(
+            get: { fullScreenDestination == .newPost },
+            set: { newValue in
+                if newValue {
+                    fullScreenDestination = .newPost
+                } else {
+                    fullScreenDestination = .home
+                    selectedMediaItems = []
+                    cameraImage = nil
+                }
+            }
+        )
+    }
+
+    private var showGenerateImageBinding: Binding<Bool> {
+        Binding(
+            get: { fullScreenDestination == .generateImage },
+            set: { if !$0 { fullScreenDestination = .home } }
+        )
+    }
+
+    private var showWriteBinding: Binding<Bool> {
+        Binding(
+            get: { fullScreenDestination == .write },
+            set: { if !$0 { fullScreenDestination = .home } }
+        )
+    }
+
+    private var showUserProfileBinding: Binding<Bool> {
+        Binding(
+            get: { if case .userProfile = fullScreenDestination { return true } else { return false } },
+            set: { if !$0 { fullScreenDestination = .home } }
+        )
+    }
+
+    private var currentUserId: String {
+        if case .userProfile(let id) = fullScreenDestination { return id }
+        return ""
+    }
+
+    private var showReportBinding: Binding<Bool> {
+        Binding(
+            get: { if case .report = activeSheet { return true } else { return false } },
+            set: { if !$0 { activeSheet = nil } }
+        )
+    }
+
     var body: some View {
         ZStack {
-            // 条件渲染：根据状态即时切换视图
-            if showNotification {
-                NotificationView(showNotification: $showNotification)
+            // 条件渲染：根据状态即时切换视图 (使用狀態機)
+            switch fullScreenDestination {
+            case .notification:
+                NotificationView(showNotification: showNotificationBinding)
                     .transition(.identity)
-            } else if showSearch {
-                SearchView(showSearch: $showSearch)
+
+            case .search:
+                SearchView(showSearch: showSearchBinding)
                     .transition(.identity)
-            } else if showNewPost {
+
+            case .newPost:
                 NewPostView(
-                    showNewPost: $showNewPost,
+                    showNewPost: showNewPostBinding,
                     initialMediaItems: selectedMediaItems,
                     initialImage: cameraImage,
                     onPostSuccess: { newPost in
-                        // Post 成功后直接添加到 Feed 顶部（优化版本，不需要重新加载整个feed）
                         feedViewModel.addNewPost(newPost)
                     }
                 )
                 .transition(.identity)
-                .onDisappear {
-                    // 清除选择的媒体项
-                    selectedMediaItems = []
-                    cameraImage = nil
-                }
-            } else if showGenerateImage {
-                GenerateImage01View(showGenerateImage: $showGenerateImage)
+
+            case .generateImage:
+                GenerateImage01View(showGenerateImage: showGenerateImageBinding)
                     .transition(.identity)
-            } else if showWrite {
-                WriteView(showWrite: $showWrite, currentPage: $currentPage)
+
+            case .write:
+                WriteView(showWrite: showWriteBinding, currentPage: $currentPage)
                     .transition(.identity)
-            } else if showPostDetail, let post = selectedPostForDetail {
+
+            case .postDetail(let post):
                 PostDetailView(
                     post: post,
                     onDismiss: {
-                        showPostDetail = false
-                        selectedPostForDetail = nil
+                        fullScreenDestination = .home
                     },
                     onAvatarTapped: { authorId in
-                        // 从帖子详情页点击头像跳转用户主页
-                        showPostDetail = false
-                        selectedPostForDetail = nil
-                        selectedUserId = authorId
-                        showUserProfile = true
+                        fullScreenDestination = .userProfile(authorId)
                     }
                 )
                 .transition(.identity)
-            } else if showUserProfile {
-                // MARK: - UserProfile 页面
+
+            case .userProfile(let userId):
                 UserProfileView(
-                    showUserProfile: $showUserProfile,
-                    userId: selectedUserId
+                    showUserProfile: showUserProfileBinding,
+                    userId: userId
                 )
                 .transition(.identity)
-            } else {
+
+            case .home:
                 homeContent
             }
 
@@ -100,47 +190,41 @@ struct HomeView: View {
                 PhotoOptionsModal(
                     isPresented: $showPhotoOptions,
                     onChoosePhoto: {
-                        // 直接打开系统相册选择器
                         showSystemPhotoPicker = true
                     },
                     onTakePhoto: {
-                        showCamera = true
+                        activeSheet = .camera
                     },
                     onGenerateImage: {
-                        showGenerateImage = true
+                        fullScreenDestination = .generateImage
                     },
                     onWrite: {
-                        showWrite = true
+                        fullScreenDestination = .write
                     }
                 )
             }
         }
-        .animation(.none, value: showNotification)
-        .animation(.none, value: showSearch)
-        .animation(.none, value: showNewPost)
-        .animation(.none, value: showGenerateImage)
-        .animation(.none, value: showWrite)
-        .animation(.none, value: showPostDetail)
-        .animation(.none, value: showUserProfile)
+        .animation(.none, value: fullScreenDestination)
         .navigationBarBackButtonHidden(true)
-        .sheet(isPresented: $showReportView) {
-            ReportModal(isPresented: $showReportView, showThankYouView: $showThankYouView)
-        }
-        .sheet(isPresented: $showComments) {
-            if let post = selectedPostForComment {
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .report:
+                ReportModal(isPresented: showReportBinding, showThankYouView: $showThankYouView)
+            case .comments(let post):
                 CommentSheetView(
                     post: post,
-                    isPresented: $showComments,
+                    isPresented: Binding(
+                        get: { activeSheet != nil },
+                        set: { if !$0 { activeSheet = nil } }
+                    ),
                     onAvatarTapped: { userId in
-                        // 从评论弹窗点击头像跳转用户主页
-                        selectedUserId = userId
-                        showUserProfile = true
+                        activeSheet = nil
+                        fullScreenDestination = .userProfile(userId)
                     }
                 )
+            case .camera:
+                ImagePicker(sourceType: .camera, selectedImage: $cameraImage)
             }
-        }
-        .sheet(isPresented: $showCamera) {
-            ImagePicker(sourceType: .camera, selectedImage: $cameraImage)
         }
         .photosPicker(
             isPresented: $showSystemPhotoPicker,
@@ -151,7 +235,7 @@ struct HomeView: View {
         .onChange(of: cameraImage) { oldValue, newValue in
             // 相机拍摄后，跳转到NewPostView
             if newValue != nil {
-                showNewPost = true
+                fullScreenDestination = .newPost
             }
         }
         .onChange(of: selectedPhotosFromPicker) { oldValue, newValue in
@@ -163,7 +247,7 @@ struct HomeView: View {
                     await MainActor.run {
                         selectedMediaItems = mediaItems
                         selectedPhotosFromPicker = []  // 清空以便下次选择
-                        showNewPost = true
+                        fullScreenDestination = .newPost
                     }
                 } catch {
                     #if DEBUG
@@ -190,7 +274,7 @@ struct HomeView: View {
             VStack(spacing: 0) {
                 // MARK: - 顶部导航栏
                 HStack {
-                    Button(action: { showSearch = true }) {
+                    Button(action: { fullScreenDestination = .search }) {
                         Image(systemName: "magnifyingglass")
                             .frame(width: 24, height: 24)
                             .foregroundColor(DesignTokens.textPrimary)
@@ -201,7 +285,7 @@ struct HomeView: View {
                         .scaledToFit()
                         .frame(height: 18)
                     Spacer()
-                    Button(action: { showNotification = true }) {
+                    Button(action: { fullScreenDestination = .notification }) {
                         Image(systemName: "bell")
                             .frame(width: 24, height: 24)
                             .foregroundColor(DesignTokens.textPrimary)
@@ -274,26 +358,22 @@ struct HomeView: View {
                                 case .post(let index, let post):
                                     FeedPostCard(
                                         post: post,
-                                        showReportView: $showReportView,
+                                        showReportView: showReportBinding,
                                         onLike: { Task { await feedViewModel.toggleLike(postId: post.id) } },
                                         onComment: {
-                                            selectedPostForComment = post
-                                            showComments = true
+                                            activeSheet = .comments(post)
                                         },
                                         onShare: { Task { await feedViewModel.sharePost(postId: post.id) } },
                                         onBookmark: { Task { await feedViewModel.toggleBookmark(postId: post.id) } },
                                         onAvatarTapped: { authorId in
-                                            // 点击头像跳转到用户主页
-                                            selectedUserId = authorId
-                                            showUserProfile = true
+                                            fullScreenDestination = .userProfile(authorId)
                                         }
                                     )
                                     // 让卡片左右贴边显示
                                     .padding(.horizontal, -DesignTokens.spacing16)
                                     .ignoresSafeArea(.container, edges: .horizontal)
                                     .onTapGesture {
-                                        selectedPostForDetail = post
-                                        showPostDetail = true
+                                        fullScreenDestination = .postDetail(post)
                                     }
                                     .onAppear {
                                         // Prefetch images for upcoming posts
@@ -367,7 +447,7 @@ struct HomeView: View {
                     .frame(height: 0) // ← 调整 ScrollView 下方的间距
             }
             .safeAreaInset(edge: .bottom) {
-                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)
+                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: showNewPostBinding)
                     .padding(.top, 80)
             }
         }
