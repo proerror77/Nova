@@ -341,13 +341,14 @@ class OAuthService: NSObject {
     // MARK: - Helpers
 
     /// Returns the redirect URI based on the OAuth flow type
-    /// For backend proxy flow (Google), we use the backend URL
+    /// For backend proxy flow (Google), we use the staging API domain (must match Google OAuth config)
     /// For native flow (Apple), we use the custom URL scheme
     private func getRedirectUri(for provider: OAuthProvider) -> String {
         switch provider {
         case .google:
             // Backend proxy flow - Google redirects to backend, backend redirects to iOS
-            return "\(APIConfig.current.baseURL)/api/v2/auth/oauth/google/callback"
+            // MUST use the exact URL configured in Google OAuth Console
+            return "https://staging-api.icered.com/api/v2/auth/oauth/google/callback"
         case .apple:
             // Apple uses native flow, but for web-based fallback use custom scheme
             return "icered://oauth/apple/callback"
