@@ -7,12 +7,76 @@ class UserService {
     static let shared = UserService()
     private let client = APIClient.shared
 
+    // MARK: - Cache Configuration
+    
+    /// Cache entry with timestamp for TTL validation
+    private struct CacheEntry {
+        let profile: UserProfile
+        let timestamp: Date
+    }
+    
+    /// Cache TTL: 5 minutes
+    private let cacheTTL: TimeInterval = 300
+    
+    /// In-memory cache for user profiles by ID
+    private var profileCacheById: [String: CacheEntry] = [:]
+    
+    /// In-memory cache for user profiles by username
+    private var profileCacheByUsername: [String: CacheEntry] = [:]
+    
+    /// Serial queue for thread-safe cache access
+    private let cacheQueue = DispatchQueue(label: "com.novasocial.userservice.cache")
+
     private init() {}
+
+    // MARK: - Cache Management
+    
+    /// Check if a cache entry is still valid
+    private func isValidCacheEntry(_ entry: CacheEntry) -> Bool {
+        return Date().timeIntervalSince(entry.timestamp) < cacheTTL
+    }
+    
+    /// Invalidate cache for a specific user (call after profile update)
+    func invalidateCache(userId: String? = nil, username: String? = nil) {
+        cacheQueue.sync {
+            if let userId = userId {
+                profileCacheById.removeValue(forKey: userId)
+            }
+            if let username = username {
+                profileCacheByUsername.removeValue(forKey: username.lowercased())
+            }
+        }
+    }
+    
+    /// Clear all cached profiles
+    func clearCache() {
+        cacheQueue.sync {
+            profileCacheById.removeAll()
+            profileCacheByUsername.removeAll()
+        }
+    }
+    
+    /// Store profile in cache (both by ID and username)
+    private func cacheProfile(_ profile: UserProfile) {
+        let entry = CacheEntry(profile: profile, timestamp: Date())
+        cacheQueue.sync {
+            profileCacheById[profile.id] = entry
+            if let username = profile.username {
+                profileCacheByUsername[username.lowercased()] = entry
+            }
+        }
+    }
 
     // MARK: - User Profile
 
-    /// Get user profile by ID
+    /// Get user profile by ID (with caching)
     func getUser(userId: String) async throws -> UserProfile {
+        // Check cache first
+        if let cached = cacheQueue.sync(execute: { profileCacheById[userId] }),
+           isValidCacheEntry(cached) {
+            return cached.profile
+        }
+        
         struct GetUserResponse: Codable {
             let user: UserProfile
         }
@@ -22,11 +86,22 @@ class UserService {
             method: "GET"
         )
 
+        // Cache the result
+        cacheProfile(response.user)
+        
         return response.user
     }
 
-    /// Get user profile by username
+    /// Get user profile by username (with caching)
     func getUserByUsername(_ username: String) async throws -> UserProfile {
+        let lowercasedUsername = username.lowercased()
+        
+        // Check cache first
+        if let cached = cacheQueue.sync(execute: { profileCacheByUsername[lowercasedUsername] }),
+           isValidCacheEntry(cached) {
+            return cached.profile
+        }
+        
         struct GetUserResponse: Codable {
             let user: UserProfile
         }
@@ -36,6 +111,9 @@ class UserService {
             method: "GET"
         )
 
+        // Cache the result
+        cacheProfile(response.user)
+        
         return response.user
     }
 
@@ -78,6 +156,9 @@ class UserService {
             method: "PUT",
             body: request
         )
+
+        // Update cache with new profile data
+        cacheProfile(response.user)
 
         return response.user
     }
@@ -176,6 +257,11 @@ class UserService {
             method: "GET"
         )
 
+        // Cache all returned profiles
+        for profile in response.users {
+            cacheProfile(profile)
+        }
+
         return response.users
     }
 
@@ -200,5 +286,8 @@ class UserService {
             method: "DELETE",
             body: request
         ) as EmptyResponse
+        
+        // Clear cache for deleted user
+        invalidateCache(userId: userId)
     }
 }

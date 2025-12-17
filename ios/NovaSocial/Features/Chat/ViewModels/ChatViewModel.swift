@@ -475,19 +475,52 @@ class ChatViewModel: ObservableObject {
 
     /// Disconnect WebSocket when view disappears
     func cleanup() {
-        chatService.disconnectWebSocket()
+        // Clear all callbacks first to break any potential retain cycles
         chatService.onMessageReceived = nil
         chatService.onTypingIndicator = nil
         chatService.onReadReceipt = nil
+        chatService.onConnectionStatusChanged = nil
+        
+        // Clear Matrix callbacks
         MatrixBridgeService.shared.onMatrixMessage = nil
         MatrixBridgeService.shared.onTypingIndicator = nil
+        
+        // Disconnect WebSocket
+        chatService.disconnectWebSocket()
+        
+        // Clean up timer
         typingTimer?.invalidate()
         typingTimer = nil
+        
+        #if DEBUG
+        print("[ChatViewModel] Cleanup completed for conversation \(conversationId)")
+        #endif
     }
 
     deinit {
-        // Ensure timer is fully cleaned up
-        // Note: WebSocket cleanup is handled in cleanup() which should be called by the view
+        // Clear callbacks synchronously to prevent retain cycles
+        // Note: These closures might hold weak references to self,
+        // but setting them to nil ensures they're released immediately
+        chatService.onMessageReceived = nil
+        chatService.onTypingIndicator = nil
+        chatService.onReadReceipt = nil
+        chatService.onConnectionStatusChanged = nil
+        
+        // Clear Matrix callbacks
+        MatrixBridgeService.shared.onMatrixMessage = nil
+        MatrixBridgeService.shared.onTypingIndicator = nil
+        
+        // Clean up timer
         typingTimer?.invalidate()
+        
+        // Disconnect WebSocket asynchronously (won't block deinit)
+        let service = chatService
+        Task { @MainActor in
+            service.disconnectWebSocket()
+        }
+        
+        #if DEBUG
+        print("[ChatViewModel] deinit - resources released for conversation \(conversationId)")
+        #endif
     }
 }

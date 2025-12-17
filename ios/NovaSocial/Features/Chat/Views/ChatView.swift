@@ -410,8 +410,25 @@ struct ChatView: View {
             await loadChatData()
         }
         .onDisappear {
-            // 断开WebSocket连接
+            // Clean up all callbacks to prevent memory leaks
+            chatService.onMessageReceived = nil
+            chatService.onTypingIndicator = nil
+            chatService.onReadReceipt = nil
+            chatService.onConnectionStatusChanged = nil
+            
+            // Clear Matrix callbacks
+            MatrixBridgeService.shared.onMatrixMessage = nil
+            MatrixBridgeService.shared.onTypingIndicator = nil
+            
+            // Disconnect WebSocket
             chatService.disconnectWebSocket()
+            
+            // Clean up timer
+            typingTimer?.invalidate()
+            
+            #if DEBUG
+            print("[ChatView] Cleanup completed for conversation \(conversationId)")
+            #endif
         }
     }
 

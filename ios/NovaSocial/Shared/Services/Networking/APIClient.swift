@@ -4,6 +4,7 @@ import Foundation
 /// Actor for thread-safe request deduplication storage
 private actor RequestDeduplicationStore {
     private var inflightRequests: [String: Task<Data, Error>] = [:]
+    private var inflightMutations: [String: Task<Data, Error>] = [:]
 
     func getExistingTask(for key: String) -> Task<Data, Error>? {
         return inflightRequests[key]
@@ -16,6 +17,20 @@ private actor RequestDeduplicationStore {
     func removeTask(for key: String) {
         inflightRequests.removeValue(forKey: key)
     }
+    
+    // MARK: - Mutation Deduplication (防止重複提交)
+    
+    func getExistingMutation(for key: String) -> Task<Data, Error>? {
+        return inflightMutations[key]
+    }
+    
+    func storeMutation(_ task: Task<Data, Error>, for key: String) {
+        inflightMutations[key] = task
+    }
+    
+    func removeMutation(for key: String) {
+        inflightMutations.removeValue(forKey: key)
+    }
 }
 
 // MARK: - API Client
@@ -24,7 +39,8 @@ private actor RequestDeduplicationStore {
 /// Handles authentication, JSON encoding/decoding, and error handling
 /// Features:
 /// - Automatic token refresh on 401 responses
-/// - Request deduplication (同時相同請求只發一次)
+/// - GET request deduplication (同時相同請求只發一次)
+/// - Mutation deduplication to prevent double-submission (防止重複提交 POST/PUT/DELETE)
 /// - Exponential backoff retry for transient errors
 class APIClient {
     static let shared = APIClient()
@@ -202,6 +218,7 @@ class APIClient {
 
     /// Execute request with deduplication and retry
     /// - Deduplicates identical concurrent requests (只發送一次)
+    /// - Deduplicates mutation requests to prevent double-submission (防止重複提交)
     /// - Retries transient errors with exponential backoff
     /// - Automatically attempts token refresh on 401
     private func executeRequest<T: Decodable>(
@@ -210,13 +227,14 @@ class APIClient {
         enableDeduplication: Bool = true
     ) async throws -> T {
         let key = requestKey(for: request)
+        let method = request.httpMethod ?? "GET"
 
-        // MARK: - Request Deduplication (Actor-based for Swift 6)
-        if enableDeduplication && request.httpMethod == "GET" {
+        // MARK: - GET Request Deduplication (Actor-based for Swift 6)
+        if enableDeduplication && method == "GET" {
             // Check for inflight request
             if let existingTask = await deduplicationStore.getExistingTask(for: key) {
                 #if DEBUG
-                print("[API] 🔄 Deduplicating request: \(request.url?.path ?? "?")")
+                print("[API] 🔄 Deduplicating GET request: \(request.url?.path ?? "?")")
                 #endif
                 let data = try await existingTask.value
                 return try decodeResponse(data)
@@ -238,7 +256,36 @@ class APIClient {
             }
         }
 
-        // Non-GET requests or deduplication disabled
+        // MARK: - Mutation Deduplication (防止重複提交 POST/PUT/DELETE)
+        // Prevents double-likes, double-follows, etc. from rapid taps
+        if enableDeduplication && (method == "POST" || method == "PUT" || method == "DELETE") {
+            // Check for inflight identical mutation
+            if let existingTask = await deduplicationStore.getExistingMutation(for: key) {
+                #if DEBUG
+                print("[API] 🛡️ Blocking duplicate \(method) request: \(request.url?.path ?? "?")")
+                #endif
+                // Return the same result as the inflight mutation
+                let data = try await existingTask.value
+                return try decodeResponse(data)
+            }
+
+            // Create new mutation task and store it
+            let task = Task<Data, Error> {
+                try await self.performRequestWithRetry(request, isTokenRetry: isRetry)
+            }
+            await deduplicationStore.storeMutation(task, for: key)
+
+            do {
+                let data = try await task.value
+                await deduplicationStore.removeMutation(for: key)
+                return try decodeResponse(data)
+            } catch {
+                await deduplicationStore.removeMutation(for: key)
+                throw error
+            }
+        }
+
+        // Deduplication disabled - execute directly
         let data = try await performRequestWithRetry(request, isTokenRetry: isRetry)
         return try decodeResponse(data)
     }

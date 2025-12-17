@@ -1,5 +1,47 @@
 import SwiftUI
 
+// MARK: - Profile View State
+/// Enum representing the active overlay/sheet state in ProfileView
+/// Using enum instead of multiple booleans prevents state conflicts
+enum ProfileActiveSheet: Equatable {
+    case none
+    case newPost(initialImage: UIImage?)
+    case generateImage
+    case write
+    case settings
+    case following
+    case followers
+    case postDetail(post: Post)
+    case imagePicker
+    case camera
+    case photoOptions
+    case accountSwitcher
+    case shareSheet
+    
+    static func == (lhs: ProfileActiveSheet, rhs: ProfileActiveSheet) -> Bool {
+        switch (lhs, rhs) {
+        case (.none, .none),
+             (.generateImage, .generateImage),
+             (.write, .write),
+             (.settings, .settings),
+             (.following, .following),
+             (.followers, .followers),
+             (.imagePicker, .imagePicker),
+             (.camera, .camera),
+             (.photoOptions, .photoOptions),
+             (.accountSwitcher, .accountSwitcher),
+             (.shareSheet, .shareSheet):
+            return true
+        case (.newPost(let img1), .newPost(let img2)):
+            return img1 === img2
+        case (.postDetail(let p1), .postDetail(let p2)):
+            return p1.id == p2.id
+        default:
+            return false
+        }
+    }
+}
+
 struct ProfileView: View {
     @Binding var currentPage: AppPage
     // 全局认证状态从上层注入
@@ -357,8 +399,8 @@ struct ProfileView: View {
                 // MARK: - 帖子网格
                 ScrollView {
                     if profileData.selectedTab == .posts {
-                        // Posts 标签 - 使用 UserPostsManager 实时同步
-                        if userPostsManager.isLoading {
+                        // Posts 标签 - 使用 UserPostsManager 实时同步（支持分页）
+                        if userPostsManager.isLoading && userPostsManager.userPosts.isEmpty {
                             ProgressView()
                                 .padding(.top, 40)
                         } else if userPostsManager.hasPosts {
@@ -373,10 +415,27 @@ struct ProfileView: View {
                                             showPostDetail = true
                                         }
                                     )
+                                    .onAppear {
+                                        // 无限滚动：当最后几个帖子出现时，加载更多
+                                        if let lastPost = userPostsManager.userPosts.suffix(3).first,
+                                           post.id == lastPost.id,
+                                           userPostsManager.hasMore,
+                                           !userPostsManager.isLoadingMore {
+                                            Task {
+                                                await userPostsManager.loadMorePosts()
+                                            }
+                                        }
+                                    }
                                 }
                             }
                             .padding(.horizontal, 8)
                             .padding(.top, 8)
+                            
+                            // 加载更多指示器
+                            if userPostsManager.isLoadingMore {
+                                ProgressView()
+                                    .padding(.vertical, 16)
+                            }
                         } else {
                             emptyStateView
                         }

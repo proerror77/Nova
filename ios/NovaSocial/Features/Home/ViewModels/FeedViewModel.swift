@@ -172,6 +172,16 @@ class FeedViewModel: ObservableObject {
             // Convert raw posts to FeedPost objects directly
             var allPosts = response.posts.map { FeedPost(from: $0) }
 
+            // Fetch bookmark status for authenticated users (await before UI update to prevent flicker)
+            if isAuthenticated, !allPosts.isEmpty {
+                let postIds = allPosts.map { $0.id }
+                if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) {
+                    allPosts = allPosts.map { post in
+                        bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
+                    }
+                }
+            }
+
             // Merge recently created posts that may not be in server response yet
             mergeRecentlyCreatedPosts(into: &allPosts)
             
@@ -187,21 +197,6 @@ class FeedViewModel: ObservableObject {
             prefetchImagesForPosts(self.posts, startIndex: 0, count: 10)
 
             self.error = nil
-
-            // Load bookmark status in background (non-blocking)
-            if isAuthenticated, !self.posts.isEmpty {
-                let postIdsToCheck = self.posts.map { $0.id }
-                Task { [weak self] in
-                    guard let self = self else { return }
-                    if let bookmarkedIds = try? await self.socialService.batchCheckBookmarked(postIds: postIdsToCheck) {
-                        await MainActor.run {
-                            self.posts = self.posts.map { post in
-                                bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
-                            }
-                        }
-                    }
-                }
-            }
         } catch let apiError as APIError {
             // Handle unauthorized: try token refresh or fallback to guest mode
             if case .unauthorized = apiError, isAuthenticated, !isGuestFallback {
@@ -230,6 +225,16 @@ class FeedViewModel: ObservableObject {
 
                     var allPosts = fallbackResponse.posts.map { FeedPost(from: $0) }
 
+                    // Fetch bookmark status for authenticated users (await before UI update)
+                    if isAuthenticated, !allPosts.isEmpty {
+                        let postIds = allPosts.map { $0.id }
+                        if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) {
+                            allPosts = allPosts.map { post in
+                                bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
+                            }
+                        }
+                    }
+
                     // Merge recently created posts that may not be in server response yet
                     mergeRecentlyCreatedPosts(into: &allPosts)
                     
@@ -241,21 +246,6 @@ class FeedViewModel: ObservableObject {
                     }
 
                     self.error = nil
-
-                    // Load bookmark status in background (non-blocking)
-                    if isAuthenticated, !self.posts.isEmpty {
-                        let postIdsToCheck = self.posts.map { $0.id }
-                        Task { [weak self] in
-                            guard let self = self else { return }
-                            if let bookmarkedIds = try? await self.socialService.batchCheckBookmarked(postIds: postIdsToCheck) {
-                                await MainActor.run {
-                                    self.posts = self.posts.map { post in
-                                        bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
-                                    }
-                                }
-                            }
-                        }
-                    }
                 } catch {
                     self.error = apiError.localizedDescription
                     self.posts = []
@@ -290,7 +280,17 @@ class FeedViewModel: ObservableObject {
             self.hasMore = response.hasMore
 
             // Convert raw posts to FeedPost objects directly
-            let newPosts = response.posts.map { FeedPost(from: $0) }
+            var newPosts = response.posts.map { FeedPost(from: $0) }
+
+            // Fetch bookmark status for authenticated users (await before UI update to prevent flicker)
+            if isAuthenticated, !newPosts.isEmpty {
+                let newPostIds = newPosts.map { $0.id }
+                if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: newPostIds) {
+                    newPosts = newPosts.map { post in
+                        bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
+                    }
+                }
+            }
 
             // Client-side deduplication: Only add posts that aren't already in the feed
             let existingIds = Set(self.posts.map { $0.id })
@@ -304,21 +304,6 @@ class FeedViewModel: ObservableObject {
                 #endif
             } else {
                 self.posts.append(contentsOf: uniqueNewPosts)
-
-                // Load bookmark status in background (non-blocking)
-                if isAuthenticated {
-                    let newPostIds = uniqueNewPosts.map { $0.id }
-                    Task { [weak self] in
-                        guard let self = self else { return }
-                        if let bookmarkedIds = try? await self.socialService.batchCheckBookmarked(postIds: newPostIds) {
-                            await MainActor.run {
-                                self.posts = self.posts.map { post in
-                                    bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
-                                }
-                            }
-                        }
-                    }
-                }
             }
 
         } catch {
