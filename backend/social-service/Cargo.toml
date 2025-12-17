@@ -48,6 +48,9 @@ rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", 
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
+# Metrics
+prometheus.workspace = true
+
 # Shared libs
 transactional-outbox = { path = "../libs/transactional-outbox" }
 idempotent-consumer = { path = "../libs/idempotent-consumer" }

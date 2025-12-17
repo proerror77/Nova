@@ -1,9 +1,13 @@
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use clickhouse::Client as ClickHouseClient;
+use clickhouse::Row;
+use prometheus::{IntCounter, IntGauge};
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::message::Message;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
@@ -11,6 +15,230 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::error::{AnalyticsError, Result};
+
+/// Metrics for CDC consumer monitoring
+#[derive(Clone)]
+pub struct CdcConsumerMetrics {
+    /// Total number of Kafka consumer errors
+    pub consumer_errors_total: IntCounter,
+    /// Current consecutive error count (resets on success)
+    pub consecutive_errors: IntGauge,
+    /// Total messages successfully processed
+    pub messages_processed_total: IntCounter,
+    /// Total messages that failed processing
+    pub messages_failed_total: IntCounter,
+    /// Consumer health status (1 = healthy, 0 = unhealthy)
+    pub consumer_healthy: IntGauge,
+    /// Current backoff duration in seconds
+    pub backoff_seconds: IntGauge,
+}
+
+impl CdcConsumerMetrics {
+    pub fn new() -> Self {
+        let registry = prometheus::default_registry();
+
+        let consumer_errors_total = IntCounter::new(
+            "cdc_consumer_errors_total",
+            "Total number of Kafka consumer errors encountered",
+        )
+        .expect("valid metric for cdc_consumer_errors_total");
+
+        let consecutive_errors = IntGauge::new(
+            "cdc_consumer_consecutive_errors",
+            "Current number of consecutive Kafka consumer errors",
+        )
+        .expect("valid metric for cdc_consumer_consecutive_errors");
+
+        let messages_processed_total = IntCounter::new(
+            "cdc_messages_processed_total",
+            "Total number of CDC messages successfully processed",
+        )
+        .expect("valid metric for cdc_messages_processed_total");
+
+        let messages_failed_total = IntCounter::new(
+            "cdc_messages_failed_total",
+            "Total number of CDC messages that failed processing",
+        )
+        .expect("valid metric for cdc_messages_failed_total");
+
+        let consumer_healthy = IntGauge::new(
+            "cdc_consumer_healthy",
+            "CDC consumer health status (1 = healthy, 0 = unhealthy)",
+        )
+        .expect("valid metric for cdc_consumer_healthy");
+
+        let backoff_seconds = IntGauge::new(
+            "cdc_consumer_backoff_seconds",
+            "Current backoff duration in seconds",
+        )
+        .expect("valid metric for cdc_consumer_backoff_seconds");
+
+        // Register all metrics
+        for metric in [
+            Box::new(consumer_errors_total.clone()) as Box<dyn prometheus::core::Collector>,
+            Box::new(consecutive_errors.clone()),
+            Box::new(messages_processed_total.clone()),
+            Box::new(messages_failed_total.clone()),
+            Box::new(consumer_healthy.clone()),
+            Box::new(backoff_seconds.clone()),
+        ] {
+            let _ = registry.register(metric);
+        }
+
+        // Start as healthy
+        consumer_healthy.set(1);
+
+        Self {
+            consumer_errors_total,
+            consecutive_errors,
+            messages_processed_total,
+            messages_failed_total,
+            consumer_healthy,
+            backoff_seconds,
+        }
+    }
+}
+
+impl Default for CdcConsumerMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Error handling state for the CDC consumer
+pub struct ConsumerErrorState {
+    /// Number of consecutive errors
+    consecutive_count: AtomicU32,
+    /// Timestamp of last successful operation (Unix millis)
+    last_success_ms: AtomicU64,
+}
+
+impl ConsumerErrorState {
+    pub fn new() -> Self {
+        Self {
+            consecutive_count: AtomicU32::new(0),
+            last_success_ms: AtomicU64::new(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64,
+            ),
+        }
+    }
+
+    /// Record a successful operation, resetting error count
+    pub fn record_success(&self) {
+        self.consecutive_count.store(0, Ordering::SeqCst);
+        self.last_success_ms.store(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+            Ordering::SeqCst,
+        );
+    }
+
+    /// Record an error, incrementing consecutive count
+    pub fn record_error(&self) -> u32 {
+        self.consecutive_count.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    /// Get current consecutive error count
+    pub fn consecutive_errors(&self) -> u32 {
+        self.consecutive_count.load(Ordering::SeqCst)
+    }
+
+    /// Get duration since last success
+    pub fn time_since_success(&self) -> Duration {
+        let last = self.last_success_ms.load(Ordering::SeqCst);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        Duration::from_millis(now.saturating_sub(last))
+    }
+
+    /// Calculate backoff duration based on consecutive errors (exponential with cap)
+    pub fn calculate_backoff(&self) -> Duration {
+        const MIN_BACKOFF_SECS: u64 = 1;
+        const MAX_BACKOFF_SECS: u64 = 60;
+
+        let errors = self.consecutive_errors();
+        if errors == 0 {
+            return Duration::from_secs(MIN_BACKOFF_SECS);
+        }
+
+        // Exponential backoff: 2^(errors-1) seconds, capped at MAX_BACKOFF_SECS
+        let backoff_secs = 2u64
+            .saturating_pow(errors.saturating_sub(1))
+            .min(MAX_BACKOFF_SECS);
+        Duration::from_secs(backoff_secs)
+    }
+}
+
+impl Default for ConsumerErrorState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Status information for the CDC consumer
+#[derive(Debug, Clone)]
+pub struct ConsumerStatus {
+    /// Whether the consumer is currently healthy
+    pub healthy: bool,
+    /// Current number of consecutive errors
+    pub consecutive_errors: u32,
+    /// Time since last successful operation
+    pub time_since_last_success: Duration,
+    /// Current backoff duration being applied
+    pub current_backoff: Duration,
+}
+
+/// Row struct for posts_cdc table - used for type-safe ClickHouse inserts
+#[derive(Debug, Clone, Row, Serialize, Deserialize)]
+pub struct PostsCdcRow {
+    pub id: String,
+    pub user_id: String,
+    pub content: String,
+    pub media_url: Option<String>,
+    pub created_at: u32,  // DateTime as Unix timestamp
+    pub cdc_timestamp: u64,
+    pub is_deleted: u8,
+}
+
+/// Row struct for follows_cdc table - used for type-safe ClickHouse inserts
+#[derive(Debug, Clone, Row, Serialize, Deserialize)]
+pub struct FollowsCdcRow {
+    pub follower_id: String,
+    pub followed_id: String,
+    pub created_at: u32,  // DateTime as Unix timestamp
+    pub cdc_operation: u8,
+    pub cdc_timestamp: u32,  // DateTime as Unix timestamp
+    pub follow_count: i8,
+}
+
+/// Row struct for comments_cdc table - used for type-safe ClickHouse inserts
+#[derive(Debug, Clone, Row, Serialize, Deserialize)]
+pub struct CommentsCdcRow {
+    pub id: String,
+    pub post_id: String,
+    pub user_id: String,
+    pub content: String,
+    pub created_at: u32,  // DateTime as Unix timestamp
+    pub cdc_timestamp: u64,
+    pub is_deleted: u8,
+}
+
+/// Row struct for likes_cdc table - used for type-safe ClickHouse inserts
+#[derive(Debug, Clone, Row, Serialize, Deserialize)]
+pub struct LikesCdcRow {
+    pub user_id: String,
+    pub post_id: String,
+    pub created_at: u32,  // DateTime as Unix timestamp
+    pub cdc_timestamp: u64,
+    pub is_deleted: u8,
+}
 
 use super::models::{CdcMessage, CdcOperation};
 
@@ -61,15 +289,26 @@ impl CdcConsumerConfig {
     }
 }
 
+/// Threshold for consecutive errors before marking consumer as unhealthy
+const UNHEALTHY_ERROR_THRESHOLD: u32 = 5;
+
+/// Threshold for consecutive errors before emitting critical warning
+const CRITICAL_ERROR_THRESHOLD: u32 = 10;
+
 /// CDC Consumer service
 ///
 /// Consumes CDC messages from Kafka topics and inserts them into ClickHouse.
+/// Includes comprehensive error handling with exponential backoff and metrics.
 pub struct CdcConsumer {
     consumer: StreamConsumer,
     ch_client: ClickHouseClient,
     #[allow(dead_code)]
     config: CdcConsumerConfig,
     semaphore: Arc<Semaphore>,
+    /// Metrics for monitoring consumer health and performance
+    metrics: CdcConsumerMetrics,
+    /// Error state tracking for backoff and health checks
+    error_state: Arc<ConsumerErrorState>,
 }
 
 impl CdcConsumer {
@@ -111,21 +350,69 @@ impl CdcConsumer {
             .with_user(&config.clickhouse_user)
             .with_password(&config.clickhouse_password);
 
+        let metrics = CdcConsumerMetrics::new();
+        let error_state = Arc::new(ConsumerErrorState::new());
+
+        info!("CDC consumer initialized with metrics and error handling");
+
         Ok(Self {
             consumer,
             ch_client,
             semaphore: Arc::new(Semaphore::new(config.max_concurrent_inserts)),
             config,
+            metrics,
+            error_state,
         })
     }
 
-    /// Run the CDC consumer loop
+    /// Check if the consumer is healthy
+    /// Returns false if consecutive errors exceed threshold or no success for too long
+    pub fn is_healthy(&self) -> bool {
+        let errors = self.error_state.consecutive_errors();
+        let time_since_success = self.error_state.time_since_success();
+
+        // Unhealthy if too many consecutive errors
+        if errors >= UNHEALTHY_ERROR_THRESHOLD {
+            return false;
+        }
+
+        // Unhealthy if no success for more than 5 minutes
+        if time_since_success > Duration::from_secs(300) && errors > 0 {
+            return false;
+        }
+
+        true
+    }
+
+    /// Get current consumer status for health checks
+    pub fn status(&self) -> ConsumerStatus {
+        ConsumerStatus {
+            healthy: self.is_healthy(),
+            consecutive_errors: self.error_state.consecutive_errors(),
+            time_since_last_success: self.error_state.time_since_success(),
+            current_backoff: self.error_state.calculate_backoff(),
+        }
+    }
+
+    /// Run the CDC consumer loop with comprehensive error handling
+    ///
+    /// Features:
+    /// - Exponential backoff on consecutive errors (1s -> 2s -> 4s -> ... -> 60s max)
+    /// - Prometheus metrics for monitoring
+    /// - Health status tracking
+    /// - Warning alerts when error threshold is exceeded
     pub async fn run(&self) -> Result<()> {
-        info!("Starting CDC consumer loop");
+        info!("Starting CDC consumer loop with error handling");
 
         loop {
             match self.consumer.recv().await {
                 Ok(msg) => {
+                    // Reset error state on successful receive
+                    self.error_state.record_success();
+                    self.metrics.consecutive_errors.set(0);
+                    self.metrics.consumer_healthy.set(1);
+                    self.metrics.backoff_seconds.set(0);
+
                     let topic = msg.topic();
                     let partition = msg.partition();
                     let offset = msg.offset();
@@ -135,17 +422,62 @@ impl CdcConsumer {
                         topic, partition, offset
                     );
 
-                    if let Err(e) = self.process_message(&msg).await {
-                        error!(
-                            "Failed to process CDC message (topic={}, partition={}, offset={}): {}",
-                            topic, partition, offset, e
-                        );
-                        // Continue processing, Kafka auto-commit handles offset
+                    match self.process_message(&msg).await {
+                        Ok(()) => {
+                            self.metrics.messages_processed_total.inc();
+                        }
+                        Err(e) => {
+                            self.metrics.messages_failed_total.inc();
+                            error!(
+                                "Failed to process CDC message (topic={}, partition={}, offset={}): {}",
+                                topic, partition, offset, e
+                            );
+                            // Continue processing, Kafka auto-commit handles offset
+                        }
                     }
                 }
                 Err(e) => {
-                    error!("Kafka consumer error: {}", e);
-                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    // Record the error and update metrics
+                    let consecutive = self.error_state.record_error();
+                    self.metrics.consumer_errors_total.inc();
+                    self.metrics.consecutive_errors.set(consecutive as i64);
+
+                    // Calculate backoff duration
+                    let backoff = self.error_state.calculate_backoff();
+                    self.metrics.backoff_seconds.set(backoff.as_secs() as i64);
+
+                    // Update health status
+                    let is_healthy = self.is_healthy();
+                    self.metrics.consumer_healthy.set(if is_healthy { 1 } else { 0 });
+
+                    // Log with appropriate severity based on consecutive errors
+                    if consecutive >= CRITICAL_ERROR_THRESHOLD {
+                        error!(
+                            consecutive_errors = consecutive,
+                            backoff_secs = backoff.as_secs(),
+                            time_since_success_secs = self.error_state.time_since_success().as_secs(),
+                            "CRITICAL: Kafka consumer experiencing persistent failures. \
+                             Manual intervention may be required. Error: {}",
+                            e
+                        );
+                    } else if consecutive >= UNHEALTHY_ERROR_THRESHOLD {
+                        warn!(
+                            consecutive_errors = consecutive,
+                            backoff_secs = backoff.as_secs(),
+                            "Kafka consumer unhealthy - multiple consecutive errors. Error: {}",
+                            e
+                        );
+                    } else {
+                        error!(
+                            consecutive_errors = consecutive,
+                            backoff_secs = backoff.as_secs(),
+                            "Kafka consumer error (will retry with backoff): {}",
+                            e
+                        );
+                    }
+
+                    // Apply exponential backoff before retry
+                    tokio::time::sleep(backoff).await;
                 }
             }
         }
@@ -188,7 +520,7 @@ impl CdcConsumer {
         Ok(())
     }
 
-    /// Insert posts CDC message into ClickHouse
+    /// Insert posts CDC message into ClickHouse using type-safe parameterized insert
     async fn insert_posts_cdc(&self, msg: &CdcMessage) -> Result<()> {
         let op = msg.operation();
         let data = match op {
@@ -217,18 +549,28 @@ impl CdcConsumer {
         };
         let cdc_timestamp = Self::ts_ms_u64(msg.payload().ts_ms)?;
 
-        let query = format!(
-            "INSERT INTO posts_cdc (id, user_id, content, media_url, created_at, cdc_timestamp, is_deleted) VALUES ('{}', '{}', '{}', {}, '{}', {}, {})",
-            post_id,
-            author_id,
-            Self::escape_clickhouse_str(&content),
-            media_url.map(|u| format!("'{}'", Self::escape_clickhouse_str(&u))).unwrap_or_else(|| "NULL".to_string()),
-            created_at.format("%Y-%m-%d %H:%M:%S"),
+        // Use type-safe parameterized insert to prevent SQL injection
+        let row = PostsCdcRow {
+            id: post_id.to_string(),
+            user_id: author_id.to_string(),
+            content,
+            media_url,
+            created_at: created_at.timestamp() as u32,
             cdc_timestamp,
-            is_deleted
-        );
+            is_deleted,
+        };
 
-        self.ch_client.query(&query).execute().await.map_err(|e| {
+        let mut insert = self.ch_client.insert("posts_cdc").map_err(|e| {
+            error!("ClickHouse insert preparation error: {}", e);
+            AnalyticsError::ClickHouse(e.to_string())
+        })?;
+
+        insert.write(&row).await.map_err(|e| {
+            error!("ClickHouse row write error: {}", e);
+            AnalyticsError::ClickHouse(e.to_string())
+        })?;
+
+        insert.end().await.map_err(|e| {
             error!("ClickHouse insert error: {}", e);
             AnalyticsError::ClickHouse(e.to_string())
         })?;
@@ -237,7 +579,7 @@ impl CdcConsumer {
         Ok(())
     }
 
-    /// Insert follows CDC message into ClickHouse
+    /// Insert follows CDC message into ClickHouse using type-safe parameterized insert
     async fn insert_follows_cdc(&self, msg: &CdcMessage) -> Result<()> {
         let op = msg.operation();
         let data = match op {
@@ -247,7 +589,7 @@ impl CdcConsumer {
         .ok_or_else(|| AnalyticsError::Validation("CDC message missing data field".to_string()))?;
 
         let follower_raw: String = Self::extract_field(data, "follower_id")?;
-        // PostgreSQL table uses "following_id", but ClickHouse expects "followee_id"
+        // PostgreSQL table uses "following_id", but ClickHouse expects "followed_id"
         let following_raw: String = Self::extract_field(data, "following_id")?;
         let follower_id = Uuid::parse_str(&follower_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid follower UUID: {}", e)))?;
@@ -258,20 +600,30 @@ impl CdcConsumer {
 
         // Match actual ClickHouse table schema (nova_feed.follows_cdc):
         // followed_id (not followee_id), cdc_operation (not is_deleted), follow_count
-        let cdc_operation = if *op == CdcOperation::Delete { 2 } else { 1 };  // 1=INSERT, 2=DELETE
+        let cdc_operation: u8 = if *op == CdcOperation::Delete { 2 } else { 1 };  // 1=INSERT, 2=DELETE
         let follow_count: i8 = if *op == CdcOperation::Delete { -1 } else { 1 };  // For SummingMergeTree
 
-        let query = format!(
-            "INSERT INTO follows_cdc (follower_id, followed_id, created_at, cdc_operation, cdc_timestamp, follow_count) VALUES ('{}', '{}', '{}', {}, '{}', {})",
-            follower_id,
-            followee_id,  // Variable is still named followee_id, but column is followed_id
-            created_at.format("%Y-%m-%d %H:%M:%S"),  // DateTime format (no milliseconds)
+        // Use type-safe parameterized insert to prevent SQL injection
+        let row = FollowsCdcRow {
+            follower_id: follower_id.to_string(),
+            followed_id: followee_id.to_string(),
+            created_at: created_at.timestamp() as u32,
             cdc_operation,
-            created_at.format("%Y-%m-%d %H:%M:%S"),  // cdc_timestamp DateTime format
-            follow_count
-        );
+            cdc_timestamp: created_at.timestamp() as u32,
+            follow_count,
+        };
 
-        self.ch_client.query(&query).execute().await.map_err(|e| {
+        let mut insert = self.ch_client.insert("follows_cdc").map_err(|e| {
+            error!("ClickHouse insert preparation error: {}", e);
+            AnalyticsError::ClickHouse(e.to_string())
+        })?;
+
+        insert.write(&row).await.map_err(|e| {
+            error!("ClickHouse row write error: {}", e);
+            AnalyticsError::ClickHouse(e.to_string())
+        })?;
+
+        insert.end().await.map_err(|e| {
             error!("ClickHouse insert error: {}", e);
             AnalyticsError::ClickHouse(e.to_string())
         })?;
@@ -283,7 +635,7 @@ impl CdcConsumer {
         Ok(())
     }
 
-    /// Insert comments CDC message into ClickHouse
+    /// Insert comments CDC message into ClickHouse using type-safe parameterized insert
     async fn insert_comments_cdc(&self, msg: &CdcMessage) -> Result<()> {
         let op = msg.operation();
         let data = match op {
@@ -312,18 +664,28 @@ impl CdcConsumer {
         };
         let cdc_timestamp = Self::ts_ms_u64(msg.payload().ts_ms)?;
 
-        let query = format!(
-            "INSERT INTO comments_cdc (id, post_id, user_id, content, created_at, cdc_timestamp, is_deleted) VALUES ('{}', '{}', '{}', '{}', '{}', {}, {})",
-            comment_id,
-            post_id,
-            user_id,
-            Self::escape_clickhouse_str(&content),
-            created_at.format("%Y-%m-%d %H:%M:%S"),
+        // Use type-safe parameterized insert to prevent SQL injection
+        let row = CommentsCdcRow {
+            id: comment_id.to_string(),
+            post_id: post_id.to_string(),
+            user_id: user_id.to_string(),
+            content,
+            created_at: created_at.timestamp() as u32,
             cdc_timestamp,
-            is_deleted
-        );
+            is_deleted,
+        };
 
-        self.ch_client.query(&query).execute().await.map_err(|e| {
+        let mut insert = self.ch_client.insert("comments_cdc").map_err(|e| {
+            error!("ClickHouse insert preparation error: {}", e);
+            AnalyticsError::ClickHouse(e.to_string())
+        })?;
+
+        insert.write(&row).await.map_err(|e| {
+            error!("ClickHouse row write error: {}", e);
+            AnalyticsError::ClickHouse(e.to_string())
+        })?;
+
+        insert.end().await.map_err(|e| {
             error!("ClickHouse insert error: {}", e);
             AnalyticsError::ClickHouse(e.to_string())
         })?;
@@ -332,7 +694,7 @@ impl CdcConsumer {
         Ok(())
     }
 
-    /// Insert likes CDC message into ClickHouse
+    /// Insert likes CDC message into ClickHouse using type-safe parameterized insert
     async fn insert_likes_cdc(&self, msg: &CdcMessage) -> Result<()> {
         let op = msg.operation();
         let data = match op {
@@ -357,16 +719,26 @@ impl CdcConsumer {
         };
         let cdc_timestamp = Self::ts_ms_u64(msg.payload().ts_ms)?;
 
-        let query = format!(
-            "INSERT INTO likes_cdc (user_id, post_id, created_at, cdc_timestamp, is_deleted) VALUES ('{}', '{}', '{}', {}, {})",
-            user_id,
-            post_id,
-            created_at.format("%Y-%m-%d %H:%M:%S"),
+        // Use type-safe parameterized insert to prevent SQL injection
+        let row = LikesCdcRow {
+            user_id: user_id.to_string(),
+            post_id: post_id.to_string(),
+            created_at: created_at.timestamp() as u32,
             cdc_timestamp,
-            is_deleted
-        );
+            is_deleted,
+        };
 
-        self.ch_client.query(&query).execute().await.map_err(|e| {
+        let mut insert = self.ch_client.insert("likes_cdc").map_err(|e| {
+            error!("ClickHouse insert preparation error: {}", e);
+            AnalyticsError::ClickHouse(e.to_string())
+        })?;
+
+        insert.write(&row).await.map_err(|e| {
+            error!("ClickHouse row write error: {}", e);
+            AnalyticsError::ClickHouse(e.to_string())
+        })?;
+
+        insert.end().await.map_err(|e| {
             error!("ClickHouse insert error: {}", e);
             AnalyticsError::ClickHouse(e.to_string())
         })?;
@@ -376,13 +748,6 @@ impl CdcConsumer {
             user_id, post_id, op
         );
         Ok(())
-    }
-
-    /// Escape a string for ClickHouse SQL queries.
-    /// Escapes single quotes (') and question marks (?) which are interpreted
-    /// as parameter placeholders by the clickhouse crate.
-    fn escape_clickhouse_str(s: &str) -> String {
-        s.replace('\'', "''").replace('?', "\\?")
     }
 
     fn extract_field<T>(data: &Value, field: &str) -> Result<T>
