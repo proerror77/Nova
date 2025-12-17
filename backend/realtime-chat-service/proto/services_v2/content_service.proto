@@ -73,6 +73,24 @@ message GetUserPostsResponse {
   bool has_more = 3;
 }
 
+// BatchGetUserPosts - Get recent posts from multiple users in a single call
+// Optimizes N+1 query pattern in graph recall (P0-2)
+message BatchGetUserPostsRequest {
+  repeated string user_ids = 1;     // List of user IDs to fetch posts from
+  int32 posts_per_user = 2;         // Maximum posts to return per user (default: 5)
+  ContentStatus status = 3;         // Filter by content status (default: PUBLISHED)
+}
+
+message UserPostsList {
+  repeated Post posts = 1;
+}
+
+message BatchGetUserPostsResponse {
+  map<string, UserPostsList> posts_by_user = 1;  // Map of user_id -> their posts
+  int32 total_posts = 2;                          // Total number of posts returned
+  repeated string failed_user_ids = 3;            // User IDs that failed to fetch
+}
+
 message ListRecentPostsRequest {
   int32 limit = 1;
   string exclude_user_id = 2;
@@ -168,6 +186,14 @@ service ContentService {
       additional_bindings {
         get: "/api/v2/content/user/{user_id}"
       }
+    };
+  }
+
+  // Batch get posts from multiple users (optimizes N+1 query pattern)
+  rpc BatchGetUserPosts(BatchGetUserPostsRequest) returns (BatchGetUserPostsResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/content/posts/batch-by-users"
+      body: "*"
     };
   }
 
