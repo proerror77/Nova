@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // 发帖身份类型
 enum PostAsType {
@@ -16,16 +17,16 @@ struct PostAsSelectionPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // 真名选项
+            // 真名选项 - 传入 AvatarManager 的待上传头像
             PostAsOptionRow(
                 avatarUrl: avatarUrl,
                 displayName: realName,
                 subtitle: username,
                 isSelected: selectedType == .realName,
-                borderColor: Color(red: 0.82, green: 0.11, blue: 0.26)
-            ) {
-                onRealNameTap?()
-            }
+                borderColor: Color(red: 0.82, green: 0.11, blue: 0.26),
+                action: { onRealNameTap?() },
+                pendingAvatar: AvatarManager.shared.pendingAvatar
+            )
 
             // 分隔线
             Divider()
@@ -37,10 +38,9 @@ struct PostAsSelectionPanel: View {
                 displayName: "Dreamer",
                 subtitle: "Alias name",
                 isSelected: selectedType == .alias,
-                borderColor: Color(red: 0.37, green: 0.37, blue: 0.37)
-            ) {
-                onAliasTap?()
-            }
+                borderColor: Color(red: 0.37, green: 0.37, blue: 0.37),
+                action: { onAliasTap?() }
+            )
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -60,13 +60,21 @@ struct PostAsOptionRow: View {
     let isSelected: Bool
     let borderColor: Color
     let action: () -> Void
+    var pendingAvatar: UIImage? = nil
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 14) {
                 // 头像 - 放大到 56x56
+                // 优先级: pendingAvatar > avatarUrl > 默认头像
                 ZStack {
-                    if let avatarUrl = avatarUrl, let url = URL(string: avatarUrl) {
+                    if let pendingAvatar = pendingAvatar {
+                        Image(uiImage: pendingAvatar)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 56, height: 56)
+                            .clipShape(Circle())
+                    } else if let avatarUrl = avatarUrl, let url = URL(string: avatarUrl) {
                         AsyncImage(url: url) { image in
                             image
                                 .resizable()

@@ -1,5 +1,0 @@
-# Serena configuration for ICERED iOS project
-project_root: /Users/icered/Documents/Nova/ios/NovaSocial
-language_server:
-  swift:
-    command: sourcekit-lsp
