@@ -365,6 +365,35 @@ async fn main() -> std::io::Result<()> {
                 "/api/v2/auth/oauth/apple/native",
                 web::post().to(rest_api::oauth::apple_native_sign_in),
             )
+            // ✅ Passkey (WebAuthn/FIDO2) Authentication API
+            .route(
+                "/api/v2/auth/passkey/register/start",
+                web::post().to(rest_api::passkey::start_registration),
+            )
+            .route(
+                "/api/v2/auth/passkey/register/complete",
+                web::post().to(rest_api::passkey::complete_registration),
+            )
+            .route(
+                "/api/v2/auth/passkey/authenticate/start",
+                web::post().to(rest_api::passkey::start_authentication),
+            )
+            .route(
+                "/api/v2/auth/passkey/authenticate/complete",
+                web::post().to(rest_api::passkey::complete_authentication),
+            )
+            .route(
+                "/api/v2/auth/passkey/list",
+                web::get().to(rest_api::passkey::list_passkeys),
+            )
+            .route(
+                "/api/v2/auth/passkey/{credential_id}",
+                web::delete().to(rest_api::passkey::revoke_passkey),
+            )
+            .route(
+                "/api/v2/auth/passkey/{credential_id}/rename",
+                web::put().to(rest_api::passkey::rename_passkey),
+            )
             // ✅ Identity/Password Management API
             .route(
                 "/api/v2/identity/password/change",
@@ -463,6 +492,15 @@ async fn main() -> std::io::Result<()> {
             .route("/api/v2/alice/chat", web::post().to(rest_api::send_message))
             .route("/api/v2/alice/voice", web::post().to(rest_api::voice_mode))
             .route("/api/v2/alice/enhance", web::post().to(rest_api::enhance_post))
+            // ✅ Photo Analysis API (iOS Vision → ranking-service)
+            .route(
+                "/api/v2/photo-analysis/upload",
+                web::post().to(rest_api::photo_analysis::upload_photo_analysis),
+            )
+            .route(
+                "/api/v2/photo-analysis/onboarding",
+                web::post().to(rest_api::photo_analysis::upload_onboarding_interests),
+            )
             // ✅ Channels API
             .route(
                 "/api/v2/channels",
