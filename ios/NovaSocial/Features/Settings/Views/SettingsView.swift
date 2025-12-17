@@ -5,7 +5,8 @@ struct SettingsView: View {
     @StateObject private var viewModel = SettingsViewModel()
     @EnvironmentObject private var authManager: AuthenticationManager
     @State private var isPostAsExpanded = false
-    @State private var selectedPostAsType: PostAsType = .realName
+    @State private var selectedPostAsType: PostAsType = .primary
+    private let aliasEditState = AliasEditState.shared
 
     var body: some View {
         ZStack {
@@ -74,13 +75,15 @@ struct SettingsView: View {
                                 // 展开的选择面板 - 使用高度动画
                                 PostAsSelectionPanel(
                                     selectedType: $selectedPostAsType,
-                                    realName: authManager.currentUser?.displayName ?? authManager.currentUser?.username ?? "User",
-                                    username: authManager.currentUser?.username ?? "username",
-                                    avatarUrl: authManager.currentUser?.avatarUrl,
-                                    onRealNameTap: {
+                                    primaryAccount: viewModel.primaryAccount,
+                                    aliasAccounts: viewModel.aliasAccounts,
+                                    currentUser: authManager.currentUser,
+                                    onPrimaryTap: {
                                         currentPage = .profileSetting
                                     },
-                                    onAliasTap: {
+                                    onAliasTap: { aliasAccount in
+                                        // 设置编辑状态（nil 表示创建新账户）
+                                        aliasEditState.setEditingAccount(aliasAccount?.id)
                                         currentPage = .aliasName
                                     }
                                 )

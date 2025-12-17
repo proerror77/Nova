@@ -2,45 +2,88 @@ import SwiftUI
 import UIKit
 
 // 发帖身份类型
-enum PostAsType {
-    case realName
-    case alias
+enum PostAsType: Equatable {
+    case primary
+    case alias(accountId: String)
 }
 
 struct PostAsSelectionPanel: View {
     @Binding var selectedType: PostAsType
-    let realName: String
-    let username: String
-    let avatarUrl: String?
-    var onRealNameTap: (() -> Void)? = nil
-    var onAliasTap: (() -> Void)? = nil
+    let primaryAccount: Account?
+    let aliasAccounts: [Account]
+    let currentUser: UserProfile?
+    var onPrimaryTap: (() -> Void)? = nil
+    var onAliasTap: ((Account?) -> Void)? = nil
+
+    // Computed properties for backward compatibility
+    private var realName: String {
+        primaryAccount?.effectiveDisplayName ?? currentUser?.displayName ?? currentUser?.username ?? "User"
+    }
+
+    private var username: String {
+        primaryAccount?.username ?? currentUser?.username ?? "username"
+    }
+
+    private var avatarUrl: String? {
+        primaryAccount?.avatarUrl ?? currentUser?.avatarUrl
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            // 真名选项 - 传入 AvatarManager 的待上传头像
+            // 主账户选项
             PostAsOptionRow(
                 avatarUrl: avatarUrl,
                 displayName: realName,
                 subtitle: username,
-                isSelected: selectedType == .realName,
+                isSelected: selectedType == .primary,
                 borderColor: Color(red: 0.82, green: 0.11, blue: 0.26),
-                action: { onRealNameTap?() },
+                action: { onPrimaryTap?() },
                 pendingAvatar: AvatarManager.shared.pendingAvatar
             )
 
             // 分隔线
-            Divider()
-                .padding(.leading, 80)
+            if !aliasAccounts.isEmpty {
+                Divider()
+                    .padding(.leading, 80)
+            }
 
-            // 别名选项
-            PostAsOptionRow(
-                avatarUrl: nil,
-                displayName: "Dreamer",
-                subtitle: "Alias name",
-                isSelected: selectedType == .alias,
-                borderColor: Color(red: 0.37, green: 0.37, blue: 0.37),
-                action: { onAliasTap?() }
-            )
+            // 子账户选项列表
+            ForEach(aliasAccounts) { alias in
+                PostAsOptionRow(
+                    avatarUrl: alias.avatarUrl,
+                    displayName: alias.effectiveDisplayName,
+                    subtitle: "Alias name",
+                    isSelected: {
+                        if case .alias(let id) = selectedType {
+                            return id == alias.id
+                        }
+                        return false
+                    }(),
+                    borderColor: Color(red: 0.37, green: 0.37, blue: 0.37),
+                    action: { onAliasTap?(alias) }
+                )
+
+                if alias.id != aliasAccounts.last?.id {
+                    Divider()
+                        .padding(.leading, 80)
+                }
+            }
+
+            // 如果没有子账户，显示创建选项
+            if aliasAccounts.isEmpty {
+                Divider()
+                    .padding(.leading, 80)
+
+                PostAsOptionRow(
+                    avatarUrl: nil,
+                    displayName: "Create Alias",
+                    subtitle: "Add a new identity",
+                    isSelected: false,
+                    borderColor: Color(red: 0.37, green: 0.37, blue: 0.37),
+                    action: { onAliasTap?(nil) },
+                    showAddIcon: true
+                )
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -61,14 +104,21 @@ struct PostAsOptionRow: View {
     let borderColor: Color
     let action: () -> Void
     var pendingAvatar: UIImage? = nil
+    var showAddIcon: Bool = false
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                // 头像 - 放大到 56x56
-                // 优先级: pendingAvatar > avatarUrl > 默认头像
+                // 头像
                 ZStack {
-                    if let pendingAvatar = pendingAvatar {
+                    if showAddIcon {
+                        Circle()
+                            .fill(Color(red: 0.95, green: 0.95, blue: 0.95))
+                            .frame(width: 56, height: 56)
+                        Image(systemName: "plus")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundColor(DesignTokens.accentColor)
+                    } else if let pendingAvatar = pendingAvatar {
                         Image(uiImage: pendingAvatar)
                             .resizable()
                             .scaledToFill()
@@ -90,10 +140,10 @@ struct PostAsOptionRow: View {
                 }
                 .overlay(
                     Circle()
-                        .stroke(borderColor, lineWidth: 1.5)
+                        .stroke(isSelected ? borderColor : Color.clear, lineWidth: 1.5)
                 )
 
-                // 名称和副标题 - 放大字体
+                // 名称和副标题
                 VStack(alignment: .leading, spacing: 4) {
                     Text(displayName)
                         .font(.system(size: 16, weight: .bold))
@@ -119,10 +169,10 @@ struct PostAsOptionRow: View {
 #Preview {
     VStack {
         PostAsSelectionPanel(
-            selectedType: .constant(.realName),
-            realName: "Bruce Li",
-            username: "brucelichina",
-            avatarUrl: nil
+            selectedType: .constant(.primary),
+            primaryAccount: nil,
+            aliasAccounts: [],
+            currentUser: nil
         )
     }
     .padding()
