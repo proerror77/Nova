@@ -131,8 +131,9 @@ struct LoginView: View {
                         // Log In Button
                         logInButton
 
-                        // Google & Apple Buttons (side by side)
+                        // Phone, Google & Apple Buttons (side by side)
                         HStack(spacing: 11.w) {
+                            phoneButton
                             googleButton
                             appleButton
                         }
@@ -328,6 +329,27 @@ struct LoginView: View {
         }
         .disabled(isLoading || isGoogleLoading)
         .accessibilityIdentifier("appleButton")
+    }
+
+    // MARK: - Phone Button (Icon Only)
+    private var phoneButton: some View {
+        Button(action: {
+            currentPage = .phoneLogin
+        }) {
+            Image(systemName: "phone.fill")
+                .font(.system(size: 20.f, weight: .medium))
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: Layout.buttonHeight.h)
+                .background(Color.clear)
+                .cornerRadius(65.s)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 65.s)
+                        .stroke(Color.white, lineWidth: 0.5)
+                )
+        }
+        .disabled(isLoading || isGoogleLoading)
+        .accessibilityIdentifier("phoneButton")
     }
 
     // MARK: - Create Account Button

@@ -56,6 +56,12 @@ struct IceredApp: App {
                     case .login:
                         LoginView(currentPage: $currentPage)
                             .transition(.identity)
+                    case .phoneLogin:
+                        PhoneLoginView(currentPage: $currentPage)
+                            .transition(.identity)
+                    case .phoneRegistration:
+                        PhoneRegistrationView(currentPage: $currentPage)
+                            .transition(.identity)
                     case .forgotPassword:
                         ForgotPasswordView(currentPage: $currentPage)
                             .transition(.identity)

@@ -285,7 +285,7 @@ struct CreateAccountView: View {
                         HStack(spacing: 54) {
                             // Phone button
                             Button(action: {
-                                // TODO: Phone login
+                                currentPage = .phoneRegistration
                             }) {
                                 Image(systemName: "iphone")
                                     .font(.system(size: 20))
