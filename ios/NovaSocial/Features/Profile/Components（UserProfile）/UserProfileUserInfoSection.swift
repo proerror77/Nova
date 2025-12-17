@@ -52,6 +52,10 @@ struct UserProfileUserInfoSection: View {
     var followersCount: Int
     var likesCount: Int
 
+    // Alias account support
+    var isAlias: Bool = false
+    var aliasName: String? = nil
+
     // Layout
     var layout: UserProfileUserInfoLayout = .default
 
@@ -60,6 +64,14 @@ struct UserProfileUserInfoSection: View {
     var onFollowersTapped: () -> Void = {}
     var onLikesTapped: () -> Void = {}
 
+    /// Display name - uses aliasName for alias accounts
+    private var displayName: String {
+        if isAlias, let alias = aliasName {
+            return alias
+        }
+        return username
+    }
+
     var body: some View {
         VStack(alignment: .center, spacing: 0) {
             // MARK: - 头像
@@ -67,10 +79,25 @@ struct UserProfileUserInfoSection: View {
                 .padding(.top, layout.topPadding)
 
             // MARK: - 用户名
-            Text(username)
-                .font(.system(size: layout.usernameFontSize, weight: .bold))
-                .foregroundColor(layout.textColor)
-                .padding(.top, layout.usernameTopPadding)
+            HStack(spacing: 6) {
+                Text(displayName)
+                    .font(.system(size: layout.usernameFontSize, weight: .bold))
+                    .foregroundColor(layout.textColor)
+
+                // Alias badge
+                if isAlias {
+                    Text("Alias")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(Color(red: 0.87, green: 0.11, blue: 0.26).opacity(0.8))
+                        )
+                }
+            }
+            .padding(.top, layout.usernameTopPadding)
 
             // MARK: - 位置
             if let location = location, !location.isEmpty {

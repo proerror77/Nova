@@ -163,6 +163,8 @@ struct UserProfileView: View {
                         followingCount: userData.followingCount,
                         followersCount: userData.followersCount,
                         likesCount: userData.likesCount,
+                        isAlias: userData.isAlias,
+                        aliasName: userData.aliasName,
                         layout: userInfoLayout,
                         onFollowingTapped: {
                             // 点击 Following

@@ -138,6 +138,9 @@ class FeedViewModel: ObservableObject {
             // Convert raw posts to FeedPost objects directly
             var allPosts = response.posts.map { FeedPost(from: $0) }
 
+            // Sync current user's avatar for their own posts (ensures latest avatar is shown)
+            allPosts = syncCurrentUserAvatar(allPosts)
+
             // Fetch bookmark status for authenticated users
             if isAuthenticated, !allPosts.isEmpty {
                 let postIds = allPosts.map { $0.id }
@@ -187,6 +190,9 @@ class FeedViewModel: ObservableObject {
                     self.hasMore = fallbackResponse.hasMore
 
                     var allPosts = fallbackResponse.posts.map { FeedPost(from: $0) }
+
+                    // Sync current user's avatar for their own posts
+                    allPosts = syncCurrentUserAvatar(allPosts)
 
                     // Fetch bookmark status for authenticated users
                     if isAuthenticated, !allPosts.isEmpty {
@@ -241,6 +247,9 @@ class FeedViewModel: ObservableObject {
 
             // Convert raw posts to FeedPost objects directly
             var newPosts = response.posts.map { FeedPost(from: $0) }
+
+            // Sync current user's avatar for their own posts
+            newPosts = syncCurrentUserAvatar(newPosts)
 
             // Fetch bookmark status for authenticated users
             if isAuthenticated, !newPosts.isEmpty {
@@ -301,6 +310,9 @@ class FeedViewModel: ObservableObject {
             self.hasMore = response.hasMore
 
             var allPosts = response.posts.map { FeedPost(from: $0) }
+
+            // Sync current user's avatar for their own posts
+            allPosts = syncCurrentUserAvatar(allPosts)
 
             // Fetch bookmark status for authenticated users
             if isAuthenticated, !allPosts.isEmpty {
@@ -528,6 +540,13 @@ class FeedViewModel: ObservableObject {
         return post
     }
 
+    /// Increment comment count for a post (called when a comment is successfully added)
+    func incrementCommentCount(postId: String) {
+        guard let index = posts.firstIndex(where: { $0.id == postId }) else { return }
+        let post = posts[index]
+        posts[index] = post.copying(commentCount: post.commentCount + 1)
+    }
+
     /// Toggle bookmark on a post
     func toggleBookmark(postId: String) async {
         // Prevent concurrent bookmark operations for the same post
@@ -605,10 +624,27 @@ class FeedViewModel: ObservableObject {
 
     // MARK: - Private Methods
 
-    /// Process posts: enrich with bookmark status and deduplicate
+    /// Process posts: sync current user avatar, enrich with bookmark status and deduplicate
     private func processAndDeduplicatePosts(_ posts: [FeedPost]) async -> [FeedPost] {
-        let enrichedPosts = await enrichWithBookmarkStatus(posts)
+        let syncedPosts = syncCurrentUserAvatar(posts)
+        let enrichedPosts = await enrichWithBookmarkStatus(syncedPosts)
         return deduplicatePosts(enrichedPosts)
+    }
+
+    /// Sync current user's avatar for their own posts
+    /// This ensures the Feed shows the latest avatar after user updates it locally
+    private func syncCurrentUserAvatar(_ posts: [FeedPost]) -> [FeedPost] {
+        guard let currentUserId = authManager.currentUser?.id,
+              let currentUserAvatar = authManager.currentUser?.avatarUrl else {
+            return posts
+        }
+
+        return posts.map { post in
+            if post.authorId == currentUserId {
+                return post.copying(authorAvatar: currentUserAvatar)
+            }
+            return post
+        }
     }
 
     /// Enrich posts with bookmark status for authenticated users
