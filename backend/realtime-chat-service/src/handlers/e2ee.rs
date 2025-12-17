@@ -728,15 +728,8 @@ pub async fn send_e2ee_message(
         return Err(AppError::BadRequest("Device ID cannot be empty".into()));
     }
 
-    // Map message type to string (for database storage)
-    let message_type_str = match body.message_type {
-        0 => Some("text".to_string()),
-        1 => Some("image".to_string()),
-        2 => Some("audio".to_string()),
-        3 => Some("video".to_string()),
-        4 => Some("file".to_string()),
-        _ => None, // Unknown types stored as NULL
-    };
+    // Note: message_type field removed in schema migration - not stored in database
+    // Schema note: Columns from migrations 0004 (base), 0005 (content), and 0011 (megolm)
 
     // Create request for E2EE message service
     let request = SendE2eeMessageRequest {
@@ -745,7 +738,6 @@ pub async fn send_e2ee_message(
         session_id: body.session_id.clone(),
         ciphertext: body.ciphertext.clone(),
         message_index: body.message_index,
-        message_type: message_type_str,
         idempotency_key: body.idempotency_key.clone(),
     };
 

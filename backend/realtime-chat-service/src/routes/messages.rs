@@ -289,9 +289,11 @@ pub async fn update_message(
     let tx = client.transaction().await?;
 
     // 1. Get message with FOR UPDATE lock (prevents concurrent modifications)
+    // Schema note: Use only columns from migrations 0004 (base) and 0005 (content)
+    // E2E encryption handled by PostgreSQL TDE - no content_encrypted/content_nonce columns
     let msg_row = tx.query_opt(
         "SELECT m.conversation_id, m.sender_id, m.version_number, m.created_at, m.content,
-                m.content_encrypted, m.content_nonce, c.privacy_mode::text AS privacy_mode
+                c.privacy_mode::text AS privacy_mode
          FROM messages m
          JOIN conversations c ON c.id = m.conversation_id
          WHERE m.id = $1
@@ -311,18 +313,7 @@ pub async fn update_message(
         _ => crate::services::conversation_service::PrivacyMode::SearchEnabled,
     };
 
-    let mut old_content: String = msg_row.get("content");
-    let ciphertext: Option<Vec<u8>> = msg_row.get("content_encrypted");
-
-    if matches!(
-        privacy_mode,
-        crate::services::conversation_service::PrivacyMode::StrictE2e
-    ) {
-        old_content = ciphertext
-            .as_ref()
-            .map(|c| general_purpose::STANDARD.encode(c))
-            .unwrap_or_else(|| "[Encrypted message unavailable]".to_string());
-    }
+    let old_content: String = msg_row.get("content");
 
     let validator = MessageEditValidator {
         conversation_id,

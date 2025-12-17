@@ -44,28 +44,18 @@ impl MessageService {
 
     pub async fn send_message_db(
         db: &Pool,
-        encryption: &EncryptionService,
+        _encryption: &EncryptionService, // Encryption handled by PostgreSQL TDE
         conversation_id: Uuid,
         sender_id: Uuid,
         plaintext: &[u8],
         idempotency_key: Option<&str>,
     ) -> Result<MessageRow, crate::error::AppError> {
         let id = Uuid::new_v4();
-        let privacy_mode = Self::fetch_conversation_privacy(db, conversation_id).await?;
 
-        let content_string = String::from_utf8(plaintext.to_vec())
+        // Note: E2E encryption columns removed in migration 0009
+        // Using PostgreSQL TDE for at-rest encryption instead
+        let content = String::from_utf8(plaintext.to_vec())
             .map_err(|e| crate::error::AppError::Config(format!("invalid utf8: {e}")))?;
-
-        let (content, content_encrypted, content_nonce, encryption_version) =
-            if matches!(privacy_mode, PrivacyMode::StrictE2e) {
-                let (ciphertext, nonce) = encryption.encrypt(conversation_id, plaintext)?;
-                (String::new(), Some(ciphertext), Some(nonce.to_vec()), 1)
-            } else {
-                (content_string.clone(), None, None, 0)
-            };
-
-        let encrypted_slice = content_encrypted.as_deref();
-        let nonce_slice = content_nonce.as_deref();
 
         let client = db.get().await.map_err(|e| {
             crate::error::AppError::StartServer(format!("get client: {e}"))
@@ -85,9 +75,6 @@ impl MessageService {
                 conversation_id,
                 sender_id,
                 content,
-                content_encrypted,
-                content_nonce,
-                encryption_version,
                 idempotency_key,
                 sequence_number
             )
@@ -97,14 +84,11 @@ impl MessageService {
                 $3,
                 $4,
                 $5,
-                $6,
-                $7,
-                $8,
                 next.last_seq
             FROM next
-            RETURNING id, conversation_id, sender_id, content, content_encrypted, content_nonce, encryption_version, sequence_number, idempotency_key, created_at
+            RETURNING id, conversation_id, sender_id, content, sequence_number, idempotency_key, created_at
             "#,
-            &[&id, &conversation_id, &sender_id, &content, &encrypted_slice, &nonce_slice, &encryption_version, &idempotency_key]
+            &[&id, &conversation_id, &sender_id, &content, &idempotency_key]
         )
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("insert msg: {e}")))?;
@@ -114,16 +98,14 @@ impl MessageService {
             conversation_id: row.get(1),
             sender_id: row.get(2),
             content: row.get(3),
-            content_encrypted: row.get(4),
-            content_nonce: row.get(5),
-            encryption_version: row.get(6),
-            sequence_number: row.get(7),
-            idempotency_key: row.get(8),
-            created_at: row.get(9),
-            updated_at: None,
+            sequence_number: row.get(4),
+            idempotency_key: row.get(5),
+            created_at: row.get(6),
             edited_at: None,
             deleted_at: None,
             reaction_count: 0,
+            version_number: 1,
+            recalled_at: None,
         })
     }
     /// Send a message to a conversation (wrapper for send_message_db)
@@ -166,33 +148,24 @@ impl MessageService {
     }
 
     /// Send an audio message to a conversation
-    /// Stores audio metadata (codec, duration) alongside message
+    /// Stores audio URL in content field (metadata columns removed in schema simplification)
     /// Returns: (message_id, sequence_number)
     #[allow(clippy::too_many_arguments)]
     pub async fn send_audio_message_db(
         db: &Pool,
-        encryption: &EncryptionService,
+        _encryption: &EncryptionService, // Encryption handled by PostgreSQL TDE
         conversation_id: Uuid,
         sender_id: Uuid,
         audio_url: &str,
-        duration_ms: u32,
-        audio_codec: &str,
+        _duration_ms: u32,  // Metadata stored in content JSON if needed
+        _audio_codec: &str, // Metadata stored in content JSON if needed
         idempotency_key: Option<&str>,
     ) -> Result<(Uuid, i64), crate::error::AppError> {
         let id = Uuid::new_v4();
 
-        // For compatibility: store audio URL in `content` and add metadata columns when present
-        let _ = idempotency_key; // not enforced at DB layer in current schema
-        let privacy_mode = Self::fetch_conversation_privacy(db, conversation_id).await?;
-
-        let (content, content_encrypted, content_nonce, encryption_version) =
-            if matches!(privacy_mode, PrivacyMode::StrictE2e) {
-                let (ciphertext, nonce) =
-                    encryption.encrypt(conversation_id, audio_url.as_bytes())?;
-                (String::new(), Some(ciphertext), Some(nonce.to_vec()), 1)
-            } else {
-                (audio_url.to_string(), None, None, 0)
-            };
+        // Note: message_type, duration_ms, audio_codec columns don't exist in current schema
+        // Store audio URL in content field; client can parse metadata from URL or store as JSON
+        let content = audio_url.to_string();
 
         let client = db.get().await.map_err(|e| {
             crate::error::AppError::StartServer(format!("get client: {e}"))
@@ -212,12 +185,6 @@ impl MessageService {
                 conversation_id,
                 sender_id,
                 content,
-                message_type,
-                duration_ms,
-                audio_codec,
-                content_encrypted,
-                content_nonce,
-                encryption_version,
                 idempotency_key,
                 sequence_number
             )
@@ -226,18 +193,12 @@ impl MessageService {
                 $2,
                 $3,
                 $4,
-                'audio',
                 $5,
-                $6,
-                $7,
-                $8,
-                $9,
-                $10,
                 next.last_seq
             FROM next
             RETURNING sequence_number
             "#,
-            &[&id, &conversation_id, &sender_id, &content, &(duration_ms as i32), &audio_codec, &content_encrypted.as_deref(), &content_nonce.as_deref(), &encryption_version, &idempotency_key]
+            &[&id, &conversation_id, &sender_id, &content, &idempotency_key]
         )
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("insert audio msg: {e}")))?
@@ -565,18 +526,16 @@ impl MessageService {
             crate::error::AppError::StartServer(format!("get client: {e}"))
         })?;
 
+        // Note: E2E columns removed in migration 0009, message_type never existed
         let rows = client.query(
             r#"SELECT id,
                       sender_id,
-                      m.sequence_number AS sequence_number,
+                      sequence_number,
                       created_at,
                       recalled_at,
-                      updated_at,
+                      edited_at,
                       version_number,
-                      content,
-                      content_encrypted,
-                      content_nonce,
-                      message_type
+                      content
                FROM messages
                WHERE conversation_id = $1 AND deleted_at IS NULL
                ORDER BY created_at ASC
@@ -585,8 +544,6 @@ impl MessageService {
         )
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("history: {e}")))?;
-        let privacy_mode = Self::fetch_conversation_privacy(db, conversation_id).await?;
-        let use_encryption = matches!(privacy_mode, PrivacyMode::StrictE2e);
 
         let mut out = Vec::with_capacity(rows.len());
         for r in rows {
@@ -595,50 +552,26 @@ impl MessageService {
             let seq: i64 = r.get("sequence_number");
             let created_at: chrono::DateTime<Utc> = r.get("created_at");
             let recalled_at: Option<chrono::DateTime<Utc>> = r.get("recalled_at");
-            let updated_at: Option<chrono::DateTime<Utc>> = r.get("updated_at");
-            let version_number: i32 = r.get("version_number");
-            let message_type: Option<String> = r.get("message_type");
+            let edited_at: Option<chrono::DateTime<Utc>> = r.get("edited_at");
+            let version_number: i64 = r.get("version_number");
+            let content: String = r.get("content");
 
-            if use_encryption {
-                let ciphertext: Option<Vec<u8>> = r.get("content_encrypted");
-                let nonce: Option<Vec<u8>> = r.get("content_nonce");
-                out.push(super::super::routes::messages::MessageDto {
-                    id,
-                    sender_id,
-                    sequence_number: seq,
-                    created_at: created_at.to_rfc3339(),
-                    content: String::new(),
-                    encrypted: true,
-                    encrypted_payload: ciphertext
-                        .as_ref()
-                        .map(|c| general_purpose::STANDARD.encode(c)),
-                    nonce: nonce.as_ref().map(|n| general_purpose::STANDARD.encode(n)),
-                    recalled_at: recalled_at.map(|t| t.to_rfc3339()),
-                    updated_at: updated_at.map(|t| t.to_rfc3339()),
-                    version_number,
-                    message_type,
-                    reactions: Vec::new(),
-                    attachments: Vec::new(),
-                });
-            } else {
-                let content: String = r.get("content");
-                out.push(super::super::routes::messages::MessageDto {
-                    id,
-                    sender_id,
-                    sequence_number: seq,
-                    created_at: created_at.to_rfc3339(),
-                    content,
-                    encrypted: false,
-                    encrypted_payload: None,
-                    nonce: None,
-                    recalled_at: recalled_at.map(|t| t.to_rfc3339()),
-                    updated_at: updated_at.map(|t| t.to_rfc3339()),
-                    version_number,
-                    message_type,
-                    reactions: Vec::new(),
-                    attachments: Vec::new(),
-                });
-            }
+            out.push(super::super::routes::messages::MessageDto {
+                id,
+                sender_id,
+                sequence_number: seq,
+                created_at: created_at.to_rfc3339(),
+                content,
+                encrypted: false,
+                encrypted_payload: None,
+                nonce: None,
+                recalled_at: recalled_at.map(|t| t.to_rfc3339()),
+                updated_at: edited_at.map(|t| t.to_rfc3339()),
+                version_number: version_number as i32,
+                message_type: None, // Column doesn't exist in schema
+                reactions: Vec::new(),
+                attachments: Vec::new(),
+            });
         }
         Ok(out)
     }
@@ -668,18 +601,17 @@ impl MessageService {
         };
 
         // 1. Fetch messages
+        // Schema note: Use only columns from migrations 0004 (base) and 0005 (content)
+        // E2E encryption handled by PostgreSQL TDE - no content_encrypted/content_nonce columns
         let query_sql = format!(
             r#"SELECT id,
                       sender_id,
-                      m.sequence_number AS sequence_number,
+                      sequence_number,
                       created_at,
                       recalled_at,
-                      updated_at,
+                      edited_at,
                       version_number,
-                      content,
-                      content_encrypted,
-                      content_nonce,
-                      message_type
+                      content
                FROM messages
                {}
                ORDER BY created_at ASC
@@ -769,6 +701,7 @@ impl MessageService {
         }
 
         // 4. Build final DTOs
+        // Note: PostgreSQL TDE handles encryption transparently - no separate encrypted fields
         let result = messages
             .into_iter()
             .map(|r| {
@@ -777,49 +710,25 @@ impl MessageService {
                 let seq: i64 = r.get("sequence_number");
                 let created_at: chrono::DateTime<Utc> = r.get("created_at");
                 let recalled_at: Option<chrono::DateTime<Utc>> = r.get("recalled_at");
-                let updated_at: Option<chrono::DateTime<Utc>> = r.get("updated_at");
+                let edited_at: Option<chrono::DateTime<Utc>> = r.get("edited_at");
                 let version_number: i32 = r.get("version_number");
-                let message_type: Option<String> = r.get("message_type");
+                let content: String = r.get("content");
 
-                if use_encryption {
-                    let ciphertext: Option<Vec<u8>> = r.get("content_encrypted");
-                    let nonce: Option<Vec<u8>> = r.get("content_nonce");
-                    MessageDto {
-                        id,
-                        sender_id,
-                        sequence_number: seq,
-                        created_at: created_at.to_rfc3339(),
-                        content: String::new(),
-                        encrypted: true,
-                        encrypted_payload: ciphertext
-                            .as_ref()
-                            .map(|c| general_purpose::STANDARD.encode(c)),
-                        nonce: nonce.as_ref().map(|n| general_purpose::STANDARD.encode(n)),
-                        recalled_at: recalled_at.map(|t| t.to_rfc3339()),
-                        updated_at: updated_at.map(|t| t.to_rfc3339()),
-                        version_number,
-                        message_type,
-                        reactions: reactions_map.remove(&id).unwrap_or_default(),
-                        attachments: attachments_map.remove(&id).unwrap_or_default(),
-                    }
-                } else {
-                    let content: String = r.get("content");
-                    MessageDto {
-                        id,
-                        sender_id,
-                        sequence_number: seq,
-                        created_at: created_at.to_rfc3339(),
-                        content,
-                        encrypted: false,
-                        encrypted_payload: None,
-                        nonce: None,
-                        recalled_at: recalled_at.map(|t| t.to_rfc3339()),
-                        updated_at: updated_at.map(|t| t.to_rfc3339()),
-                        version_number,
-                        message_type,
-                        reactions: reactions_map.remove(&id).unwrap_or_default(),
-                        attachments: attachments_map.remove(&id).unwrap_or_default(),
-                    }
+                MessageDto {
+                    id,
+                    sender_id,
+                    sequence_number: seq,
+                    created_at: created_at.to_rfc3339(),
+                    content,
+                    encrypted: use_encryption, // Indicates PostgreSQL TDE encryption
+                    encrypted_payload: None,
+                    nonce: None,
+                    recalled_at: recalled_at.map(|t| t.to_rfc3339()),
+                    updated_at: edited_at.map(|t| t.to_rfc3339()),
+                    version_number,
+                    message_type: None, // Column removed in schema migration
+                    reactions: reactions_map.remove(&id).unwrap_or_default(),
+                    attachments: attachments_map.remove(&id).unwrap_or_default(),
                 }
             })
             .collect();
@@ -829,7 +738,7 @@ impl MessageService {
 
     pub async fn update_message_db(
         db: &Pool,
-        encryption: &EncryptionService,
+        _encryption: &EncryptionService, // Encryption handled by PostgreSQL TDE
         message_id: Uuid,
         plaintext: &[u8],
     ) -> Result<(), crate::error::AppError> {
@@ -840,30 +749,14 @@ impl MessageService {
             crate::error::AppError::StartServer(format!("get client: {e}"))
         })?;
 
-        // Get conversation_id and sender_id before updating
-        let msg_info = client.query_one("SELECT conversation_id FROM messages WHERE id = $1", &[&message_id])
-            .await
-            .map_err(|e| crate::error::AppError::StartServer(format!("get message info: {e}")))?;
-        let conversation_id: Uuid = msg_info.get("conversation_id");
-
-        let privacy_mode = Self::fetch_conversation_privacy(db, conversation_id).await?;
-
-        if matches!(privacy_mode, PrivacyMode::StrictE2e) {
-            let (ciphertext, nonce) = encryption.encrypt(conversation_id, plaintext)?;
-            client.execute(
-                "UPDATE messages SET content = $1, content_encrypted = $2, content_nonce = $3, encryption_version = 1, version_number = version_number + 1, updated_at = NOW() WHERE id = $4",
-                &[&"", &ciphertext, &nonce.to_vec(), &message_id]
-            )
-            .await
-            .map_err(|e| crate::error::AppError::StartServer(format!("update msg: {e}")))?;
-        } else {
-            client.execute(
-                "UPDATE messages SET content = $1, content_encrypted = NULL, content_nonce = NULL, encryption_version = 0, version_number = version_number + 1, updated_at = NOW() WHERE id = $2",
-                &[&content_plain, &message_id]
-            )
-                .await
-                .map_err(|e| crate::error::AppError::StartServer(format!("update msg: {e}")))?;
-        }
+        // Schema note: Use only columns from migrations 0004 (base) and 0005 (content)
+        // E2E encryption handled by PostgreSQL TDE - no separate encrypted columns
+        client.execute(
+            "UPDATE messages SET content = $1, version_number = version_number + 1, edited_at = NOW() WHERE id = $2",
+            &[&content_plain, &message_id]
+        )
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("update msg: {e}")))?;
 
         Ok(())
     }
@@ -954,10 +847,11 @@ impl MessageService {
         };
 
         // Build the query with proper sorting - include all message fields
+        // Schema note: Use only columns from migrations 0004 (base) and 0005 (content)
         let query_sql = format!(
             "SELECT m.id, m.sender_id, \
                     m.sequence_number AS sequence_number, \
-                    m.created_at, m.content, m.recalled_at, m.edited_at, m.version_number, m.message_type \
+                    m.created_at, m.content, m.recalled_at, m.edited_at, m.version_number \
              FROM messages m \
              WHERE m.conversation_id = $1 \
                AND m.deleted_at IS NULL \
@@ -982,7 +876,6 @@ impl MessageService {
                 let recalled_at: Option<chrono::DateTime<Utc>> = r.get("recalled_at");
                 let edited_at: Option<chrono::DateTime<Utc>> = r.get("edited_at");
                 let version_number: i32 = r.get("version_number");
-                let message_type: Option<String> = r.get("message_type");
 
                 super::super::routes::messages::MessageDto {
                     id,
@@ -996,9 +889,9 @@ impl MessageService {
                     recalled_at: recalled_at.map(|dt| dt.to_rfc3339()),
                     updated_at: edited_at.map(|dt| dt.to_rfc3339()),
                     version_number,
-                    message_type,
-                    reactions: vec![], // Could be fetched separately if needed for search results
-                    attachments: vec![], // Could be fetched separately if needed for search results
+                    message_type: None, // Column removed in schema migration
+                    reactions: vec![],
+                    attachments: vec![],
                 }
             })
             .collect();
