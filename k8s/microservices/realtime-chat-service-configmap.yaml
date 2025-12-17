@@ -13,6 +13,10 @@ data:
   # gRPC services
   # Identity service uses mTLS in staging
   GRPC_IDENTITY_SERVICE_URL: "https://identity-service.nova-staging.svc.cluster.local:50051"
+  # Social service (Tier0 - required for DM permission checks)
+  GRPC_SOCIAL_SERVICE_URL: "https://social-service.nova-staging.svc.cluster.local:50052"
+  # Ranking service - downgrade to Tier1 (not critical for chat)
+  GRPC_RANKING_SERVICE_TIER: "tier1"
   # S3
   S3_BUCKET: "nova-media-staging"
   S3_REGION: "ap-northeast-1"
