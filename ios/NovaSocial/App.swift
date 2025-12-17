@@ -167,17 +167,36 @@ struct IceredApp: App {
                 // Handle push notification navigation
                 handlePushNotification(notification.userInfo)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .sessionExpired)) { notification in
+                // Handle session expiration - navigate to login immediately
+                handleSessionExpired(notification.userInfo)
+            }
             .onChange(of: scenePhase) { oldPhase, newPhase in
                 // 当 App 进入后台时，记录时间戳
                 if newPhase == .background {
                     backgroundEntryTime = Date()
+                    print("[App] 📱 App entered background")
                 }
-                // 当 App 从后台返回到活跃状态时，检查是否超过2分钟
+                // 当 App 从后台返回到活跃状态时
                 if newPhase == .active, let entryTime = backgroundEntryTime {
                     let timeInBackground = Date().timeIntervalSince(entryTime)
-                    // 只有超过2分钟才显示 Splash Screen
+                    print("[App] 📱 App returned to foreground after \(String(format: "%.1f", timeInBackground))s")
+                    
+                    // 只有超过2分钟才显示 Splash Screen (with full re-validation)
                     if timeInBackground >= backgroundTimeout {
+                        print("[App] ⏰ Background timeout exceeded, showing splash screen")
                         currentPage = .splash
+                    } else if authManager.isAuthenticated && timeInBackground >= 30 {
+                        // For shorter background periods (30s+), silently validate session
+                        // This catches token expiration without showing splash
+                        print("[App] 🔍 Validating session after \(String(format: "%.0f", timeInBackground))s in background")
+                        Task {
+                            let isValid = await authManager.validateSession()
+                            if !isValid {
+                                print("[App] ❌ Session invalid after background, navigating to login")
+                                currentPage = .login
+                            }
+                        }
                     }
                     // 重置时间戳
                     backgroundEntryTime = nil
@@ -220,6 +239,29 @@ struct IceredApp: App {
             // Default to home
             currentPage = .home
         }
+    }
+    
+    // MARK: - Session Expiration Handling
+    
+    /// Handle session expiration - immediately navigate to login
+    private func handleSessionExpired(_ userInfo: [AnyHashable: Any]?) {
+        print("╔════════════════════════════════════════════════════════════")
+        print("║ [App] 🚨 SESSION EXPIRED NOTIFICATION RECEIVED")
+        print("╚════════════════════════════════════════════════════════════")
+        
+        // Extract expiration reason if available
+        if let reason = userInfo?["reason"] as? SessionExpiredReason {
+            print("[App] Expiration reason: \(reason.rawValue)")
+            print("[App] User message: \(reason.userMessage)")
+        }
+        
+        // Navigate to login page immediately
+        print("[App] 🔄 Navigating to login page...")
+        currentPage = .login
+        
+        // Show alert to user (optional - the login page should handle this)
+        // The sessionState and lastExpirationReason on authManager can be used
+        // by LoginView to show an appropriate message
     }
 
     @MainActor

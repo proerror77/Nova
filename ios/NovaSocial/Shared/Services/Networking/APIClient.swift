@@ -370,33 +370,45 @@ class APIClient {
         case 200...299:
             return data
         case 401:
+            // Parse error response for more details
+            let errorBody = String(data: data, encoding: .utf8) ?? "No body"
+            
+            print("╔════════════════════════════════════════════════════════════")
+            print("║ [API] ⚠️ 401 UNAUTHORIZED RECEIVED")
+            print("║ URL: \(request.url?.absoluteString ?? "?")")
+            print("║ Method: \(request.httpMethod ?? "?")")
+            print("║ Is retry attempt: \(isTokenRetry)")
+            print("║ Response body: \(errorBody.prefix(200))")
+            print("╚════════════════════════════════════════════════════════════")
+            
             // Attempt token refresh on 401, but only once to prevent infinite loops
             if !isTokenRetry {
-                #if DEBUG
-                print("[API] 401 received, attempting token refresh...")
-                #endif
+                print("[API] 🔄 Attempting token refresh...")
 
                 let refreshSucceeded = await AuthenticationManager.shared.attemptTokenRefresh()
 
                 if refreshSucceeded {
-                    #if DEBUG
-                    print("[API] Token refreshed, retrying request...")
-                    #endif
+                    print("[API] ✅ Token refreshed successfully, retrying original request...")
 
                     // Rebuild request with new token
                     var retryRequest = request
                     if let newToken = authToken {
                         retryRequest.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+                        print("[API] 🔑 New token applied to retry request")
+                    } else {
+                        print("[API] ⚠️ Warning: No new token available after refresh")
                     }
 
                     // Retry with isTokenRetry=true to prevent infinite loop
                     return try await performSingleRequest(retryRequest, isTokenRetry: true)
+                } else {
+                    print("[API] ❌ Token refresh failed")
                 }
+            } else {
+                print("[API] ❌ Already retried after refresh, not retrying again (prevents infinite loop)")
             }
 
-            #if DEBUG
-            print("[API] Token refresh failed or already retried, throwing unauthorized")
-            #endif
+            print("[API] 🚫 Throwing unauthorized error - user will be redirected to login")
             throw APIError.unauthorized
         case 404:
             throw APIError.notFound
