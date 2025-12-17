@@ -4,7 +4,9 @@ import CoreLocation
 @MainActor
 class ChatViewModel: ObservableObject {
     // MARK: - Dependencies
-    @Published var chatService = ChatService()
+    // Use nonisolated(unsafe) to allow access in deinit
+    // This is safe because ChatService handles its own thread safety
+    nonisolated(unsafe) var chatService = ChatService()
     private let mediaService = MediaService()
 
     // MARK: - Core State
@@ -27,7 +29,8 @@ class ChatViewModel: ObservableObject {
     // MARK: - Typing Indicator
     @Published var isOtherUserTyping = false
     @Published var typingUserName = ""
-    var typingTimer: Timer?
+    // Use nonisolated(unsafe) for timer to allow invalidation in deinit
+    nonisolated(unsafe) var typingTimer: Timer?
 
     // MARK: - Properties
     let conversationId: String
@@ -498,29 +501,31 @@ class ChatViewModel: ObservableObject {
     }
 
     deinit {
-        // Clear callbacks synchronously to prevent retain cycles
-        // Note: These closures might hold weak references to self,
-        // but setting them to nil ensures they're released immediately
-        chatService.onMessageReceived = nil
-        chatService.onTypingIndicator = nil
-        chatService.onReadReceipt = nil
-        chatService.onConnectionStatusChanged = nil
-        
-        // Clear Matrix callbacks
-        MatrixBridgeService.shared.onMatrixMessage = nil
-        MatrixBridgeService.shared.onTypingIndicator = nil
-        
-        // Clean up timer
+        // Clean up timer synchronously (timers are thread-safe)
         typingTimer?.invalidate()
         
-        // Disconnect WebSocket asynchronously (won't block deinit)
+        // Capture chatService reference for async cleanup
         let service = chatService
-        Task { @MainActor in
-            service.disconnectWebSocket()
-        }
+        let convId = conversationId
         
-        #if DEBUG
-        print("[ChatViewModel] deinit - resources released for conversation \(conversationId)")
-        #endif
+        // All MainActor-isolated cleanup must be async
+        Task { @MainActor in
+            // Clear ChatService callbacks
+            service.onMessageReceived = nil
+            service.onTypingIndicator = nil
+            service.onReadReceipt = nil
+            service.onConnectionStatusChanged = nil
+            
+            // Disconnect WebSocket
+            service.disconnectWebSocket()
+            
+            // Clear Matrix callbacks
+            MatrixBridgeService.shared.onMatrixMessage = nil
+            MatrixBridgeService.shared.onTypingIndicator = nil
+            
+            #if DEBUG
+            print("[ChatViewModel] deinit - resources released for conversation \(convId)")
+            #endif
+        }
     }
 }

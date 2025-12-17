@@ -61,9 +61,8 @@ class UserService {
         let entry = CacheEntry(profile: profile, timestamp: Date())
         cacheQueue.sync {
             profileCacheById[profile.id] = entry
-            if let username = profile.username {
-                profileCacheByUsername[username.lowercased()] = entry
-            }
+            // username is non-optional String, cache it directly
+            profileCacheByUsername[profile.username.lowercased()] = entry
         }
     }
 

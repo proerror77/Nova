@@ -146,17 +146,20 @@ struct IceredApp: App {
             .task {
                 // Check notification settings on app launch
                 await pushManager.checkNotificationSettings()
+                await initializeMatrixBridgeIfNeeded()
             }
             .onChange(of: authManager.isAuthenticated) { _, isAuthenticated in
                 // Request push notification permission when user logs in
                 if isAuthenticated {
                     Task {
                         await pushManager.requestAuthorization()
+                        await initializeMatrixBridgeIfNeeded()
                     }
                 } else {
                     // Unregister push token on logout
                     Task {
                         await pushManager.unregisterToken()
+                        await MatrixBridgeService.shared.shutdown(clearCredentials: true)
                     }
                 }
             }
@@ -216,6 +219,20 @@ struct IceredApp: App {
         default:
             // Default to home
             currentPage = .home
+        }
+    }
+
+    @MainActor
+    private func initializeMatrixBridgeIfNeeded() async {
+        guard !isUITesting else { return }
+        guard authManager.isAuthenticated, !authManager.isGuestMode else { return }
+
+        do {
+            try await MatrixBridgeService.shared.initialize()
+        } catch {
+            #if DEBUG
+            print("[App] Matrix initialization failed: \(error)")
+            #endif
         }
     }
 }

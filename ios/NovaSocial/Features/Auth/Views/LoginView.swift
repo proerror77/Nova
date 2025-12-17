@@ -49,10 +49,16 @@ struct LoginView: View {
     @EnvironmentObject private var authManager: AuthenticationManager
 
     // MARK: - Computed Properties
-    /// Forgot Password 按钮启用条件：email 格式正确且无错误
+    /// Forgot Password 按钮启用条件：email 格式正确且无错误（電話不支援忘記密碼）
     private var isForgotPasswordEnabled: Bool {
-        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmedEmail.isEmpty && isValidEmail(trimmedEmail) && emailError == nil
+        let trimmedInput = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmedInput.isEmpty && isValidEmail(trimmedInput) && emailError == nil
+    }
+
+    /// 檢查輸入是否為電話號碼格式
+    private var isPhoneInput: Bool {
+        let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        return isValidPhone(trimmed)
     }
 
     var body: some View {
@@ -131,9 +137,8 @@ struct LoginView: View {
                         // Log In Button
                         logInButton
 
-                        // Phone, Google & Apple Buttons (side by side)
+                        // Google & Apple Buttons (side by side)
                         HStack(spacing: 11.w) {
-                            phoneButton
                             googleButton
                             appleButton
                         }
@@ -331,27 +336,6 @@ struct LoginView: View {
         .accessibilityIdentifier("appleButton")
     }
 
-    // MARK: - Phone Button (Icon Only)
-    private var phoneButton: some View {
-        Button(action: {
-            currentPage = .phoneLogin
-        }) {
-            Image(systemName: "phone.fill")
-                .font(.system(size: 20.f, weight: .medium))
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: Layout.buttonHeight.h)
-                .background(Color.clear)
-                .cornerRadius(65.s)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 65.s)
-                        .stroke(Color.white, lineWidth: 0.5)
-                )
-        }
-        .disabled(isLoading || isGoogleLoading)
-        .accessibilityIdentifier("phoneButton")
-    }
-
     // MARK: - Create Account Button
     private var createAccountButton: some View {
         Button(action: {
@@ -446,20 +430,21 @@ struct LoginView: View {
     // MARK: - Validation
 
     private func validateLogin() -> Bool {
-        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInput = email.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            if trimmedEmail.isEmpty {
-                errorMessage = "Please_enter_your_email"
+        if trimmedInput.isEmpty {
+            errorMessage = "Please_enter_your_email_or_phone"
             return false
         }
 
-            if !isValidEmail(trimmedEmail) {
-                errorMessage = "Please_enter_a_valid_email"
+        // 驗證是否為有效的 email 或電話號碼
+        if !isValidEmail(trimmedInput) && !isValidPhone(trimmedInput) {
+            errorMessage = "Please_enter_a_valid_email_or_phone"
             return false
         }
 
-            if password.isEmpty {
-                errorMessage = "Please_enter_your_password"
+        if password.isEmpty {
+            errorMessage = "Please_enter_your_password"
             return false
         }
 
@@ -472,8 +457,8 @@ struct LoginView: View {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             emailError = nil  // Don't show error for empty field until submit
-        } else if !isValidEmail(trimmed) {
-            emailError = "Invalid_email_format"
+        } else if !isValidEmail(trimmed) && !isValidPhone(trimmed) {
+            emailError = "Invalid_email_or_phone_format"
         } else {
             emailError = nil
         }
@@ -485,6 +470,22 @@ struct LoginView: View {
         // Basic email format validation using regex
         let emailRegex = #"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"#
         return email.range(of: emailRegex, options: .regularExpression) != nil
+    }
+
+    private func isValidPhone(_ phone: String) -> Bool {
+        // 支援多種電話格式：
+        // - 純數字 (至少7位): 0912345678, 912345678
+        // - 帶國碼: +886912345678, +1234567890
+        // - 帶空格或連字號: 0912-345-678, 0912 345 678
+        let digitsOnly = phone.filter { $0.isNumber }
+
+        // 檢查是否以 + 開頭（國際電話格式）
+        if phone.hasPrefix("+") {
+            return digitsOnly.count >= 7 && digitsOnly.count <= 15
+        }
+
+        // 純數字電話號碼
+        return digitsOnly.count >= 7 && digitsOnly.count <= 15
     }
 }
 

@@ -28,8 +28,10 @@ final class MatrixBridgeService {
     private let apiClient = APIClient.shared
 
     /// Feature flag to use SSO login instead of legacy token endpoint
-    /// Set to true to use the new Matrix SSO flow
-    private let useSSOLogin = true
+    /// Set to false to use automatic token-based login (no SSO dialog)
+    /// When true, shows ASWebAuthenticationSession dialog for Matrix SSO
+    /// User expectation: After Nova login (email/phone/Google/Apple), Matrix should auto-authorize
+    private let useSSOLogin = false
 
     // MARK: - State
 

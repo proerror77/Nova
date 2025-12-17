@@ -24,6 +24,7 @@
 		0CE35545BE0426ACFD947E22 /* CryptoCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBBFF77645A4CF02AAB9B2E4 /* CryptoCore.swift */; };
 		0E255AAE8F1562704602EDE8 /* DefaultAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803F96C26D9E8C040F88BC22 /* DefaultAvatarView.swift */; };
 		0F27F8BA94B02A52810F5D84 /* AccountSwitcherSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5762CD35798707845E339714 /* AccountSwitcherSheet.swift */; };
+		1183B659832CB30303FC0563 /* PhoneLoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F413929E863DA61C476F44D5 /* PhoneLoginView.swift */; };
 		1183B659832CB30303FC0564 /* PhoneRegistrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F413929E863DA61C476F44D6 /* PhoneRegistrationView.swift */; };
 		124E367C3D6397C95405BDAF /* PostAsSelectionPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24CEFEAC014290526A9CD69E /* PostAsSelectionPanel.swift */; };
 		162EEE7D84A7DE23589C45F0 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D34F87E7DE783C7F956B76F /* ChatView.swift */; };
@@ -283,6 +284,7 @@
 		EA6D2E536652EEB5F08CB53D /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		F0CEAA8A405BB702DA178841 /* LivePhotoManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivePhotoManager.swift; sourceTree = "<group>"; };
 		F20C285F38EB2939BF1DBFE5 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		F413929E863DA61C476F44D5 /* PhoneLoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneLoginView.swift; sourceTree = "<group>"; };
 		F413929E863DA61C476F44D6 /* PhoneRegistrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneRegistrationView.swift; sourceTree = "<group>"; };
 		F49BDC924F2780626F9D2CBA /* ProfileSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSettingView.swift; sourceTree = "<group>"; };
 		F5E70390640C08938059D9CF /* UserService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserService.swift; sourceTree = "<group>"; };
@@ -982,6 +984,7 @@
 				B11D90E19EB8E81DACA13AAB /* ForgotPasswordView.swift */,
 				76D0E0843119B94AF1AA2AF5 /* EmailSentConfirmationView.swift */,
 				31C506816FBC6DA8C0428370 /* LoginView.swift */,
+				F413929E863DA61C476F44D5 /* PhoneLoginView.swift */,
 				F413929E863DA61C476F44D6 /* PhoneRegistrationView.swift */,
 				36F012F2E478BE330431A7E0 /* ResetPasswordView.swift */,
 				D661B4DD0C4067F3F4F871A5 /* WelcomeView.swift */,
@@ -1166,6 +1169,7 @@
 			name = ICERED;
 			packageProductDependencies = (
 				993B7693D000A65F41AB0A29 /* RtcBasic */,
+				MATRIX001PKGPRODUCT001001 /* MatrixRustSDK */,
 			);
 			productName = ICERED;
 			productReference = C6B7EF0FCF06C5477C18E6F9 /* ICERED.app */;
@@ -1221,6 +1225,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				6F31D960E8920F9EA1157343 /* XCRemoteSwiftPackageReference "AgoraRtcEngine_iOS" */,
+				MATRIX001LOCALPKGREF001001 /* XCLocalSwiftPackageReference "MatrixRustSDKLocal" */,
 			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
@@ -1345,6 +1350,7 @@
 				F87C58656F5FD03A8C3345EB /* NotificationViewModel.swift in Sources */,
 				395113E5360AAA3CF258875A /* OAuthService.swift in Sources */,
 				9127641952A87D2E4677B311 /* PhoneAuthService.swift in Sources */,
+				1183B659832CB30303FC0563 /* PhoneLoginView.swift in Sources */,
 				1183B659832CB30303FC0564 /* PhoneRegistrationView.swift in Sources */,
 				872EE38FD80234144C2CC601 /* PhotoOptionsModal.swift in Sources */,
 				124E367C3D6397C95405BDAF /* PostAsSelectionPanel.swift in Sources */,
@@ -1497,6 +1503,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.libruce.icered;
 				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG MATRIX_SDK_ENABLED";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1524,6 +1531,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.libruce.icered;
 				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1678,11 +1686,23 @@
 		};
 /* End XCRemoteSwiftPackageReference section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		MATRIX001LOCALPKGREF001001 /* XCLocalSwiftPackageReference "MatrixRustSDKLocal" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Frameworks/MatrixRustSDKLocal;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		993B7693D000A65F41AB0A29 /* RtcBasic */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 6F31D960E8920F9EA1157343 /* XCRemoteSwiftPackageReference "AgoraRtcEngine_iOS" */;
 			productName = RtcBasic;
+		};
+		MATRIX001PKGPRODUCT001001 /* MatrixRustSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = MATRIX001LOCALPKGREF001001 /* XCLocalSwiftPackageReference "MatrixRustSDKLocal" */;
+			productName = MatrixRustSDK;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
