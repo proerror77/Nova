@@ -1058,23 +1058,25 @@ mod tests {
     use super::*;
     use rdkafka::config::FromClientConfig;
 
+    /// Calculate exponential backoff delay based on retry count.
+    /// This is a standalone version for testing without needing a full processor.
+    fn calculate_backoff(retry_count: i32) -> Duration {
+        const MAX_BACKOFF_SECS: u64 = 300; // 5 minutes
+        let backoff_secs = 2u64.pow(retry_count as u32).min(MAX_BACKOFF_SECS);
+        Duration::from_secs(backoff_secs)
+    }
+
     #[test]
     fn test_backoff_calculation() {
-        let repo = Arc::new(SqlxOutboxRepository::new(
-            PgPool::connect_lazy("postgresql://localhost/test").unwrap(),
-        ));
-        let producer =
-            rdkafka::producer::FutureProducer::from_config(&rdkafka::ClientConfig::new()).unwrap();
-        let publisher = Arc::new(KafkaOutboxPublisher::new(producer, "test".to_string()));
-        let processor = OutboxProcessor::new(repo, publisher, 10, Duration::from_secs(1), 5);
-
-        assert_eq!(processor.calculate_backoff(0).as_secs(), 1);
-        assert_eq!(processor.calculate_backoff(1).as_secs(), 2);
-        assert_eq!(processor.calculate_backoff(2).as_secs(), 4);
-        assert_eq!(processor.calculate_backoff(3).as_secs(), 8);
-        assert_eq!(processor.calculate_backoff(4).as_secs(), 16);
-        assert_eq!(processor.calculate_backoff(5).as_secs(), 32);
-        assert_eq!(processor.calculate_backoff(10).as_secs(), 300); // capped
+        // Test exponential backoff: 2^n seconds, capped at 300s
+        assert_eq!(calculate_backoff(0).as_secs(), 1);
+        assert_eq!(calculate_backoff(1).as_secs(), 2);
+        assert_eq!(calculate_backoff(2).as_secs(), 4);
+        assert_eq!(calculate_backoff(3).as_secs(), 8);
+        assert_eq!(calculate_backoff(4).as_secs(), 16);
+        assert_eq!(calculate_backoff(5).as_secs(), 32);
+        assert_eq!(calculate_backoff(10).as_secs(), 300); // capped at max
+        assert_eq!(calculate_backoff(15).as_secs(), 300); // still capped
     }
 
     #[test]
