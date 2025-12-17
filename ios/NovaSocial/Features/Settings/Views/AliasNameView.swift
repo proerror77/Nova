@@ -4,21 +4,19 @@ import PhotosUI
 struct AliasNameView: View {
     @Binding var currentPage: AppPage
 
-    // Form fields
-    @State private var aliasName: String = "Dreamer"
-    @State private var dateOfBirth: String = "16/11/2000"
-    @State private var gender: String = "Enter your gender"
-    @State private var profession: String = "Illustrator"
-    @State private var location: String = "China"
+    // MARK: - ViewModel
+    @StateObject private var viewModel = AliasAccountViewModel()
 
     // Photo picker
     @State private var selectedPhotoItem: PhotosPickerItem?
-    @State private var avatarImage: UIImage?
 
     // Picker sheets
     @State private var showGenderPicker = false
     @State private var showLocationPicker = false
     @State private var showDatePicker = false
+
+    // Success alert
+    @State private var showSuccessAlert = false
 
     // Card styling (matching ProfileSettingView)
     private let cardCornerRadius: CGFloat = 6
@@ -38,64 +36,121 @@ struct AliasNameView: View {
                 topNavigationBar
                     .background(.white)
 
-                ScrollView {
-                    VStack(spacing: 12) {
-                        // MARK: - Avatar Section
-                        avatarSection
-                            .padding(.top, 20)
-                            .padding(.bottom, 10)
+                if viewModel.isLoading {
+                    Spacer()
+                    ProgressView()
+                        .scaleEffect(1.2)
+                    Spacer()
+                } else {
+                    ScrollView {
+                        VStack(spacing: 12) {
+                            // MARK: - Avatar Section
+                            avatarSection
+                                .padding(.top, 20)
+                                .padding(.bottom, 10)
 
-                        // MARK: - Form Fields
-                        VStack(spacing: 20) {
-                            // Alias name
-                            aliasNameCard
+                            // MARK: - Form Fields
+                            VStack(spacing: 20) {
+                                // Alias name
+                                aliasNameCard
 
-                            // Date of Birth
-                            dateOfBirthCard
+                                // Date of Birth
+                                dateOfBirthCard
 
-                            // Gender
-                            genderCard
+                                // Gender
+                                genderCard
 
-                            // Profession
-                            professionCard
+                                // Profession
+                                professionCard
 
-                            // Location
-                            locationCard
+                                // Location
+                                locationCard
+                            }
+                            .padding(.horizontal, 12)
+
+                            // Footer text
+                            Text("Alias name can be replaced again after 45 days")
+                                .font(.system(size: 12))
+                                .lineSpacing(20)
+                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                                .padding(.top, 20)
                         }
-                        .padding(.horizontal, 12)
-
-                        // Footer text
-                        Text("Alias name can be replaced again after 45 days")
-                            .font(.system(size: 12))
-                            .lineSpacing(20)
-                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                            .padding(.top, 20)
+                        .padding(.bottom, 40)
                     }
-                    .padding(.bottom, 40)
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
                 }
             }
+
+            // Error message overlay
+            if let error = viewModel.errorMessage {
+                VStack {
+                    Text(error)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.red.opacity(0.9))
+                        .cornerRadius(12)
+                        .padding(.top, 80)
+
+                    Spacer()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .animation(.easeInOut, value: viewModel.errorMessage)
+            }
+        }
+        .onAppear {
+            loadEditingAccountIfNeeded()
         }
         .onChange(of: selectedPhotoItem) { _, newValue in
             Task {
                 if let photoItem = newValue,
                    let data = try? await photoItem.loadTransferable(type: Data.self),
                    let image = UIImage(data: data) {
-                    avatarImage = image
+                    viewModel.updateAvatarImage(image)
                 }
             }
         }
+        .onChange(of: viewModel.showSuccessMessage) { _, newValue in
+            if newValue {
+                showSuccessAlert = true
+                viewModel.showSuccessMessage = false
+            }
+        }
         .sheet(isPresented: $showGenderPicker) {
-            GenderPickerView(selectedGender: Binding(
-                get: { Gender(rawValue: gender) ?? .notSet },
-                set: { gender = $0.rawValue }
-            ), isPresented: $showGenderPicker)
+            GenderPickerView(
+                selectedGender: $viewModel.gender,
+                isPresented: $showGenderPicker
+            )
         }
         .sheet(isPresented: $showLocationPicker) {
-            LocationPickerView(selectedLocation: $location, isPresented: $showLocationPicker)
+            LocationPickerView(selectedLocation: $viewModel.location, isPresented: $showLocationPicker)
+        }
+        .sheet(isPresented: $showDatePicker) {
+            DateOfBirthPickerView(dateString: $viewModel.dateOfBirth, isPresented: $showDatePicker)
+        }
+        .alert("Success", isPresented: $showSuccessAlert) {
+            Button("OK") {
+                // Clear editing state and go back
+                AliasEditState.shared.clearEditingState()
+                currentPage = .setting
+            }
+        } message: {
+            Text(viewModel.isEditing ? "Alias account updated successfully" : "Alias account created successfully")
+        }
+    }
+
+    // MARK: - Load Editing Account
+
+    private func loadEditingAccountIfNeeded() {
+        let editState = AliasEditState.shared
+        if editState.isEditing, let account = editState.editingAccount {
+            Task {
+                await viewModel.loadAliasAccount(accountId: account.id)
+            }
         }
     }
 
@@ -103,6 +158,7 @@ struct AliasNameView: View {
     private var topNavigationBar: some View {
         HStack {
             Button(action: {
+                AliasEditState.shared.clearEditingState()
                 currentPage = .setting
             }) {
                 Image(systemName: "chevron.left")
@@ -121,15 +177,22 @@ struct AliasNameView: View {
             Spacer()
 
             Button(action: {
-                // TODO: Save alias profile
-                currentPage = .setting
+                Task {
+                    await viewModel.save()
+                }
             }) {
-                Text("Save")
-                    .font(.system(size: 14))
-                    .lineSpacing(20)
-                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                if viewModel.isSaving {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                } else {
+                    Text("Save")
+                        .font(.system(size: 14))
+                        .lineSpacing(20)
+                        .foregroundColor(viewModel.canSave ? DesignTokens.accentColor : Color(red: 0.53, green: 0.53, blue: 0.53))
+                }
             }
             .frame(width: 50, alignment: .trailing)
+            .disabled(viewModel.isSaving || !viewModel.canSave)
         }
         .frame(height: 60)
         .padding(.horizontal, 20)
@@ -138,25 +201,35 @@ struct AliasNameView: View {
     // MARK: - Avatar Section
     private var avatarSection: some View {
         ZStack(alignment: .bottomTrailing) {
-            // 外圈白色边框
+            // Outer white border
             ZStack {
                 Ellipse()
                     .fill(.white)
                     .frame(width: 118, height: 118)
 
-                // 头像图片
-                if let image = avatarImage {
+                // Avatar image - priority: selected image > existing URL > default
+                if let image = viewModel.avatarImage {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
                         .frame(width: 114, height: 114)
                         .clipShape(Ellipse())
+                } else if let avatarUrl = viewModel.avatarUrl, let url = URL(string: avatarUrl) {
+                    AsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        DefaultAvatarView(size: 114)
+                    }
+                    .frame(width: 114, height: 114)
+                    .clipShape(Ellipse())
                 } else {
                     DefaultAvatarView(size: 114)
                 }
             }
 
-            // 红色加号按钮
+            // Red plus button
             PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                 ZStack {
                     Circle()
@@ -181,7 +254,7 @@ struct AliasNameView: View {
                 .foregroundColor(labelColor)
                 .frame(width: 100, alignment: .leading)
 
-            TextField("", text: $aliasName)
+            TextField("Enter alias name", text: $viewModel.aliasName)
                 .font(valueFont)
                 .foregroundColor(.black)
 
@@ -207,9 +280,9 @@ struct AliasNameView: View {
                     .foregroundColor(labelColor)
                     .frame(width: 100, alignment: .leading)
 
-                Text(dateOfBirth)
+                Text(viewModel.dateOfBirth.isEmpty ? "Select date" : viewModel.formatDateForDisplay(viewModel.dateOfBirth))
                     .font(valueFont)
-                    .foregroundColor(.black)
+                    .foregroundColor(viewModel.dateOfBirth.isEmpty ? Color(red: 0.53, green: 0.53, blue: 0.53) : .black)
 
                 Spacer()
             }
@@ -234,9 +307,9 @@ struct AliasNameView: View {
                     .foregroundColor(labelColor)
                     .frame(width: 100, alignment: .leading)
 
-                Text(gender)
+                Text(viewModel.gender == .notSet ? "Select gender" : viewModel.gender.displayName)
                     .font(valueFont)
-                    .foregroundColor(.black)
+                    .foregroundColor(viewModel.gender == .notSet ? Color(red: 0.53, green: 0.53, blue: 0.53) : .black)
 
                 Spacer()
 
@@ -262,7 +335,7 @@ struct AliasNameView: View {
                 .foregroundColor(labelColor)
                 .frame(width: 100, alignment: .leading)
 
-            TextField("", text: $profession)
+            TextField("Enter profession", text: $viewModel.profession)
                 .font(valueFont)
                 .foregroundColor(.black)
 
@@ -288,9 +361,9 @@ struct AliasNameView: View {
                     .foregroundColor(labelColor)
                     .frame(width: 100, alignment: .leading)
 
-                Text(location)
+                Text(viewModel.location.isEmpty ? "Select location" : viewModel.location)
                     .font(valueFont)
-                    .foregroundColor(.black)
+                    .foregroundColor(viewModel.location.isEmpty ? Color(red: 0.53, green: 0.53, blue: 0.53) : .black)
 
                 Spacer()
 

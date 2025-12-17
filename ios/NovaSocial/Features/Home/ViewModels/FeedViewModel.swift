@@ -634,13 +634,25 @@ class FeedViewModel: ObservableObject {
     /// Sync current user's avatar for their own posts
     /// This ensures the Feed shows the latest avatar after user updates it locally
     private func syncCurrentUserAvatar(_ posts: [FeedPost]) -> [FeedPost] {
+        #if DEBUG
+        print("[Feed] syncCurrentUserAvatar called with \(posts.count) posts")
+        print("[Feed] currentUser id: \(authManager.currentUser?.id ?? "nil")")
+        print("[Feed] currentUser avatarUrl: \(authManager.currentUser?.avatarUrl ?? "nil")")
+        #endif
+
         guard let currentUserId = authManager.currentUser?.id,
               let currentUserAvatar = authManager.currentUser?.avatarUrl else {
+            #if DEBUG
+            print("[Feed] syncCurrentUserAvatar: skipped - currentUser or avatarUrl is nil")
+            #endif
             return posts
         }
 
         return posts.map { post in
             if post.authorId == currentUserId {
+                #if DEBUG
+                print("[Feed] Syncing avatar for post \(post.id) - old: \(post.authorAvatar ?? "nil"), new: \(currentUserAvatar)")
+                #endif
                 return post.copying(authorAvatar: currentUserAvatar)
             }
             return post

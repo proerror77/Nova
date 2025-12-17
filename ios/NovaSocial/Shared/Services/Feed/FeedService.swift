@@ -541,7 +541,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
 
     /// Create a copy with optional field overrides (eliminates duplicate creation code)
     func copying(
-        authorAvatar: String?? = nil,  // Double optional: nil = keep original, .some(nil) = set to nil, .some(value) = update
+        authorAvatar: String?? = nil,  // Double optional: nil = keep original, .some(value) = update
         likeCount: Int? = nil,
         commentCount: Int? = nil,
         shareCount: Int? = nil,

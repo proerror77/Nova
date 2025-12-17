@@ -8,6 +8,50 @@ struct SettingsView: View {
     @State private var selectedPostAsType: PostAsType = .primary
     private let aliasEditState = AliasEditState.shared
 
+    // MARK: - Computed Properties
+
+    /// Convert accounts to display data for PostAsSelectionPanel
+    private var accountDisplayData: [AccountDisplayData] {
+        // If we have accounts from API, use them
+        if !viewModel.accounts.isEmpty {
+            return viewModel.accounts.map { AccountDisplayData(from: $0) }
+        }
+
+        // Fallback: create display data from current user + placeholder alias
+        var displayData: [AccountDisplayData] = []
+
+        // Primary account from current user
+        if let user = authManager.currentUser {
+            displayData.append(AccountDisplayData(fromUser: user))
+        }
+
+        // Add alias placeholder if no alias accounts exist
+        if !viewModel.hasAliasAccount {
+            displayData.append(.placeholderAlias)
+        }
+
+        return displayData
+    }
+
+    // MARK: - Account Handling
+
+    private func handleAccountTap(_ account: AccountDisplayData) {
+        if account.isPrimary {
+            // Go to profile settings for primary account
+            currentPage = .profileSetting
+        } else if account.id == "placeholder-alias" {
+            // Create new alias
+            viewModel.createNewAliasAccount()
+            currentPage = .aliasName
+        } else if account.isAlias {
+            // Edit existing alias
+            if let aliasAccount = viewModel.accounts.first(where: { $0.id == account.id }) {
+                viewModel.editAliasAccount(aliasAccount)
+            }
+            currentPage = .aliasName
+        }
+    }
+
     var body: some View {
         ZStack {
             DesignTokens.backgroundColor
@@ -74,18 +118,13 @@ struct SettingsView: View {
 
                                 // 展开的选择面板 - 使用高度动画
                                 PostAsSelectionPanel(
-                                    selectedType: $selectedPostAsType,
-                                    primaryAccount: viewModel.primaryAccount,
-                                    aliasAccounts: viewModel.aliasAccounts,
-                                    currentUser: authManager.currentUser,
-                                    onPrimaryTap: {
-                                        currentPage = .profileSetting
+                                    accounts: accountDisplayData,
+                                    selectedAccountId: viewModel.currentAccountId,
+                                    onAccountTap: { account in
+                                        handleAccountTap(account)
                                     },
-                                    onAliasTap: { aliasAccount in
-                                        // 设置编辑状态（nil 表示创建新账户）
-                                        aliasEditState.setEditingAccount(aliasAccount?.id)
-                                        currentPage = .aliasName
-                                    }
+                                    pendingPrimaryAvatar: AvatarManager.shared.pendingAvatar,
+                                    isLoading: viewModel.isLoadingAccounts
                                 )
                                 .frame(height: isPostAsExpanded ? nil : 0, alignment: .top)
                                 .clipped()

@@ -86,6 +86,9 @@ class AuthenticationManager: ObservableObject {
     private func loadCurrentUser(userId: String) async throws {
         do {
             self.currentUser = try await identityService.getUser(userId: userId)
+            #if DEBUG
+            print("[Auth] Loaded current user: id=\(currentUser?.id ?? "nil"), avatarUrl=\(currentUser?.avatarUrl ?? "nil")")
+            #endif
         } catch {
             #if DEBUG
             print("[Auth] Failed to load user profile: \(error)")
@@ -139,7 +142,7 @@ class AuthenticationManager: ObservableObject {
         _ = keychain.save(user.id, for: .userId)
 
         #if DEBUG
-        print("[Auth] Current user updated: \(user.username)")
+        print("[Auth] Current user updated: id=\(user.id), username=\(user.username), avatarUrl=\(user.avatarUrl ?? "nil")")
         #endif
     }
 
@@ -298,6 +301,26 @@ class AuthenticationManager: ObservableObject {
 
         // Clear Keychain
         keychain.clearAll()
+    }
+
+    // MARK: - Update Tokens (for account switching)
+
+    /// Update authentication tokens (used when switching accounts)
+    /// - Parameters:
+    ///   - accessToken: New access token
+    ///   - refreshToken: Optional new refresh token
+    func updateTokens(accessToken: String, refreshToken: String?) async {
+        self.authToken = accessToken
+        APIClient.shared.setAuthToken(accessToken)
+        _ = keychain.save(accessToken, for: .authToken)
+
+        if let refreshToken = refreshToken {
+            _ = keychain.save(refreshToken, for: .refreshToken)
+        }
+
+        #if DEBUG
+        print("[Auth] Tokens updated for account switch")
+        #endif
     }
 
     // MARK: - Token Refresh

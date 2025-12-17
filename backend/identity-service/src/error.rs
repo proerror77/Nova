@@ -82,6 +82,9 @@ pub enum IdentityError {
 
     #[error("Validation error: {0}")]
     Validation(String),
+
+    #[error("Not found: {0}")]
+    NotFoundError(String),
 }
 
 impl IdentityError {
@@ -145,6 +148,7 @@ impl IdentityError {
             IdentityError::Validation(msg) => {
                 Status::new(Code::InvalidArgument, format!("Validation error: {}", msg))
             }
+            IdentityError::NotFoundError(msg) => Status::new(Code::NotFound, msg.clone()),
             IdentityError::Database(_)
             | IdentityError::Redis(_)
             | IdentityError::JwtError(_)

@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0F0FB609D1474E43B076D2DC /* AliasAccountViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30304F56E1746A9A28CBD0A /* AliasAccountViewModel.swift */; };
+		BE7A6DBA7E75417C860DAAE3 /* AccountsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E7C448D0791490EA5BF3C66 /* AccountsService.swift */; };
 		T3ST00000001BU1LDF1L30001 /* APIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T3ST00000001F1L3R3F00001 /* APIClientTests.swift */; };
 		T3ST00000001BU1LDF1L30002 /* ErrorHandlingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T3ST00000001F1L3R3F00002 /* ErrorHandlingTests.swift */; };
 		T3ST00000001BU1LDF1L30003 /* AuthenticationManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T3ST00000001F1L3R3F00003 /* AuthenticationManagerTests.swift */; };
@@ -158,6 +160,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		4E7C448D0791490EA5BF3C66 /* AccountsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountsService.swift; sourceTree = "<group>"; };
 		T3ST00000001F1L3R3F00001 /* APIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClientTests.swift; sourceTree = "<group>"; };
 		T3ST00000001F1L3R3F00002 /* ErrorHandlingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorHandlingTests.swift; sourceTree = "<group>"; };
 		T3ST00000001F1L3R3F00003 /* AuthenticationManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationManagerTests.swift; sourceTree = "<group>"; };
@@ -222,6 +225,7 @@
 		6D34F87E7DE783C7F956B76F /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		6D34F87E7DE783C7F956B770 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
 		712BA1842DBC03D66DB2611F /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
+B30304F56E1746A9A28CBD0A /* AliasAccountViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AliasAccountViewModel.swift; sourceTree = "<group>"; };
 		7382F96F698E0CDC89B99912 /* GetVerifiedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GetVerifiedView.swift; sourceTree = "<group>"; };
 		75ADA8314EFFF10E30AEE448 /* InviteFriendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteFriendsView.swift; sourceTree = "<group>"; };
 		75EC152D81EC4B655AFC53A1 /* NavigationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationManager.swift; sourceTree = "<group>"; };
@@ -349,6 +353,14 @@
 /* End PBXTargetDependency section */
 
 /* Begin PBXGroup section */
+		ACD8490079E34BD89A58E701 /* Accounts */ = {
+			isa = PBXGroup;
+			children = (
+				4E7C448D0791490EA5BF3C66 /* AccountsService.swift */,
+			);
+			path = Accounts;
+			sourceTree = "<group>";
+		};
 		00D23E0A2E752DBA61667BFA /* Chat */ = {
 			isa = PBXGroup;
 			children = (
@@ -555,6 +567,7 @@
 		3639645BC60AEEF8F6A61480 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				ACD8490079E34BD89A58E701 /* Accounts */,
 				3D41B4E2838E07B6FD382157 /* AI */,
 				D3B9518C5063D61AA216A2E8 /* Auth */,
 				2EAEF8629FDE3604E134B9DB /* Chat */,
@@ -923,6 +936,7 @@
 		BD097F1C3825E3185AF9B529 /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
+				B30304F56E1746A9A28CBD0A /* AliasAccountViewModel.swift */,
 				76856E465B25C89F2D6954C1 /* ProfileSettingViewModel.swift */,
 				712BA1842DBC03D66DB2611F /* SettingsViewModel.swift */,
 			);
@@ -1253,6 +1267,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0F0FB609D1474E43B076D2DC /* AliasAccountViewModel.swift in Sources */,
+				BE7A6DBA7E75417C860DAAE3 /* AccountsService.swift in Sources */,
 				EC516B87CB7AEC823B0452E5 /* AliasNameView.swift in Sources */,
 				B230BF96701D200CF0CA3FED /* UserProfileActionButtons.swift in Sources */,
 				006ED84FD31451075B3DDD9C /* UserProfileContentSection.swift in Sources */,
