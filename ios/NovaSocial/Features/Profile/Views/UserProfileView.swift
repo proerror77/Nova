@@ -13,6 +13,10 @@ struct UserProfileData {
     var isVerified: Bool
     var posts: [UserProfilePostData]
 
+    // Alias account support
+    var isAlias: Bool = false
+    var aliasName: String? = nil
+
     /// 默认占位数据（用于加载中或预览）
     static let placeholder = UserProfileData(
         userId: "",
@@ -163,6 +167,8 @@ struct UserProfileView: View {
                         followingCount: userData.followingCount,
                         followersCount: userData.followersCount,
                         likesCount: userData.likesCount,
+                        isAlias: userData.isAlias,
+                        aliasName: userData.aliasName,
                         layout: userInfoLayout,
                         onFollowingTapped: {
                             // 点击 Following
