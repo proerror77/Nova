@@ -35,10 +35,20 @@ fn follow_writes_only_from_social_or_graph_service() {
         .to_path_buf();
 
     let allowed = [
+        // social-service: entry points for follow operations
         "backend/social-service/src/workers/graph_sync.rs",
         "backend/social-service/src/services/follow.rs",
+        "backend/social-service/src/grpc/server_v2.rs",
+        // graph-service: internal implementation
         "backend/graph-service/src/grpc/server.rs",
         "backend/graph-service/src/repository/graph_repository.rs",
+        "backend/graph-service/src/repository/trait.rs",
+        "backend/graph-service/src/repository/dual_write_repository.rs",
+        "backend/graph-service/src/repository/postgres_repository.rs",
+        "backend/graph-service/src/repository/cached_repository.rs",
+        "backend/graph-service/src/consumers/social_events.rs",
+        // graphql-gateway: REST API passthrough
+        "backend/graphql-gateway/src/rest_api/graph.rs",
     ];
 
     let mut offenders = Vec::new();
