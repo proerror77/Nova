@@ -618,6 +618,15 @@ async fn main() -> std::io::Result<()> {
             // ✅ User Settings API
             .route("/api/v2/settings", web::get().to(get_settings))
             .route("/api/v2/settings", web::put().to(update_settings))
+            // ✅ Matrix E2EE Integration API (proxied to realtime-chat-service)
+            .service(rest_api::matrix::get_matrix_token)
+            .service(rest_api::matrix::get_matrix_config)
+            .service(rest_api::matrix::get_all_room_mappings)
+            .service(rest_api::matrix::save_room_mapping)
+            .service(rest_api::matrix::get_room_mapping)
+            .service(rest_api::matrix::get_conversation_mapping)
+            .service(rest_api::matrix::get_encryption_status)
+            .service(rest_api::matrix::get_room_status)
     })
     .bind(&bind_addr)?
     .run()

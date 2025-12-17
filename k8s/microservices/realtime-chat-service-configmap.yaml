@@ -19,3 +19,12 @@ data:
   # WebRTC ICE
   ICE_TTL_SECONDS: "86400"
   RTC_STUN_URLS: "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302"
+  # Matrix E2EE Integration
+  MATRIX_ENABLED: "true"
+  MATRIX_HOMESERVER_URL: "https://matrix.nova-staging.svc.cluster.local:8448"
+  MATRIX_SERVER_NAME: "nova.chat"
+  # Kafka for identity event sync
+  KAFKA_ENABLED: "true"
+  KAFKA_BROKERS: "kafka-broker-0.kafka-headless.nova-staging:9092"
+  KAFKA_CONSUMER_GROUP_ID: "realtime-chat-service"
+  KAFKA_IDENTITY_EVENTS_TOPIC: "identity-events"

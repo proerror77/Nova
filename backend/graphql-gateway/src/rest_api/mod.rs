@@ -19,6 +19,7 @@ pub mod content;
 pub mod feed;
 pub mod graph;
 pub mod identity;
+pub mod matrix; // Matrix E2EE integration proxy
 pub mod media;
 pub mod models;
 pub mod notifications;

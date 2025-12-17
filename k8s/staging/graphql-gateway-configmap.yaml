@@ -55,6 +55,9 @@ data:
   TRACING_ENABLED: "true"
   TRACING_SAMPLE_RATE: "0.1"  # Sample 10% of traces in staging
 
+  # Matrix E2EE Integration (proxied to realtime-chat-service)
+  CHAT_SERVICE_HTTP_URL: "http://realtime-chat-service.nova-staging.svc.cluster.local:8080"
+
 ---
 apiVersion: v1
 kind: Secret

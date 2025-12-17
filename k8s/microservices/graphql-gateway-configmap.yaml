@@ -46,3 +46,6 @@ data:
 
   # Kafka configuration (for subscriptions)
   kafka-brokers: "kafka-broker-0.kafka-headless.kafka:9092,kafka-broker-1.kafka-headless.kafka:9092,kafka-broker-2.kafka-headless.kafka:9092"
+
+  # Matrix E2EE Integration (proxied to realtime-chat-service HTTP)
+  chat-service-http-url: "http://realtime-chat-service.nova.svc.cluster.local:8080"
