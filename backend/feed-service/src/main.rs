@@ -389,6 +389,10 @@ async fn main() -> io::Result<()> {
             .app_data(rec_handler_state.clone())
             .app_data(feed_handler_state.clone())
             .route("/health", web::get().to(|| async { "OK" }))
+            // Health endpoints for K8s probes
+            .route("/api/v1/health", web::get().to(|| async { "OK" }))
+            .route("/api/v1/health/live", web::get().to(|| async { "OK" }))
+            .route("/api/v1/health/ready", web::get().to(|| async { "OK" }))
             .route(
                 "/metrics",
                 web::get().to(recommendation_service::metrics::serve_metrics),
