@@ -12,20 +12,8 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy workspace files (context is ./backend)
-COPY Cargo.toml Cargo.lock ./
-# Copy all workspace members
-COPY libs ./libs
-COPY proto ./proto
-COPY feed-service ./feed-service
-COPY content-service ./content-service
-COPY identity-service ./identity-service
-COPY graphql-gateway ./graphql-gateway
-COPY social-service ./social-service
-COPY notification-service ./notification-service
-COPY media-service ./media-service
-COPY graph-service ./graph-service
-COPY ranking-service ./ranking-service
+# Copy entire workspace (context is ./backend)
+COPY . .
 
 # Build feed-service
 RUN cargo build --release -p feed-service --bin feed-service
