@@ -22,14 +22,25 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Determine Dockerfile path
+    - name: Determine Dockerfile path and context
       id: dockerfile
       shell: bash
       run: |
+        # List of services that are independent workspaces (need their own directory as context)
+        INDEPENDENT_WORKSPACES="realtime-chat-service"
+
         if [ -n "${{ inputs.dockerfile-path }}" ]; then
           echo "path=${{ inputs.dockerfile-path }}" >> "$GITHUB_OUTPUT"
         else
           echo "path=./backend/${{ inputs.service-name }}/Dockerfile" >> "$GITHUB_OUTPUT"
+        fi
+
+        # Set context based on whether service is an independent workspace
+        if echo "$INDEPENDENT_WORKSPACES" | grep -qw "${{ inputs.service-name }}"; then
+          echo "context=./backend/${{ inputs.service-name }}" >> "$GITHUB_OUTPUT"
+          echo "🔧 Using service directory as build context (independent workspace)"
+        else
+          echo "context=./backend" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Set up Docker Buildx
@@ -38,7 +49,7 @@ runs:
     - name: Build and push Docker image
       uses: docker/build-push-action@v6
       with:
-        context: .
+        context: ${{ steps.dockerfile.outputs.context }}
         file: ${{ steps.dockerfile.outputs.path }}
         platforms: linux/amd64
         push: true
