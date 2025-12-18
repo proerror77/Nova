@@ -10,21 +10,48 @@
 /// - PKCE support for mobile flows
 /// - Token exchange over HTTPS only
 /// - User info fetched from provider APIs
+/// - Apple JWT tokens are cryptographically verified against Apple's public keys
 use crate::config::OAuthSettings;
 use crate::error::{IdentityError, Result};
 use crate::models::User;
 use crate::services::KafkaEventProducer;
 use base64::prelude::*;
 use chrono::{DateTime, Duration, Utc};
+use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use once_cell::sync::Lazy;
 use redis_utils::SharedConnectionManager;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::PgPool;
-use tracing::{info, warn};
+use std::collections::HashMap;
+use std::sync::RwLock;
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 const OAUTH_STATE_TTL_SECS: u64 = 600; // 10 minutes
+const APPLE_JWKS_URL: &str = "https://appleid.apple.com/auth/keys";
+const APPLE_ISSUER: &str = "https://appleid.apple.com";
+const APPLE_JWKS_CACHE_TTL_SECS: i64 = 3600; // 1 hour
+
+/// Cached Apple JWKS (public keys)
+static APPLE_JWKS_CACHE: Lazy<RwLock<AppleJwksCache>> =
+    Lazy::new(|| RwLock::new(AppleJwksCache::default()));
+
+#[derive(Default)]
+struct AppleJwksCache {
+    keys: HashMap<String, AppleJwk>,
+    fetched_at: Option<DateTime<Utc>>,
+}
+
+impl AppleJwksCache {
+    fn is_expired(&self) -> bool {
+        match self.fetched_at {
+            Some(t) => Utc::now() - t > Duration::seconds(APPLE_JWKS_CACHE_TTL_SECS),
+            None => true,
+        }
+    }
+}
 
 /// OAuth provider types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -270,8 +297,11 @@ impl OAuthService {
             .await
             .map_err(|e| IdentityError::OAuthError(e.to_string()))?;
 
-        // Decode ID token to get user info (Apple doesn't have userinfo endpoint)
-        let id_token_claims: AppleIdTokenClaims = decode_jwt_claims(&token_response.id_token)?;
+        // Verify and decode ID token with cryptographic signature verification
+        // This validates: signature (RS256), issuer (https://appleid.apple.com),
+        // audience (our client_id), and expiration
+        let id_token_claims =
+            verify_apple_id_token(&self.http, &token_response.id_token, &client_id).await?;
 
         Ok(OAuthUserInfo {
             provider_user_id: id_token_claims.sub,
@@ -319,8 +349,16 @@ impl OAuthService {
 
     /// Handle Apple native sign-in (from iOS ASAuthorizationAppleIDCredential)
     ///
-    /// This verifies the identity token and creates/links the user account.
+    /// This verifies the identity token cryptographically and creates/links the user account.
     /// Unlike the web flow, this uses the identity_token directly instead of exchanging a code.
+    ///
+    /// ## Security
+    ///
+    /// The identity token is verified against Apple's public keys (JWKS) to ensure:
+    /// - The token was signed by Apple (RS256 signature verification)
+    /// - The token was issued for our app (audience = client_id)
+    /// - The token is from Apple (issuer = https://appleid.apple.com)
+    /// - The token has not expired
     pub async fn apple_native_sign_in(
         &self,
         identity_token: &str,
@@ -329,13 +367,22 @@ impl OAuthService {
         given_name: Option<&str>,
         family_name: Option<&str>,
     ) -> Result<OAuthCallbackResult> {
-        // 1. Decode and verify the identity token (JWT from Apple)
-        let id_token_claims: AppleIdTokenClaims = decode_jwt_claims(identity_token)?;
+        let client_id = self.apple_client_id()?.clone();
 
-        // 2. Verify the subject matches the user_identifier
+        // 1. Verify and decode the identity token with cryptographic signature verification
+        // This validates: signature (RS256), issuer, audience (client_id), and expiration
+        let id_token_claims =
+            verify_apple_id_token(&self.http, identity_token, &client_id).await?;
+
+        // 2. Verify the subject matches the user_identifier provided by iOS
         if id_token_claims.sub != user_identifier {
+            error!(
+                token_sub = %id_token_claims.sub,
+                provided_id = %user_identifier,
+                "Apple user identifier mismatch"
+            );
             return Err(IdentityError::OAuthError(
-                "User identifier mismatch".to_string(),
+                "User identifier mismatch - possible token tampering".to_string(),
             ));
         }
 
@@ -369,7 +416,7 @@ impl OAuthService {
         info!(
             user_id = %user.id,
             is_new_user = is_new_user,
-            "Apple native sign-in completed"
+            "Apple native sign-in completed with verified token"
         );
 
         Ok(OAuthCallbackResult { user, is_new_user })
@@ -526,10 +573,51 @@ struct AppleTokenResponse {
     id_token: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct AppleIdTokenClaims {
+    /// Subject - unique user identifier from Apple
     sub: String,
+    /// User's email (may be private relay email)
     email: Option<String>,
+    /// Issuer - validated by jsonwebtoken library
+    #[serde(default)]
+    #[allow(dead_code)]
+    iss: String,
+    /// Audience - validated by jsonwebtoken library
+    #[serde(default)]
+    #[allow(dead_code)]
+    aud: String,
+    /// Expiration time - validated by jsonwebtoken library
+    #[serde(default)]
+    #[allow(dead_code)]
+    exp: i64,
+    /// Issued at time - included for completeness
+    #[serde(default)]
+    #[allow(dead_code)]
+    iat: i64,
+}
+
+/// Apple JWKS response structure
+#[derive(Debug, Deserialize)]
+struct AppleJwksResponse {
+    keys: Vec<AppleJwk>,
+}
+
+/// Individual JWK from Apple's key set
+#[derive(Debug, Clone, Deserialize)]
+struct AppleJwk {
+    /// Key ID - used to match against JWT header
+    kid: String,
+    /// Key type (always "RSA" for Apple) - included for completeness
+    #[allow(dead_code)]
+    kty: String,
+    /// Algorithm (RS256) - included for completeness
+    #[allow(dead_code)]
+    alg: String,
+    /// RSA public key modulus (Base64URL encoded)
+    n: String,
+    /// RSA public key exponent (Base64URL encoded)
+    e: String,
 }
 
 // ===== Utility Functions =====
@@ -538,7 +626,154 @@ fn to_expiry(ts: Option<i64>) -> Option<DateTime<Utc>> {
     ts.and_then(|secs| DateTime::from_timestamp(secs, 0))
 }
 
-fn decode_jwt_claims<T: serde::de::DeserializeOwned>(token: &str) -> Result<T> {
+/// Fetch Apple's public keys (JWKS) for JWT verification
+async fn fetch_apple_jwks(http: &Client) -> Result<Vec<AppleJwk>> {
+    debug!("Fetching Apple JWKS from {}", APPLE_JWKS_URL);
+
+    let response = http
+        .get(APPLE_JWKS_URL)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|e| {
+            error!("Failed to fetch Apple JWKS: {}", e);
+            IdentityError::OAuthError(format!("Failed to fetch Apple public keys: {}", e))
+        })?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        error!("Apple JWKS request failed with status: {}", status);
+        return Err(IdentityError::OAuthError(format!(
+            "Apple JWKS request failed: {}",
+            status
+        )));
+    }
+
+    let jwks: AppleJwksResponse = response.json().await.map_err(|e| {
+        error!("Failed to parse Apple JWKS response: {}", e);
+        IdentityError::OAuthError(format!("Failed to parse Apple public keys: {}", e))
+    })?;
+
+    info!("Successfully fetched {} Apple public keys", jwks.keys.len());
+    Ok(jwks.keys)
+}
+
+/// Get Apple's public key by key ID, using cache when possible
+async fn get_apple_public_key(http: &Client, kid: &str) -> Result<AppleJwk> {
+    // Check cache first
+    {
+        let cache = APPLE_JWKS_CACHE.read().unwrap();
+        if !cache.is_expired() {
+            if let Some(key) = cache.keys.get(kid) {
+                debug!("Using cached Apple public key for kid={}", kid);
+                return Ok(key.clone());
+            }
+        }
+    }
+
+    // Fetch fresh keys
+    let keys = fetch_apple_jwks(http).await?;
+
+    // Update cache
+    {
+        let mut cache = APPLE_JWKS_CACHE.write().unwrap();
+        cache.keys.clear();
+        for key in &keys {
+            cache.keys.insert(key.kid.clone(), key.clone());
+        }
+        cache.fetched_at = Some(Utc::now());
+    }
+
+    // Find the requested key
+    let cache = APPLE_JWKS_CACHE.read().unwrap();
+    cache.keys.get(kid).cloned().ok_or_else(|| {
+        error!("Apple public key not found for kid={}", kid);
+        IdentityError::OAuthError(format!("Apple public key not found for kid={}", kid))
+    })
+}
+
+/// Verify and decode Apple ID token with cryptographic signature verification
+///
+/// This function:
+/// 1. Extracts the key ID (kid) from the JWT header
+/// 2. Fetches Apple's public key for that kid
+/// 3. Verifies the RS256 signature
+/// 4. Validates issuer, audience, and expiration
+/// 5. Returns the verified claims
+async fn verify_apple_id_token(
+    http: &Client,
+    token: &str,
+    expected_client_id: &str,
+) -> Result<AppleIdTokenClaims> {
+    // 1. Decode JWT header to get key ID
+    let header = decode_header(token).map_err(|e| {
+        error!("Failed to decode Apple JWT header: {}", e);
+        IdentityError::OAuthError(format!("Invalid Apple ID token header: {}", e))
+    })?;
+
+    let kid = header.kid.ok_or_else(|| {
+        error!("Apple JWT missing key ID (kid) in header");
+        IdentityError::OAuthError("Apple ID token missing key ID".to_string())
+    })?;
+
+    // 2. Verify algorithm is RS256
+    if header.alg != Algorithm::RS256 {
+        error!("Apple JWT using unexpected algorithm: {:?}", header.alg);
+        return Err(IdentityError::OAuthError(format!(
+            "Unexpected JWT algorithm: {:?}",
+            header.alg
+        )));
+    }
+
+    // 3. Get Apple's public key for this kid
+    let jwk = get_apple_public_key(http, &kid).await?;
+
+    // 4. Create decoding key from JWK
+    let decoding_key = DecodingKey::from_rsa_components(&jwk.n, &jwk.e).map_err(|e| {
+        error!("Failed to create decoding key from Apple JWK: {}", e);
+        IdentityError::OAuthError(format!("Invalid Apple public key format: {}", e))
+    })?;
+
+    // 5. Set up validation rules
+    let mut validation = Validation::new(Algorithm::RS256);
+    validation.set_issuer(&[APPLE_ISSUER]);
+    validation.set_audience(&[expected_client_id]);
+    validation.validate_exp = true;
+
+    // 6. Decode and verify the token
+    let token_data = decode::<AppleIdTokenClaims>(token, &decoding_key, &validation).map_err(|e| {
+        error!("Apple JWT verification failed: {}", e);
+        match e.kind() {
+            jsonwebtoken::errors::ErrorKind::InvalidSignature => {
+                IdentityError::OAuthError("Apple ID token signature verification failed".to_string())
+            }
+            jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
+                IdentityError::OAuthError("Apple ID token has expired".to_string())
+            }
+            jsonwebtoken::errors::ErrorKind::InvalidIssuer => {
+                IdentityError::OAuthError("Apple ID token has invalid issuer".to_string())
+            }
+            jsonwebtoken::errors::ErrorKind::InvalidAudience => {
+                IdentityError::OAuthError("Apple ID token has invalid audience".to_string())
+            }
+            _ => IdentityError::OAuthError(format!("Apple ID token verification failed: {}", e)),
+        }
+    })?;
+
+    info!(
+        "Successfully verified Apple ID token for sub={}",
+        token_data.claims.sub
+    );
+
+    Ok(token_data.claims)
+}
+
+/// DEPRECATED: Decode JWT claims without verification
+/// This function is only kept for backward compatibility and should NOT be used for Apple tokens.
+/// Use `verify_apple_id_token` instead for secure token verification.
+#[allow(dead_code)]
+fn decode_jwt_claims_unsafe<T: serde::de::DeserializeOwned>(token: &str) -> Result<T> {
+    warn!("Using unsafe JWT decode without signature verification - this is deprecated!");
     let segments: Vec<&str> = token.split('.').collect();
     if segments.len() != 3 {
         return Err(IdentityError::OAuthError(
