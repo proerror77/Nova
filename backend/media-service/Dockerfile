@@ -41,21 +41,6 @@ RUN for dir in identity-service content-service social-service streaming-service
     done && \
     mkdir -p content-service/benches && echo "fn main() {}" > content-service/benches/feed_ranking_bench.rs
 
-# Downgrade packages that require Rust 1.88+ to versions compatible with Rust 1.85
-RUN cargo update -p aws-config --precise 1.5.15 && \
-    cargo update -p aws-sdk-s3 --precise 1.75.0 && \
-    cargo update -p aws-sdk-sso --precise 1.55.0 && \
-    cargo update -p aws-sdk-ssooidc --precise 1.56.0 && \
-    cargo update -p aws-sdk-sts --precise 1.55.0 && \
-    cargo update -p aws-sigv4 --precise 1.2.9 && \
-    cargo update -p aws-smithy-async --precise 1.2.4 && \
-    cargo update -p aws-smithy-runtime --precise 1.7.8 && \
-    cargo update -p aws-smithy-runtime-api --precise 1.7.4 && \
-    cargo update -p aws-smithy-types --precise 1.2.14 && \
-    cargo update -p aws-credential-types --precise 1.2.4 && \
-    cargo update -p aws-runtime --precise 1.5.6 && \
-    cargo update -p home --precise 0.5.9
-
 # Build media-service binaries (main server + thumbnail migrator + thumbnail worker)
 RUN cargo build --release -p media-service --bin media-service --bin thumb-migrate --bin thumb-worker
 
