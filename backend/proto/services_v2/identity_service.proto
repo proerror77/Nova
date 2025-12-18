@@ -68,19 +68,12 @@ service IdentityService {
   rpc DeleteAliasAccount(DeleteAliasAccountRequest) returns (google.protobuf.Empty);
 
   // ========== Passkey/WebAuthn ==========
-  // Start passkey registration - returns challenge and options
   rpc StartPasskeyRegistration(StartPasskeyRegistrationRequest) returns (StartPasskeyRegistrationResponse);
-  // Complete passkey registration - verify attestation and store credential
   rpc CompletePasskeyRegistration(CompletePasskeyRegistrationRequest) returns (CompletePasskeyRegistrationResponse);
-  // Start passkey authentication - returns challenge and options
   rpc StartPasskeyAuthentication(StartPasskeyAuthenticationRequest) returns (StartPasskeyAuthenticationResponse);
-  // Complete passkey authentication - verify assertion and return tokens
   rpc CompletePasskeyAuthentication(CompletePasskeyAuthenticationRequest) returns (CompletePasskeyAuthenticationResponse);
-  // List user's registered passkeys
   rpc ListPasskeys(ListPasskeysRequest) returns (ListPasskeysResponse);
-  // Revoke a passkey credential
   rpc RevokePasskey(RevokePasskeyRequest) returns (google.protobuf.Empty);
-  // Rename a passkey credential
   rpc RenamePasskey(RenamePasskeyRequest) returns (google.protobuf.Empty);
 }
 
@@ -476,23 +469,21 @@ message AccountSwitchedEvent {
 // Passkey/WebAuthn Messages
 // ============================================================================
 
-// -------- Start Passkey Registration --------
 message StartPasskeyRegistrationRequest {
   string user_id = 1;
-  string credential_name = 2;     // Friendly name for the passkey
-  string device_type = 3;         // e.g., "iPhone", "iPad"
-  string os_version = 4;          // e.g., "18.0"
+  string credential_name = 2;
+  string device_type = 3;
+  string os_version = 4;
 }
 
 message StartPasskeyRegistrationResponse {
-  string challenge_id = 1;        // Challenge ID for correlation
-  string options_json = 2;        // WebAuthn options JSON
+  string challenge_id = 1;
+  string options_json = 2;
 }
 
-// -------- Complete Passkey Registration --------
 message CompletePasskeyRegistrationRequest {
   string challenge_id = 1;
-  string attestation_json = 2;    // WebAuthn attestation response JSON
+  string attestation_json = 2;
   string credential_name = 3;
   string device_type = 4;
   string os_version = 5;
@@ -503,20 +494,18 @@ message CompletePasskeyRegistrationResponse {
   string credential_name = 2;
 }
 
-// -------- Start Passkey Authentication --------
 message StartPasskeyAuthenticationRequest {
-  string user_id = 1;             // Optional: for user-specific challenges
+  string user_id = 1;
 }
 
 message StartPasskeyAuthenticationResponse {
   string challenge_id = 1;
-  string options_json = 2;        // WebAuthn options JSON
+  string options_json = 2;
 }
 
-// -------- Complete Passkey Authentication --------
 message CompletePasskeyAuthenticationRequest {
   string challenge_id = 1;
-  string assertion_json = 2;      // WebAuthn assertion response JSON
+  string assertion_json = 2;
 }
 
 message CompletePasskeyAuthenticationResponse {
@@ -529,7 +518,6 @@ message CompletePasskeyAuthenticationResponse {
   string email = 7;
 }
 
-// -------- List Passkeys --------
 message ListPasskeysRequest {
   string user_id = 1;
 }
@@ -551,14 +539,12 @@ message ListPasskeysResponse {
   repeated PasskeyCredential passkeys = 1;
 }
 
-// -------- Revoke Passkey --------
 message RevokePasskeyRequest {
   string user_id = 1;
   string credential_id = 2;
   string reason = 3;
 }
 
-// -------- Rename Passkey --------
 message RenamePasskeyRequest {
   string user_id = 1;
   string credential_id = 2;
