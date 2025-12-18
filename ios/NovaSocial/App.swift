@@ -157,11 +157,15 @@ struct IceredApp: App {
             .onChange(of: authManager.isAuthenticated) { _, isAuthenticated in
                 // Request push notification permission when user logs in
                 if isAuthenticated {
+                    // Navigate to home after login
+                    currentPage = .home
                     Task {
                         await pushManager.requestAuthorization()
                         await initializeMatrixBridgeIfNeeded()
                     }
                 } else {
+                    // Navigate to login page on logout
+                    currentPage = .login
                     // Unregister push token on logout
                     Task {
                         await pushManager.unregisterToken()
@@ -303,7 +307,8 @@ struct IceredApp: App {
         guard authManager.isAuthenticated, !authManager.isGuestMode else { return }
 
         do {
-            try await MatrixBridgeService.shared.initialize()
+            // With useSSOLogin=false, this uses automatic token-based login (no dialog)
+            try await MatrixBridgeService.shared.initialize(requireLogin: true)
         } catch {
             #if DEBUG
             print("[App] Matrix initialization failed: \(error)")

@@ -210,8 +210,9 @@ class FeedViewModel: ObservableObject {
                     await loadFeed(algorithm: algorithm, isGuestFallback: isGuestFallback)
                     return
                 } else {
-                    // Token refresh failed - gracefully degrade to guest mode
-                    await authManager.logout()
+                    // Token refresh failed - gracefully degrade to guest mode without logging out
+                    // User stays authenticated but sees guest content until next successful API call
+                    FeedLogger.debug("Token refresh failed, falling back to guest feed")
                     isLoading = false
                     await loadFeed(algorithm: algorithm, isGuestFallback: true)
                     return
@@ -555,10 +556,11 @@ class FeedViewModel: ObservableObject {
             // Handle specific error cases
             switch error {
             case .unauthorized:
-                // Session expired - logout to redirect to login page
-                await authManager.logout()
+                // Session issue - show error instead of forcing logout
+                // APIClient's token refresh should handle re-authentication
+                self.toastError = "Please try again."
                 #if DEBUG
-                print("[Feed] Toggle like error: Session expired, logging out")
+                print("[Feed] Toggle like error: Unauthorized, will retry on next action")
                 #endif
             case .noConnection:
                 self.toastError = "No internet connection. Please try again."
@@ -661,10 +663,10 @@ class FeedViewModel: ObservableObject {
             case .unauthorized:
                 // Revert on auth error
                 posts[index] = post
-                // Session expired - logout to redirect to login page
-                await authManager.logout()
+                // Session issue - show error instead of forcing logout
+                self.toastError = "Please try again."
                 #if DEBUG
-                print("[Feed] Toggle bookmark error: Session expired, logging out")
+                print("[Feed] Toggle bookmark error: Unauthorized, will retry on next action")
                 #endif
             case .noConnection:
                 // Revert on connection error
@@ -778,8 +780,10 @@ class FeedViewModel: ObservableObject {
     private func handleSocialActionError(_ error: APIError, action: String) async {
         switch error {
         case .unauthorized:
-            await authManager.logout()
-            FeedLogger.debug("Toggle \(action) error: Session expired, logging out")
+            // Session issue - show error instead of forcing logout
+            // APIClient's token refresh mechanism will handle re-authentication
+            self.toastError = "Please try again."
+            FeedLogger.debug("Toggle \(action) error: Unauthorized, will retry on next action")
         case .noConnection:
             self.toastError = "No internet connection. Please try again."
         case .serviceUnavailable:

@@ -31,7 +31,7 @@ final class MatrixBridgeService {
     /// Set to false to use automatic token-based login (no SSO dialog)
     /// When true, shows ASWebAuthenticationSession dialog for Matrix SSO
     /// User expectation: After Nova login (email/phone/Google/Apple), Matrix should auto-authorize
-    private let useSSOLogin = true
+    private let useSSOLogin = false  // Use automatic token-based login for seamless experience
 
     // MARK: - State
 
@@ -77,7 +77,10 @@ final class MatrixBridgeService {
 
     /// Initialize the Matrix bridge for the current user
     /// Should be called after Nova login
-    func initialize() async throws {
+    /// - Parameter requireLogin: If true, will trigger SSO login if session restore fails.
+    ///                          If false, will silently fail without showing SSO dialog.
+    ///                          Default is true for backwards compatibility with chat views.
+    func initialize(requireLogin: Bool = true) async throws {
         guard !isInitialized else {
             #if DEBUG
             print("[MatrixBridge] Already initialized")
@@ -86,7 +89,7 @@ final class MatrixBridgeService {
         }
 
         #if DEBUG
-        print("[MatrixBridge] Initializing bridge...")
+        print("[MatrixBridge] Initializing bridge (requireLogin: \(requireLogin))...")
         #endif
 
         do {
@@ -110,14 +113,25 @@ final class MatrixBridgeService {
             let sessionRestored = try await matrixService.restoreSession()
 
             if !sessionRestored {
-                // Choose login method based on feature flag
-                if useSSOLogin {
-                    // Use new SSO login flow
-                    try await loginWithSSO()
+                // Only trigger login if explicitly required (e.g., user navigated to chat)
+                // This prevents SSO dialog from appearing on app startup
+                if requireLogin {
+                    // Choose login method based on feature flag
+                    if useSSOLogin {
+                        // Use new SSO login flow
+                        try await loginWithSSO()
+                    } else {
+                        // Legacy: Get Matrix access token from Nova backend
+                        // DEPRECATED: This endpoint returns a service account token
+                        try await loginWithLegacyToken()
+                    }
                 } else {
-                    // Legacy: Get Matrix access token from Nova backend
-                    // DEPRECATED: This endpoint returns a service account token
-                    try await loginWithLegacyToken()
+                    #if DEBUG
+                    print("[MatrixBridge] Session not restored, but login not required - skipping SSO")
+                    #endif
+                    // Don't throw error, just don't mark as initialized
+                    // User will be prompted to login when they actually use chat
+                    return
                 }
             }
 

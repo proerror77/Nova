@@ -325,27 +325,16 @@ struct HomeView: View {
                                         .foregroundColor(.gray)
                                         .multilineTextAlignment(.center)
 
-                                    if error.contains("Session expired") || error.contains("login") {
-                                        // Session expired - show login button
-                                        Button {
-                                            Task {
-                                                await authManager.logout()
-                                            }
-                                        } label: {
-                                            Text("Login")
-                                        }
-                                        .font(.system(size: DesignTokens.fontMedium, weight: .medium))
-                                        .foregroundColor(DesignTokens.textOnAccent)
-                                        .padding(.horizontal, 24)
-                                        .padding(.vertical, DesignTokens.spacing10)
-                                        .background(DesignTokens.accentColor)
-                                        .cornerRadius(DesignTokens.buttonCornerRadius)
-                                    } else {
-                                        Button("Retry") {
-                                            Task { await feedViewModel.loadFeed() }
-                                        }
-                                        .foregroundColor(DesignTokens.accentColor)
+                                    // Show retry button for all errors - let APIClient handle re-authentication
+                                    Button("Retry") {
+                                        Task { await feedViewModel.loadFeed() }
                                     }
+                                    .font(.system(size: DesignTokens.fontMedium, weight: .medium))
+                                    .foregroundColor(DesignTokens.textOnAccent)
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, DesignTokens.spacing10)
+                                    .background(DesignTokens.accentColor)
+                                    .cornerRadius(DesignTokens.buttonCornerRadius)
                                 }
                                 .padding()
                             }

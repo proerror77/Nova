@@ -387,18 +387,17 @@ class AuthenticationManager: ObservableObject {
                         continue
                     }
 
-                    // Only logout on authentication errors (401/403), not network failures
+                    // Don't auto-logout on any error - let the UI handle it gracefully
+                    // This prevents unexpected logouts and SSO dialogs
+                    #if DEBUG
                     if self.isAuthenticationError(error) {
-                        #if DEBUG
-                        print("[Auth] Authentication error - logging out")
-                        #endif
-                        await self.logout()
+                        print("[Auth] Authentication error - NOT logging out, UI will handle")
                     } else {
-                        #if DEBUG
                         print("[Auth] Network error - keeping session, user can retry later")
-                        #endif
-                        // Don't logout for network errors - user can try again when connection is restored
                     }
+                    #endif
+                    // Return false to indicate refresh failed, but don't logout
+                    // The calling code should handle this gracefully (e.g., show guest content)
                     return false
                 }
             }
