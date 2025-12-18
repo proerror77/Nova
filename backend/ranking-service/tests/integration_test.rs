@@ -22,8 +22,12 @@ async fn test_basic_workflow() {
         personalized_recall_weight: 0.1,
     };
 
-    let recall_layer =
-        RecallLayer::new(graph_channel, content_channel, redis_client.clone(), recall_config);
+    let recall_layer = RecallLayer::new(
+        graph_channel,
+        content_channel,
+        redis_client.clone(),
+        recall_config,
+    );
 
     // 創建 FeatureClient for RankingLayer
     let feature_client = Arc::new(FeatureClient::new(redis_client));

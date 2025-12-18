@@ -6,7 +6,6 @@
 ///
 /// Security: All endpoints require INTERNAL_API_KEY authentication via
 /// X-Internal-API-Key header.
-
 mod zitadel;
 
 pub use zitadel::*;
@@ -36,8 +35,14 @@ pub fn build_router(state: HttpServerState) -> Router {
 
     Router::new()
         .route("/health", get(health_check))
-        .route("/internal/zitadel/user-claims/:user_id", get(zitadel::get_user_claims))
-        .layer(middleware::from_fn_with_state(Arc::clone(&state), auth_middleware))
+        .route(
+            "/internal/zitadel/user-claims/:user_id",
+            get(zitadel::get_user_claims),
+        )
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            auth_middleware,
+        ))
         .with_state(state)
 }
 
@@ -60,7 +65,10 @@ async fn auth_middleware(
     // Check if internal API key is configured
     let Some(expected_key) = &state.internal_api_key else {
         warn!("Internal API key not configured - blocking all internal requests");
-        return (StatusCode::INTERNAL_SERVER_ERROR, "Internal API key not configured")
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal API key not configured",
+        )
             .into_response();
     };
 

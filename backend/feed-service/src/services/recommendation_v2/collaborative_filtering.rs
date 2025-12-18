@@ -307,7 +307,10 @@ fn load_user_liked_posts(path: &Path) -> Result<HashMap<Uuid, Vec<(Uuid, f64)>>>
 
             match Uuid::parse_str(&entry.id) {
                 Ok(post_id) => posts.push((post_id, entry.score)),
-                Err(err) => warn!("Invalid UUID in user liked posts entry {}: {}", entry.id, err),
+                Err(err) => warn!(
+                    "Invalid UUID in user liked posts entry {}: {}",
+                    entry.id, err
+                ),
             }
         }
 
@@ -318,10 +321,7 @@ fn load_user_liked_posts(path: &Path) -> Result<HashMap<Uuid, Vec<(Uuid, f64)>>>
         }
     }
 
-    info!(
-        users_count = result.len(),
-        "User liked posts loaded"
-    );
+    info!(users_count = result.len(), "User liked posts loaded");
 
     Ok(result)
 }
@@ -500,9 +500,7 @@ mod tests {
         };
 
         let seen_posts = vec![post1];
-        let recommendations = model
-            .recommend_user_based(user1, &seen_posts, 10)
-            .unwrap();
+        let recommendations = model.recommend_user_based(user1, &seen_posts, 10).unwrap();
 
         assert_eq!(recommendations.len(), 3);
 

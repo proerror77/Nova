@@ -74,6 +74,9 @@ struct IceredApp: App {
                     case .createAccount:
                         CreateAccountView(currentPage: $currentPage)
                             .transition(.identity)
+                    case .phoneRegistration:
+                        PhoneRegistrationView(currentPage: $currentPage)
+                            .transition(.identity)
                     case .home:
                         // Skip 跳过登录直接进入Home
                         HomeView(currentPage: $currentPage)
@@ -143,6 +146,9 @@ struct IceredApp: App {
             .environmentObject(themeManager)
             .environmentObject(pushManager)
             .preferredColorScheme(themeManager.colorScheme)
+            .onOpenURL { url in
+                handleDeepLink(url)
+            }
             .task {
                 // Check notification settings on app launch
                 await pushManager.checkNotificationSettings()
@@ -205,6 +211,48 @@ struct IceredApp: App {
         }
     }
 
+    // MARK: - Deep Link Handler
+
+    /// Handle deep links for password reset and other app navigation
+    /// Supported URL formats:
+    /// - nova://reset-password?token=xxx
+    /// - icered://reset-password?token=xxx
+    /// - https://app.nova.dev/reset-password?token=xxx
+    private func handleDeepLink(_ url: URL) {
+        #if DEBUG
+        print("[DeepLink] Received URL: \(url)")
+        #endif
+
+        // Extract the path from different URL schemes
+        let path: String
+        if url.scheme == "https" {
+            path = url.path
+        } else {
+            // For custom schemes like nova:// or icered://
+            path = url.host ?? ""
+        }
+
+        // Handle reset-password deep link
+        if path == "reset-password" || path == "/reset-password" {
+            // Extract token from query parameters
+            if let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
+               let queryItems = components.queryItems,
+               let token = queryItems.first(where: { $0.name == "token" })?.value,
+               !token.isEmpty {
+                #if DEBUG
+                print("[DeepLink] Password reset token received")
+                #endif
+                currentPage = .resetPassword(token: token)
+            } else {
+                #if DEBUG
+                print("[DeepLink] No valid token in reset-password URL")
+                #endif
+                // Show error or redirect to forgot password
+                currentPage = .forgotPassword
+            }
+        }
+    }
+
     // MARK: - Push Notification Handling
 
     /// Handle push notification navigation based on notification type
@@ -240,25 +288,25 @@ struct IceredApp: App {
             currentPage = .home
         }
     }
-    
+
     // MARK: - Session Expiration Handling
-    
+
     /// Handle session expiration - immediately navigate to login
     private func handleSessionExpired(_ userInfo: [AnyHashable: Any]?) {
         print("╔════════════════════════════════════════════════════════════")
         print("║ [App] 🚨 SESSION EXPIRED NOTIFICATION RECEIVED")
         print("╚════════════════════════════════════════════════════════════")
-        
+
         // Extract expiration reason if available
         if let reason = userInfo?["reason"] as? SessionExpiredReason {
             print("[App] Expiration reason: \(reason.rawValue)")
             print("[App] User message: \(reason.userMessage)")
         }
-        
+
         // Navigate to login page immediately
         print("[App] 🔄 Navigating to login page...")
         currentPage = .login
-        
+
         // Show alert to user (optional - the login page should handle this)
         // The sessionState and lastExpirationReason on authManager can be used
         // by LoginView to show an appropriate message

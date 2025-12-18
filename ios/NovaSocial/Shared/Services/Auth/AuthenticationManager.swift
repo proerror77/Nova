@@ -1,52 +1,6 @@
 import Foundation
 import SwiftUI
 
-// MARK: - Session State
-
-/// Represents the current session state for debugging and user feedback
-enum SessionState: Equatable {
-    case active
-    case refreshing
-    case expired(reason: SessionExpiredReason)
-    case loggedOut
-    
-    var isValid: Bool {
-        if case .active = self { return true }
-        return false
-    }
-}
-
-/// Reason for session expiration - helps with debugging and user messaging
-enum SessionExpiredReason: String, Equatable {
-    case tokenExpired = "Token expired"
-    case refreshTokenExpired = "Refresh token expired"
-    case refreshFailed = "Token refresh failed"
-    case serverRejected = "Server rejected credentials"
-    case noRefreshToken = "No refresh token available"
-    case userLoggedOut = "User logged out"
-    case networkError = "Network error during refresh"
-    
-    var userMessage: String {
-        switch self {
-        case .tokenExpired, .refreshTokenExpired, .refreshFailed, .serverRejected:
-            return "Your session has expired. Please login again."
-        case .noRefreshToken:
-            return "Session data missing. Please login again."
-        case .userLoggedOut:
-            return "You have been logged out."
-        case .networkError:
-            return "Network error. Please check your connection and try again."
-        }
-    }
-}
-
-// MARK: - Session Expiration Notification
-extension Notification.Name {
-    /// Posted when session expires and user needs to re-login
-    /// userInfo contains: ["reason": SessionExpiredReason]
-    static let sessionExpired = Notification.Name("SessionExpired")
-}
-
 // MARK: - Authentication Manager
 
 /// Manages user authentication state and token persistence
@@ -58,10 +12,6 @@ class AuthenticationManager: ObservableObject {
     @Published var isAuthenticated = false
     @Published var currentUser: UserProfile?
     @Published var authToken: String?
-    @Published var sessionState: SessionState = .loggedOut
-    
-    /// Last session expiration reason (for debugging and user feedback)
-    @Published var lastExpirationReason: SessionExpiredReason?
 
     private let identityService = IdentityService()
     private let keychain = KeychainService.shared
@@ -119,86 +69,16 @@ class AuthenticationManager: ObservableObject {
 
     /// Load saved authentication from Keychain
     func loadSavedAuth() {
-        print("[Auth] 🔍 Loading saved authentication...")
-        
         if let token = keychain.get(.authToken),
            let userId = keychain.get(.userId) {
-            print("[Auth] ✅ Found saved token (length: \(token.count)) and userId: \(userId)")
-            
             self.authToken = token
             APIClient.shared.setAuthToken(token)
             self.isAuthenticated = true
-            self.sessionState = .active
 
             // Load user profile in background
             Task {
                 try? await loadCurrentUser(userId: userId)
             }
-        } else {
-            print("[Auth] ℹ️ No saved auth found - user needs to login")
-            self.sessionState = .loggedOut
-        }
-        
-        // Log refresh token availability
-        if keychain.get(.refreshToken) != nil {
-            print("[Auth] ✅ Refresh token available")
-        } else {
-            print("[Auth] ⚠️ No refresh token saved")
-        }
-    }
-    
-    /// Validate current session by making a lightweight API call
-    /// Call this on app launch/resume to proactively detect expired sessions
-    /// Returns true if session is valid, false if expired (will trigger logout)
-    func validateSession() async -> Bool {
-        print("╔════════════════════════════════════════════════════════════")
-        print("║ [Auth] 🔐 VALIDATING SESSION")
-        print("║ isAuthenticated: \(isAuthenticated)")
-        print("║ hasToken: \(authToken != nil)")
-        print("║ hasRefreshToken: \(keychain.get(.refreshToken) != nil)")
-        print("╚════════════════════════════════════════════════════════════")
-        
-        guard isAuthenticated, let userId = keychain.get(.userId) else {
-            print("[Auth] ℹ️ Not authenticated, skipping validation")
-            return false
-        }
-        
-        sessionState = .refreshing
-        
-        do {
-            // Try to load user profile - this will trigger 401 if token expired
-            let user = try await identityService.getUser(userId: userId)
-            self.currentUser = user
-            self.sessionState = .active
-            print("[Auth] ✅ Session validated successfully")
-            return true
-        } catch {
-            print("[Auth] ⚠️ Session validation failed: \(error)")
-            
-            if let apiError = error as? APIError {
-                switch apiError {
-                case .unauthorized:
-                    // Token expired - try to refresh
-                    print("[Auth] 🔄 Token expired, attempting refresh...")
-                    let refreshed = await attemptTokenRefresh()
-                    if refreshed {
-                        print("[Auth] ✅ Token refreshed, session is now valid")
-                        return true
-                    } else {
-                        print("[Auth] ❌ Token refresh failed, session invalid")
-                        return false
-                    }
-                default:
-                    // Other errors (network, etc) - keep session, don't logout
-                    print("[Auth] 🌐 Non-auth error during validation, keeping session")
-                    self.sessionState = .active
-                    return true
-                }
-            }
-            
-            // Unknown error - keep session
-            self.sessionState = .active
-            return true
         }
     }
 
@@ -206,9 +86,13 @@ class AuthenticationManager: ObservableObject {
     private func loadCurrentUser(userId: String) async throws {
         do {
             self.currentUser = try await identityService.getUser(userId: userId)
-            print("[Auth] ✅ Loaded user profile: \(currentUser?.displayName ?? "unknown")")
+            #if DEBUG
+            print("[Auth] Loaded current user: id=\(currentUser?.id ?? "nil"), avatarUrl=\(currentUser?.avatarUrl ?? "nil")")
+            #endif
         } catch {
-            print("[Auth] ⚠️ Failed to load user profile: \(error)")
+            #if DEBUG
+            print("[Auth] Failed to load user profile: \(error)")
+            #endif
             // Keep auth state but user will be nil
         }
     }
@@ -258,7 +142,7 @@ class AuthenticationManager: ObservableObject {
         _ = keychain.save(user.id, for: .userId)
 
         #if DEBUG
-        print("[Auth] Current user updated: \(user.username)")
+        print("[Auth] Current user updated: id=\(user.id), username=\(user.username), avatarUrl=\(user.avatarUrl ?? "nil")")
         #endif
     }
 
@@ -402,33 +286,11 @@ class AuthenticationManager: ObservableObject {
 
     // MARK: - Logout
 
-    /// Logout current user (manual logout by user)
+    /// Logout current user
     func logout() async {
-        print("[Auth] 🚪 User initiated logout")
-        await performLogout(reason: .userLoggedOut, postNotification: false)
-    }
-    
-    /// Handle session expiration (automatic logout due to token issues)
-    /// Posts notification to trigger navigation back to login
-    func handleSessionExpired(reason: SessionExpiredReason) async {
-        print("╔════════════════════════════════════════════════════════════")
-        print("║ [Auth] ⚠️ SESSION EXPIRED")
-        print("║ Reason: \(reason.rawValue)")
-        print("║ User message: \(reason.userMessage)")
-        print("╚════════════════════════════════════════════════════════════")
-        
-        await performLogout(reason: reason, postNotification: true)
-    }
-    
-    /// Internal logout implementation
-    private func performLogout(reason: SessionExpiredReason, postNotification: Bool) async {
         // Clear identity service auth
         try? await identityService.logout()
 
-        // Update session state
-        self.sessionState = reason == .userLoggedOut ? .loggedOut : .expired(reason: reason)
-        self.lastExpirationReason = reason
-        
         // Clear local state
         self.authToken = nil
         self.currentUser = nil
@@ -439,18 +301,26 @@ class AuthenticationManager: ObservableObject {
 
         // Clear Keychain
         keychain.clearAll()
-        
-        print("[Auth] 🧹 Cleared all auth state and tokens")
-        
-        // Post notification for session expiration (not for manual logout)
-        if postNotification {
-            print("[Auth] 📢 Posting sessionExpired notification")
-            NotificationCenter.default.post(
-                name: .sessionExpired,
-                object: nil,
-                userInfo: ["reason": reason]
-            )
+    }
+
+    // MARK: - Update Tokens (for account switching)
+
+    /// Update authentication tokens (used when switching accounts)
+    /// - Parameters:
+    ///   - accessToken: New access token
+    ///   - refreshToken: Optional new refresh token
+    func updateTokens(accessToken: String, refreshToken: String?) async {
+        self.authToken = accessToken
+        APIClient.shared.setAuthToken(accessToken)
+        _ = keychain.save(accessToken, for: .authToken)
+
+        if let refreshToken = refreshToken {
+            _ = keychain.save(refreshToken, for: .refreshToken)
         }
+
+        #if DEBUG
+        print("[Auth] Tokens updated for account switch")
+        #endif
     }
 
     // MARK: - Token Refresh
@@ -479,35 +349,17 @@ class AuthenticationManager: ObservableObject {
     /// Uses task coalescence to prevent multiple concurrent refresh attempts (race condition fix)
     /// Includes retry logic for network failures to avoid unnecessary logouts
     func attemptTokenRefresh() async -> Bool {
-        let startTime = Date()
-        
-        print("╔════════════════════════════════════════════════════════════")
-        print("║ [Auth] 🔄 TOKEN REFRESH STARTED")
-        print("║ Time: \(ISO8601DateFormatter().string(from: startTime))")
-        print("║ Current auth state: \(isAuthenticated ? "authenticated" : "not authenticated")")
-        print("║ Session state: \(sessionState)")
-        print("╚════════════════════════════════════════════════════════════")
-        
         // If already refreshing, wait for the existing task (MainActor ensures thread safety)
         if let existingTask = refreshTask {
-            print("[Auth] ⏳ Already refreshing, waiting for existing task...")
-            sessionState = .refreshing
             return await existingTask.value
         }
 
         guard let storedRefreshToken = keychain.get(.refreshToken) else {
-            print("[Auth] ❌ NO REFRESH TOKEN AVAILABLE - Cannot refresh session")
-            print("[Auth] 📍 This usually means:")
-            print("[Auth]    1. User never logged in properly")
-            print("[Auth]    2. Refresh token was cleared/corrupted")
-            print("[Auth]    3. Keychain access issue")
-            
-            await handleSessionExpired(reason: .noRefreshToken)
+            #if DEBUG
+            print("[Auth] No refresh token available")
+            #endif
             return false
         }
-        
-        print("[Auth] ✅ Found refresh token (length: \(storedRefreshToken.count) chars)")
-        sessionState = .refreshing
 
         // Create and store the refresh task
         let task = Task<Bool, Never> { [weak self] in
@@ -515,73 +367,37 @@ class AuthenticationManager: ObservableObject {
 
             // Retry loop for network failures
             for attempt in 1...self.maxRefreshRetries {
-                print("[Auth] 🔄 Refresh attempt \(attempt)/\(self.maxRefreshRetries)...")
-                
                 do {
                     try await self.refreshToken(refreshToken: storedRefreshToken)
-                    
-                    let duration = Date().timeIntervalSince(startTime)
-                    print("╔════════════════════════════════════════════════════════════")
-                    print("║ [Auth] ✅ TOKEN REFRESH SUCCESSFUL")
-                    print("║ Attempt: \(attempt)/\(self.maxRefreshRetries)")
-                    print("║ Duration: \(String(format: "%.2f", duration))s")
-                    print("║ New token set: \(self.authToken != nil)")
-                    print("╚════════════════════════════════════════════════════════════")
-                    
-                    self.sessionState = .active
+                    #if DEBUG
+                    print("[Auth] Token refreshed successfully on attempt \(attempt)")
+                    #endif
                     return true
-                    
                 } catch {
-                    print("[Auth] ⚠️ Refresh attempt \(attempt) failed:")
-                    print("[Auth]    Error: \(error)")
-                    print("[Auth]    Error type: \(type(of: error))")
-                    
-                    if let apiError = error as? APIError {
-                        print("[Auth]    APIError case: \(apiError)")
-                        print("[Auth]    Is retryable: \(apiError.isRetryable)")
-                    }
+                    #if DEBUG
+                    print("[Auth] Token refresh attempt \(attempt)/\(self.maxRefreshRetries) failed: \(error)")
+                    #endif
 
                     // Check if it's a network error (worth retrying) vs auth error (don't retry)
                     let isNetworkError = self.isRetryableError(error)
-                    let isAuthError = self.isAuthenticationError(error)
-                    
-                    print("[Auth]    Is network error (retryable): \(isNetworkError)")
-                    print("[Auth]    Is auth error (fatal): \(isAuthError)")
 
                     if isNetworkError && attempt < self.maxRefreshRetries {
-                        print("[Auth] 🔄 Will retry in \(self.refreshRetryDelaySeconds)s...")
+                        // Wait before retrying for network errors
                         try? await Task.sleep(nanoseconds: self.refreshRetryDelaySeconds * 1_000_000_000)
                         continue
                     }
 
-                    // Determine expiration reason
-                    let reason: SessionExpiredReason
-                    if isAuthError {
-                        if let apiError = error as? APIError, case .unauthorized = apiError {
-                            reason = .refreshTokenExpired
-                        } else {
-                            reason = .serverRejected
-                        }
-                    } else if isNetworkError {
-                        reason = .networkError
-                    } else {
-                        reason = .refreshFailed
-                    }
-                    
-                    print("╔════════════════════════════════════════════════════════════")
-                    print("║ [Auth] ❌ TOKEN REFRESH FAILED")
-                    print("║ Reason: \(reason.rawValue)")
-                    print("║ Will logout: \(isAuthError)")
-                    print("╚════════════════════════════════════════════════════════════")
-
                     // Only logout on authentication errors (401/403), not network failures
-                    if isAuthError {
-                        await self.handleSessionExpired(reason: reason)
+                    if self.isAuthenticationError(error) {
+                        #if DEBUG
+                        print("[Auth] Authentication error - logging out")
+                        #endif
+                        await self.logout()
                     } else {
-                        // Network error - keep session but mark state
-                        print("[Auth] 🌐 Network error - keeping session, user can retry later")
-                        self.sessionState = .expired(reason: reason)
-                        self.lastExpirationReason = reason
+                        #if DEBUG
+                        print("[Auth] Network error - keeping session, user can retry later")
+                        #endif
+                        // Don't logout for network errors - user can try again when connection is restored
                     }
                     return false
                 }

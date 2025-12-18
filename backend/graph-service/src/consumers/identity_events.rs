@@ -137,7 +137,10 @@ impl IdentityEventsConsumer {
             .upsert_user(event.user_id, &event.username)
             .await?;
 
-        info!("Successfully created user in graph-service: {}", event.user_id);
+        info!(
+            "Successfully created user in graph-service: {}",
+            event.user_id
+        );
         Ok(())
     }
 

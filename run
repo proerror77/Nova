@@ -1,0 +1,3 @@
+#!/bin/bash
+# 快捷运行 iOS 应用
+exec "$(dirname "$0")/run-ios.sh" "$@"

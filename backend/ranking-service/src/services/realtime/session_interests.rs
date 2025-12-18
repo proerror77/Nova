@@ -45,7 +45,7 @@ impl SessionInterestManager {
     pub fn new(redis: redis::Client) -> Self {
         Self {
             redis,
-            session_ttl: 7200, // 2 hours
+            session_ttl: 7200,               // 2 hours
             decay_half_life_seconds: 1800.0, // 30 minutes
             max_interests: 50,
             key_prefix: "session".to_string(),
@@ -226,10 +226,7 @@ impl SessionInterestManager {
 
         // Add profile interests
         for (tag, score) in profile_interests {
-            merged.insert(
-                tag.clone(),
-                score * (1.0 - session_weight),
-            );
+            merged.insert(tag.clone(), score * (1.0 - session_weight));
         }
 
         // Add session interests (weighted more heavily)

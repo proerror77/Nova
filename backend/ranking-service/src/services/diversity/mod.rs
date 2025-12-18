@@ -289,8 +289,7 @@ mod tests {
         // Should reorder to: post1 (author1), post3 (author2), post2 (author1)
         if reranked.len() >= 2 {
             assert_ne!(
-                reranked[0].features.author_id,
-                reranked[1].features.author_id,
+                reranked[0].features.author_id, reranked[1].features.author_id,
                 "First two posts should not be from same author"
             );
         }

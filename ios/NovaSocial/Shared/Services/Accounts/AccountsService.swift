@@ -1,4 +1,28 @@
 import Foundation
+import UIKit
+
+// MARK: - Alias Edit State
+
+/// Shared state for editing alias accounts
+@MainActor
+class AliasEditState: ObservableObject {
+    static let shared = AliasEditState()
+
+    @Published var editingAccount: Account?
+    @Published var isEditing: Bool = false
+
+    private init() {}
+
+    func startEditing(account: Account) {
+        self.editingAccount = account
+        self.isEditing = true
+    }
+
+    func clearEditingState() {
+        self.editingAccount = nil
+        self.isEditing = false
+    }
+}
 
 // MARK: - Accounts Service
 
@@ -15,7 +39,20 @@ class AccountsService {
     /// Get list of all accounts associated with current user
     /// - Returns: List of user accounts
     func getAccounts() async throws -> AccountsResponse {
-        return try await client.get(endpoint: APIConfig.Accounts.getAccounts)
+        #if DEBUG
+        print("[AccountsService] GET \(APIConfig.Accounts.getAccounts)")
+        #endif
+
+        let response: AccountsResponse = try await client.get(endpoint: APIConfig.Accounts.getAccounts)
+
+        #if DEBUG
+        print("[AccountsService] Got \(response.accounts.count) accounts")
+        for account in response.accounts {
+            print("  - [\(account.id.prefix(8))...] \(account.effectiveDisplayName) (isAlias: \(account.isAlias), isPrimary: \(account.isPrimary))")
+        }
+        #endif
+
+        return response
     }
 
     // MARK: - Switch Account
@@ -108,6 +145,68 @@ class AccountsService {
             body: request
         )
     }
+
+    // MARK: - Alias Account Methods
+
+    /// Create a new alias account
+    /// - Parameter request: Create alias account request
+    /// - Returns: Created alias account
+    func createAliasAccount(request: CreateAliasAccountRequest) async throws -> Account {
+        #if DEBUG
+        print("[AccountsService] POST \(APIConfig.Accounts.createAlias)")
+        print("  aliasName: \(request.aliasName)")
+        #endif
+
+        struct Response: Codable {
+            let account: Account
+        }
+
+        let response: Response = try await client.request(
+            endpoint: APIConfig.Accounts.createAlias,
+            method: "POST",
+            body: request
+        )
+
+        #if DEBUG
+        print("[AccountsService] Created alias account: \(response.account.effectiveDisplayName)")
+        #endif
+
+        return response.account
+    }
+
+    /// Update an existing alias account
+    /// - Parameters:
+    ///   - accountId: ID of the alias account to update
+    ///   - request: Update request with new values
+    /// - Returns: Updated alias account
+    func updateAliasAccount(accountId: String, request: UpdateAliasAccountRequest) async throws -> Account {
+        struct Response: Codable {
+            let account: Account
+        }
+
+        let response: Response = try await client.request(
+            endpoint: "\(APIConfig.Accounts.updateAlias)/\(accountId)",
+            method: "PUT",
+            body: request
+        )
+
+        return response.account
+    }
+
+    /// Get alias account details
+    /// - Parameter accountId: ID of the alias account
+    /// - Returns: Alias account details
+    func getAliasAccount(accountId: String) async throws -> Account {
+        struct Response: Codable {
+            let account: Account
+        }
+
+        let response: Response = try await client.get(
+            endpoint: "\(APIConfig.Accounts.getAlias)/\(accountId)"
+        )
+
+        return response.account
+    }
 }
 
 // MARK: - Models
@@ -120,8 +219,24 @@ struct Account: Codable, Identifiable {
     let avatarUrl: String?
     let isPrimary: Bool
     let isActive: Bool
+    let isAlias: Bool
     let lastActiveAt: Date?
     let createdAt: Date
+
+    // Alias-specific fields
+    let aliasName: String?
+    let dateOfBirth: String?
+    let gender: Gender?
+    let profession: String?
+    let location: String?
+
+    /// Effective display name - uses aliasName for alias accounts
+    var effectiveDisplayName: String {
+        if isAlias {
+            return aliasName ?? displayName ?? username
+        }
+        return displayName ?? username
+    }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -130,8 +245,33 @@ struct Account: Codable, Identifiable {
         case avatarUrl = "avatar_url"
         case isPrimary = "is_primary"
         case isActive = "is_active"
+        case isAlias = "is_alias"
         case lastActiveAt = "last_active_at"
         case createdAt = "created_at"
+        case aliasName = "alias_name"
+        case dateOfBirth = "date_of_birth"
+        case gender
+        case profession
+        case location
+    }
+
+    // Custom decoder to handle missing fields gracefully
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        username = try container.decode(String.self, forKey: .username)
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+        avatarUrl = try container.decodeIfPresent(String.self, forKey: .avatarUrl)
+        isPrimary = try container.decodeIfPresent(Bool.self, forKey: .isPrimary) ?? false
+        isActive = try container.decodeIfPresent(Bool.self, forKey: .isActive) ?? false
+        isAlias = try container.decodeIfPresent(Bool.self, forKey: .isAlias) ?? false
+        lastActiveAt = try container.decodeIfPresent(Date.self, forKey: .lastActiveAt)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        aliasName = try container.decodeIfPresent(String.self, forKey: .aliasName)
+        dateOfBirth = try container.decodeIfPresent(String.self, forKey: .dateOfBirth)
+        gender = try container.decodeIfPresent(Gender.self, forKey: .gender)
+        profession = try container.decodeIfPresent(String.self, forKey: .profession)
+        location = try container.decodeIfPresent(String.self, forKey: .location)
     }
 }
 
@@ -158,5 +298,45 @@ struct SwitchAccountResponse: Codable {
         case accessToken = "access_token"
         case refreshToken = "refresh_token"
         case account
+    }
+}
+
+// MARK: - Alias Account Requests
+
+/// Request to create a new alias account
+struct CreateAliasAccountRequest: Codable {
+    let aliasName: String
+    let avatarUrl: String?
+    let dateOfBirth: String?
+    let gender: Gender?
+    let profession: String?
+    let location: String?
+
+    enum CodingKeys: String, CodingKey {
+        case aliasName = "alias_name"
+        case avatarUrl = "avatar_url"
+        case dateOfBirth = "date_of_birth"
+        case gender
+        case profession
+        case location
+    }
+}
+
+/// Request to update an existing alias account
+struct UpdateAliasAccountRequest: Codable {
+    let aliasName: String?
+    let avatarUrl: String?
+    let dateOfBirth: String?
+    let gender: Gender?
+    let profession: String?
+    let location: String?
+
+    enum CodingKeys: String, CodingKey {
+        case aliasName = "alias_name"
+        case avatarUrl = "avatar_url"
+        case dateOfBirth = "date_of_birth"
+        case gender
+        case profession
+        case location
     }
 }

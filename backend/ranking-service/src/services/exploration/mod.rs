@@ -15,11 +15,11 @@
 // - Exploitation: avg_engagement_rate (CTR, completion rate)
 // - Exploration: uncertainty bonus based on impression count
 
-pub mod ucb;
 pub mod new_content_pool;
+pub mod ucb;
 
+pub use new_content_pool::{NewContentEntry, NewContentPool};
 pub use ucb::UCBExplorer;
-pub use new_content_pool::{NewContentPool, NewContentEntry};
 
 use thiserror::Error;
 

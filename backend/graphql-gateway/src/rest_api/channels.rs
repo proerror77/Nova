@@ -95,12 +95,20 @@ pub async fn get_all_channels(
                 .map(|c| Channel {
                     id: c.id,
                     name: c.name,
-                    description: if c.description.is_empty() { None } else { Some(c.description) },
+                    description: if c.description.is_empty() {
+                        None
+                    } else {
+                        Some(c.description)
+                    },
                     category: c.category,
                     subscriber_count: c.subscriber_count,
                     is_subscribed: false,
                     slug: c.slug,
-                    icon_url: if c.icon_url.is_empty() { None } else { Some(c.icon_url) },
+                    icon_url: if c.icon_url.is_empty() {
+                        None
+                    } else {
+                        Some(c.icon_url)
+                    },
                     display_order: c.display_order,
                     is_enabled: c.is_enabled,
                 })
@@ -146,12 +154,20 @@ pub async fn get_channel_details(
             Ok(HttpResponse::Ok().json(Channel {
                 id: c.id,
                 name: c.name,
-                description: if c.description.is_empty() { None } else { Some(c.description) },
+                description: if c.description.is_empty() {
+                    None
+                } else {
+                    Some(c.description)
+                },
                 category: c.category,
                 subscriber_count: c.subscriber_count,
                 is_subscribed: false,
                 slug: c.slug,
-                icon_url: if c.icon_url.is_empty() { None } else { Some(c.icon_url) },
+                icon_url: if c.icon_url.is_empty() {
+                    None
+                } else {
+                    Some(c.icon_url)
+                },
                 display_order: c.display_order,
                 is_enabled: c.is_enabled,
             }))
@@ -374,7 +390,10 @@ pub async fn suggest_channels(
         all_text.push_str(&theme.to_lowercase());
     }
 
-    debug!(combined_text_len = all_text.len(), "Combined text for classification");
+    debug!(
+        combined_text_len = all_text.len(),
+        "Combined text for classification"
+    );
 
     // Tokenize content into words
     let content_words: Vec<&str> = all_text
@@ -413,7 +432,11 @@ pub async fn suggest_channels(
     }
 
     // Sort by confidence descending
-    suggestions.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+    suggestions.sort_by(|a, b| {
+        b.confidence
+            .partial_cmp(&a.confidence)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     // Limit to max suggestions
     suggestions.truncate(max_suggestions);

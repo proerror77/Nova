@@ -106,14 +106,16 @@ pub async fn get_profile(
     // Get the first (and only) profile from the batch response
     if let Some(p) = resp.profiles.into_iter().next() {
         // Build display_name from first_name and last_name if not set
-        let display_name = p.display_name.or_else(|| {
-            match (p.first_name.as_ref(), p.last_name.as_ref()) {
-                (Some(f), Some(l)) if !f.is_empty() && !l.is_empty() => Some(format!("{} {}", f, l)),
-                (Some(f), _) if !f.is_empty() => Some(f.clone()),
-                (_, Some(l)) if !l.is_empty() => Some(l.clone()),
-                _ => None,
-            }
-        });
+        let display_name =
+            p.display_name
+                .or_else(|| match (p.first_name.as_ref(), p.last_name.as_ref()) {
+                    (Some(f), Some(l)) if !f.is_empty() && !l.is_empty() => {
+                        Some(format!("{} {}", f, l))
+                    }
+                    (Some(f), _) if !f.is_empty() => Some(f.clone()),
+                    (_, Some(l)) if !l.is_empty() => Some(l.clone()),
+                    _ => None,
+                });
 
         let profile = UserProfileResponse {
             id: p.user_id,
@@ -210,14 +212,16 @@ pub async fn get_profile_by_username(
 
     if let Some(p) = profile_resp.profiles.into_iter().next() {
         // Build display_name from first_name and last_name if not set
-        let display_name = p.display_name.or_else(|| {
-            match (p.first_name.as_ref(), p.last_name.as_ref()) {
-                (Some(f), Some(l)) if !f.is_empty() && !l.is_empty() => Some(format!("{} {}", f, l)),
-                (Some(f), _) if !f.is_empty() => Some(f.clone()),
-                (_, Some(l)) if !l.is_empty() => Some(l.clone()),
-                _ => None,
-            }
-        });
+        let display_name =
+            p.display_name
+                .or_else(|| match (p.first_name.as_ref(), p.last_name.as_ref()) {
+                    (Some(f), Some(l)) if !f.is_empty() && !l.is_empty() => {
+                        Some(format!("{} {}", f, l))
+                    }
+                    (Some(f), _) if !f.is_empty() => Some(f.clone()),
+                    (_, Some(l)) if !l.is_empty() => Some(l.clone()),
+                    _ => None,
+                });
 
         let profile = UserProfileResponse {
             id: p.user_id,
@@ -315,7 +319,9 @@ pub async fn update_profile(
                 // Build display_name from first_name and last_name if not set
                 let display_name = p.display_name.or_else(|| {
                     match (p.first_name.as_ref(), p.last_name.as_ref()) {
-                        (Some(f), Some(l)) if !f.is_empty() && !l.is_empty() => Some(format!("{} {}", f, l)),
+                        (Some(f), Some(l)) if !f.is_empty() && !l.is_empty() => {
+                            Some(format!("{} {}", f, l))
+                        }
                         (Some(f), _) if !f.is_empty() => Some(f.clone()),
                         (_, Some(l)) if !l.is_empty() => Some(l.clone()),
                         _ => None,

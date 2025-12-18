@@ -476,33 +476,30 @@ struct CreateAccountView: View {
         isLoading = false
     }
 
-    // MARK: - Google Sign-In
-
     private func handleGoogleSignIn() async {
         isGoogleLoading = true
         errorMessage = nil
 
         do {
             let _ = try await authManager.loginWithGoogle()
-            // Success - AuthenticationManager will update isAuthenticated
-            // Navigate to home
+            // Success - AuthenticationManager will update isAuthenticated and navigate
             await MainActor.run {
                 currentPage = .home
             }
         } catch {
-            // Check if user cancelled
             let errorDesc = error.localizedDescription.lowercased()
             if errorDesc.contains("cancel") {
                 // User cancelled, no error message needed
             } else {
                 errorMessage = error.localizedDescription
             }
+            #if DEBUG
+            print("[CreateAccountView] Google sign-in error: \(error)")
+            #endif
         }
 
         isGoogleLoading = false
     }
-
-    // MARK: - Apple Sign-In
 
     private func handleAppleSignIn() async {
         isAppleLoading = true
@@ -510,19 +507,20 @@ struct CreateAccountView: View {
 
         do {
             let _ = try await authManager.loginWithApple()
-            // Success - AuthenticationManager will update isAuthenticated
-            // Navigate to home
+            // Success - AuthenticationManager will update isAuthenticated and navigate
             await MainActor.run {
                 currentPage = .home
             }
         } catch {
-            // Check if user cancelled
             let errorDesc = error.localizedDescription.lowercased()
             if errorDesc.contains("cancel") {
                 // User cancelled, no error message needed
             } else {
                 errorMessage = error.localizedDescription
             }
+            #if DEBUG
+            print("[CreateAccountView] Apple sign-in error: \(error)")
+            #endif
         }
 
         isAppleLoading = false

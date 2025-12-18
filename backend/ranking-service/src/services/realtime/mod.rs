@@ -10,11 +10,11 @@
 //
 // Redis-backed for low-latency real-time updates
 
-pub mod session_tracker;
 pub mod session_interests;
+pub mod session_tracker;
 
-pub use session_tracker::SessionTracker;
 pub use session_interests::{SessionInterest, SessionInterestManager};
+pub use session_tracker::SessionTracker;
 
 use thiserror::Error;
 

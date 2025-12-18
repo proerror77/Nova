@@ -328,17 +328,18 @@ pub async fn search_content(
     let mut search_client = clients.search_client();
 
     // Build filter (SearchFilters in new proto)
-    let filters = query.verified_only.map(|verified_only| {
-        crate::clients::proto::search::SearchFilters {
-            content_type: String::new(),
-            date_from: 0,
-            date_to: 0,
-            hashtags: vec![],
-            language: String::new(),
-            verified_only,
-            sort_by: String::new(),
-        }
-    });
+    let filters =
+        query.verified_only.map(
+            |verified_only| crate::clients::proto::search::SearchFilters {
+                content_type: String::new(),
+                date_from: 0,
+                date_to: 0,
+                hashtags: vec![],
+                language: String::new(),
+                verified_only,
+                sort_by: String::new(),
+            },
+        );
 
     let grpc_request = tonic::Request::new(SearchPostsRequest {
         query: query.q.clone(),

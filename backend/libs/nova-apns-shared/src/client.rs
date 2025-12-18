@@ -1,7 +1,10 @@
 use std::fs::File;
 use std::sync::Arc;
 
-use a2::{Client, ClientConfig, DefaultNotificationBuilder, Endpoint, NotificationBuilder, NotificationOptions, Priority};
+use a2::{
+    Client, ClientConfig, DefaultNotificationBuilder, Endpoint, NotificationBuilder,
+    NotificationOptions, Priority,
+};
 use tokio::sync::Mutex;
 use tracing::{error, info};
 
@@ -69,9 +72,8 @@ impl ApnsPush {
     /// # Returns
     /// `Ok(ApnsPush)` if initialization succeeds, `Err(ApnsError)` if certificate loading fails
     pub fn new(cfg: &ApnsConfig) -> Result<Self, ApnsError> {
-        let mut file = File::open(&cfg.certificate_path).map_err(|e| {
-            ApnsError::StartServer(format!("failed to open certificate file: {e}"))
-        })?;
+        let mut file = File::open(&cfg.certificate_path)
+            .map_err(|e| ApnsError::StartServer(format!("failed to open certificate file: {e}")))?;
 
         let password = cfg.certificate_passphrase.as_deref().unwrap_or("");
 

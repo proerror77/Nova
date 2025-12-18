@@ -112,7 +112,12 @@ impl InterestExplorer {
         let known_interests: HashSet<String> = if let Ok(ref lt) = memory.long_term {
             lt.stable_interests.keys().cloned().collect()
         } else {
-            memory.short_term.instant_interests.keys().cloned().collect()
+            memory
+                .short_term
+                .instant_interests
+                .keys()
+                .cloned()
+                .collect()
         };
 
         // 從每個已知興趣擴展
@@ -147,7 +152,8 @@ impl InterestExplorer {
 
         if let Ok(ref lt) = memory.long_term {
             // 找出上升趨勢的興趣
-            let rising: Vec<_> = lt.stable_interests
+            let rising: Vec<_> = lt
+                .stable_interests
                 .iter()
                 .filter(|(_, info)| matches!(info.trend, InterestTrend::Rising))
                 .collect();
@@ -184,7 +190,8 @@ impl InterestExplorer {
             let patterns = &lt.behavior_patterns;
 
             // 根據活躍時段推斷
-            let peak_hours: Vec<usize> = patterns.active_hours
+            let peak_hours: Vec<usize> = patterns
+                .active_hours
                 .iter()
                 .enumerate()
                 .filter(|(_, &count)| count > 0)
@@ -266,7 +273,11 @@ impl InterestExplorer {
             .collect();
 
         // 按置信度排序
-        unique.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        unique.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         unique
     }
@@ -293,11 +304,7 @@ impl InterestExplorer {
     }
 
     /// 更新興趣關聯
-    fn update_relation(
-        graph: &mut HashMap<String, Vec<RelatedInterest>>,
-        from: &str,
-        to: &str,
-    ) {
+    fn update_relation(graph: &mut HashMap<String, Vec<RelatedInterest>>, from: &str, to: &str) {
         let relations = graph.entry(from.to_string()).or_insert_with(Vec::new);
 
         if let Some(rel) = relations.iter_mut().find(|r| r.tag == to) {
@@ -315,7 +322,11 @@ impl InterestExplorer {
 
         // 限制關係數量
         if relations.len() > 50 {
-            relations.sort_by(|a, b| b.strength.partial_cmp(&a.strength).unwrap_or(std::cmp::Ordering::Equal));
+            relations.sort_by(|a, b| {
+                b.strength
+                    .partial_cmp(&a.strength)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
             relations.truncate(50);
         }
     }

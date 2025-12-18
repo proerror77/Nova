@@ -21,6 +21,7 @@ class ProfileData {
     private let socialService = SocialService()
     private let contentService = ContentService()
     private let mediaService = MediaService()
+    private let authManager = AuthenticationManager.shared
 
     // MARK: - Current User ID
     // TODO: Get from authentication service
@@ -45,6 +46,16 @@ class ProfileData {
         do {
             // Fetch user profile from IdentityService
             userProfile = try await identityService.getUser(userId: userId)
+
+            // Sync to authManager if this is the current user's profile
+            // This ensures Feed and other views see the latest avatar URL
+            if let profile = userProfile,
+               profile.id == authManager.currentUser?.id {
+                authManager.updateCurrentUser(profile)
+                #if DEBUG
+                print("[ProfileData] Synced current user profile to authManager, avatarUrl: \(profile.avatarUrl ?? "nil")")
+                #endif
+            }
 
             // Load initial content based on selected tab
             await loadContent(for: selectedTab)

@@ -90,8 +90,8 @@ impl RankingServiceImpl {
         diversity_layer: DiversityLayer,
     ) -> Self {
         // 创建默认的 Redis 客户端 (实际使用时应从配置注入)
-        let redis_client = redis::Client::open("redis://localhost:6379")
-            .expect("Failed to create Redis client");
+        let redis_client =
+            redis::Client::open("redis://localhost:6379").expect("Failed to create Redis client");
 
         Self {
             recall_layer: Arc::new(recall_layer),
@@ -135,10 +135,7 @@ impl RankingServiceImpl {
     }
 
     /// 設置用戶畫像服務
-    pub async fn set_profile_updater(
-        &self,
-        updater: ProfileUpdater<ClickHouseProfileDatabase>,
-    ) {
+    pub async fn set_profile_updater(&self, updater: ProfileUpdater<ClickHouseProfileDatabase>) {
         let mut guard = self.profile_updater.write().await;
         *guard = Some(updater);
         info!("ProfileUpdater initialized");
@@ -352,10 +349,8 @@ impl RankingService for RankingServiceImpl {
         );
 
         // 將 CoarseCandidate 內的 Candidate 取出供精排使用
-        let filtered_candidates: Vec<crate::models::Candidate> = coarse_ranked
-            .into_iter()
-            .map(|cc| cc.candidate)
-            .collect();
+        let filtered_candidates: Vec<crate::models::Candidate> =
+            coarse_ranked.into_iter().map(|cc| cc.candidate).collect();
 
         // ============================================
         // Layer 3: Fine Ranking (精排層) - 百級候選
@@ -403,8 +398,7 @@ impl RankingService for RankingServiceImpl {
         // Session Personalization (會話級個性化)
         // ============================================
         let personalized = if self.config.enable_session_personalization {
-            self.apply_session_boost(session_id, with_exploration)
-                .await
+            self.apply_session_boost(session_id, with_exploration).await
         } else {
             with_exploration
         };
@@ -489,9 +483,9 @@ impl RankingService for RankingServiceImpl {
 
         // Get profile updater
         let updater_guard = self.profile_updater.read().await;
-        let updater = updater_guard.as_ref().ok_or_else(|| {
-            Status::unavailable("ProfileUpdater not initialized")
-        })?;
+        let updater = updater_guard
+            .as_ref()
+            .ok_or_else(|| Status::unavailable("ProfileUpdater not initialized"))?;
 
         // Try to load from cache first
         match updater.load_profile_from_cache(user_id).await {
@@ -536,9 +530,9 @@ impl RankingService for RankingServiceImpl {
 
         // Get profile updater
         let updater_guard = self.profile_updater.read().await;
-        let updater = updater_guard.as_ref().ok_or_else(|| {
-            Status::unavailable("ProfileUpdater not initialized")
-        })?;
+        let updater = updater_guard
+            .as_ref()
+            .ok_or_else(|| Status::unavailable("ProfileUpdater not initialized"))?;
 
         // Update profile
         match updater.update_user_profile(user_id).await {
@@ -578,14 +572,16 @@ impl RankingService for RankingServiceImpl {
         // Get LLM analyzer
         let analyzer_guard = self.llm_analyzer.read().await;
         let analyzer = analyzer_guard.as_ref().ok_or_else(|| {
-            Status::unavailable("LLM analyzer not initialized. Enable LLM in config to use personas.")
+            Status::unavailable(
+                "LLM analyzer not initialized. Enable LLM in config to use personas.",
+            )
         })?;
 
         // Get profile updater to load profile data
         let updater_guard = self.profile_updater.read().await;
-        let updater = updater_guard.as_ref().ok_or_else(|| {
-            Status::unavailable("ProfileUpdater not initialized")
-        })?;
+        let updater = updater_guard
+            .as_ref()
+            .ok_or_else(|| Status::unavailable("ProfileUpdater not initialized"))?;
 
         // If regenerate requested, invalidate cache
         if req.regenerate {
@@ -617,7 +613,10 @@ impl RankingService for RankingServiceImpl {
             }
             Err(e) => {
                 error!(user_id = %user_id, error = %e, "Failed to generate persona");
-                Err(Status::internal(format!("Failed to generate persona: {}", e)))
+                Err(Status::internal(format!(
+                    "Failed to generate persona: {}",
+                    e
+                )))
             }
         }
     }
@@ -635,9 +634,9 @@ impl RankingService for RankingServiceImpl {
 
         // Get profile updater
         let updater_guard = self.profile_updater.read().await;
-        let updater = updater_guard.as_ref().ok_or_else(|| {
-            Status::unavailable("ProfileUpdater not initialized")
-        })?;
+        let updater = updater_guard
+            .as_ref()
+            .ok_or_else(|| Status::unavailable("ProfileUpdater not initialized"))?;
 
         // Parse user IDs
         let user_ids: Vec<Uuid> = req
@@ -680,8 +679,16 @@ impl RankingService for RankingServiceImpl {
         request: Request<GetUserInterestsRequest>,
     ) -> Result<Response<GetUserInterestsResponse>, Status> {
         let req = request.into_inner();
-        let limit = if req.limit > 0 { req.limit as usize } else { 50 };
-        let min_weight = if req.min_weight > 0.0 { req.min_weight } else { 0.0 };
+        let limit = if req.limit > 0 {
+            req.limit as usize
+        } else {
+            50
+        };
+        let min_weight = if req.min_weight > 0.0 {
+            req.min_weight
+        } else {
+            0.0
+        };
 
         info!(
             "GetUserInterests request: user_id={}, limit={}, min_weight={}",
@@ -694,9 +701,9 @@ impl RankingService for RankingServiceImpl {
 
         // Get profile updater
         let updater_guard = self.profile_updater.read().await;
-        let updater = updater_guard.as_ref().ok_or_else(|| {
-            Status::unavailable("ProfileUpdater not initialized")
-        })?;
+        let updater = updater_guard
+            .as_ref()
+            .ok_or_else(|| Status::unavailable("ProfileUpdater not initialized"))?;
 
         // Load profile
         match updater.load_profile_from_cache(user_id).await {
@@ -718,12 +725,10 @@ impl RankingService for RankingServiceImpl {
                     total_count,
                 }))
             }
-            Ok(None) => {
-                Err(Status::not_found(format!(
-                    "Profile not found for user {}",
-                    user_id
-                )))
-            }
+            Ok(None) => Err(Status::not_found(format!(
+                "Profile not found for user {}",
+                user_id
+            ))),
             Err(e) => {
                 error!(user_id = %user_id, error = %e, "Failed to load interests");
                 Err(Status::internal(format!("Failed to load interests: {}", e)))
@@ -736,7 +741,11 @@ impl RankingService for RankingServiceImpl {
         request: Request<GetPersonalizedRecommendationsRequest>,
     ) -> Result<Response<GetPersonalizedRecommendationsResponse>, Status> {
         let req = request.into_inner();
-        let count = if req.count > 0 { req.count as usize } else { 10 };
+        let count = if req.count > 0 {
+            req.count as usize
+        } else {
+            10
+        };
 
         info!(
             "GetPersonalizedRecommendations request: user_id={}, topic_count={}, count={}",
@@ -762,9 +771,9 @@ impl RankingService for RankingServiceImpl {
 
         // Get profile updater
         let updater_guard = self.profile_updater.read().await;
-        let updater = updater_guard.as_ref().ok_or_else(|| {
-            Status::unavailable("ProfileUpdater not initialized")
-        })?;
+        let updater = updater_guard
+            .as_ref()
+            .ok_or_else(|| Status::unavailable("ProfileUpdater not initialized"))?;
 
         // Load profile
         let profile = match updater.load_profile_from_cache(user_id).await {
@@ -781,9 +790,10 @@ impl RankingService for RankingServiceImpl {
         };
 
         // Generate persona first (cached)
-        let persona = analyzer.analyze_profile(&profile).await.map_err(|e| {
-            Status::internal(format!("Failed to analyze profile: {}", e))
-        })?;
+        let persona = analyzer
+            .analyze_profile(&profile)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to analyze profile: {}", e)))?;
 
         // Generate recommendations
         match analyzer
@@ -852,7 +862,11 @@ use crate::services::profile_builder::{
 fn to_proto_profile(profile: UserProfile) -> ProtoProfile {
     ProtoProfile {
         user_id: profile.user_id.to_string(),
-        interests: profile.interests.into_iter().map(to_proto_interest).collect(),
+        interests: profile
+            .interests
+            .into_iter()
+            .map(to_proto_interest)
+            .collect(),
         behavior: Some(to_proto_behavior(profile.behavior)),
         created_at: profile.created_at.to_rfc3339(),
         updated_at: profile.updated_at.to_rfc3339(),

@@ -41,7 +41,9 @@ pub mod llm_analyzer;
 pub mod profile_updater;
 
 // Core builders
-pub use behavior_builder::{BehaviorBuilder, BehaviorBuilderConfig, BehaviorPattern, VideoLengthPreference};
+pub use behavior_builder::{
+    BehaviorBuilder, BehaviorBuilderConfig, BehaviorPattern, VideoLengthPreference,
+};
 pub use interest_builder::{EngagementAction, InterestBuilder, InterestBuilderConfig, InterestTag};
 
 // Profile management

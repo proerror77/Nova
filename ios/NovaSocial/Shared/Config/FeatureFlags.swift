@@ -375,13 +375,4 @@ extension FeatureFlags {
     }
 }
 
-// MARK: - Preview Setup Extension
-
-extension View {
-    /// Standard preview setup with feature flags and auth manager
-    func previewSetup() -> some View {
-        self
-            .withFeatureFlags(.preview)
-            .environmentObject(AuthenticationManager.shared)
-    }
-}
+// Note: previewSetup() extension is defined in PreviewData.swift

@@ -99,7 +99,12 @@ impl NewContentPool {
     }
 
     fn entry_key(&self, content_id: &Uuid) -> String {
-        format!("{}{}{}", self.key_prefix, Self::ENTRY_KEY_PREFIX, content_id)
+        format!(
+            "{}{}{}",
+            self.key_prefix,
+            Self::ENTRY_KEY_PREFIX,
+            content_id
+        )
     }
 
     fn total_impressions_key(&self) -> String {
@@ -115,8 +120,8 @@ impl NewContentPool {
             .map_err(|e| ExplorationError::RedisError(e.to_string()))?;
 
         let entry = NewContentEntry::new(content_id, author_id);
-        let entry_json =
-            serde_json::to_string(&entry).map_err(|e| ExplorationError::PoolError(e.to_string()))?;
+        let entry_json = serde_json::to_string(&entry)
+            .map_err(|e| ExplorationError::PoolError(e.to_string()))?;
 
         // Add to sorted set with UCB score
         let _: () = conn
@@ -277,10 +282,7 @@ impl NewContentPool {
             .map_err(|e| ExplorationError::RedisError(e.to_string()))?;
 
         // Get total impressions
-        let total_impressions: u32 = conn
-            .get(self.total_impressions_key())
-            .await
-            .unwrap_or(0);
+        let total_impressions: u32 = conn.get(self.total_impressions_key()).await.unwrap_or(0);
 
         // Get all content in pool
         let content_ids: Vec<String> = conn
@@ -309,9 +311,11 @@ impl NewContentPool {
                 };
 
                 // Compute new UCB score
-                entry.ucb_score =
-                    self.ucb_explorer
-                        .ucb_score(entry.impressions, entry.engagements, total_impressions);
+                entry.ucb_score = self.ucb_explorer.ucb_score(
+                    entry.impressions,
+                    entry.engagements,
+                    total_impressions,
+                );
 
                 // Update score in sorted set
                 let _: () = conn

@@ -131,16 +131,36 @@ sqlx migrate run
 #### 4. iOS 设置
 
 ```bash
-# 使用 Xcode 创建项目
-# File -> New -> Project -> iOS App
-# 项目名：NovaSocial
-# Interface: SwiftUI
-# Language: Swift
+# iOS 项目位置
+cd ios/NovaSocial
 
-# 或通过命令行（需要 XcodeGen）
-xcodegen generate
-open NovaSocial.xcodeproj
+# 使用 Xcode 打开
+open ICERED.xcodeproj
 ```
+
+### 运行 iOS 应用
+
+提供多种方式运行 iOS 应用：
+
+```bash
+# 方式 1: 快捷命令 (推荐)
+./run                      # 默认 iPhone 17 Pro
+./run "iPhone 15 Pro"      # 指定模拟器
+
+# 方式 2: Make 命令
+make ios                   # iPhone 17 Pro (默认)
+make ios-iphone15          # iPhone 15 Pro
+make ios-ipad              # iPad Pro 13-inch (M5)
+
+# 方式 3: 完整脚本
+./run-ios.sh "iPhone 17 Pro"
+```
+
+脚本会自动执行：
+1. 启动指定的 iOS 模拟器
+2. 构建 Xcode 项目 (Debug 配置)
+3. 安装应用到模拟器
+4. 启动应用
 
 ### 运行完整系统
 
@@ -148,13 +168,50 @@ open NovaSocial.xcodeproj
 # 1. 启动所有后端服务（Docker Compose）
 docker-compose up -d
 
-# 2. 启动 iOS 模拟器
-open -a Simulator
-
-# 3. 运行 iOS 应用
-cd ios/NovaSocial
-xcodebuild -scheme NovaSocial -destination 'platform=iOS Simulator,name=iPhone 15' run
+# 2. 运行 iOS 应用 (自动启动模拟器)
+./run
 ```
+
+## 🔄 开发工作流
+
+### 上传代码到 GitHub
+
+使用 `upload` 脚本自动完成: commit → update → push → 创建 PR
+
+```bash
+# 方式 1: 交互式 (会提示输入 commit message)
+./upload
+
+# 方式 2: 直接指定 commit message
+./upload "feat: add new feature"
+
+# 查看当前状态
+./upload --status
+
+# 查看帮助
+./upload --help
+```
+
+**脚本执行流程:**
+
+```
+[1/5] 检查更改    → 显示待提交的文件
+[2/5] 提交更改    → git add + git commit
+[3/5] 同步远程    → git pull --rebase
+[4/5] 推送到远程  → git push
+[5/5] 处理 PR     → 创建新 PR 或显示现有 PR
+```
+
+### 快捷命令汇总
+
+| 命令 | 说明 |
+|------|------|
+| `./run` | 构建并运行 iOS 应用 |
+| `./upload` | 上传代码并创建 PR |
+| `./upload --status` | 查看 git 和 PR 状态 |
+| `make ios` | 运行 iOS 应用 |
+| `make build` | 构建后端服务 |
+| `make test` | 运行后端测试 |
 
 ## 📅 开发路线图
 

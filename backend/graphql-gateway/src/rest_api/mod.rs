@@ -11,6 +11,7 @@
 ///     ↓
 /// gRPC Client → Microservice
 /// ```
+pub mod accounts;
 pub mod alice;
 pub mod auth;
 pub mod channels;

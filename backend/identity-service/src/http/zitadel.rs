@@ -3,7 +3,6 @@
 /// Provides user claims data for Zitadel Actions to enrich OIDC tokens.
 /// This enables Zitadel to use Nova's user IDs and profile data as the
 /// source of truth while acting as the OIDC provider.
-
 use crate::db;
 use axum::{
     extract::{Path, State},

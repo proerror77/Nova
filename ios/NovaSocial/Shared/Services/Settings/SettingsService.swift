@@ -15,7 +15,7 @@ class SettingsService {
     /// Get user settings
     /// - Parameter userId: User ID
     /// - Returns: User settings
-    func getSettings(userId: String) async throws -> UserSettings {
+    func getSettings(userId: String) async throws -> DetailedUserSettings {
         return try await client.get(endpoint: APIConfig.Settings.getSettings(userId))
     }
 
@@ -26,7 +26,7 @@ class SettingsService {
     ///   - userId: User ID
     ///   - settings: Settings to update
     /// - Returns: Updated user settings
-    func updateSettings(userId: String, settings: UserSettingsUpdate) async throws -> UserSettings {
+    func updateSettings(userId: String, settings: UserSettingsUpdate) async throws -> DetailedUserSettings {
         return try await client.request(
             endpoint: APIConfig.Settings.updateSettings(userId),
             method: "PUT",
@@ -46,7 +46,7 @@ class SettingsService {
         followsEnabled: Bool? = nil,
         mentionsEnabled: Bool? = nil,
         messagesEnabled: Bool? = nil
-    ) async throws -> UserSettings {
+    ) async throws -> DetailedUserSettings {
         let notificationSettings = NotificationSettingsUpdate(
             pushEnabled: pushEnabled,
             emailEnabled: emailEnabled,
@@ -69,7 +69,7 @@ class SettingsService {
         showReadReceipts: Bool? = nil,
         allowTagging: TaggingPermission? = nil,
         allowMentions: MentionPermission? = nil
-    ) async throws -> UserSettings {
+    ) async throws -> DetailedUserSettings {
         let privacySettings = PrivacySettingsUpdate(
             isPrivateAccount: isPrivateAccount,
             showActivityStatus: showActivityStatus,
@@ -88,7 +88,7 @@ class SettingsService {
         language: String? = nil,
         sensitiveContentFilter: Bool? = nil,
         autoplayVideos: AutoplayPreference? = nil
-    ) async throws -> UserSettings {
+    ) async throws -> DetailedUserSettings {
         let contentSettings = ContentSettingsUpdate(
             language: language,
             sensitiveContentFilter: sensitiveContentFilter,
@@ -102,8 +102,8 @@ class SettingsService {
 
 // MARK: - Models
 
-/// Complete user settings
-struct UserSettings: Codable {
+/// Complete user settings (detailed nested structure)
+struct DetailedUserSettings: Codable {
     let userId: String
     let notifications: NotificationSettings
     let privacy: PrivacySettings

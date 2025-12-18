@@ -320,6 +320,11 @@ struct APIConfig {
         static let getAccounts = "/api/v2/accounts"  // GET 獲取用戶所有帳戶
         static let switchAccount = "/api/v2/accounts/switch"  // POST 切換帳戶
         static let removeAccount = "/api/v2/accounts"  // DELETE /api/v2/accounts/{id} 刪除帳戶
+
+        // Alias account endpoints
+        static let createAlias = "/api/v2/accounts/alias"  // POST 創建別名帳戶
+        static let updateAlias = "/api/v2/accounts/alias"  // PUT /api/v2/accounts/alias/{id} 更新別名帳戶
+        static let getAlias = "/api/v2/accounts/alias"  // GET /api/v2/accounts/alias/{id} 獲取別名帳戶
     }
 
     // MARK: - Device Management API

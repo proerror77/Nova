@@ -36,9 +36,7 @@ pub async fn list_channels(
         ORDER BY COALESCE(display_order, 100) ASC, subscriber_count DESC, created_at DESC
         LIMIT {} OFFSET {}
         "#,
-        where_clause,
-        limit,
-        offset
+        where_clause, limit, offset
     );
 
     let rows = if let Some(cat) = category {
@@ -126,8 +124,8 @@ pub async fn list_posts_by_channel(
 ) -> Result<(Vec<Uuid>, bool), AppError> {
     // Cursor-based pagination: fetch posts older than the cursor
     let post_ids = if let (Some(cursor_id), Some(cursor_ts)) = (cursor_post_id, cursor_created_at) {
-        let cursor_time = chrono::DateTime::from_timestamp(cursor_ts, 0)
-            .unwrap_or_else(|| chrono::Utc::now());
+        let cursor_time =
+            chrono::DateTime::from_timestamp(cursor_ts, 0).unwrap_or_else(|| chrono::Utc::now());
 
         sqlx::query_scalar::<_, Uuid>(
             r#"
@@ -182,29 +180,29 @@ pub async fn list_posts_by_channel(
 
 /// Resolve channel_id from either UUID or slug
 /// Returns None if channel doesn't exist
-pub async fn resolve_channel_id(pool: &PgPool, channel_id_or_slug: &str) -> Result<Option<Uuid>, AppError> {
+pub async fn resolve_channel_id(
+    pool: &PgPool,
+    channel_id_or_slug: &str,
+) -> Result<Option<Uuid>, AppError> {
     // Try parsing as UUID first
     if let Ok(uuid) = Uuid::parse_str(channel_id_or_slug) {
         // Verify the channel exists
-        let exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM channels WHERE id = $1)"
-        )
-        .bind(uuid)
-        .fetch_one(pool)
-        .await
-        .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+        let exists =
+            sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM channels WHERE id = $1)")
+                .bind(uuid)
+                .fetch_one(pool)
+                .await
+                .map_err(|e| AppError::DatabaseError(e.to_string()))?;
 
         return Ok(if exists { Some(uuid) } else { None });
     }
 
     // Otherwise, try to find by slug
-    let channel_id = sqlx::query_scalar::<_, Uuid>(
-        "SELECT id FROM channels WHERE slug = $1"
-    )
-    .bind(channel_id_or_slug)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+    let channel_id = sqlx::query_scalar::<_, Uuid>("SELECT id FROM channels WHERE slug = $1")
+        .bind(channel_id_or_slug)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| AppError::DatabaseError(e.to_string()))?;
 
     Ok(channel_id)
 }

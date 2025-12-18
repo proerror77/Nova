@@ -656,6 +656,31 @@ async fn main() -> std::io::Result<()> {
             // ✅ User Settings API
             .route("/api/v2/settings", web::get().to(get_settings))
             .route("/api/v2/settings", web::put().to(update_settings))
+            // ✅ Account Management API (Multi-account & Alias)
+            .route(
+                "/api/v2/accounts",
+                web::get().to(rest_api::accounts::list_accounts),
+            )
+            .route(
+                "/api/v2/accounts/switch",
+                web::post().to(rest_api::accounts::switch_account),
+            )
+            .route(
+                "/api/v2/accounts/alias",
+                web::post().to(rest_api::accounts::create_alias_account),
+            )
+            .route(
+                "/api/v2/accounts/alias/{id}",
+                web::get().to(rest_api::accounts::get_alias_account),
+            )
+            .route(
+                "/api/v2/accounts/alias/{id}",
+                web::put().to(rest_api::accounts::update_alias_account),
+            )
+            .route(
+                "/api/v2/accounts/alias/{id}",
+                web::delete().to(rest_api::accounts::delete_alias_account),
+            )
             // ✅ Matrix E2EE Integration API (proxied to realtime-chat-service)
             .service(rest_api::matrix::get_matrix_token)
             .service(rest_api::matrix::get_matrix_config)

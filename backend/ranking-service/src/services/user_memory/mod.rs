@@ -56,12 +56,11 @@ pub mod predictive_engine;
 mod tests;
 
 pub use insight_generator::{InsightGenerator, UserInsight};
-pub use interest_explorer::{InterestExplorer, ExplorationResult, LatentInterest};
+pub use interest_explorer::{ExplorationResult, InterestExplorer, LatentInterest};
 pub use memory_store::{
-    MemoryStore, ShortTermMemory, LongTermMemory, SemanticMemory,
-    MemoryEvent, MemoryConfig,
+    LongTermMemory, MemoryConfig, MemoryEvent, MemoryStore, SemanticMemory, ShortTermMemory,
 };
-pub use predictive_engine::{PredictiveEngine, Prediction, PredictionType};
+pub use predictive_engine::{Prediction, PredictionType, PredictiveEngine};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -136,7 +135,10 @@ impl UserMemorySystem {
         let short_term = self.memory_store.get_short_term(user_id).await?;
 
         // 長期記憶可能不存在 (新用戶)
-        let long_term = self.memory_store.get_long_term(user_id).await
+        let long_term = self
+            .memory_store
+            .get_long_term(user_id)
+            .await
             .map_err(|e| e.to_string());
 
         let semantic = self.memory_store.get_semantic(user_id).await?;
@@ -151,7 +153,10 @@ impl UserMemorySystem {
     }
 
     /// 探索用戶潛在興趣
-    pub async fn explore_interests(&self, user_id: Uuid) -> Result<Vec<LatentInterest>, MemoryError> {
+    pub async fn explore_interests(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Vec<LatentInterest>, MemoryError> {
         let memory = self.get_user_memory(user_id).await?;
         let exploration = self.interest_explorer.explore(&memory).await?;
         Ok(exploration.latent_interests)

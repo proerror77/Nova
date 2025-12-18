@@ -1014,4 +1014,158 @@ service AuthService {
       body: "*"
     };
   }
+
+  // ========== Account Management (Multi-account & Alias) ==========
+  // List all accounts for a user (primary + aliases)
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/accounts"
+    };
+  }
+
+  // Switch to a different account (returns new tokens)
+  rpc SwitchAccount(SwitchAccountRequest) returns (SwitchAccountResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/accounts/switch"
+      body: "*"
+    };
+  }
+
+  // Create a new alias account
+  rpc CreateAliasAccount(CreateAliasAccountRequest) returns (CreateAliasAccountResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/accounts/alias"
+      body: "*"
+    };
+  }
+
+  // Update an existing alias account
+  rpc UpdateAliasAccount(UpdateAliasAccountRequest) returns (UpdateAliasAccountResponse) {
+    option (google.api.http) = {
+      put: "/api/v2/accounts/alias/{account_id}"
+      body: "*"
+    };
+  }
+
+  // Get alias account details
+  rpc GetAliasAccount(GetAliasAccountRequest) returns (GetAliasAccountResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/accounts/alias/{account_id}"
+    };
+  }
+
+  // Delete an alias account
+  rpc DeleteAliasAccount(DeleteAliasAccountRequest) returns (DeleteAliasAccountResponse) {
+    option (google.api.http) = {
+      delete: "/api/v2/accounts/alias/{account_id}"
+    };
+  }
+}
+
+// ============================================================================
+// Account Management Messages (Multi-account & Alias)
+// ============================================================================
+
+// Gender enum for alias accounts
+enum Gender {
+  GENDER_UNSPECIFIED = 0;
+  GENDER_MALE = 1;
+  GENDER_FEMALE = 2;
+  GENDER_OTHER = 3;
+  GENDER_PREFER_NOT_TO_SAY = 4;
+}
+
+// Account representation (both primary and alias accounts)
+message Account {
+  string id = 1;                           // Account UUID
+  string user_id = 2;                      // Owner user UUID
+  string username = 3;                     // Username
+  string display_name = 4;                 // Display name
+  string avatar_url = 5;                   // Avatar URL
+  bool is_primary = 6;                     // True for main account
+  bool is_active = 7;                      // Currently active account
+  bool is_alias = 8;                       // True for alias accounts
+  int64 last_active_at = 9;                // Unix timestamp
+  int64 created_at = 10;                   // Unix timestamp
+
+  // Alias-specific fields (only populated for alias accounts)
+  string alias_name = 11;                  // Alias display name
+  string date_of_birth = 12;               // Date of birth (YYYY-MM-DD)
+  Gender gender = 13;                      // Gender
+  string profession = 14;                  // Profession/occupation
+  string location = 15;                    // Location
+}
+
+// -------- List Accounts --------
+message ListAccountsRequest {
+  string user_id = 1;                      // User to list accounts for
+}
+
+message ListAccountsResponse {
+  repeated Account accounts = 1;           // All accounts (primary + aliases)
+  string current_account_id = 2;           // Currently active account ID
+}
+
+// -------- Switch Account --------
+message SwitchAccountRequest {
+  string user_id = 1;                      // Current user ID
+  string target_account_id = 2;            // Account ID to switch to
+}
+
+message SwitchAccountResponse {
+  bool success = 1;
+  string access_token = 2;                 // New access token
+  string refresh_token = 3;                // New refresh token
+  Account account = 4;                     // Switched account details
+}
+
+// -------- Create Alias Account --------
+message CreateAliasAccountRequest {
+  string user_id = 1;                      // Owner user ID
+  string alias_name = 2;                   // Required: Alias display name
+  string avatar_url = 3;                   // Optional: Avatar URL
+  string date_of_birth = 4;                // Optional: Date of birth (YYYY-MM-DD)
+  Gender gender = 5;                       // Optional: Gender
+  string profession = 6;                   // Optional: Profession
+  string location = 7;                     // Optional: Location
+}
+
+message CreateAliasAccountResponse {
+  Account account = 1;                     // Created alias account
+}
+
+// -------- Update Alias Account --------
+message UpdateAliasAccountRequest {
+  string account_id = 1;                   // Alias account ID to update
+  string user_id = 2;                      // Owner user ID (for authorization)
+  string alias_name = 3;                   // Updated alias name
+  string avatar_url = 4;                   // Updated avatar URL
+  string date_of_birth = 5;                // Updated date of birth
+  Gender gender = 6;                       // Updated gender
+  string profession = 7;                   // Updated profession
+  string location = 8;                     // Updated location
+}
+
+message UpdateAliasAccountResponse {
+  Account account = 1;                     // Updated alias account
+}
+
+// -------- Get Alias Account --------
+message GetAliasAccountRequest {
+  string account_id = 1;                   // Alias account ID
+  string user_id = 2;                      // Owner user ID (for authorization)
+}
+
+message GetAliasAccountResponse {
+  Account account = 1;                     // Alias account details
+}
+
+// -------- Delete Alias Account --------
+message DeleteAliasAccountRequest {
+  string account_id = 1;                   // Alias account ID to delete
+  string user_id = 2;                      // Owner user ID (for authorization)
+}
+
+message DeleteAliasAccountResponse {
+  bool success = 1;
 }

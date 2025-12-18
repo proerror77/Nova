@@ -180,8 +180,8 @@ impl CoarseRankingLayer {
         } else {
             0.0
         };
-        let content_type_match =
-            self.compute_content_type_match(&candidate.content_type, &user.content_type_preferences);
+        let content_type_match = self
+            .compute_content_type_match(&candidate.content_type, &user.content_type_preferences);
 
         let score = self.weights.engagement * engagement
             + self.weights.recency * recency
@@ -244,11 +244,11 @@ impl CoarseRankingLayer {
             .position(|p| p.eq_ignore_ascii_case(content_type));
 
         match position {
-            Some(0) => 1.0,    // First preference
-            Some(1) => 0.7,    // Second preference
-            Some(2) => 0.5,    // Third preference
-            Some(_) => 0.3,    // Lower preference
-            None => 0.2,       // Not in preferences
+            Some(0) => 1.0, // First preference
+            Some(1) => 0.7, // Second preference
+            Some(2) => 0.5, // Third preference
+            Some(_) => 0.3, // Lower preference
+            None => 0.2,    // Not in preferences
         }
     }
 
@@ -296,8 +296,8 @@ mod tests {
         let now = chrono::Utc::now().timestamp();
 
         let candidates = vec![
-            create_test_candidate("post1", 0.9, now - 3600),  // 1 hour ago, high engagement
-            create_test_candidate("post2", 0.5, now),         // Fresh, medium engagement
+            create_test_candidate("post1", 0.9, now - 3600), // 1 hour ago, high engagement
+            create_test_candidate("post2", 0.5, now),        // Fresh, medium engagement
             create_test_candidate("post3", 0.3, now - 86400), // 1 day old, low engagement
         ];
 
@@ -333,10 +333,7 @@ mod tests {
         assert!(score > 0.0 && score < 1.0);
 
         // No match
-        let score = layer.compute_interest_match(
-            &["music".to_string()],
-            &["cooking".to_string()],
-        );
+        let score = layer.compute_interest_match(&["music".to_string()], &["cooking".to_string()]);
         assert_eq!(score, 0.0);
     }
 

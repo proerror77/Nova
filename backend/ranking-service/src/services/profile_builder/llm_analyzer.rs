@@ -211,7 +211,9 @@ impl LlmProvider for AnthropicProvider {
             .json(&request)
             .send()
             .await
-            .map_err(|e| ProfileBuilderError::DatabaseError(format!("Anthropic API error: {}", e)))?;
+            .map_err(|e| {
+                ProfileBuilderError::DatabaseError(format!("Anthropic API error: {}", e))
+            })?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
@@ -526,8 +528,8 @@ Return ONLY valid JSON, no other text."#,
             .await?;
 
         // Parse recommendations
-        let recommendations: Vec<ContentRecommendation> = serde_json::from_str(&response)
-            .map_err(|e| {
+        let recommendations: Vec<ContentRecommendation> =
+            serde_json::from_str(&response).map_err(|e| {
                 warn!(error = %e, response = %response, "Failed to parse recommendations");
                 ProfileBuilderError::InvalidData(format!("Failed to parse recommendations: {}", e))
             })?;
@@ -612,11 +614,7 @@ Return ONLY valid JSON, no other text."#,
     }
 
     /// Parse LLM response into UserPersona
-    fn parse_persona_response(
-        &self,
-        response: &str,
-        profile: &UserProfile,
-    ) -> Result<UserPersona> {
+    fn parse_persona_response(&self, response: &str, profile: &UserProfile) -> Result<UserPersona> {
         // Try to extract JSON from response (handle markdown code blocks)
         let json_str = if response.contains("```json") {
             response
@@ -625,10 +623,7 @@ Return ONLY valid JSON, no other text."#,
                 .and_then(|s| s.split("```").next())
                 .unwrap_or(response)
         } else if response.contains("```") {
-            response
-                .split("```")
-                .nth(1)
-                .unwrap_or(response)
+            response.split("```").nth(1).unwrap_or(response)
         } else {
             response
         };

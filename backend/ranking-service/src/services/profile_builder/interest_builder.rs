@@ -69,9 +69,9 @@ pub enum EngagementAction {
     Comment,
     Share,
     Save,
-    CompleteWatch,     // >80% completion
-    PartialWatch,      // 50-80% completion
-    Skip,              // <20% completion
+    CompleteWatch, // >80% completion
+    PartialWatch,  // 50-80% completion
+    Skip,          // <20% completion
     NotInterested,
 }
 
@@ -131,10 +131,7 @@ impl InterestBuilder {
     /// 2. Apply time decay to each signal
     /// 3. Aggregate weighted signals
     /// 4. Filter by threshold and limit
-    pub fn build_interests(
-        &self,
-        signals: Vec<EngagementSignal>,
-    ) -> Result<Vec<InterestTag>> {
+    pub fn build_interests(&self, signals: Vec<EngagementSignal>) -> Result<Vec<InterestTag>> {
         if signals.is_empty() {
             return Ok(Vec::new());
         }
@@ -187,10 +184,7 @@ impl InterestBuilder {
         // Limit to max interests
         interests.truncate(self.config.max_interests);
 
-        info!(
-            interest_count = interests.len(),
-            "Built user interest tags"
-        );
+        info!(interest_count = interests.len(), "Built user interest tags");
 
         Ok(interests)
     }

@@ -1751,6 +1751,336 @@ impl AuthService for IdentityServiceServer {
             username: result.username,
         }))
     }
+
+    // ========== Account Management (Multi-account & Alias) ==========
+
+    /// List all accounts for a user (primary + aliases)
+    async fn list_accounts(
+        &self,
+        request: Request<ListAccountsRequest>,
+    ) -> std::result::Result<Response<ListAccountsResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        // Get primary user account
+        let user = db::users::find_by_id(&self.db, user_id)
+            .await
+            .map_err(to_status)?
+            .ok_or_else(|| Status::not_found("User not found"))?;
+
+        // Get all alias accounts
+        let aliases = db::accounts::list_by_user(&self.db, user_id)
+            .await
+            .map_err(to_status)?;
+
+        // Build accounts list (primary first)
+        let mut accounts = Vec::with_capacity(1 + aliases.len());
+
+        // Add primary account
+        let is_primary_active = aliases.iter().all(|a| !a.is_active);
+        accounts.push(Account {
+            id: user.id.to_string(),
+            user_id: user.id.to_string(),
+            username: user.username.clone(),
+            display_name: user.display_name.clone().unwrap_or_default(),
+            avatar_url: user.avatar_url.clone().unwrap_or_default(),
+            is_primary: true,
+            is_active: is_primary_active,
+            is_alias: false,
+            last_active_at: user.updated_at.timestamp(),
+            created_at: user.created_at.timestamp(),
+            alias_name: String::new(),
+            date_of_birth: String::new(),
+            gender: Gender::Unspecified.into(),
+            profession: String::new(),
+            location: String::new(),
+        });
+
+        // Add alias accounts
+        for alias in &aliases {
+            accounts.push(alias_record_to_proto(alias, &user));
+        }
+
+        // Determine current account ID
+        let current_account_id = if is_primary_active {
+            user.id.to_string()
+        } else {
+            aliases
+                .iter()
+                .find(|a| a.is_active)
+                .map(|a| a.id.to_string())
+                .unwrap_or_else(|| user.id.to_string())
+        };
+
+        Ok(Response::new(ListAccountsResponse {
+            accounts,
+            current_account_id,
+        }))
+    }
+
+    /// Switch to a different account (returns new tokens)
+    async fn switch_account(
+        &self,
+        request: Request<SwitchAccountRequest>,
+    ) -> std::result::Result<Response<SwitchAccountResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+        let target_account_id = Uuid::parse_str(&req.target_account_id)
+            .map_err(|_| Status::invalid_argument("Invalid target account ID format"))?;
+
+        // Get primary user
+        let user = db::users::find_by_id(&self.db, user_id)
+            .await
+            .map_err(to_status)?
+            .ok_or_else(|| Status::not_found("User not found"))?;
+
+        // Check if switching to primary account
+        if target_account_id == user_id {
+            // Switch to primary account
+            db::accounts::deactivate_all_aliases(&self.db, user_id)
+                .await
+                .map_err(to_status)?;
+            db::accounts::update_user_current_account(&self.db, user_id, None, "primary")
+                .await
+                .map_err(to_status)?;
+
+            // Generate new tokens
+            let tokens = generate_token_pair(user.id, &user.email, &user.username)
+                .map_err(anyhow_to_status)?;
+
+            info!(user_id = %user_id, "Switched to primary account");
+
+            return Ok(Response::new(SwitchAccountResponse {
+                success: true,
+                access_token: tokens.access_token,
+                refresh_token: tokens.refresh_token,
+                account: Some(Account {
+                    id: user.id.to_string(),
+                    user_id: user.id.to_string(),
+                    username: user.username.clone(),
+                    display_name: user.display_name.clone().unwrap_or_default(),
+                    avatar_url: user.avatar_url.clone().unwrap_or_default(),
+                    is_primary: true,
+                    is_active: true,
+                    is_alias: false,
+                    last_active_at: Utc::now().timestamp(),
+                    created_at: user.created_at.timestamp(),
+                    alias_name: String::new(),
+                    date_of_birth: String::new(),
+                    gender: Gender::Unspecified.into(),
+                    profession: String::new(),
+                    location: String::new(),
+                }),
+            }));
+        }
+
+        // Switch to alias account
+        let alias = db::accounts::find_by_id_and_user(&self.db, target_account_id, user_id)
+            .await
+            .map_err(to_status)?
+            .ok_or_else(|| Status::not_found("Alias account not found or not owned by user"))?;
+
+        // Set the alias as active
+        db::accounts::set_active_alias(&self.db, target_account_id, user_id)
+            .await
+            .map_err(to_status)?;
+        db::accounts::update_user_current_account(&self.db, user_id, Some(target_account_id), "alias")
+            .await
+            .map_err(to_status)?;
+
+        // Generate new tokens (still using primary user credentials)
+        let tokens = generate_token_pair(user.id, &user.email, &user.username)
+            .map_err(anyhow_to_status)?;
+
+        info!(
+            user_id = %user_id,
+            alias_id = %target_account_id,
+            alias_name = %alias.alias_name,
+            "Switched to alias account"
+        );
+
+        Ok(Response::new(SwitchAccountResponse {
+            success: true,
+            access_token: tokens.access_token,
+            refresh_token: tokens.refresh_token,
+            account: Some(alias_record_to_proto(&alias, &user)),
+        }))
+    }
+
+    /// Create a new alias account
+    async fn create_alias_account(
+        &self,
+        request: Request<CreateAliasAccountRequest>,
+    ) -> std::result::Result<Response<CreateAliasAccountResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        // Validate alias name
+        if req.alias_name.trim().is_empty() {
+            return Err(Status::invalid_argument("Alias name is required"));
+        }
+
+        // Get user for context
+        let user = db::users::find_by_id(&self.db, user_id)
+            .await
+            .map_err(to_status)?
+            .ok_or_else(|| Status::not_found("User not found"))?;
+
+        // Parse date_of_birth if provided
+        let date_of_birth = if req.date_of_birth.is_empty() {
+            None
+        } else {
+            Some(
+                chrono::NaiveDate::parse_from_str(&req.date_of_birth, "%Y-%m-%d")
+                    .map_err(|_| Status::invalid_argument("Invalid date format. Use YYYY-MM-DD"))?,
+            )
+        };
+
+        // Convert proto Gender to model Gender
+        let gender = proto_gender_to_model(req.gender());
+
+        // Create alias account
+        let fields = db::accounts::CreateAliasAccountFields {
+            user_id,
+            alias_name: req.alias_name.trim().to_string(),
+            avatar_url: if req.avatar_url.is_empty() { None } else { Some(req.avatar_url) },
+            date_of_birth,
+            gender,
+            profession: if req.profession.is_empty() { None } else { Some(req.profession) },
+            location: if req.location.is_empty() { None } else { Some(req.location) },
+        };
+
+        let alias = db::accounts::create_alias_account(&self.db, fields)
+            .await
+            .map_err(to_status)?;
+
+        info!(
+            user_id = %user_id,
+            alias_id = %alias.id,
+            alias_name = %alias.alias_name,
+            "Alias account created"
+        );
+
+        Ok(Response::new(CreateAliasAccountResponse {
+            account: Some(alias_record_to_proto(&alias, &user)),
+        }))
+    }
+
+    /// Update an existing alias account
+    async fn update_alias_account(
+        &self,
+        request: Request<UpdateAliasAccountRequest>,
+    ) -> std::result::Result<Response<UpdateAliasAccountResponse>, Status> {
+        let req = request.into_inner();
+        let account_id = Uuid::parse_str(&req.account_id)
+            .map_err(|_| Status::invalid_argument("Invalid account ID format"))?;
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        // Get user for context
+        let user = db::users::find_by_id(&self.db, user_id)
+            .await
+            .map_err(to_status)?
+            .ok_or_else(|| Status::not_found("User not found"))?;
+
+        // Parse date_of_birth if provided
+        let date_of_birth = if req.date_of_birth.is_empty() {
+            None
+        } else {
+            Some(
+                chrono::NaiveDate::parse_from_str(&req.date_of_birth, "%Y-%m-%d")
+                    .map_err(|_| Status::invalid_argument("Invalid date format. Use YYYY-MM-DD"))?,
+            )
+        };
+
+        // Convert proto Gender to model Gender
+        let gender = proto_gender_to_model(req.gender());
+
+        // Build update fields
+        let fields = db::accounts::UpdateAliasAccountFields {
+            alias_name: if req.alias_name.is_empty() { None } else { Some(req.alias_name) },
+            avatar_url: if req.avatar_url.is_empty() { None } else { Some(req.avatar_url) },
+            date_of_birth,
+            gender,
+            profession: if req.profession.is_empty() { None } else { Some(req.profession) },
+            location: if req.location.is_empty() { None } else { Some(req.location) },
+        };
+
+        let alias = db::accounts::update_alias_account(&self.db, account_id, user_id, fields)
+            .await
+            .map_err(to_status)?;
+
+        info!(
+            user_id = %user_id,
+            alias_id = %account_id,
+            "Alias account updated"
+        );
+
+        Ok(Response::new(UpdateAliasAccountResponse {
+            account: Some(alias_record_to_proto(&alias, &user)),
+        }))
+    }
+
+    /// Get alias account details
+    async fn get_alias_account(
+        &self,
+        request: Request<GetAliasAccountRequest>,
+    ) -> std::result::Result<Response<GetAliasAccountResponse>, Status> {
+        let req = request.into_inner();
+        let account_id = Uuid::parse_str(&req.account_id)
+            .map_err(|_| Status::invalid_argument("Invalid account ID format"))?;
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        // Get user for context
+        let user = db::users::find_by_id(&self.db, user_id)
+            .await
+            .map_err(to_status)?
+            .ok_or_else(|| Status::not_found("User not found"))?;
+
+        // Get alias account
+        let alias = db::accounts::find_by_id_and_user(&self.db, account_id, user_id)
+            .await
+            .map_err(to_status)?
+            .ok_or_else(|| Status::not_found("Alias account not found or not owned by user"))?;
+
+        Ok(Response::new(GetAliasAccountResponse {
+            account: Some(alias_record_to_proto(&alias, &user)),
+        }))
+    }
+
+    /// Delete an alias account (soft delete)
+    async fn delete_alias_account(
+        &self,
+        request: Request<DeleteAliasAccountRequest>,
+    ) -> std::result::Result<Response<DeleteAliasAccountResponse>, Status> {
+        let req = request.into_inner();
+        let account_id = Uuid::parse_str(&req.account_id)
+            .map_err(|_| Status::invalid_argument("Invalid account ID format"))?;
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        // Delete alias account
+        db::accounts::delete_alias_account(&self.db, account_id, user_id)
+            .await
+            .map_err(to_status)?;
+
+        // If this was the active account, switch back to primary
+        db::accounts::update_user_current_account(&self.db, user_id, None, "primary")
+            .await
+            .map_err(to_status)?;
+
+        info!(
+            user_id = %user_id,
+            alias_id = %account_id,
+            "Alias account deleted"
+        );
+
+        Ok(Response::new(DeleteAliasAccountResponse { success: true }))
+    }
 }
 
 // ===== Helper Functions =====
@@ -1793,6 +2123,7 @@ fn to_status(err: IdentityError) -> Status {
         IdentityError::Validation(msg) => {
             Status::invalid_argument(format!("Validation error: {}", msg))
         }
+        IdentityError::NotFoundError(msg) => Status::not_found(msg),
         IdentityError::Internal(msg) => Status::internal(msg),
     }
 }
@@ -1868,5 +2199,56 @@ fn oauth_provider_str_to_proto(provider: &str) -> OAuthProvider {
         "google" => OAuthProvider::OauthProviderGoogle,
         "apple" => OAuthProvider::OauthProviderApple,
         _ => OAuthProvider::OauthProviderUnspecified,
+    }
+}
+
+// ===== Account Management Helper Functions =====
+
+/// Convert AliasAccountRecord to Account proto message
+fn alias_record_to_proto(
+    alias: &db::accounts::AliasAccountRecord,
+    user: &crate::models::User,
+) -> Account {
+    Account {
+        id: alias.id.to_string(),
+        user_id: alias.user_id.to_string(),
+        username: user.username.clone(),
+        display_name: alias.alias_name.clone(),
+        avatar_url: alias.avatar_url.clone().unwrap_or_default(),
+        is_primary: false,
+        is_active: alias.is_active,
+        is_alias: true,
+        last_active_at: alias.updated_at.timestamp(),
+        created_at: alias.created_at.timestamp(),
+        alias_name: alias.alias_name.clone(),
+        date_of_birth: alias
+            .date_of_birth
+            .map(|d| d.format("%Y-%m-%d").to_string())
+            .unwrap_or_default(),
+        gender: model_gender_to_proto(alias.gender.as_ref()).into(),
+        profession: alias.profession.clone().unwrap_or_default(),
+        location: alias.location.clone().unwrap_or_default(),
+    }
+}
+
+/// Convert proto Gender enum to model Gender
+fn proto_gender_to_model(gender: Gender) -> Option<crate::models::user::Gender> {
+    match gender {
+        Gender::Male => Some(crate::models::user::Gender::Male),
+        Gender::Female => Some(crate::models::user::Gender::Female),
+        Gender::Other => Some(crate::models::user::Gender::Other),
+        Gender::PreferNotToSay => Some(crate::models::user::Gender::PreferNotToSay),
+        Gender::Unspecified => None,
+    }
+}
+
+/// Convert model Gender to proto Gender enum
+fn model_gender_to_proto(gender: Option<&crate::models::user::Gender>) -> Gender {
+    match gender {
+        Some(crate::models::user::Gender::Male) => Gender::Male,
+        Some(crate::models::user::Gender::Female) => Gender::Female,
+        Some(crate::models::user::Gender::Other) => Gender::Other,
+        Some(crate::models::user::Gender::PreferNotToSay) => Gender::PreferNotToSay,
+        None => Gender::Unspecified,
     }
 }

@@ -12,6 +12,6 @@ pub use services::{DiversityLayer, FeatureClient, RankingLayer, RecallLayer};
 
 // Re-export profile builder types for convenience
 pub use services::profile_builder::{
-    ClickHouseProfileDatabase, LlmProfileAnalyzer, ProfileDatabase, ProfileUpdater,
-    UserPersona, UserProfile, UserSegment,
+    ClickHouseProfileDatabase, LlmProfileAnalyzer, ProfileDatabase, ProfileUpdater, UserPersona,
+    UserProfile, UserSegment,
 };

@@ -284,7 +284,12 @@ class MediaService {
                 try await uploadToPresignedUrl(presignedUrl, data: imageData, contentType: "image/jpeg")
                 return presignedUrl.components(separatedBy: "?").first ?? presignedUrl
             } else if let uploadId = uploadResponse.uploadId, !uploadId.isEmpty {
-                return uploadId
+                // BUG FIX: Backend returns upload_id, we must call completeUpload to get the actual media_url
+                // Without this, avatars are never saved to the database because upload_id is not a URL
+                #if DEBUG
+                print("[Media] Got upload_id: \(uploadId), completing upload to get media_url...")
+                #endif
+                return try await completeUpload(uploadId: uploadId)
             }
 
             // 如果所有字段都为空，抛出错误
@@ -346,7 +351,11 @@ class MediaService {
                 try await uploadToPresignedUrl(presignedUrl, data: videoData, contentType: "video/mp4")
                 return presignedUrl.components(separatedBy: "?").first ?? presignedUrl
             } else if let uploadId = uploadResponse.uploadId, !uploadId.isEmpty {
-                return uploadId
+                // BUG FIX: Backend returns upload_id, we must call completeUpload to get the actual media_url
+                #if DEBUG
+                print("[Media] Got upload_id for video: \(uploadId), completing upload...")
+                #endif
+                return try await completeUpload(uploadId: uploadId)
             }
 
             throw APIError.serverError(statusCode: 200, message: "Upload response missing required fields (media_url, presigned_url, or upload_id)")
@@ -417,7 +426,11 @@ class MediaService {
                 try await uploadToPresignedUrl(presignedUrl, data: audioData, contentType: "audio/mp4")
                 return presignedUrl.components(separatedBy: "?").first ?? presignedUrl
             } else if let uploadId = uploadResponse.uploadId, !uploadId.isEmpty {
-                return uploadId
+                // BUG FIX: Backend returns upload_id, we must call completeUpload to get the actual media_url
+                #if DEBUG
+                print("[Media] Got upload_id for audio: \(uploadId), completing upload...")
+                #endif
+                return try await completeUpload(uploadId: uploadId)
             }
 
             throw APIError.serverError(statusCode: 200, message: "Upload response missing required fields (media_url, presigned_url, or upload_id)")
