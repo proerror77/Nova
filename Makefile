@@ -1,4 +1,4 @@
-.PHONY: help setup dev down clean build test lint docker-build docker-run migrate
+.PHONY: help setup dev down clean build test lint docker-build docker-run migrate ios
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -126,3 +126,12 @@ test-grpc-script: ## Run gRPC integration test script
 test-grpc-script-staging: ## Run gRPC integration test script against staging
 	@chmod +x ./tests/grpc_integration_test.sh
 	./tests/grpc_integration_test.sh staging
+
+ios: ## Build and run iOS app in simulator
+	@./run-ios.sh
+
+ios-iphone15: ## Build and run iOS app on iPhone 15 Pro simulator
+	@./run-ios.sh "iPhone 15 Pro"
+
+ios-ipad: ## Build and run iOS app on iPad Pro simulator
+	@./run-ios.sh "iPad Pro 13-inch (M5)"

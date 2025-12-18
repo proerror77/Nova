@@ -11,6 +11,8 @@ struct UserProfileData {
     var followersCount: Int
     var likesCount: Int
     var isVerified: Bool
+    var isAlias: Bool = false
+    var aliasName: String? = nil
     var posts: [UserProfilePostData]
 
     /// 默认占位数据（用于加载中或预览）

@@ -5,7 +5,7 @@ struct SettingsView: View {
     @StateObject private var viewModel = SettingsViewModel()
     @EnvironmentObject private var authManager: AuthenticationManager
     @State private var isPostAsExpanded = false
-    @State private var selectedPostAsType: PostAsType = .primary
+    @State private var selectedPostAsType: PostAsType = .realName
     private let aliasEditState = AliasEditState.shared
 
     // MARK: - Computed Properties
