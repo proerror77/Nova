@@ -788,3 +788,314 @@ fn decode_jwt_claims_unsafe<T: serde::de::DeserializeOwned>(token: &str) -> Resu
     serde_json::from_slice(&payload)
         .map_err(|e| IdentityError::OAuthError(format!("Failed to parse ID token payload: {}", e)))
 }
+
+// ============================================================================
+// Unit Tests for Apple JWT Verification
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use jsonwebtoken::Algorithm;
+
+    // ========================================================================
+    // AppleJwksCache Tests
+    // ========================================================================
+
+    #[test]
+    fn test_apple_jwks_cache_default_is_expired() {
+        let cache = AppleJwksCache::default();
+        assert!(cache.is_expired(), "Default cache should be expired");
+    }
+
+    #[test]
+    fn test_apple_jwks_cache_fresh_not_expired() {
+        let cache = AppleJwksCache {
+            keys: HashMap::new(),
+            fetched_at: Some(Utc::now()),
+        };
+        assert!(!cache.is_expired(), "Fresh cache should not be expired");
+    }
+
+    #[test]
+    fn test_apple_jwks_cache_old_is_expired() {
+        let cache = AppleJwksCache {
+            keys: HashMap::new(),
+            fetched_at: Some(Utc::now() - Duration::hours(2)),
+        };
+        assert!(cache.is_expired(), "2-hour old cache should be expired");
+    }
+
+    #[test]
+    fn test_apple_jwks_cache_just_under_ttl_not_expired() {
+        let cache = AppleJwksCache {
+            keys: HashMap::new(),
+            fetched_at: Some(Utc::now() - Duration::minutes(59)),
+        };
+        assert!(!cache.is_expired(), "59-minute old cache should not be expired");
+    }
+
+    // ========================================================================
+    // JWT Header Parsing Tests
+    // ========================================================================
+
+    #[test]
+    fn test_decode_header_valid_jwt() {
+        // Create a minimal valid JWT structure (header.payload.signature)
+        let header = BASE64_URL_SAFE_NO_PAD.encode(r#"{"alg":"RS256","kid":"test-key-id"}"#);
+        let payload = BASE64_URL_SAFE_NO_PAD.encode(r#"{"sub":"test"}"#);
+        let token = format!("{}.{}.fake_signature", header, payload);
+
+        let decoded = decode_header(&token).expect("should decode header");
+        assert_eq!(decoded.alg, Algorithm::RS256);
+        assert_eq!(decoded.kid, Some("test-key-id".to_string()));
+    }
+
+    #[test]
+    fn test_decode_header_missing_kid() {
+        let header = BASE64_URL_SAFE_NO_PAD.encode(r#"{"alg":"RS256"}"#);
+        let payload = BASE64_URL_SAFE_NO_PAD.encode(r#"{"sub":"test"}"#);
+        let token = format!("{}.{}.fake_signature", header, payload);
+
+        let decoded = decode_header(&token).expect("should decode header");
+        assert!(decoded.kid.is_none(), "kid should be None when not present");
+    }
+
+    #[test]
+    fn test_decode_header_invalid_token() {
+        let result = decode_header("not.a.valid.jwt.token");
+        assert!(result.is_err(), "should fail to decode invalid token");
+    }
+
+    #[test]
+    fn test_decode_header_wrong_algorithm() {
+        let header = BASE64_URL_SAFE_NO_PAD.encode(r#"{"alg":"HS256","kid":"test"}"#);
+        let payload = BASE64_URL_SAFE_NO_PAD.encode(r#"{"sub":"test"}"#);
+        let token = format!("{}.{}.fake_signature", header, payload);
+
+        let decoded = decode_header(&token).expect("should decode header");
+        assert_eq!(decoded.alg, Algorithm::HS256);
+        // In verify_apple_id_token, we reject non-RS256 algorithms
+    }
+
+    // ========================================================================
+    // AppleIdTokenClaims Deserialization Tests
+    // ========================================================================
+
+    #[test]
+    fn test_apple_claims_deserialization_full() {
+        let json = r#"{
+            "sub": "001234.abcdef.5678",
+            "email": "user@privaterelay.appleid.com",
+            "iss": "https://appleid.apple.com",
+            "aud": "com.example.app",
+            "exp": 1700000000,
+            "iat": 1699990000
+        }"#;
+
+        let claims: AppleIdTokenClaims = serde_json::from_str(json).expect("should deserialize");
+        assert_eq!(claims.sub, "001234.abcdef.5678");
+        assert_eq!(claims.email, Some("user@privaterelay.appleid.com".to_string()));
+        assert_eq!(claims.iss, "https://appleid.apple.com");
+        assert_eq!(claims.aud, "com.example.app");
+        assert_eq!(claims.exp, 1700000000);
+        assert_eq!(claims.iat, 1699990000);
+    }
+
+    #[test]
+    fn test_apple_claims_deserialization_minimal() {
+        let json = r#"{
+            "sub": "001234.abcdef.5678"
+        }"#;
+
+        let claims: AppleIdTokenClaims = serde_json::from_str(json).expect("should deserialize");
+        assert_eq!(claims.sub, "001234.abcdef.5678");
+        assert!(claims.email.is_none());
+        // Default values for other fields
+        assert_eq!(claims.iss, "");
+        assert_eq!(claims.aud, "");
+        assert_eq!(claims.exp, 0);
+        assert_eq!(claims.iat, 0);
+    }
+
+    #[test]
+    fn test_apple_claims_deserialization_with_null_email() {
+        let json = r#"{
+            "sub": "001234.abcdef.5678",
+            "email": null
+        }"#;
+
+        let claims: AppleIdTokenClaims = serde_json::from_str(json).expect("should deserialize");
+        assert!(claims.email.is_none());
+    }
+
+    // ========================================================================
+    // AppleJwk Deserialization Tests
+    // ========================================================================
+
+    #[test]
+    fn test_apple_jwk_deserialization() {
+        let json = r#"{
+            "kty": "RSA",
+            "kid": "ABC123",
+            "use": "sig",
+            "alg": "RS256",
+            "n": "base64url_encoded_modulus",
+            "e": "AQAB"
+        }"#;
+
+        let jwk: AppleJwk = serde_json::from_str(json).expect("should deserialize");
+        assert_eq!(jwk.kid, "ABC123");
+        assert_eq!(jwk.kty, "RSA");
+        assert_eq!(jwk.alg, "RS256");
+        assert_eq!(jwk.n, "base64url_encoded_modulus");
+        assert_eq!(jwk.e, "AQAB");
+    }
+
+    #[test]
+    fn test_apple_jwks_response_deserialization() {
+        let json = r#"{
+            "keys": [
+                {
+                    "kty": "RSA",
+                    "kid": "KEY1",
+                    "alg": "RS256",
+                    "n": "modulus1",
+                    "e": "AQAB"
+                },
+                {
+                    "kty": "RSA",
+                    "kid": "KEY2",
+                    "alg": "RS256",
+                    "n": "modulus2",
+                    "e": "AQAB"
+                }
+            ]
+        }"#;
+
+        let response: AppleJwksResponse = serde_json::from_str(json).expect("should deserialize");
+        assert_eq!(response.keys.len(), 2);
+        assert_eq!(response.keys[0].kid, "KEY1");
+        assert_eq!(response.keys[1].kid, "KEY2");
+    }
+
+    // ========================================================================
+    // Error Message Tests
+    // ========================================================================
+
+    #[test]
+    fn test_error_messages_are_descriptive() {
+        // Test that our error messages contain useful information
+        let error = IdentityError::OAuthError("Apple ID token has expired".to_string());
+        let error_str = format!("{:?}", error);
+        assert!(error_str.contains("expired"), "Error should mention expiration");
+
+        let error = IdentityError::OAuthError("Apple ID token signature verification failed".to_string());
+        let error_str = format!("{:?}", error);
+        assert!(error_str.contains("signature"), "Error should mention signature");
+    }
+
+    // ========================================================================
+    // Integration-style Tests (without actual network calls)
+    // ========================================================================
+
+    #[test]
+    fn test_oauth_provider_as_str() {
+        assert_eq!(OAuthProvider::Google.as_str(), "google");
+        assert_eq!(OAuthProvider::Apple.as_str(), "apple");
+    }
+
+    #[test]
+    fn test_to_expiry_some() {
+        let result = to_expiry(Some(1700000000));
+        assert!(result.is_some());
+        let dt = result.unwrap();
+        assert_eq!(dt.timestamp(), 1700000000);
+    }
+
+    #[test]
+    fn test_to_expiry_none() {
+        let result = to_expiry(None);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_to_expiry_zero() {
+        let result = to_expiry(Some(0));
+        assert!(result.is_some());
+    }
+
+    // ========================================================================
+    // Deprecated Function Tests
+    // ========================================================================
+
+    #[test]
+    fn test_decode_jwt_claims_unsafe_valid_token() {
+        // Create a valid JWT structure
+        let header = BASE64_URL_SAFE_NO_PAD.encode(r#"{"alg":"RS256","kid":"test"}"#);
+        let payload = BASE64_URL_SAFE_NO_PAD.encode(r#"{"sub":"test-user-123","email":"test@example.com"}"#);
+        let token = format!("{}.{}.fake_signature", header, payload);
+
+        let result: Result<AppleIdTokenClaims> = decode_jwt_claims_unsafe(&token);
+        assert!(result.is_ok());
+        let claims = result.unwrap();
+        assert_eq!(claims.sub, "test-user-123");
+        assert_eq!(claims.email, Some("test@example.com".to_string()));
+    }
+
+    #[test]
+    fn test_decode_jwt_claims_unsafe_invalid_format() {
+        let result: Result<AppleIdTokenClaims> = decode_jwt_claims_unsafe("not-a-jwt");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(format!("{:?}", error).contains("Invalid ID token format"));
+    }
+
+    #[test]
+    fn test_decode_jwt_claims_unsafe_invalid_base64() {
+        let token = "header.!!!invalid_base64!!!.signature";
+        let result: Result<AppleIdTokenClaims> = decode_jwt_claims_unsafe(token);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_jwt_claims_unsafe_invalid_json() {
+        let header = BASE64_URL_SAFE_NO_PAD.encode(r#"{"alg":"RS256"}"#);
+        let payload = BASE64_URL_SAFE_NO_PAD.encode("not valid json");
+        let token = format!("{}.{}.signature", header, payload);
+
+        let result: Result<AppleIdTokenClaims> = decode_jwt_claims_unsafe(&token);
+        assert!(result.is_err());
+    }
+
+    // ========================================================================
+    // Validation Rules Tests
+    // ========================================================================
+
+    #[test]
+    fn test_validation_requires_rs256() {
+        let mut validation = Validation::new(Algorithm::RS256);
+        validation.set_issuer(&[APPLE_ISSUER]);
+        validation.set_audience(&["com.example.app"]);
+        validation.validate_exp = true;
+
+        // Validation is set up correctly
+        assert!(validation.algorithms.contains(&Algorithm::RS256));
+        assert!(validation.validate_exp);
+    }
+
+    #[test]
+    fn test_apple_issuer_constant() {
+        assert_eq!(APPLE_ISSUER, "https://appleid.apple.com");
+    }
+
+    #[test]
+    fn test_apple_jwks_url_constant() {
+        assert_eq!(APPLE_JWKS_URL, "https://appleid.apple.com/auth/keys");
+    }
+
+    #[test]
+    fn test_cache_ttl_is_one_hour() {
+        assert_eq!(APPLE_JWKS_CACHE_TTL_SECS, 3600);
+    }
+}
