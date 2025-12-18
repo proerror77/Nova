@@ -31,6 +31,8 @@ permissions:
   contents: read
 
 env:
+  # NOTE: This workflow is shared across the AWS→GCP migration.
+  # Keep AWS/ECR settings optional and gate ECR-only jobs behind a repo variable.
   AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-1' }}
   ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION || 'ap-northeast-1' }}.amazonaws.com
   REGISTRY_ALIAS: nova
@@ -190,7 +192,8 @@ jobs:
     name: Container Vulnerability Scanning
     runs-on: ubuntu-latest
     needs: [sast-scan, dependency-scan]
-    if: github.event_name == 'push'
+    # Disabled by default during GCP migration (requires AWS OIDC + ECR).
+    if: github.event_name == 'push' && vars.ENABLE_ECR_SECURITY_SCAN == 'true'
     permissions:
       id-token: write
       contents: read
@@ -275,7 +278,7 @@ jobs:
     name: Generate SBOM
     runs-on: ubuntu-latest
     needs: container-scan
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.container-scan.result == 'success'
 
     strategy:
       matrix:
@@ -315,7 +318,7 @@ jobs:
     name: Sign Container Images
     runs-on: ubuntu-latest
     needs: sbom-generation
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.sbom-generation.result == 'success'
 
     permissions:
       id-token: write
