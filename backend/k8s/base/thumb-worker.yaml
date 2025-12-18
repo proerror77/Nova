@@ -1,0 +1,75 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: thumb-worker
+  namespace: nova-backend
+  labels:
+    app: thumb-worker
+    component: backend
+    version: v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: thumb-worker
+  template:
+    metadata:
+      labels:
+        app: thumb-worker
+        version: v1
+    spec:
+      containers:
+      - name: thumb-worker
+        image: nova-media-service:latest
+        imagePullPolicy: Always
+        command: ["/app/thumb-worker"]
+        env:
+        - name: RUST_LOG
+          value: "info,thumb_worker=debug,media_service=debug"
+        # GCS Configuration
+        - name: GCS_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: nova-backend-config
+              key: GCS_BUCKET
+        - name: GCS_SERVICE_ACCOUNT_JSON
+          valueFrom:
+            secretKeyRef:
+              name: gcs-service-account
+              key: service-account.json
+        # Database - connects to content service DB
+        - name: CONTENT_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-backend-secrets
+              key: DATABASE_URL
+        # Kafka Configuration
+        - name: KAFKA_BROKERS
+          valueFrom:
+            configMapKeyRef:
+              name: nova-backend-config
+              key: KAFKA_BROKERS
+        - name: KAFKA_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: nova-backend-config
+              key: KAFKA_MEDIA_EVENTS_TOPIC
+        - name: KAFKA_GROUP_ID
+          value: "thumbnail-worker-v1"
+        # Thumbnail Configuration
+        - name: THUMB_MAX_DIMENSION
+          value: "600"
+        - name: THUMB_QUALITY
+          value: "85"
+        - name: BATCH_INTERVAL_SECS
+          value: "300"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        # No health probes needed for worker (no HTTP server)
+      restartPolicy: Always

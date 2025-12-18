@@ -44,8 +44,11 @@ data:
   JWT_REFRESH_TOKEN_EXPIRES_IN_DAYS: "90"
 
   # gRPC Configuration
-  GRPC_AUTH_SERVICE_URL: "http://auth-service:9083"
-  GRPC_CONTENT_SERVICE_URL: "http://content-service:9081"
+  # Identity service (auth) - used by grpc-clients library
+  GRPC_IDENTITY_SERVICE_URL: "http://identity-service:9081"
+  # Legacy auth URL - kept for backward compatibility
+  GRPC_AUTH_SERVICE_URL: "http://identity-service:9081"
+  GRPC_CONTENT_SERVICE_URL: "http://content-service:9082"
   GRPC_FEED_SERVICE_URL: "http://feed-service:9084"
   GRPC_MEDIA_SERVICE_URL: "http://media-service:9082"
   GRPC_MESSAGING_SERVICE_URL: "http://messaging-service:9085"
@@ -64,6 +67,19 @@ data:
   GRPC_ENABLE_CONNECTION_POOLING: "true"
   GRPC_CONNECTION_POOL_SIZE: "10"
   GRPC_TLS_ENABLED: "false"
+
+  # Service dependency tiers (0=hard, 1=soft-critical, 2=optional)
+  # Only identity-service is Tier0 (required for auth)
+  GRPC_IDENTITY_SERVICE_TIER: "0"
+  GRPC_CONTENT_SERVICE_TIER: "1"
+  GRPC_FEED_SERVICE_TIER: "1"
+  GRPC_MEDIA_SERVICE_TIER: "1"
+  GRPC_GRAPH_SERVICE_TIER: "1"
+  GRPC_SOCIAL_SERVICE_TIER: "1"
+  GRPC_SEARCH_SERVICE_TIER: "1"
+  GRPC_NOTIFICATION_SERVICE_TIER: "1"
+  GRPC_RANKING_SERVICE_TIER: "1"
+  GRPC_ANALYTICS_SERVICE_TIER: "1"
 
   # Matrix (E2EE messaging) - backend/realtime-chat-service consumes these.
   # Set MATRIX_ENABLED=true only after homeserver is reachable.
@@ -105,3 +121,11 @@ data:
   CLICKHOUSE_URL: "http://clickhouse:8123"
   KAFKA_BROKERS: "kafka:9092"
   ELASTICSEARCH_URL: "http://elasticsearch:9200"
+
+  # GCS (Google Cloud Storage) - for media storage
+  GCS_BUCKET: "nova-media-staging"
+
+  # Media events topic (used by media-service producer and thumb-worker consumer)
+  KAFKA_MEDIA_EVENTS_TOPIC: "nova.media.events"
+  # Alias for media-service config
+  KAFKA_EVENTS_TOPIC: "nova.media.events"

@@ -4,9 +4,12 @@ kind: Kustomization
 resources:
   - ../../base
   - matrix-well-known.yaml
+  - apple-well-known.yaml  # Passkey/WebAuthn AASA for iOS
   # Staging-specific new resources (truly new, not overrides)
   - synapse-ingress.yaml
   - zitadel-ingress.yaml
+  # Identity service Zitadel sync secret (token must be set manually or via sealed-secrets)
+  - identity-service-zitadel-secret.yaml
 
 namespace: nova-backend
 
@@ -42,6 +45,11 @@ patches:
       kind: Deployment
       name: zitadel
     path: zitadel-resources-patch.yaml
+  # Identity service Zitadel secret mount
+  - target:
+      kind: Deployment
+      name: identity-service
+    path: identity-service-zitadel-patch.yaml
   # Zitadel deployment strategy - use Recreate to avoid resource contention in staging
   - target:
       kind: Deployment
@@ -67,13 +75,15 @@ patches:
       - op: remove
         path: /spec/storageClassName
   # ConfigMap patch for staging environment
+  # NOTE: APP_ENV kept as "development" to avoid TLS requirement in grpc-clients
+  # TODO: Enable TLS and set APP_ENV=staging when TLS certificates are configured
   - target:
       kind: ConfigMap
       name: nova-backend-config
     patch: |-
-      - op: replace
-        path: /data/APP_ENV
-        value: "staging"
+      # - op: replace
+      #   path: /data/APP_ENV
+      #   value: "staging"
       - op: replace
         path: /data/LOG_LEVEL
         value: "debug"
@@ -101,6 +111,13 @@ patches:
       - op: add
         path: /data/ZITADEL_EXTERNAL_DOMAIN
         value: "id.staging.gcp.icered.com"
+      # Enable Zitadel user sync for unified identity
+      - op: replace
+        path: /data/ZITADEL_SYNC_ENABLED
+        value: "true"
+      - op: replace
+        path: /data/ZITADEL_API_URL
+        value: "http://zitadel.nova-backend.svc.cluster.local:8080"
 
 # Staging image tags - use full GAR registry path
 images:
@@ -147,8 +164,12 @@ images:
   - name: nova-streaming-service
     newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/streaming-service
     newTag: latest
+  # Thumb worker uses the same image as media-service
+  - name: nova-thumb-worker
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/media-service
+    newTag: latest
   # Third-party services
   - name: matrixdotorg/synapse
-    newTag: v1.98.0
+    newTag: v1.120.0
   - name: ghcr.io/zitadel/zitadel
     newTag: v2.62.1
