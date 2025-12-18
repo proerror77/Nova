@@ -1,4 +1,4 @@
-/// Kafka event producer for identity service
+/// Kafka event producer for identity service with circuit breaker resilience
 use crate::error::{IdentityError, Result};
 use chrono::{DateTime, Utc};
 use crypto_core::kafka_correlation::inject_headers;
@@ -8,19 +8,22 @@ use event_schema::{
 };
 use rdkafka::message::OwnedHeaders;
 use rdkafka::producer::{FutureProducer, FutureRecord};
+use resilience::{CircuitBreaker, CircuitBreakerError, CircuitState};
+use std::sync::Arc;
 use std::time::Duration;
-use tracing::warn;
+use tracing::{info, warn};
 use uuid::Uuid;
 
-/// Kafka event producer service
+/// Kafka event producer service with circuit breaker protection
 #[derive(Clone)]
 pub struct KafkaEventProducer {
     producer: FutureProducer,
     topic: String,
+    circuit_breaker: Arc<CircuitBreaker>,
 }
 
 impl KafkaEventProducer {
-    /// Create a new Kafka event producer
+    /// Create a new Kafka event producer with circuit breaker
     ///
     /// ## Arguments
     ///
@@ -30,15 +33,46 @@ impl KafkaEventProducer {
         let producer = rdkafka::config::ClientConfig::new()
             .set("bootstrap.servers", brokers)
             .set("client.id", "identity-service")
+            // Idempotency and reliability settings
+            .set("enable.idempotence", "true")
+            .set("acks", "all")
+            .set("max.in.flight.requests.per.connection", "5")
+            .set("retries", "3")
             .create::<FutureProducer>()
             .map_err(|e| {
                 IdentityError::Internal(format!("Failed to create Kafka producer: {}", e))
             })?;
 
+        // Use Kafka-optimized circuit breaker config from resilience presets
+        let cb_config = resilience::presets::kafka_config().circuit_breaker;
+        let circuit_breaker = Arc::new(CircuitBreaker::new(cb_config));
+
+        info!(
+            brokers = %brokers,
+            topic = %topic,
+            "Identity service Kafka producer initialized with circuit breaker"
+        );
+
         Ok(Self {
             producer,
             topic: topic.to_string(),
+            circuit_breaker,
         })
+    }
+
+    /// Get the current circuit breaker state
+    pub fn circuit_state(&self) -> CircuitState {
+        self.circuit_breaker.state()
+    }
+
+    /// Check if circuit breaker is open (failing fast)
+    pub fn is_circuit_open(&self) -> bool {
+        matches!(self.circuit_state(), CircuitState::Open)
+    }
+
+    /// Get current error rate from circuit breaker
+    pub fn error_rate(&self) -> f64 {
+        self.circuit_breaker.error_rate()
     }
 
     /// Publish user created event
@@ -167,7 +201,7 @@ impl KafkaEventProducer {
         Ok(())
     }
 
-    /// Generic event publishing method
+    /// Generic event publishing method with circuit breaker protection
     async fn publish_event<T: serde::Serialize>(
         &self,
         envelope: &EventEnvelope<T>,
@@ -181,21 +215,51 @@ impl KafkaEventProducer {
             .correlation_id
             .unwrap_or(envelope.event_id)
             .to_string();
-        let headers = inject_headers(OwnedHeaders::new(), &correlation_id);
-        let record = FutureRecord::to(&self.topic)
-            .key(&partition_key)
-            .payload(&payload)
-            .headers(headers);
+        let topic = self.topic.clone();
+        let producer = self.producer.clone();
 
-        self.producer
-            .send(record, Duration::from_secs(30))
-            .await
-            .map_err(|(error, _)| {
-                warn!("Failed to send Kafka event: {:?}", error);
-                IdentityError::Internal(format!("Failed to publish event to Kafka: {}", error))
-            })?;
+        let result = self
+            .circuit_breaker
+            .call(|| async {
+                let headers = inject_headers(OwnedHeaders::new(), &correlation_id);
+                let record = FutureRecord::to(&topic)
+                    .key(&partition_key)
+                    .payload(&payload)
+                    .headers(headers);
 
-        Ok(())
+                producer
+                    .send(record, Duration::from_secs(30))
+                    .await
+                    .map(|_| ())
+                    .map_err(|(err, _)| format!("{}", err))
+            })
+            .await;
+
+        match result {
+            Ok(()) => Ok(()),
+            Err(CircuitBreakerError::Open) => {
+                warn!(
+                    event_type = ?envelope.event_type,
+                    circuit_state = ?self.circuit_state(),
+                    "Circuit breaker open - rejecting Kafka publish"
+                );
+                Err(IdentityError::Internal(
+                    "Kafka circuit breaker open - publish rejected".to_string(),
+                ))
+            }
+            Err(CircuitBreakerError::CallFailed(msg)) => {
+                warn!(
+                    error = %msg,
+                    circuit_state = ?self.circuit_state(),
+                    error_rate = self.error_rate(),
+                    "Kafka publish failed"
+                );
+                Err(IdentityError::Internal(format!(
+                    "Failed to publish event to Kafka: {}",
+                    msg
+                )))
+            }
+        }
     }
 }
 

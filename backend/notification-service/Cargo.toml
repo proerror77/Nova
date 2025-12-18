@@ -54,6 +54,7 @@ nova-fcm-shared = { path = "../libs/nova-fcm-shared" }
 nova-apns-shared = { path = "../libs/nova-apns-shared" }
 resilience = { path = "../libs/resilience" }  # ✅ P1: Timeout protection & circuit breakers
 grpc-tls = { path = "../libs/grpc-tls" }  # ✅ P0: mTLS for service-to-service auth
+redis-utils = { path = "../libs/redis-utils" }  # Redis pool for distributed deduplication
 
 [build-dependencies]
 tonic-build = "0.12"
