@@ -398,45 +398,38 @@ struct NewChatView: View {
                 : nil
 
             // 使用 Matrix Bridge 創建對話（同時創建 Nova 對話和 Matrix 房間）
+            // 注意：Matrix E2EE 是必要條件，不再支援 REST fallback
+            guard matrixBridge.isE2EEAvailable else {
+                throw NSError(domain: "NewChatView", code: -1, userInfo: [
+                    NSLocalizedDescriptionKey: "Matrix service not available. Please try again later."
+                ])
+            }
+
+            #if DEBUG
+            print("[NewChatView] Creating conversation with Matrix E2EE...")
+            #endif
+
             let conversation: Conversation
 
-            if matrixBridge.isE2EEAvailable {
-                // Matrix E2EE 可用 - 使用 Bridge 服務
-                #if DEBUG
-                print("[NewChatView] Creating conversation with Matrix E2EE...")
-                #endif
-
-                if selectedUsers.count == 1 {
-                    // 1:1 對話 - 使用專門的好友對話方法
-                    conversation = try await matrixBridge.startConversationWithFriend(
-                        friendUserId: selectedUsers[0].id
-                    )
-                } else {
-                    // 群組對話 - 先創建 Nova 對話，再創建 Matrix 房間
-                    conversation = try await chatService.createConversation(
-                        type: conversationType,
-                        participantIds: participantIds,
-                        name: groupName
-                    )
-                    // 為對話創建 Matrix 房間
-                    _ = try await matrixBridge.createRoomForConversation(conversation)
-                }
-
-                #if DEBUG
-                print("[NewChatView] ✅ Created E2EE conversation: \(conversation.id)")
-                #endif
+            if selectedUsers.count == 1 {
+                // 1:1 對話 - 使用專門的好友對話方法
+                conversation = try await matrixBridge.startConversationWithFriend(
+                    friendUserId: selectedUsers[0].id
+                )
             } else {
-                // Matrix 不可用 - 使用普通 REST API
-                #if DEBUG
-                print("[NewChatView] Matrix unavailable, using REST API...")
-                #endif
-
+                // 群組對話 - 先創建 Nova 對話，再創建 Matrix 房間
                 conversation = try await chatService.createConversation(
                     type: conversationType,
                     participantIds: participantIds,
                     name: groupName
                 )
+                // 為對話創建 Matrix 房間
+                _ = try await matrixBridge.createRoomForConversation(conversation)
             }
+
+            #if DEBUG
+            print("[NewChatView] ✅ Created E2EE conversation: \(conversation.id)")
+            #endif
 
             createdConversationId = conversation.id
             createdConversationName = selectedUsers.count == 1

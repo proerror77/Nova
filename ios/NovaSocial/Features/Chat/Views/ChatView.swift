@@ -1027,7 +1027,7 @@ struct ChatView: View {
     }
 
     // MARK: - Send Text Message
-    /// 發送文字訊息，優先使用 Matrix E2EE（如果可用）
+    /// 發送文字訊息 - 使用 Matrix E2EE（端到端加密）
     private func sendMessage() {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty, !isSending else { return }
@@ -1046,13 +1046,11 @@ struct ChatView: View {
         Task {
             isSending = true
             do {
-                // 使用 sendSecureMessage，自動嘗試 Matrix E2EE
-                // 如果 Matrix 不可用，會自動 fallback 到 REST API
+                // 使用 Matrix SDK 發送訊息（E2EE 端到端加密）
                 let sentMessage = try await chatService.sendSecureMessage(
                     conversationId: conversationId,
                     content: trimmedText,
-                    type: .text,
-                    preferE2EE: true  // 優先使用端到端加密
+                    type: .text
                 )
 
                 // Replace local message with server response
@@ -1061,8 +1059,7 @@ struct ChatView: View {
                 }
 
                 #if DEBUG
-                let encryptionStatus = sentMessage.encryptionVersion == 3 ? "Matrix E2EE" : "REST API"
-                print("[ChatView] Message sent via \(encryptionStatus): \(sentMessage.id)")
+                print("[ChatView] ✅ Message sent via Matrix E2EE: \(sentMessage.id)")
                 #endif
 
             } catch {
@@ -1076,76 +1073,95 @@ struct ChatView: View {
         }
     }
 
-    // MARK: - 发送图片消息
-    /// 完整图片上传流程：压缩 → 上传到 MediaService → 发送消息
+    // MARK: - 發送圖片訊息
+    /// 使用 Matrix SDK 發送圖片訊息
     private func sendImageMessage(image: UIImage) {
-        // 压缩图片
+        // 壓縮圖片
         guard let imageData = image.jpegData(compressionQuality: 0.8) else {
             #if DEBUG
-            print("[ChatView] Failed to compress image")
+            print("[ChatView] ❌ Failed to compress image")
             #endif
             error = "Failed to compress image"
             return
         }
 
-        // 立即添加到本地 UI（乐观更新）
+        // 立即添加到本地 UI（樂觀更新）
         let localMessage = ChatMessage(localText: "", isFromMe: true, image: image)
         messages.append(localMessage)
         showAttachmentOptions = false
 
-        // 异步上传并发送
         Task {
             isUploadingImage = true
 
             do {
-                // 1. 上传图片到 MediaService
-                let filename = "chat_image_\(UUID().uuidString).jpg"
-                let mediaUrl = try await mediaService.uploadImage(imageData: imageData, filename: filename)
-
-                #if DEBUG
-                print("[ChatView] Image uploaded: \(mediaUrl)")
-                #endif
-
-                // 2. 发送带 mediaUrl 的消息到聊天服务
-                let sentMessage = try await chatService.sendMessage(
-                    conversationId: conversationId,
-                    content: mediaUrl,  // 图片 URL 作为内容
-                    type: .image,
-                    mediaUrl: mediaUrl
-                )
-
-                // 3. 替换本地消息为服务器返回的消息
-                if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
-                    // 保留本地图片用于显示，同时更新消息 ID
-                    var updatedMessage = ChatMessage(from: sentMessage, currentUserId: currentUserId)
-                    updatedMessage.image = image  // 保留本地图片
-                    messages[index] = updatedMessage
+                // 確保 Matrix 已初始化
+                guard MatrixBridgeService.shared.isInitialized else {
+                    throw NSError(domain: "ChatView", code: -1, userInfo: [
+                        NSLocalizedDescriptionKey: "Matrix service not initialized"
+                    ])
                 }
 
                 #if DEBUG
-                print("[ChatView] Image message sent: \(sentMessage.id)")
+                print("[ChatView] 📤 Sending image via Matrix SDK")
                 #endif
+
+                // 將圖片數據保存到臨時文件
+                let tempDir = FileManager.default.temporaryDirectory
+                let filename = "chat_image_\(UUID().uuidString).jpg"
+                let tempFileURL = tempDir.appendingPathComponent(filename)
+                try imageData.write(to: tempFileURL)
+
+                // 使用 Matrix SDK 發送圖片
+                let eventId = try await MatrixBridgeService.shared.sendMessage(
+                    conversationId: conversationId,
+                    content: "",
+                    mediaURL: tempFileURL,
+                    mimeType: "image/jpeg"
+                )
+
+                // 清理臨時文件
+                try? FileManager.default.removeItem(at: tempFileURL)
+
+                let senderId = KeychainService.shared.get(.userId) ?? ""
+                let sentMessage = Message(
+                    id: eventId,
+                    conversationId: conversationId,
+                    senderId: senderId,
+                    content: "",
+                    type: .image,
+                    createdAt: Date(),
+                    status: .sent,
+                    encryptionVersion: 3  // Matrix E2EE
+                )
+
+                #if DEBUG
+                print("[ChatView] ✅ Image sent via Matrix: \(eventId)")
+                #endif
+
+                // 替換本地訊息為伺服器返回的訊息
+                if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
+                    var updatedMessage = ChatMessage(from: sentMessage, currentUserId: currentUserId)
+                    updatedMessage.image = image  // 保留本地圖片用於顯示
+                    messages[index] = updatedMessage
+                }
 
             } catch {
                 #if DEBUG
-                print("[ChatView] Failed to send image: \(error)")
+                print("[ChatView] ❌ Failed to send image: \(error)")
                 #endif
-
-                // 上传失败 - 标记消息为失败状态
                 self.error = "Failed to send image"
-
-                // 可选：移除失败的消息或添加重试按钮
-                // messages.removeAll { $0.id == localMessage.id }
+                // 移除失敗的本地訊息
+                messages.removeAll { $0.id == localMessage.id }
             }
 
             isUploadingImage = false
         }
     }
 
-    // MARK: - 发送位置消息
-    /// 发送位置消息到会话
+    // MARK: - 發送位置訊息
+    /// 發送位置訊息 - 使用 Matrix SDK
     private func sendLocationMessage(location: CLLocationCoordinate2D) {
-        // 立即添加到本地 UI（乐观更新）
+        // 立即添加到本地 UI（樂觀更新）
         let localMessage = ChatMessage(localText: "", isFromMe: true, location: location)
         messages.append(localMessage)
         showAttachmentOptions = false
@@ -1154,23 +1170,54 @@ struct ChatView: View {
             isSending = true
 
             do {
-                // 使用 ChatService 的位置分享 API
-                try await chatService.shareLocation(
+                // 確保 Matrix 已初始化
+                guard MatrixBridgeService.shared.isInitialized else {
+                    throw NSError(domain: "ChatView", code: -1, userInfo: [
+                        NSLocalizedDescriptionKey: "Matrix service not initialized"
+                    ])
+                }
+
+                #if DEBUG
+                print("[ChatView] 📍 Sending location via Matrix SDK")
+                #endif
+
+                // 使用 Matrix SDK 發送位置訊息
+                let eventId = try await MatrixBridgeService.shared.sendLocation(
                     conversationId: conversationId,
                     latitude: location.latitude,
-                    longitude: location.longitude,
-                    accuracy: nil
+                    longitude: location.longitude
+                )
+
+                let senderId = KeychainService.shared.get(.userId) ?? ""
+                let sentMessage = Message(
+                    id: eventId,
+                    conversationId: conversationId,
+                    senderId: senderId,
+                    content: "geo:\(location.latitude),\(location.longitude)",
+                    type: .location,
+                    createdAt: Date(),
+                    status: .sent,
+                    encryptionVersion: 3  // Matrix E2EE
                 )
 
                 #if DEBUG
-                print("[ChatView] Location shared: \(location.latitude), \(location.longitude)")
+                print("[ChatView] ✅ Location sent via Matrix: \(eventId)")
                 #endif
+
+                // 替換本地訊息為伺服器返回的訊息
+                if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
+                    var updatedMessage = ChatMessage(from: sentMessage, currentUserId: currentUserId)
+                    updatedMessage.location = location
+                    messages[index] = updatedMessage
+                }
 
             } catch {
                 #if DEBUG
-                print("[ChatView] Failed to share location: \(error)")
+                print("[ChatView] ❌ Failed to send location: \(error)")
                 #endif
                 self.error = "Failed to share location"
+                // 移除失敗的本地訊息
+                messages.removeAll { $0.id == localMessage.id }
             }
 
             isSending = false
@@ -1261,9 +1308,9 @@ struct ChatView: View {
         sendVoiceMessage(audioData: result.data, duration: result.duration, url: result.url)
     }
 
-    /// 发送语音消息
+    /// 發送語音訊息 - 使用 Matrix SDK
     private func sendVoiceMessage(audioData: Data, duration: TimeInterval, url: URL) {
-        // 立即添加到本地 UI（乐观更新）
+        // 立即添加到本地 UI（樂觀更新）
         let localMessage = ChatMessage(
             localText: "",
             isFromMe: true,
@@ -1278,23 +1325,42 @@ struct ChatView: View {
             isSending = true
 
             do {
-                // 1. 上传音频到 MediaService
-                let filename = "voice_\(UUID().uuidString).m4a"
-                let mediaUrl = try await mediaService.uploadAudio(audioData: audioData, filename: filename)
+                // 確保 Matrix 已初始化
+                guard MatrixBridgeService.shared.isInitialized else {
+                    throw NSError(domain: "ChatView", code: -1, userInfo: [
+                        NSLocalizedDescriptionKey: "Matrix service not initialized"
+                    ])
+                }
 
                 #if DEBUG
-                print("[ChatView] Voice uploaded: \(mediaUrl)")
+                print("[ChatView] 📤 Sending voice via Matrix SDK: \(url)")
                 #endif
 
-                // 2. 发送带 mediaUrl 的消息到聊天服务
-                let sentMessage = try await chatService.sendMessage(
+                // 使用 Matrix SDK 發送語音訊息
+                let eventId = try await MatrixBridgeService.shared.sendMessage(
                     conversationId: conversationId,
-                    content: String(format: "%.1f", duration),  // 时长作为内容（用于预览）
-                    type: .audio,
-                    mediaUrl: mediaUrl
+                    content: String(format: "%.1f", duration),
+                    mediaURL: url,
+                    mimeType: "audio/mp4"
                 )
 
-                // 3. 替换本地消息为服务器返回的消息
+                let senderId = KeychainService.shared.get(.userId) ?? ""
+                let sentMessage = Message(
+                    id: eventId,
+                    conversationId: conversationId,
+                    senderId: senderId,
+                    content: String(format: "%.1f", duration),
+                    type: .audio,
+                    createdAt: Date(),
+                    status: .sent,
+                    encryptionVersion: 3  // Matrix E2EE
+                )
+
+                #if DEBUG
+                print("[ChatView] ✅ Voice sent via Matrix: \(eventId)")
+                #endif
+
+                // 替換本地訊息為伺服器返回的訊息
                 if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
                     var updatedMessage = ChatMessage(from: sentMessage, currentUserId: currentUserId)
                     updatedMessage.audioData = audioData
@@ -1303,15 +1369,13 @@ struct ChatView: View {
                     messages[index] = updatedMessage
                 }
 
-                #if DEBUG
-                print("[ChatView] Voice message sent: \(sentMessage.id)")
-                #endif
-
             } catch {
                 #if DEBUG
-                print("[ChatView] Failed to send voice: \(error)")
+                print("[ChatView] ❌ Failed to send voice: \(error)")
                 #endif
                 self.error = "Failed to send voice message"
+                // 移除失敗的本地訊息
+                messages.removeAll { $0.id == localMessage.id }
             }
 
             isSending = false

@@ -1,5 +1,25 @@
 import Foundation
 
+// MARK: - Chat Service Errors
+
+/// ChatService 錯誤類型
+enum ChatServiceError: LocalizedError {
+    case matrixNotInitialized
+    case messageSendFailed(String)
+    case invalidMediaUrl
+
+    var errorDescription: String? {
+        switch self {
+        case .matrixNotInitialized:
+            return "Matrix service is not initialized"
+        case .messageSendFailed(let reason):
+            return "Failed to send message: \(reason)"
+        case .invalidMediaUrl:
+            return "Invalid media URL"
+        }
+    }
+}
+
 // MARK: - WebSocket State Actor (Thread-safe WebSocket management)
 
 /// Actor for thread-safe WebSocket state management
@@ -87,77 +107,18 @@ final class ChatService {
         #endif
     }
 
-    // MARK: - REST API - Messages
+    // MARK: - Matrix SDK - Messages
 
-    /// 发送消息到指定会话
+    /// 透過 Matrix SDK 發送訊息（E2EE 端到端加密）
     /// - Parameters:
-    ///   - conversationId: 会话ID
-    ///   - content: 消息内容
-    ///   - type: 消息类型（默认为文本）
-    ///   - mediaUrl: 媒体URL（可选）
-    ///   - replyToId: 回复的消息ID（可选）
-    /// - Returns: 发送后的消息对象
-    @MainActor
-    func sendMessage(
-        conversationId: String,
-        content: String,
-        type: ChatMessageType = .text,
-        mediaUrl: String? = nil,
-        replyToId: String? = nil
-    ) async throws -> Message {
-        struct SendMessageAPIResponse: Codable {
-            let id: String?
-            let messageId: String?
-            let conversationId: String?
-            let timestamp: TimeInterval?
-            let status: String?
-        }
-
-        let request = SendMessageRequest(
-            conversationId: conversationId,
-            content: content,
-            type: type,
-            mediaUrl: mediaUrl,
-            replyToId: replyToId
-        )
-
-        let response: SendMessageAPIResponse = try await client.request(
-            endpoint: APIConfig.Chat.sendMessage,
-            method: "POST",
-            body: request
-        )
-
-        let messageId = response.id ?? response.messageId ?? UUID().uuidString
-        let createdAt = response.timestamp.map { Date(timeIntervalSince1970: $0) } ?? Date()
-        let senderId = AuthenticationManager.shared.currentUser?.id ?? ""
-
-        let message = Message(
-            id: messageId,
-            conversationId: conversationId,
-            senderId: senderId,
-            content: content,
-            type: type,
-            createdAt: createdAt,
-            status: .sent
-        )
-
-        #if DEBUG
-        print("[ChatService] Message sent: \(message.id)")
-        #endif
-
-        return message
-    }
-
-    /// Send message with automatic E2EE via Matrix (if available)
-    /// Falls back to regular API if Matrix bridge is not initialized
-    /// - Parameters:
-    ///   - conversationId: 会话ID
-    ///   - content: 消息内容
-    ///   - type: 消息类型（默认为文本）
-    ///   - mediaUrl: 媒体URL（可选）
-    ///   - replyToId: 回复的消息ID（可选）
-    ///   - preferE2EE: Prefer E2EE if available (default true)
-    /// - Returns: 发送后的消息对象
+    ///   - conversationId: 會話ID
+    ///   - content: 訊息內容
+    ///   - type: 訊息類型（預設為文字）
+    ///   - mediaUrl: 媒體URL（可選，用於媒體訊息）
+    ///   - replyToId: 回覆的訊息ID（可選）
+    ///   - preferE2EE: 未使用，保留為 API 相容性
+    /// - Returns: 發送後的訊息物件
+    /// - Throws: 如果 Matrix 未初始化則拋出錯誤
     @MainActor
     func sendSecureMessage(
         conversationId: String,
@@ -167,46 +128,60 @@ final class ChatService {
         replyToId: String? = nil,
         preferE2EE: Bool = true
     ) async throws -> Message {
-        // Use Matrix E2EE if enabled and bridge is initialized
-        if preferE2EE && useMatrixE2EE && MatrixBridgeService.shared.isInitialized {
-            #if DEBUG
-            print("[ChatService] Sending message via Matrix E2EE")
-            #endif
+        // 確保 Matrix 已初始化
+        guard MatrixBridgeService.shared.isInitialized else {
+            throw ChatServiceError.matrixNotInitialized
+        }
 
-            do {
-                // Send via Matrix bridge
-                let eventId = try await MatrixBridgeService.shared.sendMessage(
-                    conversationId: conversationId,
-                    content: content
-                )
+        #if DEBUG
+        print("[ChatService] 📤 Sending message via Matrix SDK (type: \(type))")
+        #endif
 
-                // Create local message object
-                let senderId = AuthenticationManager.shared.currentUser?.id ?? ""
-                return Message(
-                    id: eventId,
-                    conversationId: conversationId,
-                    senderId: senderId,
-                    content: content,
-                    type: type,
-                    createdAt: Date(),
-                    status: .sent,
-                    encryptionVersion: 3  // Matrix E2EE
-                )
-            } catch {
-                #if DEBUG
-                print("[ChatService] Matrix E2EE failed, falling back to REST: \(error)")
-                #endif
-                // Fall through to regular send
+        // 轉換 mediaUrl 字串為 URL 並判斷 MIME 類型
+        var mediaURL: URL? = nil
+        var mimeType: String? = nil
+
+        if let mediaUrlString = mediaUrl, let url = URL(string: mediaUrlString) {
+            mediaURL = url
+            // 根據訊息類型判斷 MIME 類型
+            switch type {
+            case .image:
+                mimeType = "image/jpeg"
+            case .video:
+                mimeType = "video/mp4"
+            case .audio:
+                mimeType = "audio/mp4"  // M4A format
+            case .file:
+                mimeType = "application/octet-stream"
+            default:
+                break
             }
         }
 
-        // Fallback to regular REST API
-        return try await sendMessage(
+        // 透過 Matrix Bridge 發送訊息
+        let eventId = try await MatrixBridgeService.shared.sendMessage(
             conversationId: conversationId,
             content: content,
+            mediaURL: mediaURL,
+            mimeType: mimeType
+        )
+
+        // 建立本地訊息物件
+        let senderId = AuthenticationManager.shared.currentUser?.id ?? ""
+
+        #if DEBUG
+        print("[ChatService] ✅ Message sent via Matrix: \(eventId)")
+        #endif
+
+        return Message(
+            id: eventId,
+            conversationId: conversationId,
+            senderId: senderId,
+            content: content,
             type: type,
-            mediaUrl: mediaUrl,
-            replyToId: replyToId
+            createdAt: Date(),
+            status: .sent,
+            encryptionVersion: 3  // Matrix E2EE
         )
     }
 
