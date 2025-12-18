@@ -204,6 +204,7 @@ pub async fn get_conversation_by_id(
 }
 
 /// POST /api/v2/chat/conversations
+/// Creates a new conversation and returns iOS-compatible format
 #[post("/api/v2/chat/conversations")]
 pub async fn create_conversation(
     http_req: HttpRequest,
@@ -219,12 +220,20 @@ pub async fn create_conversation(
     if !participants.iter().any(|p| p == &user_id) {
         participants.push(user_id.clone());
     }
+
+    // Determine conversation type: direct (1:1) if only 2 participants, otherwise group
+    let conv_type = if payload.conversation_type.is_some() {
+        payload.conversation_type.unwrap()
+    } else if participants.len() == 2 {
+        ConversationType::Direct as i32
+    } else {
+        ConversationType::Group as i32
+    };
+
     let req = CreateConversationRequest {
         name: payload.name.clone().unwrap_or_default(),
-        conversation_type: payload
-            .conversation_type
-            .unwrap_or(ConversationType::Group as i32),
-        participant_ids: participants,
+        conversation_type: conv_type,
+        participant_ids: participants.clone(),
     };
     match clients
         .call_chat(|| {
@@ -233,7 +242,20 @@ pub async fn create_conversation(
         })
         .await
     {
-        Ok(resp) => HttpResponse::Ok().json(resp),
+        Ok(resp) => {
+            // Transform gRPC CreateConversationResponse to iOS-compatible format
+            // gRPC returns { conversation: {...} }, iOS expects direct {...}
+            if let Some(conv) = resp.conversation {
+                let rest_conv = RestConversation::from(conv);
+                HttpResponse::Ok().json(rest_conv)
+            } else {
+                // Fallback: create a minimal response if conversation is missing
+                warn!("create_conversation returned empty conversation");
+                HttpResponse::InternalServerError().json(serde_json::json!({
+                    "error": "Failed to create conversation"
+                }))
+            }
+        }
         Err(e) => {
             error!("create_conversation failed: {}", e);
             HttpResponse::ServiceUnavailable().finish()
@@ -297,7 +319,7 @@ pub struct RestConversation {
     #[serde(rename = "type")]
     pub conversation_type: String, // "direct" or "group"
     pub name: Option<String>,
-    pub participants: Vec<String>,
+    pub members: Vec<RestConversationMember>, // iOS expects members array
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_message: Option<RestLastMessage>,
     pub created_at: String, // ISO8601
@@ -306,6 +328,21 @@ pub struct RestConversation {
     pub avatar_url: Option<String>,
     #[serde(default)]
     pub unread_count: i32,
+    #[serde(default)]
+    pub is_muted: bool,
+    #[serde(default)]
+    pub is_archived: bool,
+    #[serde(default)]
+    pub is_encrypted: bool,
+}
+
+/// Member in a conversation (matches iOS ConversationMember model)
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RestConversationMember {
+    pub user_id: String,
+    pub username: String,
+    pub role: String, // "owner", "admin", "member"
+    pub joined_at: String, // ISO8601
 }
 
 /// Last message preview (matches iOS LastMessage model)
@@ -387,6 +424,19 @@ impl From<crate::clients::proto::chat::Conversation> for RestConversation {
             timestamp: timestamp_to_iso8601(msg.created_at),
         });
 
+        // Convert participant_ids to members array (iOS format)
+        let members: Vec<RestConversationMember> = conv
+            .participant_ids
+            .iter()
+            .enumerate()
+            .map(|(idx, user_id)| RestConversationMember {
+                user_id: user_id.clone(),
+                username: String::new(), // Username not available in proto, iOS handles this gracefully
+                role: if idx == 0 { "owner".to_string() } else { "member".to_string() },
+                joined_at: timestamp_to_iso8601(created_ts),
+            })
+            .collect();
+
         RestConversation {
             id: conv.id,
             conversation_type: conversation_type_to_string(conv.conversation_type),
@@ -395,12 +445,15 @@ impl From<crate::clients::proto::chat::Conversation> for RestConversation {
             } else {
                 Some(conv.name)
             },
-            participants: conv.participant_ids,
+            members,
             last_message,
             created_at: timestamp_to_iso8601(created_ts),
             updated_at: timestamp_to_iso8601(updated_ts),
-            avatar_url: None, // Not present in this proto version
-            unread_count: 0,  // Not present in this proto version
+            avatar_url: None,      // Not present in this proto version
+            unread_count: 0,       // Not present in this proto version
+            is_muted: false,
+            is_archived: false,
+            is_encrypted: false,
         }
     }
 }

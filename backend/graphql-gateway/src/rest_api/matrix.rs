@@ -36,8 +36,8 @@ fn get_http_client() -> &'static Client {
 /// Get the chat service HTTP URL for Matrix API proxying
 fn get_chat_service_url() -> String {
     env::var("CHAT_SERVICE_HTTP_URL").unwrap_or_else(|_| {
-        // Fallback to default realtime-chat-service HTTP URL (port 8080 in K8s)
-        "http://realtime-chat-service.nova-staging.svc.cluster.local:8080".to_string()
+        // Fallback to default realtime-chat-service HTTP URL (port 8086 in K8s)
+        "http://realtime-chat-service:8086".to_string()
     })
 }
 

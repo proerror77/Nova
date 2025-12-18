@@ -59,6 +59,9 @@ data:
   GRPC_EVENTS_SERVICE_URL: "http://events-service:9090"
   GRPC_CHAT_SERVICE_URL: "http://realtime-chat-service:9086"
 
+  # Chat service HTTP URL (for Matrix API proxy in graphql-gateway)
+  CHAT_SERVICE_HTTP_URL: "http://realtime-chat-service:8086"
+
   GRPC_CONNECTION_TIMEOUT_SECS: "10"
   GRPC_REQUEST_TIMEOUT_SECS: "30"
   GRPC_MAX_CONCURRENT_STREAMS: "1000"
