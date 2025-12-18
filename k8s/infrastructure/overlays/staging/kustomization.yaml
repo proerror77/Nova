@@ -544,7 +544,7 @@ resources:
 # sts-rotator.yaml - DISABLED: aws sts get-session-token cannot be called with IRSA session credentials
 # S3 credentials are now managed by ExternalSecrets (nova-s3-credentials from nova/staging/nova-s3-config)
 # - sts-rotator.yaml
-- secrets-sync.yaml
+- gcp-secrets-sync.yaml
 - content-service-configmap.yaml
 - resource-optimization-info.configmap.yaml
 - nova-clickhouse-credentials.yaml
