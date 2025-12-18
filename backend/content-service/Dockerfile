@@ -14,10 +14,10 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy workspace files from repo root
-COPY Cargo.toml Cargo.lock ./
-# Copy full backend workspace to satisfy workspace members
+# Copy backend workspace from repo root (build context is repo root)
 COPY backend ./backend
+
+WORKDIR /app/backend
 
 # Build content-service
 RUN cargo build --release -p content-service --bin content-service
@@ -38,7 +38,7 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 WORKDIR /app
 
 # Copy binary and migrations
-COPY --from=builder /app/target/release/content-service /app/content-service
+COPY --from=builder /app/backend/target/release/content-service /app/content-service
 
 # Adjust ownership
 RUN chown -R appuser:appuser /app
