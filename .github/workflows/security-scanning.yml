@@ -72,14 +72,39 @@ jobs:
             --verbose \
             --exit-code 1
 
-      - name: Scan secrets (current files)
-        if: always()
+      - name: Scan secrets (changed files only, PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" \
+            | while IFS= read -r file; do
+                [ -z "$file" ] && continue
+                [ -f "$file" ] || continue
+                mkdir -p "$tmp/$(dirname "$file")"
+                cp "$file" "$tmp/$file"
+              done
+          ./gitleaks detect --no-git --source "$tmp" --verbose --exit-code 1
+
+      - name: Scan secrets (changed files only, push)
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" \
+            | while IFS= read -r file; do
+                [ -z "$file" ] && continue
+                [ -f "$file" ] || continue
+                mkdir -p "$tmp/$(dirname "$file")"
+                cp "$file" "$tmp/$file"
+              done
+          ./gitleaks detect --no-git --source "$tmp" --verbose --exit-code 1
+
+      - name: Scan secrets (current files, scheduled)
+        if: github.event_name == 'schedule'
+        continue-on-error: true
         run: |
           ./gitleaks detect --no-git --source . --verbose --exit-code 1
-
-      - name: Scan for secrets in current files
-        run: |
-          echo "✅ Secrets scan completed"
 
   # ============ Stage 2: Dependency Scanning ============
   dependency-scan:
