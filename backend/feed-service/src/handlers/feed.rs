@@ -8,11 +8,12 @@ use uuid::Uuid;
 use crate::error::{AppError, Result};
 use crate::grpc::clients::{ContentServiceClient, GraphServiceClient};
 use crate::middleware::jwt_auth::UserId;
-use crate::models::FeedResponse;
+use crate::models::{FeedPostFull, FeedResponse};
 use grpc_clients::nova::content_service::v2::{
-    ContentStatus, GetUserPostsRequest, ListRecentPostsRequest,
+    ContentStatus, GetPostsByIdsRequest, GetUserPostsRequest, ListRecentPostsRequest,
 };
 use grpc_clients::nova::graph_service::v2::GetFollowingRequest;
+use grpc_clients::nova::social_service::v2::BatchGetCountsRequest;
 
 #[derive(Debug, Deserialize)]
 pub struct FeedQueryParams {
@@ -56,6 +57,7 @@ impl FeedQueryParams {
 pub struct FeedHandlerState {
     pub content_client: Arc<ContentServiceClient>,
     pub graph_client: Arc<GraphServiceClient>,
+    pub grpc_pool: Arc<grpc_clients::GrpcClientPool>,
 }
 
 #[get("")]
@@ -188,12 +190,88 @@ pub async fn get_feed(
         None
     };
 
+    // Step: Fetch full post details from content-service
+    let full_posts = fetch_full_posts(&state, &posts).await?;
+
     Ok(HttpResponse::Ok().json(FeedResponse {
-        posts,
+        posts: full_posts,
         cursor,
         has_more,
         total_count,
     }))
+}
+
+/// Fetch full post details from content-service and social stats
+async fn fetch_full_posts(
+    state: &FeedHandlerState,
+    post_ids: &[Uuid],
+) -> Result<Vec<FeedPostFull>> {
+    if post_ids.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let post_id_strings: Vec<String> = post_ids.iter().map(|id| id.to_string()).collect();
+
+    // Fetch full post details from content-service
+    let posts_resp = state
+        .content_client
+        .get_posts_by_ids(GetPostsByIdsRequest {
+            post_ids: post_id_strings.clone(),
+        })
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to fetch post details: {}", e)))?;
+
+    // Fetch social stats from social-service (graceful degradation if unavailable)
+    let mut social_client = state.grpc_pool.social();
+    let social_counts = match social_client
+        .batch_get_counts(BatchGetCountsRequest {
+            post_ids: post_id_strings.clone(),
+        })
+        .await
+    {
+        Ok(resp) => resp.into_inner().counts,
+        Err(e) => {
+            warn!("Failed to fetch social counts (continuing with zeros): {}", e);
+            std::collections::HashMap::new()
+        }
+    };
+
+    // Convert to FeedPostFull with social stats
+    let full_posts: Vec<FeedPostFull> = posts_resp
+        .posts
+        .into_iter()
+        .enumerate()
+        .map(|(idx, post)| {
+            let counts = social_counts.get(&post.id);
+            let mut thumbnail_urls = post.thumbnail_urls.clone();
+            let media_urls = post.media_urls.clone();
+
+            // Fall back to media_urls if no thumbnails
+            if thumbnail_urls.is_empty() {
+                thumbnail_urls = media_urls.clone();
+            }
+
+            FeedPostFull {
+                id: post.id.clone(),
+                user_id: post.author_id.clone(),
+                content: post.content.clone(),
+                created_at: post.created_at,
+                ranking_score: 1.0 - (idx as f64 * 0.01),
+                like_count: counts.map(|c| c.like_count as u32).unwrap_or(0),
+                comment_count: counts.map(|c| c.comment_count as u32).unwrap_or(0),
+                share_count: counts.map(|c| c.share_count as u32).unwrap_or(0),
+                media_urls,
+                thumbnail_urls,
+                media_type: post.media_type.clone(),
+                author_username: None, // TODO: Fetch from identity-service
+                author_display_name: None,
+                author_avatar: None,
+            }
+        })
+        .collect();
+
+    info!("Fetched {} full posts with social stats", full_posts.len());
+    Ok(full_posts)
 }
 
 /// Fetch global/recent posts as a fallback when graph-service is unavailable
@@ -305,8 +383,11 @@ pub async fn get_guest_feed(
         posts_count, offset, has_more
     );
 
+    // Fetch full post details from content-service
+    let full_posts = fetch_full_posts(&state, &posts).await?;
+
     Ok(HttpResponse::Ok().json(FeedResponse {
-        posts,
+        posts: full_posts,
         cursor,
         has_more,
         total_count,

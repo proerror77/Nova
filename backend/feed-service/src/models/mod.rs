@@ -13,10 +13,38 @@ pub struct User {
     pub name: String,
 }
 
-/// Feed response model
+/// Full post data for feed response (matches iOS FeedPostRaw)
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedPostFull {
+    pub id: String,
+    pub user_id: String,
+    pub content: String,
+    pub created_at: i64,
+    pub ranking_score: f64,
+    pub like_count: u32,
+    pub comment_count: u32,
+    pub share_count: u32,
+    #[serde(default)]
+    pub media_urls: Vec<String>,
+    #[serde(default)]
+    pub thumbnail_urls: Vec<String>,
+    #[serde(default)]
+    pub media_type: String,
+    /// Author information for display
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_avatar: Option<String>,
+}
+
+/// Feed response model with full post objects (for iOS compatibility)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FeedResponse {
-    pub posts: Vec<Uuid>,
+    pub posts: Vec<FeedPostFull>,
     pub cursor: Option<String>,
     pub has_more: bool,
     pub total_count: usize,

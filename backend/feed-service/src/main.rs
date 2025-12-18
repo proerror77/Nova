@@ -197,8 +197,9 @@ async fn main() -> io::Result<()> {
             pool: grpc_pool.clone(),
             enabled: true,
         }),
+        grpc_pool: grpc_pool.clone(),
     });
-    tracing::info!("FeedHandlerState initialized with content and graph gRPC clients");
+    tracing::info!("FeedHandlerState initialized with content, graph, and social gRPC clients");
 
     // Kafka consumer removed - recommendation events now handled by ranking-service
     info!("Feed-service simplified - ranking delegated to ranking-service");
