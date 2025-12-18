@@ -393,6 +393,33 @@ struct MultiPhotoPickerView: View {
                     .padding(8)
                 }
                 .frame(width: 200, height: 250)
+
+            case .video(let data):
+                ZStack(alignment: .bottomTrailing) {
+                    Image(uiImage: data.thumbnail)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 200, height: 250)
+                        .cornerRadius(12)
+                        .clipped()
+
+                    // Play icon
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 40))
+                        .foregroundColor(.white.opacity(0.9))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    // Duration badge
+                    Text(formatDuration(data.duration))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.black.opacity(0.6))
+                        .cornerRadius(4)
+                        .padding(8)
+                }
+                .frame(width: 200, height: 250)
             }
 
             // Delete button
@@ -463,6 +490,14 @@ struct MultiPhotoPickerView: View {
                 isLoading = false
             }
         }
+    }
+
+    // MARK: - Format Duration
+
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
     }
 
     // MARK: - Remove Item

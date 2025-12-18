@@ -173,7 +173,7 @@ struct IceredApp: App {
                 // Handle push notification navigation
                 handlePushNotification(notification.userInfo)
             }
-            .onReceive(NotificationCenter.default.publisher(for: .sessionExpired)) { notification in
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SessionExpired"))) { notification in
                 // Handle session expiration - navigate to login immediately
                 handleSessionExpired(notification.userInfo)
             }
@@ -293,23 +293,8 @@ struct IceredApp: App {
 
     /// Handle session expiration - immediately navigate to login
     private func handleSessionExpired(_ userInfo: [AnyHashable: Any]?) {
-        print("╔════════════════════════════════════════════════════════════")
-        print("║ [App] 🚨 SESSION EXPIRED NOTIFICATION RECEIVED")
-        print("╚════════════════════════════════════════════════════════════")
-
-        // Extract expiration reason if available
-        if let reason = userInfo?["reason"] as? SessionExpiredReason {
-            print("[App] Expiration reason: \(reason.rawValue)")
-            print("[App] User message: \(reason.userMessage)")
-        }
-
-        // Navigate to login page immediately
-        print("[App] 🔄 Navigating to login page...")
+        print("[App] SESSION EXPIRED - Navigating to login page")
         currentPage = .login
-
-        // Show alert to user (optional - the login page should handle this)
-        // The sessionState and lastExpirationReason on authManager can be used
-        // by LoginView to show an appropriate message
     }
 
     @MainActor

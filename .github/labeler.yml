@@ -1,0 +1,124 @@
+# Labeler configuration for auto-labeling PRs
+# Used by actions/labeler
+
+# Backend services
+backend:
+  - changed-files:
+      - any-glob-to-any-file: 'backend/**'
+
+backend/identity:
+  - changed-files:
+      - any-glob-to-any-file: 'backend/identity-service/**'
+
+backend/content:
+  - changed-files:
+      - any-glob-to-any-file: 'backend/content-service/**'
+
+backend/feed:
+  - changed-files:
+      - any-glob-to-any-file: 'backend/feed-service/**'
+
+backend/graph:
+  - changed-files:
+      - any-glob-to-any-file: 'backend/graph-service/**'
+
+backend/media:
+  - changed-files:
+      - any-glob-to-any-file: 'backend/media-service/**'
+
+backend/social:
+  - changed-files:
+      - any-glob-to-any-file: 'backend/social-service/**'
+
+backend/chat:
+  - changed-files:
+      - any-glob-to-any-file: 'backend/realtime-chat-service/**'
+
+backend/gateway:
+  - changed-files:
+      - any-glob-to-any-file: 'backend/graphql-gateway/**'
+
+backend/analytics:
+  - changed-files:
+      - any-glob-to-any-file: 'backend/analytics-service/**'
+
+backend/notification:
+  - changed-files:
+      - any-glob-to-any-file: 'backend/notification-service/**'
+
+backend/search:
+  - changed-files:
+      - any-glob-to-any-file: 'backend/search-service/**'
+
+backend/ranking:
+  - changed-files:
+      - any-glob-to-any-file: 'backend/ranking-service/**'
+
+backend/trust-safety:
+  - changed-files:
+      - any-glob-to-any-file: 'backend/trust-safety-service/**'
+
+# iOS
+ios:
+  - changed-files:
+      - any-glob-to-any-file: 'ios/**'
+
+# Infrastructure
+infra:
+  - changed-files:
+      - any-glob-to-any-file: 'infra/**'
+
+kubernetes:
+  - changed-files:
+      - any-glob-to-any-file: 'k8s/**'
+
+terraform:
+  - changed-files:
+      - any-glob-to-any-file: '**/*.tf'
+
+# CI/CD
+ci:
+  - changed-files:
+      - any-glob-to-any-file: '.github/**'
+
+# Documentation
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'docs/**'
+          - '*.md'
+          - 'LICENSE'
+
+# Dependencies
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'Cargo.toml'
+          - 'Cargo.lock'
+          - 'package.json'
+          - 'package-lock.json'
+          - 'go.mod'
+          - 'go.sum'
+
+# Shared libraries
+shared-libs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'backend/libs/**'
+          - 'backend/common/**'
+          - 'backend/proto/**'
+
+# Database migrations
+migrations:
+  - changed-files:
+      - any-glob-to-any-file: '**/migrations/**'
+
+# Configuration
+config:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.yaml'
+          - '**/*.yml'
+          - '**/*.json'
+          - '**/*.toml'
+          - '**/*.env*'

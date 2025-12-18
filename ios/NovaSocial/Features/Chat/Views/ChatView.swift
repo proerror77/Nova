@@ -862,7 +862,7 @@ struct ChatView: View {
             setupWebSocketCallbacks()
 
             // 5. Connect WebSocket
-            chatService.connectWebSocket()
+            chatService.connectWebSocket(conversationId: conversationId, userId: currentUserId)
 
             // 6. Mark messages as read
             if let lastMessage = messages.last {

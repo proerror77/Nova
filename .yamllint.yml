@@ -1,0 +1,36 @@
+# YAMLLint configuration for Nova Social Platform
+
+extends: default
+
+rules:
+  line-length:
+    max: 200
+    level: warning
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+  document-start: disable
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no', 'on', 'off']
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1
+  braces:
+    max-spaces-inside: 1
+  brackets:
+    max-spaces-inside: 1
+  colons:
+    max-spaces-after: 1
+  commas:
+    max-spaces-after: 1
+  empty-lines:
+    max: 2
+  new-line-at-end-of-file: enable
+  trailing-spaces: enable
+
+ignore: |
+  node_modules/
+  target/
+  .git/
+  helm/
+  infra/ten-agent-repo/

@@ -152,16 +152,21 @@ struct MessageView: View {
     private static let useMessagePreviewMode = false
     #endif
 
-    // ChatService 实例
+    // Services
     private let chatService = ChatService()
     private let friendsService = FriendsService()
+    private let matrixBridge = MatrixBridgeService.shared
+
+    // MARK: - Matrix State
+    @State private var isMatrixInitializing = false
+    @State private var matrixInitError: String?
 
     init(currentPage: Binding<AppPage>) {
         self._currentPage = currentPage
     }
 
-    // MARK: - 从API加载会话列表
-    private func loadConversations() async {
+    // MARK: - 初始化 Matrix 並載入對話
+    private func initializeMatrixAndLoadConversations() async {
         // 🎨 预览模式：使用模拟数据进行UI调试
         if Self.useMessagePreviewMode {
             print("🎨 [MessageView] Preview Mode enabled - using mock data")
@@ -176,50 +181,85 @@ struct MessageView: View {
 
         await MainActor.run {
             self.isPreviewMode = false
+            self.isLoading = true
+            self.errorMessage = nil
+            self.matrixInitError = nil
         }
 
-        print("🚀 [MessageView] loadConversations() starting...")
-        isLoading = true
-        errorMessage = nil
+        // 步驟 1: 確保 Matrix 已初始化
+        if !matrixBridge.isInitialized {
+            print("🔄 [MessageView] Matrix not initialized, initializing...")
+            await MainActor.run {
+                self.isMatrixInitializing = true
+            }
+
+            do {
+                try await matrixBridge.initialize()
+                print("✅ [MessageView] Matrix initialized successfully")
+            } catch {
+                print("❌ [MessageView] Matrix initialization failed: \(error)")
+                await MainActor.run {
+                    self.isMatrixInitializing = false
+                    self.isLoading = false
+                    self.matrixInitError = "Matrix 連接失敗: \(error.localizedDescription)"
+                    self.errorMessage = "Failed to connect to messaging service"
+                }
+                return
+            }
+
+            await MainActor.run {
+                self.isMatrixInitializing = false
+            }
+        }
+
+        // Check if Matrix bridge is enabled (backend must have Matrix config)
+        if !matrixBridge.isBridgeEnabled {
+            print("⚠️ [MessageView] Matrix bridge is disabled")
+            await MainActor.run {
+                self.isLoading = false
+                self.conversations = []
+                // Don't show error - just show empty state since messaging is not available yet
+            }
+            return
+        }
+
+        // 步驟 2: 從 Matrix 載入對話列表
+        await loadConversationsFromMatrix()
+    }
+
+    // MARK: - 從 Matrix 載入對話列表
+    private func loadConversationsFromMatrix() async {
+        print("🚀 [MessageView] loadConversationsFromMatrix() starting...")
+
+        await MainActor.run {
+            self.isLoading = true
+            self.errorMessage = nil
+        }
 
         do {
-            print("📞 [MessageView] Calling chatService.getConversations()")
-            let apiConversations = try await chatService.getConversations()
+            print("📞 [MessageView] Calling matrixBridge.getConversationsFromMatrix()")
+            let matrixConversations = try await matrixBridge.getConversationsFromMatrix()
 
-            print("✅ [MessageView] Loaded \(apiConversations.count) conversations from API")
+            print("✅ [MessageView] Loaded \(matrixConversations.count) conversations from Matrix")
 
             // Convert to UI model
-            let currentUserId = KeychainService.shared.get(.userId) ?? ""
-            let previews = apiConversations.map { conv -> ConversationPreview in
-                // For direct conversations, show the other user's name
-                // For group conversations, show the group name
-                let userName: String
-                if conv.type == .direct {
-                    // Find the other member (not current user)
-                    if let otherMember = conv.members.first(where: { $0.userId != currentUserId }) {
-                        userName = otherMember.username
-                    } else if let firstMember = conv.members.first {
-                        userName = firstMember.username
-                    } else {
-                        userName = "User \(conv.id.prefix(4))"
-                    }
+            let previews = matrixConversations.map { conv -> ConversationPreview in
+                let timeStr: String
+                if let time = conv.lastMessageTime {
+                    timeStr = formatTime(time)
                 } else {
-                    // Group conversation - use group name
-                    userName = conv.name ?? "Group \(conv.id.prefix(4))"
+                    timeStr = ""
                 }
-                
-                // Get last message content (may need decryption)
-                let lastMsg = conv.lastMessage?.content ?? "Start chatting!"
-                let timeStr = formatTime(conv.lastMessage?.timestamp ?? conv.updatedAt)
 
                 return ConversationPreview(
                     id: conv.id,
-                    userName: userName,
-                    lastMessage: lastMsg,
+                    userName: conv.displayName,
+                    lastMessage: conv.lastMessage ?? "開始聊天吧！",
                     time: timeStr,
                     unreadCount: conv.unreadCount,
                     hasUnread: conv.unreadCount > 0,
-                    isEncrypted: conv.isEncrypted
+                    isEncrypted: conv.isEncrypted,
+                    avatarUrl: conv.avatarURL
                 )
             }
 
@@ -228,13 +268,21 @@ struct MessageView: View {
                 self.isLoading = false
             }
         } catch {
-            print("❌ [MessageView] Failed to load conversations: \(error)")
+            print("❌ [MessageView] Failed to load conversations from Matrix: \(error)")
 
             await MainActor.run {
                 self.errorMessage = "Failed to load messages"
                 self.isLoading = false
-                // 如果API失败，显示空列表而不是mock数据
                 self.conversations = []
+            }
+        }
+    }
+
+    // MARK: - 設置 Matrix 房間更新監聽
+    private func setupMatrixRoomListObserver() {
+        matrixBridge.onRoomListUpdated = { [self] _ in
+            Task {
+                await loadConversationsFromMatrix()
             }
         }
     }
@@ -432,9 +480,11 @@ struct MessageView: View {
             }
         }
         .onAppear {
-            // 页面显示时加载会话列表
+            // 設置 Matrix 房間列表更新監聽
+            setupMatrixRoomListObserver()
+            // 初始化 Matrix 並載入對話列表
             Task {
-                await loadConversations()
+                await initializeMatrixAndLoadConversations()
             }
         }
     }
@@ -595,7 +645,7 @@ struct MessageView: View {
                                     .foregroundColor(DesignTokens.textSecondary)
                                 Button(action: {
                                     Task {
-                                        await loadConversations()
+                                        await initializeMatrixAndLoadConversations()
                                     }
                                 }) {
                                 Text(LocalizedStringKey("Retry"))

@@ -403,7 +403,7 @@ struct CreateAccountView: View {
         // 移除 .ignoresSafeArea(.keyboard) 防止页面随键盘浮动
         .scrollDismissesKeyboard(.interactively)
         .onChange(of: selectedPhotoItem) { oldValue, newValue in
-            Task {
+            _Concurrency.Task { @MainActor in
                 if let photoItem = newValue,
                    let data = try? await photoItem.loadTransferable(type: Data.self),
                    let image = UIImage(data: data) {

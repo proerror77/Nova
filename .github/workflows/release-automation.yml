@@ -1,0 +1,383 @@
+name: Release Automation
+
+# Automated release workflow with semantic versioning
+# - Auto-generates changelogs from conventional commits
+# - Creates GitHub releases
+# - Tags Docker images with version
+# - Supports environment promotions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'ios/**'
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        type: choice
+        options:
+          - auto
+          - patch
+          - minor
+          - major
+        default: auto
+      dry_run:
+        description: 'Dry run (no actual release)'
+        type: boolean
+        default: false
+      promote_to_production:
+        description: 'Promote to production after release'
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+  pull-requests: read
+  id-token: write
+
+env:
+  GCP_REGION: ${{ vars.GCP_REGION || 'asia-northeast1' }}
+  GAR_REGISTRY: ${{ vars.GCP_REGION || 'asia-northeast1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/nova
+
+jobs:
+  # ============================================================
+  # Analyze Commits for Version Bump
+  # ============================================================
+  analyze-commits:
+    name: Analyze Commits
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.version.outputs.new_version }}
+      current_version: ${{ steps.version.outputs.current_version }}
+      bump_type: ${{ steps.version.outputs.bump_type }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+      should_release: ${{ steps.version.outputs.should_release }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get current version
+        id: current
+        run: |
+          # Get latest tag or default to 0.0.0
+          CURRENT_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Analyze commits for version bump
+        id: version
+        run: |
+          set -e
+
+          CURRENT_VERSION="${{ steps.current.outputs.version }}"
+          echo "current_version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+
+          # Get commits since last tag
+          if git rev-parse "$CURRENT_VERSION" >/dev/null 2>&1; then
+            COMMITS=$(git log "$CURRENT_VERSION"..HEAD --pretty=format:"%s" 2>/dev/null || echo "")
+          else
+            COMMITS=$(git log --pretty=format:"%s" -20)
+          fi
+
+          echo "Commits to analyze:"
+          echo "$COMMITS"
+
+          # Determine bump type from conventional commits
+          if [ "${{ inputs.release_type }}" != "auto" ] && [ -n "${{ inputs.release_type }}" ]; then
+            BUMP_TYPE="${{ inputs.release_type }}"
+          elif echo "$COMMITS" | grep -qE "^(BREAKING CHANGE|feat!|fix!):"; then
+            BUMP_TYPE="major"
+          elif echo "$COMMITS" | grep -qE "^feat(\(.+\))?:"; then
+            BUMP_TYPE="minor"
+          elif echo "$COMMITS" | grep -qE "^(fix|perf|refactor)(\(.+\))?:"; then
+            BUMP_TYPE="patch"
+          else
+            echo "No conventional commits found - skipping release"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "bump_type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
+
+          # Calculate new version
+          VERSION_PARTS=(${CURRENT_VERSION//v/})
+          VERSION_PARTS=(${VERSION_PARTS//./ })
+          MAJOR=${VERSION_PARTS[0]:-0}
+          MINOR=${VERSION_PARTS[1]:-0}
+          PATCH=${VERSION_PARTS[2]:-0}
+
+          case $BUMP_TYPE in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+
+          echo "Version bump: $CURRENT_VERSION -> $NEW_VERSION ($BUMP_TYPE)"
+
+      - name: Generate changelog
+        id: changelog
+        if: steps.version.outputs.should_release == 'true'
+        run: |
+          set -e
+
+          CURRENT_VERSION="${{ steps.current.outputs.version }}"
+
+          # Group commits by type
+          if git rev-parse "$CURRENT_VERSION" >/dev/null 2>&1; then
+            COMMITS=$(git log "$CURRENT_VERSION"..HEAD --pretty=format:"%H|%s|%an" 2>/dev/null || echo "")
+          else
+            COMMITS=$(git log --pretty=format:"%H|%s|%an" -20)
+          fi
+
+          # Generate changelog content
+          CHANGELOG="## What's Changed\n\n"
+
+          # Features
+          FEATURES=$(echo "$COMMITS" | grep -E "^\w+\|feat(\(.+\))?:" | while IFS='|' read hash msg author; do
+            echo "* ${msg} (@${author})"
+          done || true)
+          if [ -n "$FEATURES" ]; then
+            CHANGELOG+="### Features\n$FEATURES\n\n"
+          fi
+
+          # Bug Fixes
+          FIXES=$(echo "$COMMITS" | grep -E "^\w+\|fix(\(.+\))?:" | while IFS='|' read hash msg author; do
+            echo "* ${msg} (@${author})"
+          done || true)
+          if [ -n "$FIXES" ]; then
+            CHANGELOG+="### Bug Fixes\n$FIXES\n\n"
+          fi
+
+          # Performance
+          PERF=$(echo "$COMMITS" | grep -E "^\w+\|perf(\(.+\))?:" | while IFS='|' read hash msg author; do
+            echo "* ${msg} (@${author})"
+          done || true)
+          if [ -n "$PERF" ]; then
+            CHANGELOG+="### Performance\n$PERF\n\n"
+          fi
+
+          # Other changes
+          OTHER=$(echo "$COMMITS" | grep -vE "^\w+\|(feat|fix|perf|docs|chore)(\(.+\))?:" | while IFS='|' read hash msg author; do
+            echo "* ${msg} (@${author})"
+          done || true)
+          if [ -n "$OTHER" ]; then
+            CHANGELOG+="### Other Changes\n$OTHER\n\n"
+          fi
+
+          # Add footer
+          CHANGELOG+="\n**Full Changelog**: https://github.com/${{ github.repository }}/compare/$CURRENT_VERSION...${{ steps.version.outputs.new_version }}"
+
+          # Output changelog (escape for JSON)
+          echo "changelog<<EOF" >> "$GITHUB_OUTPUT"
+          echo -e "$CHANGELOG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+  # ============================================================
+  # Create Release
+  # ============================================================
+  create-release:
+    name: Create Release
+    needs: analyze-commits
+    if: needs.analyze-commits.outputs.should_release == 'true' && inputs.dry_run != true
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.analyze-commits.outputs.new_version }}
+          name: Release ${{ needs.analyze-commits.outputs.new_version }}
+          body: ${{ needs.analyze-commits.outputs.changelog }}
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Output release info
+        run: |
+          echo "## Release Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.analyze-commits.outputs.new_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Type:** ${{ needs.analyze-commits.outputs.bump_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Changelog" >> $GITHUB_STEP_SUMMARY
+          echo "${{ needs.analyze-commits.outputs.changelog }}" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================
+  # Tag Docker Images with Version
+  # ============================================================
+  tag-images:
+    name: Tag Docker Images
+    needs: [analyze-commits, create-release]
+    if: needs.analyze-commits.outputs.should_release == 'true' && inputs.dry_run != true
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    strategy:
+      matrix:
+        service:
+          - analytics-service
+          - content-service
+          - feed-service
+          - graph-service
+          - graphql-gateway
+          - identity-service
+          - media-service
+          - notification-service
+          - ranking-service
+          - realtime-chat-service
+          - search-service
+          - social-service
+          - trust-safety-service
+      max-parallel: 6
+      fail-fast: false
+
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Tag image with version
+        run: |
+          VERSION="${{ needs.analyze-commits.outputs.new_version }}"
+          SERVICE="${{ matrix.service }}"
+          REGISTRY="${{ env.GAR_REGISTRY }}"
+
+          # Add version tag to existing latest image
+          gcloud artifacts docker tags add \
+            "${REGISTRY}/${SERVICE}:latest" \
+            "${REGISTRY}/${SERVICE}:${VERSION}" \
+            --quiet || echo "Failed to tag ${SERVICE}"
+
+          echo "Tagged ${SERVICE}:latest as ${SERVICE}:${VERSION}"
+
+  # ============================================================
+  # Promote to Production (Optional)
+  # ============================================================
+  promote-production:
+    name: Promote to Production
+    needs: [analyze-commits, create-release, tag-images]
+    if: |
+      needs.analyze-commits.outputs.should_release == 'true' &&
+      inputs.dry_run != true &&
+      inputs.promote_to_production == true
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://api.nova.app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install GKE auth plugin
+        run: gcloud components install gke-gcloud-auth-plugin --quiet
+
+      - name: Deploy to production
+        run: |
+          VERSION="${{ needs.analyze-commits.outputs.new_version }}"
+
+          # Get production cluster credentials
+          gcloud container clusters get-credentials nova-production-gke \
+            --region ${{ env.GCP_REGION }} \
+            --project ${{ vars.GCP_PROJECT_ID }}
+
+          # Update all deployments with version tag
+          for SERVICE in analytics-service content-service feed-service graph-service graphql-gateway identity-service media-service notification-service ranking-service realtime-chat-service search-service social-service trust-safety-service; do
+            kubectl set image deployment/$SERVICE \
+              $SERVICE=${{ env.GAR_REGISTRY }}/$SERVICE:$VERSION \
+              -n nova-production || echo "Skipping $SERVICE"
+          done
+
+          echo "Deployed version $VERSION to production"
+
+  # ============================================================
+  # Notify Release
+  # ============================================================
+  notify-release:
+    name: Notify Release
+    needs: [analyze-commits, create-release, tag-images]
+    if: always() && needs.analyze-commits.outputs.should_release == 'true'
+    uses: ./.github/workflows/_reusable-feishu-notify.yml
+    with:
+      title: "New Release: ${{ needs.analyze-commits.outputs.new_version }}"
+      status: ${{ needs.create-release.result == 'success' && 'success' || 'failure' }}
+      workflow-name: "Release Automation"
+      environment: "release"
+      message: |
+        **Version:** ${{ needs.analyze-commits.outputs.new_version }}
+        **Type:** ${{ needs.analyze-commits.outputs.bump_type }}
+        **Previous:** ${{ needs.analyze-commits.outputs.current_version }}
+
+        Docker images tagged with version.
+        Ready for production promotion.
+    secrets:
+      feishu-webhook: ${{ secrets.FEISHU_WEBHOOK }}
+
+  # ============================================================
+  # Dry Run Summary
+  # ============================================================
+  dry-run-summary:
+    name: Dry Run Summary
+    needs: analyze-commits
+    if: inputs.dry_run == true && needs.analyze-commits.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Show what would happen
+        run: |
+          echo "## Dry Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This is a dry run. No actual release was created." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Release Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Current Version | ${{ needs.analyze-commits.outputs.current_version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| New Version | ${{ needs.analyze-commits.outputs.new_version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bump Type | ${{ needs.analyze-commits.outputs.bump_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Changelog Preview" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "${{ needs.analyze-commits.outputs.changelog }}" >> $GITHUB_STEP_SUMMARY

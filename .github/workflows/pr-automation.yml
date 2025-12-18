@@ -1,0 +1,430 @@
+name: PR Automation
+
+# Automated PR management workflow
+# - Auto-labeling based on files changed
+# - Size labeling
+# - Stale PR handling
+# - Auto-assign reviewers
+# - Merge queue management
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: pr-automation-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  # ============================================================
+  # Auto-Labeling
+  # ============================================================
+  auto-label:
+    name: Auto Label PR
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Label by files changed
+        uses: actions/labeler@v5
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          configuration-path: .github/labeler.yml
+
+      - name: Label by PR size
+        uses: codelytv/pr-size-labeler@v1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          xs_label: 'size/XS'
+          xs_max_size: 10
+          s_label: 'size/S'
+          s_max_size: 100
+          m_label: 'size/M'
+          m_max_size: 500
+          l_label: 'size/L'
+          l_max_size: 1000
+          xl_label: 'size/XL'
+          fail_if_xl: false
+
+      - name: Add priority labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prTitle = context.payload.pull_request.title.toLowerCase();
+            const labels = [];
+
+            // Priority based on keywords
+            if (prTitle.includes('hotfix') || prTitle.includes('urgent') || prTitle.includes('critical')) {
+              labels.push('priority/critical');
+            } else if (prTitle.includes('bug') || prTitle.includes('fix')) {
+              labels.push('priority/high');
+            } else if (prTitle.includes('feat')) {
+              labels.push('priority/medium');
+            }
+
+            // Type based on conventional commit prefix
+            if (prTitle.startsWith('feat')) labels.push('type/feature');
+            else if (prTitle.startsWith('fix')) labels.push('type/bug');
+            else if (prTitle.startsWith('docs')) labels.push('type/docs');
+            else if (prTitle.startsWith('refactor')) labels.push('type/refactor');
+            else if (prTitle.startsWith('perf')) labels.push('type/performance');
+            else if (prTitle.startsWith('test')) labels.push('type/test');
+            else if (prTitle.startsWith('ci')) labels.push('type/ci');
+            else if (prTitle.startsWith('chore')) labels.push('type/chore');
+
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                labels: labels
+              });
+            }
+
+  # ============================================================
+  # Auto-Assign Reviewers
+  # ============================================================
+  auto-assign:
+    name: Auto Assign Reviewers
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'opened' &&
+      !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get changed files
+        id: files
+        uses: dorny/paths-filter@v3
+        with:
+          list-files: json
+          filters: |
+            backend:
+              - 'backend/**'
+            ios:
+              - 'ios/**'
+            infra:
+              - 'k8s/**'
+              - 'infra/**'
+              - '.github/**'
+            docs:
+              - 'docs/**'
+              - '*.md'
+
+      - name: Assign reviewers based on CODEOWNERS
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+
+            // Skip if author is a bot
+            if (pr.user.type === 'Bot') return;
+
+            // Define reviewers by area (should match CODEOWNERS)
+            const reviewersByArea = {
+              backend: ['backend-team'],
+              ios: ['ios-team'],
+              infra: ['devops-team'],
+              docs: ['docs-team']
+            };
+
+            const reviewers = new Set();
+            const areas = ['${{ steps.files.outputs.backend }}', '${{ steps.files.outputs.ios }}', '${{ steps.files.outputs.infra }}', '${{ steps.files.outputs.docs }}'];
+            const areaNames = ['backend', 'ios', 'infra', 'docs'];
+
+            areas.forEach((changed, i) => {
+              if (changed === 'true') {
+                const areaReviewers = reviewersByArea[areaNames[i]] || [];
+                areaReviewers.forEach(r => reviewers.add(r));
+              }
+            });
+
+            // Remove the PR author from reviewers
+            reviewers.delete(pr.user.login);
+
+            if (reviewers.size > 0) {
+              try {
+                // Try to add team reviewers
+                await github.rest.pulls.requestReviewers({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  team_reviewers: Array.from(reviewers)
+                });
+              } catch (e) {
+                console.log('Could not assign team reviewers:', e.message);
+              }
+            }
+
+  # ============================================================
+  # PR Validation
+  # ============================================================
+  validate-pr:
+    name: Validate PR
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate PR title (conventional commits)
+        uses: amannn/action-semantic-pull-request@v5
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          requireScope: false
+          subjectPattern: ^[A-Z].+$
+          subjectPatternError: |
+            The subject "{subject}" should start with a capital letter.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check PR description
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const body = pr.body || '';
+
+            const warnings = [];
+
+            // Check minimum description length
+            if (body.length < 50) {
+              warnings.push('PR description is too short. Please provide more context.');
+            }
+
+            // Check for required sections
+            const hasWhatChanged = body.toLowerCase().includes('## what') ||
+                                   body.toLowerCase().includes('## summary') ||
+                                   body.toLowerCase().includes('## changes');
+            if (!hasWhatChanged) {
+              warnings.push('Please include a "## Summary" or "## What Changed" section.');
+            }
+
+            // Check for test plan on non-trivial PRs
+            const filesChanged = pr.changed_files || 0;
+            if (filesChanged > 5) {
+              const hasTestPlan = body.toLowerCase().includes('## test') ||
+                                  body.toLowerCase().includes('testing');
+              if (!hasTestPlan) {
+                warnings.push('For larger PRs, please include a "## Test Plan" section.');
+              }
+            }
+
+            if (warnings.length > 0) {
+              const comment = `## PR Validation Warnings
+
+            Please address the following:
+
+            ${warnings.map(w => `- ${w}`).join('\n')}
+
+            ---
+            *This is an automated check. Feel free to dismiss if not applicable.*`;
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: comment
+              });
+            }
+
+  # ============================================================
+  # First-time Contributor Welcome
+  # ============================================================
+  welcome-contributor:
+    name: Welcome First-time Contributor
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'opened'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check if first contribution
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const author = context.payload.pull_request.user.login;
+
+            // Check if user has previous PRs
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              per_page: 100
+            });
+
+            const previousPRs = prs.filter(pr =>
+              pr.user.login === author &&
+              pr.number !== context.payload.pull_request.number
+            );
+
+            return previousPRs.length === 0;
+
+      - name: Welcome message
+        if: steps.check.outputs.result == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const author = context.payload.pull_request.user.login;
+
+            const message = `## Welcome to Nova!
+
+            Thanks for your first contribution, @${author}!
+
+            Here are a few things to know:
+            - Our CI will run tests and linting on your PR
+            - Please make sure your PR title follows [conventional commits](https://www.conventionalcommits.org/)
+            - A team member will review your PR soon
+
+            If you have any questions, feel free to ask in the comments!
+
+            ---
+            *This is an automated welcome message.*`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: message
+            });
+
+  # ============================================================
+  # Command Handler (via comments)
+  # ============================================================
+  command-handler:
+    name: Handle PR Commands
+    if: |
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse and execute command
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comment = context.payload.comment.body.trim();
+            const author = context.payload.comment.user.login;
+            const prNumber = context.payload.issue.number;
+
+            // Check if user has write access
+            const { data: permission } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: author
+            });
+
+            const hasWriteAccess = ['admin', 'write'].includes(permission.permission);
+
+            // Parse command
+            const [cmd, ...args] = comment.split(/\s+/);
+
+            switch (cmd.toLowerCase()) {
+              case '/lgtm':
+                if (hasWriteAccess) {
+                  await github.rest.pulls.createReview({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: prNumber,
+                    event: 'APPROVE',
+                    body: 'LGTM! :+1:'
+                  });
+                }
+                break;
+
+              case '/hold':
+                if (hasWriteAccess) {
+                  await github.rest.issues.addLabels({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: prNumber,
+                    labels: ['do-not-merge/hold']
+                  });
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: prNumber,
+                    body: `PR is on hold. Use \`/unhold\` to remove.`
+                  });
+                }
+                break;
+
+              case '/unhold':
+                if (hasWriteAccess) {
+                  try {
+                    await github.rest.issues.removeLabel({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: prNumber,
+                      name: 'do-not-merge/hold'
+                    });
+                  } catch (e) {
+                    // Label might not exist
+                  }
+                }
+                break;
+
+              case '/retest':
+                if (hasWriteAccess) {
+                  // Trigger a re-run of CI
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: prNumber,
+                    body: 'Retriggering CI checks...'
+                  });
+                  // This will trigger workflow_run for synchronize
+                }
+                break;
+
+              case '/help':
+                const helpMessage = `## Available Commands
+
+            | Command | Description | Access |
+            |---------|-------------|--------|
+            | \`/lgtm\` | Approve the PR | Write |
+            | \`/hold\` | Put PR on hold | Write |
+            | \`/unhold\` | Remove hold | Write |
+            | \`/retest\` | Retrigger CI | Write |
+            | \`/help\` | Show this help | All |
+            `;
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  body: helpMessage
+                });
+                break;
+
+              default:
+                // Unknown command - ignore
+                break;
+            }

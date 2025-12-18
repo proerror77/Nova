@@ -478,6 +478,27 @@ class AuthenticationManager: ObservableObject {
         try await identityService.resetPassword(resetToken: token, newPassword: newPassword)
     }
 
+    // MARK: - Session Validation
+
+    /// Validate the current session by checking if we have valid credentials
+    func validateSession() async -> Bool {
+        // Check if we have a stored token
+        guard let token = keychain.get(.authToken), !token.isEmpty else {
+            print("[Auth] No stored token found")
+            return false
+        }
+
+        // Set the token in API client if not already set
+        if authToken == nil {
+            authToken = token
+            APIClient.shared.setAuthToken(token)
+        }
+
+        // For now, just return true if we have a token
+        // In a full implementation, this would call the server to validate
+        return isAuthenticated
+    }
+
     // MARK: - Private Helpers
 
     private func saveAuth(token: String, refreshToken: String?, user: UserProfile) async {

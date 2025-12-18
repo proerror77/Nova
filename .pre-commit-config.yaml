@@ -1,0 +1,189 @@
+# Pre-commit hooks for Nova Social Platform
+# Install: pip install pre-commit && pre-commit install
+
+default_stages: [commit]
+fail_fast: false
+
+repos:
+  # ============================================================
+  # General Hooks
+  # ============================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$|\.swift$'
+      - id: end-of-file-fixer
+        exclude: '\.swift$'
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        exclude: 'k8s/.*\.yaml$|helm/.*'
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: check-symlinks
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # ============================================================
+  # Secrets Detection
+  # ============================================================
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks
+        name: Detect secrets
+        entry: gitleaks protect --staged --verbose
+        language: golang
+
+  # ============================================================
+  # Rust Hooks
+  # ============================================================
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: Rust Format
+        entry: bash -c 'cd backend && cargo fmt --all -- --check'
+        language: system
+        files: '\.rs$'
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: Rust Clippy
+        entry: bash -c 'cd backend && cargo clippy --lib --bins --all-features -- -D clippy::unwrap_used -D clippy::todo -D clippy::unimplemented'
+        language: system
+        files: '\.rs$'
+        pass_filenames: false
+        stages: [push]
+
+      - id: cargo-check
+        name: Rust Check
+        entry: bash -c 'cd backend && cargo check --all-targets'
+        language: system
+        files: '\.rs$'
+        pass_filenames: false
+
+      - id: rust-no-println
+        name: No println! in production
+        entry: grep -rn 'println!\|eprintln!' --include='*.rs'
+        language: system
+        files: 'backend/.*\.rs$'
+        exclude: 'tests/|_test\.rs$|build\.rs$|examples/'
+        pass_filenames: false
+        stages: [push]
+
+  # ============================================================
+  # Swift/iOS Hooks
+  # ============================================================
+  - repo: local
+    hooks:
+      - id: swiftlint
+        name: SwiftLint
+        entry: bash -c 'cd ios/NovaSocial && swiftlint --strict --quiet'
+        language: system
+        files: '\.swift$'
+        pass_filenames: false
+
+      - id: swift-format-check
+        name: Swift Format Check
+        entry: bash -c 'cd ios/NovaSocial && swift-format lint --recursive .'
+        language: system
+        files: '\.swift$'
+        pass_filenames: false
+
+  # ============================================================
+  # Kubernetes/YAML Hooks
+  # ============================================================
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.33.0
+    hooks:
+      - id: yamllint
+        args:
+          - -c
+          - .yamllint.yml
+        exclude: 'helm/|k8s/.*kustomization.*|node_modules/'
+
+  - repo: local
+    hooks:
+      - id: k8s-validate
+        name: Kubernetes Manifest Validation
+        entry: bash -c 'for f in $(find k8s -name "*.yaml" -type f ! -name "kustomization.yaml" 2>/dev/null | head -10); do kubectl apply --dry-run=client -f "$f" 2>/dev/null || true; done'
+        language: system
+        files: 'k8s/.*\.yaml$'
+        pass_filenames: false
+
+  # ============================================================
+  # Docker Hooks
+  # ============================================================
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint
+        args:
+          - --ignore=DL3008
+          - --ignore=DL3013
+          - --ignore=DL3018
+
+  # ============================================================
+  # Commit Message Hooks
+  # ============================================================
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.1.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args:
+          - feat
+          - fix
+          - docs
+          - style
+          - refactor
+          - perf
+          - test
+          - build
+          - ci
+          - chore
+          - revert
+
+  # ============================================================
+  # Markdown Hooks
+  # ============================================================
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.38.0
+    hooks:
+      - id: markdownlint
+        args: ['--config', '.markdownlint.json']
+        exclude: 'CHANGELOG\.md$|node_modules/'
+
+  # ============================================================
+  # Shell Script Hooks
+  # ============================================================
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.6
+    hooks:
+      - id: shellcheck
+        args: [-x, -e, SC1091]
+
+  # ============================================================
+  # Security Hooks
+  # ============================================================
+  - repo: local
+    hooks:
+      - id: no-hardcoded-secrets
+        name: No Hardcoded Secrets
+        entry: bash -c 'grep -rn -E "(password|secret|api_key|token)\s*=\s*\"[^\"]+\"" --include="*.rs" --include="*.swift" --include="*.yaml" . | grep -v "_test\." | grep -v "test_" | grep -v "examples/" && exit 1 || exit 0'
+        language: system
+        files: '\.(rs|swift|yaml|yml)$'
+        exclude: 'tests/|_test\.|examples/'
+        pass_filenames: false
+
+      - id: no-todo-in-main
+        name: No TODO comments on main
+        entry: bash -c 'if [ "$(git branch --show-current)" = "main" ]; then grep -rn "TODO\|FIXME\|XXX" --include="*.rs" --include="*.swift" . | grep -v target/ | head -5 && echo "Warning: TODO comments found" || true; fi'
+        language: system
+        pass_filenames: false
+        stages: [push]

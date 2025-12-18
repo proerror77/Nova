@@ -15,9 +15,6 @@ use crate::middleware::UserId;
 use crate::models::{StartUploadRequest, UploadResponse};
 use crate::services::video::gcs::GcsSigner;
 use crate::services::UploadService;
-use aws_sdk_s3::config::Region;
-use aws_sdk_s3::presigning::PresigningConfig;
-use aws_sdk_s3::Client as S3Client;
 use std::time::Duration;
 
 #[derive(Debug, Serialize)]
@@ -152,10 +149,10 @@ pub struct PresignedUrlRequest {
     pub content_type: String,
 }
 
-/// Generate a presigned URL for S3 upload
+/// Generate a presigned URL for GCS upload
 ///
-/// Generates a signed URL that allows the client to upload directly to S3
-/// without needing AWS credentials. The URL expires after 1 hour.
+/// Generates a signed URL that allows the client to upload directly to GCS
+/// without needing credentials. The URL expires after 1 hour.
 pub async fn generate_presigned_url(
     config: web::Data<Config>,
     upload_id: web::Path<String>,
@@ -164,62 +161,35 @@ pub async fn generate_presigned_url(
     let upload_uuid = Uuid::parse_str(&upload_id)
         .map_err(|_| AppError::BadRequest("Invalid upload ID".to_string()))?;
 
-    // Generate S3 object key with upload ID and filename
-    let s3_key = format!("uploads/{}/{}", upload_uuid, req.file_name);
+    // Generate GCS object key with upload ID and filename
+    let object_key = format!("uploads/{}/{}", upload_uuid, req.file_name);
 
     // Expiration time: 1 hour from now (in seconds)
     let expiration_secs = 3600u64;
 
-    // Prefer GCS signing if configured, otherwise fallback to S3 presign
-    let presigned_url = if let Some(gcs_cfg) = &config.gcs {
-        let signer =
-            GcsSigner::from_config(gcs_cfg).map_err(|e| AppError::Internal(e.to_string()))?;
-        signer
-            .sign_put_url(
-                &gcs_cfg.bucket,
-                &s3_key,
-                &req.content_type,
-                Duration::from_secs(expiration_secs),
-            )
-            .map_err(|e| AppError::Internal(e.to_string()))?
-    } else {
-        // Build AWS SDK config
-        let sdk_cfg = aws_config::from_env()
-            .region(Region::new(config.s3.region.clone()))
-            .load()
-            .await;
+    // Use GCS signing
+    let gcs_cfg = config
+        .gcs
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("GCS configuration required".to_string()))?;
 
-        // Allow custom S3-compatible endpoint (e.g., MinIO/LocalStack)
-        let mut s3_conf_builder = aws_sdk_s3::config::Builder::from(&sdk_cfg);
-        if let Some(endpoint) = &config.s3.endpoint {
-            s3_conf_builder = s3_conf_builder.endpoint_url(endpoint);
-        }
-        let s3_client = S3Client::from_conf(s3_conf_builder.build());
+    let signer =
+        GcsSigner::from_config(gcs_cfg).map_err(|e| AppError::Internal(e.to_string()))?;
 
-        // Create presigning config
-        let presign_cfg = PresigningConfig::builder()
-            .expires_in(Duration::from_secs(expiration_secs))
-            .build()
-            .map_err(|e| AppError::Internal(format!("Failed to create presign config: {e}")))?;
-
-        // Generate presigned URL for PUT upload
-        let presigned = s3_client
-            .put_object()
-            .bucket(&config.s3.bucket)
-            .key(&s3_key)
-            .content_type(&req.content_type)
-            .presigned(presign_cfg)
-            .await
-            .map_err(|e| AppError::Internal(format!("Failed to generate presigned URL: {e}")))?;
-
-        presigned.uri().to_string()
-    };
+    let presigned_url = signer
+        .sign_put_url(
+            &gcs_cfg.bucket,
+            &object_key,
+            &req.content_type,
+            Duration::from_secs(expiration_secs),
+        )
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
     tracing::info!(
         upload_id = %upload_uuid,
-        s3_key = %s3_key,
+        object_key = %object_key,
         expiration = expiration_secs as i64,
-        "Generated presigned URL for S3 upload"
+        "Generated presigned URL for GCS upload"
     );
 
     Ok(HttpResponse::Ok().json(PresignedUrlResponse {

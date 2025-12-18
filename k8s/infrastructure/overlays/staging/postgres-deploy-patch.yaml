@@ -72,7 +72,7 @@ spec:
       volumes:
       - name: init-scripts
         configMap:
-          name: postgres-init
+          name: postgres-multi-db-init
 
   # StatefulSet 特定配置
   serviceName: postgres

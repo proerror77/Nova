@@ -80,12 +80,12 @@ struct NewPostView: View {
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: .constant(nil))
         }
-        // PhotosPicker with Live Photo support
+        // PhotosPicker with Live Photo and video support
         .photosPicker(
             isPresented: $showPhotoPicker,
             selection: $selectedPhotos,
             maxSelectionCount: 5 - selectedMediaItems.count,
-            matching: .any(of: [.images, .livePhotos])  // Support both images and Live Photos
+            matching: .any(of: [.images, .livePhotos, .videos])  // Support images, Live Photos, and videos
         )
         .onChange(of: selectedPhotos) { oldValue, newValue in
             Task {
@@ -382,10 +382,37 @@ struct NewPostView: View {
                                         removeMediaItem(at: index)
                                     }
                                 )
+
+                            case .video(let videoData):
+                                // Video preview with thumbnail and duration
+                                ZStack(alignment: .bottomTrailing) {
+                                    Image(uiImage: videoData.thumbnail)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 239, height: 290)
+                                        .cornerRadius(10)
+                                        .clipped()
+
+                                    // Video duration badge
+                                    Text(formatDuration(videoData.duration))
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.black.opacity(0.6))
+                                        .cornerRadius(4)
+                                        .padding(8)
+
+                                    // Play icon overlay
+                                    Image(systemName: "play.circle.fill")
+                                        .font(.system(size: 40))
+                                        .foregroundColor(.white.opacity(0.9))
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                }
                             }
 
-                            // Delete button (for regular images, Live Photo has its own)
-                            if case .image = mediaItem {
+                            // Delete button (for images and videos, Live Photo has its own)
+                            if !mediaItem.isLivePhoto {
                                 Button(action: {
                                     removeMediaItem(at: index)
                                 }) {
@@ -665,16 +692,21 @@ struct NewPostView: View {
     // MARK: - Remove media item
     private func removeMediaItem(at index: Int) {
         guard index < selectedMediaItems.count else { return }
-        
+
         let item = selectedMediaItems[index]
-        
-        // Clean up temporary files for Live Photos
-        if case .livePhoto(let data) = item {
+
+        // Clean up temporary files for Live Photos and videos
+        switch item {
+        case .livePhoto(let data):
             try? FileManager.default.removeItem(at: data.videoURL)
+        case .video(let data):
+            try? FileManager.default.removeItem(at: data.url)
+        case .image:
+            break
         }
-        
+
         selectedMediaItems.remove(at: index)
-        
+
         // Sync with legacy selectedImages
         if index < selectedImages.count {
             selectedImages.remove(at: index)
@@ -1037,6 +1069,13 @@ struct NewPostView: View {
         }.value
     }
 
+    // MARK: - Format video duration
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+
     // MARK: - 提交帖子
     private func submitPost() async {
         guard canPost else { return }
@@ -1106,16 +1145,17 @@ struct NewPostView: View {
                 return
             }
             
-            // Separate regular images from Live Photos for different handling
+            // Separate regular images, Live Photos, and videos for different handling
             var regularImages: [(data: Data, filename: String, index: Int)] = []
             var livePhotos: [(data: LivePhotoData, index: Int)] = []
-            
+            var videos: [(data: VideoData, index: Int)] = []
+
             // Process images in parallel on background thread for faster preparation
             await MainActor.run {
-                uploadStatus = "Processing images..."
+                uploadStatus = "Processing media..."
             }
-            
-            // Collect images and live photos first
+
+            // Collect images, live photos, and videos first
             var imagesToProcess: [(image: UIImage, index: Int)] = []
             for (index, item) in itemsToUpload.enumerated() {
                 switch item {
@@ -1123,6 +1163,8 @@ struct NewPostView: View {
                     imagesToProcess.append((image: image, index: index))
                 case .livePhoto(let livePhotoData):
                     livePhotos.append((data: livePhotoData, index: index))
+                case .video(let videoData):
+                    videos.append((data: videoData, index: index))
                 }
             }
             

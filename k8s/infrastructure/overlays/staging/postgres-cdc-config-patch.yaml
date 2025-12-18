@@ -12,7 +12,6 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres
-  namespace: nova-staging
 spec:
   template:
     spec:

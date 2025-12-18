@@ -1,21 +1,18 @@
 pub mod gcs;
 /// Video service module
 ///
-/// Provides video-related services migrated from video-service:
-/// - S3 upload and management for video files
+/// Provides video-related services:
+/// - GCS upload and management for video files
 /// - Presigned URL generation for direct client uploads
 /// - File verification and integrity checks
 /// - GCP Transcoder API integration for real video transcoding
 ///
-/// Part of Phase C: Media Consolidation
-pub mod s3;
+/// Part of Phase C: Media Consolidation + GCP Migration
+pub mod storage;
 pub mod transcoder;
 
-// Re-export commonly used functions
-pub use s3::{
-    delete_s3_object, generate_presigned_url, get_s3_client, health_check, upload_video_to_s3,
-    verify_file_hash, verify_s3_object_exists,
-};
+// Re-export GCS storage client and functions
+pub use storage::{get_gcs_client, GcsStorageClient};
 
 // Re-export GCP Transcoder client
 pub use transcoder::{

@@ -382,6 +382,9 @@ struct MediaPreviewView: View {
 
                     case .livePhoto(let data):
                         livePhotoPreview(data: data, geometry: geometry)
+
+                    case .video(let data):
+                        videoPreview(data: data, geometry: geometry)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -566,6 +569,130 @@ struct MediaPreviewView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Video Preview
+
+    private func videoPreview(data: VideoData, geometry: GeometryProxy) -> some View {
+        ZStack {
+            // Video thumbnail as background
+            Image(uiImage: data.thumbnail)
+                .resizable()
+                .scaledToFit()
+                .scaleEffect(scale)
+                .offset(offset)
+
+            // Video player
+            if let player = player {
+                VideoPlayerLayer(player: player)
+                    .scaledToFit()
+                    .scaleEffect(scale)
+                    .offset(offset)
+            }
+
+            // Play/Pause button overlay
+            if !isPlayingLivePhoto {
+                Button(action: {
+                    if player == nil {
+                        let videoPlayer = AVPlayer(url: data.url)
+                        player = videoPlayer
+                        videoPlayer.play()
+                        isPlayingLivePhoto = true
+                    }
+                }) {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 64))
+                        .foregroundColor(.white.opacity(0.9))
+                }
+            }
+
+            // Duration badge
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    Text(formatVideoDuration(data.duration))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.black.opacity(0.6))
+                        .cornerRadius(4)
+                }
+                .padding(16)
+            }
+        }
+        .gesture(
+            MagnificationGesture()
+                .onChanged { value in
+                    let delta = value / lastScale
+                    lastScale = value
+                    scale = min(max(scale * delta, 1), 4)
+                }
+                .onEnded { _ in
+                    lastScale = 1.0
+                    if scale < 1 {
+                        withAnimation(.spring()) {
+                            scale = 1
+                            offset = .zero
+                        }
+                    }
+                }
+        )
+        .simultaneousGesture(
+            DragGesture()
+                .onChanged { value in
+                    if scale > 1 {
+                        offset = CGSize(
+                            width: lastOffset.width + value.translation.width,
+                            height: lastOffset.height + value.translation.height
+                        )
+                    } else {
+                        if value.translation.height > 0 {
+                            offset = CGSize(width: 0, height: value.translation.height)
+                        }
+                    }
+                }
+                .onEnded { value in
+                    if scale > 1 {
+                        lastOffset = offset
+                    } else {
+                        if value.translation.height > 100 {
+                            dismissPreview()
+                        } else {
+                            withAnimation(.spring()) {
+                                offset = .zero
+                            }
+                        }
+                    }
+                }
+        )
+        .onTapGesture {
+            if isPlayingLivePhoto {
+                player?.pause()
+                isPlayingLivePhoto = false
+            } else if player != nil {
+                player?.play()
+                isPlayingLivePhoto = true
+            }
+        }
+        .onTapGesture(count: 2) {
+            withAnimation(.spring()) {
+                if scale > 1 {
+                    scale = 1
+                    offset = .zero
+                    lastOffset = .zero
+                } else {
+                    scale = 2
+                }
+            }
+        }
+    }
+
+    private func formatVideoDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
     }
 
     // MARK: - Top Bar

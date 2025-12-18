@@ -279,13 +279,13 @@ final class ChatService {
     // MARK: - REST API - Conversations
 
     /// Create a new conversation (1:1 or group)
-    /// Maps to API: POST /api/v1/conversations
+    /// Maps to API: POST /api/v2/chat/conversations
     /// - Parameters:
     ///   - type: Conversation type (direct/group)
     ///   - participantIds: User IDs to add to the conversation
     ///   - name: Conversation name (required for groups, null for direct)
     /// - Returns: Created conversation object
-    /// - Note: For direct conversations, if one already exists between the same users, 
+    /// - Note: For direct conversations, if one already exists between the same users,
     ///         the existing conversation is returned (idempotent)
     @MainActor
     func createConversation(
@@ -299,17 +299,146 @@ final class ChatService {
             name: name
         )
 
-        let conversation: Conversation = try await client.request(
+        // Use flexible response parser that handles multiple backend formats
+        let response: CreateConversationFlexibleResponse = try await client.request(
             endpoint: APIConfig.Chat.createConversation,
             method: "POST",
             body: request
         )
+
+        let conversation = response.toConversation(type: type, name: name, participantIds: participantIds)
 
         #if DEBUG
         print("[ChatService] Conversation created: \(conversation.id)")
         #endif
 
         return conversation
+    }
+
+    /// Flexible response parser for createConversation API
+    /// Handles multiple backend response formats:
+    /// 1. Direct Conversation object (new format)
+    /// 2. Wrapped format: { "conversation": {...} }
+    /// 3. Minimal format: { "id": "...", "member_count": ..., "last_message_id": ... }
+    private struct CreateConversationFlexibleResponse: Codable {
+        // Direct format fields
+        let id: String
+        let type: String?
+        let name: String?
+        let members: [ConversationMember]?
+        let createdAt: Date?
+        let updatedAt: Date?
+        let lastMessage: ConversationLastMessage?
+        let unreadCount: Int?
+        let isMuted: Bool?
+        let isArchived: Bool?
+        let isEncrypted: Bool?
+        let avatarUrl: String?
+
+        // Wrapped format field
+        let conversation: Conversation?
+
+        // Minimal format fields
+        let memberCount: Int?
+        let lastMessageId: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id, type, name, members, conversation
+            case createdAt = "created_at"
+            case updatedAt = "updated_at"
+            case lastMessage = "last_message"
+            case unreadCount = "unread_count"
+            case isMuted = "is_muted"
+            case isArchived = "is_archived"
+            case isEncrypted = "is_encrypted"
+            case avatarUrl = "avatar_url"
+            case memberCount = "member_count"
+            case lastMessageId = "last_message_id"
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+
+            // Try to get ID (required in all formats)
+            id = try container.decode(String.self, forKey: .id)
+
+            // Optional fields for direct format
+            type = try container.decodeIfPresent(String.self, forKey: .type)
+            name = try container.decodeIfPresent(String.self, forKey: .name)
+            members = try container.decodeIfPresent([ConversationMember].self, forKey: .members)
+            lastMessage = try container.decodeIfPresent(ConversationLastMessage.self, forKey: .lastMessage)
+            unreadCount = try container.decodeIfPresent(Int.self, forKey: .unreadCount)
+            isMuted = try container.decodeIfPresent(Bool.self, forKey: .isMuted)
+            isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived)
+            isEncrypted = try container.decodeIfPresent(Bool.self, forKey: .isEncrypted)
+            avatarUrl = try container.decodeIfPresent(String.self, forKey: .avatarUrl)
+
+            // Wrapped format
+            conversation = try container.decodeIfPresent(Conversation.self, forKey: .conversation)
+
+            // Minimal format
+            memberCount = try container.decodeIfPresent(Int.self, forKey: .memberCount)
+            lastMessageId = try container.decodeIfPresent(String.self, forKey: .lastMessageId)
+
+            // Flexible date decoding
+            if let dateString = try? container.decode(String.self, forKey: .createdAt) {
+                createdAt = ISO8601DateFormatter().date(from: dateString) ?? Date()
+            } else if let timestamp = try? container.decode(Double.self, forKey: .createdAt) {
+                createdAt = Date(timeIntervalSince1970: timestamp)
+            } else {
+                createdAt = nil
+            }
+
+            if let dateString = try? container.decode(String.self, forKey: .updatedAt) {
+                updatedAt = ISO8601DateFormatter().date(from: dateString) ?? Date()
+            } else if let timestamp = try? container.decode(Double.self, forKey: .updatedAt) {
+                updatedAt = Date(timeIntervalSince1970: timestamp)
+            } else {
+                updatedAt = nil
+            }
+        }
+
+        /// Convert flexible response to Conversation
+        func toConversation(type requestType: ConversationType, name requestName: String?, participantIds: [String]) -> Conversation {
+            // If wrapped format has full conversation, use it
+            if let conv = conversation {
+                return conv
+            }
+
+            // Otherwise build from available fields
+            let convType: ConversationType
+            if let typeStr = type {
+                convType = ConversationType(rawValue: typeStr) ?? requestType
+            } else {
+                convType = requestType
+            }
+
+            let convMembers: [ConversationMember]
+            if let m = members, !m.isEmpty {
+                convMembers = m
+            } else {
+                // Create placeholder members from participantIds
+                convMembers = participantIds.map { userId in
+                    ConversationMember(userId: userId, username: "", role: .member, joinedAt: Date())
+                }
+            }
+
+            return Conversation(
+                id: id,
+                type: convType,
+                name: name ?? requestName,
+                createdBy: participantIds.first,
+                createdAt: createdAt ?? Date(),
+                updatedAt: updatedAt ?? Date(),
+                members: convMembers,
+                lastMessage: lastMessage,
+                unreadCount: unreadCount ?? 0,
+                isMuted: isMuted ?? false,
+                isArchived: isArchived ?? false,
+                isEncrypted: isEncrypted ?? false,
+                avatarUrl: avatarUrl
+            )
+        }
     }
     
     /// Legacy method for backwards compatibility
@@ -668,7 +797,7 @@ final class ChatService {
 
     /// 连接WebSocket以接收实时消息
     /// ⚠️ 注意：需要先登录获取JWT token
-    func connectWebSocket() {
+    func connectWebSocket(conversationId: String, userId: String) {
         guard let token = client.getAuthToken() else {
             #if DEBUG
             print("[ChatService] WebSocket connection failed: No auth token")
@@ -676,12 +805,38 @@ final class ChatService {
             return
         }
 
+        guard UUID(uuidString: conversationId) != nil else {
+            #if DEBUG
+            print("[ChatService] WebSocket connection failed: Invalid conversationId: \(conversationId)")
+            #endif
+            return
+        }
+
+        guard UUID(uuidString: userId) != nil else {
+            #if DEBUG
+            print("[ChatService] WebSocket connection failed: Invalid userId: \(userId)")
+            #endif
+            return
+        }
+
         // 构建WebSocket URL
-        let baseURL = APIConfig.current.baseURL.replacingOccurrences(of: "https://", with: "ws://")
+        let baseURL = APIConfig.current.baseURL.replacingOccurrences(of: "https://", with: "wss://")
                                                 .replacingOccurrences(of: "http://", with: "ws://")
-        guard let url = URL(string: "\(baseURL)\(APIConfig.Chat.websocket)") else {
+        guard var components = URLComponents(string: "\(baseURL)\(APIConfig.Chat.websocket)") else {
             #if DEBUG
             print("[ChatService] WebSocket URL invalid")
+            #endif
+            return
+        }
+
+        components.queryItems = [
+            URLQueryItem(name: "conversation_id", value: conversationId),
+            URLQueryItem(name: "user_id", value: userId),
+        ]
+
+        guard let url = components.url else {
+            #if DEBUG
+            print("[ChatService] WebSocket URL invalid after adding query params")
             #endif
             return
         }

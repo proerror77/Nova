@@ -31,7 +31,7 @@ final class MatrixBridgeService {
     /// Set to false to use automatic token-based login (no SSO dialog)
     /// When true, shows ASWebAuthenticationSession dialog for Matrix SSO
     /// User expectation: After Nova login (email/phone/Google/Apple), Matrix should auto-authorize
-    private let useSSOLogin = false
+    private let useSSOLogin = true
 
     // MARK: - State
 
@@ -92,13 +92,13 @@ final class MatrixBridgeService {
         do {
             // Check if Matrix bridge is enabled for this user
             isBridgeEnabled = await checkBridgeEnabled()
-
-            guard isBridgeEnabled else {
-                #if DEBUG
-                print("[MatrixBridge] Bridge disabled for this user")
-                #endif
-                return
+            // Matrix-first mode: treat backend flag as advisory only.
+            // We still initialize Matrix locally so Nova chat can be disabled.
+            #if DEBUG
+            if !isBridgeEnabled {
+                print("[MatrixBridge] ⚠️ Backend reported bridge disabled; continuing with Matrix-first initialization")
             }
+            #endif
 
             // Initialize Matrix client
             try await matrixService.initialize(
@@ -263,6 +263,16 @@ final class MatrixBridgeService {
         return roomId
     }
 
+    /// Resolve a Matrix room ID from either:
+    /// - a Matrix room ID (`!room:server`) in Matrix-first mode, or
+    /// - a Nova conversation ID (requires mapping via backend/cache) in Nova-first mode.
+    private func resolveRoomId(for conversationOrRoomId: String) async throws -> String {
+        if conversationOrRoomId.hasPrefix("!") {
+            return conversationOrRoomId
+        }
+        return try await getRoomId(for: conversationOrRoomId)
+    }
+
     /// Get Nova conversation ID for a Matrix room
     func getConversationId(for roomId: String) async throws -> String? {
         // Check cache first
@@ -292,7 +302,7 @@ final class MatrixBridgeService {
             throw MatrixBridgeError.notInitialized
         }
 
-        let roomId = try await getRoomId(for: conversationId)
+        let roomId = try await resolveRoomId(for: conversationId)
 
         let eventId: String
         if let mediaURL = mediaURL, let mimeType = mimeType {
@@ -314,6 +324,23 @@ final class MatrixBridgeService {
         #endif
 
         return eventId
+    }
+
+    /// Send location via Matrix (E2EE)
+    func sendLocation(
+        conversationId: String,
+        latitude: Double,
+        longitude: Double,
+        description: String? = nil
+    ) async throws -> String {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        // TODO: Implement location sharing via Matrix
+        // For now, send as a text message with location coordinates
+        let locationText = description ?? "Location: \(latitude), \(longitude)"
+        return try await sendMessage(conversationId: conversationId, content: locationText)
     }
 
     /// Get messages for a conversation via Matrix
@@ -493,21 +520,13 @@ final class MatrixBridgeService {
     }
 
     private func handleMatrixMessage(_ message: MatrixMessage) async {
-        // Convert Matrix room ID to Nova conversation ID
-        guard let conversationId = try? await getConversationId(for: message.roomId) else {
-            #if DEBUG
-            print("[MatrixBridge] Unknown room: \(message.roomId)")
-            #endif
-            return
-        }
-
+        // Matrix-first: treat roomId as the conversationId if no Nova mapping exists.
+        let conversationId = (try? await getConversationId(for: message.roomId)) ?? message.roomId
         onMatrixMessage?(conversationId, message)
     }
 
     private func handleTypingIndicator(roomId: String, userIds: [String]) async {
-        guard let conversationId = try? await getConversationId(for: roomId) else {
-            return
-        }
+        let conversationId = (try? await getConversationId(for: roomId)) ?? roomId
 
         // Convert Matrix user IDs to Nova user IDs
         let novaUserIds = userIds.compactMap { matrixService.convertToNovaUserId(matrixUserId: $0) }
@@ -532,7 +551,6 @@ final class MatrixBridgeService {
 
     private func checkBridgeEnabled() async -> Bool {
         // Check feature flag from backend
-        // For now, return true to enable Matrix integration
         do {
             struct ConfigResponse: Codable {
                 let enabled: Bool
@@ -542,17 +560,17 @@ final class MatrixBridgeService {
             let response: ConfigResponse = try await apiClient.get(
                 endpoint: APIConfig.Matrix.getConfig
             )
+            #if DEBUG
+            print("[MatrixBridge] Backend config: enabled=\(response.enabled), homeserver=\(response.homeserverUrl ?? "nil")")
+            #endif
             return response.enabled
         } catch {
             #if DEBUG
             print("[MatrixBridge] Failed to check bridge status: \(error)")
+            print("[MatrixBridge] ⚠️ Backend Matrix config not available; assuming enabled for Matrix-first mode")
             #endif
-            // Default to enabled in debug mode
-            #if DEBUG
+            // Matrix-first: default to ENABLED when backend is not available.
             return true
-            #else
-            return false
-            #endif
         }
     }
 
@@ -780,5 +798,144 @@ extension MatrixBridgeService {
     /// Get current Matrix user ID
     var matrixUserId: String? {
         matrixService.userId
+    }
+}
+
+// MARK: - Matrix Rooms as Conversations
+
+extension MatrixBridgeService {
+
+    /// Data structure representing a conversation from Matrix
+    /// This is used by MessageView to display the conversation list
+    struct MatrixConversationInfo: Identifiable {
+        let id: String              // Matrix room ID
+        let displayName: String     // Room name or other user's name for DM
+        let lastMessage: String?    // Last message content
+        let lastMessageTime: Date?  // Last message timestamp
+        let unreadCount: Int        // Unread message count
+        let isEncrypted: Bool       // E2EE status
+        let isDirect: Bool          // 1:1 vs group
+        let avatarURL: String?      // Avatar URL
+        let memberCount: Int        // Number of members
+    }
+
+    /// Get all Matrix rooms as conversation info for the message list
+    /// This is the main entry point for loading conversations via Matrix
+    func getConversationsFromMatrix() async throws -> [MatrixConversationInfo] {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        #if DEBUG
+        print("[MatrixBridge] 📋 Loading conversations from Matrix rooms...")
+        #endif
+
+        let rooms = try await matrixService.getJoinedRooms()
+
+        #if DEBUG
+        print("[MatrixBridge] Found \(rooms.count) Matrix rooms")
+        #endif
+
+        // Convert MatrixRoom to MatrixConversationInfo
+        let conversations = rooms.map { room -> MatrixConversationInfo in
+            // For direct rooms, try to get the other user's display name
+            let displayName: String
+            if room.isDirect {
+                displayName = room.name ?? "Direct Message"
+            } else {
+                displayName = room.name ?? "Group Chat"
+            }
+
+            return MatrixConversationInfo(
+                id: room.id,
+                displayName: displayName,
+                lastMessage: room.lastMessage?.content,
+                lastMessageTime: room.lastActivity,
+                unreadCount: room.unreadCount,
+                isEncrypted: room.isEncrypted,
+                isDirect: room.isDirect,
+                avatarURL: room.avatarURL,
+                memberCount: room.memberCount
+            )
+        }
+
+        // Sort by last activity (most recent first)
+        let sorted = conversations.sorted { conv1, conv2 in
+            guard let time1 = conv1.lastMessageTime else { return false }
+            guard let time2 = conv2.lastMessageTime else { return true }
+            return time1 > time2
+        }
+
+        #if DEBUG
+        print("[MatrixBridge] ✅ Returning \(sorted.count) conversations")
+        #endif
+
+        return sorted
+    }
+
+    /// Create a new direct conversation with a user via Matrix
+    /// This creates a Matrix room and returns the conversation info
+    func createDirectConversation(withUserId userId: String, displayName: String?) async throws -> MatrixConversationInfo {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        #if DEBUG
+        print("[MatrixBridge] Creating direct conversation with user: \(userId)")
+        #endif
+
+        // Create a direct room in Matrix
+        let roomId = try await matrixService.createRoom(
+            name: nil,  // Direct rooms don't need names
+            isDirect: true,
+            inviteUserIds: [userId],
+            isEncrypted: true
+        )
+
+        #if DEBUG
+        print("[MatrixBridge] Created Matrix room: \(roomId)")
+        #endif
+
+        return MatrixConversationInfo(
+            id: roomId,
+            displayName: displayName ?? "Direct Message",
+            lastMessage: nil,
+            lastMessageTime: Date(),
+            unreadCount: 0,
+            isEncrypted: true,
+            isDirect: true,
+            avatarURL: nil,
+            memberCount: 2
+        )
+    }
+
+    /// Create a new group conversation via Matrix
+    func createGroupConversation(name: String, userIds: [String]) async throws -> MatrixConversationInfo {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        #if DEBUG
+        print("[MatrixBridge] Creating group conversation: \(name) with \(userIds.count) users")
+        #endif
+
+        let roomId = try await matrixService.createRoom(
+            name: name,
+            isDirect: false,
+            inviteUserIds: userIds,
+            isEncrypted: true
+        )
+
+        return MatrixConversationInfo(
+            id: roomId,
+            displayName: name,
+            lastMessage: nil,
+            lastMessageTime: Date(),
+            unreadCount: 0,
+            isEncrypted: true,
+            isDirect: false,
+            avatarURL: nil,
+            memberCount: userIds.count + 1  // Including current user
+        )
     }
 }

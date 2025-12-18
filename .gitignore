@@ -95,7 +95,6 @@ vendor/
 **/*.xcodeproj/xcshareddata/xcschemes/
 .backup/
 infra/ten-agent-repo/
-infra/ten-agent-repo/
 
 # Temporary test files
 *-response.json
@@ -103,7 +102,66 @@ infra/ten-agent-repo/
 user-creds.json
 backup-*.yaml
 *.backup
+*.bak
 
 # Local test scripts (should be in scripts/ if needed)
 test-*.sh
 do-*.sh
+
+# Python/ML
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+*.pyc
+htmlcov/
+.coverage
+*.pyo
+.ipynb_checkpoints/
+
+# Terraform (additional)
+*.tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Security - sensitive files (should NEVER be committed)
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials*.json
+**/keys/private*.pem
+**/keys/*.key
+!**/test*/**/*.pem
+!**/test*/**/*.key
+!**/*public*.pem
+
+# Cache directories
+.cache/
+.history/
+.npm/
+.pnpm-store/
+
+# iOS additional
+*.ipa
+*.dSYM.zip
+Pods/
+
+# Kubernetes secrets (local only)
+*-secret.yaml
+!**/k8s/**/example-secret.yaml
+
+# Local Swift Packages (external dependencies)
+ios/LocalPackages/
+
+# Large binary frameworks (use Swift Package Manager)
+ios/NovaSocial/Frameworks/
+
+# Archive/backup directories
+ios/Archive/

@@ -1,6 +1,26 @@
 import SwiftUI
 import PhotosUI
 import Photos
+import AVFoundation
+import UniformTypeIdentifiers
+
+// MARK: - Movie Transferable for Video Loading
+
+struct Movie: Transferable {
+    let url: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(contentType: .movie) { movie in
+            SentTransferredFile(movie.url)
+        } importing: { received in
+            let tempDir = FileManager.default.temporaryDirectory
+            let fileName = "video_\(UUID().uuidString).mov"
+            let destURL = tempDir.appendingPathComponent(fileName)
+            try FileManager.default.copyItem(at: received.file, to: destURL)
+            return Self(url: destURL)
+        }
+    }
+}
 
 // MARK: - Live Photo Data Model
 
@@ -23,33 +43,52 @@ struct LivePhotoData: Identifiable {
     }
 }
 
-/// Media item that can be either a regular image or a Live Photo
+/// Video data model
+struct VideoData: Identifiable {
+    let id = UUID()
+    let url: URL
+    let thumbnail: UIImage
+    let duration: TimeInterval
+}
+
+/// Media item that can be either a regular image, Live Photo, or video
 enum PostMediaItem: Identifiable {
     case image(UIImage)
     case livePhoto(LivePhotoData)
-    
+    case video(VideoData)
+
     var id: String {
         switch self {
         case .image(let image):
             return "image-\(ObjectIdentifier(image).hashValue)"
         case .livePhoto(let data):
             return data.id.uuidString
+        case .video(let data):
+            return data.id.uuidString
         }
     }
-    
-    /// Get the display image (still image for Live Photo)
+
+    /// Get the display image (still image for Live Photo, thumbnail for video)
     var displayImage: UIImage {
         switch self {
         case .image(let image):
             return image
         case .livePhoto(let data):
             return data.stillImage
+        case .video(let data):
+            return data.thumbnail
         }
     }
-    
+
     /// Check if this is a Live Photo
     var isLivePhoto: Bool {
         if case .livePhoto = self { return true }
+        return false
+    }
+
+    /// Check if this is a video
+    var isVideo: Bool {
+        if case .video = self { return true }
         return false
     }
 }
@@ -67,28 +106,121 @@ class LivePhotoManager: ObservableObject {
     private init() {}
     
     // MARK: - Load from PhotosPickerItem
-    
-    /// Load a Live Photo from PhotosPickerItem
-    /// Returns LivePhotoData if it's a Live Photo, or just the image if not
+
+    /// Load media from PhotosPickerItem - supports images, Live Photos, and videos
     func loadMedia(from item: PhotosPickerItem) async throws -> PostMediaItem {
         isProcessing = true
         defer { isProcessing = false }
-        
-        // First, try to load as Live Photo
-        if let livePhoto = try? await item.loadTransferable(type: PHLivePhoto.self) {
-            // Extract components from Live Photo
-            if let livePhotoData = try await extractLivePhotoComponents(from: livePhoto) {
+
+        let supportedTypes = item.supportedContentTypes
+
+        // Check if it's a video
+        let videoTypes = supportedTypes.filter { $0.conforms(to: .movie) || $0.conforms(to: .video) }
+        if !videoTypes.isEmpty {
+            if let videoData = try await loadVideo(from: item) {
+                return .video(videoData)
+            }
+        }
+
+        // Check if it's a Live Photo (has both image and video components)
+        let hasLivePhotoType = supportedTypes.contains { $0.identifier == "com.apple.live-photo" }
+        if hasLivePhotoType {
+            if let livePhotoData = try await loadLivePhoto(from: item) {
                 return .livePhoto(livePhotoData)
             }
         }
-        
+
         // Fall back to regular image
         if let data = try? await item.loadTransferable(type: Data.self),
            let image = UIImage(data: data) {
             return .image(image)
         }
-        
+
         throw LivePhotoError.loadFailed
+    }
+
+    /// Load video from PhotosPickerItem
+    private func loadVideo(from item: PhotosPickerItem) async throws -> VideoData? {
+        // Load video as Movie transferable
+        guard let movie = try? await item.loadTransferable(type: Movie.self) else {
+            return nil
+        }
+
+        let url = movie.url
+
+        // Generate thumbnail
+        let asset = AVURLAsset(url: url)
+        let imageGenerator = AVAssetImageGenerator(asset: asset)
+        imageGenerator.appliesPreferredTrackTransform = true
+
+        let thumbnail: UIImage
+        do {
+            let cgImage = try imageGenerator.copyCGImage(at: .zero, actualTime: nil)
+            thumbnail = UIImage(cgImage: cgImage)
+        } catch {
+            thumbnail = UIImage(systemName: "video.fill") ?? UIImage()
+        }
+
+        // Get duration
+        let duration: TimeInterval
+        do {
+            let durationCM = try await asset.load(.duration)
+            duration = durationCM.seconds
+        } catch {
+            duration = 0
+        }
+
+        return VideoData(url: url, thumbnail: thumbnail, duration: duration)
+    }
+
+    /// Load Live Photo from PhotosPickerItem using Photos framework
+    private func loadLivePhoto(from item: PhotosPickerItem) async throws -> LivePhotoData? {
+        // Get the PHAsset using the item identifier
+        guard let assetId = item.itemIdentifier else { return nil }
+
+        let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: [assetId], options: nil)
+        guard let asset = fetchResult.firstObject, asset.mediaSubtypes.contains(.photoLive) else {
+            return nil
+        }
+
+        // Request Live Photo
+        return try await withCheckedThrowingContinuation { continuation in
+            let options = PHLivePhotoRequestOptions()
+            options.deliveryMode = .highQualityFormat
+            options.isNetworkAccessAllowed = true
+
+            PHImageManager.default().requestLivePhoto(
+                for: asset,
+                targetSize: PHImageManagerMaximumSize,
+                contentMode: .aspectFit,
+                options: options
+            ) { livePhoto, info in
+                guard let livePhoto = livePhoto else {
+                    if let error = info?[PHImageErrorKey] as? Error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume(throwing: LivePhotoError.loadFailed)
+                    }
+                    return
+                }
+
+                // Check if this is the final result
+                let isDegraded = (info?[PHImageResultIsDegradedKey] as? Bool) ?? false
+                if isDegraded { return }
+
+                Task {
+                    do {
+                        if let data = try await self.extractLivePhotoComponents(from: livePhoto) {
+                            continuation.resume(returning: data)
+                        } else {
+                            continuation.resume(throwing: LivePhotoError.extractionFailed)
+                        }
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+        }
     }
     
     /// Load multiple media items from PhotosPickerItems
@@ -206,12 +338,17 @@ class LivePhotoManager: ObservableObject {
     }
     
     // MARK: - Cleanup
-    
-    /// Clean up temporary video files
+
+    /// Clean up temporary video files for Live Photos and videos
     func cleanupTemporaryFiles(for items: [PostMediaItem]) {
         for item in items {
-            if case .livePhoto(let data) = item {
+            switch item {
+            case .livePhoto(let data):
                 try? FileManager.default.removeItem(at: data.videoURL)
+            case .video(let data):
+                try? FileManager.default.removeItem(at: data.url)
+            case .image:
+                break
             }
         }
     }

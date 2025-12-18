@@ -1,0 +1,301 @@
+name: Unified CI/CD Orchestrator
+
+# PR 检查工作流 - 只在 PR 时运行质量检查和测试
+# 部署由 staging-deploy-incremental.yml 独立处理（push to main 触发）
+# 这样避免重复触发和全量部署
+
+on:
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      force_backend:
+        description: 'Force backend checks'
+        type: boolean
+        default: false
+      force_ios:
+        description: 'Force iOS checks'
+        type: boolean
+        default: false
+
+concurrency:
+  group: unified-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+  checks: write
+  pull-requests: write
+
+env:
+  CI_ORCHESTRATOR_VERSION: '2.0.0'
+
+jobs:
+  # ============================================================
+  # Phase 0: Change Detection & Routing
+  # ============================================================
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      ios: ${{ steps.filter.outputs.ios }}
+      k8s: ${{ steps.filter.outputs.k8s }}
+      docs: ${{ steps.filter.outputs.docs }}
+      workflows: ${{ steps.filter.outputs.workflows }}
+      changed_services: ${{ steps.services.outputs.changed }}
+      services_json: ${{ steps.services.outputs.json }}
+      has_changes: ${{ steps.filter.outputs.backend == 'true' || steps.filter.outputs.ios == 'true' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Path filter
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'proto/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+            ios:
+              - 'ios/**'
+            k8s:
+              - 'k8s/**'
+              - 'infra/**'
+            docs:
+              - 'docs/**'
+              - '*.md'
+            workflows:
+              - '.github/**'
+
+      - name: Detect changed backend services
+        id: services
+        if: steps.filter.outputs.backend == 'true' || inputs.force_backend
+        run: |
+          set -e
+
+          # Get base SHA for comparison
+          if [ "${{ github.event_name }}" == "push" ]; then
+            BASE_SHA="${{ github.event.before }}"
+            HEAD_SHA="${{ github.sha }}"
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE_SHA=$(git rev-parse HEAD~1)
+            HEAD_SHA=$(git rev-parse HEAD)
+          fi
+
+          echo "Comparing $BASE_SHA..$HEAD_SHA"
+
+          # Check for shared library changes
+          SHARED_CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" 2>/dev/null | \
+            grep -E '^backend/(libs|common|proto)/' | wc -l || echo "0")
+
+          if [ "$SHARED_CHANGED" -gt 0 ] || [ "${{ inputs.force_backend }}" == "true" ]; then
+            echo "Shared libraries changed - all services affected"
+            SERVICES='["analytics-service","content-service","feed-service","graph-service","graphql-gateway","identity-service","media-service","notification-service","ranking-service","realtime-chat-service","search-service","social-service","trust-safety-service"]'
+          else
+            SERVICES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" 2>/dev/null | \
+              grep '^backend/' | \
+              cut -d'/' -f2 | \
+              sort -u | \
+              grep -E '^(analytics|content|feed|graph|graphql|identity|media|notification|ranking|realtime-chat|search|social|trust-safety)-service$' | \
+              jq -R -s -c 'split("\n") | map(select(. != ""))' || echo '[]')
+          fi
+
+          echo "changed=$SERVICES" >> "$GITHUB_OUTPUT"
+          echo "json=$SERVICES" >> "$GITHUB_OUTPUT"
+          echo "Changed services: $SERVICES"
+
+  # ============================================================
+  # Phase 1: Code Quality (Parallel)
+  # ============================================================
+  backend-quality:
+    name: Backend Quality
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true' || inputs.force_backend
+    uses: ./.github/workflows/code-quality.yml
+    secrets: inherit
+
+  ios-quality:
+    name: iOS Quality
+    needs: detect-changes
+    if: needs.detect-changes.outputs.ios == 'true' || inputs.force_ios
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: Run SwiftLint
+        working-directory: ios/NovaSocial
+        run: swiftlint --reporter github-actions-logging
+        continue-on-error: true
+
+  # ============================================================
+  # Phase 2: Testing (Parallel)
+  # ============================================================
+  backend-tests:
+    name: Backend Tests
+    needs: [detect-changes, backend-quality]
+    if: needs.detect-changes.outputs.backend == 'true' || inputs.force_backend
+    uses: ./.github/workflows/backend-workspace-tests.yml
+    secrets: inherit
+
+  ios-tests:
+    name: iOS Tests
+    needs: [detect-changes, ios-quality]
+    if: needs.detect-changes.outputs.ios == 'true' || inputs.force_ios
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select --switch /Applications/Xcode_16.0.app
+
+      - name: Build and Test
+        working-directory: ios/NovaSocial
+        run: |
+          xcodebuild test \
+            -project ICERED.xcodeproj \
+            -scheme ICERED \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.0' \
+            -enableCodeCoverage YES \
+            -quiet 2>&1 | tee test.log
+        continue-on-error: true
+
+  # ============================================================
+  # Phase 3: Security Scanning (Parallel) - 只在 PR 时快速检查
+  # ============================================================
+  security-scan:
+    name: Security Scanning
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Secrets Detection
+        run: |
+          wget -q https://github.com/gitleaks/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_linux_x64.tar.gz
+          tar xzf gitleaks_8.18.0_linux_x64.tar.gz
+          ./gitleaks detect --source . --verbose --exit-code 1 || {
+            echo "::error::Secrets detected in code"
+            exit 1
+          }
+
+      - name: Cargo Audit
+        run: |
+          cargo install cargo-audit --quiet
+          cd backend && cargo audit --deny warnings
+        continue-on-error: true
+
+  # ============================================================
+  # Phase 4: Notifications & Summary (不包含部署)
+  # ============================================================
+  summary:
+    name: PR Check Summary
+    needs: [detect-changes, backend-quality, ios-quality, backend-tests, ios-tests, security-scan]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# PR 检查结果" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 检查项 | 状态 |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 变更检测 | ${{ needs.detect-changes.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend 代码质量 | ${{ needs.backend-quality.result == 'success' && '✅' || needs.backend-quality.result == 'skipped' && '⏭️ 跳过' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| iOS 代码质量 | ${{ needs.ios-quality.result == 'success' && '✅' || needs.ios-quality.result == 'skipped' && '⏭️ 跳过' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend 测试 | ${{ needs.backend-tests.result == 'success' && '✅' || needs.backend-tests.result == 'skipped' && '⏭️ 跳过' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| iOS 测试 | ${{ needs.ios-tests.result == 'success' && '✅' || needs.ios-tests.result == 'skipped' && '⏭️ 跳过' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 安全扫描 | ${{ needs.security-scan.result == 'success' && '✅' || needs.security-scan.result == 'skipped' && '⏭️ 跳过' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**变更的服务:** ${{ needs.detect-changes.outputs.changed_services || '无' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> 注意：部署由 `staging-deploy-incremental.yml` 在合并到 main 后自动触发，只部署变更的服务。" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================
+  # PR Comment (for PRs only)
+  # ============================================================
+  pr-comment:
+    name: PR Status Comment
+    needs: [detect-changes, backend-quality, backend-tests, security-scan]
+    if: github.event_name == 'pull_request' && always()
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Create PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const results = {
+              quality: '${{ needs.backend-quality.result }}',
+              tests: '${{ needs.backend-tests.result }}',
+              security: '${{ needs.security-scan.result }}'
+            };
+
+            const statusEmoji = (status) => {
+              switch(status) {
+                case 'success': return '✅';
+                case 'skipped': return '⏭️';
+                case 'failure': return '❌';
+                default: return '⚪';
+              }
+            };
+
+            const body = `## 🔄 CI/CD Pipeline Results
+
+            | Check | Status |
+            |-------|--------|
+            | Code Quality | ${statusEmoji(results.quality)} ${results.quality} |
+            | Tests | ${statusEmoji(results.tests)} ${results.tests} |
+            | Security Scan | ${statusEmoji(results.security)} ${results.security} |
+
+            **Changed Services:** ${{ needs.detect-changes.outputs.changed_services || 'None' }}
+
+            ---
+            *Commit: ${{ github.sha }}*
+            `;
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('CI/CD Pipeline Results')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+            }

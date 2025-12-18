@@ -159,15 +159,6 @@ struct LoginView: View {
             }
         }
         .ignoresSafeArea(.keyboard)
-        .onAppear {
-            // Check if we were redirected here due to session expiration
-            if let reason = authManager.lastExpirationReason {
-                print("[LoginView] 📍 Arrived after session expiration: \(reason.rawValue)")
-                errorMessage = reason.userMessage
-                // Clear the reason after displaying
-                authManager.lastExpirationReason = nil
-            }
-        }
     }
 
     // MARK: - Logo Section
