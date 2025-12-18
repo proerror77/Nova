@@ -12,7 +12,6 @@ use media_service::kafka::events::MediaEventsProducer;
 use media_service::middleware;
 use media_service::openapi::ApiDoc;
 use media_service::services::video::gcs::GcsSigner;
-use media_service::services::video::s3::get_s3_client;
 use media_service::services::ReelTranscodePipeline;
 use media_service::Config;
 use redis_utils::{RedisPool, SentinelConfig};
@@ -151,40 +150,24 @@ async fn main() -> io::Result<()> {
     let media_cache = Arc::new(MediaCache::with_manager(redis_pool.manager(), None));
     let media_cache_http = media_cache.clone();
 
-    // Initialize S3 client for presigned URL generation
-    let s3_client = match get_s3_client(&config.s3).await {
-        Ok(client) => Arc::new(client),
+    // Initialize GCS client for presigned URL generation
+    let cdn_url = std::env::var("CDN_URL").unwrap_or_else(|_| "http://localhost".to_string());
+    let gcs_cfg = config.gcs.as_ref().ok_or_else(|| {
+        io::Error::other("GCS configuration is required - set GCS_BUCKET and GCS_SERVICE_ACCOUNT_JSON or GCS_SERVICE_ACCOUNT_JSON_PATH")
+    })?;
+    let gcs_signer = match GcsSigner::from_config(gcs_cfg) {
+        Ok(signer) => Arc::new(signer),
         Err(e) => {
-            tracing::error!("S3 client initialization failed: {:#}", e);
-            eprintln!("ERROR: Failed to initialize S3 client: {}", e);
+            tracing::error!("GCS signer initialization failed: {:#}", e);
+            eprintln!("ERROR: Failed to initialize GCS signer: {}", e);
             std::process::exit(1);
         }
     };
-    let s3_config = Arc::new(config.s3.clone());
-    let cdn_url = std::env::var("CDN_URL").unwrap_or_else(|_| "http://localhost".to_string());
-    let (gcs_signer, gcs_bucket) = if let Some(gcs_cfg) = &config.gcs {
-        match GcsSigner::from_config(gcs_cfg) {
-            Ok(signer) => {
-                tracing::info!(
-                    "GCS signing enabled (bucket={}, host={})",
-                    gcs_cfg.bucket,
-                    gcs_cfg.host
-                );
-                (Some(Arc::new(signer)), Some(gcs_cfg.bucket.clone()))
-            }
-            Err(err) => {
-                tracing::warn!("GCS signing disabled due to config error: {err}");
-                (None, None)
-            }
-        }
-    } else {
-        tracing::info!("GCS signing not configured; falling back to S3 presign");
-        (None, None)
-    };
+    let gcs_bucket = gcs_cfg.bucket.clone();
 
     info!(
-        "S3 client initialized (bucket={}, region={})",
-        config.s3.bucket, config.s3.region
+        "GCS client initialized (bucket={}, host={})",
+        gcs_cfg.bucket, gcs_cfg.host
     );
 
     // Initialize Kafka producer for media events (e.g., MediaUploaded)
@@ -292,19 +275,17 @@ async fn main() -> io::Result<()> {
 
     // gRPC server task
     let db_pool_grpc = db_pool.clone();
-    let s3_client_grpc = s3_client.clone();
-    let s3_config_grpc = s3_config.clone();
     let cdn_url_grpc = cdn_url.clone();
+    let gcs_signer_grpc = gcs_signer.clone();
+    let gcs_bucket_grpc = gcs_bucket.clone();
     tasks.spawn(async move {
         tracing::info!("gRPC server is running");
         media_service::grpc::start_grpc_server(
             grpc_addr,
             db_pool_grpc,
-            s3_client_grpc,
-            s3_config_grpc,
             cdn_url_grpc,
-            gcs_signer.clone(),
-            gcs_bucket.clone(),
+            gcs_signer_grpc,
+            gcs_bucket_grpc,
             grpc_shutdown,
         )
         .await

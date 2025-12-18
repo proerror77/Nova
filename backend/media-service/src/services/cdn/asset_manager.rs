@@ -1,8 +1,9 @@
-// Asset Manager Service - S3-backed asset storage
+// Asset Manager Service - GCS-backed asset storage
 // Linus philosophy: Data structure first, simple operations, no special cases
 
 use crate::error::{AppError, Result};
-use aws_sdk_s3::Client as S3Client;
+use crate::services::video::GcsStorageClient;
+use bytes::Bytes;
 use chrono::Utc;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -49,11 +50,10 @@ pub struct CdnQuota {
     pub last_updated: chrono::DateTime<Utc>,
 }
 
-/// Asset manager with S3 storage and PostgreSQL metadata
+/// Asset manager with GCS storage and PostgreSQL metadata
 pub struct AssetManager {
     db: Arc<PgPool>,
-    s3_client: Arc<S3Client>,
-    s3_bucket: String,
+    gcs_client: Arc<GcsStorageClient>,
     url_signer: Arc<UrlSigner>,
 }
 
@@ -61,19 +61,17 @@ impl AssetManager {
     /// Create new asset manager
     pub fn new(
         db: Arc<PgPool>,
-        s3_client: Arc<S3Client>,
-        s3_bucket: String,
+        gcs_client: Arc<GcsStorageClient>,
         url_signer: Arc<UrlSigner>,
     ) -> Self {
         Self {
             db,
-            s3_client,
-            s3_bucket,
+            gcs_client,
             url_signer,
         }
     }
 
-    /// Upload asset to S3 and record metadata
+    /// Upload asset to GCS and record metadata
     pub async fn upload_asset(
         &self,
         user_id: Uuid,
@@ -90,16 +88,11 @@ impl AssetManager {
         // Storage key format: {user_id}/{asset_id}/{filename}
         let storage_key = format!("{}/{}/{}", user_id, asset_id, original_filename);
 
-        // Upload to S3
-        self.s3_client
-            .put_object()
-            .bucket(&self.s3_bucket)
-            .key(&storage_key)
-            .body(content.into())
-            .content_type(content_type)
-            .send()
+        // Upload to GCS
+        self.gcs_client
+            .upload(&storage_key, Bytes::from(content), content_type)
             .await
-            .map_err(|e| AppError::Internal(format!("S3 upload failed: {}", e)))?;
+            .map_err(|e| AppError::Internal(format!("GCS upload failed: {}", e)))?;
 
         // Generate signed CDN URL (24h TTL for metadata storage)
         let cdn_url = self.url_signer.sign_url(&storage_key, 86400)?;
@@ -154,7 +147,7 @@ impl AssetManager {
             return Err(AppError::NotFound("Asset not found".into()));
         }
 
-        // Note: S3 deletion happens async (cleanup job)
+        // Note: GCS deletion happens async (cleanup job)
         Ok(())
     }
 

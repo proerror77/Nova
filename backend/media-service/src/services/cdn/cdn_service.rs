@@ -2,7 +2,7 @@
 ///
 /// Manages content delivery through CDN providers with caching, failover,
 /// and geographic routing capabilities. Supports CloudFront, Cloudflare,
-/// and fallback to S3 origin.
+/// and fallback to GCS origin.
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -15,7 +15,7 @@ pub struct CdnConfig {
     pub endpoint_url: String,
     pub cache_ttl_seconds: u32,
     pub enable_geo_cache: bool,
-    pub fallback_to_s3: bool,
+    pub fallback_to_gcs: bool,
 }
 
 /// Cache entry for manifests
@@ -209,14 +209,14 @@ impl CdnService {
 
     /// Build origin URL (fallback for CDN failures)
     pub fn get_origin_url(&self, video_id: &str, quality: Option<&str>, format: &str) -> String {
-        // Format: s3://bucket/prefix/videos/video-id/quality.m3u8
+        // Format: gs://bucket/prefix/videos/video-id/quality.m3u8
         let path = match (quality, format) {
             (Some(q), _) => format!("videos/{}/{}.m3u8", video_id, q),
             (None, "dash") => format!("videos/{}.mpd", video_id),
             _ => format!("videos/{}/index.m3u8", video_id),
         };
 
-        format!("s3://{}/{}{}", "nova-videos", "processed/", path)
+        format!("gs://{}/{}{}", "nova-videos", "processed/", path)
     }
 
     /// Check CDN health (returns true if accessible)
@@ -239,7 +239,7 @@ impl CdnService {
 
     /// Get fallback URL when CDN fails
     pub fn get_fallback_url(&self, video_id: &str, quality: Option<&str>) -> String {
-        if self.config.fallback_to_s3 {
+        if self.config.fallback_to_gcs {
             self.get_origin_url(video_id, quality, "hls")
         } else {
             // If no fallback, return empty string
@@ -325,7 +325,7 @@ impl CdnService {
 
         // Get CDN URL and fallback
         let cdn_url = self.get_manifest_url(video_id, quality, format);
-        let fallback_url = if self.config.fallback_to_s3 {
+        let fallback_url = if self.config.fallback_to_gcs {
             Some(self.get_origin_url(video_id, quality, format))
         } else {
             None
@@ -381,7 +381,7 @@ mod tests {
             endpoint_url: "https://cdn.example.com".to_string(),
             cache_ttl_seconds: 300,
             enable_geo_cache: true,
-            fallback_to_s3: true,
+            fallback_to_gcs: true,
         }
     }
 
@@ -452,17 +452,17 @@ mod tests {
     fn test_fallback_url_generation() {
         // Test with fallback enabled
         let mut config = create_test_config();
-        config.fallback_to_s3 = true;
+        config.fallback_to_gcs = true;
 
         let service = CdnService::new(config.clone());
         let fallback = service.get_fallback_url("video-123", Some("720p"));
 
-        assert!(fallback.contains("s3://"));
+        assert!(fallback.contains("gs://"));
         assert!(fallback.contains("video-123"));
 
         // Test with fallback disabled
         let mut config2 = create_test_config();
-        config2.fallback_to_s3 = false;
+        config2.fallback_to_gcs = false;
         let service2 = CdnService::new(config2);
         let fallback2 = service2.get_fallback_url("video-123", Some("720p"));
         assert!(fallback2.is_empty());
@@ -473,7 +473,7 @@ mod tests {
         let service = CdnService::new(create_test_config());
 
         let url = service.get_origin_url("video-123", None, "hls");
-        assert!(url.contains("s3://"));
+        assert!(url.contains("gs://"));
         assert!(url.contains("video-123"));
         assert!(url.contains(".m3u8"));
 

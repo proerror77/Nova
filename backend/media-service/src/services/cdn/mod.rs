@@ -3,7 +3,7 @@
 /// This module provides comprehensive CDN functionality including:
 /// - Cache invalidation (Redis-backed)
 /// - CDN service integration (CloudFront, Cloudflare, Generic)
-/// - Asset management (S3-backed storage)
+/// - Asset management (GCS-backed storage)
 /// - URL signing (HMAC-SHA256)
 /// - Origin shield (request coalescing, cache warming)
 /// - CDN failover (circuit breaker, exponential backoff)

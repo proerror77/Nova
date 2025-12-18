@@ -250,7 +250,7 @@ mod tests {
             endpoint_url: "https://cdn.example.com".to_string(),
             cache_ttl_seconds: 300,
             enable_geo_cache: true,
-            fallback_to_s3: true,
+            fallback_to_gcs: true,
         }
     }
 

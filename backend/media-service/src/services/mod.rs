@@ -3,13 +3,13 @@
 /// This module provides business logic for:
 /// - Video service: video lifecycle management
 /// - Upload service: upload handling and resumable uploads
-/// - Video module: S3 upload and management (migrated from video-service)
+/// - Video module: GCS upload and management (migrated from video-service)
 /// - Streaming module: HLS/DASH manifest generation for VOD (migrated from streaming-service)
 /// - CDN module: Content delivery network management (migrated from cdn-service)
 /// - Thumbnail module: Thumbnail generation for images using GCS
 ///
 /// Extracted from user-service as part of P1.2 service splitting.
-/// Enhanced with video-service S3 capabilities and streaming-service VOD manifests in Phase C: Media Consolidation.
+/// Enhanced with video-service GCS capabilities and streaming-service VOD manifests in Phase C: Media Consolidation.
 pub mod cdn;
 pub mod streaming;
 pub mod thumbnail;

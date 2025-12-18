@@ -1,8 +1,5 @@
 // gRPC service implementation for media service (services_v2 proto)
-use crate::config::S3Config;
 use crate::services::video::gcs::GcsSigner;
-use crate::services::video::s3::generate_presigned_url;
-use aws_sdk_s3::Client as S3Client;
 use chrono::Utc;
 use sqlx::PgPool;
 use std::fs;
@@ -141,26 +138,20 @@ fn string_to_processing_status(s: &str) -> ProcessingStatus {
 #[derive(Clone)]
 pub struct MediaServiceImpl {
     db_pool: PgPool,
-    s3_client: Arc<S3Client>,
-    s3_config: Arc<S3Config>,
     cdn_url: String,
-    gcs_signer: Option<Arc<GcsSigner>>,
-    gcs_bucket: Option<String>,
+    gcs_signer: Arc<GcsSigner>,
+    gcs_bucket: String,
 }
 
 impl MediaServiceImpl {
     pub fn new(
         db_pool: PgPool,
-        s3_client: Arc<S3Client>,
-        s3_config: Arc<S3Config>,
         cdn_url: String,
-        gcs_signer: Option<Arc<GcsSigner>>,
-        gcs_bucket: Option<String>,
+        gcs_signer: Arc<GcsSigner>,
+        gcs_bucket: String,
     ) -> Self {
         Self {
             db_pool,
-            s3_client,
-            s3_config,
             cdn_url,
             gcs_signer,
             gcs_bucket,
@@ -198,7 +189,7 @@ impl MediaService for MediaServiceImpl {
             req.mime_type.clone()
         };
 
-        // Generate S3 storage path
+        // Generate GCS storage path
         let ext = req
             .filename
             .rsplit('.')
@@ -207,28 +198,19 @@ impl MediaService for MediaServiceImpl {
             .to_lowercase();
         let storage_path = format!("uploads/{}/{}.{}", user_id, upload_id, ext);
 
-        // Generate upload URL (prefer GCS signer if configured)
-        let presigned_url =
-            if let (Some(signer), Some(bucket)) = (&self.gcs_signer, &self.gcs_bucket) {
-                signer
-                    .sign_put_url(
-                        bucket,
-                        &storage_path,
-                        &mime_type,
-                        std::time::Duration::from_secs(900),
-                    )
-                    .map_err(|e| {
-                        tracing::error!("Failed to generate GCS signed URL: {:?}", e);
-                        Status::internal("Failed to generate upload URL")
-                    })?
-            } else {
-                generate_presigned_url(&self.s3_client, &self.s3_config, &storage_path, &mime_type)
-                    .await
-                    .map_err(|e| {
-                        tracing::error!("Failed to generate presigned URL: {:?}", e);
-                        Status::internal("Failed to generate upload URL")
-                    })?
-            };
+        // Generate GCS signed URL for upload
+        let presigned_url = self
+            .gcs_signer
+            .sign_put_url(
+                &self.gcs_bucket,
+                &storage_path,
+                &mime_type,
+                std::time::Duration::from_secs(900),
+            )
+            .map_err(|e| {
+                tracing::error!("Failed to generate GCS signed URL: {:?}", e);
+                Status::internal("Failed to generate upload URL")
+            })?;
 
         let expires_at = Utc::now() + chrono::Duration::minutes(15);
 
@@ -678,20 +660,16 @@ impl MediaService for MediaServiceImpl {
 pub async fn start_grpc_server(
     addr: std::net::SocketAddr,
     db_pool: PgPool,
-    s3_client: Arc<S3Client>,
-    s3_config: Arc<S3Config>,
     cdn_url: String,
-    gcs_signer: Option<Arc<GcsSigner>>,
-    gcs_bucket: Option<String>,
+    gcs_signer: Arc<GcsSigner>,
+    gcs_bucket: String,
     mut shutdown: broadcast::Receiver<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use tonic::transport::Server;
 
     tracing::info!("Starting gRPC server at {}", addr);
 
-    let service = MediaServiceImpl::new(
-        db_pool, s3_client, s3_config, cdn_url, gcs_signer, gcs_bucket,
-    );
+    let service = MediaServiceImpl::new(db_pool, cdn_url, gcs_signer, gcs_bucket);
 
     let mut server_builder = Server::builder();
 

@@ -10,7 +10,6 @@ pub struct Config {
     pub database: DatabaseConfig,
     pub cache: CacheConfig,
     pub kafka: KafkaConfig,
-    pub s3: S3Config,
     pub gcs: Option<GcsConfig>,
     pub upload: UploadConfig,
 }
@@ -71,15 +70,6 @@ pub struct KafkaConfig {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct S3Config {
-    pub bucket: String,
-    pub region: String,
-    pub access_key_id: Option<String>,
-    pub secret_access_key: Option<String>,
-    pub endpoint: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
 pub struct GcsConfig {
     pub bucket: String,
     /// Service account JSON content (preferred), or a filesystem path to JSON.
@@ -127,13 +117,6 @@ impl Config {
                     .unwrap_or_else(|_| "localhost:9092".to_string()),
                 events_topic: std::env::var("KAFKA_EVENTS_TOPIC")
                     .unwrap_or_else(|_| "media_events".to_string()),
-            },
-            s3: S3Config {
-                bucket: std::env::var("S3_BUCKET").unwrap_or_else(|_| "nova-uploads".to_string()),
-                region: std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
-                access_key_id: std::env::var("AWS_ACCESS_KEY_ID").ok(),
-                secret_access_key: std::env::var("AWS_SECRET_ACCESS_KEY").ok(),
-                endpoint: std::env::var("S3_ENDPOINT").ok(),
             },
             gcs: {
                 // Enable GCS signing only when a bucket AND some form of service account JSON is provided.
