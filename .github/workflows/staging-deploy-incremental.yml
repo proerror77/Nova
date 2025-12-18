@@ -307,8 +307,20 @@ jobs:
 
       - name: Health check
         run: |
+          set -euo pipefail
           SERVICE="${{ matrix.service }}"
-          kubectl wait --for=condition=ready pod -l app="$SERVICE" -n ${{ env.NAMESPACE }} --timeout=2m
+          NAMESPACE="${{ env.NAMESPACE }}"
+
+          echo "⏳ Waiting for deployment/$SERVICE to be available..."
+          if ! kubectl wait --for=condition=available deployment/"$SERVICE" -n "$NAMESPACE" --timeout=5m; then
+            echo "❌ $SERVICE not available"
+            kubectl get deployment/"$SERVICE" -n "$NAMESPACE" -o wide || true
+            kubectl describe deployment/"$SERVICE" -n "$NAMESPACE" || true
+            kubectl get pods -n "$NAMESPACE" -l app="$SERVICE" -o wide || true
+            exit 1
+          fi
+
+          kubectl get pods -n "$NAMESPACE" -l app="$SERVICE" -o wide || true
           echo "✅ $SERVICE is healthy"
 
   # Layer 1: 核心服务
@@ -363,8 +375,20 @@ jobs:
 
       - name: Health check
         run: |
+          set -euo pipefail
           SERVICE="${{ matrix.service }}"
-          kubectl wait --for=condition=ready pod -l app="$SERVICE" -n ${{ env.NAMESPACE }} --timeout=2m
+          NAMESPACE="${{ env.NAMESPACE }}"
+
+          echo "⏳ Waiting for deployment/$SERVICE to be available..."
+          if ! kubectl wait --for=condition=available deployment/"$SERVICE" -n "$NAMESPACE" --timeout=5m; then
+            echo "❌ $SERVICE not available"
+            kubectl get deployment/"$SERVICE" -n "$NAMESPACE" -o wide || true
+            kubectl describe deployment/"$SERVICE" -n "$NAMESPACE" || true
+            kubectl get pods -n "$NAMESPACE" -l app="$SERVICE" -o wide || true
+            exit 1
+          fi
+
+          kubectl get pods -n "$NAMESPACE" -l app="$SERVICE" -o wide || true
           echo "✅ $SERVICE is healthy"
 
   # Layer 2: 业务服务
@@ -420,8 +444,20 @@ jobs:
 
       - name: Health check
         run: |
+          set -euo pipefail
           SERVICE="${{ matrix.service }}"
-          kubectl wait --for=condition=ready pod -l app="$SERVICE" -n ${{ env.NAMESPACE }} --timeout=2m
+          NAMESPACE="${{ env.NAMESPACE }}"
+
+          echo "⏳ Waiting for deployment/$SERVICE to be available..."
+          if ! kubectl wait --for=condition=available deployment/"$SERVICE" -n "$NAMESPACE" --timeout=5m; then
+            echo "❌ $SERVICE not available"
+            kubectl get deployment/"$SERVICE" -n "$NAMESPACE" -o wide || true
+            kubectl describe deployment/"$SERVICE" -n "$NAMESPACE" || true
+            kubectl get pods -n "$NAMESPACE" -l app="$SERVICE" -o wide || true
+            exit 1
+          fi
+
+          kubectl get pods -n "$NAMESPACE" -l app="$SERVICE" -o wide || true
           echo "✅ $SERVICE is healthy"
 
   # Layer 3: 边缘服务
@@ -478,8 +514,20 @@ jobs:
 
       - name: Health check
         run: |
+          set -euo pipefail
           SERVICE="${{ matrix.service }}"
-          kubectl wait --for=condition=ready pod -l app="$SERVICE" -n ${{ env.NAMESPACE }} --timeout=2m
+          NAMESPACE="${{ env.NAMESPACE }}"
+
+          echo "⏳ Waiting for deployment/$SERVICE to be available..."
+          if ! kubectl wait --for=condition=available deployment/"$SERVICE" -n "$NAMESPACE" --timeout=5m; then
+            echo "❌ $SERVICE not available"
+            kubectl get deployment/"$SERVICE" -n "$NAMESPACE" -o wide || true
+            kubectl describe deployment/"$SERVICE" -n "$NAMESPACE" || true
+            kubectl get pods -n "$NAMESPACE" -l app="$SERVICE" -o wide || true
+            exit 1
+          fi
+
+          kubectl get pods -n "$NAMESPACE" -l app="$SERVICE" -o wide || true
           echo "✅ $SERVICE is healthy"
 
   # Layer 4: 网关（最后部署）
@@ -535,8 +583,20 @@ jobs:
 
       - name: Health check
         run: |
+          set -euo pipefail
           SERVICE="${{ matrix.service }}"
-          kubectl wait --for=condition=ready pod -l app="$SERVICE" -n ${{ env.NAMESPACE }} --timeout=2m
+          NAMESPACE="${{ env.NAMESPACE }}"
+
+          echo "⏳ Waiting for deployment/$SERVICE to be available..."
+          if ! kubectl wait --for=condition=available deployment/"$SERVICE" -n "$NAMESPACE" --timeout=5m; then
+            echo "❌ $SERVICE not available"
+            kubectl get deployment/"$SERVICE" -n "$NAMESPACE" -o wide || true
+            kubectl describe deployment/"$SERVICE" -n "$NAMESPACE" || true
+            kubectl get pods -n "$NAMESPACE" -l app="$SERVICE" -o wide || true
+            exit 1
+          fi
+
+          kubectl get pods -n "$NAMESPACE" -l app="$SERVICE" -o wide || true
           echo "✅ Gateway is healthy"
 
   # ============================================================
