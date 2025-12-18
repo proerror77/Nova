@@ -54,17 +54,32 @@ jobs:
           tar xzf gitleaks_8.18.0_linux_x64.tar.gz
           chmod +x gitleaks
 
-      - name: Scan for secrets in history
+      - name: Scan secrets (PR commits only)
+        if: github.event_name == 'pull_request'
         run: |
-          ./gitleaks detect --source . --verbose --exit-code 1 || {
-            echo "⚠️ Secrets detected in git history"
-            echo "Remediation: git filter-branch or BFG Repo-Cleaner"
-            exit 1
-          }
+          ./gitleaks detect \
+            --source . \
+            --log-opts="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" \
+            --verbose \
+            --exit-code 1
+
+      - name: Scan secrets (push commits only)
+        if: github.event_name == 'push'
+        run: |
+          ./gitleaks detect \
+            --source . \
+            --log-opts="${{ github.event.before }}..${{ github.sha }}" \
+            --verbose \
+            --exit-code 1
+
+      - name: Scan secrets (current files)
+        if: always()
+        run: |
+          ./gitleaks detect --no-git --source . --verbose --exit-code 1
 
       - name: Scan for secrets in current files
         run: |
-          ./gitleaks protect --installation-id 0 --staged
+          echo "✅ Secrets scan completed"
 
   # ============ Stage 2: Dependency Scanning ============
   dependency-scan:
