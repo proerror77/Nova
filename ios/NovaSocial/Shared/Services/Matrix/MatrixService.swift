@@ -107,6 +107,39 @@ class Timeline {
     func sendVideo(url: String, thumbnailUrl: String?, videoInfo: VideoInfo, caption: String?, formattedCaption: String?, progressWatcher: Any?) async throws {}
     func sendAudio(url: String, audioInfo: AudioInfo, caption: String?, formattedCaption: String?, progressWatcher: Any?) async throws {}
     func sendFile(url: String, fileInfo: FileInfo, progressWatcher: Any?) async throws {}
+    // Edit message
+    func edit(eventOrTransactionId: EventOrTransactionId, newContent: EditedContent) async throws {}
+    // Redact (delete) message
+    func redactEvent(eventOrTransactionId: EventOrTransactionId, reason: String?) async throws {}
+    // Reactions
+    func toggleReaction(eventOrTransactionId: EventOrTransactionId, key: String) async throws {}
+    func sendReaction(eventOrTransactionId: EventOrTransactionId, key: String) async throws {}
+}
+
+enum EventOrTransactionId {
+    case eventId(String)
+    case transactionId(String)
+}
+
+struct EditedContent {
+    static func roomMessage(msgType: RoomMessageEventContentWithoutRelation) -> EditedContent {
+        return EditedContent()
+    }
+}
+
+struct RoomMessageEventContentWithoutRelation {
+    static func text(body: String, formatted: FormattedBody?) -> RoomMessageEventContentWithoutRelation {
+        return RoomMessageEventContentWithoutRelation()
+    }
+}
+
+struct FormattedBody {
+    let format: MessageFormat
+    let body: String
+}
+
+enum MessageFormat {
+    case html
 }
 
 enum ReceiptType { case read }
@@ -286,10 +319,12 @@ private final class TimelineItemCollector: TimelineListener, @unchecked Sendable
         guard !hasReturned else { return }
 
         var items: [TimelineItem] = []
+        var sawReset = false
         for d in diff {
             switch d {
             case .reset(let values):
                 items = values
+                sawReset = true
             case .append(let values):
                 items.append(contentsOf: values)
             case .pushBack(let value):
@@ -301,7 +336,7 @@ private final class TimelineItemCollector: TimelineListener, @unchecked Sendable
             }
         }
 
-        if !items.isEmpty {
+        if sawReset || !items.isEmpty {
             hasReturned = true
             onItemsReceived(items)
         }
@@ -391,6 +426,23 @@ protocol MatrixServiceProtocol: AnyObject {
 
     /// Get all joined rooms
     func getJoinedRooms() async throws -> [MatrixRoom]
+
+    // MARK: - Message Edit/Delete/Reactions
+
+    /// Edit a message
+    func editMessage(roomId: String, eventId: String, newContent: String) async throws
+
+    /// Delete/redact a message
+    func redactMessage(roomId: String, eventId: String, reason: String?) async throws
+
+    /// Toggle reaction on a message (add if not present, remove if present)
+    func toggleReaction(roomId: String, eventId: String, emoji: String) async throws
+
+    /// Send reaction to a message
+    func sendReaction(roomId: String, eventId: String, emoji: String) async throws
+
+    /// Get reactions for a message
+    func getReactions(roomId: String, eventId: String) async throws -> [MatrixReaction]
 }
 
 // MARK: - Matrix Connection State
@@ -453,6 +505,24 @@ enum MatrixMessageType: String, Equatable {
     case location = "m.location"
     case notice = "m.notice"
     case emote = "m.emote"
+}
+
+/// Matrix reaction model
+struct MatrixReaction: Identifiable, Equatable {
+    let id: String  // Unique identifier (eventId + emoji)
+    let eventId: String  // The message event ID this reaction is on
+    let senderId: String  // Who sent the reaction
+    let emoji: String  // The reaction emoji/key
+    let timestamp: Date
+}
+
+/// Aggregated reaction for display
+struct MatrixReactionGroup: Identifiable, Equatable {
+    var id: String { emoji }
+    let emoji: String
+    var count: Int
+    var senderIds: [String]
+    var includesCurrentUser: Bool
 }
 
 // MARK: - Matrix Service Errors
