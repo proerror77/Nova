@@ -12,6 +12,7 @@ pub async fn create_post(
     media_key: &str,
     media_type: &str,
 ) -> Result<Post, sqlx::Error> {
+    // Note: media_urls should be empty for text-only posts (media_type='none')
     let post = sqlx::query_as::<_, Post>(
         r#"
         INSERT INTO posts (user_id, caption, media_key, media_type, media_urls, status)
@@ -20,7 +21,7 @@ pub async fn create_post(
             $2,
             $3,
             $4,
-            CASE WHEN $3 = 'text-only' THEN '[]'::jsonb ELSE jsonb_build_array($3) END,
+            CASE WHEN $4 = 'none' THEN '[]'::jsonb ELSE jsonb_build_array($3) END,
             'pending'
         )
         RETURNING id, user_id, content, caption, media_key, media_type, media_urls, status,

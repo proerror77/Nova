@@ -132,6 +132,7 @@ impl PostService {
         // Serialize media_urls to JSON
         let media_urls_json = serde_json::to_value(media_urls).unwrap_or_default();
 
+        // Note: media_urls fallback to media_key only when media_type is NOT 'none'
         let post = sqlx::query_as::<_, Post>(
             r#"
             INSERT INTO posts (user_id, caption, media_key, media_type, media_urls, status)
@@ -140,7 +141,7 @@ impl PostService {
                 $2,
                 $3,
                 $4,
-                CASE WHEN $5::jsonb = '[]'::jsonb AND $3 <> 'text-only' THEN jsonb_build_array($3) ELSE $5::jsonb END,
+                CASE WHEN $5::jsonb = '[]'::jsonb AND $4 <> 'none' THEN jsonb_build_array($3) ELSE $5::jsonb END,
                 'published'
             )
             RETURNING id, user_id, content, caption, media_key, media_type, media_urls, status,
@@ -190,6 +191,9 @@ impl PostService {
         let media_urls_json = serde_json::to_value(media_urls).unwrap_or_default();
 
         // 1. Create the post
+        // Note: media_urls should only be populated with media_key as fallback when:
+        //   - media_urls is empty AND media_type is NOT 'none' (text-only posts)
+        // For text-only posts (media_type='none'), media_urls should remain empty
         let post = sqlx::query_as::<_, Post>(
             r#"
             INSERT INTO posts (user_id, caption, media_key, media_type, media_urls, status)
@@ -198,7 +202,7 @@ impl PostService {
                 $2,
                 $3,
                 $4,
-                CASE WHEN $5::jsonb = '[]'::jsonb AND $3 <> 'text-only' THEN jsonb_build_array($3) ELSE $5::jsonb END,
+                CASE WHEN $5::jsonb = '[]'::jsonb AND $4 <> 'none' THEN jsonb_build_array($3) ELSE $5::jsonb END,
                 'published'
             )
             RETURNING id, user_id, content, caption, media_key, media_type, media_urls, status,
