@@ -131,16 +131,36 @@ sqlx migrate run
 #### 4. iOS 设置
 
 ```bash
-# 使用 Xcode 创建项目
-# File -> New -> Project -> iOS App
-# 项目名：NovaSocial
-# Interface: SwiftUI
-# Language: Swift
+# iOS 项目位置
+cd ios/NovaSocial
 
-# 或通过命令行（需要 XcodeGen）
-xcodegen generate
-open NovaSocial.xcodeproj
+# 使用 Xcode 打开
+open ICERED.xcodeproj
 ```
+
+### 运行 iOS 应用
+
+提供多种方式运行 iOS 应用：
+
+```bash
+# 方式 1: 快捷命令 (推荐)
+./run                      # 默认 iPhone 17 Pro
+./run "iPhone 15 Pro"      # 指定模拟器
+
+# 方式 2: Make 命令
+make ios                   # iPhone 17 Pro (默认)
+make ios-iphone15          # iPhone 15 Pro
+make ios-ipad              # iPad Pro 13-inch (M5)
+
+# 方式 3: 完整脚本
+./run-ios.sh "iPhone 17 Pro"
+```
+
+脚本会自动执行：
+1. 启动指定的 iOS 模拟器
+2. 构建 Xcode 项目 (Debug 配置)
+3. 安装应用到模拟器
+4. 启动应用
 
 ### 运行完整系统
 
@@ -148,12 +168,8 @@ open NovaSocial.xcodeproj
 # 1. 启动所有后端服务（Docker Compose）
 docker-compose up -d
 
-# 2. 启动 iOS 模拟器
-open -a Simulator
-
-# 3. 运行 iOS 应用
-cd ios/NovaSocial
-xcodebuild -scheme NovaSocial -destination 'platform=iOS Simulator,name=iPhone 15' run
+# 2. 运行 iOS 应用 (自动启动模拟器)
+./run
 ```
 
 ## 📅 开发路线图
