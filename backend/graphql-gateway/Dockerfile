@@ -1,6 +1,7 @@
 # Multi-stage build for graphql-gateway
 # Build context: ./backend (CI sets this automatically)
-FROM rust:slim AS builder
+# Use rust:slim-bookworm to match debian:bookworm-slim glibc version
+FROM rust:slim-bookworm AS builder
 
 # Install build dependencies
 RUN apt-get update && \
