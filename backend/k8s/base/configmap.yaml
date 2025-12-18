@@ -50,7 +50,7 @@ data:
   GRPC_AUTH_SERVICE_URL: "http://identity-service:9081"
   GRPC_CONTENT_SERVICE_URL: "http://content-service:9082"
   GRPC_FEED_SERVICE_URL: "http://feed-service:9084"
-  GRPC_MEDIA_SERVICE_URL: "http://media-service:9082"
+  GRPC_MEDIA_SERVICE_URL: "http://media-service:9085"
   GRPC_MESSAGING_SERVICE_URL: "http://messaging-service:9085"
   GRPC_SEARCH_SERVICE_URL: "http://search-service:9086"
   GRPC_STREAMING_SERVICE_URL: "http://streaming-service:8088"

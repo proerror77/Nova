@@ -101,7 +101,7 @@ kubectl rollout status deployment -n nova-backend --timeout=5m
 | auth-service | 8083 | 9083 |
 | content-service | 8081 | 9081 |
 | feed-service | 8084 | 9084 |
-| media-service | 8082 | 9082 |
+| media-service | 8085 | 9085 |
 | messaging-service | 8085 | 9085 |
 | search-service | 8086 | 9086 |
 | streaming-service | 8087 | 9087 |

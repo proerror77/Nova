@@ -12,7 +12,7 @@ services=(
   "auth-service:8083"
   "content-service:8081"
   "feed-service:8084"
-  "media-service:8082"
+  "media-service:8085"
   "messaging-service:8085"
   "search-service:8086"
   "streaming-service:8087"

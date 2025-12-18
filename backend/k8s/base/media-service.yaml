@@ -41,6 +41,21 @@ spec:
           value: "9085"
         - name: RUST_LOG
           value: "info"
+        # JWT authentication - use same public key as identity-service
+        - name: JWT_PUBLIC_KEY_PEM
+          valueFrom:
+            secretKeyRef:
+              name: identity-service-secret
+              key: jwt-public-key
+        # GCS configuration for media storage
+        - name: GCS_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: nova-gcs-credentials
+              key: bucket
+              optional: true
+        - name: GCS_SERVICE_ACCOUNT_JSON_PATH
+          value: "/var/secrets/gcs/service-account.json"
         envFrom:
         - configMapRef:
             name: nova-backend-config
@@ -78,6 +93,15 @@ spec:
           periodSeconds: 5
           timeoutSeconds: 3
           failureThreshold: 30
+        volumeMounts:
+        - name: gcs-credentials
+          mountPath: /var/secrets/gcs
+          readOnly: true
+      volumes:
+      - name: gcs-credentials
+        secret:
+          secretName: media-service-sa
+          optional: true
       restartPolicy: Always
 
 ---
