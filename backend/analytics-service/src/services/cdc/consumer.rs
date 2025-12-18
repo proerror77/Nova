@@ -198,46 +198,53 @@ pub struct ConsumerStatus {
 /// Row struct for posts_cdc table - used for type-safe ClickHouse inserts
 #[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct PostsCdcRow {
-    pub id: String,
-    pub user_id: String,
+    pub id: Uuid,
+    pub user_id: Uuid,
     pub content: String,
-    pub media_url: Option<String>,
-    pub created_at: u32,  // DateTime as Unix timestamp
-    pub cdc_timestamp: u64,
-    pub is_deleted: u8,
+    pub media_key: String,
+    pub media_type: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+    pub cdc_operation: i8,
+    pub cdc_timestamp: DateTime<Utc>,
 }
 
 /// Row struct for follows_cdc table - used for type-safe ClickHouse inserts
 #[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct FollowsCdcRow {
-    pub follower_id: String,
-    pub followed_id: String,
-    pub created_at: u32,  // DateTime as Unix timestamp
-    pub cdc_operation: u8,
-    pub cdc_timestamp: u32,  // DateTime as Unix timestamp
+    pub follower_id: Uuid,
+    pub followed_id: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub cdc_operation: i8,
+    pub cdc_timestamp: DateTime<Utc>,
     pub follow_count: i8,
 }
 
 /// Row struct for comments_cdc table - used for type-safe ClickHouse inserts
 #[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct CommentsCdcRow {
-    pub id: String,
-    pub post_id: String,
-    pub user_id: String,
+    pub id: Uuid,
+    pub post_id: Uuid,
+    pub user_id: Uuid,
     pub content: String,
-    pub created_at: u32,  // DateTime as Unix timestamp
-    pub cdc_timestamp: u64,
-    pub is_deleted: u8,
+    pub parent_comment_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub soft_delete: Option<DateTime<Utc>>,
+    pub cdc_operation: i8,
+    pub cdc_timestamp: DateTime<Utc>,
 }
 
 /// Row struct for likes_cdc table - used for type-safe ClickHouse inserts
 #[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct LikesCdcRow {
-    pub user_id: String,
-    pub post_id: String,
-    pub created_at: u32,  // DateTime as Unix timestamp
-    pub cdc_timestamp: u64,
-    pub is_deleted: u8,
+    pub post_id: Uuid,
+    pub user_id: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub cdc_operation: i8,
+    pub cdc_timestamp: DateTime<Utc>,
+    pub like_count: i8,
 }
 
 use super::models::{CdcMessage, CdcOperation};
@@ -538,26 +545,37 @@ impl CdcConsumer {
             AnalyticsError::Validation(format!("Invalid user UUID '{}': {}", user_id_raw, e))
         })?;
         let content: String = Self::extract_field(data, "content").unwrap_or_default();
-        let media_url: Option<String> = Self::extract_optional_field(data, "media_url");
+        let media_key: String = Self::extract_field(data, "media_key").unwrap_or_default();
+        let media_type: String = Self::extract_field(data, "media_type").unwrap_or_default();
         let created_at_raw: String = Self::extract_field(data, "created_at")?;
         let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
+        let updated_at_raw: String = Self::extract_field(data, "updated_at")?;
+        let updated_at = Self::parse_datetime_best_effort(&updated_at_raw)?;
+        let deleted_at_raw: Option<String> = Self::extract_optional_field(data, "deleted_at");
+        let deleted_at = deleted_at_raw
+            .as_deref()
+            .map(Self::parse_datetime_best_effort)
+            .transpose()?;
 
-        let is_deleted: u8 = if matches!(op, CdcOperation::Delete) {
-            1
-        } else {
-            0
+        let cdc_operation: i8 = match op {
+            CdcOperation::Insert | CdcOperation::Read => 1,
+            CdcOperation::Update => 2,
+            CdcOperation::Delete => 3,
         };
-        let cdc_timestamp = Self::ts_ms_u64(msg.payload().ts_ms)?;
+        let cdc_timestamp = msg.timestamp();
 
         // Use type-safe parameterized insert to prevent SQL injection
         let row = PostsCdcRow {
-            id: post_id.to_string(),
-            user_id: author_id.to_string(),
+            id: post_id,
+            user_id: author_id,
             content,
-            media_url,
-            created_at: created_at.timestamp() as u32,
+            media_key,
+            media_type,
+            created_at,
+            updated_at,
+            deleted_at,
+            cdc_operation,
             cdc_timestamp,
-            is_deleted,
         };
 
         let mut insert = self.ch_client.insert("posts_cdc").map_err(|e| {
@@ -593,23 +611,25 @@ impl CdcConsumer {
         let following_raw: String = Self::extract_field(data, "following_id")?;
         let follower_id = Uuid::parse_str(&follower_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid follower UUID: {}", e)))?;
-        let followee_id = Uuid::parse_str(&following_raw)
+        let followed_id = Uuid::parse_str(&following_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid followee UUID: {}", e)))?;
         let created_at_raw: String = Self::extract_field(data, "created_at")?;
         let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
 
-        // Match actual ClickHouse table schema (nova_feed.follows_cdc):
-        // followed_id (not followee_id), cdc_operation (not is_deleted), follow_count
-        let cdc_operation: u8 = if *op == CdcOperation::Delete { 2 } else { 1 };  // 1=INSERT, 2=DELETE
-        let follow_count: i8 = if *op == CdcOperation::Delete { -1 } else { 1 };  // For SummingMergeTree
+        let cdc_operation: i8 = match op {
+            CdcOperation::Delete => 2,
+            CdcOperation::Insert | CdcOperation::Read | CdcOperation::Update => 1,
+        };
+        let follow_count: i8 = if *op == CdcOperation::Delete { -1 } else { 1 };
+        let cdc_timestamp = msg.timestamp();
 
         // Use type-safe parameterized insert to prevent SQL injection
         let row = FollowsCdcRow {
-            follower_id: follower_id.to_string(),
-            followed_id: followee_id.to_string(),
-            created_at: created_at.timestamp() as u32,
+            follower_id,
+            followed_id,
+            created_at,
             cdc_operation,
-            cdc_timestamp: created_at.timestamp() as u32,
+            cdc_timestamp,
             follow_count,
         };
 
@@ -629,8 +649,8 @@ impl CdcConsumer {
         })?;
 
         debug!(
-            "Inserted follows CDC: follower={}, followee={}, op={:?}",
-            follower_id, followee_id, op
+            "Inserted follows CDC: follower={}, followed={}, op={:?}",
+            follower_id, followed_id, op
         );
         Ok(())
     }
@@ -654,25 +674,41 @@ impl CdcConsumer {
         let user_id = Uuid::parse_str(&user_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid user UUID: {}", e)))?;
         let content: String = Self::extract_field(data, "content")?;
+        let parent_comment_id_raw: Option<String> = Self::extract_optional_field(data, "parent_comment_id");
+        let parent_comment_id = parent_comment_id_raw
+            .as_deref()
+            .map(Uuid::parse_str)
+            .transpose()
+            .map_err(|e| AnalyticsError::Validation(format!("Invalid parent_comment_id UUID: {}", e)))?;
         let created_at_raw: String = Self::extract_field(data, "created_at")?;
         let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
+        let updated_at_raw: String = Self::extract_field(data, "updated_at")?;
+        let updated_at = Self::parse_datetime_best_effort(&updated_at_raw)?;
+        let soft_delete_raw: Option<String> = Self::extract_optional_field(data, "soft_delete");
+        let soft_delete = soft_delete_raw
+            .as_deref()
+            .map(Self::parse_datetime_best_effort)
+            .transpose()?;
 
-        let is_deleted: u8 = if matches!(op, CdcOperation::Delete) {
-            1
-        } else {
-            0
+        let cdc_operation: i8 = match op {
+            CdcOperation::Insert | CdcOperation::Read => 1,
+            CdcOperation::Update => 2,
+            CdcOperation::Delete => 3,
         };
-        let cdc_timestamp = Self::ts_ms_u64(msg.payload().ts_ms)?;
+        let cdc_timestamp = msg.timestamp();
 
         // Use type-safe parameterized insert to prevent SQL injection
         let row = CommentsCdcRow {
-            id: comment_id.to_string(),
-            post_id: post_id.to_string(),
-            user_id: user_id.to_string(),
+            id: comment_id,
+            post_id,
+            user_id,
             content,
-            created_at: created_at.timestamp() as u32,
+            parent_comment_id,
+            created_at,
+            updated_at,
+            soft_delete,
+            cdc_operation,
             cdc_timestamp,
-            is_deleted,
         };
 
         let mut insert = self.ch_client.insert("comments_cdc").map_err(|e| {
@@ -712,20 +748,21 @@ impl CdcConsumer {
         let created_at_raw: String = Self::extract_field(data, "created_at")?;
         let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
 
-        let is_deleted: u8 = if matches!(op, CdcOperation::Delete) {
-            1
-        } else {
-            0
+        let cdc_operation: i8 = match op {
+            CdcOperation::Delete => 2,
+            CdcOperation::Insert | CdcOperation::Read | CdcOperation::Update => 1,
         };
-        let cdc_timestamp = Self::ts_ms_u64(msg.payload().ts_ms)?;
+        let like_count: i8 = if *op == CdcOperation::Delete { -1 } else { 1 };
+        let cdc_timestamp = msg.timestamp();
 
         // Use type-safe parameterized insert to prevent SQL injection
         let row = LikesCdcRow {
-            user_id: user_id.to_string(),
-            post_id: post_id.to_string(),
-            created_at: created_at.timestamp() as u32,
+            post_id,
+            user_id,
+            created_at,
+            cdc_operation,
             cdc_timestamp,
-            is_deleted,
+            like_count,
         };
 
         let mut insert = self.ch_client.insert("likes_cdc").map_err(|e| {
@@ -769,16 +806,6 @@ impl CdcConsumer {
     {
         data.get(field)
             .and_then(|v| serde_json::from_value(v.clone()).ok())
-    }
-
-    fn ts_ms_u64(ts: i64) -> Result<u64> {
-        if ts < 0 {
-            return Err(AnalyticsError::Validation(format!(
-                "Invalid negative timestamp: {}",
-                ts
-            )));
-        }
-        Ok(ts as u64)
     }
 
     fn parse_datetime_best_effort(s: &str) -> Result<DateTime<Utc>> {
