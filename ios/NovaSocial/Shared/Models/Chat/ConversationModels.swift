@@ -62,6 +62,37 @@ struct Conversation: Identifiable, Codable, Sendable {
         isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
         isEncrypted = try container.decodeIfPresent(Bool.self, forKey: .isEncrypted) ?? false
     }
+
+    /// Preview/test initializer
+    init(
+        id: String,
+        type: ConversationType,
+        name: String? = nil,
+        createdBy: String? = nil,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date(),
+        members: [ConversationMember] = [],
+        lastMessage: ConversationLastMessage? = nil,
+        unreadCount: Int = 0,
+        isMuted: Bool = false,
+        isArchived: Bool = false,
+        isEncrypted: Bool = false,
+        avatarUrl: String? = nil
+    ) {
+        self.id = id
+        self.type = type
+        self.name = name
+        self.createdBy = createdBy
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.members = members
+        self.lastMessage = lastMessage
+        self.unreadCount = unreadCount
+        self.isMuted = isMuted
+        self.isArchived = isArchived
+        self.isEncrypted = isEncrypted
+        self.avatarUrl = avatarUrl
+    }
 }
 
 /// Conversation member with role information
@@ -86,6 +117,14 @@ struct ConversationMember: Codable, Sendable, Identifiable {
         username = try container.decodeIfPresent(String.self, forKey: .username) ?? ""
         role = try container.decodeIfPresent(GroupMemberRole.self, forKey: .role) ?? .member
         joinedAt = try decodeFlexibleDate(container, key: .joinedAt)
+    }
+
+    /// Preview/test initializer
+    init(userId: String, username: String, role: GroupMemberRole = .member, joinedAt: Date = Date()) {
+        self.userId = userId
+        self.username = username
+        self.role = role
+        self.joinedAt = joinedAt
     }
 }
 

@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UIKit
 
 // MARK: - Watch Time Service
 /// TikTok-style watch time tracking for personalized recommendations
@@ -26,7 +27,7 @@ class WatchTimeService: ObservableObject {
     // MARK: - State
 
     /// Pending events to be sent
-    @Published private(set) var pendingEvents: [WatchEvent] = []
+    @Published private(set) var pendingEvents: [WatchTimeEvent] = []
 
     /// Current active watch session
     private var activeSession: WatchSession?
@@ -83,7 +84,7 @@ class WatchTimeService: ObservableObject {
 
         // Only track if watched long enough
         if watchDuration >= minWatchDuration {
-            let event = createWatchEvent(from: session, watchDuration: watchDuration)
+            let event = createWatchTimeEvent(from: session, watchDuration: watchDuration)
             pendingEvents.append(event)
 
             print("[WatchTime] Ended watching: \(contentId), duration: \(watchDuration)ms, completion: \(event.completionRate)")
@@ -171,12 +172,12 @@ class WatchTimeService: ObservableObject {
 
     // MARK: - Private Methods
 
-    private func createWatchEvent(from session: WatchSession, watchDuration: Int) -> WatchEvent {
+    private func createWatchTimeEvent(from session: WatchSession, watchDuration: Int) -> WatchTimeEvent {
         let completionRate = session.contentDuration > 0
             ? min(1.0, Float(watchDuration) / Float(session.contentDuration))
             : 0.0
 
-        return WatchEvent(
+        return WatchTimeEvent(
             contentId: session.contentId,
             watchDuration: watchDuration,
             contentDuration: session.contentDuration,
@@ -219,7 +220,7 @@ class WatchTimeService: ObservableObject {
         pendingEvents = []
 
         do {
-            let request = BatchWatchEventRequest(events: eventsToSend)
+            let request = BatchWatchTimeEventRequest(events: eventsToSend)
             try await client.post(
                 endpoint: APIConfig.Analytics.recordWatchEvents,
                 body: request
@@ -276,8 +277,8 @@ private struct WatchSession {
     }
 }
 
-/// Watch event to be sent to backend
-struct WatchEvent: Codable {
+/// Watch time event with detailed metrics
+struct WatchTimeEvent: Codable {
     let contentId: String
     let watchDuration: Int
     let contentDuration: Int
@@ -299,9 +300,9 @@ struct WatchEvent: Codable {
     }
 }
 
-/// Batch request for watch events
-struct BatchWatchEventRequest: Codable {
-    let events: [WatchEvent]
+/// Batch request for watch time events
+struct BatchWatchTimeEventRequest: Codable {
+    let events: [WatchTimeEvent]
 }
 
 /// Engagement actions

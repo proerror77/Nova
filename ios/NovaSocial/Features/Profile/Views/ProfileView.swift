@@ -22,8 +22,8 @@ struct ProfileView: View {
     @State private var showPostDetail = false  // 显示帖子详情页面
     @State private var selectedPostForDetail: Post? = nil  // 选中的帖子
 
-    // Access AvatarManager - use singleton directly instead of @StateObject to avoid memory duplication
-    private var avatarManager: AvatarManager { AvatarManager.shared }
+    // Access AvatarManager - @ObservedObject to observe pendingAvatar changes
+    @ObservedObject private var avatarManager = AvatarManager.shared
 
     // Access UserPostsManager for real-time post sync
     // NOTE: Access singleton directly for @Observable objects to ensure single source of truth
@@ -266,7 +266,7 @@ struct ProfileView: View {
                 // 第 236-248 行：用户信息区块，使用 userInfoBlockVerticalOffset 控制垂直位置
                 ProfileUserInfoSection(
                     avatarImage: avatarManager.pendingAvatar ?? localAvatarImage,
-                    avatarUrl: profileData.userProfile?.avatarUrl,
+                    avatarUrl: displayUser?.avatarUrl,  // 使用 displayUser 确保与 authManager 同步
                     username: displayUser?.displayName ?? displayUser?.username,  // 未填写时组件显示 "User"
                     location: displayUser?.location,                               // 未填写时不显示
                     profession: displayUser?.bio,                                  // 未填写时不显示

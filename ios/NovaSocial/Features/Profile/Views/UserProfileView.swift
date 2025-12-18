@@ -1,57 +1,16 @@
 import SwiftUI
 
-// MARK: - UserProfile 用户数据模型
-struct UserProfileData {
-    let userId: String
-    var username: String
-    var avatarUrl: String?
-    var location: String?
-    var profession: String?
-    var followingCount: Int
-    var followersCount: Int
-    var likesCount: Int
-    var isVerified: Bool
-    var isAlias: Bool = false
-    var aliasName: String? = nil
-    var posts: [UserProfilePostData]
-
-    /// 默认占位数据（用于加载中或预览）
-    static let placeholder = UserProfileData(
-        userId: "",
-        username: "Loading...",
-        avatarUrl: nil,
-        location: nil,
-        profession: nil,
-        followingCount: 0,
-        followersCount: 0,
-        likesCount: 0,
-        isVerified: false,
-        posts: []
-    )
-
-    /// 预览用示例数据
-    static let preview = UserProfileData(
-        userId: "preview-user-123",
-        username: "Juliette",
-        avatarUrl: nil,
-        location: "England",
-        profession: "Artist",
-        followingCount: 592,
-        followersCount: 1449,
-        likesCount: 452,
-        isVerified: true,
-        posts: []
-    )
-}
-
 // MARK: - UserProfileView
+// 使用统一的 UserProfile 模型（定义在 Shared/Models/User/UserModels.swift）
+
 struct UserProfileView: View {
     // MARK: - 导航控制
     @Binding var showUserProfile: Bool
 
     // MARK: - 用户数据
     let userId: String  // 要显示的用户ID
-    @State private var userData: UserProfileData = .placeholder
+    @State private var userProfile: UserProfile?  // 统一使用 UserProfile 模型
+    @State private var userPosts: [UserProfilePostData] = []  // 用户帖子单独存储
     @State private var isLoading = true
 
     @State private var selectedTab: ProfileTab = .posts
@@ -146,7 +105,7 @@ struct UserProfileView: View {
                 VStack(spacing: 0) {
                     // 顶部导航栏（使用组件）
                     UserProfileTopNavigationBar(
-                        isVerified: userData.isVerified,
+                        isVerified: userProfile?.safeIsVerified ?? false,
                         layout: navBarLayout,
                         onBackTapped: {
                             showUserProfile = false
@@ -158,15 +117,15 @@ struct UserProfileView: View {
 
                     // 用户信息区域（使用组件）- 居中
                     UserProfileUserInfoSection(
-                        avatarUrl: userData.avatarUrl,
-                        username: userData.username,
-                        location: userData.location,
-                        profession: userData.profession,
-                        followingCount: userData.followingCount,
-                        followersCount: userData.followersCount,
-                        likesCount: userData.likesCount,
-                        isAlias: userData.isAlias,
-                        aliasName: userData.aliasName,
+                        avatarUrl: userProfile?.avatarUrl,
+                        username: userProfile?.displayName ?? userProfile?.username ?? "Loading...",
+                        location: userProfile?.location,
+                        profession: userProfile?.bio,
+                        followingCount: userProfile?.safeFollowingCount ?? 0,
+                        followersCount: userProfile?.safeFollowerCount ?? 0,
+                        likesCount: userProfile?.safePostCount ?? 0,
+                        isAlias: false,  // TODO: 从用户设置获取
+                        aliasName: nil,
                         layout: userInfoLayout,
                         onFollowingTapped: {
                             // 点击 Following
@@ -199,7 +158,7 @@ struct UserProfileView: View {
 
                     // 内容区域（使用组件）
                     UserProfileContentSection(
-                        posts: userData.posts,
+                        posts: userPosts,
                         onSearchTapped: {
                             // 搜索操作
                         },
@@ -223,54 +182,45 @@ struct UserProfileView: View {
         isLoading = true
 
         do {
-            // 1. 加载用户资料
-            let userProfile = try await userService.getUser(userId: userId)
+            // 1. 加载用户资料（使用统一的 UserProfile 模型）
+            let profile = try await userService.getUser(userId: userId)
 
             // 2. 加载用户发布的帖子
             let postsResponse = try await contentService.getPostsByAuthor(authorId: userId, limit: 50, offset: 0)
 
             // 3. 将 Post 转换为 UserProfilePostData
-            let userPosts = postsResponse.posts.map { post in
+            let posts = postsResponse.posts.map { post in
                 UserProfilePostData(
                     id: post.id,
-                    avatarUrl: userProfile.avatarUrl,
-                    username: userProfile.displayName ?? userProfile.username,
+                    avatarUrl: profile.avatarUrl,
+                    username: profile.displayName ?? profile.username,
                     likeCount: post.likeCount ?? 0,
                     imageUrl: post.mediaUrls?.first,
                     content: post.content
                 )
             }
 
-            // 4. 更新 UI
+            // 4. 更新 UI（直接使用 UserProfile）
             await MainActor.run {
-                userData = UserProfileData(
-                    userId: userProfile.id,
-                    username: userProfile.displayName ?? userProfile.username,
-                    avatarUrl: userProfile.avatarUrl,
-                    location: userProfile.location,
-                    profession: userProfile.bio,
-                    followingCount: userProfile.safeFollowingCount,
-                    followersCount: userProfile.safeFollowerCount,
-                    likesCount: userProfile.safePostCount,
-                    isVerified: userProfile.safeIsVerified,
-                    posts: userPosts
-                )
-                isLoading = false
+                self.userProfile = profile
+                self.userPosts = posts
+                self.isLoading = false
             }
 
             #if DEBUG
-            print("[UserProfile] Loaded \(userPosts.count) posts for user: \(userProfile.username)")
+            print("[UserProfileView] Loaded \(posts.count) posts for user: \(profile.username)")
             #endif
 
         } catch {
             #if DEBUG
-            print("[UserProfile] Failed to load user data: \(error)")
+            print("[UserProfileView] Failed to load user data: \(error)")
             #endif
 
-            // 加载失败时使用占位数据
+            // 加载失败时清空数据
             await MainActor.run {
-                userData = .placeholder
-                isLoading = false
+                self.userProfile = nil
+                self.userPosts = []
+                self.isLoading = false
             }
         }
     }

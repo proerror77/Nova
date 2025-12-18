@@ -129,7 +129,7 @@ final class ProfileSettingViewModel: ObservableObject {
                 firstName: firstName.isEmpty ? nil : firstName,
                 lastName: lastName.isEmpty ? nil : lastName,
                 dateOfBirth: dateOfBirth.isEmpty ? nil : dateOfBirth,
-                gender: gender
+                gender: gender == .notSet ? nil : gender
             )
 
             // Ensure avatar URL is preserved

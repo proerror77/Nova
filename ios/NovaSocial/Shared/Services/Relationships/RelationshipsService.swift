@@ -72,7 +72,7 @@ class RelationshipsService {
     /// Get relationship status with a user
     /// - Parameter userId: ID of the user to check
     /// - Returns: Relationship status
-    func getRelationship(userId: String) async throws -> UserRelationship {
+    func getRelationship(userId: String) async throws -> UserRelationshipStatus {
         return try await client.get(
             endpoint: APIConfig.Relationships.getRelationship(userId)
         )
@@ -204,8 +204,8 @@ struct BlockedUserInfo: Codable, Identifiable {
     }
 }
 
-/// User relationship status
-struct UserRelationship: Codable {
+/// User relationship status (用户之间的关系状态)
+struct UserRelationshipStatus: Codable {
     let userId: String
     let isFollowing: Bool
     let isFollowedBy: Bool

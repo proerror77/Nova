@@ -128,7 +128,10 @@ enum PreviewData {
             mediaType: "image",
             likeCount: 156,
             commentCount: 23,
-            shareCount: 8
+            shareCount: 8,
+            authorUsername: Users.currentUser.username,
+            authorDisplayName: Users.currentUser.displayName,
+            authorAvatarUrl: Users.currentUser.avatarUrl
         )
 
         /// Sample post with multiple images
@@ -147,7 +150,10 @@ enum PreviewData {
             mediaType: "image",
             likeCount: 342,
             commentCount: 56,
-            shareCount: 21
+            shareCount: 21,
+            authorUsername: Users.regularUser.username,
+            authorDisplayName: Users.regularUser.displayName,
+            authorAvatarUrl: Users.regularUser.avatarUrl
         )
 
         /// Sample text-only post
@@ -162,7 +168,10 @@ enum PreviewData {
             mediaType: nil,
             likeCount: 78,
             commentCount: 12,
-            shareCount: 3
+            shareCount: 3,
+            authorUsername: Users.currentUser.username,
+            authorDisplayName: Users.currentUser.displayName,
+            authorAvatarUrl: Users.currentUser.avatarUrl
         )
 
         /// Array of sample posts for feeds
@@ -170,9 +179,9 @@ enum PreviewData {
             imagePost,
             multiImagePost,
             textPost,
-            Post(id: "preview-post-004", authorId: "preview-user-004", content: "Working on something exciting! Stay tuned 🚀", createdAt: Int64(Date().timeIntervalSince1970 - 3600 * 5), updatedAt: Int64(Date().timeIntervalSince1970 - 3600 * 5), status: "published", mediaUrls: ["https://picsum.photos/604/400"], mediaType: "image", likeCount: 234, commentCount: 45, shareCount: 12),
-            Post(id: "preview-post-005", authorId: "preview-user-005", content: "Morning coffee ☕️", createdAt: Int64(Date().timeIntervalSince1970 - 3600 * 8), updatedAt: Int64(Date().timeIntervalSince1970 - 3600 * 8), status: "published", mediaUrls: ["https://picsum.photos/605/400"], mediaType: "image", likeCount: 89, commentCount: 7, shareCount: 2),
-            Post(id: "preview-post-006", authorId: "preview-user-006", content: "Just hit a new personal record at the gym! 💪", createdAt: Int64(Date().timeIntervalSince1970 - 86400 * 2), updatedAt: Int64(Date().timeIntervalSince1970 - 86400 * 2), status: "published", mediaUrls: nil, mediaType: nil, likeCount: 156, commentCount: 34, shareCount: 5),
+            Post(id: "preview-post-004", authorId: "preview-user-004", content: "Working on something exciting! Stay tuned 🚀", createdAt: Int64(Date().timeIntervalSince1970 - 3600 * 5), updatedAt: Int64(Date().timeIntervalSince1970 - 3600 * 5), status: "published", mediaUrls: ["https://picsum.photos/604/400"], mediaType: "image", likeCount: 234, commentCount: 45, shareCount: 12, authorUsername: "alice_wonder", authorDisplayName: "Alice Wonder", authorAvatarUrl: "https://picsum.photos/203"),
+            Post(id: "preview-post-005", authorId: "preview-user-005", content: "Morning coffee ☕️", createdAt: Int64(Date().timeIntervalSince1970 - 3600 * 8), updatedAt: Int64(Date().timeIntervalSince1970 - 3600 * 8), status: "published", mediaUrls: ["https://picsum.photos/605/400"], mediaType: "image", likeCount: 89, commentCount: 7, shareCount: 2, authorUsername: "bob_builder", authorDisplayName: "Bob Builder", authorAvatarUrl: "https://picsum.photos/204"),
+            Post(id: "preview-post-006", authorId: "preview-user-006", content: "Just hit a new personal record at the gym! 💪", createdAt: Int64(Date().timeIntervalSince1970 - 86400 * 2), updatedAt: Int64(Date().timeIntervalSince1970 - 86400 * 2), status: "published", mediaUrls: nil, mediaType: nil, likeCount: 156, commentCount: 34, shareCount: 5, authorUsername: "carol_smith", authorDisplayName: "Carol Smith", authorAvatarUrl: "https://picsum.photos/205"),
         ]
     }
 
@@ -184,14 +193,12 @@ enum PreviewData {
             FeedPost(
                 id: "feed-001",
                 authorId: Users.currentUser.id,
-                authorUsername: Users.currentUser.username,
-                authorDisplayName: Users.currentUser.displayName,
-                authorAvatarUrl: Users.currentUser.avatarUrl,
-                authorIsVerified: Users.currentUser.safeIsVerified,
+                authorName: Users.currentUser.displayName ?? Users.currentUser.username,
+                authorAvatar: Users.currentUser.avatarUrl,
                 content: "Beautiful sunset at the beach! 🌅 #sunset #beach",
                 mediaUrls: ["https://picsum.photos/600/400"],
-                mediaType: "image",
-                createdAt: Int64(Date().timeIntervalSince1970 - 3600),
+                mediaType: .image,
+                createdAt: Date().addingTimeInterval(-3600),
                 likeCount: 156,
                 commentCount: 23,
                 shareCount: 8,
@@ -201,14 +208,12 @@ enum PreviewData {
             FeedPost(
                 id: "feed-002",
                 authorId: Users.regularUser.id,
-                authorUsername: Users.regularUser.username,
-                authorDisplayName: Users.regularUser.displayName,
-                authorAvatarUrl: Users.regularUser.avatarUrl,
-                authorIsVerified: Users.regularUser.safeIsVerified,
+                authorName: Users.regularUser.displayName ?? Users.regularUser.username,
+                authorAvatar: Users.regularUser.avatarUrl,
                 content: "Just launched my new app! Check it out 🚀",
                 mediaUrls: ["https://picsum.photos/601/400"],
-                mediaType: "image",
-                createdAt: Int64(Date().timeIntervalSince1970 - 7200),
+                mediaType: .image,
+                createdAt: Date().addingTimeInterval(-7200),
                 likeCount: 342,
                 commentCount: 56,
                 shareCount: 21,
@@ -218,14 +223,12 @@ enum PreviewData {
             FeedPost(
                 id: "feed-003",
                 authorId: "preview-user-004",
-                authorUsername: "alice_wonder",
-                authorDisplayName: "Alice Wonder",
-                authorAvatarUrl: "https://picsum.photos/203",
-                authorIsVerified: true,
+                authorName: "Alice Wonder",
+                authorAvatar: "https://picsum.photos/203",
                 content: "Working from my favorite cafe today ☕️",
                 mediaUrls: ["https://picsum.photos/602/400"],
-                mediaType: "image",
-                createdAt: Int64(Date().timeIntervalSince1970 - 10800),
+                mediaType: .image,
+                createdAt: Date().addingTimeInterval(-10800),
                 likeCount: 89,
                 commentCount: 12,
                 shareCount: 3,
@@ -281,25 +284,29 @@ enum PreviewData {
         static let sampleConversations: [Conversation] = [
             Conversation(
                 id: "conv-001",
-                participants: [Users.currentUser.id, Users.regularUser.id],
-                createdAt: Int64(Date().timeIntervalSince1970 - 86400 * 7),
-                updatedAt: Int64(Date().timeIntervalSince1970 - 300),
-                lastMessage: "Hey! How are you?",
-                lastMessageAt: Int64(Date().timeIntervalSince1970 - 300),
-                isGroup: false,
-                groupName: nil,
-                groupAvatarUrl: nil
+                type: .direct,
+                name: nil,
+                createdAt: Date().addingTimeInterval(-86400 * 7),
+                updatedAt: Date().addingTimeInterval(-300),
+                members: [
+                    ConversationMember(userId: Users.currentUser.id, username: Users.currentUser.username),
+                    ConversationMember(userId: Users.regularUser.id, username: Users.regularUser.username)
+                ],
+                unreadCount: 2
             ),
             Conversation(
                 id: "conv-002",
-                participants: [Users.currentUser.id, "preview-user-004", "preview-user-005"],
-                createdAt: Int64(Date().timeIntervalSince1970 - 86400 * 30),
-                updatedAt: Int64(Date().timeIntervalSince1970 - 3600),
-                lastMessage: "See you tomorrow!",
-                lastMessageAt: Int64(Date().timeIntervalSince1970 - 3600),
-                isGroup: true,
-                groupName: "Dev Team",
-                groupAvatarUrl: "https://picsum.photos/206"
+                type: .group,
+                name: "Dev Team",
+                createdAt: Date().addingTimeInterval(-86400 * 30),
+                updatedAt: Date().addingTimeInterval(-3600),
+                members: [
+                    ConversationMember(userId: Users.currentUser.id, username: Users.currentUser.username, role: .admin),
+                    ConversationMember(userId: "preview-user-004", username: "alice_wonder"),
+                    ConversationMember(userId: "preview-user-005", username: "bob_builder")
+                ],
+                unreadCount: 0,
+                avatarUrl: "https://picsum.photos/206"
             ),
         ]
     }
@@ -307,36 +314,42 @@ enum PreviewData {
     // MARK: - Notifications
 
     enum Notifications {
-        static let sampleNotifications: [AppNotification] = [
-            AppNotification(
+        static let sampleNotifications: [NotificationItem] = [
+            NotificationItem(
                 id: "notif-001",
-                userId: Users.currentUser.id,
                 type: .like,
-                title: "New Like",
-                body: "Jane Doe liked your post",
-                data: ["post_id": Posts.imagePost.id],
+                message: "Jane Doe liked your post",
+                timestamp: Date().addingTimeInterval(-1800),
                 isRead: false,
-                createdAt: Date().addingTimeInterval(-1800)
+                relatedUserId: Users.regularUser.id,
+                relatedPostId: Posts.imagePost.id,
+                relatedCommentId: nil,
+                userAvatarUrl: Users.regularUser.avatarUrl,
+                userName: Users.regularUser.displayName
             ),
-            AppNotification(
+            NotificationItem(
                 id: "notif-002",
-                userId: Users.currentUser.id,
                 type: .comment,
-                title: "New Comment",
-                body: "Alice Wonder commented on your post",
-                data: ["post_id": Posts.imagePost.id, "comment_id": "comment-002"],
+                message: "Alice Wonder commented on your post",
+                timestamp: Date().addingTimeInterval(-3600),
                 isRead: false,
-                createdAt: Date().addingTimeInterval(-3600)
+                relatedUserId: "preview-user-004",
+                relatedPostId: Posts.imagePost.id,
+                relatedCommentId: "comment-002",
+                userAvatarUrl: "https://picsum.photos/203",
+                userName: "Alice Wonder"
             ),
-            AppNotification(
+            NotificationItem(
                 id: "notif-003",
-                userId: Users.currentUser.id,
                 type: .follow,
-                title: "New Follower",
-                body: "Bob Builder started following you",
-                data: ["user_id": "preview-user-005"],
+                message: "Bob Builder started following you",
+                timestamp: Date().addingTimeInterval(-86400),
                 isRead: true,
-                createdAt: Date().addingTimeInterval(-86400)
+                relatedUserId: "preview-user-005",
+                relatedPostId: nil,
+                relatedCommentId: nil,
+                userAvatarUrl: "https://picsum.photos/204",
+                userName: "Bob Builder"
             ),
         ]
     }
@@ -395,7 +408,7 @@ enum PreviewData {
 
     enum Search {
         static let sampleResults: [SearchResult] = [
-            .user(id: Users.regularUser.id, username: Users.regularUser.username, displayName: Users.regularUser.displayName, avatarUrl: Users.regularUser.avatarUrl, isVerified: Users.regularUser.safeIsVerified),
+            .user(id: Users.regularUser.id, username: Users.regularUser.username, displayName: Users.regularUser.displayName ?? Users.regularUser.username, avatarUrl: Users.regularUser.avatarUrl, isVerified: Users.regularUser.safeIsVerified),
             .user(id: "preview-user-004", username: "alice_wonder", displayName: "Alice Wonder", avatarUrl: "https://picsum.photos/203", isVerified: true),
             .post(id: Posts.imagePost.id, content: Posts.imagePost.content, author: Posts.imagePost.authorId, createdAt: Posts.imagePost.createdDate, likeCount: Posts.imagePost.likeCount ?? 0),
             .hashtag(tag: "sunset", postCount: 15234),

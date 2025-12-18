@@ -265,7 +265,7 @@ class SessionInterestTracker: ObservableObject {
     private func trimInterests() {
         if currentInterests.count > maxInterests {
             let sorted = currentInterests.sorted { $0.value > $1.value }
-            currentInterests = Dictionary(uniqueKeysWithValues: sorted.prefix(maxInterests))
+            currentInterests = Dictionary(uniqueKeysWithValues: Array(sorted.prefix(maxInterests)))
         }
     }
 }
