@@ -1,0 +1,149 @@
+name: GCP Build & Deploy One Service
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Service to build and deploy
+        required: true
+        type: choice
+        options:
+          - analytics-service
+          - content-service
+          - feed-service
+          - graph-service
+          - graphql-gateway
+          - identity-service
+          - media-service
+          - notification-service
+          - ranking-service
+          - realtime-chat-service
+          - search-service
+          - social-service
+          - trust-safety-service
+      deploy:
+        description: Deploy after build
+        type: boolean
+        default: true
+
+env:
+  GCP_REGION: asia-northeast1
+  GCP_PROJECT_ID: banded-pad-479802-k9
+  REGISTRY: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova
+  NAMESPACE: nova-staging
+
+jobs:
+  build-push:
+    name: Build & Push ${{ inputs.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+
+      - name: Login to Artifact Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.GCP_REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ inputs.service }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: Determine build context
+        id: context
+        run: |
+          INDEPENDENT="realtime-chat-service"
+          if echo "$INDEPENDENT" | grep -qw "${{ inputs.service }}"; then
+            echo "context=./backend/${{ inputs.service }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "context=./backend" >> "$GITHUB_OUTPUT"
+          fi
+          echo "dockerfile=./backend/${{ inputs.service }}/Dockerfile" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.context.outputs.context }}
+          file: ${{ steps.context.outputs.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha,scope=${{ inputs.service }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.service }}
+
+      - name: Output image
+        run: |
+          echo "### Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "- Service: ${{ inputs.service }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Image: ${{ env.REGISTRY }}/${{ inputs.service }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+
+  deploy:
+    name: Deploy ${{ inputs.service }}
+    needs: build-push
+    if: ${{ inputs.deploy }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: nova-cluster
+          location: ${{ env.GCP_REGION }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Update deployment image
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ inputs.service }}:${{ github.sha }}"
+          echo "Updating ${{ inputs.service }} to image: ${IMAGE}"
+          kubectl set image deployment/${{ inputs.service }} \
+            ${{ inputs.service }}=${IMAGE} \
+            -n ${{ env.NAMESPACE }}
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/${{ inputs.service }} \
+            -n ${{ env.NAMESPACE }} \
+            --timeout=300s
+
+      - name: Verify deployment
+        run: |
+          echo "### Deployment Status" >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=${{ inputs.service }} >> $GITHUB_STEP_SUMMARY
