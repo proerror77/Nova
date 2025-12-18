@@ -256,17 +256,28 @@ async fn main() -> io::Result<()> {
     let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", grpc_port)
         .parse()
         .expect("Invalid gRPC bind address");
-    let grpc_pool = db_pool.get_ref().clone();
+    let grpc_db_pool = db_pool.get_ref().clone();
 
-    // Initialize gRPC service BEFORE spawning the task
-    let grpc_svc =
-        match recommendation_service::grpc::RecommendationServiceImpl::new(grpc_pool).await {
-            Ok(svc) => svc,
-            Err(e) => {
-                tracing::error!("Failed to initialize RecommendationService: {}", e);
-                panic!("Failed to initialize RecommendationService: {}", e);
-            }
-        };
+    // Create shared FeedCache for gRPC service (reuse existing if available)
+    let grpc_cache = match recommendation_service::FeedCache::new(
+        &config.redis.url,
+        recommendation_service::CacheConfig::default(),
+    )
+    .await
+    {
+        Ok(cache) => Arc::new(cache),
+        Err(e) => {
+            tracing::error!("Failed to initialize FeedCache for gRPC service: {}", e);
+            panic!("Failed to initialize FeedCache: {}", e);
+        }
+    };
+
+    // Initialize gRPC service with existing pools (avoid creating another GrpcClientPool)
+    let grpc_svc = recommendation_service::grpc::RecommendationServiceImpl::with_cache(
+        grpc_db_pool,
+        grpc_cache,
+        grpc_pool.clone(),
+    );
 
     tokio::spawn(async move {
         let svc = grpc_svc;
