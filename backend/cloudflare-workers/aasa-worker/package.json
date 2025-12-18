@@ -1,0 +1,21 @@
+{
+  "name": "icered-aasa-worker",
+  "version": "1.0.0",
+  "description": "Apple App Site Association Worker for ICERED Passkey/WebAuthn",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  },
+  "keywords": [
+    "cloudflare-workers",
+    "aasa",
+    "passkey",
+    "webauthn"
+  ]
+}

@@ -1,0 +1,8 @@
+# Patch thumb-worker to use nova_content database instead of default nova
+# The post_images table exists in nova_content, not nova
+# CONTENT_DATABASE_URL is at index 3 in env array
+- op: replace
+  path: /spec/template/spec/containers/0/env/3
+  value:
+    name: CONTENT_DATABASE_URL
+    value: "postgres://nova:nova@postgres.nova-staging.svc.cluster.local:5432/nova_content"

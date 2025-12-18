@@ -76,10 +76,6 @@ tonic = "0.12"
 prost = "0.13"
 prost-types = "0.13"
 
-# GraphQL
-async-graphql = { version = "7.0", features = ["dataloader", "apollo-tracing"] }
-async-graphql-actix-web = "7.0"
-
 # Web framework
 actix = "0.13"
 actix-web = "4.4"
@@ -92,12 +88,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Authentication
 jsonwebtoken = "9.3"
-argon2 = "0.5"
 
 # Utilities
 uuid = { version = "1.6", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-futures = "0.3"
 rand = "0.8"
 once_cell = "1.19"
 lazy_static = "1.4"
@@ -105,12 +99,8 @@ pin-project = "1.1"
 sha2 = "0.10"
 sha1 = "0.10"
 hex = "0.4"
-hmac = "0.12"
-hkdf = "0.12"
-aes-gcm = "0.10"
 base64 = "0.22"
 mime = "0.3"
-qrcode = "0.14"
 reqwest = { version = "0.11", features = ["json"] }
 urlencoding = "2.1"
 validator = "0.20"
@@ -142,9 +132,7 @@ tower = "0.4"
 
 # AWS SDK
 aws-config = "1.1"
-aws-sdk-secretsmanager = "1.13"
 aws-sdk-s3 = "1.15"
-moka = { version = "0.12", features = ["future"] }
 
 [profile.release]
 opt-level = 3

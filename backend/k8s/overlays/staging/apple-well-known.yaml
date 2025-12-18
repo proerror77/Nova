@@ -1,0 +1,197 @@
+# Apple App Site Association (AASA) Well-Known Configuration
+# This enables Passkey (WebAuthn) and Universal Links for iOS app
+#
+# Required for:
+#   - Passkey/WebAuthn authentication (webcredentials)
+#   - Universal Links (applinks)
+#
+# The AASA file will be served at:
+#   https://icered.com/.well-known/apple-app-site-association
+#   https://app.icered.com/.well-known/apple-app-site-association
+#   https://staging.gcp.icered.com/.well-known/apple-app-site-association
+#
+# IMPORTANT: Replace YOUR_TEAM_ID with your actual Apple Developer Team ID
+# To find your Team ID:
+#   1. Go to https://developer.apple.com/account
+#   2. Click "Membership" in the left sidebar
+#   3. Your Team ID is shown under "Membership Information"
+#
+# Or from Xcode:
+#   1. Open Xcode → Preferences → Accounts
+#   2. Select your Apple ID
+#   3. Click "View Details..."
+#   4. Your Team ID is shown for each team
+
+---
+# ConfigMap containing Apple App Site Association JSON
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: apple-well-known
+  namespace: nova-backend
+  labels:
+    app: apple-well-known
+    environment: staging
+data:
+  # Apple App Site Association file
+  # - webcredentials: Enables Passkey/WebAuthn for iOS app
+  # - applinks: Enables Universal Links for deep linking
+  apple-app-site-association: |
+    {
+      "webcredentials": {
+        "apps": ["ABC123XYZ0.com.libruce.icered"]
+      },
+      "applinks": {
+        "apps": [],
+        "details": [
+          {
+            "appID": "ABC123XYZ0.com.libruce.icered",
+            "paths": [
+              "/reset-password/*",
+              "/verify/*",
+              "/invite/*",
+              "/callback/*"
+            ]
+          }
+        ]
+      }
+    }
+
+---
+# Deployment for serving Apple well-known files
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apple-well-known
+  namespace: nova-backend
+  labels:
+    app: apple-well-known
+    environment: staging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: apple-well-known
+  template:
+    metadata:
+      labels:
+        app: apple-well-known
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.25-alpine
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          volumeMounts:
+            - name: well-known-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: nginx.conf
+              readOnly: true
+            - name: well-known-files
+              mountPath: /usr/share/nginx/html/.well-known/apple-app-site-association
+              subPath: apple-app-site-association
+              readOnly: true
+          resources:
+            requests:
+              memory: "16Mi"
+              cpu: "10m"
+            limits:
+              memory: "64Mi"
+              cpu: "50m"
+          livenessProbe:
+            httpGet:
+              path: /.well-known/apple-app-site-association
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /.well-known/apple-app-site-association
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 5
+      volumes:
+        - name: well-known-files
+          configMap:
+            name: apple-well-known
+        - name: well-known-config
+          configMap:
+            name: apple-well-known-nginx
+
+---
+# Nginx configuration for serving Apple well-known files
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: apple-well-known-nginx
+  namespace: nova-backend
+  labels:
+    app: apple-well-known
+data:
+  nginx.conf: |
+    server {
+        listen 80;
+        server_name _;
+
+        root /usr/share/nginx/html;
+
+        # IMPORTANT: Apple requires specific content-type
+        # Must be application/json with no charset
+
+        # CORS headers (optional but recommended)
+        add_header Access-Control-Allow-Origin *;
+        add_header Access-Control-Allow-Methods "GET, OPTIONS";
+
+        # Serve Apple App Site Association file
+        location /.well-known/apple-app-site-association {
+            default_type application/json;
+            alias /usr/share/nginx/html/.well-known/apple-app-site-association;
+
+            # Cache for 1 hour (Apple caches for 24h on device)
+            add_header Cache-Control "public, max-age=3600";
+        }
+
+        # Also serve without .well-known prefix for some clients
+        location /apple-app-site-association {
+            default_type application/json;
+            alias /usr/share/nginx/html/.well-known/apple-app-site-association;
+        }
+
+        # Health check
+        location /health {
+            access_log off;
+            return 200 "healthy\n";
+            add_header Content-Type text/plain;
+        }
+    }
+
+---
+# Service for Apple well-known server
+apiVersion: v1
+kind: Service
+metadata:
+  name: apple-well-known
+  namespace: nova-backend
+  labels:
+    app: apple-well-known
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+  selector:
+    app: apple-well-known
+
+# NOTE: Ingress is managed via matrix-synapse-ingress.yaml
+# AASA paths are added to existing ingress to share the load balancer IP
+#
+# For production (icered.com, app.icered.com):
+#   - Configure Cloudflare DNS to proxy to the same backend
+#   - Or add paths to existing ingress with proper certificates
+#
+# Current staging endpoint:
+#   https://staging.gcp.icered.com/.well-known/apple-app-site-association

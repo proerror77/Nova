@@ -67,6 +67,11 @@ patches:
       - op: replace
         path: /data/ZITADEL_DATABASE_POSTGRES_HOST
         value: "postgres.nova-staging.svc.cluster.local"
+  # Thumb-worker database patch - use nova_content database for post_images table
+  - target:
+      kind: Deployment
+      name: thumb-worker
+    path: thumb-worker-db-patch.yaml
   # Zitadel PVC storage class patch (use GKE default)
   - target:
       kind: PersistentVolumeClaim
@@ -130,7 +135,7 @@ images:
     newTag: latest
   - name: nova-feed-service
     newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/feed-service
-    newTag: latest
+    newTag: d7f3bd4dd3cd1f3c9c26a79a615f453d519fca56
   - name: nova-graph-service
     newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/graph-service
     newTag: latest

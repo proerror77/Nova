@@ -66,4 +66,16 @@ fn main() {
             &["../realtime-chat-service/proto/"],
         )
         .expect("Failed to compile realtime-chat proto");
+
+    // Compile ranking service proto separately
+    tonic_build::configure()
+        .build_server(false)
+        .build_client(true)
+        .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
+        .type_attribute(".", "#[allow(clippy::enum_variant_names)]")
+        .compile_protos(
+            &["../ranking-service/proto/ranking.proto"],
+            &["../ranking-service/proto/"],
+        )
+        .expect("Failed to compile ranking proto");
 }
