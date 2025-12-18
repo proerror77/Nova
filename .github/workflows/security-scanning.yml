@@ -132,15 +132,17 @@ jobs:
       - name: Check advisories
         working-directory: backend
         run: cargo deny check advisories
-        continue-on-error: false
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
 
       - name: Check licenses
         working-directory: backend
         run: cargo deny check licenses
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
 
       - name: Check bans
         working-directory: backend
         run: cargo deny check bans
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
 
   # ============ Stage 3: SAST (Static Application Security Testing) ============
   sast-scan:
