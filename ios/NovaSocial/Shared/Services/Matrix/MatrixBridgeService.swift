@@ -353,7 +353,7 @@ final class MatrixBridgeService {
             throw MatrixBridgeError.notInitialized
         }
 
-        let roomId = try await getRoomId(for: conversationId)
+        let roomId = try await resolveRoomId(for: conversationId)
         return try await matrixService.getRoomMessages(roomId: roomId, limit: limit, from: from)
     }
 
@@ -363,7 +363,7 @@ final class MatrixBridgeService {
             throw MatrixBridgeError.notInitialized
         }
 
-        let roomId = try await getRoomId(for: conversationId)
+        let roomId = try await resolveRoomId(for: conversationId)
         try await matrixService.setTyping(roomId: roomId, isTyping: isTyping)
     }
 
@@ -373,7 +373,7 @@ final class MatrixBridgeService {
             throw MatrixBridgeError.notInitialized
         }
 
-        let roomId = try await getRoomId(for: conversationId)
+        let roomId = try await resolveRoomId(for: conversationId)
         try await matrixService.markRoomAsRead(roomId: roomId)
     }
 
@@ -454,7 +454,7 @@ final class MatrixBridgeService {
             throw MatrixBridgeError.notInitialized
         }
 
-        let roomId = try await getRoomId(for: conversationId)
+        let roomId = try await resolveRoomId(for: conversationId)
         try await matrixService.inviteUser(roomId: roomId, userId: userId)
     }
 
@@ -464,7 +464,7 @@ final class MatrixBridgeService {
             throw MatrixBridgeError.notInitialized
         }
 
-        let roomId = try await getRoomId(for: conversationId)
+        let roomId = try await resolveRoomId(for: conversationId)
         try await matrixService.kickUser(roomId: roomId, userId: userId, reason: reason)
     }
 
