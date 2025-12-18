@@ -115,14 +115,20 @@ pub enum BuildPublisherResult {
     Failed(String),
 }
 
-fn build_publisher(config: &OutboxPublisherConfig, metrics: OutboxPublisherMetrics) -> BuildPublisherResult {
+fn build_publisher(
+    config: &OutboxPublisherConfig,
+    metrics: OutboxPublisherMetrics,
+) -> BuildPublisherResult {
     if !config.kafka_enabled {
         info!("SOCIAL_OUTBOX_USE_KAFKA disabled, using NoOp publisher");
         metrics.degraded_mode.set(1);
         metrics.publisher_type.set(2); // NoOp
         return BuildPublisherResult::Noop(
             CombinedPublisher {
-                inner: PublisherKind::Noop(NoopPublisher::new(metrics, config.noop_warning_interval_secs)),
+                inner: PublisherKind::Noop(NoopPublisher::new(
+                    metrics,
+                    config.noop_warning_interval_secs,
+                )),
             },
             "Kafka disabled by configuration".to_string(),
         );
@@ -133,12 +139,18 @@ fn build_publisher(config: &OutboxPublisherConfig, metrics: OutboxPublisherMetri
         if config.fail_on_kafka_unavailable {
             return BuildPublisherResult::Failed(reason);
         }
-        warn!("{}; using NoOp outbox publisher - EVENTS WILL BE DROPPED", reason);
+        warn!(
+            "{}; using NoOp outbox publisher - EVENTS WILL BE DROPPED",
+            reason
+        );
         metrics.degraded_mode.set(1);
         metrics.publisher_type.set(2);
         return BuildPublisherResult::Noop(
             CombinedPublisher {
-                inner: PublisherKind::Noop(NoopPublisher::new(metrics, config.noop_warning_interval_secs)),
+                inner: PublisherKind::Noop(NoopPublisher::new(
+                    metrics,
+                    config.noop_warning_interval_secs,
+                )),
             },
             reason,
         );
@@ -180,7 +192,10 @@ fn build_publisher(config: &OutboxPublisherConfig, metrics: OutboxPublisherMetri
             metrics.publisher_type.set(2);
             BuildPublisherResult::Noop(
                 CombinedPublisher {
-                    inner: PublisherKind::Noop(NoopPublisher::new(metrics, config.noop_warning_interval_secs)),
+                    inner: PublisherKind::Noop(NoopPublisher::new(
+                        metrics,
+                        config.noop_warning_interval_secs,
+                    )),
                 },
                 reason,
             )
@@ -239,12 +254,11 @@ impl NoopPublisher {
         let last_warning = self.last_warning_time.load(Ordering::Relaxed);
 
         if now_secs >= last_warning + self.warning_interval_secs {
-            if self.last_warning_time.compare_exchange(
-                last_warning,
-                now_secs,
-                Ordering::SeqCst,
-                Ordering::Relaxed,
-            ).is_ok() {
+            if self
+                .last_warning_time
+                .compare_exchange(last_warning, now_secs, Ordering::SeqCst, Ordering::Relaxed)
+                .is_ok()
+            {
                 warn!(
                     total_dropped = count,
                     event_type = %event.event_type,
@@ -285,13 +299,11 @@ impl CombinedPublisher {
     /// Get circuit breaker state (if using Kafka publisher)
     pub fn circuit_state(&self) -> Option<&'static str> {
         match &self.inner {
-            PublisherKind::Kafka(p, _) => {
-                Some(match p.circuit_state() {
-                    resilience::CircuitState::Closed => "closed",
-                    resilience::CircuitState::Open => "open",
-                    resilience::CircuitState::HalfOpen => "half_open",
-                })
-            }
+            PublisherKind::Kafka(p, _) => Some(match p.circuit_state() {
+                resilience::CircuitState::Closed => "closed",
+                resilience::CircuitState::Open => "open",
+                resilience::CircuitState::HalfOpen => "half_open",
+            }),
             PublisherKind::Noop(_) => None,
         }
     }
@@ -339,7 +351,8 @@ pub struct OutboxWorkerHealth {
 }
 
 /// Global health state for the outbox worker (for health checks)
-static WORKER_HEALTH: std::sync::OnceLock<std::sync::RwLock<OutboxWorkerHealth>> = std::sync::OnceLock::new();
+static WORKER_HEALTH: std::sync::OnceLock<std::sync::RwLock<OutboxWorkerHealth>> =
+    std::sync::OnceLock::new();
 
 /// Get the current outbox worker health status
 pub fn get_health() -> OutboxWorkerHealth {
