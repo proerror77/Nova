@@ -247,7 +247,7 @@ impl OriginShield {
         }
 
         ShieldStats {
-            state: *self.state.blocking_read(),
+            state: *self.state.read().await,
             total_cached: cache.len(),
             valid_entries,
             expired_entries,
@@ -278,12 +278,11 @@ impl OriginShield {
         let state = self.get_state().await;
 
         // Shield is healthy if:
-        // 1. State is Active
-        // 2. Has some cached entries
-        // 3. Valid entries > expired entries (at least 50% valid)
-        let is_healthy = state == ShieldState::Active
-            && stats.total_cached > 0
-            && stats.valid_entries >= stats.expired_entries;
+        // 1. State is Active or Warming (warming is a valid startup state)
+        // 2. If has cached entries, valid entries >= expired entries (at least 50% valid)
+        // Note: Empty cache is OK during warmup
+        let is_healthy = matches!(state, ShieldState::Active | ShieldState::Warming)
+            && (stats.total_cached == 0 || stats.valid_entries >= stats.expired_entries);
 
         if !is_healthy {
             warn!("Origin Shield health check failed: {:?}", stats);
