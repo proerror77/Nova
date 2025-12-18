@@ -59,7 +59,7 @@ spec:
             - name: CLICKHOUSE_URL
               value: "http://clickhouse:8123"
             - name: CLICKHOUSE_DATABASE
-              value: "nova_feed"
+              value: "analytics"
             - name: CLICKHOUSE_USER
               valueFrom:
                 secretKeyRef:

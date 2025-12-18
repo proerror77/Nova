@@ -1,6 +1,9 @@
 import SwiftUI
 import UIKit
 import CommonCrypto
+import os.log
+
+private let imageLogger = Logger(subsystem: "com.libruce.icered", category: "ImageCache")
 
 /// Priority level for image loading requests
 enum ImageLoadPriority: Int, Comparable {
@@ -113,9 +116,11 @@ actor ImageCacheService {
 
             return image
         } catch {
-            #if DEBUG
-            print("[ImageCache] Failed to load image: \(error.localizedDescription)")
-            #endif
+            imageLogger.error("❌ Failed to load image from URL: \(urlString)")
+            imageLogger.error("Error: \(error.localizedDescription)")
+            if let urlError = error as? URLError {
+                imageLogger.error("URLError code: \(urlError.code.rawValue)")
+            }
             return nil
         }
     }

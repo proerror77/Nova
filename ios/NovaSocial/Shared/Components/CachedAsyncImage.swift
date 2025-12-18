@@ -46,6 +46,27 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
                 content(Image(uiImage: thumbnail))
                     .blur(radius: 2)
                     .transition(.opacity.animation(.easeInOut(duration: 0.15)))
+            } else if loadPhase == .failed {
+                // Show error state with tap to retry
+                Rectangle()
+                    .fill(Color.gray.opacity(0.2))
+                    .overlay(
+                        VStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 24))
+                                .foregroundColor(.gray)
+                            Text("Tap to retry")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        Task {
+                            loadPhase = .loading
+                            await loadImage()
+                        }
+                    }
             } else {
                 placeholder()
             }
@@ -105,6 +126,7 @@ struct OptimizedCachedImage<Content: View, Placeholder: View>: View {
     
     @State private var image: UIImage?
     @State private var hasAppeared = false
+    @State private var loadFailed = false
 
     init(
         url: URL?,
@@ -122,6 +144,19 @@ struct OptimizedCachedImage<Content: View, Placeholder: View>: View {
         Group {
             if let image = image {
                 content(Image(uiImage: image))
+            } else if loadFailed {
+                Rectangle()
+                    .fill(Color.gray.opacity(0.2))
+                    .overlay(
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 20))
+                            .foregroundColor(.gray)
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        loadFailed = false
+                        loadImage()
+                    }
             } else {
                 placeholder()
             }
@@ -139,7 +174,10 @@ struct OptimizedCachedImage<Content: View, Placeholder: View>: View {
     }
 
     private func loadImage() {
-        guard let url = url else { return }
+        guard let url = url else { 
+            loadFailed = true
+            return 
+        }
         
         Task {
             let loadedImage = await ImageCacheService.shared.loadImage(
@@ -153,6 +191,8 @@ struct OptimizedCachedImage<Content: View, Placeholder: View>: View {
                     withAnimation(.easeInOut(duration: 0.15)) {
                         image = loadedImage
                     }
+                } else {
+                    loadFailed = true
                 }
             }
         }
@@ -170,6 +210,7 @@ struct FeedCachedImage<Content: View, Placeholder: View>: View {
     
     @State private var image: UIImage?
     @State private var loadTask: Task<Void, Never>?
+    @State private var loadFailed = false
 
     init(
         url: URL?,
@@ -187,6 +228,24 @@ struct FeedCachedImage<Content: View, Placeholder: View>: View {
         Group {
             if let image = image {
                 content(Image(uiImage: image))
+            } else if loadFailed {
+                Rectangle()
+                    .fill(Color.gray.opacity(0.2))
+                    .overlay(
+                        VStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 24))
+                                .foregroundColor(.gray)
+                            Text("Tap to retry")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        loadFailed = false
+                        startLoading()
+                    }
             } else {
                 placeholder()
                     .onAppear {
@@ -201,7 +260,12 @@ struct FeedCachedImage<Content: View, Placeholder: View>: View {
     }
 
     private func startLoading() {
-        guard let url = url, image == nil else { return }
+        guard let url = url, image == nil else { 
+            if url == nil {
+                loadFailed = true
+            }
+            return 
+        }
         
         loadTask = Task {
             let loadedImage = await ImageCacheService.shared.loadImage(
@@ -213,8 +277,12 @@ struct FeedCachedImage<Content: View, Placeholder: View>: View {
             guard !Task.isCancelled else { return }
             
             await MainActor.run {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    image = loadedImage
+                if let loadedImage = loadedImage {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        image = loadedImage
+                    }
+                } else {
+                    loadFailed = true
                 }
             }
         }

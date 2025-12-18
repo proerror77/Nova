@@ -273,13 +273,8 @@ struct ChatView: View {
         ]
     }
 
-    // MARK: - Dependencies & Required Properties
-    /// 聊天服务 - 负责发送/接收消息、WebSocket连接
-    /// ⚠️ 这是连接后端API的关键，不要替换成其他Service
-    @State private var chatService = ChatService()
-
-    /// 媒体服务 - 负责图片/视频上传
-    private let mediaService = MediaService()
+    // MARK: - Services
+    private let matrixBridge = MatrixBridgeService.shared
 
     /// 必需参数
     @Binding var showChat: Bool
@@ -410,18 +405,14 @@ struct ChatView: View {
             await loadChatData()
         }
         .onDisappear {
-            // Clean up all callbacks to prevent memory leaks
-            chatService.onMessageReceived = nil
-            chatService.onTypingIndicator = nil
-            chatService.onReadReceipt = nil
-            chatService.onConnectionStatusChanged = nil
-            
             // Clear Matrix callbacks
             MatrixBridgeService.shared.onMatrixMessage = nil
             MatrixBridgeService.shared.onTypingIndicator = nil
-            
-            // Disconnect WebSocket
-            chatService.disconnectWebSocket()
+
+            Task {
+                await matrixBridge.stopListening(conversationId: conversationId)
+                try? await matrixBridge.setTyping(conversationId: conversationId, isTyping: false)
+            }
             
             // Clean up timer
             typingTimer?.invalidate()
@@ -688,11 +679,11 @@ struct ChatView: View {
                             .onChange(of: messageText) { oldValue, newValue in
                                 // Send typing indicator when user starts typing
                                 if oldValue.isEmpty && !newValue.isEmpty {
-                                    chatService.sendTypingStart(conversationId: conversationId)
+                                    Task { try? await matrixBridge.setTyping(conversationId: conversationId, isTyping: true) }
                                 }
                                 // Send typing stop when text is cleared
                                 if !oldValue.isEmpty && newValue.isEmpty {
-                                    chatService.sendTypingStop(conversationId: conversationId)
+                                    Task { try? await matrixBridge.setTyping(conversationId: conversationId, isTyping: false) }
                                 }
                             }
                     }
@@ -818,7 +809,7 @@ struct ChatView: View {
 
     // MARK: - API Calls
 
-    /// Load chat data (message history + WebSocket connection)
+    /// Load chat data via Matrix timeline/sync (Matrix-first)
     private func loadChatData() async {
         // 🎨 预览模式：使用模拟数据进行UI调试
         if Self.useChatPreviewMode {
@@ -840,44 +831,30 @@ struct ChatView: View {
         error = nil
 
         do {
-            // 0. 檢查並啟用 Matrix E2EE
-            chatService.enableMatrixE2EE()
-            isMatrixE2EEEnabled = MatrixBridgeService.shared.isInitialized
-
-            #if DEBUG
-            print("[ChatView] Matrix E2EE enabled: \(isMatrixE2EEEnabled)")
-            #endif
-
-            // 1. Get message history
-            let response = try await chatService.getMessages(conversationId: conversationId, limit: 50)
-
-            // 2. Convert to UI messages
-            messages = response.messages.map { ChatMessage(from: $0, currentUserId: currentUserId) }
-
-            // 3. Store pagination info
-            hasMoreMessages = response.hasMore
-            nextCursor = response.nextCursor
-
-            // 4. Setup WebSocket callbacks
-            setupWebSocketCallbacks()
-
-            // 5. Connect WebSocket
-            chatService.connectWebSocket(conversationId: conversationId, userId: currentUserId)
-
-            // 6. Mark messages as read
-            if let lastMessage = messages.last {
-                try? await chatService.markAsRead(conversationId: conversationId, messageId: lastMessage.id)
+            if !matrixBridge.isInitialized {
+                try await matrixBridge.initialize()
             }
 
-            // 7. Setup Matrix message handler (如果已啟用)
-            if isMatrixE2EEEnabled {
-                setupMatrixMessageHandler()
+            isMatrixE2EEEnabled = matrixBridge.isInitialized
+
+            setupMatrixMessageHandler()
+
+            let matrixMessages = try await matrixBridge.getMessages(conversationId: conversationId, limit: 50)
+            let sorted = matrixMessages.sorted { $0.timestamp < $1.timestamp }
+            messages = sorted.map { matrixMessage in
+                let novaMessage = matrixBridge.convertToNovaMessage(matrixMessage, conversationId: conversationId)
+                return ChatMessage(from: novaMessage, currentUserId: currentUserId)
             }
 
-            #if DEBUG
-            print("[ChatView] Loaded \(messages.count) messages for conversation \(conversationId)")
-            #endif
+            // MatrixService.getRoomMessages doesn't expose a paging cursor yet
+            hasMoreMessages = false
+            nextCursor = nil
 
+            try? await matrixBridge.markAsRead(conversationId: conversationId)
+
+            #if DEBUG
+            print("[ChatView] Loaded \(messages.count) Matrix messages for room \(conversationId)")
+            #endif
         } catch {
             self.error = "Failed to load messages: \(error.localizedDescription)"
             #if DEBUG
@@ -886,62 +863,6 @@ struct ChatView: View {
         }
 
         isLoadingHistory = false
-    }
-    
-    /// Setup WebSocket event callbacks
-    private func setupWebSocketCallbacks() {
-        // New message received
-        chatService.onMessageReceived = { newMessage in
-            Task { @MainActor in
-                // Avoid duplicates
-                guard !self.messages.contains(where: { $0.id == newMessage.id }) else { return }
-                self.messages.append(ChatMessage(from: newMessage, currentUserId: self.currentUserId))
-                
-                // Clear typing indicator when message is received
-                self.isOtherUserTyping = false
-                
-                // Mark as read
-                try? await self.chatService.markAsRead(
-                    conversationId: self.conversationId,
-                    messageId: newMessage.id
-                )
-            }
-        }
-        
-        // Typing indicator received
-        chatService.onTypingIndicator = { typingData in
-            Task { @MainActor in
-                // Only show if it's for this conversation and not from me
-                guard typingData.conversationId == self.conversationId,
-                      typingData.userId != self.currentUserId else { return }
-                
-                self.isOtherUserTyping = typingData.isTyping
-                self.typingUserName = typingData.username
-                
-                // Auto-hide typing indicator after 3 seconds (server TTL)
-                if typingData.isTyping {
-                    self.typingTimer?.invalidate()
-                    self.typingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
-                        Task { @MainActor in
-                            self.isOtherUserTyping = false
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Read receipt received
-        chatService.onReadReceipt = { readData in
-            Task { @MainActor in
-                guard readData.conversationId == self.conversationId else { return }
-                
-                // Update message status to "read" for messages up to lastReadMessageId
-                // This enables showing double checkmarks in the UI
-                #if DEBUG
-                print("[ChatView] Read receipt: \(readData.userId) read up to \(readData.lastReadMessageId)")
-                #endif
-            }
-        }
     }
 
     /// Setup Matrix Bridge message handler for E2EE messages
@@ -965,6 +886,11 @@ struct ChatView: View {
 
                 // 清除打字指示器
                 self.isOtherUserTyping = false
+
+                // Mark as read (Matrix read receipt)
+                if novaMessage.senderId != self.currentUserId {
+                    try? await self.matrixBridge.markAsRead(conversationId: self.conversationId)
+                }
 
                 #if DEBUG
                 print("[ChatView] Matrix E2EE message received: \(matrixMessage.id)")
@@ -999,30 +925,24 @@ struct ChatView: View {
     
     /// Load more messages (pagination)
     private func loadMoreMessages() async {
-        guard hasMoreMessages, let cursor = nextCursor, !isLoadingHistory else { return }
-        
+        guard !isLoadingHistory else { return }
+
         isLoadingHistory = true
-        
+
         do {
-            let response = try await chatService.getMessages(
-                conversationId: conversationId,
-                limit: 50,
-                cursor: cursor
-            )
-            
-            // Prepend older messages
-            let olderMessages = response.messages.map { ChatMessage(from: $0, currentUserId: currentUserId) }
-            messages.insert(contentsOf: olderMessages, at: 0)
-            
-            hasMoreMessages = response.hasMore
-            nextCursor = response.nextCursor
-            
+            let desiredLimit = max(messages.count + 50, 50)
+            let matrixMessages = try await matrixBridge.getMessages(conversationId: conversationId, limit: desiredLimit)
+            let sorted = matrixMessages.sorted { $0.timestamp < $1.timestamp }
+            messages = sorted.map { matrixMessage in
+                let novaMessage = matrixBridge.convertToNovaMessage(matrixMessage, conversationId: conversationId)
+                return ChatMessage(from: novaMessage, currentUserId: currentUserId)
+            }
         } catch {
             #if DEBUG
             print("[ChatView] Load more error: \(error)")
             #endif
         }
-        
+
         isLoadingHistory = false
     }
 
@@ -1032,36 +952,19 @@ struct ChatView: View {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty, !isSending else { return }
 
-        // Stop typing indicator
-        chatService.sendTypingStop(conversationId: conversationId)
-
-        // Add to UI immediately (optimistic update)
-        let localMessage = ChatMessage(localText: trimmedText, isFromMe: true)
-        messages.append(localMessage)
-
         messageText = ""
         showAttachmentOptions = false
 
-        // Send to server asynchronously
         Task {
             isSending = true
             do {
-                // 使用 Matrix SDK 發送訊息（E2EE 端到端加密）
-                let sentMessage = try await chatService.sendSecureMessage(
-                    conversationId: conversationId,
-                    content: trimmedText,
-                    type: .text
-                )
-
-                // Replace local message with server response
-                if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
-                    messages[index] = ChatMessage(from: sentMessage, currentUserId: currentUserId)
-                }
+                try? await matrixBridge.setTyping(conversationId: conversationId, isTyping: false)
+                _ = try await matrixBridge.sendMessage(conversationId: conversationId, content: trimmedText)
+                try? await matrixBridge.markAsRead(conversationId: conversationId)
 
                 #if DEBUG
-                print("[ChatView] ✅ Message sent via Matrix E2EE: \(sentMessage.id)")
+                print("[ChatView] ✅ Message sent via Matrix: room=\(conversationId)")
                 #endif
-
             } catch {
                 // Send failed - mark message as failed (TODO: add retry UI)
                 #if DEBUG

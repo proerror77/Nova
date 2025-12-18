@@ -42,7 +42,6 @@ struct NewChatView: View {
     }
 
     // MARK: - Services
-    private let chatService = ChatService()
     private let friendsService = FriendsService()
     private let matrixBridge = MatrixBridgeService.shared
 
@@ -391,54 +390,36 @@ struct NewChatView: View {
         errorMessage = nil
 
         do {
+            if !matrixBridge.isInitialized {
+                try await matrixBridge.initialize()
+            }
+
             let participantIds = selectedUsers.map { $0.id }
-            let conversationType: ConversationType = selectedUsers.count == 1 ? .direct : .group
             let groupName: String? = selectedUsers.count > 1
                 ? selectedUsers.map { $0.displayName }.joined(separator: ", ")
                 : nil
 
-            // 使用 Matrix Bridge 創建對話（同時創建 Nova 對話和 Matrix 房間）
-            // 注意：Matrix E2EE 是必要條件，不再支援 REST fallback
-            guard matrixBridge.isE2EEAvailable else {
-                throw NSError(domain: "NewChatView", code: -1, userInfo: [
-                    NSLocalizedDescriptionKey: "Matrix service not available. Please try again later."
-                ])
-            }
-
             #if DEBUG
-            print("[NewChatView] Creating conversation with Matrix E2EE...")
+            print("[NewChatView] Creating Matrix room...")
             #endif
 
-            let conversation: Conversation
-
+            let room: MatrixBridgeService.MatrixConversationInfo
             if selectedUsers.count == 1 {
-                // 1:1 對話 - 使用專門的好友對話方法
-                conversation = try await matrixBridge.startConversationWithFriend(
-                    friendUserId: selectedUsers[0].id
+                room = try await matrixBridge.createDirectConversation(
+                    withUserId: participantIds[0],
+                    displayName: selectedUsers[0].displayName
                 )
             } else {
-                // 群組對話 - 先創建 Nova 對話，再創建 Matrix 房間
-                conversation = try await chatService.createConversation(
-                    type: conversationType,
-                    participantIds: participantIds,
-                    name: groupName
+                room = try await matrixBridge.createGroupConversation(
+                    name: groupName ?? "Group Chat",
+                    userIds: participantIds
                 )
-                // 為對話創建 Matrix 房間
-                _ = try await matrixBridge.createRoomForConversation(conversation)
             }
 
-            #if DEBUG
-            print("[NewChatView] ✅ Created E2EE conversation: \(conversation.id)")
-            #endif
-
-            createdConversationId = conversation.id
+            createdConversationId = room.id
             createdConversationName = selectedUsers.count == 1
                 ? selectedUsers[0].displayName
                 : (groupName ?? "Group Chat")
-
-            #if DEBUG
-            print("[NewChatView] Created conversation: \(conversation.id)")
-            #endif
 
             // Navigate to the chat
             showChat = true

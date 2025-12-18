@@ -12,6 +12,15 @@ struct FeedPostCard: View {
     var onAvatarTapped: ((String) -> Void)?  // 点击头像回调，传入 authorId
 
     @State private var currentImageIndex = 0
+    
+    /// Check if URL points to a video file
+    private func isVideoUrl(_ url: String) -> Bool {
+        let lowercased = url.lowercased()
+        return lowercased.contains(".mov") ||
+               lowercased.contains(".mp4") ||
+               lowercased.contains(".m4v") ||
+               lowercased.contains(".webm")
+    }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -67,25 +76,37 @@ struct FeedPostCard: View {
             }
             .padding(.horizontal, 16)
 
-            // MARK: - Post Images (375x500)
+            // MARK: - Post Media (Images & Videos)
             if !post.displayMediaUrls.isEmpty {
                 VStack(spacing: 8) {
                     TabView(selection: $currentImageIndex) {
-                        ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
-                            CachedAsyncImage(
-                                url: URL(string: imageUrl),
-                                targetSize: CGSize(width: 750, height: 1000)  // 2x for Retina
-                            ) { image in
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                            } placeholder: {
-                                Rectangle()
-                                    .fill(DesignTokens.placeholderColor)
-                                    .overlay(
-                                        ProgressView()
-                                            .tint(.white)
+                        ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, mediaUrl in
+                            Group {
+                                if isVideoUrl(mediaUrl) {
+                                    // Video content - use FeedVideoPlayer
+                                    FeedVideoPlayer(
+                                        url: URL(string: mediaUrl)!,
+                                        autoPlay: false,
+                                        isMuted: true
                                     )
+                                } else {
+                                    // Image content - use CachedAsyncImage
+                                    CachedAsyncImage(
+                                        url: URL(string: mediaUrl),
+                                        targetSize: CGSize(width: 750, height: 1000)  // 2x for Retina
+                                    ) { image in
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                    } placeholder: {
+                                        Rectangle()
+                                            .fill(DesignTokens.placeholderColor)
+                                            .overlay(
+                                                ProgressView()
+                                                    .tint(.white)
+                                            )
+                                    }
+                                }
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .clipped()

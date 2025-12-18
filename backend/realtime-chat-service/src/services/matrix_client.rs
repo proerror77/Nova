@@ -789,6 +789,9 @@ mod tests {
             service_user: "@nova-service:staging.nova.internal".to_string(),
             access_token: Some("test_token".to_string()),
             device_name: "test_device".to_string(),
+            recovery_key: None,
+            admin_token: None,
+            server_name: "staging.nova.internal".to_string(),
         };
 
         let client = MatrixClient {

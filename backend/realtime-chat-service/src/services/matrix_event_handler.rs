@@ -18,6 +18,7 @@ pub async fn handle_matrix_message_event(
     db: &Pool,
     registry: &Arc<ConnectionRegistry>,
     redis: &Arc<RedisClient>,
+    matrix_first: bool,
     room: Room,
     event: SyncRoomMessageEvent,
 ) -> Result<(), AppError> {
@@ -40,6 +41,16 @@ pub async fn handle_matrix_message_event(
         event_id = %event_id,
         "Received Matrix message event"
     );
+
+    if matrix_first {
+        debug!(
+            room_id = %room_id,
+            sender = %sender,
+            event_id = %event_id,
+            "Matrix-first mode enabled; skipping Nova DB persistence and WebSocket broadcast"
+        );
+        return Ok(());
+    }
 
     // 1. Look up conversation_id from Matrix room_id
     let conversation_id =

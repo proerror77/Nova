@@ -1,6 +1,7 @@
 use actix_web::{get, web, HttpMessage, HttpRequest, HttpResponse};
 use base64::{engine::general_purpose, Engine as _};
 use serde::Deserialize;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
@@ -13,6 +14,7 @@ use grpc_clients::nova::content_service::v2::{
     ContentStatus, GetPostsByIdsRequest, GetUserPostsRequest, ListRecentPostsRequest,
 };
 use grpc_clients::nova::graph_service::v2::GetFollowingRequest;
+use grpc_clients::nova::identity_service::v2::GetUserProfilesByIdsRequest;
 use grpc_clients::nova::social_service::v2::BatchGetCountsRequest;
 
 #[derive(Debug, Deserialize)]
@@ -221,6 +223,41 @@ async fn fetch_full_posts(
         .await
         .map_err(|e| AppError::Internal(format!("Failed to fetch post details: {}", e)))?;
 
+    // Batch fetch author profiles from identity-service (graceful degradation if unavailable)
+    let author_ids: Vec<String> = posts_resp
+        .posts
+        .iter()
+        .map(|p| p.author_id.clone())
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    let author_profiles: HashMap<String, grpc_clients::nova::identity_service::v2::UserProfile> = if author_ids.is_empty() {
+        HashMap::new()
+    } else {
+        let mut auth_client = state.grpc_pool.auth();
+        match auth_client
+            .get_user_profiles_by_ids(tonic::Request::new(GetUserProfilesByIdsRequest {
+                user_ids: author_ids,
+            }))
+            .await
+        {
+            Ok(resp) => resp
+                .into_inner()
+                .profiles
+                .into_iter()
+                .map(|p| (p.user_id.clone(), p))
+                .collect(),
+            Err(e) => {
+                warn!(
+                    "Failed to fetch author profiles from identity-service (continuing without author info): {}",
+                    e
+                );
+                HashMap::new()
+            }
+        }
+    };
+
     // Fetch social stats from social-service (graceful degradation if unavailable)
     let mut social_client = state.grpc_pool.social();
     let social_counts = match social_client
@@ -251,6 +288,18 @@ async fn fetch_full_posts(
                 thumbnail_urls = media_urls.clone();
             }
 
+            let profile = author_profiles.get(&post.author_id);
+            let author_username = profile.map(|p| p.username.clone());
+            let author_display_name = profile.and_then(|p| {
+                let display = p.display_name.clone().unwrap_or_default();
+                if display.is_empty() {
+                    Some(p.username.clone())
+                } else {
+                    Some(display)
+                }
+            });
+            let author_avatar = profile.and_then(|p| p.avatar_url.clone());
+
             FeedPostFull {
                 id: post.id.clone(),
                 user_id: post.author_id.clone(),
@@ -263,9 +312,9 @@ async fn fetch_full_posts(
                 media_urls,
                 thumbnail_urls,
                 media_type: post.media_type.clone(),
-                author_username: None, // TODO: Fetch from identity-service
-                author_display_name: None,
-                author_avatar: None,
+                author_username,
+                author_display_name,
+                author_avatar,
             }
         })
         .collect();

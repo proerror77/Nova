@@ -153,7 +153,6 @@ struct MessageView: View {
     #endif
 
     // Services
-    private let chatService = ChatService()
     private let friendsService = FriendsService()
     private let matrixBridge = MatrixBridgeService.shared
 
@@ -212,15 +211,9 @@ struct MessageView: View {
             }
         }
 
-        // Check if Matrix bridge is enabled (backend must have Matrix config)
         if !matrixBridge.isBridgeEnabled {
-            print("⚠️ [MessageView] Matrix bridge is disabled")
-            await MainActor.run {
-                self.isLoading = false
-                self.conversations = []
-                // Don't show error - just show empty state since messaging is not available yet
-            }
-            return
+            // Matrix-first mode: backend flag is advisory only.
+            print("⚠️ [MessageView] Backend reported Matrix bridge disabled; continuing in Matrix-first mode")
         }
 
         // 步驟 2: 從 Matrix 載入對話列表
@@ -363,14 +356,39 @@ struct MessageView: View {
     }
 
     private func startConversationWithUser(_ user: UserProfile) {
-        // 设置选中的用户信息并跳转到聊天页面
-        selectedConversationId = user.id
-        selectedUserName = user.displayName ?? user.username
-        searchText = ""
-        isSearching = false
-        searchResults = []
-        isSearchFocused = false
-        showChat = true
+        Task {
+            do {
+                if !matrixBridge.isInitialized {
+                    await MainActor.run {
+                        self.isMatrixInitializing = true
+                        self.matrixInitError = nil
+                    }
+                    try await matrixBridge.initialize()
+                    await MainActor.run { self.isMatrixInitializing = false }
+                }
+
+                let conversation = try await matrixBridge.createDirectConversation(
+                    withUserId: user.id,
+                    displayName: user.displayName ?? user.username
+                )
+
+                await MainActor.run {
+                    selectedConversationId = conversation.id
+                    selectedUserName = user.displayName ?? user.username
+                    searchText = ""
+                    isSearching = false
+                    searchResults = []
+                    isSearchFocused = false
+                    showChat = true
+                }
+            } catch {
+                await MainActor.run {
+                    self.isMatrixInitializing = false
+                    self.matrixInitError = "Matrix 連接失敗: \(error.localizedDescription)"
+                    self.errorMessage = "Failed to start conversation"
+                }
+            }
+        }
     }
 
     // MARK: - Camera Permission Check

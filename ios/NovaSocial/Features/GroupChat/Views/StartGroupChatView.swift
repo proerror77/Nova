@@ -16,7 +16,7 @@ class StartGroupChatViewModel {
     var errorMessage: String?
 
     private let friendsService = FriendsService()
-    private let chatService = ChatService()
+    private let matrixBridge = MatrixBridgeService.shared
 
     var canCreateGroup: Bool {
         selectedUsers.count >= 2 && !groupName.trimmingCharacters(in: .whitespaces).isEmpty
@@ -80,10 +80,10 @@ class StartGroupChatViewModel {
         selectedUsers.removeAll { $0.id == user.id }
     }
 
-    func createGroupChat() async -> Conversation? {
+    func createGroupChat() async -> Bool {
         guard canCreateGroup else {
             errorMessage = NSLocalizedString("group_chat.error.validation", comment: "")
-            return nil
+            return false
         }
 
         isCreating = true
@@ -91,16 +91,20 @@ class StartGroupChatViewModel {
 
         do {
             let participantIds = selectedUsers.map { $0.id }
-            let conversation = try await chatService.createConversation(
-                type: ConversationType.group,
-                participantIds: participantIds,
-                name: groupName.trimmingCharacters(in: .whitespaces)
+            if !matrixBridge.isInitialized {
+                try await matrixBridge.initialize()
+            }
+
+            _ = try await matrixBridge.createGroupConversation(
+                name: groupName.trimmingCharacters(in: .whitespaces),
+                userIds: participantIds
             )
 
             #if DEBUG
-            print("✅ [StartGroupChat] Group chat created: \(conversation.id)")
+            print("✅ [StartGroupChat] Group chat room created")
             #endif
-            return conversation
+            isCreating = false
+            return true
 
         } catch {
             errorMessage = NSLocalizedString("group_chat.error.create_failed", comment: "")
@@ -108,7 +112,7 @@ class StartGroupChatViewModel {
             print("❌ [StartGroupChat] Failed to create group chat: \(error)")
             #endif
             isCreating = false
-            return nil
+            return false
         }
     }
 }
@@ -146,7 +150,7 @@ struct StartGroupChatView: View {
                     // Create button
                     Button(action: {
                         Task {
-                            if await viewModel.createGroupChat() != nil {
+                            if await viewModel.createGroupChat() {
                                 currentPage = .message
                             }
                         }

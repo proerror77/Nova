@@ -936,26 +936,52 @@ extension MatrixBridgeService {
         print("[MatrixBridge] Found \(rooms.count) Matrix rooms")
         #endif
 
-        // Convert MatrixRoom to MatrixConversationInfo
-        let conversations = rooms.map { room -> MatrixConversationInfo in
-            // For direct rooms, try to get the other user's display name
-            let displayName: String
+        // Convert MatrixRoom to MatrixConversationInfo (with optional Nova profile enrichment)
+        let currentUserId = keychain.get(.userId) ?? AuthenticationManager.shared.currentUser?.id ?? ""
+
+        var conversations: [MatrixConversationInfo] = []
+        conversations.reserveCapacity(rooms.count)
+
+        for room in rooms {
+            var displayName: String
+            var avatarURL: String?
+
             if room.isDirect {
                 displayName = room.name ?? "Direct Message"
+                avatarURL = room.avatarURL
+
+                // Try to enrich from Nova conversation + identity profiles.
+                // This fixes cases where Matrix room display names/avatars are not yet configured.
+                if let novaConversationId = try? await queryConversationMapping(roomId: room.id),
+                   let conversation = try? await chatService.getConversation(conversationId: novaConversationId) {
+                    if let name = conversation.name, !name.isEmpty {
+                        displayName = name
+                    } else if let other = conversation.members.first(where: { $0.userId != currentUserId }),
+                              !other.username.isEmpty {
+                        displayName = other.username
+                    }
+
+                    if let convAvatar = conversation.avatarUrl, !convAvatar.isEmpty {
+                        avatarURL = convAvatar
+                    }
+                }
             } else {
                 displayName = room.name ?? "Group Chat"
+                avatarURL = room.avatarURL
             }
 
-            return MatrixConversationInfo(
-                id: room.id,
-                displayName: displayName,
-                lastMessage: room.lastMessage?.content,
-                lastMessageTime: room.lastActivity,
-                unreadCount: room.unreadCount,
-                isEncrypted: room.isEncrypted,
-                isDirect: room.isDirect,
-                avatarURL: room.avatarURL,
-                memberCount: room.memberCount
+            conversations.append(
+                MatrixConversationInfo(
+                    id: room.id,
+                    displayName: displayName,
+                    lastMessage: room.lastMessage?.content,
+                    lastMessageTime: room.lastActivity,
+                    unreadCount: room.unreadCount,
+                    isEncrypted: room.isEncrypted,
+                    isDirect: room.isDirect,
+                    avatarURL: avatarURL,
+                    memberCount: room.memberCount
+                )
             )
         }
 

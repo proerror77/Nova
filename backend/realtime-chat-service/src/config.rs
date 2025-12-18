@@ -120,6 +120,8 @@ pub struct Config {
     pub s3: S3Config,
     pub auth_service_url: String,
     pub matrix: MatrixConfig,
+    /// Matrix-first mode: do not persist/broadcast plaintext chat via Nova DB/WebSocket.
+    pub matrix_first: bool,
     pub kafka: KafkaConfig,
 }
 
@@ -285,6 +287,11 @@ impl Config {
             server_name,
         };
 
+        let matrix_first = env::var("MATRIX_FIRST")
+            .ok()
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+            .unwrap_or(false);
+
         // Kafka configuration
         let kafka_enabled = env::var("KAFKA_ENABLED")
             .ok()
@@ -312,6 +319,7 @@ impl Config {
             s3,
             auth_service_url,
             matrix,
+            matrix_first,
             kafka,
         })
     }
@@ -407,6 +415,7 @@ mod tests {
                 admin_token: None,
                 server_name: "test.com".to_string(),
             },
+            matrix_first: false,
             kafka: KafkaConfig {
                 enabled: false,
                 brokers: "localhost:9092".to_string(),

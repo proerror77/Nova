@@ -259,6 +259,7 @@ async fn main() -> Result<(), error::AppError> {
         let db_clone = db.clone();
         let registry_clone = Arc::new(state.registry.clone());
         let redis_clone = Arc::new(state.redis.clone());
+        let matrix_first = cfg.matrix_first;
 
         // Register VoIP event handler for Matrix call signaling
         let voip_handler = Arc::new(handlers::MatrixVoipEventHandler::new(
@@ -277,17 +278,20 @@ async fn main() -> Result<(), error::AppError> {
                 let db = db_clone.clone();
                 let registry = registry_clone.clone();
                 let redis = redis_clone.clone();
+                let matrix_first = matrix_first;
 
                 move |event, room| {
                     let db = db.clone();
                     let registry = registry.clone();
                     let redis = redis.clone();
+                    let matrix_first = matrix_first;
 
                     tokio::spawn(async move {
                         if let Err(e) = realtime_chat_service::services::matrix_event_handler::handle_matrix_message_event(
                             &db,
                             &registry,
                             &redis,
+                            matrix_first,
                             room,
                             event,
                         )

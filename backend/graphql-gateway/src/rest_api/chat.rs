@@ -1,6 +1,7 @@
 use actix_web::{get, post, web, HttpMessage, HttpRequest, HttpResponse};
 use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use tracing::{error, warn};
 
 use crate::clients::proto::chat::ConversationType;
@@ -8,8 +9,34 @@ use crate::clients::proto::chat::{
     CreateConversationRequest, GetConversationRequest, GetMessagesRequest,
     ListConversationsRequest, SendMessageRequest,
 };
+use crate::clients::proto::auth::{GetUserProfilesByIdsRequest, UserProfile as AuthUserProfile};
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
+
+async fn fetch_user_profiles(
+    clients: &ServiceClients,
+    user_ids: Vec<String>,
+) -> HashMap<String, AuthUserProfile> {
+    if user_ids.is_empty() {
+        return HashMap::new();
+    }
+
+    let mut auth = clients.auth_client();
+    let req = tonic::Request::new(GetUserProfilesByIdsRequest { user_ids });
+
+    match auth.get_user_profiles_by_ids(req).await {
+        Ok(resp) => resp
+            .into_inner()
+            .profiles
+            .into_iter()
+            .map(|p| (p.user_id.clone(), p))
+            .collect(),
+        Err(e) => {
+            warn!("Failed to fetch user profiles for chat enrichment: {}", e);
+            HashMap::new()
+        }
+    }
+}
 
 /// GET /api/v2/chat/conversations
 /// Returns an array of conversations (iOS-compatible format)
@@ -37,12 +64,22 @@ pub async fn get_conversations(
         .await
     {
         Ok(resp) => {
+            // Batch fetch participant profiles once to populate usernames/avatars.
+            let participant_ids: Vec<String> = resp
+                .conversations
+                .iter()
+                .flat_map(|c| c.participant_ids.iter().cloned())
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect();
+            let profiles = fetch_user_profiles(&clients, participant_ids).await;
+
             // Transform gRPC response to REST API format (direct array)
             // Note: call_chat already extracts inner response via into_inner()
             let conversations: Vec<RestConversation> = resp
                 .conversations
                 .into_iter()
-                .map(RestConversation::from)
+                .map(|c| RestConversation::from_proto(c, &profiles, &user_id))
                 .collect();
 
             HttpResponse::Ok().json(conversations)
@@ -177,7 +214,7 @@ pub async fn get_conversation_by_id(
     path: web::Path<String>,
     clients: web::Data<ServiceClients>,
 ) -> HttpResponse {
-    let user = match http_req.extensions().get::<AuthenticatedUser>().copied() {
+    let user_id = match http_req.extensions().get::<AuthenticatedUser>().copied() {
         Some(AuthenticatedUser(id)) => id.to_string(),
         None => return HttpResponse::Unauthorized().finish(),
     };
@@ -185,7 +222,7 @@ pub async fn get_conversation_by_id(
     let conversation_id = path.into_inner();
     let req = GetConversationRequest {
         conversation_id,
-        user_id: user,
+        user_id: user_id.clone(),
     };
 
     match clients
@@ -195,7 +232,18 @@ pub async fn get_conversation_by_id(
         })
         .await
     {
-        Ok(resp) => HttpResponse::Ok().json(resp),
+        Ok(resp) => {
+            let Some(conv) = resp.conversation else {
+                return HttpResponse::NotFound().finish();
+            };
+            let profiles =
+                fetch_user_profiles(&clients, conv.participant_ids.clone()).await;
+            HttpResponse::Ok().json(RestConversation::from_proto(
+                conv,
+                &profiles,
+                &user_id,
+            ))
+        }
         Err(e) => {
             error!("get_conversation failed: {}", e);
             HttpResponse::ServiceUnavailable().finish()
@@ -245,7 +293,8 @@ pub async fn create_conversation(
         Ok(resp) => {
             // Transform gRPC Conversation to iOS-compatible format
             // CreateConversation returns Conversation directly (not wrapped)
-            let rest_conv = RestConversation::from(resp);
+            let profiles = fetch_user_profiles(&clients, participants).await;
+            let rest_conv = RestConversation::from_proto(resp, &profiles, &user_id);
             HttpResponse::Ok().json(rest_conv)
         }
         Err(e) => {
@@ -333,6 +382,8 @@ pub struct RestConversation {
 pub struct RestConversationMember {
     pub user_id: String,
     pub username: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_url: Option<String>,
     pub role: String, // "owner", "admin", "member"
     pub joined_at: String, // ISO8601
 }
@@ -396,8 +447,12 @@ fn message_type_to_string(t: i32) -> String {
 }
 
 /// Convert gRPC Conversation to REST API format
-impl From<crate::clients::proto::chat::Conversation> for RestConversation {
-    fn from(conv: crate::clients::proto::chat::Conversation) -> Self {
+impl RestConversation {
+    fn from_proto(
+        conv: crate::clients::proto::chat::Conversation,
+        profiles: &HashMap<String, AuthUserProfile>,
+        current_user_id: &str,
+    ) -> Self {
         // Fail-safe: some older rows may have missing/zero timestamps; normalize to now()
         let created_ts = if conv.created_at > 0 {
             conv.created_at
@@ -423,25 +478,55 @@ impl From<crate::clients::proto::chat::Conversation> for RestConversation {
             .enumerate()
             .map(|(idx, user_id)| RestConversationMember {
                 user_id: user_id.clone(),
-                username: String::new(), // Username not available in proto, iOS handles this gracefully
+                username: profiles
+                    .get(user_id)
+                    .map(|p| {
+                        p.display_name
+                            .clone()
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or_else(|| p.username.clone())
+                    })
+                    .unwrap_or_default(),
+                avatar_url: profiles.get(user_id).and_then(|p| p.avatar_url.clone()),
                 role: if idx == 0 { "owner".to_string() } else { "member".to_string() },
                 joined_at: timestamp_to_iso8601(created_ts),
             })
             .collect();
 
+        // Prefer a meaningful name + avatar for direct conversations when conv.name is empty.
+        let (name, avatar_url) = if conversation_type_to_string(conv.conversation_type) == "direct"
+            && conv.name.is_empty()
+        {
+            let other_id = conv
+                .participant_ids
+                .iter()
+                .find(|id| *id != current_user_id)
+                .cloned();
+            let other_profile = other_id.as_ref().and_then(|id| profiles.get(id));
+            let name = other_profile.map(|p| {
+                p.display_name
+                    .clone()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| p.username.clone())
+            });
+            let avatar = other_profile.and_then(|p| p.avatar_url.clone());
+            (name, avatar)
+        } else {
+            (
+                if conv.name.is_empty() { None } else { Some(conv.name.clone()) },
+                None,
+            )
+        };
+
         RestConversation {
             id: conv.id,
             conversation_type: conversation_type_to_string(conv.conversation_type),
-            name: if conv.name.is_empty() {
-                None
-            } else {
-                Some(conv.name)
-            },
+            name,
             members,
             last_message,
             created_at: timestamp_to_iso8601(created_ts),
             updated_at: timestamp_to_iso8601(updated_ts),
-            avatar_url: None,      // Not present in this proto version
+            avatar_url,            // Derived from the other participant (direct chats)
             unread_count: 0,       // Not present in this proto version
             is_muted: false,
             is_archived: false,

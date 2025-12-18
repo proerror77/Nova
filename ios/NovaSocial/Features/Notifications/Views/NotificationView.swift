@@ -210,9 +210,27 @@ struct NotificationView: View {
                 NotificationListItem(
                     notification: notification,
                     onMessageTap: {
+                        guard let userId = notification.relatedUserId else { return }
                         selectedUserName = notification.userName ?? "User"
-                        selectedConversationId = "notification_conv_\(notification.relatedUserId ?? notification.id)"
-                        showChat = true
+                        Task {
+                            do {
+                                if !MatrixBridgeService.shared.isInitialized {
+                                    try await MatrixBridgeService.shared.initialize()
+                                }
+                                let room = try await MatrixBridgeService.shared.createDirectConversation(
+                                    withUserId: userId,
+                                    displayName: selectedUserName
+                                )
+                                await MainActor.run {
+                                    selectedConversationId = room.id
+                                    showChat = true
+                                }
+                            } catch {
+                                #if DEBUG
+                                print("❌ [NotificationView] Failed to start chat: \(error)")
+                                #endif
+                            }
+                        }
                     },
                     onFollowTap: { isFollowing in
                         Task {

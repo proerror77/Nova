@@ -30,7 +30,6 @@ class AddFriendsViewModel {
     private let graphService = GraphService()
     private let userService = UserService.shared
     private let matrixBridge = MatrixBridgeService.shared
-    private let chatService = ChatService()
 
     func loadRecommendations() async {
         isLoadingRecommendations = true
@@ -162,36 +161,17 @@ class AddFriendsViewModel {
         errorMessage = nil
 
         do {
-            let conversation: Conversation
-
-            // 優先使用 Matrix E2EE
-            if matrixBridge.isE2EEAvailable {
-                #if DEBUG
-                print("[AddFriendsView] Starting E2EE chat with \(user.username)")
-                #endif
-
-                conversation = try await matrixBridge.startConversationWithFriend(
-                    friendUserId: user.id
-                )
-
-                #if DEBUG
-                print("[AddFriendsView] ✅ E2EE chat created: \(conversation.id)")
-                #endif
-            } else {
-                // Fallback to regular chat
-                #if DEBUG
-                print("[AddFriendsView] Matrix unavailable, using REST API")
-                #endif
-
-                conversation = try await chatService.createConversation(
-                    type: .direct,
-                    participantIds: [user.id],
-                    name: nil
-                )
+            if !matrixBridge.isInitialized {
+                try await matrixBridge.initialize()
             }
 
+            let room = try await matrixBridge.createDirectConversation(
+                withUserId: user.id,
+                displayName: user.displayName ?? user.username
+            )
+
             // Navigate to chat
-            chatConversationId = conversation.id
+            chatConversationId = room.id
             chatUserName = user.displayName ?? user.username
             showChat = true
 
