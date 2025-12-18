@@ -1,3 +1,5 @@
+# Multi-stage build for graphql-gateway
+# Build context: ./backend (CI sets this automatically)
 FROM rust:slim AS builder
 
 # Install build dependencies
@@ -11,34 +13,33 @@ RUN apt-get update && \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Ensure we have a new enough Rust/Cargo toolchain with edition 2024 support.
+# Ensure we have a new enough Rust/Cargo toolchain with edition 2024 support
 RUN rustup toolchain install nightly && \
     rustup default nightly
 
 WORKDIR /app
 
-# Copy workspace manifest files
-COPY Cargo.toml Cargo.lock ./
-
-# Copy backend workspace (needed for workspace dependencies)
-COPY backend/ ./backend/
+# Copy entire backend workspace (context is ./backend)
+# This includes Cargo.toml, Cargo.lock, all services, libs, and proto directories
+COPY . .
 
 # Build GraphQL Gateway binary in release mode
 RUN cargo +nightly build --release -p graphql-gateway
 
 # Runtime stage
-FROM rust:slim
+FROM debian:bookworm-slim
 
 # Install minimal runtime dependencies
 RUN apt-get update && \
     apt-get install -y \
     ca-certificates \
     curl \
+    libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy binary from builder (binary is in workspace target dir at root level)
+# Copy binary from builder
 COPY --from=builder /app/target/release/graphql-gateway /app/graphql-gateway
 
 # Create non-root user
