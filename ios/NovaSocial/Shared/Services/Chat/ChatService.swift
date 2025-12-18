@@ -406,27 +406,59 @@ final class ChatService {
         return response
     }
     
-    /// Mark messages as read in a conversation
-    /// Maps to API: POST /api/v1/conversations/:id/read
+    // MARK: - Matrix SDK - Read Receipts
+
+    /// 標記訊息為已讀 - 優先使用 Matrix SDK
     /// - Parameters:
-    ///   - conversationId: Conversation ID
-    ///   - messageId: ID of the last read message
+    ///   - conversationId: 會話 ID
+    ///   - messageId: 最後已讀訊息 ID（用於 REST API fallback）
     @MainActor
     func markAsRead(conversationId: String, messageId: String) async throws {
+        // 優先使用 Matrix SDK
+        if MatrixBridgeService.shared.isInitialized {
+            do {
+                try await MatrixBridgeService.shared.markAsRead(conversationId: conversationId)
+                #if DEBUG
+                print("[ChatService] ✅ Marked as read via Matrix SDK: conversation=\(conversationId)")
+                #endif
+                return
+            } catch {
+                #if DEBUG
+                print("[ChatService] Matrix markAsRead failed, falling back to REST API: \(error)")
+                #endif
+            }
+        }
+
+        // Fallback: REST API
         struct MessageResponse: Codable {
             let message: String
         }
-        
+
         let request = MarkAsReadRequest(messageId: messageId)
-        
+
         let _: MessageResponse = try await client.request(
             endpoint: "\(APIConfig.Chat.getConversation(conversationId))/read",
             method: "POST",
             body: request
         )
-        
+
         #if DEBUG
-        print("[ChatService] Marked as read: conversation=\(conversationId), message=\(messageId)")
+        print("[ChatService] Marked as read via REST API: conversation=\(conversationId), message=\(messageId)")
+        #endif
+    }
+
+    /// 僅使用 Matrix SDK 標記會話為已讀（不需要 messageId）
+    /// - Parameter conversationId: 會話 ID
+    @MainActor
+    func markAsReadMatrix(conversationId: String) async throws {
+        guard MatrixBridgeService.shared.isInitialized else {
+            throw ChatServiceError.matrixNotInitialized
+        }
+
+        try await MatrixBridgeService.shared.markAsRead(conversationId: conversationId)
+
+        #if DEBUG
+        print("[ChatService] ✅ Marked as read via Matrix SDK: conversation=\(conversationId)")
         #endif
     }
 
@@ -827,10 +859,28 @@ final class ChatService {
         }
     }
     
-    /// Send typing start event
-    /// - Parameter conversationId: Conversation ID
+    // MARK: - Matrix SDK - Typing Indicators
+
+    /// 發送打字開始指示器 - 優先使用 Matrix SDK
+    /// - Parameter conversationId: 會話 ID
     func sendTypingStart(conversationId: String) {
         Task {
+            // 優先使用 Matrix SDK
+            if await MainActor.run(body: { MatrixBridgeService.shared.isInitialized }) {
+                do {
+                    try await MatrixBridgeService.shared.setTyping(conversationId: conversationId, isTyping: true)
+                    #if DEBUG
+                    print("[ChatService] ✅ Typing start sent via Matrix SDK")
+                    #endif
+                    return
+                } catch {
+                    #if DEBUG
+                    print("[ChatService] Matrix typing start failed, falling back to WebSocket: \(error)")
+                    #endif
+                }
+            }
+
+            // Fallback: WebSocket
             guard await wsStateManager.getIsConnected(),
                   let task = await wsStateManager.getTask() else { return }
 
@@ -845,16 +895,32 @@ final class ChatService {
                 }
             } catch {
                 #if DEBUG
-                print("[ChatService] Failed to send typing.start: \(error)")
+                print("[ChatService] Failed to send typing.start via WebSocket: \(error)")
                 #endif
             }
         }
     }
 
-    /// Send typing stop event
-    /// - Parameter conversationId: Conversation ID
+    /// 發送打字停止指示器 - 優先使用 Matrix SDK
+    /// - Parameter conversationId: 會話 ID
     func sendTypingStop(conversationId: String) {
         Task {
+            // 優先使用 Matrix SDK
+            if await MainActor.run(body: { MatrixBridgeService.shared.isInitialized }) {
+                do {
+                    try await MatrixBridgeService.shared.setTyping(conversationId: conversationId, isTyping: false)
+                    #if DEBUG
+                    print("[ChatService] ✅ Typing stop sent via Matrix SDK")
+                    #endif
+                    return
+                } catch {
+                    #if DEBUG
+                    print("[ChatService] Matrix typing stop failed, falling back to WebSocket: \(error)")
+                    #endif
+                }
+            }
+
+            // Fallback: WebSocket
             guard await wsStateManager.getIsConnected(),
                   let task = await wsStateManager.getTask() else { return }
 
@@ -869,7 +935,7 @@ final class ChatService {
                 }
             } catch {
                 #if DEBUG
-                print("[ChatService] Failed to send typing.stop: \(error)")
+                print("[ChatService] Failed to send typing.stop via WebSocket: \(error)")
                 #endif
             }
         }
