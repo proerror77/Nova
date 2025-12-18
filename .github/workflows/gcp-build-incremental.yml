@@ -152,10 +152,22 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Determine build context
+        id: build-context
+        run: |
+          # Independent workspaces need their own directory as context
+          INDEPENDENT_WORKSPACES="realtime-chat-service"
+          if echo "$INDEPENDENT_WORKSPACES" | grep -qw "${{ matrix.service }}"; then
+            echo "context=./backend/${{ matrix.service }}" >> "$GITHUB_OUTPUT"
+            echo "🔧 Using service directory as build context (independent workspace)"
+          else
+            echo "context=./backend" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ steps.build-context.outputs.context }}
           file: ./backend/${{ matrix.service }}/Dockerfile
           platforms: linux/amd64
           push: true
