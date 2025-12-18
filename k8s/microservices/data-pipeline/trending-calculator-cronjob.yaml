@@ -119,8 +119,7 @@ spec:
                   valueFrom:
                     secretKeyRef:
                       name: postgres-secret
-                      key: password
-                      optional: true
+                      key: POSTGRES_PASSWORD
 ---
 # User interests calculator (for personalized recommendations)
 apiVersion: batch/v1
@@ -222,5 +221,4 @@ spec:
                   valueFrom:
                     secretKeyRef:
                       name: postgres-secret
-                      key: password
-                      optional: true
+                      key: POSTGRES_PASSWORD
