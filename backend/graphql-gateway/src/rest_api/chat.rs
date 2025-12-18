@@ -243,18 +243,10 @@ pub async fn create_conversation(
         .await
     {
         Ok(resp) => {
-            // Transform gRPC CreateConversationResponse to iOS-compatible format
-            // gRPC returns { conversation: {...} }, iOS expects direct {...}
-            if let Some(conv) = resp.conversation {
-                let rest_conv = RestConversation::from(conv);
-                HttpResponse::Ok().json(rest_conv)
-            } else {
-                // Fallback: create a minimal response if conversation is missing
-                warn!("create_conversation returned empty conversation");
-                HttpResponse::InternalServerError().json(serde_json::json!({
-                    "error": "Failed to create conversation"
-                }))
-            }
+            // Transform gRPC Conversation to iOS-compatible format
+            // CreateConversation returns Conversation directly (not wrapped)
+            let rest_conv = RestConversation::from(resp);
+            HttpResponse::Ok().json(rest_conv)
         }
         Err(e) => {
             error!("create_conversation failed: {}", e);

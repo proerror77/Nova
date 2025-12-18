@@ -339,27 +339,19 @@ async fn main() -> std::io::Result<()> {
             // ✅ OAuth Authentication API (Google, Apple)
             .route(
                 "/api/v2/auth/oauth/google/start",
-                web::post().to(rest_api::oauth::google_oauth_start),
+                web::post().to(rest_api::oauth::start_google_oauth),
             )
             .route(
                 "/api/v2/auth/oauth/google/callback",
-                web::post().to(rest_api::oauth::google_oauth_callback_post),
-            )
-            .route(
-                "/api/v2/auth/oauth/google/callback",
-                web::get().to(rest_api::oauth::google_oauth_callback_get),
+                web::post().to(rest_api::oauth::complete_google_oauth),
             )
             .route(
                 "/api/v2/auth/oauth/apple/start",
-                web::post().to(rest_api::oauth::apple_oauth_start),
+                web::post().to(rest_api::oauth::start_apple_oauth),
             )
             .route(
                 "/api/v2/auth/oauth/apple/callback",
-                web::post().to(rest_api::oauth::apple_oauth_callback_post),
-            )
-            .route(
-                "/api/v2/auth/oauth/apple/callback",
-                web::get().to(rest_api::oauth::apple_oauth_callback_get),
+                web::post().to(rest_api::oauth::complete_apple_oauth),
             )
             .route(
                 "/api/v2/auth/oauth/apple/native",
