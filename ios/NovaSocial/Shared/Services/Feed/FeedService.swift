@@ -377,10 +377,15 @@ enum FeedMediaType: String, Codable {
     case video = "video"
     case livePhoto = "live_photo"  // Live Photo (still image + short video)
     case mixed = "mixed"  // Post contains both images and videos
-    
+    case none = "none"  // Text-only post with no media
+
     /// Determine media type from URL extension
     static func from(url: String) -> FeedMediaType {
         let lowercased = url.lowercased()
+        // Skip non-URL placeholders (e.g., "text-content-xxx")
+        guard lowercased.hasPrefix("http://") || lowercased.hasPrefix("https://") else {
+            return .none
+        }
         if lowercased.contains(".mp4") || lowercased.contains(".m4v") || lowercased.contains(".webm") {
             return .video
         }
@@ -393,12 +398,17 @@ enum FeedMediaType: String, Codable {
     
     /// Determine media type from array of URLs
     static func from(urls: [String]) -> FeedMediaType {
-        guard !urls.isEmpty else { return .image }
-        
+        guard !urls.isEmpty else { return .none }
+
         let types = urls.map { FeedMediaType.from(url: $0) }
         let hasVideo = types.contains(.video)
         let hasImage = types.contains(.image)
-        
+
+        // If all URLs are invalid (e.g., text-content-xxx), return none
+        if !hasVideo && !hasImage {
+            return .none
+        }
+
         if hasVideo && hasImage {
             return .mixed
         } else if hasVideo {
@@ -441,11 +451,14 @@ struct FeedPost: Identifiable, Codable, Equatable {
     let isBookmarked: Bool
 
     /// Prefer thumbnails for list performance; fall back to originals when missing.
+    /// Filters out invalid URLs (e.g., "text-content-xxx" placeholders)
     var displayMediaUrls: [String] {
-        if !thumbnailUrls.isEmpty {
-            return thumbnailUrls
+        let urls = !thumbnailUrls.isEmpty ? thumbnailUrls : mediaUrls
+        // Only return valid HTTP/HTTPS URLs
+        return urls.filter { url in
+            let lowercased = url.lowercased()
+            return lowercased.hasPrefix("http://") || lowercased.hasPrefix("https://")
         }
-        return mediaUrls
     }
     
     /// Check if this post contains video content
@@ -541,7 +554,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
 
     /// Create a copy with optional field overrides (eliminates duplicate creation code)
     func copying(
-        authorAvatar: String?? = nil,  // Double optional: nil = keep original, .some(value) = update
+        authorAvatar: String?? = nil,  // Double optional: nil = keep original, .some(nil) = set to nil, .some(value) = update
         likeCount: Int? = nil,
         commentCount: Int? = nil,
         shareCount: Int? = nil,

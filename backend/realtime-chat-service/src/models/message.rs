@@ -3,22 +3,24 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value as JsonValue};
 use uuid::Uuid;
 
+/// Message struct matching database schema
+/// Schema note: Columns from migrations 0004 (base), 0005 (content), and 0011 (megolm)
+/// E2E encryption fields (content_encrypted, content_nonce, encryption_version) were dropped in migration 0009
+/// PostgreSQL TDE handles encryption at the database level
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     pub id: Uuid,
     pub conversation_id: Uuid,
     pub sender_id: Uuid,
-    pub encryption_version: i32,
-    pub content_encrypted: Option<Vec<u8>>,
-    pub content_nonce: Option<Vec<u8>>,
     pub content: String,
     pub sequence_number: i64,
     pub idempotency_key: Option<String>,
     pub created_at: DateTime<Utc>,
-    pub updated_at: Option<DateTime<Utc>>,
     pub edited_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<DateTime<Utc>>,
     pub reaction_count: i32,
+    pub version_number: i32,
+    pub recalled_at: Option<DateTime<Utc>>,
 }
 
 /// Envelope used for realtime fanout and Redis Streams persistence.

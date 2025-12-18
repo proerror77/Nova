@@ -2,11 +2,34 @@ import Foundation
 import Combine
 import UIKit  // For UIDevice
 
-// MARK: - MatrixRustSDK Stub Types
-// TODO: Remove these stubs once MatrixRustSDK is properly integrated via SPM
-// These are placeholder types to allow the app to compile without the SDK
+// MARK: - MatrixRustSDK Import
+// Import the Matrix Rust SDK Swift components
+// Package: https://github.com/matrix-org/matrix-rust-components-swift
 
-#if !canImport(MatrixRustSDK)
+// MARK: - MatrixRustSDK Conditional Import
+// Use MATRIX_SDK_ENABLED flag instead of canImport() for reliable detection
+// Set in Build Settings > Swift Compiler - Custom Flags > Active Compilation Conditions
+//
+// When MATRIX_SDK_ENABLED is defined:
+//   - Real MatrixRustSDK types are used
+//   - Full E2EE functionality is available
+//
+// When NOT defined (fallback mode):
+//   - Stub types allow compilation without the SDK
+//   - E2EE features gracefully degrade
+
+#if MATRIX_SDK_ENABLED
+import MatrixRustSDK
+// Real SDK types are now available: Client, ClientBuilder, Room, Timeline, Session, etc.
+
+#else
+// MARK: - Stub Mode Active
+// MatrixRustSDK package not available - using stub implementations
+// To enable real SDK: Add MATRIX_SDK_ENABLED to Active Compilation Conditions
+// MARK: - MatrixRustSDK Stub Types (Fallback)
+// These stub types allow compilation when SDK is not yet resolved
+// They will be replaced by real SDK types once the package is downloaded
+
 class Client {
     func userId() -> String { "" }
     func rooms() -> [Room] { [] }
@@ -45,8 +68,12 @@ class RoomListService {
 }
 
 class RoomList {
-    func entries(listener: RoomListEntriesListenerProtocol) -> (entries: [RoomListEntry], handle: TaskHandle) {
-        ([], TaskHandle())
+    func entriesWithDynamicAdapters(pageSize: UInt32, listener: RoomListEntriesListener) -> RoomListEntriesWithDynamicAdaptersResult {
+        return RoomListEntriesWithDynamicAdaptersResult()
+    }
+
+    func room(roomId: String) throws -> Room {
+        return Room()
     }
 }
 
@@ -74,6 +101,7 @@ class Timeline {
     func send(msg: Any) async throws {}
     func paginateBackwards(numEvents: UInt16) async throws {}
     func getTimelineItems() -> [TimelineItem] { [] }
+    func addListener(listener: TimelineListener) async -> TaskHandle { TaskHandle() }
     func markAsRead(receiptType: ReceiptType) async throws {}
     func sendImage(url: String, thumbnailUrl: String?, imageInfo: ImageInfo, caption: String?, formattedCaption: String?, progressWatcher: Any?) async throws {}
     func sendVideo(url: String, thumbnailUrl: String?, videoInfo: VideoInfo, caption: String?, formattedCaption: String?, progressWatcher: Any?) async throws {}
@@ -173,24 +201,112 @@ class TaskHandle {
     func cancel() {}
 }
 
-enum RoomListEntry {
-    case filled(String)
-    case empty
-    case invalidated
-}
-
+// New SDK uses Room objects directly, no RoomListEntry wrapper
 enum RoomListEntriesUpdate {
-    case append([RoomListEntry])
-    case set(Int, RoomListEntry)
-    case insert(Int, RoomListEntry)
+    case append(values: [Room])
+    case clear
+    case pushFront(value: Room)
+    case pushBack(value: Room)
+    case popFront
+    case popBack
+    case insert(index: UInt32, value: Room)
+    case set(index: UInt32, value: Room)
+    case remove(index: UInt32)
+    case truncate(length: UInt32)
+    case reset(values: [Room])
 }
 
-protocol RoomListEntriesListenerProtocol: AnyObject {
+protocol RoomListEntriesListener: AnyObject, Sendable {
     func onUpdate(roomEntriesUpdate: [RoomListEntriesUpdate])
 }
 
+protocol RoomListEntriesWithDynamicAdaptersResultProtocol: AnyObject {
+    func controller() -> RoomListDynamicEntriesControllerProtocol
+    func entriesStream() -> TaskHandle
+}
+
+protocol RoomListDynamicEntriesControllerProtocol: AnyObject {
+    func setFilter(kind: RoomListEntriesDynamicFilterKind) -> Bool
+}
+
+enum RoomListEntriesDynamicFilterKind {
+    case all
+    case none
+}
+
+class RoomListEntriesWithDynamicAdaptersResult: RoomListEntriesWithDynamicAdaptersResultProtocol {
+    func controller() -> RoomListDynamicEntriesControllerProtocol {
+        return RoomListDynamicEntriesController()
+    }
+
+    func entriesStream() -> TaskHandle {
+        TaskHandle()
+    }
+}
+
+class RoomListDynamicEntriesController: RoomListDynamicEntriesControllerProtocol {
+    func setFilter(kind: RoomListEntriesDynamicFilterKind) -> Bool { true }
+}
+
+enum TimelineDiff {
+    case append(values: [TimelineItem])
+    case clear
+    case pushFront(value: TimelineItem)
+    case pushBack(value: TimelineItem)
+    case popFront
+    case popBack
+    case insert(index: UInt32, value: TimelineItem)
+    case set(index: UInt32, value: TimelineItem)
+    case remove(index: UInt32)
+    case truncate(length: UInt32)
+    case reset(values: [TimelineItem])
+}
+
+protocol TimelineListener: AnyObject, Sendable {
+    func onUpdate(diff: [TimelineDiff])
+}
+
 func messageEventContentFromMarkdown(md: String) -> Any { md }
+
 #endif
+// End of conditional SDK import - real types used when MATRIX_SDK_ENABLED is defined
+
+// MARK: - Timeline Item Collector Helper
+
+/// Helper class to collect timeline items from the listener-based API
+private final class TimelineItemCollector: TimelineListener, @unchecked Sendable {
+    private let onItemsReceived: ([TimelineItem]) -> Void
+    private var hasReturned = false
+
+    init(onItemsReceived: @escaping ([TimelineItem]) -> Void) {
+        self.onItemsReceived = onItemsReceived
+    }
+
+    func onUpdate(diff: [TimelineDiff]) {
+        guard !hasReturned else { return }
+
+        var items: [TimelineItem] = []
+        for d in diff {
+            switch d {
+            case .reset(let values):
+                items = values
+            case .append(let values):
+                items.append(contentsOf: values)
+            case .pushBack(let value):
+                items.append(value)
+            case .pushFront(let value):
+                items.insert(value, at: 0)
+            default:
+                break
+            }
+        }
+
+        if !items.isEmpty {
+            hasReturned = true
+            onItemsReceived(items)
+        }
+    }
+}
 
 // MARK: - Matrix Service
 //
@@ -412,6 +528,9 @@ final class MatrixService: MatrixServiceProtocol {
     /// Room list service for efficient room updates
     private var roomListService: RoomListService?
 
+    /// Keep the room list stream alive
+    private var roomListEntriesStreamHandle: TaskHandle?
+
     /// Session storage path
     private var sessionPath: String?
 
@@ -423,6 +542,9 @@ final class MatrixService: MatrixServiceProtocol {
 
     /// Timeline listeners cache (room_id -> listener)
     private var timelineListeners: [String: TaskHandle] = [:]
+
+    /// De-duplication cache for timeline events (roomId -> eventIds)
+    private var seenTimelineEventIdsByRoom: [String: Set<String>] = [:]
 
     /// Cancellables for Combine subscriptions
     private var cancellables = Set<AnyCancellable>()
@@ -457,10 +579,15 @@ final class MatrixService: MatrixServiceProtocol {
             let sessionURL = URL(fileURLWithPath: sessionPath)
             try FileManager.default.createDirectory(at: sessionURL, withIntermediateDirectories: true)
 
-            // Build client using ClientBuilder
+            // Create separate cache path
+            let cachePath = sessionPath + "/cache"
+            let cacheURL = URL(fileURLWithPath: cachePath)
+            try FileManager.default.createDirectory(at: cacheURL, withIntermediateDirectories: true)
+
+            // Build client using ClientBuilder (updated API: sessionPaths instead of sessionPath)
             let clientBuilder = ClientBuilder()
                 .homeserverUrl(url: homeserverURL)
-                .sessionPath(path: sessionPath)
+                .sessionPaths(dataPath: sessionPath, cachePath: cachePath)
                 .userAgent(userAgent: "NovaSocial-iOS/1.0")
 
             self.client = try await clientBuilder.build()
@@ -546,7 +673,7 @@ final class MatrixService: MatrixServiceProtocol {
                 deviceId: nil
             )
 
-            self.userId = client.userId()
+            self.userId = try client.userId()
 
             // Store session credentials
             if let session = try? client.session() {
@@ -661,7 +788,7 @@ final class MatrixService: MatrixServiceProtocol {
             // Create sync service
             let syncServiceBuilder = client.syncService()
             self.syncService = try await syncServiceBuilder
-                .withCrossProcessLock(appIdentifier: "com.novasocial.icered")
+                .withCrossProcessLock()
                 .finish()
 
             // Start sync
@@ -774,7 +901,7 @@ final class MatrixService: MatrixServiceProtocol {
         }
 
         do {
-            guard let room = client.getRoom(roomId: roomId) else {
+            guard let room = try client.getRoom(roomId: roomId) else {
                 throw MatrixError.roomNotFound(roomId)
             }
             try await room.leave()
@@ -798,7 +925,7 @@ final class MatrixService: MatrixServiceProtocol {
         }
 
         do {
-            guard let room = client.getRoom(roomId: roomId) else {
+            guard let room = try client.getRoom(roomId: roomId) else {
                 throw MatrixError.roomNotFound(roomId)
             }
 
@@ -836,7 +963,7 @@ final class MatrixService: MatrixServiceProtocol {
         }
 
         do {
-            guard let room = client.getRoom(roomId: roomId) else {
+            guard let room = try client.getRoom(roomId: roomId) else {
                 throw MatrixError.roomNotFound(roomId)
             }
 
@@ -846,12 +973,21 @@ final class MatrixService: MatrixServiceProtocol {
             let data = try Data(contentsOf: mediaURL)
             _ = mediaURL.lastPathComponent  // Filename available for future use
 
+            // Create upload parameters
+            let uploadParams = UploadParameters(
+                source: .file(filename: mediaURL.path),
+                caption: caption,
+                formattedCaption: nil,
+                mentions: nil,
+                inReplyTo: nil
+            )
+
             // Determine media type and create appropriate content
             if mimeType.hasPrefix("image/") {
                 // Send as image
-                try await timeline.sendImage(
-                    url: mediaURL.path,
-                    thumbnailUrl: nil,
+                _ = try timeline.sendImage(
+                    params: uploadParams,
+                    thumbnailSource: nil,
                     imageInfo: ImageInfo(
                         height: nil,
                         width: nil,
@@ -859,17 +995,15 @@ final class MatrixService: MatrixServiceProtocol {
                         size: UInt64(data.count),
                         thumbnailInfo: nil,
                         thumbnailSource: nil,
-                        blurhash: nil
-                    ),
-                    caption: caption,
-                    formattedCaption: nil,
-                    progressWatcher: nil
+                        blurhash: nil,
+                        isAnimated: nil
+                    )
                 )
             } else if mimeType.hasPrefix("video/") {
                 // Send as video
-                try await timeline.sendVideo(
-                    url: mediaURL.path,
-                    thumbnailUrl: nil,
+                _ = try timeline.sendVideo(
+                    params: uploadParams,
+                    thumbnailSource: nil,
                     videoInfo: VideoInfo(
                         duration: nil,
                         height: nil,
@@ -879,35 +1013,28 @@ final class MatrixService: MatrixServiceProtocol {
                         thumbnailInfo: nil,
                         thumbnailSource: nil,
                         blurhash: nil
-                    ),
-                    caption: caption,
-                    formattedCaption: nil,
-                    progressWatcher: nil
+                    )
                 )
             } else if mimeType.hasPrefix("audio/") {
                 // Send as audio
-                try await timeline.sendAudio(
-                    url: mediaURL.path,
+                _ = try timeline.sendAudio(
+                    params: uploadParams,
                     audioInfo: AudioInfo(
                         duration: nil,
                         size: UInt64(data.count),
                         mimetype: mimeType
-                    ),
-                    caption: caption,
-                    formattedCaption: nil,
-                    progressWatcher: nil
+                    )
                 )
             } else {
                 // Send as file
-                try await timeline.sendFile(
-                    url: mediaURL.path,
+                _ = try timeline.sendFile(
+                    params: uploadParams,
                     fileInfo: FileInfo(
                         mimetype: mimeType,
                         size: UInt64(data.count),
                         thumbnailInfo: nil,
                         thumbnailSource: nil
-                    ),
-                    progressWatcher: nil
+                    )
                 )
             }
 
@@ -935,7 +1062,7 @@ final class MatrixService: MatrixServiceProtocol {
         }
 
         do {
-            guard let room = client.getRoom(roomId: roomId) else {
+            guard let room = try client.getRoom(roomId: roomId) else {
                 throw MatrixError.roomNotFound(roomId)
             }
 
@@ -944,8 +1071,15 @@ final class MatrixService: MatrixServiceProtocol {
             // Paginate backwards to load history
             try await timeline.paginateBackwards(numEvents: UInt16(limit))
 
-            // Get timeline items
-            let items = timeline.getTimelineItems()
+            // Use a listener to collect timeline items
+            let items = await withCheckedContinuation { (continuation: CheckedContinuation<[TimelineItem], Never>) in
+                let listener = TimelineItemCollector { collectedItems in
+                    continuation.resume(returning: collectedItems)
+                }
+                Task {
+                    _ = await timeline.addListener(listener: listener)
+                }
+            }
 
             // Convert to MatrixMessage
             return items.compactMap { item -> MatrixMessage? in
@@ -972,7 +1106,7 @@ final class MatrixService: MatrixServiceProtocol {
         let matrixUserId = convertToMatrixUserId(novaUserId: userId)
 
         do {
-            guard let room = client.getRoom(roomId: roomId) else {
+            guard let room = try client.getRoom(roomId: roomId) else {
                 throw MatrixError.roomNotFound(roomId)
             }
             try await room.inviteUserById(userId: matrixUserId)
@@ -995,7 +1129,7 @@ final class MatrixService: MatrixServiceProtocol {
         let matrixUserId = convertToMatrixUserId(novaUserId: userId)
 
         do {
-            guard let room = client.getRoom(roomId: roomId) else {
+            guard let room = try client.getRoom(roomId: roomId) else {
                 throw MatrixError.roomNotFound(roomId)
             }
             try await room.kickUser(userId: matrixUserId, reason: reason)
@@ -1012,7 +1146,7 @@ final class MatrixService: MatrixServiceProtocol {
         }
 
         do {
-            guard let room = client.getRoom(roomId: roomId) else {
+            guard let room = try client.getRoom(roomId: roomId) else {
                 throw MatrixError.roomNotFound(roomId)
             }
             try await room.typingNotice(isTyping: isTyping)
@@ -1030,7 +1164,7 @@ final class MatrixService: MatrixServiceProtocol {
         }
 
         do {
-            guard let room = client.getRoom(roomId: roomId) else {
+            guard let room = try client.getRoom(roomId: roomId) else {
                 throw MatrixError.roomNotFound(roomId)
             }
 
@@ -1117,17 +1251,18 @@ final class MatrixService: MatrixServiceProtocol {
             do {
                 let roomList = try await roomListService.allRooms()
 
-                // Subscribe to room list updates
-                let listener = RoomListEntriesListener { [weak self] entries in
+                // Subscribe to room list updates using new API
+                let listener = RoomListEntriesListenerImpl { [weak self] updates in
                     Task { @MainActor in
-                        await self?.handleRoomListUpdate(entries)
+                        await self?.handleRoomListUpdates(updates)
                     }
                 }
 
-                let result = roomList.entries(listener: listener)
+                // Use new entriesWithDynamicAdapters method
+                let result = roomList.entriesWithDynamicAdapters(pageSize: 100, listener: listener)
 
-                // Process initial entries
-                await handleRoomListUpdate(result.entries)
+                // Store controller for future filter operations if needed
+                _ = result.controller()
             } catch {
                 #if DEBUG
                 print("[MatrixService] Room list observer error: \(error)")
@@ -1136,16 +1271,27 @@ final class MatrixService: MatrixServiceProtocol {
         }
     }
 
-    private func handleRoomListUpdate(_ entries: [RoomListEntry]) async {
-        for entry in entries {
-            switch entry {
-            case .filled(let roomId):
-                if let room = client?.getRoom(roomId: roomId),
-                   let matrixRoom = await convertSDKRoomToMatrixRoom(room) {
-                    roomCache[roomId] = matrixRoom
+    private func handleRoomListUpdates(_ updates: [RoomListEntriesUpdate]) async {
+        for update in updates {
+            switch update {
+            case .append(let rooms), .reset(let rooms):
+                for room in rooms {
+                    if let matrixRoom = await convertSDKRoomToMatrixRoom(room) {
+                        roomCache[room.id()] = matrixRoom
+                        onRoomUpdated?(matrixRoom)
+                    }
+                }
+            case .pushFront(let room), .pushBack(let room), .insert(_, let room), .set(_, let room):
+                if let matrixRoom = await convertSDKRoomToMatrixRoom(room) {
+                    roomCache[room.id()] = matrixRoom
                     onRoomUpdated?(matrixRoom)
                 }
-            case .empty, .invalidated:
+            case .remove(let index):
+                // Handle room removal if needed
+                #if DEBUG
+                print("[MatrixService] Room removed at index: \(index)")
+                #endif
+            case .clear, .popFront, .popBack, .truncate:
                 break
             }
         }
@@ -1153,15 +1299,19 @@ final class MatrixService: MatrixServiceProtocol {
 
     private func convertSDKRoomToMatrixRoom(_ room: Room) async -> MatrixRoom? {
         let roomId = room.id()
-        let info = room.roomInfo()
+        guard let info = try? await room.roomInfo() else {
+            return nil
+        }
+
+        let displayName = (try? await room.displayName()) ?? roomId
 
         return MatrixRoom(
             id: roomId,
-            name: room.displayName(),
+            name: displayName,
             topic: info.topic,
             avatarURL: info.avatarUrl,
             isDirect: info.isDirect,
-            isEncrypted: info.isEncrypted,
+            isEncrypted: info.encryptionState == .encrypted,
             memberCount: Int(info.activeMembersCount),
             unreadCount: Int(info.numUnreadMessages),
             lastMessage: nil,  // Would need timeline access
@@ -1173,20 +1323,30 @@ final class MatrixService: MatrixServiceProtocol {
     private func convertTimelineItemToMessage(_ item: TimelineItem, roomId: String) -> MatrixMessage? {
         guard let eventItem = item.asEvent() else { return nil }
 
-        let eventId = eventItem.eventId() ?? UUID().uuidString
-        let senderId = eventItem.sender()
-        let timestamp = Date(timeIntervalSince1970: Double(eventItem.timestamp()) / 1000.0)
+        // Extract event ID from EventOrTransactionId enum
+        let eventId: String
+        switch eventItem.eventOrTransactionId {
+        case .eventId(let id):
+            eventId = id
+        case .transactionId(let id):
+            eventId = id
+        }
 
-        // Extract content based on message type
-        guard let content = eventItem.content() else { return nil }
+        let senderId = eventItem.sender
+        let timestamp = Date(timeIntervalSince1970: Double(eventItem.timestamp) / 1000.0)
 
-        switch content.kind() {
-        case .message:
-            if let msgContent = content.asMessage() {
-                let body = msgContent.body()
+        // Extract content based on message type - new struct-based API
+        let content = eventItem.content
+
+        switch content {
+        case .msgLike(let msgLikeContent):
+            switch msgLikeContent.kind {
+            case .message(let messageContent):
+                let body = messageContent.body
+                let isEdited = messageContent.isEdited
                 let msgType: MatrixMessageType
 
-                switch msgContent.msgtype() {
+                switch messageContent.msgType {
                 case .text:
                     msgType = .text
                 case .image:
@@ -1203,7 +1363,7 @@ final class MatrixService: MatrixServiceProtocol {
                     msgType = .notice
                 case .emote:
                     msgType = .emote
-                @unknown default:
+                case .gallery, .other:
                     msgType = .text
                 }
 
@@ -1214,17 +1374,17 @@ final class MatrixService: MatrixServiceProtocol {
                     content: body,
                     type: msgType,
                     timestamp: timestamp,
-                    isEdited: false,
+                    isEdited: isEdited,
                     replyTo: nil,
                     mediaURL: nil,
                     mediaInfo: nil
                 )
+            case .sticker, .poll, .redacted, .unableToDecrypt, .other:
+                return nil
             }
-        @unknown default:
-            break
+        case .callInvite, .rtcNotification, .roomMembership, .profileChange, .state, .failedToParseMessageLike, .failedToParseState:
+            return nil
         }
-
-        return nil
     }
 
     // MARK: - Session Storage
@@ -1276,29 +1436,15 @@ final class MatrixService: MatrixServiceProtocol {
 
 // MARK: - Room List Entries Listener
 
-private class RoomListEntriesListener: RoomListEntriesListenerProtocol {
-    private let handler: ([RoomListEntry]) -> Void
+private final class RoomListEntriesListenerImpl: RoomListEntriesListener, @unchecked Sendable {
+    private let handler: ([RoomListEntriesUpdate]) -> Void
 
-    init(handler: @escaping ([RoomListEntry]) -> Void) {
+    init(handler: @escaping ([RoomListEntriesUpdate]) -> Void) {
         self.handler = handler
     }
 
     func onUpdate(roomEntriesUpdate: [RoomListEntriesUpdate]) {
-        // Extract entries from updates
-        var entries: [RoomListEntry] = []
-        for update in roomEntriesUpdate {
-            switch update {
-            case .append(let values):
-                entries.append(contentsOf: values)
-            case .set(_, let value):
-                entries.append(value)
-            case .insert(_, let value):
-                entries.append(value)
-            @unknown default:
-                break
-            }
-        }
-        handler(entries)
+        handler(roomEntriesUpdate)
     }
 }
 
@@ -1307,6 +1453,7 @@ private class RoomListEntriesListener: RoomListEntriesListenerProtocol {
 struct MatrixConfiguration {
     /// Nova staging Matrix homeserver URL
     /// Note: Updated to use public domain (matrix.staging.gcp.icered.com) for SSO flow
+    /// Server name: staging.gcp.icered.com
     static let stagingHomeserver = "https://matrix.staging.gcp.icered.com"
 
     /// Nova production Matrix homeserver URL
@@ -1352,4 +1499,3 @@ struct MatrixConfiguration {
         }
     }
 }
-

@@ -5,7 +5,7 @@ metadata:
   namespace: nova-backend
 data:
   # Environment
-  APP_ENV: "production"
+  APP_ENV: "development"
   LOG_LEVEL: "info"
 
   # Database
@@ -44,8 +44,11 @@ data:
   JWT_REFRESH_TOKEN_EXPIRES_IN_DAYS: "90"
 
   # gRPC Configuration
-  GRPC_AUTH_SERVICE_URL: "http://auth-service:9083"
-  GRPC_CONTENT_SERVICE_URL: "http://content-service:9081"
+  # Identity service (auth) - used by grpc-clients library
+  GRPC_IDENTITY_SERVICE_URL: "http://identity-service:9081"
+  # Legacy auth URL - kept for backward compatibility
+  GRPC_AUTH_SERVICE_URL: "http://identity-service:9081"
+  GRPC_CONTENT_SERVICE_URL: "http://content-service:9082"
   GRPC_FEED_SERVICE_URL: "http://feed-service:9084"
   GRPC_MEDIA_SERVICE_URL: "http://media-service:9082"
   GRPC_MESSAGING_SERVICE_URL: "http://messaging-service:9085"
@@ -54,6 +57,7 @@ data:
   GRPC_NOTIFICATION_SERVICE_URL: "http://notification-service:9088"
   GRPC_CDN_SERVICE_URL: "http://cdn-service:9089"
   GRPC_EVENTS_SERVICE_URL: "http://events-service:9090"
+  GRPC_CHAT_SERVICE_URL: "http://realtime-chat-service:9086"
 
   GRPC_CONNECTION_TIMEOUT_SECS: "10"
   GRPC_REQUEST_TIMEOUT_SECS: "30"
@@ -64,6 +68,19 @@ data:
   GRPC_CONNECTION_POOL_SIZE: "10"
   GRPC_TLS_ENABLED: "false"
 
+  # Service dependency tiers (0=hard, 1=soft-critical, 2=optional)
+  # Only identity-service is Tier0 (required for auth)
+  GRPC_IDENTITY_SERVICE_TIER: "0"
+  GRPC_CONTENT_SERVICE_TIER: "1"
+  GRPC_FEED_SERVICE_TIER: "1"
+  GRPC_MEDIA_SERVICE_TIER: "1"
+  GRPC_GRAPH_SERVICE_TIER: "1"
+  GRPC_SOCIAL_SERVICE_TIER: "1"
+  GRPC_SEARCH_SERVICE_TIER: "1"
+  GRPC_NOTIFICATION_SERVICE_TIER: "1"
+  GRPC_RANKING_SERVICE_TIER: "1"
+  GRPC_ANALYTICS_SERVICE_TIER: "1"
+
   # Matrix (E2EE messaging) - backend/realtime-chat-service consumes these.
   # Set MATRIX_ENABLED=true only after homeserver is reachable.
   MATRIX_ENABLED: "false"
@@ -72,6 +89,21 @@ data:
   MATRIX_DEVICE_NAME: "nova-realtime-chat-service"
   # Server name used in Synapse config - should match your domain
   MATRIX_SERVER_NAME: "nova.local"
+
+  # Zitadel User Sync (identity-service -> Zitadel for unified SSO)
+  # Set ZITADEL_SYNC_ENABLED=true after configuring Zitadel service account
+  ZITADEL_SYNC_ENABLED: "false"
+  ZITADEL_API_URL: "http://zitadel:8080"
+  # ZITADEL_SERVICE_TOKEN: Set via Secret (Personal Access Token or JWT)
+  # ZITADEL_ORG_ID: Set via Secret or ConfigMap patch
+
+  # SMTP (Email via AWS SES)
+  SMTP_HOST: "email-smtp.ap-northeast-1.amazonaws.com"
+  SMTP_PORT: "587"
+  SMTP_FROM: "noreply@icered.com"
+  SMTP_USE_STARTTLS: "true"
+  EMAIL_VERIFICATION_BASE_URL: "https://app.icered.com/verify-email"
+  EMAIL_PASSWORD_RESET_BASE_URL: "https://app.icered.com/reset-password"
 
   # Rate Limiting
   RATE_LIMIT_MAX_REQUESTS: "100"
@@ -89,3 +121,11 @@ data:
   CLICKHOUSE_URL: "http://clickhouse:8123"
   KAFKA_BROKERS: "kafka:9092"
   ELASTICSEARCH_URL: "http://elasticsearch:9200"
+
+  # GCS (Google Cloud Storage) - for media storage
+  GCS_BUCKET: "nova-media-staging"
+
+  # Media events topic (used by media-service producer and thumb-worker consumer)
+  KAFKA_MEDIA_EVENTS_TOPIC: "nova.media.events"
+  # Alias for media-service config
+  KAFKA_EVENTS_TOPIC: "nova.media.events"

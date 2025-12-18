@@ -73,6 +73,10 @@ pub mod proto {
     pub mod graph {
         tonic::include_proto!("nova.graph_service.v2");
     }
+
+    pub mod ranking {
+        tonic::include_proto!("ranking.v1");
+    }
 }
 
 use proto::auth::auth_service_client::AuthServiceClient;
@@ -83,6 +87,7 @@ use proto::graph::graph_service_client::GraphServiceClient;
 use proto::identity::identity_service_client::IdentityServiceClient;
 use proto::media::media_service_client::MediaServiceClient;
 use proto::notification::notification_service_client::NotificationServiceClient;
+use proto::ranking::ranking_service_client::RankingServiceClient;
 use proto::social::social_service_client::SocialServiceClient;
 // UserServiceClient removed - user-service is deprecated
 
@@ -118,6 +123,7 @@ pub struct ServiceClients {
     search_channel: Arc<Channel>,
     notification_channel: Arc<Channel>,
     graph_channel: Arc<Channel>,
+    ranking_channel: Arc<Channel>,
     // Circuit breakers (one per service)
     auth_cb: Arc<CircuitBreaker>,
     // user_cb removed - user-service is deprecated
@@ -129,6 +135,7 @@ pub struct ServiceClients {
     search_cb: Arc<CircuitBreaker>,
     notification_cb: Arc<CircuitBreaker>,
     graph_cb: Arc<CircuitBreaker>,
+    ranking_cb: Arc<CircuitBreaker>,
 }
 
 impl Default for ServiceClients {
@@ -139,11 +146,12 @@ impl Default for ServiceClients {
             "http://content-service.nova-staging.svc.cluster.local:9081",
             "http://feed-service.nova-staging.svc.cluster.local:9084",
             "http://social-service.nova-staging.svc.cluster.local:9082",
-            "http://realtime-chat-service.nova-staging.svc.cluster.local:9085",
+            "http://realtime-chat-service.nova-staging.svc.cluster.local:9086",
             "http://media-service.nova-staging.svc.cluster.local:9086",
             "http://search-service.nova-staging.svc.cluster.local:9087",
             "http://notification-service.nova-staging.svc.cluster.local:50051",
             "http://graph-service.nova-staging.svc.cluster.local:9080",
+            "http://ranking-service.nova-staging.svc.cluster.local:9088",
         )
     }
 }
@@ -192,6 +200,11 @@ impl ServiceClients {
                 cfg.make_endpoint(&cfg.graph_service.url)
                     .map_err(|e| ServiceError::ConnectionError(e.to_string()))?,
             )),
+            // ranking-service for user profile and recommendations
+            ranking_channel: Arc::new(Self::create_channel_from_endpoint(
+                cfg.make_endpoint(&cfg.ranking_service.url)
+                    .map_err(|e| ServiceError::ConnectionError(e.to_string()))?,
+            )),
             auth_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
             content_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
             feed_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
@@ -201,6 +214,7 @@ impl ServiceClients {
             search_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
             notification_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
             graph_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
+            ranking_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
         })
     }
 
@@ -243,6 +257,7 @@ impl ServiceClients {
         search_endpoint: &str,
         notification_endpoint: &str,
         graph_endpoint: &str,
+        ranking_endpoint: &str,
     ) -> Self {
         // Circuit breaker configuration
         let cb_config = Self::default_cb_config();
@@ -258,6 +273,7 @@ impl ServiceClients {
             search_channel: Arc::new(Self::create_channel(search_endpoint)),
             notification_channel: Arc::new(Self::create_channel(notification_endpoint)),
             graph_channel: Arc::new(Self::create_channel(graph_endpoint)),
+            ranking_channel: Arc::new(Self::create_channel(ranking_endpoint)),
             auth_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
             // user_cb removed - user-service is deprecated
             content_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
@@ -267,7 +283,8 @@ impl ServiceClients {
             media_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
             search_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
             notification_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
-            graph_cb: Arc::new(CircuitBreaker::new(cb_config)),
+            graph_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
+            ranking_cb: Arc::new(CircuitBreaker::new(cb_config)),
         }
     }
 
@@ -622,6 +639,33 @@ impl ServiceClients {
             })
     }
 
+    /// Get ranking service client for user profile and recommendations
+    pub fn ranking_client(&self) -> RankingServiceClient<Channel> {
+        RankingServiceClient::new((*self.ranking_channel).clone())
+    }
+
+    /// Execute ranking service call with circuit breaker protection
+    pub async fn call_ranking<F, Fut, T>(&self, f: F) -> Result<T, ServiceError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<tonic::Response<T>, Status>>,
+    {
+        self.ranking_cb
+            .call(f)
+            .await
+            .map(|response| response.into_inner())
+            .map_err(|e| match e {
+                resilience::circuit_breaker::CircuitBreakerError::Open => {
+                    ServiceError::Unavailable {
+                        service: "ranking-service".to_string(),
+                    }
+                }
+                resilience::circuit_breaker::CircuitBreakerError::CallFailed(msg) => {
+                    ServiceError::ConnectionError(msg)
+                }
+            })
+    }
+
     /// Get circuit breaker health status for monitoring
     ///
     /// Returns a list of (service_name, circuit_state) tuples for all services.
@@ -645,6 +689,7 @@ impl ServiceClients {
             ("media-service", self.media_cb.state()),
             ("notification-service", self.notification_cb.state()),
             ("graph-service", self.graph_cb.state()),
+            ("ranking-service", self.ranking_cb.state()),
         ]
     }
 
@@ -660,6 +705,7 @@ impl ServiceClients {
             "media" => Some(&self.media_cb),
             "notification" => Some(&self.notification_cb),
             "graph" => Some(&self.graph_cb),
+            "ranking" => Some(&self.ranking_cb),
             _ => None,
         }
     }
@@ -700,8 +746,8 @@ impl ServiceError {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_service_clients_creation() {
+    #[tokio::test]
+    async fn test_service_clients_creation() {
         let clients = ServiceClients::default();
 
         // Should be able to create clients without panicking
@@ -715,10 +761,11 @@ mod tests {
         let _search = clients.search_client();
         let _notification = clients.notification_client();
         let _graph = clients.graph_client();
+        let _ranking = clients.ranking_client();
     }
 
-    #[test]
-    fn test_service_clients_clone() {
+    #[tokio::test]
+    async fn test_service_clients_clone() {
         let clients = ServiceClients::default();
         let clients_clone = clients.clone();
 
@@ -728,8 +775,8 @@ mod tests {
         assert_eq!(Arc::strong_count(&clients.auth_channel), 1);
     }
 
-    #[test]
-    fn test_custom_endpoints() {
+    #[tokio::test]
+    async fn test_custom_endpoints() {
         let clients = ServiceClients::new(
             "http://custom-auth:8080",
             // user endpoint removed - user-service is deprecated
@@ -741,6 +788,7 @@ mod tests {
             "http://custom-search:8087",
             "http://custom-notification:8088",
             "http://custom-graph:9080",
+            "http://custom-ranking:9088",
         );
 
         // Should create without panicking
@@ -749,13 +797,15 @@ mod tests {
         let _chat = clients.chat_client();
         let _notification = clients.notification_client();
         let _graph = clients.graph_client();
+        let _ranking = clients.ranking_client();
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "Invalid endpoint URL")]
-    fn test_invalid_endpoint_panics() {
+    async fn test_invalid_endpoint_panics() {
+        // Use a URI with invalid characters that will cause Endpoint::from_shared to fail
         let _ = ServiceClients::new(
-            "not-a-url",
+            "http://[invalid",
             // user endpoint removed - user-service is deprecated
             "http://content:8082",
             "http://feed:8083",
@@ -765,6 +815,7 @@ mod tests {
             "http://search:8087",
             "http://notification:8088",
             "http://graph:9080",
+            "http://ranking:9088",
         );
     }
 }

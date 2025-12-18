@@ -327,14 +327,20 @@ enum MessageStatus: String, Codable, Sendable {
 // MARK: - API Request/Response Models
 
 /// Request to create a new conversation
-/// Maps to API: POST /api/v1/conversations
+/// Maps to API: POST /api/v2/chat/conversations
 struct CreateConversationRequest: Codable, Sendable {
-    let type: ConversationType
+    let conversationType: Int  // 0 = direct, 1 = group
     let participantIds: [String]  // User IDs to add
     let name: String?  // Required for groups, null for direct
     
+    init(type: ConversationType, participantIds: [String], name: String?) {
+        self.conversationType = type == .direct ? 0 : 1
+        self.participantIds = participantIds
+        self.name = name
+    }
+    
     enum CodingKeys: String, CodingKey {
-        case type
+        case conversationType = "conversation_type"
         case participantIds = "participant_ids"
         case name
     }
@@ -398,54 +404,6 @@ struct MarkAsReadRequest: Codable, Sendable {
     
     enum CodingKeys: String, CodingKey {
         case messageId = "message_id"
-    }
-}
-
-/// Request to send a message (E2E encrypted)
-/// Maps to API: POST /api/v1/messages
-struct SendMessageRequest: Codable, Sendable {
-    let conversationId: String
-    let encryptedContent: String  // Base64-encoded ciphertext
-    let nonce: String  // Must be exactly 32 characters (24 bytes base64-encoded)
-    let messageType: String  // "text", "image", "video", "audio", "file", "location", or "system"
-    let mediaUrl: String?  // Required for image/video/audio/file types
-
-    enum CodingKeys: String, CodingKey {
-        case conversationId = "conversation_id"
-        case encryptedContent = "encrypted_content"
-        case nonce
-        case messageType = "message_type"
-        case mediaUrl = "media_url"
-    }
-
-    init(
-        conversationId: String,
-        encryptedContent: String,
-        nonce: String,
-        messageType: ChatMessageType = .text,
-        mediaUrl: String? = nil
-    ) {
-        self.conversationId = conversationId
-        self.encryptedContent = encryptedContent
-        self.nonce = nonce
-        self.messageType = messageType.rawValue
-        self.mediaUrl = mediaUrl
-    }
-
-    /// Legacy convenience initializer for plain text (will be encrypted by caller)
-    init(
-        conversationId: String,
-        content: String,
-        type: ChatMessageType,
-        mediaUrl: String?,
-        replyToId: String?
-    ) {
-        self.conversationId = conversationId
-        // For backwards compatibility - caller should encrypt
-        self.encryptedContent = Data(content.utf8).base64EncodedString()
-        self.nonce = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==" // Placeholder - should be real nonce
-        self.messageType = type.rawValue
-        self.mediaUrl = mediaUrl
     }
 }
 

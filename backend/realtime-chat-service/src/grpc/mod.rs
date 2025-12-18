@@ -197,7 +197,7 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
 
         let meta_row = client
             .query_opt(
-                "SELECT id, conversation_type, name, created_at, updated_at FROM conversations WHERE id = $1",
+                "SELECT id, conversation_type::TEXT, name, created_at, updated_at FROM conversations WHERE id = $1",
                 &[&conversation_id],
             )
             .await
@@ -278,7 +278,7 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
 
         let rows = client
             .query(
-                "SELECT id, name, conversation_type, created_at, updated_at FROM conversations WHERE id = ANY($1::uuid[]) ORDER BY updated_at DESC",
+                "SELECT id, name, conversation_type::TEXT, created_at, updated_at FROM conversations WHERE id = ANY($1::uuid[]) ORDER BY updated_at DESC",
                 &[&conv_ids],
             )
             .await
@@ -374,9 +374,11 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
             ts_row.map(|r| r.get::<_, chrono::DateTime<chrono::Utc>>("created_at"))
         };
 
+        // Schema note: Use only columns from migrations 0004 (base) and 0005 (content)
+        // Other columns may not exist due to migration inconsistencies
         let rows = client
             .query(
-                "SELECT id, sender_id, content, content_encrypted, content_nonce, encryption_version, created_at, updated_at, message_type, media_url, reply_to_message_id, status FROM messages WHERE conversation_id = $1 AND ($2::timestamptz IS NULL OR created_at < $2) ORDER BY created_at DESC LIMIT $3",
+                "SELECT id, sender_id, content, created_at, COALESCE(edited_at, created_at) as updated_at FROM messages WHERE conversation_id = $1 AND ($2::timestamptz IS NULL OR created_at < $2) ORDER BY created_at DESC LIMIT $3",
                 &[&conversation_id, &before_ts, &((limit + 1) as i64)],
             )
             .await
@@ -390,55 +392,23 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
             let mid: Uuid = row.get("id");
             let sender: Uuid = row.get("sender_id");
             let content: String = row.get("content");
-            let content_encrypted: Option<Vec<u8>> = row.get("content_encrypted");
-            let content_nonce: Option<Vec<u8>> = row.get("content_nonce");
-            let encryption_version: i32 = row.get("encryption_version");
             let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
             let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
-            let message_type_str: Option<String> = row.get("message_type");
-            let media_url: String = row.get("media_url");
-            let reply_to_message_id: String = row.get("reply_to_message_id");
-            let status: String = row.get("status");
-
-            let message_type = match message_type_str.as_deref() {
-                Some("image") => MessageType::Image as i32,
-                Some("video") => MessageType::Video as i32,
-                Some("audio") => MessageType::Audio as i32,
-                Some("file") => MessageType::File as i32,
-                Some("location") => MessageType::Location as i32,
-                _ => MessageType::Text as i32,
-            };
-
-            // For E2EE messages, encode encrypted content as base64 with nonce prepended
-            let encrypted_content =
-                if let (Some(ciphertext), Some(nonce)) = (content_encrypted, content_nonce) {
-                    use base64::Engine;
-                    // Format: base64(nonce || ciphertext) for client to parse
-                    let mut combined = nonce;
-                    combined.extend(ciphertext);
-                    base64::engine::general_purpose::STANDARD.encode(&combined)
-                } else {
-                    String::new()
-                };
 
             messages.push(Message {
                 id: mid.to_string(),
                 conversation_id: conversation_id.to_string(),
                 sender_id: sender.to_string(),
                 content,
-                message_type,
-                media_url,
+                message_type: MessageType::Text as i32, // Default to text
+                media_url: String::new(),
                 location: None,
                 created_at: created_at.timestamp(),
                 updated_at: updated_at.timestamp(),
-                status: if encryption_version > 0 {
-                    "encrypted".into()
-                } else {
-                    status
-                },
-                encrypted_content,
+                status: "sent".into(),
+                encrypted_content: String::new(),
                 ephemeral_public_key: String::new(),
-                reply_to_message_id,
+                reply_to_message_id: String::new(),
             });
         }
 

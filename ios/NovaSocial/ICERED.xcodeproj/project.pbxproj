@@ -15,6 +15,8 @@
 		09D77F54E987AC76D5971878 /* NavigationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75EC152D81EC4B655AFC53A1 /* NavigationManager.swift */; };
 		0CE35545BE0426ACFD947E22 /* CryptoCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBBFF77645A4CF02AAB9B2E4 /* CryptoCore.swift */; };
 		0E255AAE8F1562704602EDE8 /* DefaultAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803F96C26D9E8C040F88BC22 /* DefaultAvatarView.swift */; };
+		0F27F8BA94B02A52810F5D84 /* AccountSwitcherSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5762CD35798707845E339714 /* AccountSwitcherSheet.swift */; };
+		1183B659832CB30303FC0563 /* PhoneLoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F413929E863DA61C476F44D5 /* PhoneLoginView.swift */; };
 		1183B659832CB30303FC0564 /* PhoneRegistrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F413929E863DA61C476F44D6 /* PhoneRegistrationView.swift */; };
 		124E367C3D6397C95405BDAF /* PostAsSelectionPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24CEFEAC014290526A9CD69E /* PostAsSelectionPanel.swift */; };
 		162EEE7D84A7DE23589C45F0 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D34F87E7DE783C7F956B76F /* ChatView.swift */; };
@@ -152,6 +154,7 @@
 		E98D6D140719E6AA29780E96 /* UserProfileTopNavigationBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18CD2B250FC8236095F2B43B /* UserProfileTopNavigationBar.swift */; };
 		EB0FE1C0C133317FDCEF80FE /* DateExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = E35DC62777A5472A407CC9A8 /* DateExtension.swift */; };
 		EDF27D6C1C9AE2719C3D6FE9 /* ForgotPasswordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11D90E19EB8E81DACA13AAB /* ForgotPasswordView.swift */; };
+		99BB4B49924BB48E28560035 /* EmailSentConfirmationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76D0E0843119B94AF1AA2AF5 /* EmailSentConfirmationView.swift */; };
 		EEBF79C69078D7BD5A9E44DB /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BA9A27686FBAD37E301363D /* ShareSheet.swift */; };
 		EED93F21E48D6F32F5E2EABD /* code_style.md in Resources */ = {isa = PBXBuildFile; fileRef = 26417BF2F6F8AAC78621DCD9 /* code_style.md */; };
 		F1888254C4BE3800E997DF37 /* AliceVoiceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = C502D13F9C3DF5D7833C47C9 /* AliceVoiceConfig.swift */; };
@@ -276,6 +279,7 @@
 		AEE69E5CD9B931C1CE6C4C48 /* ReportModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportModal.swift; sourceTree = "<group>"; };
 		AF7C3F1FF4F4ED65A51E66E2 /* WriteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WriteView.swift; sourceTree = "<group>"; };
 		B11D90E19EB8E81DACA13AAB /* ForgotPasswordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgotPasswordView.swift; sourceTree = "<group>"; };
+		76D0E0843119B94AF1AA2AF5 /* EmailSentConfirmationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailSentConfirmationView.swift; sourceTree = "<group>"; };
 		B140AB4127BB17B46A837D83 /* CarouselCardItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarouselCardItem.swift; sourceTree = "<group>"; };
 		B5F979ECFA4B86BB5CF751BB /* E2EEService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2EEService.swift; sourceTree = "<group>"; };
 		BB25950EC2AA7F54430283FD /* UserProfileActionButtons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileActionButtons.swift; sourceTree = "<group>"; };
@@ -318,6 +322,7 @@
 		F0CEAA8A405BB702DA178841 /* LivePhotoManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivePhotoManager.swift; sourceTree = "<group>"; };
 		F17E22FD89284D78C7FE808A /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
 		F20C285F38EB2939BF1DBFE5 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		F413929E863DA61C476F44D5 /* PhoneLoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneLoginView.swift; sourceTree = "<group>"; };
 		F413929E863DA61C476F44D6 /* PhoneRegistrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneRegistrationView.swift; sourceTree = "<group>"; };
 		F49BDC924F2780626F9D2CBA /* ProfileSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSettingView.swift; sourceTree = "<group>"; };
 		F5E70390640C08938059D9CF /* UserService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserService.swift; sourceTree = "<group>"; };
@@ -1056,7 +1061,9 @@
 				36A22EF01EE6C23DBFD7BBE2 /* CreateAccountView.swift */,
 				9681C44F5AA91F2C3FB72376 /* EmailSentConfirmationView.swift */,
 				B11D90E19EB8E81DACA13AAB /* ForgotPasswordView.swift */,
+				76D0E0843119B94AF1AA2AF5 /* EmailSentConfirmationView.swift */,
 				31C506816FBC6DA8C0428370 /* LoginView.swift */,
+				F413929E863DA61C476F44D5 /* PhoneLoginView.swift */,
 				F413929E863DA61C476F44D6 /* PhoneRegistrationView.swift */,
 				36F012F2E478BE330431A7E0 /* ResetPasswordView.swift */,
 				D661B4DD0C4067F3F4F871A5 /* WelcomeView.swift */,
@@ -1237,6 +1244,7 @@
 			name = ICERED;
 			packageProductDependencies = (
 				993B7693D000A65F41AB0A29 /* RtcBasic */,
+				MATRIX001PKGPRODUCT001001 /* MatrixRustSDK */,
 			);
 			productName = ICERED;
 			productReference = C6B7EF0FCF06C5477C18E6F9 /* ICERED.app */;
@@ -1269,6 +1277,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				6F31D960E8920F9EA1157343 /* XCRemoteSwiftPackageReference "AgoraRtcEngine_iOS" */,
+				MATRIX001LOCALPKGREF001001 /* XCLocalSwiftPackageReference "MatrixRustSDKLocal" */,
 			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
@@ -1360,6 +1369,7 @@
 				D200816F952844B6819764EC /* FeedVideoPlayer.swift in Sources */,
 				2475D6EC167A437816556776 /* FeedViewModel.swift in Sources */,
 				EDF27D6C1C9AE2719C3D6FE9 /* ForgotPasswordView.swift in Sources */,
+				99BB4B49924BB48E28560035 /* EmailSentConfirmationView.swift in Sources */,
 				E554EFD2A94C43A8F074917B /* FormRow.swift in Sources */,
 				B758D4147BCE8D66A7CCF166 /* FriendsService.swift in Sources */,
 				41F6B4399375507FD4982497 /* GenderPickerView.swift in Sources */,
@@ -1397,6 +1407,7 @@
 				F87C58656F5FD03A8C3345EB /* NotificationViewModel.swift in Sources */,
 				395113E5360AAA3CF258875A /* OAuthService.swift in Sources */,
 				9127641952A87D2E4677B311 /* PhoneAuthService.swift in Sources */,
+				1183B659832CB30303FC0563 /* PhoneLoginView.swift in Sources */,
 				1183B659832CB30303FC0564 /* PhoneRegistrationView.swift in Sources */,
 				872EE38FD80234144C2CC601 /* PhotoOptionsModal.swift in Sources */,
 				124E367C3D6397C95405BDAF /* PostAsSelectionPanel.swift in Sources */,
@@ -1550,6 +1561,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.libruce.icered;
 				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG MATRIX_SDK_ENABLED";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1577,6 +1589,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.libruce.icered;
 				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1682,11 +1695,23 @@
 		};
 /* End XCRemoteSwiftPackageReference section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		MATRIX001LOCALPKGREF001001 /* XCLocalSwiftPackageReference "MatrixRustSDKLocal" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Frameworks/MatrixRustSDKLocal;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		993B7693D000A65F41AB0A29 /* RtcBasic */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 6F31D960E8920F9EA1157343 /* XCRemoteSwiftPackageReference "AgoraRtcEngine_iOS" */;
 			productName = RtcBasic;
+		};
+		MATRIX001PKGPRODUCT001001 /* MatrixRustSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = MATRIX001LOCALPKGREF001001 /* XCLocalSwiftPackageReference "MatrixRustSDKLocal" */;
+			productName = MatrixRustSDK;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

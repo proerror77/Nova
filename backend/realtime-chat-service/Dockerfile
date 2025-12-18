@@ -1,6 +1,6 @@
 # Multi-stage build for realtime-chat-service
 # This is an INDEPENDENT WORKSPACE due to sqlite dependency conflict with matrix-sdk
-# Build context must be set to backend/realtime-chat-service directory
+# Build context is ./backend/realtime-chat-service (GitHub Actions sets this)
 
 FROM rust:1.88-slim-bookworm AS builder
 
@@ -18,8 +18,7 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy the independent workspace files
-# Docker build context is backend/realtime-chat-service/
+# Copy files from the service directory (context is ./backend/realtime-chat-service)
 COPY Cargo.toml Cargo.lock ./
 COPY libs ./libs
 COPY src ./src

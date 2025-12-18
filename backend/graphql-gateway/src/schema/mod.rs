@@ -112,8 +112,8 @@ pub fn build_schema(clients: ServiceClients) -> AppSchema {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_schema_builds() {
+    #[tokio::test]
+    async fn test_schema_builds() {
         // Test schema compilation
         let clients = ServiceClients::default();
         let schema = build_schema(clients);

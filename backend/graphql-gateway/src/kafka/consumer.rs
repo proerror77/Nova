@@ -92,15 +92,25 @@ impl KafkaConsumer {
         Ok(())
     }
 
-    /// Start consuming events
+    /// Start consuming events with bounded exponential backoff on errors
     pub async fn start_consuming(self) -> Result<(), KafkaError> {
         // Spawn consumer task
         tokio::spawn(async move {
             debug!("Starting Kafka consumer loop");
 
+            // Exponential backoff configuration for error recovery
+            const MIN_BACKOFF_MS: u64 = 100;
+            const MAX_BACKOFF_MS: u64 = 30_000; // 30 seconds max
+            let mut current_backoff_ms = MIN_BACKOFF_MS;
+            let mut consecutive_errors = 0u32;
+
             loop {
                 match self.consumer.recv().await {
                     Ok(msg) => {
+                        // Reset backoff on successful receive
+                        current_backoff_ms = MIN_BACKOFF_MS;
+                        consecutive_errors = 0;
+
                         // Parse message
                         if let Some(payload) = msg.payload() {
                             let topic = msg.topic();
@@ -143,9 +153,19 @@ impl KafkaConsumer {
                         }
                     }
                     Err(e) => {
-                        error!("Kafka consumer error: {}", e);
-                        // Continue consuming on transient errors
-                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                        consecutive_errors = consecutive_errors.saturating_add(1);
+                        error!(
+                            error = %e,
+                            consecutive_errors = consecutive_errors,
+                            backoff_ms = current_backoff_ms,
+                            "Kafka consumer error - backing off"
+                        );
+
+                        // Apply exponential backoff with jitter
+                        tokio::time::sleep(tokio::time::Duration::from_millis(current_backoff_ms)).await;
+
+                        // Increase backoff for next error (exponential with cap)
+                        current_backoff_ms = (current_backoff_ms * 2).min(MAX_BACKOFF_MS);
                     }
                 }
             }

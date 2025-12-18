@@ -485,6 +485,10 @@ impl GrpcConfig {
     }
 
     /// Build a tonic Endpoint from URL with timeouts/keepalive and optional TLS/mTLS
+    ///
+    /// When TLS is enabled, the domain name for certificate verification is automatically
+    /// extracted from the URL. This allows wildcard certificates (e.g., *.nova-staging.svc.cluster.local)
+    /// to work correctly with different service hostnames.
     pub fn make_endpoint(&self, url: &str) -> Result<Endpoint, Box<dyn std::error::Error>> {
         let ep = Endpoint::from_shared(url.to_string())?
             .connect_timeout(Duration::from_secs(self.connection_timeout_secs))
@@ -499,14 +503,20 @@ impl GrpcConfig {
         match &self.tls {
             TlsConfig::Disabled => Ok(ep),
             TlsConfig::Enabled {
-                domain_name,
+                domain_name: _fallback_domain,
                 ca_cert_path,
                 client_identity,
             } => {
+                // Extract hostname from URL for TLS verification
+                // This is crucial for wildcard certs (*.nova-staging.svc.cluster.local)
+                // to work correctly with different service hostnames
+                let tls_domain = Self::extract_hostname_from_url(url)
+                    .unwrap_or_else(|| _fallback_domain.clone());
+
                 let ca_pem = fs::read(ca_cert_path)?;
                 let mut tls = ClientTlsConfig::new()
                     .ca_certificate(Certificate::from_pem(ca_pem))
-                    .domain_name(domain_name);
+                    .domain_name(&tls_domain);
 
                 // Add mTLS identity if provided
                 if let Some(identity) = client_identity {
@@ -515,14 +525,49 @@ impl GrpcConfig {
                     tls = tls.identity(Identity::from_pem(cert_pem, key_pem));
                 }
 
+                tracing::debug!(
+                    url = %url,
+                    tls_domain = %tls_domain,
+                    "Creating TLS endpoint with auto-extracted domain"
+                );
+
                 Ok(ep.tls_config(tls)?)
             }
+        }
+    }
+
+    /// Extract hostname from a URL string (e.g., "https://service.example.com:9095" -> "service.example.com")
+    fn extract_hostname_from_url(url: &str) -> Option<String> {
+        // Remove protocol prefix
+        let without_protocol = url
+            .strip_prefix("https://")
+            .or_else(|| url.strip_prefix("http://"))
+            .unwrap_or(url);
+
+        // Extract hostname (before port or path)
+        let hostname = without_protocol
+            .split(':')
+            .next()
+            .or_else(|| without_protocol.split('/').next())?;
+
+        if hostname.is_empty() {
+            None
+        } else {
+            Some(hostname.to_string())
         }
     }
 
     /// Connect to a Channel using this configuration
     pub async fn connect_channel(&self, url: &str) -> Result<Channel, Box<dyn std::error::Error>> {
         Ok(self.make_endpoint(url)?.connect().await?)
+    }
+
+    /// Create a lazy-connecting Channel that connects on first use
+    ///
+    /// This is preferred for non-critical (Tier1/Tier2) services to avoid
+    /// blocking startup while waiting for connections.
+    pub fn connect_channel_lazy(&self, url: &str) -> Result<Channel, Box<dyn std::error::Error>> {
+        Ok(self.make_endpoint(url)?.connect_lazy())
     }
 }
 
@@ -716,5 +761,52 @@ mod tests {
         } else {
             env::remove_var("GRPC_TLS_CLIENT_KEY_PATH");
         }
+    }
+
+    #[test]
+    fn test_extract_hostname_from_url() {
+        // HTTPS URLs
+        assert_eq!(
+            GrpcConfig::extract_hostname_from_url("https://realtime-chat-service.nova-staging.svc.cluster.local:9095"),
+            Some("realtime-chat-service.nova-staging.svc.cluster.local".to_string())
+        );
+        assert_eq!(
+            GrpcConfig::extract_hostname_from_url("https://feed-service.nova-staging.svc.cluster.local:9084"),
+            Some("feed-service.nova-staging.svc.cluster.local".to_string())
+        );
+
+        // HTTP URLs
+        assert_eq!(
+            GrpcConfig::extract_hostname_from_url("http://identity-service:50051"),
+            Some("identity-service".to_string())
+        );
+
+        // URLs without port
+        assert_eq!(
+            GrpcConfig::extract_hostname_from_url("https://api.example.com"),
+            Some("api.example.com".to_string())
+        );
+
+        // URLs with path
+        assert_eq!(
+            GrpcConfig::extract_hostname_from_url("https://service.example.com:8080/path"),
+            Some("service.example.com".to_string())
+        );
+
+        // localhost
+        assert_eq!(
+            GrpcConfig::extract_hostname_from_url("http://localhost:9086"),
+            Some("localhost".to_string())
+        );
+
+        // Edge cases
+        assert_eq!(
+            GrpcConfig::extract_hostname_from_url(""),
+            None
+        );
+        assert_eq!(
+            GrpcConfig::extract_hostname_from_url("https://"),
+            None
+        );
     }
 }

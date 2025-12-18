@@ -82,28 +82,40 @@ class ContentService {
         }
     }
 
-    /// Batch fetch posts by IDs (parallel requests)
+    /// Batch fetch posts by IDs with limited concurrency
     func getPostsByIds(_ ids: [String]) async throws -> [Post] {
         guard !ids.isEmpty else { return [] }
 
-        return try await withThrowingTaskGroup(of: Post?.self) { group in
-            for id in ids {
-                group.addTask {
-                    try? await self.getPost(postId: id)
+        let maxConcurrent = 6
+        var posts: [Post] = []
+
+        // Process in batches to limit concurrent requests
+        for batchStart in stride(from: 0, to: ids.count, by: maxConcurrent) {
+            let batchEnd = min(batchStart + maxConcurrent, ids.count)
+            let batchIds = Array(ids[batchStart..<batchEnd])
+
+            let batchPosts = try await withThrowingTaskGroup(of: Post?.self) { group in
+                for id in batchIds {
+                    group.addTask {
+                        try? await self.getPost(postId: id)
+                    }
                 }
+
+                var results: [Post] = []
+                for try await post in group {
+                    if let post = post {
+                        results.append(post)
+                    }
+                }
+                return results
             }
 
-            var posts: [Post] = []
-            for try await post in group {
-                if let post = post {
-                    posts.append(post)
-                }
-            }
-
-            // Sort by original ID order
-            let idOrder = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0) })
-            return posts.sorted { (idOrder[$0.id] ?? Int.max) < (idOrder[$1.id] ?? Int.max) }
+            posts.append(contentsOf: batchPosts)
         }
+
+        // Sort by original ID order
+        let idOrder = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0) })
+        return posts.sorted { (idOrder[$0.id] ?? Int.max) < (idOrder[$1.id] ?? Int.max) }
     }
 
     /// Update an existing post

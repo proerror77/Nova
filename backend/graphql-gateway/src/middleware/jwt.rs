@@ -114,6 +114,8 @@ where
             // Polls API (public read access for trending polls and rankings)
             "/api/v2/polls/trending",
             "/api/v2/polls/active",
+            // OAuth authentication (Google, Apple - public endpoints for initiating OAuth flow)
+            "/api/v2/auth/oauth",
         ];
 
         if public_prefixes.iter().any(|p| path.starts_with(p)) {

@@ -8,7 +8,10 @@
 /// 2. NotificationBatch: Batching logic
 /// 3. RetryPolicy: Error handling and retry logic
 /// 4. Error handling with circuit breaker
+/// 5. Redis-based distributed deduplication
 use chrono::{DateTime, Utc};
+use redis::AsyncCommands;
+use redis_utils::SharedConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use uuid::Uuid;
@@ -154,6 +157,63 @@ impl RetryPolicy {
     }
 }
 
+/// Redis-based distributed deduplication for notifications
+///
+/// This provides cross-instance deduplication using Redis SETNX with TTL.
+/// Key format: `dedup:notif:{user_id}:{event_type}:{notification_id}`
+#[derive(Clone)]
+pub struct RedisDeduplicator {
+    redis: SharedConnectionManager,
+    ttl_secs: u64,
+}
+
+impl RedisDeduplicator {
+    /// Create a new Redis deduplicator
+    pub fn new(redis: SharedConnectionManager, ttl_secs: u64) -> Self {
+        Self { redis, ttl_secs }
+    }
+
+    /// Check if notification is a duplicate
+    ///
+    /// Uses Redis SETNX with TTL - returns true if duplicate (key already exists),
+    /// false if new (key was set successfully).
+    pub async fn is_duplicate(&self, user_id: &Uuid, event_type: &str, notification_id: &str) -> bool {
+        let key = format!("dedup:notif:{}:{}:{}", user_id, event_type, notification_id);
+
+        let result: Result<bool, _> = redis_utils::with_timeout(async {
+            let mut conn = self.redis.lock().await;
+            // SET key value NX EX seconds - returns true if key was set, false if already exists
+            conn.set_nx(&key, "1").await
+        })
+        .await;
+
+        match result {
+            Ok(was_set) => {
+                if was_set {
+                    // Key was set, now add expiration
+                    let expire_result: Result<(), _> = redis_utils::with_timeout(async {
+                        let mut conn = self.redis.lock().await;
+                        conn.expire(&key, self.ttl_secs as i64).await
+                    })
+                    .await;
+
+                    if let Err(e) = expire_result {
+                        tracing::warn!("Failed to set TTL on dedup key {}: {}", key, e);
+                    }
+                    false // Not a duplicate
+                } else {
+                    true // Duplicate
+                }
+            }
+            Err(e) => {
+                // On Redis error, log and allow through (fail open)
+                tracing::warn!("Redis dedup check failed for {}: {} - allowing notification", key, e);
+                false
+            }
+        }
+    }
+}
+
 /// Main Kafka consumer for notifications
 pub struct KafkaNotificationConsumer {
     pub broker: String,
@@ -162,10 +222,13 @@ pub struct KafkaNotificationConsumer {
     pub batch_size: usize,
     pub flush_interval_ms: u64,
     pub retry_policy: RetryPolicy,
+    /// Redis-based deduplicator for distributed deduplication
+    pub deduplicator: Option<RedisDeduplicator>,
 }
 
 use crate::models::{CreateNotificationRequest, NotificationPriority, NotificationType};
 use crate::services::NotificationService;
+use rdkafka::consumer::CommitMode;
 use std::sync::Arc;
 
 impl KafkaNotificationConsumer {
@@ -178,7 +241,14 @@ impl KafkaNotificationConsumer {
             batch_size: 100,
             flush_interval_ms: 5000, // 5 seconds
             retry_policy: RetryPolicy::default(),
+            deduplicator: None,
         }
+    }
+
+    /// Set the Redis deduplicator for distributed deduplication
+    pub fn with_deduplicator(mut self, deduplicator: RedisDeduplicator) -> Self {
+        self.deduplicator = Some(deduplicator);
+        self
     }
 
     /// Start consuming from Kafka with batching
@@ -205,13 +275,15 @@ impl KafkaNotificationConsumer {
             self.broker
         );
 
-        // Create Kafka consumer
+        // Create Kafka consumer with MANUAL commits for reliable processing
+        // Auto-commit is disabled to prevent message loss - commits happen after batch flush
         let consumer: StreamConsumer = ClientConfig::new()
             .set("bootstrap.servers", &self.broker)
             .set("group.id", &self.group_id)
             .set("auto.offset.reset", "latest")
-            .set("enable.auto.commit", "true")
-            .set("auto.commit.interval.ms", "5000")
+            .set("enable.auto.commit", "false") // Manual commit for reliability
+            .set("session.timeout.ms", "30000")
+            .set("heartbeat.interval.ms", "10000")
             .create()
             .map_err(|e| format!("Failed to create Kafka consumer: {}", e))?;
 
@@ -233,9 +305,15 @@ impl KafkaNotificationConsumer {
         let mut batch = NotificationBatch::new();
         let mut flush_interval = interval(Duration::from_millis(self.flush_interval_ms));
 
-        // Deduplication map: key = "user_id:event_type:event_key", value = timestamp
-        let mut dedup_map: std::collections::HashMap<String, i64> =
-            std::collections::HashMap::new();
+        // Clone deduplicator for use in loop
+        let deduplicator = self.deduplicator.clone();
+
+        // Log deduplication mode
+        if deduplicator.is_some() {
+            tracing::info!("Using Redis-based distributed deduplication");
+        } else {
+            tracing::warn!("No Redis deduplicator configured - deduplication disabled");
+        }
 
         loop {
             select! {
@@ -246,30 +324,23 @@ impl KafkaNotificationConsumer {
                                 if let Ok(payload_str) = std::str::from_utf8(payload) {
                                     match serde_json::from_str::<KafkaNotification>(payload_str) {
                                         Ok(notification) => {
-                                            // Deduplication check (1-minute window)
-                                            let event_key = format!(
-                                                "{}:{}:{}",
-                                                notification.user_id,
-                                                notification.event_type,
-                                                notification.id
-                                            );
-
-                                            let now = chrono::Utc::now().timestamp();
-                                            if let Some(&last_timestamp) = dedup_map.get(&event_key) {
-                                                if now - last_timestamp < 60 {
+                                            // Redis-based distributed deduplication
+                                            if let Some(ref dedup) = deduplicator {
+                                                let event_type_str = notification.event_type.to_string();
+                                                if dedup.is_duplicate(
+                                                    &notification.user_id,
+                                                    &event_type_str,
+                                                    &notification.id,
+                                                ).await {
                                                     tracing::debug!(
-                                                        "Duplicate notification detected: {} (within 1 minute)",
-                                                        event_key
+                                                        "Duplicate notification detected via Redis: {}:{}:{}",
+                                                        notification.user_id,
+                                                        event_type_str,
+                                                        notification.id
                                                     );
                                                     continue;
                                                 }
                                             }
-
-                                            // Add to dedup map
-                                            dedup_map.insert(event_key, now);
-
-                                            // Clean up old dedup entries (older than 2 minutes)
-                                            dedup_map.retain(|_, &mut v| now - v < 120);
 
                                             // Add to batch
                                             batch.add(notification);
@@ -279,9 +350,14 @@ impl KafkaNotificationConsumer {
                                                 match self.flush_batch(&batch, notification_service.clone()).await {
                                                     Ok(count) => {
                                                         tracing::info!("Flushed batch: {} notifications processed", count);
+                                                        // Commit offsets AFTER successful processing
+                                                        if let Err(e) = consumer.commit_consumer_state(CommitMode::Async) {
+                                                            tracing::warn!("Failed to commit Kafka offsets: {}", e);
+                                                        }
                                                     }
                                                     Err(e) => {
-                                                        tracing::error!("Failed to flush batch: {}", e);
+                                                        tracing::error!("Failed to flush batch: {} - NOT committing offsets", e);
+                                                        // Don't commit - messages will be reprocessed
                                                     }
                                                 }
                                                 batch.clear();
@@ -305,9 +381,14 @@ impl KafkaNotificationConsumer {
                         match self.flush_batch(&batch, notification_service.clone()).await {
                             Ok(count) => {
                                 tracing::info!("Time-based flush: {} notifications processed", count);
+                                // Commit offsets AFTER successful processing
+                                if let Err(e) = consumer.commit_consumer_state(CommitMode::Async) {
+                                    tracing::warn!("Failed to commit Kafka offsets: {}", e);
+                                }
                             }
                             Err(e) => {
-                                tracing::error!("Failed to flush batch: {}", e);
+                                tracing::error!("Failed to flush batch: {} - NOT committing offsets", e);
+                                // Don't commit - messages will be reprocessed
                             }
                         }
                         batch.clear();

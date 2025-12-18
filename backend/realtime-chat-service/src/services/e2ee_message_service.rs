@@ -50,8 +50,6 @@ pub struct E2eeMessage {
     pub message_index: u32,
     pub sequence_number: i64,
     pub created_at: DateTime<Utc>,
-    /// Optional: message type (text, image, audio, etc.)
-    pub message_type: Option<String>,
 }
 
 /// Request to send an E2EE message
@@ -62,8 +60,6 @@ pub struct SendE2eeMessageRequest {
     pub session_id: String,
     pub ciphertext: String,
     pub message_index: u32,
-    #[serde(default)]
-    pub message_type: Option<String>,
     #[serde(default)]
     pub idempotency_key: Option<String>,
 }
@@ -93,6 +89,8 @@ impl E2eeMessageService {
         }
 
         // Store the encrypted message with atomic sequence number
+        // Schema note: Use only columns from migrations 0004 (base), 0005 (content), and 0011 (megolm)
+        // E2EE messages are identified by presence of megolm_session_id, not encryption_version
         let client = db.get().await?;
         let row = client.query_one(
             r#"
@@ -108,15 +106,13 @@ impl E2eeMessageService {
                 conversation_id,
                 sender_id,
                 content,
-                message_type,
                 idempotency_key,
                 sequence_number,
-                -- E2EE-specific fields
+                -- E2EE-specific fields (from migration 0011)
                 sender_device_id,
                 megolm_session_id,
                 megolm_ciphertext,
-                megolm_message_index,
-                encryption_version
+                megolm_message_index
             )
             SELECT
                 $1,
@@ -124,17 +120,15 @@ impl E2eeMessageService {
                 $3,
                 '',  -- No plaintext content for E2EE messages
                 $4,
-                $5,
                 next.last_seq,
+                $5,
                 $6,
                 $7,
-                $8,
-                $9,
-                2    -- encryption_version = 2 indicates Megolm E2EE
+                $8
             FROM next
-            RETURNING id, conversation_id, sender_id, sequence_number, created_at, message_type
+            RETURNING id, conversation_id, sender_id, sequence_number, created_at
             "#,
-            &[&id, &request.conversation_id, &sender_id, &request.message_type, &request.idempotency_key, &request.sender_device_id, &request.session_id, &request.ciphertext, &(request.message_index as i32)]
+            &[&id, &request.conversation_id, &sender_id, &request.idempotency_key, &request.sender_device_id, &request.session_id, &request.ciphertext, &(request.message_index as i32)]
         )
         .await
         .map_err(|e| E2eeMessageError::Database(e.to_string()))?;
@@ -149,7 +143,6 @@ impl E2eeMessageService {
             message_index: request.message_index,
             sequence_number: row.get("sequence_number"),
             created_at: row.get("created_at"),
-            message_type: row.get("message_type"),
         };
 
         info!(
@@ -183,6 +176,8 @@ impl E2eeMessageService {
 
         let limit = limit.min(200);
 
+        // Schema note: E2EE messages are identified by presence of megolm_session_id
+        // (encryption_version column was dropped in migration 0009)
         let client = db.get().await?;
         let rows = if let Some(before_seq) = before_sequence {
             client.query(
@@ -190,11 +185,11 @@ impl E2eeMessageService {
                 SELECT
                     id, conversation_id, sender_id, sender_device_id,
                     megolm_session_id, megolm_ciphertext, megolm_message_index,
-                    sequence_number, created_at, message_type
+                    sequence_number, created_at
                 FROM messages
                 WHERE conversation_id = $1
                   AND deleted_at IS NULL
-                  AND encryption_version = 2
+                  AND megolm_session_id IS NOT NULL
                   AND sequence_number < $2
                 ORDER BY sequence_number DESC
                 LIMIT $3
@@ -209,11 +204,11 @@ impl E2eeMessageService {
                 SELECT
                     id, conversation_id, sender_id, sender_device_id,
                     megolm_session_id, megolm_ciphertext, megolm_message_index,
-                    sequence_number, created_at, message_type
+                    sequence_number, created_at
                 FROM messages
                 WHERE conversation_id = $1
                   AND deleted_at IS NULL
-                  AND encryption_version = 2
+                  AND megolm_session_id IS NOT NULL
                 ORDER BY sequence_number DESC
                 LIMIT $2
                 "#,
@@ -240,7 +235,6 @@ impl E2eeMessageService {
                     message_index: message_index.unwrap_or(0) as u32,
                     sequence_number: row.get("sequence_number"),
                     created_at: row.get("created_at"),
-                    message_type: row.get("message_type"),
                 }
             })
             .collect();
@@ -272,17 +266,18 @@ impl E2eeMessageService {
 
         let limit = limit.min(500);
 
+        // Schema note: E2EE messages are identified by presence of megolm_session_id
         let client = db.get().await?;
         let rows = client.query(
             r#"
             SELECT
                 id, conversation_id, sender_id, sender_device_id,
                 megolm_session_id, megolm_ciphertext, megolm_message_index,
-                sequence_number, created_at, message_type
+                sequence_number, created_at
             FROM messages
             WHERE conversation_id = $1
               AND deleted_at IS NULL
-              AND encryption_version = 2
+              AND megolm_session_id IS NOT NULL
               AND sequence_number > $2
             ORDER BY sequence_number ASC
             LIMIT $3
@@ -309,7 +304,6 @@ impl E2eeMessageService {
                     message_index: message_index.unwrap_or(0) as u32,
                     sequence_number: row.get("sequence_number"),
                     created_at: row.get("created_at"),
-                    message_type: row.get("message_type"),
                 }
             })
             .collect();
@@ -380,6 +374,7 @@ impl E2eeMessageService {
     ) -> Result<Vec<String>, E2eeMessageError> {
         let since = since_sequence.unwrap_or(0);
 
+        // Schema note: E2EE messages are identified by presence of megolm_session_id
         let client = db.get().await?;
         let rows = client.query(
             r#"
@@ -387,7 +382,6 @@ impl E2eeMessageService {
             FROM messages
             WHERE conversation_id = $1
               AND deleted_at IS NULL
-              AND encryption_version = 2
               AND megolm_session_id IS NOT NULL
               AND sequence_number > $2
             "#,

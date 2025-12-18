@@ -12,6 +12,7 @@ resources:
   - graph-service.yaml
   - ranking-service.yaml
   - media-service.yaml
+  - thumb-worker.yaml
   - streaming-service.yaml
   - realtime-chat-service.yaml
   - search-service.yaml

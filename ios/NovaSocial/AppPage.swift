@@ -5,6 +5,8 @@ enum AppPage: Equatable {
     case splash
     case welcome
     case login
+    case phoneLogin
+    case phoneRegistration
     case forgotPassword
     case emailSentConfirmation(email: String)
     case resetPassword(token: String)

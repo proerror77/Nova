@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     protobuf-compiler \
     librdkafka-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -20,8 +21,8 @@ COPY backend ./backend
 # Change to backend directory for workspace build
 WORKDIR /app/backend
 
-# Build media-service binaries (main server + thumbnail migrator)
-RUN cargo build --release -p media-service --bin media-service --bin thumb-migrate
+# Build media-service binaries (main server + thumbnail migrator + thumbnail worker)
+RUN cargo build --release -p media-service --bin media-service --bin thumb-migrate --bin thumb-worker
 
 # Runtime stage
 FROM debian:bookworm-slim AS runtime
@@ -41,6 +42,7 @@ WORKDIR /app
 # Copy binaries
 COPY --from=builder /app/backend/target/release/media-service /app/media-service
 COPY --from=builder /app/backend/target/release/thumb-migrate /app/thumb-migrate
+COPY --from=builder /app/backend/target/release/thumb-worker /app/thumb-worker
 
 # Adjust ownership
 RUN chown -R appuser:appuser /app

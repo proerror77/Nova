@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 // MARK: - 会话预览数据模型
 struct ConversationPreview: Identifiable {
@@ -115,6 +116,7 @@ struct MessageView: View {
     @State private var selectedConversationId = ""
     @State private var showImagePicker = false
     @State private var showCamera = false
+    @State private var showCameraPermissionAlert = false
     @State private var selectedImage: UIImage?
     @State private var showGenerateImage = false
     @State private var showWrite = false
@@ -323,6 +325,28 @@ struct MessageView: View {
         showChat = true
     }
 
+    // MARK: - Camera Permission Check
+    private func checkCameraPermissionAndOpen() {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            showCamera = true
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async {
+                    if granted {
+                        showCamera = true
+                    } else {
+                        showCameraPermissionAlert = true
+                    }
+                }
+            }
+        case .denied, .restricted:
+            showCameraPermissionAlert = true
+        @unknown default:
+            showCameraPermissionAlert = true
+        }
+    }
+
     var body: some View {
         ZStack {
             // 条件渲染：根据状态即时切换视图
@@ -361,7 +385,7 @@ struct MessageView: View {
                         showImagePicker = true
                     },
                     onTakePhoto: {
-                        showCamera = true
+                        checkCameraPermissionAndOpen()
                     },
                     onGenerateImage: {
                         showGenerateImage = true
@@ -390,6 +414,16 @@ struct MessageView: View {
         }
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
+        }
+        .alert("Camera Access Required", isPresented: $showCameraPermissionAlert) {
+            Button("Open Settings") {
+                if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(settingsUrl)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Please allow camera access in Settings to take photos.")
         }
         .onChange(of: selectedImage) { oldValue, newValue in
             // 选择/拍摄照片后，自动跳转到NewPostView

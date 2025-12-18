@@ -20,11 +20,14 @@ pub mod content;
 pub mod feed;
 pub mod graph;
 pub mod identity;
+pub mod matrix; // Matrix E2EE integration proxy
 pub mod media;
 pub mod models;
 pub mod notifications;
 pub mod oauth;
+pub mod passkey;
 pub mod phone_auth;
+pub mod photo_analysis; // iOS Vision photo analysis for ranking
 pub mod poll;
 pub mod search;
 pub mod settings;

@@ -2,9 +2,13 @@ import SwiftUI
 
 @main
 struct IceredApp: App {
+    // Connect AppDelegate for push notifications
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     // App 持有全局认证状态，并下发 EnvironmentObject
     @StateObject private var authManager = AuthenticationManager.shared
     @StateObject private var themeManager = ThemeManager.shared
+    @StateObject private var pushManager = PushNotificationManager.shared
     @State private var currentPage: AppPage
 
     // 监听 App 生命周期状态
@@ -51,6 +55,12 @@ struct IceredApp: App {
                             .transition(.identity)
                     case .login:
                         LoginView(currentPage: $currentPage)
+                            .transition(.identity)
+                    case .phoneLogin:
+                        PhoneLoginView(currentPage: $currentPage)
+                            .transition(.identity)
+                    case .phoneRegistration:
+                        PhoneRegistrationView(currentPage: $currentPage)
                             .transition(.identity)
                     case .forgotPassword:
                         ForgotPasswordView(currentPage: $currentPage)
@@ -134,21 +144,65 @@ struct IceredApp: App {
             .animation(.none, value: currentPage)
             .environmentObject(authManager)
             .environmentObject(themeManager)
+            .environmentObject(pushManager)
             .preferredColorScheme(themeManager.colorScheme)
             .onOpenURL { url in
                 handleDeepLink(url)
+            }
+            .task {
+                // Check notification settings on app launch
+                await pushManager.checkNotificationSettings()
+                await initializeMatrixBridgeIfNeeded()
+            }
+            .onChange(of: authManager.isAuthenticated) { _, isAuthenticated in
+                // Request push notification permission when user logs in
+                if isAuthenticated {
+                    Task {
+                        await pushManager.requestAuthorization()
+                        await initializeMatrixBridgeIfNeeded()
+                    }
+                } else {
+                    // Unregister push token on logout
+                    Task {
+                        await pushManager.unregisterToken()
+                        await MatrixBridgeService.shared.shutdown(clearCredentials: true)
+                    }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("PushNotificationReceived"))) { notification in
+                // Handle push notification navigation
+                handlePushNotification(notification.userInfo)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .sessionExpired)) { notification in
+                // Handle session expiration - navigate to login immediately
+                handleSessionExpired(notification.userInfo)
             }
             .onChange(of: scenePhase) { oldPhase, newPhase in
                 // 当 App 进入后台时，记录时间戳
                 if newPhase == .background {
                     backgroundEntryTime = Date()
+                    print("[App] 📱 App entered background")
                 }
-                // 当 App 从后台返回到活跃状态时，检查是否超过2分钟
+                // 当 App 从后台返回到活跃状态时
                 if newPhase == .active, let entryTime = backgroundEntryTime {
                     let timeInBackground = Date().timeIntervalSince(entryTime)
-                    // 只有超过2分钟才显示 Splash Screen
+                    print("[App] 📱 App returned to foreground after \(String(format: "%.1f", timeInBackground))s")
+                    
+                    // 只有超过2分钟才显示 Splash Screen (with full re-validation)
                     if timeInBackground >= backgroundTimeout {
+                        print("[App] ⏰ Background timeout exceeded, showing splash screen")
                         currentPage = .splash
+                    } else if authManager.isAuthenticated && timeInBackground >= 30 {
+                        // For shorter background periods (30s+), silently validate session
+                        // This catches token expiration without showing splash
+                        print("[App] 🔍 Validating session after \(String(format: "%.0f", timeInBackground))s in background")
+                        Task {
+                            let isValid = await authManager.validateSession()
+                            if !isValid {
+                                print("[App] ❌ Session invalid after background, navigating to login")
+                                currentPage = .login
+                            }
+                        }
                     }
                     // 重置时间戳
                     backgroundEntryTime = nil
@@ -196,6 +250,79 @@ struct IceredApp: App {
                 // Show error or redirect to forgot password
                 currentPage = .forgotPassword
             }
+        }
+    }
+
+    // MARK: - Push Notification Handling
+
+    /// Handle push notification navigation based on notification type
+    private func handlePushNotification(_ userInfo: [AnyHashable: Any]?) {
+        guard let userInfo = userInfo,
+              let type = userInfo["type"] as? String else {
+            return
+        }
+
+        // Ensure user is authenticated before navigating
+        guard authManager.isAuthenticated else { return }
+
+        // Navigate based on notification type
+        switch type {
+        case "like", "comment", "mention", "share", "reply":
+            // Navigate to the related post if available
+            if userInfo["post_id"] != nil {
+                // TODO: Navigate to post detail view
+                // For now, just go to home
+                currentPage = .home
+            }
+        case "follow":
+            // Navigate to the follower's profile
+            if userInfo["user_id"] != nil {
+                // TODO: Navigate to user profile view
+                currentPage = .home
+            }
+        case "message":
+            // Navigate to messages
+            currentPage = .message
+        default:
+            // Default to home
+            currentPage = .home
+        }
+    }
+
+    // MARK: - Session Expiration Handling
+
+    /// Handle session expiration - immediately navigate to login
+    private func handleSessionExpired(_ userInfo: [AnyHashable: Any]?) {
+        print("╔════════════════════════════════════════════════════════════")
+        print("║ [App] 🚨 SESSION EXPIRED NOTIFICATION RECEIVED")
+        print("╚════════════════════════════════════════════════════════════")
+
+        // Extract expiration reason if available
+        if let reason = userInfo?["reason"] as? SessionExpiredReason {
+            print("[App] Expiration reason: \(reason.rawValue)")
+            print("[App] User message: \(reason.userMessage)")
+        }
+
+        // Navigate to login page immediately
+        print("[App] 🔄 Navigating to login page...")
+        currentPage = .login
+
+        // Show alert to user (optional - the login page should handle this)
+        // The sessionState and lastExpirationReason on authManager can be used
+        // by LoginView to show an appropriate message
+    }
+
+    @MainActor
+    private func initializeMatrixBridgeIfNeeded() async {
+        guard !isUITesting else { return }
+        guard authManager.isAuthenticated, !authManager.isGuestMode else { return }
+
+        do {
+            try await MatrixBridgeService.shared.initialize()
+        } catch {
+            #if DEBUG
+            print("[App] Matrix initialization failed: \(error)")
+            #endif
         }
     }
 }

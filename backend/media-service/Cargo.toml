@@ -12,6 +12,10 @@ path = "src/main.rs"
 name = "thumb-migrate"
 path = "src/bin/thumb_migrate.rs"
 
+[[bin]]
+name = "thumb-worker"
+path = "src/bin/thumb_worker.rs"
+
 [lib]
 name = "media_service"
 path = "src/lib.rs"

@@ -135,161 +135,103 @@ pub struct GrpcClientPool {
 impl GrpcClientPool {
     /// Create a new gRPC client pool from configuration
     ///
-    /// **Graceful Degradation**: If a service endpoint is unavailable, creates a placeholder
-    /// channel that will fail at call-time rather than blocking initialization.
-    /// This allows services to start even when their gRPC dependencies are not yet deployed.
+    /// **Fast Startup with Lazy Connections**:
+    /// - Tier0 services: Block and wait for connection (fail fast if unavailable)
+    /// - Tier1/Tier2 services: Use lazy connections that connect on first use
+    ///
+    /// This allows services to start quickly without waiting for all dependencies.
     pub async fn new(config: &config::GrpcConfig) -> Result<Self, Box<dyn std::error::Error>> {
         use crate::config::DependencyTier;
 
-        // Helper to create channel with fallback to placeholder on failure
-        async fn connect_or_placeholder(
+        // Helper to create channel - lazy for Tier1/Tier2, blocking for Tier0
+        async fn connect_for_tier(
             config: &config::GrpcConfig,
             endpoint: &config::ServiceEndpoint,
             service_name: &str,
-            degraded: &mut Vec<String>,
         ) -> Result<Channel, Box<dyn std::error::Error>> {
-            match config.connect_channel(&endpoint.url).await {
-                Ok(channel) => {
-                    tracing::debug!("✅ Connected to {}", service_name);
-                    Ok(channel)
-                }
-                Err(e) => match endpoint.tier {
-                    DependencyTier::Tier0 => Err(format!(
-                        "{} is Tier0 and unreachable at {}: {}",
-                        service_name, endpoint.url, e
-                    )
-                    .into()),
-                    DependencyTier::Tier1 | DependencyTier::Tier2 => {
-                        tracing::warn!(
-                            target: "grpc_clients",
-                            "⚠️  {} unavailable ({}): will start in degraded mode (tier={:?})",
-                            service_name,
-                            e,
-                            endpoint.tier
-                        );
-                        degraded.push(service_name.to_string());
-                        Ok(
-                            tonic::transport::Endpoint::from_static("http://127.0.0.1:1")
-                                .connect_lazy(),
+            match endpoint.tier {
+                DependencyTier::Tier0 => {
+                    // Tier0: Must succeed at startup
+                    match config.connect_channel(&endpoint.url).await {
+                        Ok(channel) => {
+                            tracing::info!("✅ Connected to {} (Tier0)", service_name);
+                            Ok(channel)
+                        }
+                        Err(e) => Err(format!(
+                            "{} is Tier0 and unreachable at {}: {}",
+                            service_name, endpoint.url, e
                         )
+                        .into()),
                     }
-                },
+                }
+                DependencyTier::Tier1 | DependencyTier::Tier2 => {
+                    // Tier1/Tier2: Use lazy connection for fast startup
+                    match config.connect_channel_lazy(&endpoint.url) {
+                        Ok(channel) => {
+                            tracing::debug!(
+                                "✅ Created lazy connection for {} (tier={:?})",
+                                service_name,
+                                endpoint.tier
+                            );
+                            Ok(channel)
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                target: "grpc_clients",
+                                "⚠️  Failed to create endpoint for {} ({}): using placeholder",
+                                service_name,
+                                e,
+                            );
+                            // Placeholder that will fail at call-time
+                            Ok(
+                                tonic::transport::Endpoint::from_static("http://127.0.0.1:1")
+                                    .connect_lazy(),
+                            )
+                        }
+                    }
+                }
             }
         }
 
-        let mut degraded = Vec::new();
-
+        // Initialize all clients - Tier0 blocks, Tier1/Tier2 use lazy connections
         let auth_client = Arc::new(AuthServiceClient::new(
-            connect_or_placeholder(
-                config,
-                &config.identity_service,
-                "identity-service",
-                &mut degraded,
-            )
-            .await?,
+            connect_for_tier(config, &config.identity_service, "identity-service").await?,
         ));
         let content_client = Arc::new(ContentServiceClient::new(
-            connect_or_placeholder(
-                config,
-                &config.content_service,
-                "content-service",
-                &mut degraded,
-            )
-            .await?,
+            connect_for_tier(config, &config.content_service, "content-service").await?,
         ));
         let feed_client = Arc::new(RecommendationServiceClient::new(
-            connect_or_placeholder(config, &config.feed_service, "feed-service", &mut degraded)
-                .await?,
+            connect_for_tier(config, &config.feed_service, "feed-service").await?,
         ));
         let search_client = Arc::new(SearchServiceClient::new(
-            connect_or_placeholder(
-                config,
-                &config.search_service,
-                "search-service",
-                &mut degraded,
-            )
-            .await?,
+            connect_for_tier(config, &config.search_service, "search-service").await?,
         ));
         let media_client = Arc::new(MediaServiceClient::new(
-            connect_or_placeholder(
-                config,
-                &config.media_service,
-                "media-service",
-                &mut degraded,
-            )
-            .await?,
+            connect_for_tier(config, &config.media_service, "media-service").await?,
         ));
         let notification_client = Arc::new(NotificationServiceClient::new(
-            connect_or_placeholder(
-                config,
-                &config.notification_service,
-                "notification-service",
-                &mut degraded,
-            )
-            .await?,
+            connect_for_tier(config, &config.notification_service, "notification-service").await?,
         ));
         let events_client = Arc::new(EventsServiceClient::new(
-            connect_or_placeholder(
-                config,
-                &config.analytics_service,
-                "analytics-service",
-                &mut degraded,
-            )
-            .await?,
+            connect_for_tier(config, &config.analytics_service, "analytics-service").await?,
         ));
         let graph_client = Arc::new(GraphServiceClient::new(
-            connect_or_placeholder(
-                config,
-                &config.graph_service,
-                "graph-service",
-                &mut degraded,
-            )
-            .await?,
+            connect_for_tier(config, &config.graph_service, "graph-service").await?,
         ));
         let social_client = Arc::new(SocialServiceClient::new(
-            connect_or_placeholder(
-                config,
-                &config.social_service,
-                "social-service",
-                &mut degraded,
-            )
-            .await?,
+            connect_for_tier(config, &config.social_service, "social-service").await?,
         ));
         let ranking_client = Arc::new(RankingServiceClient::new(
-            connect_or_placeholder(
-                config,
-                &config.ranking_service,
-                "ranking-service",
-                &mut degraded,
-            )
-            .await?,
+            connect_for_tier(config, &config.ranking_service, "ranking-service").await?,
         ));
         let feature_store_client = Arc::new(FeatureStoreClient::new(
-            connect_or_placeholder(
-                config,
-                &config.feature_store,
-                "feature-store",
-                &mut degraded,
-            )
-            .await?,
+            connect_for_tier(config, &config.feature_store, "feature-store").await?,
         ));
         let trust_safety_client = Arc::new(TrustSafetyServiceClient::new(
-            connect_or_placeholder(
-                config,
-                &config.trust_safety_service,
-                "trust-safety-service",
-                &mut degraded,
-            )
-            .await?,
+            connect_for_tier(config, &config.trust_safety_service, "trust-safety-service").await?,
         ));
 
-        if !degraded.is_empty() {
-            tracing::warn!(
-                target: "grpc_clients",
-                degraded = ?degraded,
-                "gRPC client pool initialized in degraded mode"
-            );
-        }
+        tracing::info!("✅ gRPC client pool initialized (Tier1/Tier2 services use lazy connections)");
 
         Ok(Self {
             auth_client,
@@ -304,7 +246,7 @@ impl GrpcClientPool {
             ranking_client,
             feature_store_client,
             trust_safety_client,
-            degraded_services: degraded,
+            degraded_services: Vec::new(), // Not tracked at startup anymore - lazy connections handle this
         })
     }
 

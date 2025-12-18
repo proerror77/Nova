@@ -53,6 +53,11 @@ class FeedViewModel: ObservableObject {
 
     // Track ongoing like operations to prevent concurrent calls for the same post
     private var ongoingLikeOperations: Set<String> = []
+    
+    // Track recently created posts to preserve them after refresh (optimistic update)
+    // Posts are kept for 5 minutes to allow backend indexing
+    private var recentlyCreatedPosts: [(post: FeedPost, createdAt: Date)] = []
+    private let recentPostRetentionDuration: TimeInterval = 300  // 5 minutes
 
     // Track ongoing bookmark operations to prevent concurrent calls for the same post
     private var ongoingBookmarkOperations: Set<String> = []
@@ -72,9 +77,9 @@ class FeedViewModel: ObservableObject {
 
         guard !urls.isEmpty else { return }
 
-        // Run prefetch asynchronously to avoid blocking main actor
+        // Run prefetch asynchronously with low priority to avoid blocking main actor
         Task.detached(priority: .utility) { [urls, prefetchTargetSize] in
-            await ImageCacheService.shared.prefetch(urls: urls, targetSize: prefetchTargetSize)
+            await ImageCacheService.shared.prefetch(urls: urls, targetSize: prefetchTargetSize, priority: .low)
         }
     }
 
@@ -82,6 +87,35 @@ class FeedViewModel: ObservableObject {
     func onPostAppear(at index: Int) {
         // Prefetch images for the next 5 posts
         prefetchImagesForPosts(posts, startIndex: index + 1, count: 5)
+    }
+
+    /// Smart prefetch with visibility tracking for optimal performance
+    func onVisiblePostsChanged(visibleIndices: Set<Int>) {
+        guard !posts.isEmpty else { return }
+        
+        let sortedIndices = visibleIndices.sorted()
+        guard let firstVisible = sortedIndices.first,
+              let lastVisible = sortedIndices.last else { return }
+        
+        // Get URLs for currently visible posts (high priority)
+        let visibleUrls = sortedIndices
+            .filter { $0 < posts.count }
+            .flatMap { posts[$0].displayMediaUrls }
+        
+        // Get URLs for upcoming posts (prefetch with low priority)
+        let prefetchStart = lastVisible + 1
+        let prefetchEnd = min(prefetchStart + 8, posts.count)
+        let upcomingUrls = (prefetchStart..<prefetchEnd)
+            .flatMap { posts[$0].displayMediaUrls }
+        
+        // Use smart prefetch for optimal loading
+        Task.detached(priority: .utility) { [visibleUrls, upcomingUrls, prefetchTargetSize] in
+            await ImageCacheService.shared.smartPrefetch(
+                visibleUrls: visibleUrls,
+                upcomingUrls: upcomingUrls,
+                targetSize: prefetchTargetSize
+            )
+        }
     }
 
     // MARK: - Public Methods
@@ -141,7 +175,7 @@ class FeedViewModel: ObservableObject {
             // Sync current user's avatar for their own posts (ensures latest avatar is shown)
             allPosts = syncCurrentUserAvatar(allPosts)
 
-            // Fetch bookmark status for authenticated users
+            // Fetch bookmark status for authenticated users (await before UI update to prevent flicker)
             if isAuthenticated, !allPosts.isEmpty {
                 let postIds = allPosts.map { $0.id }
                 if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) {
@@ -151,6 +185,9 @@ class FeedViewModel: ObservableObject {
                 }
             }
 
+            // Merge recently created posts that may not be in server response yet
+            mergeRecentlyCreatedPosts(into: &allPosts)
+            
             // Client-side deduplication: Remove duplicate posts by ID
             var seenIds = Set<String>()
             self.posts = allPosts.filter { post in
@@ -194,7 +231,7 @@ class FeedViewModel: ObservableObject {
                     // Sync current user's avatar for their own posts
                     allPosts = syncCurrentUserAvatar(allPosts)
 
-                    // Fetch bookmark status for authenticated users
+                    // Fetch bookmark status for authenticated users (await before UI update)
                     if isAuthenticated, !allPosts.isEmpty {
                         let postIds = allPosts.map { $0.id }
                         if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) {
@@ -204,6 +241,9 @@ class FeedViewModel: ObservableObject {
                         }
                     }
 
+                    // Merge recently created posts that may not be in server response yet
+                    mergeRecentlyCreatedPosts(into: &allPosts)
+                    
                     var seenIds = Set<String>()
                     self.posts = allPosts.filter { post in
                         guard !seenIds.contains(post.id) else { return false }
@@ -251,10 +291,10 @@ class FeedViewModel: ObservableObject {
             // Sync current user's avatar for their own posts
             newPosts = syncCurrentUserAvatar(newPosts)
 
-            // Fetch bookmark status for authenticated users
+            // Fetch bookmark status for authenticated users (await before UI update to prevent flicker)
             if isAuthenticated, !newPosts.isEmpty {
-                let postIds = newPosts.map { $0.id }
-                if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) {
+                let newPostIds = newPosts.map { $0.id }
+                if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: newPostIds) {
                     newPosts = newPosts.map { post in
                         bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
                     }
@@ -408,11 +448,16 @@ class FeedViewModel: ObservableObject {
     /// Add a newly created post to the top of the feed (optimistic update)
     /// This avoids the need to refresh the entire feed after posting
     func addNewPost(_ post: Post) {
+        // Use current user info for the new post
+        let currentUser = authManager.currentUser
+        let authorName = currentUser?.displayName ?? currentUser?.username ?? "User \(post.authorId.prefix(8))"
+        let authorAvatar = currentUser?.avatarUrl
+        
         let feedPost = FeedPost(
             id: post.id,
             authorId: post.authorId,
-            authorName: "User \(post.authorId.prefix(8))",
-            authorAvatar: nil,
+            authorName: authorName,
+            authorAvatar: authorAvatar,
             content: post.content,
             mediaUrls: post.mediaUrls ?? [],
             createdAt: post.createdDate,
@@ -426,6 +471,32 @@ class FeedViewModel: ObservableObject {
         // Add to the top of the feed
         self.posts.insert(feedPost, at: 0)
         self.postIds.insert(post.id, at: 0)
+        
+        // Track recently created post to preserve after refresh
+        cleanupExpiredRecentPosts()
+        recentlyCreatedPosts.append((post: feedPost, createdAt: Date()))
+    }
+    
+    /// Clean up expired recently created posts
+    private func cleanupExpiredRecentPosts() {
+        let now = Date()
+        recentlyCreatedPosts.removeAll { now.timeIntervalSince($0.createdAt) > recentPostRetentionDuration }
+    }
+    
+    /// Merge recently created posts that are not in the server response
+    private func mergeRecentlyCreatedPosts(into posts: inout [FeedPost]) {
+        cleanupExpiredRecentPosts()
+        
+        let serverPostIds = Set(posts.map { $0.id })
+        let missingPosts = recentlyCreatedPosts
+            .filter { !serverPostIds.contains($0.post.id) }
+            .map { $0.post }
+        
+        if !missingPosts.isEmpty {
+            // Insert missing recent posts at the top
+            posts.insert(contentsOf: missingPosts, at: 0)
+            FeedLogger.debug("Preserved \(missingPosts.count) recently created post(s) after refresh")
+        }
     }
 
     /// Switch feed algorithm
@@ -634,25 +705,13 @@ class FeedViewModel: ObservableObject {
     /// Sync current user's avatar for their own posts
     /// This ensures the Feed shows the latest avatar after user updates it locally
     private func syncCurrentUserAvatar(_ posts: [FeedPost]) -> [FeedPost] {
-        #if DEBUG
-        print("[Feed] syncCurrentUserAvatar called with \(posts.count) posts")
-        print("[Feed] currentUser id: \(authManager.currentUser?.id ?? "nil")")
-        print("[Feed] currentUser avatarUrl: \(authManager.currentUser?.avatarUrl ?? "nil")")
-        #endif
-
         guard let currentUserId = authManager.currentUser?.id,
               let currentUserAvatar = authManager.currentUser?.avatarUrl else {
-            #if DEBUG
-            print("[Feed] syncCurrentUserAvatar: skipped - currentUser or avatarUrl is nil")
-            #endif
             return posts
         }
 
         return posts.map { post in
             if post.authorId == currentUserId {
-                #if DEBUG
-                print("[Feed] Syncing avatar for post \(post.id) - old: \(post.authorAvatar ?? "nil"), new: \(currentUserAvatar)")
-                #endif
                 return post.copying(authorAvatar: currentUserAvatar)
             }
             return post

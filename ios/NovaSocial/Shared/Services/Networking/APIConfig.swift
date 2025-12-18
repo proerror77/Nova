@@ -269,6 +269,17 @@ struct APIConfig {
         static func getProfile(_ id: String) -> String { "/api/v2/users/\(id)" }
     }
 
+    // MARK: - User Profile Data API (ranking-service via graphql-gateway)
+    struct UserProfile {
+        /// POST /api/v2/photo-analysis/upload - 上傳照片分析結果
+        /// Used by iOS Vision photo library analysis for interest building
+        static let uploadPhotoAnalysis = "/api/v2/photo-analysis/upload"
+        /// POST /api/v2/photo-analysis/onboarding - 上傳 Onboarding 選擇的興趣
+        static let uploadOnboardingInterests = "/api/v2/photo-analysis/onboarding"
+        /// GET /api/v2/profile/interests - 獲取用戶興趣標籤
+        static let getInterests = "/api/v2/profile/interests"
+    }
+
     // MARK: - User Settings API (identity-service - SINGLE SOURCE OF TRUTH)
     struct Settings {
         /// GET /api/v2/auth/users/{id}/settings 獲取用戶設定

@@ -1,5 +1,28 @@
 import Foundation
 
+// MARK: - Upload Progress
+
+/// Progress callback for upload operations
+typealias UploadProgressCallback = (Double) -> Void
+
+/// Result of a batch upload operation
+struct BatchUploadResult {
+    /// Map of original index to uploaded URL (preserves order mapping)
+    let urlsByIndex: [Int: String]
+    let failedIndices: [Int]
+    let errors: [Int: Error]
+    
+    /// Convenience: URLs sorted by original index
+    var successfulUrls: [String] {
+        urlsByIndex.sorted { $0.key < $1.key }.map { $0.value }
+    }
+    
+    /// Get URL for a specific original index
+    func url(for index: Int) -> String? {
+        urlsByIndex[index]
+    }
+}
+
 // MARK: - Media Service
 
 /// Manages media uploads using media-service backend
@@ -29,8 +52,169 @@ class MediaService {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 120  // 2 minutes for upload requests
         config.timeoutIntervalForResource = 300 // 5 minutes for total upload
+        config.httpMaximumConnectionsPerHost = 4 // Allow more parallel connections
         return URLSession(configuration: config)
     }()
+    
+    // MARK: - Parallel Upload Methods
+    
+    /// Upload multiple images in parallel with progress tracking
+    /// - Parameters:
+    ///   - images: Array of (imageData, filename) tuples
+    ///   - maxConcurrent: Maximum concurrent uploads (default: 5)
+    ///   - progressCallback: Called with overall progress (0.0 to 1.0)
+    /// - Returns: BatchUploadResult containing successful URLs and any failures
+    func uploadImagesInParallel(
+        images: [(data: Data, filename: String)],
+        maxConcurrent: Int = 5,
+        progressCallback: UploadProgressCallback? = nil
+    ) async -> BatchUploadResult {
+        guard !images.isEmpty else {
+            return BatchUploadResult(urlsByIndex: [:], failedIndices: [], errors: [:])
+        }
+        
+        var urlsByIndex: [Int: String] = [:]
+        var failedIndices: [Int] = []
+        var errors: [Int: Error] = [:]
+        var completedCount = 0
+        let totalCount = images.count
+        let lock = NSLock()
+        
+        await withTaskGroup(of: (Int, Result<String, Error>).self) { group in
+            var activeCount = 0
+            var nextIndex = 0
+            
+            // Helper to add task
+            func addNextTask() {
+                if nextIndex < images.count {
+                    let index = nextIndex
+                    let image = images[index]
+                    nextIndex += 1
+                    activeCount += 1
+                    
+                    group.addTask {
+                        do {
+                            let url = try await self.uploadImage(
+                                imageData: image.data,
+                                filename: image.filename
+                            )
+                            return (index, .success(url))
+                        } catch {
+                            return (index, .failure(error))
+                        }
+                    }
+                }
+            }
+            
+            // Start initial batch
+            for _ in 0..<min(maxConcurrent, images.count) {
+                addNextTask()
+            }
+            
+            // Process results and add more tasks
+            for await (index, result) in group {
+                lock.lock()
+                activeCount -= 1
+                completedCount += 1
+                
+                switch result {
+                case .success(let url):
+                    urlsByIndex[index] = url
+                case .failure(let error):
+                    failedIndices.append(index)
+                    errors[index] = error
+                }
+                
+                // Report progress
+                let progress = Double(completedCount) / Double(totalCount)
+                lock.unlock()
+                
+                await MainActor.run {
+                    progressCallback?(progress)
+                }
+                
+                // Add next task if available
+                addNextTask()
+            }
+        }
+        
+        return BatchUploadResult(
+            urlsByIndex: urlsByIndex,
+            failedIndices: failedIndices.sorted(),
+            errors: errors
+        )
+    }
+    
+    /// Upload image with progress tracking using URLSession delegate
+    /// - Parameters:
+    ///   - imageData: Image data to upload
+    ///   - filename: Original filename
+    ///   - progressCallback: Called with upload progress (0.0 to 1.0)
+    /// - Returns: Media URL for the uploaded image
+    func uploadImageWithProgress(
+        imageData: Data,
+        filename: String = "image.jpg",
+        progressCallback: UploadProgressCallback? = nil
+    ) async throws -> String {
+        let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.uploadStart)")!
+        
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 120
+        
+        if let token = client.getAuthToken() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        // Build multipart body
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(imageData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        
+        // Use upload task for progress tracking
+        let delegate = UploadProgressDelegate(progressCallback: progressCallback)
+        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        
+        defer {
+            session.finishTasksAndInvalidate()
+        }
+        
+        let (data, response) = try await session.upload(for: request, from: body)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        
+        switch httpResponse.statusCode {
+        case 200...299:
+            let decoder = JSONDecoder()
+            let uploadResponse = try decoder.decode(UploadResponse.self, from: data)
+            
+            if let mediaUrl = uploadResponse.mediaUrl, !mediaUrl.isEmpty {
+                return mediaUrl
+            } else if let presignedUrl = uploadResponse.presignedUrl, !presignedUrl.isEmpty {
+                try await uploadToPresignedUrl(presignedUrl, data: imageData, contentType: "image/jpeg")
+                return presignedUrl.components(separatedBy: "?").first ?? presignedUrl
+            } else if let uploadId = uploadResponse.uploadId, !uploadId.isEmpty {
+                return uploadId
+            }
+            
+            throw APIError.serverError(statusCode: 200, message: "Upload response missing required fields")
+        case 401:
+            throw APIError.unauthorized
+        case 413:
+            throw APIError.serverError(statusCode: 413, message: "File too large (max 20MB)")
+        default:
+            let message = String(data: data, encoding: .utf8) ?? "Upload failed"
+            throw APIError.serverError(statusCode: httpResponse.statusCode, message: message)
+        }
+    }
 
     /// Upload image using multipart/form-data
     /// - Parameters:
@@ -945,5 +1129,32 @@ struct ReelsListResponse: Codable {
         case reels
         case totalCount = "total_count"
         case hasMore = "has_more"
+    }
+}
+
+// MARK: - Upload Progress Delegate
+
+/// URLSession delegate for tracking upload progress
+private class UploadProgressDelegate: NSObject, URLSessionTaskDelegate {
+    private let progressCallback: UploadProgressCallback?
+    
+    init(progressCallback: UploadProgressCallback?) {
+        self.progressCallback = progressCallback
+        super.init()
+    }
+    
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didSendBodyData bytesSent: Int64,
+        totalBytesSent: Int64,
+        totalBytesExpectedToSend: Int64
+    ) {
+        guard totalBytesExpectedToSend > 0 else { return }
+        let progress = Double(totalBytesSent) / Double(totalBytesExpectedToSend)
+        
+        DispatchQueue.main.async { [weak self] in
+            self?.progressCallback?(progress)
+        }
     }
 }

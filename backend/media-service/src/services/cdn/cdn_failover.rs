@@ -78,7 +78,7 @@ impl FailoverManager {
         let state = self.state.read().await;
 
         match *state {
-            FailoverState::BrokenCircuit => {
+            FailoverState::BrokenCircuit | FailoverState::UsingFallback => {
                 if old_count + 1 >= self.recovery_threshold {
                     info!("Circuit breaker recovering: {} successes", old_count + 1);
                     drop(state);

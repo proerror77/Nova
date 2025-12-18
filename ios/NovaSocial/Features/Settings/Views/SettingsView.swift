@@ -4,53 +4,10 @@ struct SettingsView: View {
     @Binding var currentPage: AppPage
     @StateObject private var viewModel = SettingsViewModel()
     @EnvironmentObject private var authManager: AuthenticationManager
+    @EnvironmentObject private var pushManager: PushNotificationManager
     @State private var isPostAsExpanded = false
     @State private var selectedPostAsType: PostAsType = .realName
-    private let aliasEditState = AliasEditState.shared
-
-    // MARK: - Computed Properties
-
-    /// Convert accounts to display data for PostAsSelectionPanel
-    private var accountDisplayData: [AccountDisplayData] {
-        // If we have accounts from API, use them
-        if !viewModel.accounts.isEmpty {
-            return viewModel.accounts.map { AccountDisplayData(from: $0) }
-        }
-
-        // Fallback: create display data from current user + placeholder alias
-        var displayData: [AccountDisplayData] = []
-
-        // Primary account from current user
-        if let user = authManager.currentUser {
-            displayData.append(AccountDisplayData(fromUser: user))
-        }
-
-        // Add alias placeholder if no alias accounts exist
-        if !viewModel.hasAliasAccount {
-            displayData.append(.placeholderAlias)
-        }
-
-        return displayData
-    }
-
-    // MARK: - Account Handling
-
-    private func handleAccountTap(_ account: AccountDisplayData) {
-        if account.isPrimary {
-            // Go to profile settings for primary account
-            currentPage = .profileSetting
-        } else if account.id == "placeholder-alias" {
-            // Create new alias
-            viewModel.createNewAliasAccount()
-            currentPage = .aliasName
-        } else if account.isAlias {
-            // Edit existing alias
-            if let aliasAccount = viewModel.accounts.first(where: { $0.id == account.id }) {
-                viewModel.editAliasAccount(aliasAccount)
-            }
-            currentPage = .aliasName
-        }
-    }
+    @State private var isPushEnabled = false
 
     var body: some View {
         ZStack {
@@ -118,13 +75,16 @@ struct SettingsView: View {
 
                                 // 展开的选择面板 - 使用高度动画
                                 PostAsSelectionPanel(
-                                    accounts: accountDisplayData,
-                                    selectedAccountId: viewModel.currentAccountId,
-                                    onAccountTap: { account in
-                                        handleAccountTap(account)
+                                    selectedType: $selectedPostAsType,
+                                    realName: authManager.currentUser?.displayName ?? authManager.currentUser?.username ?? "User",
+                                    username: authManager.currentUser?.username ?? "username",
+                                    avatarUrl: authManager.currentUser?.avatarUrl,
+                                    onRealNameTap: {
+                                        currentPage = .profileSetting
                                     },
-                                    pendingPrimaryAvatar: AvatarManager.shared.pendingAvatar,
-                                    isLoading: viewModel.isLoadingAccounts
+                                    onAliasTap: {
+                                        currentPage = .aliasName
+                                    }
                                 )
                                 .frame(height: isPostAsExpanded ? nil : 0, alignment: .top)
                                 .clipped()
@@ -219,6 +179,62 @@ struct SettingsView: View {
                         }
                         .padding(.horizontal, 12)
 
+                        // MARK: - Notification Settings
+                        VStack(alignment: .leading, spacing: 0) {
+                            HStack(spacing: 16) {
+                                Image(systemName: "bell.fill")
+                                    .font(.system(size: 18))
+                                    .foregroundColor(DesignTokens.accentColor)
+                                    .frame(width: 24)
+
+                                Text("Push Notifications")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(DesignTokens.textPrimary)
+
+                                Spacer()
+
+                                Toggle("", isOn: $isPushEnabled)
+                                    .labelsHidden()
+                                    .tint(DesignTokens.accentColor)
+                                    .onChange(of: isPushEnabled) { _, newValue in
+                                        Task {
+                                            if newValue {
+                                                let granted = await pushManager.requestAuthorization()
+                                                if !granted {
+                                                    // Open system settings if permission denied
+                                                    isPushEnabled = false
+                                                    if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+                                                        await MainActor.run {
+                                                            UIApplication.shared.open(settingsUrl)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 16)
+                            .background(DesignTokens.surface)
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color(red: 0.68, green: 0.68, blue: 0.68).opacity(0.3), lineWidth: 0.5)
+                            )
+                            .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                isPushEnabled.toggle()
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .onAppear {
+                            isPushEnabled = pushManager.isAuthorized
+                        }
+                        .onChange(of: pushManager.isAuthorized) { _, newValue in
+                            isPushEnabled = newValue
+                        }
+
                         // MARK: - Actions
                         VStack(alignment: .leading, spacing: 0) {
                             Button(action: {
@@ -280,10 +296,12 @@ struct SettingsView: View {
 #Preview("Settings - Default") {
     SettingsView(currentPage: .constant(.setting))
         .environmentObject(AuthenticationManager.shared)
+        .environmentObject(PushNotificationManager.shared)
 }
 
 #Preview("Settings - Dark Mode") {
     SettingsView(currentPage: .constant(.setting))
         .environmentObject(AuthenticationManager.shared)
+        .environmentObject(PushNotificationManager.shared)
         .preferredColorScheme(.dark)
 }

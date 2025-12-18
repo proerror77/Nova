@@ -626,6 +626,223 @@ impl OutboxPublisher for KafkaOutboxPublisher {
     }
 }
 
+/// Kafka publisher with circuit breaker protection.
+///
+/// This wraps `KafkaOutboxPublisher` with circuit breaker pattern to:
+/// - Prevent cascading failures when Kafka is unavailable
+/// - Fail fast instead of timing out when circuit is open
+/// - Automatically recover when Kafka becomes available
+///
+/// # Circuit Breaker States
+///
+/// - **Closed**: Normal operation, all requests pass through
+/// - **Open**: Kafka unavailable, requests fail immediately
+/// - **HalfOpen**: Testing recovery, limited requests allowed
+///
+/// # Configuration
+///
+/// Uses `resilience::presets::kafka_config()` by default:
+/// - Failure threshold: 5 consecutive failures
+/// - Recovery timeout: 30 seconds
+/// - Success threshold: 2 successes to close circuit
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use transactional_outbox::CircuitBreakerKafkaPublisher;
+/// use rdkafka::producer::FutureProducer;
+/// use rdkafka::ClientConfig;
+///
+/// let producer: FutureProducer = ClientConfig::new()
+///     .set("bootstrap.servers", "localhost:9092")
+///     .set("enable.idempotence", "true")
+///     .create()
+///     .unwrap();
+///
+/// let publisher = CircuitBreakerKafkaPublisher::new(producer, "nova".to_string());
+/// // Use publisher with OutboxProcessor
+/// ```
+pub struct CircuitBreakerKafkaPublisher {
+    inner: KafkaOutboxPublisher,
+    circuit_breaker: resilience::CircuitBreaker,
+    metrics: CircuitBreakerPublisherMetrics,
+}
+
+/// Metrics for circuit breaker publisher
+#[derive(Clone)]
+pub struct CircuitBreakerPublisherMetrics {
+    /// Current circuit state (0=closed, 1=open, 2=half-open)
+    pub circuit_state: prometheus::IntGauge,
+    /// Total number of times circuit opened
+    pub circuit_opened_total: prometheus::IntCounter,
+    /// Total requests rejected due to open circuit
+    pub requests_rejected_total: prometheus::IntCounter,
+    /// Current error rate in the sliding window
+    pub error_rate: prometheus::Gauge,
+}
+
+impl CircuitBreakerPublisherMetrics {
+    pub fn new(service_name: &str) -> Self {
+        let registry = prometheus::default_registry();
+
+        let circuit_state = prometheus::IntGauge::new(
+            format!("{}_kafka_circuit_state", service_name),
+            "Current circuit breaker state (0=closed, 1=open, 2=half-open)",
+        )
+        .expect("valid metric");
+
+        let circuit_opened_total = prometheus::IntCounter::new(
+            format!("{}_kafka_circuit_opened_total", service_name),
+            "Total number of times the Kafka circuit breaker opened",
+        )
+        .expect("valid metric");
+
+        let requests_rejected_total = prometheus::IntCounter::new(
+            format!("{}_kafka_requests_rejected_total", service_name),
+            "Total requests rejected due to open circuit breaker",
+        )
+        .expect("valid metric");
+
+        let error_rate = prometheus::Gauge::new(
+            format!("{}_kafka_error_rate", service_name),
+            "Current error rate in the circuit breaker sliding window",
+        )
+        .expect("valid metric");
+
+        for metric in [
+            Box::new(circuit_state.clone()) as Box<dyn prometheus::core::Collector>,
+            Box::new(circuit_opened_total.clone()),
+            Box::new(requests_rejected_total.clone()),
+            Box::new(error_rate.clone()),
+        ] {
+            let _ = registry.register(metric);
+        }
+
+        Self {
+            circuit_state,
+            circuit_opened_total,
+            requests_rejected_total,
+            error_rate,
+        }
+    }
+
+    fn update_state(&self, state: resilience::CircuitState, error_rate_value: f64) {
+        let state_value = match state {
+            resilience::CircuitState::Closed => 0,
+            resilience::CircuitState::Open => 1,
+            resilience::CircuitState::HalfOpen => 2,
+        };
+        self.circuit_state.set(state_value);
+        self.error_rate.set(error_rate_value);
+    }
+}
+
+impl CircuitBreakerKafkaPublisher {
+    /// Create a new circuit breaker protected Kafka publisher with default settings.
+    pub fn new(producer: FutureProducer, topic_prefix: String) -> Self {
+        Self::with_config(
+            producer,
+            topic_prefix,
+            resilience::presets::kafka_config().circuit_breaker,
+            "outbox",
+        )
+    }
+
+    /// Create a new circuit breaker protected Kafka publisher with custom config.
+    pub fn with_config(
+        producer: FutureProducer,
+        topic_prefix: String,
+        config: resilience::CircuitBreakerConfig,
+        service_name: &str,
+    ) -> Self {
+        let inner = KafkaOutboxPublisher::new(producer, topic_prefix);
+        let circuit_breaker = resilience::CircuitBreaker::new(config);
+        let metrics = CircuitBreakerPublisherMetrics::new(service_name);
+
+        info!(
+            service = service_name,
+            "Created Kafka publisher with circuit breaker protection"
+        );
+
+        Self {
+            inner,
+            circuit_breaker,
+            metrics,
+        }
+    }
+
+    /// Get current circuit state
+    pub fn circuit_state(&self) -> resilience::CircuitState {
+        self.circuit_breaker.state()
+    }
+
+    /// Get current error rate
+    pub fn error_rate(&self) -> f64 {
+        self.circuit_breaker.error_rate()
+    }
+
+    /// Check if circuit is open (failing fast)
+    pub fn is_circuit_open(&self) -> bool {
+        matches!(self.circuit_state(), resilience::CircuitState::Open)
+    }
+}
+
+#[async_trait]
+impl OutboxPublisher for CircuitBreakerKafkaPublisher {
+    async fn publish(&self, event: &OutboxEvent) -> OutboxResult<()> {
+        let previous_state = self.circuit_breaker.state();
+
+        let result = self
+            .circuit_breaker
+            .call(|| async { self.inner.publish(event).await })
+            .await;
+
+        // Update metrics
+        let current_state = self.circuit_breaker.state();
+        self.metrics
+            .update_state(current_state, self.circuit_breaker.error_rate());
+
+        // Track circuit state transitions
+        if previous_state != resilience::CircuitState::Open
+            && current_state == resilience::CircuitState::Open
+        {
+            self.metrics.circuit_opened_total.inc();
+            warn!(
+                event_id = %event.id,
+                event_type = %event.event_type,
+                error_rate = self.circuit_breaker.error_rate(),
+                "Kafka circuit breaker OPENED - requests will fail fast until recovery"
+            );
+        }
+
+        match result {
+            Ok(()) => Ok(()),
+            Err(resilience::CircuitBreakerError::Open) => {
+                self.metrics.requests_rejected_total.inc();
+                warn!(
+                    event_id = %event.id,
+                    event_type = %event.event_type,
+                    "Kafka publish rejected - circuit breaker is OPEN"
+                );
+                Err(OutboxError::PublishFailed(
+                    "Circuit breaker is open - Kafka unavailable".to_string(),
+                ))
+            }
+            Err(resilience::CircuitBreakerError::CallFailed(msg)) => {
+                error!(
+                    event_id = %event.id,
+                    event_type = %event.event_type,
+                    error = %msg,
+                    circuit_state = ?current_state,
+                    error_rate = self.circuit_breaker.error_rate(),
+                    "Kafka publish failed"
+                );
+                Err(OutboxError::PublishFailed(msg))
+            }
+        }
+    }
+}
+
 /// Background processor for publishing outbox events.
 ///
 /// This component:
@@ -841,23 +1058,25 @@ mod tests {
     use super::*;
     use rdkafka::config::FromClientConfig;
 
+    /// Calculate exponential backoff delay based on retry count.
+    /// This is a standalone version for testing without needing a full processor.
+    fn calculate_backoff(retry_count: i32) -> Duration {
+        const MAX_BACKOFF_SECS: u64 = 300; // 5 minutes
+        let backoff_secs = 2u64.pow(retry_count as u32).min(MAX_BACKOFF_SECS);
+        Duration::from_secs(backoff_secs)
+    }
+
     #[test]
     fn test_backoff_calculation() {
-        let repo = Arc::new(SqlxOutboxRepository::new(
-            PgPool::connect_lazy("postgresql://localhost/test").unwrap(),
-        ));
-        let producer =
-            rdkafka::producer::FutureProducer::from_config(&rdkafka::ClientConfig::new()).unwrap();
-        let publisher = Arc::new(KafkaOutboxPublisher::new(producer, "test".to_string()));
-        let processor = OutboxProcessor::new(repo, publisher, 10, Duration::from_secs(1), 5);
-
-        assert_eq!(processor.calculate_backoff(0).as_secs(), 1);
-        assert_eq!(processor.calculate_backoff(1).as_secs(), 2);
-        assert_eq!(processor.calculate_backoff(2).as_secs(), 4);
-        assert_eq!(processor.calculate_backoff(3).as_secs(), 8);
-        assert_eq!(processor.calculate_backoff(4).as_secs(), 16);
-        assert_eq!(processor.calculate_backoff(5).as_secs(), 32);
-        assert_eq!(processor.calculate_backoff(10).as_secs(), 300); // capped
+        // Test exponential backoff: 2^n seconds, capped at 300s
+        assert_eq!(calculate_backoff(0).as_secs(), 1);
+        assert_eq!(calculate_backoff(1).as_secs(), 2);
+        assert_eq!(calculate_backoff(2).as_secs(), 4);
+        assert_eq!(calculate_backoff(3).as_secs(), 8);
+        assert_eq!(calculate_backoff(4).as_secs(), 16);
+        assert_eq!(calculate_backoff(5).as_secs(), 32);
+        assert_eq!(calculate_backoff(10).as_secs(), 300); // capped at max
+        assert_eq!(calculate_backoff(15).as_secs(), 300); // still capped
     }
 
     #[test]

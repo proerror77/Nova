@@ -85,9 +85,10 @@ fn test_password_pattern_detection() {
 
 #[test]
 fn test_logs_contain_no_bearer_tokens() {
+    // These unsafe_logs contain complete JWT patterns (header.payload.signature)
     let unsafe_logs = vec![
-        r#"{"level":"ERROR","auth_header":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}"#,
-        r#"{"level":"DEBUG","token":"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0..."}"#,
+        r#"{"level":"ERROR","auth_header":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"}"#,
+        r#"{"level":"DEBUG","token":"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.Gf7l_v8V0r29p8WfVZXdELdBm5r-oRPJXNvPqLZ-5cU"}"#,
     ];
 
     let jwt_pattern = Regex::new(r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+").unwrap();
