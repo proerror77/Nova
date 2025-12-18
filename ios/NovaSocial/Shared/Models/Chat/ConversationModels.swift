@@ -426,7 +426,14 @@ struct GetMessagesResponse: Codable, Sendable {
         hasMore = try container.decodeIfPresent(Bool.self, forKey: .hasMore) ?? false
         nextCursor = try container.decodeIfPresent(String.self, forKey: .nextCursor)
     }
-    
+
+    /// Memberwise initializer for programmatic construction
+    init(messages: [Message], hasMore: Bool, nextCursor: String?) {
+        self.messages = messages
+        self.hasMore = hasMore
+        self.nextCursor = nextCursor
+    }
+
     // Legacy alias
     var cursor: String? { nextCursor }
 }
@@ -509,6 +516,15 @@ struct MessageReaction: Identifiable, Codable, Sendable {
         userId = try container.decode(String.self, forKey: .userId)
         emoji = try container.decode(String.self, forKey: .emoji)
         createdAt = try decodeFlexibleDate(container, key: .createdAt)
+    }
+
+    /// Memberwise initializer for programmatic construction
+    init(id: String, messageId: String, userId: String, emoji: String, createdAt: Date) {
+        self.id = id
+        self.messageId = messageId
+        self.userId = userId
+        self.emoji = emoji
+        self.createdAt = createdAt
     }
 }
 

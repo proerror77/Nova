@@ -111,25 +111,30 @@ class Timeline {
     func edit(eventOrTransactionId: EventOrTransactionId, newContent: EditedContent) async throws {}
     // Redact (delete) message
     func redactEvent(eventOrTransactionId: EventOrTransactionId, reason: String?) async throws {}
-    // Reactions
-    func toggleReaction(eventOrTransactionId: EventOrTransactionId, key: String) async throws {}
-    func sendReaction(eventOrTransactionId: EventOrTransactionId, key: String) async throws {}
+    // Reactions - toggle only (adds if not present, removes if present)
+    func toggleReaction(itemId: EventOrTransactionId, key: String) async throws {}
 }
 
 enum EventOrTransactionId {
-    case eventId(String)
-    case transactionId(String)
+    case eventId(eventId: String)
+    case transactionId(transactionId: String)
 }
 
 struct EditedContent {
-    static func roomMessage(msgType: RoomMessageEventContentWithoutRelation) -> EditedContent {
-        return EditedContent()
+    let content: RoomMessageEventContentWithoutRelation
+
+    static func roomMessage(content: RoomMessageEventContentWithoutRelation) -> EditedContent {
+        return EditedContent(content: content)
     }
 }
 
 struct RoomMessageEventContentWithoutRelation {
-    static func text(body: String, formatted: FormattedBody?) -> RoomMessageEventContentWithoutRelation {
-        return RoomMessageEventContentWithoutRelation()
+    let body: String
+    let formatted: FormattedBody?
+
+    init(body: String, formatted: FormattedBody? = nil) {
+        self.body = body
+        self.formatted = formatted
     }
 }
 
@@ -340,6 +345,19 @@ private final class TimelineItemCollector: TimelineListener, @unchecked Sendable
             hasReturned = true
             onItemsReceived(items)
         }
+    }
+}
+
+/// Listener for continuous timeline updates (used for realtime message delivery)
+private final class RoomTimelineListener: TimelineListener, @unchecked Sendable {
+    private let onDiff: ([TimelineDiff]) -> Void
+
+    init(onDiff: @escaping ([TimelineDiff]) -> Void) {
+        self.onDiff = onDiff
+    }
+
+    func onUpdate(diff: [TimelineDiff]) {
+        onDiff(diff)
     }
 }
 
@@ -612,6 +630,7 @@ final class MatrixService: MatrixServiceProtocol {
 
     /// Timeline listeners cache (room_id -> listener)
     private var timelineListeners: [String: TaskHandle] = [:]
+    private var roomTimelines: [String: Timeline] = [:]
 
     /// De-duplication cache for timeline events (roomId -> eventIds)
     private var seenTimelineEventIdsByRoom: [String: Set<String>] = [:]
@@ -834,6 +853,8 @@ final class MatrixService: MatrixServiceProtocol {
         self.client = nil
         roomCache.removeAll()
         timelineListeners.removeAll()
+        roomTimelines.removeAll()
+        seenTimelineEventIdsByRoom.removeAll()
         updateConnectionState(.disconnected)
 
         #if DEBUG
@@ -896,6 +917,8 @@ final class MatrixService: MatrixServiceProtocol {
             handle.cancel()
         }
         timelineListeners.removeAll()
+        roomTimelines.removeAll()
+        seenTimelineEventIdsByRoom.removeAll()
 
         if connectionState == .syncing {
             updateConnectionState(.connected)
@@ -984,6 +1007,70 @@ final class MatrixService: MatrixServiceProtocol {
     }
 
     // MARK: - Messaging
+
+    func subscribeToRoomTimeline(roomId: String) async throws {
+        guard let client = client, userId != nil else {
+            throw MatrixError.notLoggedIn
+        }
+
+        if timelineListeners[roomId] != nil {
+            return
+        }
+
+        guard let room = try client.getRoom(roomId: roomId) else {
+            throw MatrixError.roomNotFound(roomId)
+        }
+
+        let timeline = try await room.timeline()
+        roomTimelines[roomId] = timeline
+
+        let listener = RoomTimelineListener { [weak self] diffs in
+            Task { @MainActor in
+                self?.handleRoomTimelineDiff(roomId: roomId, diffs: diffs)
+            }
+        }
+
+        let handle = await timeline.addListener(listener: listener)
+        timelineListeners[roomId] = handle
+    }
+
+    func unsubscribeFromRoomTimeline(roomId: String) {
+        if let handle = timelineListeners.removeValue(forKey: roomId) {
+            handle.cancel()
+        }
+        roomTimelines.removeValue(forKey: roomId)
+        seenTimelineEventIdsByRoom.removeValue(forKey: roomId)
+    }
+
+    private func handleRoomTimelineDiff(roomId: String, diffs: [TimelineDiff]) {
+        for diff in diffs {
+            switch diff {
+            case .append(let values):
+                for item in values {
+                    emitTimelineItem(item, roomId: roomId)
+                }
+            case .pushBack(let value):
+                emitTimelineItem(value, roomId: roomId)
+            case .pushFront(let value):
+                emitTimelineItem(value, roomId: roomId)
+            case .set(_, let value):
+                emitTimelineItem(value, roomId: roomId)
+            default:
+                break
+            }
+        }
+    }
+
+    private func emitTimelineItem(_ item: TimelineItem, roomId: String) {
+        guard let message = convertTimelineItemToMessage(item, roomId: roomId) else { return }
+
+        var seen = seenTimelineEventIdsByRoom[roomId] ?? Set()
+        guard !seen.contains(message.id) else { return }
+        seen.insert(message.id)
+        seenTimelineEventIdsByRoom[roomId] = seen
+
+        onMessageReceived?(message)
+    }
 
     func sendMessage(roomId: String, content: String) async throws -> String {
         #if DEBUG
@@ -1268,6 +1355,140 @@ final class MatrixService: MatrixServiceProtocol {
         }
 
         return matrixRooms
+    }
+
+    // MARK: - Message Edit/Delete/Reactions
+
+    func editMessage(roomId: String, eventId: String, newContent: String) async throws {
+        #if DEBUG
+        print("[MatrixService] Editing message \(eventId) in room \(roomId)")
+        #endif
+
+        guard let client = client, userId != nil else {
+            throw MatrixError.notLoggedIn
+        }
+
+        do {
+            guard let room = try client.getRoom(roomId: roomId) else {
+                throw MatrixError.roomNotFound(roomId)
+            }
+
+            let timeline = try await room.timeline()
+
+            // Create edited content
+            let content = messageEventContentFromMarkdown(md: newContent)
+            let editedContent = EditedContent.roomMessage(content: content)
+
+            // Edit the message
+            try await timeline.edit(
+                eventOrTransactionId: .eventId(eventId: eventId),
+                newContent: editedContent
+            )
+
+            #if DEBUG
+            print("[MatrixService] Message edited successfully")
+            #endif
+        } catch let error as MatrixError {
+            throw error
+        } catch {
+            throw MatrixError.sendFailed("Edit failed: \(error.localizedDescription)")
+        }
+    }
+
+    func redactMessage(roomId: String, eventId: String, reason: String?) async throws {
+        #if DEBUG
+        print("[MatrixService] Redacting message \(eventId) in room \(roomId)")
+        #endif
+
+        guard let client = client, userId != nil else {
+            throw MatrixError.notLoggedIn
+        }
+
+        do {
+            guard let room = try client.getRoom(roomId: roomId) else {
+                throw MatrixError.roomNotFound(roomId)
+            }
+
+            let timeline = try await room.timeline()
+
+            // Redact the message
+            try await timeline.redactEvent(
+                eventOrTransactionId: .eventId(eventId: eventId),
+                reason: reason
+            )
+
+            #if DEBUG
+            print("[MatrixService] Message redacted successfully")
+            #endif
+        } catch let error as MatrixError {
+            throw error
+        } catch {
+            throw MatrixError.sendFailed("Redact failed: \(error.localizedDescription)")
+        }
+    }
+
+    func toggleReaction(roomId: String, eventId: String, emoji: String) async throws {
+        #if DEBUG
+        print("[MatrixService] Toggling reaction \(emoji) on message \(eventId)")
+        #endif
+
+        guard let client = client, userId != nil else {
+            throw MatrixError.notLoggedIn
+        }
+
+        do {
+            guard let room = try client.getRoom(roomId: roomId) else {
+                throw MatrixError.roomNotFound(roomId)
+            }
+
+            let timeline = try await room.timeline()
+
+            // Toggle reaction (add if not present, remove if present)
+            try await timeline.toggleReaction(
+                itemId: .eventId(eventId: eventId),
+                key: emoji
+            )
+
+            #if DEBUG
+            print("[MatrixService] Reaction toggled successfully")
+            #endif
+        } catch let error as MatrixError {
+            throw error
+        } catch {
+            throw MatrixError.sendFailed("Toggle reaction failed: \(error.localizedDescription)")
+        }
+    }
+
+    func sendReaction(roomId: String, eventId: String, emoji: String) async throws {
+        #if DEBUG
+        print("[MatrixService] Sending reaction \(emoji) on message \(eventId)")
+        #endif
+
+        // Matrix SDK uses toggleReaction - if reaction doesn't exist it will be added
+        // This is the same as sending a new reaction
+        try await toggleReaction(roomId: roomId, eventId: eventId, emoji: emoji)
+
+        #if DEBUG
+        print("[MatrixService] Reaction sent successfully (via toggleReaction)")
+        #endif
+    }
+
+    func getReactions(roomId: String, eventId: String) async throws -> [MatrixReaction] {
+        #if DEBUG
+        print("[MatrixService] Getting reactions for message \(eventId)")
+        #endif
+
+        guard let client = client, userId != nil else {
+            throw MatrixError.notLoggedIn
+        }
+
+        // Note: Matrix SDK provides reactions via timeline event relations
+        // Reactions will be parsed from timeline events when received
+        #if DEBUG
+        print("[MatrixService] Note: Reactions are retrieved via timeline events")
+        #endif
+
+        return []
     }
 
     // MARK: - Helper Methods

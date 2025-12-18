@@ -354,7 +354,14 @@ final class MatrixBridgeService {
         }
 
         let roomId = try await resolveRoomId(for: conversationId)
+        try await matrixService.subscribeToRoomTimeline(roomId: roomId)
         return try await matrixService.getRoomMessages(roomId: roomId, limit: limit, from: from)
+    }
+
+    func stopListening(conversationId: String) async {
+        guard isInitialized else { return }
+        guard let roomId = try? await resolveRoomId(for: conversationId) else { return }
+        matrixService.unsubscribeFromRoomTimeline(roomId: roomId)
     }
 
     /// Set typing indicator for a conversation
@@ -375,6 +382,85 @@ final class MatrixBridgeService {
 
         let roomId = try await resolveRoomId(for: conversationId)
         try await matrixService.markRoomAsRead(roomId: roomId)
+    }
+
+    // MARK: - Message Edit/Delete/Reactions
+
+    /// Edit a message in a conversation
+    func editMessage(conversationId: String, messageId: String, newContent: String) async throws {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        let roomId = try await resolveRoomId(for: conversationId)
+        try await matrixService.editMessage(roomId: roomId, eventId: messageId, newContent: newContent)
+
+        #if DEBUG
+        print("[MatrixBridge] Edited message \(messageId) in conversation \(conversationId)")
+        #endif
+    }
+
+    /// Delete/redact a message in a conversation
+    func deleteMessage(conversationId: String, messageId: String, reason: String? = nil) async throws {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        let roomId = try await resolveRoomId(for: conversationId)
+        try await matrixService.redactMessage(roomId: roomId, eventId: messageId, reason: reason)
+
+        #if DEBUG
+        print("[MatrixBridge] Deleted message \(messageId) in conversation \(conversationId)")
+        #endif
+    }
+
+    /// Recall (unsend) a message - same as delete but with different semantic
+    func recallMessage(conversationId: String, messageId: String) async throws {
+        try await deleteMessage(conversationId: conversationId, messageId: messageId, reason: "Message recalled by sender")
+    }
+
+    /// Toggle reaction on a message (add if not present, remove if present)
+    func toggleReaction(conversationId: String, messageId: String, emoji: String) async throws {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        let roomId = try await resolveRoomId(for: conversationId)
+        try await matrixService.toggleReaction(roomId: roomId, eventId: messageId, emoji: emoji)
+
+        #if DEBUG
+        print("[MatrixBridge] Toggled reaction \(emoji) on message \(messageId)")
+        #endif
+    }
+
+    /// Add a reaction to a message
+    func addReaction(conversationId: String, messageId: String, emoji: String) async throws {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        let roomId = try await resolveRoomId(for: conversationId)
+        try await matrixService.sendReaction(roomId: roomId, eventId: messageId, emoji: emoji)
+
+        #if DEBUG
+        print("[MatrixBridge] Added reaction \(emoji) to message \(messageId)")
+        #endif
+    }
+
+    /// Remove a reaction from a message (uses toggle since Matrix doesn't have direct remove)
+    func removeReaction(conversationId: String, messageId: String, emoji: String) async throws {
+        // In Matrix, toggleReaction will remove if already present
+        try await toggleReaction(conversationId: conversationId, messageId: messageId, emoji: emoji)
+    }
+
+    /// Get reactions for a message
+    func getReactions(conversationId: String, messageId: String) async throws -> [MatrixReaction] {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        let roomId = try await resolveRoomId(for: conversationId)
+        return try await matrixService.getReactions(roomId: roomId, eventId: messageId)
     }
 
     // MARK: - Room Operations
