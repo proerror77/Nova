@@ -12,13 +12,22 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy backend workspace (use backend/Cargo.toml as workspace root to avoid
-# conflicts with legacy root workspace configuration).
-COPY backend ./backend
+# Copy workspace files (context is ./backend)
+COPY Cargo.toml Cargo.lock ./
+# Copy all workspace members
+COPY libs ./libs
+COPY proto ./proto
+COPY feed-service ./feed-service
+COPY content-service ./content-service
+COPY identity-service ./identity-service
+COPY graphql-gateway ./graphql-gateway
+COPY social-service ./social-service
+COPY notification-service ./notification-service
+COPY media-service ./media-service
+COPY graph-service ./graph-service
+COPY ranking-service ./ranking-service
 
-WORKDIR /app/backend
-
-# Build feed-service from the backend workspace
+# Build feed-service
 RUN cargo build --release -p feed-service --bin feed-service
 
 FROM debian:bookworm-slim AS runtime
@@ -35,7 +44,7 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 
 WORKDIR /app
 
-COPY --from=builder /app/backend/target/release/feed-service /app/feed-service
+COPY --from=builder /app/target/release/feed-service /app/feed-service
 
 # Adjust ownership and drop privileges
 RUN chown -R appuser:appuser /app
