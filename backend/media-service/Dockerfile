@@ -41,6 +41,9 @@ RUN for dir in identity-service content-service social-service streaming-service
     done && \
     mkdir -p content-service/benches && echo "fn main() {}" > content-service/benches/feed_ranking_bench.rs
 
+# Downgrade home crate to version compatible with Rust 1.85
+RUN cargo update -p home --precise 0.5.9
+
 # Build media-service binaries (main server + thumbnail migrator + thumbnail worker)
 RUN cargo build --release -p media-service --bin media-service --bin thumb-migrate --bin thumb-worker
 
