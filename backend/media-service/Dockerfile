@@ -1,5 +1,5 @@
 # Multi-stage build for media-service
-FROM rust:1.88-slim-bookworm AS builder
+FROM rust:1.83-slim-bookworm AS builder
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
@@ -48,17 +48,18 @@ COPY --from=builder /app/backend/target/release/thumb-worker /app/thumb-worker
 RUN chown -R appuser:appuser /app
 USER appuser
 
-# Health check
+# Health check - use HTTP_PORT from env (default 8085)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -f http://localhost:${HTTP_PORT:-8085}/health || exit 1
 
 ENV RUST_LOG=info
 ENV SERVER_HOST=0.0.0.0
-ENV SERVER_PORT=8080
+ENV HTTP_PORT=8085
+ENV GRPC_PORT=9085
 
 # Expose REST API port
-EXPOSE 8080
+EXPOSE 8085
 # Expose gRPC port
-EXPOSE 9080
+EXPOSE 9085
 
 CMD ["/app/media-service"]

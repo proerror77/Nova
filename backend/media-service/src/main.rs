@@ -78,8 +78,16 @@ async fn main() -> io::Result<()> {
         }
     };
 
-    let http_bind_address = format!("{}:{}", config.app.host, 8082);
-    let grpc_bind_address = format!("{}:9082", config.app.host);
+    let http_port = std::env::var("HTTP_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(config.app.port);
+    let grpc_port = std::env::var("GRPC_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(9085u16);
+    let http_bind_address = format!("{}:{}", config.app.host, http_port);
+    let grpc_bind_address = format!("{}:{}", config.app.host, grpc_port);
 
     println!(
         "🎥 Media Service starting HTTP server on {}",

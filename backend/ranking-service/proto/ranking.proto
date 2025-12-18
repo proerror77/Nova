@@ -32,6 +32,16 @@ service RankingService {
 
   // 獲取個性化內容推薦
   rpc GetPersonalizedRecommendations(GetPersonalizedRecommendationsRequest) returns (GetPersonalizedRecommendationsResponse);
+
+  // ============================================
+  // Photo Analysis APIs (iOS Vision Integration)
+  // ============================================
+
+  // Upload photo analysis results from iOS Vision
+  rpc UploadPhotoAnalysis(UploadPhotoAnalysisRequest) returns (UploadPhotoAnalysisResponse);
+
+  // Upload onboarding interest selections
+  rpc UploadOnboardingInterests(UploadOnboardingInterestsRequest) returns (UploadOnboardingInterestsResponse);
 }
 
 // Feed 排序請求
@@ -249,4 +259,54 @@ message ContentRecommendation {
   string topic = 1;
   float relevance_score = 2;
   string reason = 3;
+}
+
+// ============================================
+// Photo Analysis Messages (iOS Vision Integration)
+// ============================================
+
+// Photo analysis source enum
+enum PhotoAnalysisSource {
+  PHOTO_ANALYSIS_SOURCE_UNSPECIFIED = 0;
+  PHOTO_ANALYSIS_SOURCE_IOS_VISION = 1;
+  PHOTO_ANALYSIS_SOURCE_SERVER_ML = 2;
+  PHOTO_ANALYSIS_SOURCE_COMBINED = 3;
+}
+
+// Photo theme detected by iOS Vision
+message PhotoTheme {
+  string theme = 1;                    // Theme category (e.g., "Travel", "Food")
+  float confidence = 2;                // Confidence score (0-1)
+  int32 photo_count = 3;               // Number of photos in this category
+  repeated string sub_categories = 4;  // Sub-categories
+}
+
+// Request to upload photo analysis results
+message UploadPhotoAnalysisRequest {
+  string user_id = 1;
+  repeated PhotoTheme detected_themes = 2;
+  string analyzed_at = 3;              // ISO 8601 timestamp
+  int32 photo_count = 4;               // Total photos analyzed
+  PhotoAnalysisSource source = 5;
+}
+
+// Response from photo analysis upload
+message UploadPhotoAnalysisResponse {
+  bool success = 1;
+  int32 interests_created = 2;
+  string error_message = 3;
+}
+
+// Request to upload onboarding interest selections
+message UploadOnboardingInterestsRequest {
+  string user_id = 1;
+  repeated string selected_channels = 2;  // Selected channel/interest IDs
+  string selected_at = 3;                 // ISO 8601 timestamp
+}
+
+// Response from onboarding interests upload
+message UploadOnboardingInterestsResponse {
+  bool success = 1;
+  int32 interests_created = 2;
+  string error_message = 3;
 }
