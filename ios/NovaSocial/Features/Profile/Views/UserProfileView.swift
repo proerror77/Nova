@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 // MARK: - UserProfileView
 // 使用统一的 UserProfile 模型（定义在 Shared/Models/User/UserModels.swift）
@@ -12,6 +13,7 @@ struct UserProfileView: View {
     @State private var userProfile: UserProfile?  // 统一使用 UserProfile 模型
     @State private var userPosts: [UserProfilePostData] = []  // 用户帖子单独存储
     @State private var isLoading = true
+    @State private var isRefreshing = false
 
     @State private var selectedTab: ProfileTab = .posts
     @State private var isFollowing = true
@@ -19,6 +21,9 @@ struct UserProfileView: View {
     // MARK: - Services
     private let userService = UserService.shared
     private let contentService = ContentService()
+
+    // MARK: - Notification Observer
+    @State private var avatarUpdateCancellable: AnyCancellable?
 
     enum ProfileTab {
         case posts
@@ -174,7 +179,51 @@ struct UserProfileView: View {
         }
         .task {
             await loadUserData()
+            setupAvatarUpdateObserver()
         }
+        .refreshable {
+            await refreshUserData()
+        }
+    }
+
+    // MARK: - 设置头像更新监听
+    private func setupAvatarUpdateObserver() {
+        avatarUpdateCancellable = NotificationCenter.default.publisher(for: .userAvatarDidUpdate)
+            .receive(on: DispatchQueue.main)
+            .sink { [self] notification in
+                guard let userInfo = notification.userInfo,
+                      let updatedUserId = userInfo[AvatarNotificationKey.userId.rawValue] as? String,
+                      updatedUserId == self.userId else {
+                    return
+                }
+
+                let newAvatarUrl = userInfo[AvatarNotificationKey.avatarUrl.rawValue] as? String
+
+                // 更新用户资料中的头像
+                if var profile = self.userProfile {
+                    // 直接修改 avatarUrl（因为 UserProfile 是 struct 且 avatarUrl 是 var）
+                    profile.avatarUrl = newAvatarUrl
+                    self.userProfile = profile
+
+                    // 同时更新帖子中的头像
+                    self.userPosts = self.userPosts.map { post in
+                        var updatedPost = post
+                        updatedPost.avatarUrl = newAvatarUrl
+                        return updatedPost
+                    }
+
+                    #if DEBUG
+                    print("[UserProfileView] Avatar updated via notification for user: \(updatedUserId)")
+                    #endif
+                }
+            }
+    }
+
+    // MARK: - 刷新用户数据
+    private func refreshUserData() async {
+        isRefreshing = true
+        await loadUserData()
+        isRefreshing = false
     }
 
     // MARK: - 加载用户数据

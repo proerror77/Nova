@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 
 // MARK: - Feed Logger
 enum FeedLogger {
@@ -57,6 +58,9 @@ class FeedViewModel: ObservableObject {
     // Track ongoing bookmark operations to prevent concurrent calls for the same post
     private var ongoingBookmarkOperations: Set<String> = []
 
+    // Combine subscriptions for notifications
+    private var cancellables = Set<AnyCancellable>()
+
     // Image prefetch target size for feed cards
     private let prefetchTargetSize = CGSize(width: 750, height: 1000)
 
@@ -106,6 +110,55 @@ class FeedViewModel: ObservableObject {
         self.contentService = contentService
         self.socialService = socialService
         self.authManager = authManager ?? AuthenticationManager.shared
+
+        // 订阅头像更新通知
+        setupAvatarUpdateObserver()
+    }
+
+    // MARK: - Avatar Update Observer
+
+    /// 设置头像更新通知监听器
+    /// 当任何用户的头像更新时，自动更新 Feed 中该用户的所有帖子头像
+    private func setupAvatarUpdateObserver() {
+        NotificationCenter.default.publisher(for: .userAvatarDidUpdate)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard let self = self else { return }
+
+                // 从通知中提取用户 ID 和新头像 URL
+                guard let userInfo = notification.userInfo,
+                      let userId = userInfo[AvatarNotificationKey.userId.rawValue] as? String else {
+                    return
+                }
+
+                let avatarUrl = userInfo[AvatarNotificationKey.avatarUrl.rawValue] as? String
+
+                // 更新 Feed 中该用户的所有帖子头像
+                self.updateAvatarForUser(userId: userId, avatarUrl: avatarUrl)
+            }
+            .store(in: &cancellables)
+
+        FeedLogger.debug("Avatar update observer setup complete")
+    }
+
+    /// 更新指定用户在 Feed 中的所有帖子头像
+    /// - Parameters:
+    ///   - userId: 需要更新头像的用户 ID
+    ///   - avatarUrl: 新的头像 URL
+    private func updateAvatarForUser(userId: String, avatarUrl: String?) {
+        var updatedCount = 0
+
+        posts = posts.map { post in
+            if post.authorId == userId {
+                updatedCount += 1
+                return post.copying(authorAvatar: avatarUrl)
+            }
+            return post
+        }
+
+        if updatedCount > 0 {
+            FeedLogger.debug("Updated avatar for \(updatedCount) posts from user \(userId)")
+        }
     }
 
     func loadFeed(

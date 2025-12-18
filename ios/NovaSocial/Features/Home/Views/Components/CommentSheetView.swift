@@ -200,20 +200,29 @@ struct SocialCommentRow: View {
     let comment: SocialComment
     var onAvatarTapped: ((String) -> Void)?  // 点击头像回调
 
+    /// 显示的用户名：优先 displayName，其次 username，最后 ID 前缀
+    private var displayUsername: String {
+        if let displayName = comment.authorDisplayName, !displayName.isEmpty {
+            return displayName
+        }
+        if let username = comment.authorUsername, !username.isEmpty {
+            return username
+        }
+        return "User \(comment.userId.prefix(8))"
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: DesignTokens.spacing12) {
-            // Avatar (点击跳转用户主页)
-            Circle()
-                .fill(DesignTokens.avatarPlaceholder)
-                .frame(width: DesignTokens.avatarSmall, height: DesignTokens.avatarSmall)
+            // Avatar (点击跳转用户主页) - 使用 AvatarView 显示实际头像
+            AvatarView(image: nil, url: comment.authorAvatarUrl, size: DesignTokens.avatarSmall)
                 .onTapGesture {
                     onAvatarTapped?(comment.userId)
                 }
 
             VStack(alignment: .leading, spacing: DesignTokens.spacing4) {
                 HStack {
-                    // 用户名 (点击跳转用户主页)
-                    Text("User \(comment.userId.prefix(8))")
+                    // 用户名 (点击跳转用户主页) - 显示实际用户名
+                    Text(displayUsername)
                         .font(.system(size: DesignTokens.fontMedium, weight: .semibold))
                         .foregroundColor(.black)
                         .onTapGesture {

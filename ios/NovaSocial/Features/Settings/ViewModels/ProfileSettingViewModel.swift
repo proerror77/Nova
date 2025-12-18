@@ -159,10 +159,15 @@ final class ProfileSettingViewModel: ObservableObject {
             avatarImage = nil
 
             // 清除 AvatarManager 中的待上传头像（已成功上传）
-            if newAvatarUrl != nil {
+            // 并广播头像更新通知，让所有监听者（Feed、UserProfile 等）更新头像显示
+            if let finalAvatarUrl = updatedUser.avatarUrl {
                 avatarManager.clearPendingAvatar()
+
+                // 广播头像更新通知
+                avatarManager.notifyAvatarUpdate(userId: userId, avatarUrl: finalAvatarUrl)
+
                 #if DEBUG
-                print("[ProfileSettingViewModel] 头像上传成功，已清除 AvatarManager 中的待上传头像")
+                print("[ProfileSettingViewModel] 头像上传成功，已广播更新通知: userId=\(userId), avatarUrl=\(finalAvatarUrl)")
                 #endif
             }
 
