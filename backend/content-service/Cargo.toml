@@ -52,7 +52,7 @@ async-trait.workspace = true
 reqwest.workspace = true
 urlencoding.workspace = true
 clickhouse.workspace = true
-utoipa.workspace = true
+utoipa = { version = "5.4", features = ["chrono", "uuid"] }
 utoipa-swagger-ui = { version = "9", features = ["actix-web"] }
 
 # Resilience (P0-5)
