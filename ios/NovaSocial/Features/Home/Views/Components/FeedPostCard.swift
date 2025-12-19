@@ -83,10 +83,10 @@ struct FeedPostCard: View {
                         ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, mediaUrl in
                             Group {
                                 if isVideoUrl(mediaUrl) {
-                                    // Video content - use FeedVideoPlayer
+                                    // Video content - use FeedVideoPlayer (autoplay when visible)
                                     FeedVideoPlayer(
                                         url: URL(string: mediaUrl)!,
-                                        autoPlay: false,
+                                        autoPlay: true,
                                         isMuted: true
                                     )
                                 } else {
