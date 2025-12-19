@@ -1,75 +1,102 @@
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: thumb-worker
-  namespace: nova-backend
+  namespace: nova-staging
   labels:
     app: thumb-worker
-    component: backend
-    version: v1
+    tier: backend
+  annotations:
+    environment: staging
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: thumb-worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   template:
     metadata:
       labels:
         app: thumb-worker
-        version: v1
+        component: thumb-worker
+        tier: backend
+      annotations:
+        environment: staging
     spec:
+      serviceAccountName: media-service
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1000
       containers:
       - name: thumb-worker
-        image: nova-media-service:latest
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/media-service:latest
         imagePullPolicy: Always
         command: ["/app/thumb-worker"]
         env:
-        - name: RUST_LOG
-          value: "info,thumb_worker=debug,media_service=debug"
-        # GCS Configuration
-        - name: GCS_BUCKET
-          valueFrom:
-            configMapKeyRef:
-              name: nova-backend-config
-              key: GCS_BUCKET
-        - name: GCS_SERVICE_ACCOUNT_JSON
+        # Database - use nova_media database
+        - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
-              name: gcs-service-account
-              key: service-account.json
-        # Database - connects to content service DB
+              name: nova-db-credentials
+              key: media-db-url
         - name: CONTENT_DATABASE_URL
           valueFrom:
             secretKeyRef:
-              name: nova-backend-secrets
-              key: DATABASE_URL
-        # Kafka Configuration
+              name: nova-db-credentials
+              key: media-db-url
+        # GCS configuration
+        - name: GCS_BUCKET
+          value: "nova-media-staging"
+        - name: GCS_SERVICE_ACCOUNT_JSON_PATH
+          value: "/var/secrets/gcs/service-account.json"
+        # Kafka configuration (use FQDN for cross-namespace)
         - name: KAFKA_BROKERS
-          valueFrom:
-            configMapKeyRef:
-              name: nova-backend-config
-              key: KAFKA_BROKERS
+          value: "kafka.nova-staging.svc.cluster.local:9092"
         - name: KAFKA_TOPIC
-          valueFrom:
-            configMapKeyRef:
-              name: nova-backend-config
-              key: KAFKA_MEDIA_EVENTS_TOPIC
+          value: "media_events"
         - name: KAFKA_GROUP_ID
-          value: "thumbnail-worker-v1"
-        # Thumbnail Configuration
+          value: "thumbnail-worker"
+        # Thumbnail configuration
         - name: THUMB_MAX_DIMENSION
           value: "600"
         - name: THUMB_QUALITY
           value: "85"
         - name: BATCH_INTERVAL_SECS
           value: "300"
+        # Logging
+        - name: RUST_LOG
+          value: "info,thumb_worker=debug,media_service=debug"
         resources:
           requests:
-            memory: "256Mi"
-            cpu: "100m"
+            cpu: "50m"
+            memory: "128Mi"
           limits:
-            memory: "1Gi"
-            cpu: "1000m"
-        # No health probes needed for worker (no HTTP server)
-      restartPolicy: Always
+            cpu: "500m"
+            memory: "512Mi"
+        volumeMounts:
+        - name: gcs-sa
+          mountPath: /var/secrets/gcs
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: gcs-sa
+        secret:
+          secretName: media-service-sa
+      - name: tmp
+        emptyDir: {}
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 50
+            preference:
+              matchExpressions:
+              - key: tier
+                operator: In
+                values:
+                - backend

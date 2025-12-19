@@ -1,5 +1,6 @@
 import SwiftUI
 import Foundation
+import PhotosUI
 
 // MARK: - HomeView
 
@@ -16,9 +17,12 @@ struct HomeView: View {
     @State private var showPhotoOptions = false
     @State private var showComments = false
     @State private var selectedPostForComment: FeedPost?
-    @State private var showImagePicker = false
+    @State private var showPhotoPicker = false  // Multi-photo picker
+    @State private var selectedPhotos: [PhotosPickerItem] = []  // PhotosPicker selection
     @State private var showCamera = false
     @State private var selectedImage: UIImage?
+    @State private var selectedMediaItems: [PostMediaItem] = []  // For multi-photo selection
+    @State private var isProcessingPhotos = false  // Processing indicator
     @State private var showGenerateImage = false
     @State private var showWrite = false
     @State private var selectedPostForDetail: FeedPost?
@@ -42,10 +46,14 @@ struct HomeView: View {
             } else if showNewPost {
                 NewPostView(
                     showNewPost: $showNewPost,
+                    initialMediaItems: selectedMediaItems.isEmpty ? nil : selectedMediaItems,
                     initialImage: selectedImage,
                     onPostSuccess: { newPost in
                         // Post 成功后直接添加到 Feed 顶部（优化版本，不需要重新加载整个feed）
                         feedViewModel.addNewPost(newPost)
+                        // Clear selected media after posting
+                        selectedMediaItems = []
+                        selectedImage = nil
                     }
                 )
                 .transition(.identity)
@@ -70,7 +78,7 @@ struct HomeView: View {
                 PhotoOptionsModal(
                     isPresented: $showPhotoOptions,
                     onChoosePhoto: {
-                        showImagePicker = true
+                        showPhotoPicker = true  // Open multi-photo picker
                     },
                     onTakePhoto: {
                         showCamera = true
@@ -99,14 +107,24 @@ struct HomeView: View {
                 CommentSheetView(post: post, isPresented: $showComments)
             }
         }
-        .sheet(isPresented: $showImagePicker) {
-            ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
+        // System PhotosPicker - user selects 1-5 photos, taps blue checkmark to confirm
+        .photosPicker(
+            isPresented: $showPhotoPicker,
+            selection: $selectedPhotos,
+            maxSelectionCount: 5,
+            matching: .any(of: [.images, .livePhotos, .videos])
+        )
+        .onChange(of: selectedPhotos) { oldValue, newValue in
+            guard !newValue.isEmpty else { return }
+            Task {
+                await processSelectedPhotos(newValue)
+            }
         }
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
         }
         .onChange(of: selectedImage) { oldValue, newValue in
-            // 选择/拍摄照片后，自动跳转到NewPostView
+            // 拍摄照片后，自动跳转到NewPostView
             if newValue != nil {
                 showNewPost = true
             }
@@ -432,6 +450,36 @@ struct HomeView: View {
                 )
                 .frame(height: 4)
                 .offset(y: 4)
+        }
+    }
+
+    // MARK: - Process Selected Photos
+
+    private func processSelectedPhotos(_ items: [PhotosPickerItem]) async {
+        guard !items.isEmpty else { return }
+
+        await MainActor.run {
+            isProcessingPhotos = true
+        }
+
+        do {
+            let mediaItems = try await LivePhotoManager.shared.loadMedia(from: items, maxCount: 5)
+
+            await MainActor.run {
+                isProcessingPhotos = false
+                selectedMediaItems = mediaItems
+                selectedPhotos = []  // Clear selection for next time
+                showNewPost = true
+            }
+        } catch {
+            #if DEBUG
+            print("[HomeView] Failed to process photos: \(error)")
+            #endif
+
+            await MainActor.run {
+                isProcessingPhotos = false
+                selectedPhotos = []
+            }
         }
     }
 }

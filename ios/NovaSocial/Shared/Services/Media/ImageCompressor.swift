@@ -4,17 +4,17 @@ import CoreGraphics
 // MARK: - Image Compression Quality
 
 enum ImageCompressionQuality: CaseIterable {
-    case low        // 60% quality, max 1080px
-    case medium     // 75% quality, max 1920px
-    case high       // 85% quality, max 2560px
+    case low        // 50% quality, max 1080px - optimized for fast uploads
+    case medium     // 70% quality, max 1440px
+    case high       // 85% quality, max 2048px
     case original   // 100% quality, no resize
 
     var jpegQuality: CGFloat {
         switch self {
         case .low:
-            return 0.60
+            return 0.50  // Lower quality for faster uploads
         case .medium:
-            return 0.75
+            return 0.70
         case .high:
             return 0.85
         case .original:
@@ -25,11 +25,11 @@ enum ImageCompressionQuality: CaseIterable {
     var maxDimension: CGFloat {
         switch self {
         case .low:
-            return 1080
+            return 1080  // Good enough for social media
         case .medium:
-            return 1920
+            return 1440
         case .high:
-            return 2560
+            return 2048
         case .original:
             return CGFloat.greatestFiniteMagnitude
         }
@@ -39,11 +39,11 @@ enum ImageCompressionQuality: CaseIterable {
     var targetSizeBytes: Int {
         switch self {
         case .low:
-            return 200_000      // ~200 KB
+            return 150_000      // ~150 KB for fast uploads
         case .medium:
-            return 500_000      // ~500 KB
+            return 400_000      // ~400 KB
         case .high:
-            return 1_000_000    // ~1 MB
+            return 800_000      // ~800 KB
         case .original:
             return Int.max
         }

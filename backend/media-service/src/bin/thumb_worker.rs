@@ -7,7 +7,7 @@
 //! - GCS_BUCKET: GCS bucket name (e.g., "nova-media-staging")
 //! - GCS_SERVICE_ACCOUNT_JSON: Service account JSON content (base64 or raw)
 //! - GCS_SERVICE_ACCOUNT_JSON_PATH: Alternative: path to service account JSON file
-//! - CONTENT_DATABASE_URL: PostgreSQL URL for content DB (post_images table)
+//! - CONTENT_DATABASE_URL: PostgreSQL URL for media DB (uploads/media_files tables in nova_media)
 //! - KAFKA_BROKERS: Kafka broker addresses
 //! - KAFKA_TOPIC: Topic to consume (default: "media_events")
 //! - KAFKA_GROUP_ID: Consumer group ID (default: "thumbnail-worker")

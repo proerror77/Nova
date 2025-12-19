@@ -82,16 +82,22 @@ struct NewPostView: View {
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: .constant(nil))
         }
-        // PhotosPicker with Live Photo and video support
+        // Direct system PhotosPicker for multi-select
         .photosPicker(
             isPresented: $showPhotoPicker,
             selection: $selectedPhotos,
             maxSelectionCount: 5 - selectedMediaItems.count,
-            matching: .any(of: [.images, .livePhotos, .videos])  // Support images, Live Photos, and videos
+            selectionBehavior: .continuousAndOrdered,
+            matching: .any(of: [.images, .livePhotos, .videos])
         )
         .onChange(of: selectedPhotos) { oldValue, newValue in
+            guard !newValue.isEmpty else { return }
             Task {
                 await processSelectedPhotos(newValue)
+                // Clear selection after processing
+                await MainActor.run {
+                    selectedPhotos = []
+                }
             }
         }
         .onAppear {
@@ -647,15 +653,14 @@ struct NewPostView: View {
     // MARK: - Process Selected Photos (with Live Photo support)
     private func processSelectedPhotos(_ items: [PhotosPickerItem]) async {
         guard !items.isEmpty else { return }
-        
+
         await MainActor.run {
             isProcessingMedia = true
         }
-        
+
         defer {
             Task { @MainActor in
                 isProcessingMedia = false
-                selectedPhotos = []  // Clear for next selection
             }
         }
         
@@ -1183,10 +1188,10 @@ struct NewPostView: View {
                 // Extract just the images for compression
                 let images = imagesToProcess.map { $0.image }
 
-                // Compress all images in parallel
+                // Compress all images in parallel (use .low for ~200KB, faster uploads)
                 let compressionResults = await imageCompressor.compressImagesInParallel(
                     images: images,
-                    quality: .medium,
+                    quality: .low,
                     progressCallback: { progress in
                         #if DEBUG
                         print("[NewPost] Image compression progress: \(String(format: "%.0f", progress * 100))%")
@@ -1272,10 +1277,10 @@ struct NewPostView: View {
                     uploadStatus = "Uploading Live Photo \(livePhotoIndex + 1)/\(livePhotos.count)..."
                 }
 
-                // Compress the still image component
+                // Compress the still image component (use .low for faster uploads)
                 let compressionResult = await imageCompressor.compressImage(
                     livePhotoInfo.data.stillImage,
-                    quality: .medium
+                    quality: .low
                 )
                 let imageData = compressionResult.data
 
