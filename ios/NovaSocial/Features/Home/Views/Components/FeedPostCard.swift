@@ -9,54 +9,38 @@ struct FeedPostCard: View {
     var onComment: () -> Void = {}
     var onShare: () -> Void = {}
     var onBookmark: () -> Void = {}
-    var onAvatarTapped: ((String) -> Void)?  // 点击头像回调，传入 authorId
 
     @State private var currentImageIndex = 0
-    
-    /// Check if URL points to a video file
-    private func isVideoUrl(_ url: String) -> Bool {
-        let lowercased = url.lowercased()
-        return lowercased.contains(".mov") ||
-               lowercased.contains(".mp4") ||
-               lowercased.contains(".m4v") ||
-               lowercased.contains(".webm")
-    }
 
     var body: some View {
         VStack(spacing: 8) {
             // MARK: - User Info Header
             HStack {
                 HStack(spacing: 10) {
-                    // Avatar - 显示用户头像或默认头像（可点击跳转用户主页）
+                    // Avatar - 显示用户头像或默认头像
                     AvatarView(image: nil, url: post.authorAvatar, size: 30)
-                        .onTapGesture {
-                            onAvatarTapped?(post.authorId)
-                        }
 
-                    // User Info（用户名也可点击）
+                    // User Info
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
                             Text(post.authorName)
-                                .font(.system(size: 14, weight: .medium))
+                                .font(Typography.semibold14)
                                 .foregroundColor(Color(red: 0.02, green: 0, blue: 0))
-                                .onTapGesture {
-                                    onAvatarTapped?(post.authorId)
-                                }
 
                             // 认证标记 (可选)
                             Image(systemName: "checkmark.seal.fill")
-                                .font(.system(size: 10))
+                                .font(Typography.regular10)
                                 .foregroundColor(Color(red: 0.20, green: 0.60, blue: 1.0))
                         }
 
                         HStack(spacing: 9) {
                             Text(post.createdAt.timeAgoDisplay())
-                                .font(.system(size: 10))
+                                .font(Typography.regular10)
                                 .lineSpacing(13)
                                 .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
 
                             Text("Location")
-                                .font(.system(size: 10))
+                                .font(Typography.regular10)
                                 .lineSpacing(13)
                                 .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
                         }
@@ -70,43 +54,40 @@ struct FeedPostCard: View {
                     Image("card-share-icon")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 18, height: 18)
+                        .frame(width: 24, height: 24)
                 }
                 .accessibilityLabel("Share")
             }
             .padding(.horizontal, 16)
 
-            // MARK: - Post Media (Images & Videos)
-            let _ = print("[DEBUG] Post \(post.id.prefix(8)) displayMediaUrls=\(post.displayMediaUrls), mediaUrls=\(post.mediaUrls), thumbnailUrls=\(post.thumbnailUrls)")
+            // MARK: - Post Images (375x500)
             if !post.displayMediaUrls.isEmpty {
                 VStack(spacing: 8) {
                     TabView(selection: $currentImageIndex) {
-                        ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, mediaUrl in
-                            Group {
-                                if isVideoUrl(mediaUrl) {
-                                    // Video content - use FeedVideoPlayer (autoplay when visible)
-                                    FeedVideoPlayer(
-                                        url: URL(string: mediaUrl)!,
-                                        autoPlay: true,
-                                        isMuted: true
-                                    )
-                                } else {
-                                    // Image content - use CachedAsyncImage
-                                    CachedAsyncImage(
-                                        url: URL(string: mediaUrl),
-                                        targetSize: CGSize(width: 750, height: 1000)  // 2x for Retina
-                                    ) { image in
-                                        image
-                                            .resizable()
-                                            .scaledToFill()
-                                    } placeholder: {
-                                        Rectangle()
-                                            .fill(DesignTokens.placeholderColor)
-                                            .overlay(
-                                                ProgressView()
-                                                    .tint(.white)
-                                            )
-                                    }
+                        ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
+                            AsyncImage(url: URL(string: imageUrl)) { phase in
+                                switch phase {
+                                case .empty:
+                                    Rectangle()
+                                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                        .overlay(
+                                            ProgressView()
+                                                .tint(.white)
+                                        )
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                case .failure:
+                                    Rectangle()
+                                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                        .overlay(
+                                            Image(systemName: "photo")
+                                                .font(.system(size: 30))
+                                                .foregroundColor(.white.opacity(0.5))
+                                        )
+                                @unknown default:
+                                    EmptyView()
                                 }
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -137,7 +118,7 @@ struct FeedPostCard: View {
                 // Post Content Text
                 if !post.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(post.content)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(Typography.semibold16)
                         .lineSpacing(20)
                         .foregroundColor(.black)
                 }
@@ -147,28 +128,27 @@ struct FeedPostCard: View {
                     // Like button
                     Button(action: onLike) {
                         HStack(spacing: 6) {
-                            Image(post.isLiked ? "Like-on" : "Like-off")
+                            Image("card-heart-icon")
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 20, height: 20)
-                                .animation(.spring(response: 0.25, dampingFraction: 0.8), value: post.isLiked)
                             Text("\(post.likeCount)")
-                                .font(.system(size: 10))
+                                .font(Typography.regular10)
                                 .lineSpacing(20)
                                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
                         }
                     }
                     .accessibilityLabel("Like, \(post.likeCount) likes")
 
-            // Comment button
-            Button(action: onComment) {
+                    // Comment button
+                    Button(action: onComment) {
                         HStack(spacing: 6) {
                             Image("card-comment-icon")
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 20, height: 20)
                             Text("\(post.commentCount)")
-                                .font(.system(size: 10))
+                                .font(Typography.regular10)
                                 .lineSpacing(20)
                                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
                         }
@@ -178,20 +158,19 @@ struct FeedPostCard: View {
                     // Bookmark/Star button
                     Button(action: onBookmark) {
                         HStack(spacing: 6) {
-                            Image(post.isBookmarked ? "Save-on" : "Save-off")
+                            Image("card-star-icon")
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 20, height: 20)
-                                .animation(.spring(response: 0.25, dampingFraction: 0.8), value: post.isBookmarked)
                             Text("\(post.shareCount)")
-                                .font(.system(size: 10))
+                                .font(Typography.regular10)
                                 .lineSpacing(20)
                                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
                         }
                     }
                     .accessibilityLabel("Bookmark")
 
-            Spacer()
+                    Spacer()
                 }
             }
             .padding(.horizontal, 16)
@@ -204,41 +183,27 @@ struct FeedPostCard: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("FeedPostCard - Default") {
+// MARK: - Preview
+#Preview {
     @Previewable @State var showReport = false
 
     ScrollView {
         VStack(spacing: 16) {
+            // 带图片的帖子
             FeedPostCard(
                 post: FeedPost.preview,
                 showReportView: $showReport
             )
-            .padding(.horizontal, -DesignTokens.spacing16)
-            .ignoresSafeArea(.container, edges: .horizontal)
-        }
-        .padding(.horizontal, 16)
-    }
-    .background(Color(red: 0.97, green: 0.97, blue: 0.97))
-}
 
-#Preview("FeedPostCard - Dark Mode") {
-    @Previewable @State var showReport = false
-
-    ScrollView {
-        VStack(spacing: 16) {
+            // 纯文字帖子
             FeedPostCard(
-                post: FeedPost.preview,
+                post: FeedPost.previewTextOnly,
                 showReportView: $showReport
             )
-            .padding(.horizontal, -DesignTokens.spacing16)
-            .ignoresSafeArea(.container, edges: .horizontal)
         }
         .padding(.horizontal, 16)
     }
     .background(Color(red: 0.97, green: 0.97, blue: 0.97))
-    .preferredColorScheme(.dark)
 }
 
 // MARK: - Preview Data
