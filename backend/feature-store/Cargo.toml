@@ -32,6 +32,7 @@ tract-onnx = "0.21"  # ONNX model serving
 
 # ClickHouse client
 clickhouse = { version = "0.12", features = ["watch", "uuid", "time"] }
+time = "0.3"  # Required for ClickHouse datetime serialization
 
 # Shared internal libraries
 error-types = { path = "../libs/error-types" }

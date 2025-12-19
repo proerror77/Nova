@@ -70,6 +70,27 @@ resources:
   - trust-safety-service-configmap.yaml
   - trust-safety-service-serviceaccount.yaml
 
+  - feature-store-deployment.yaml
+  - feature-store-service.yaml
+  - feature-store-configmap.yaml
+  - feature-store-serviceaccount.yaml
+  - feature-store-secret.yaml
+
+  - streaming-service-deployment.yaml
+  - streaming-service-service.yaml
+  - streaming-service-configmap.yaml
+  - streaming-service-serviceaccount.yaml
+  - streaming-service-secret.yaml
+
+  - alice-voice-service-deployment.yaml
+  - alice-voice-service-service.yaml
+  - alice-voice-service-configmap.yaml
+  - alice-voice-service-serviceaccount.yaml
+  - alice-voice-service-secret.yaml
+  - alice-voice-nginx-configmap.yaml
+  - alice-voice-service-backendconfig.yaml
+  - alice-voice-service-ingress.yaml
+
   # API Gateway: DEPRECATED - now using GKE ELB directly via graphql-gateway
   # api-gateway/deployment.yaml, service.yaml, configmap-nginx.yaml are archived
   # See k8s/microservices/api-gateway/ for reference only

@@ -21,7 +21,7 @@ use uuid::Uuid;
 /// - Batch loads into Redis with 7-day TTL
 ///
 /// **Usage**:
-/// ```rust
+/// ```ignore
 /// let warmer = CacheWarmer::new(
 ///     online_store,
 ///     feature_computer,

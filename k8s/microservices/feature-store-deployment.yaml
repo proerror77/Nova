@@ -1,0 +1,190 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feature-store
+  labels:
+    app: feature-store
+    tier: backend
+  annotations:
+    description: "Feature Store - Real-time ML feature serving with Redis hot storage and ClickHouse near-line storage"
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: feature-store
+  template:
+    metadata:
+      labels:
+        app: feature-store
+        tier: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8010"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: feature-store
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - feature-store
+                topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: tier
+                    operator: In
+                    values:
+                      - backend
+
+      initContainers:
+        # Wait for Redis
+        - name: wait-for-redis
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for Redis..."
+              until nc -z redis 6379; do
+                echo "Redis is unavailable - sleeping"
+                sleep 2
+              done
+              echo "Redis is up"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+
+        # Wait for PostgreSQL
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for PostgreSQL..."
+              until nc -z pgbouncer 5432; do
+                echo "PostgreSQL is unavailable - sleeping"
+                sleep 2
+              done
+              echo "PostgreSQL is up"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+
+      containers:
+        - name: feature-store
+          image: nova/feature-store
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8010
+              protocol: TCP
+            - name: grpc
+              containerPort: 9010
+              protocol: TCP
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8010
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8010
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8010
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          env:
+            # gRPC mTLS configuration
+            - name: GRPC_SERVER_CERT_PATH
+              value: /etc/nova/certs/server.crt
+            - name: GRPC_SERVER_KEY_PATH
+              value: /etc/nova/certs/server.key
+            - name: GRPC_CLIENT_CA_CERT_PATH
+              value: /etc/nova/certs/ca.crt
+            - name: GRPC_REQUIRE_CLIENT_CERT
+              value: "true"
+            # Pod info
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+
+          envFrom:
+            - configMapRef:
+                name: feature-store-config
+            - secretRef:
+                name: feature-store-secret
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: grpc-mtls-shared
+              mountPath: /etc/nova/certs
+              readOnly: true
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: grpc-mtls-shared
+          secret:
+            secretName: grpc-mtls-shared
+
+      terminationGracePeriodSeconds: 30

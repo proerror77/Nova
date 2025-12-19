@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: streaming-service
+  labels:
+    app: streaming-service
+    tier: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: streaming-service
+  ports:
+  - name: http
+    port: 8088
+    targetPort: 8088
+    protocol: TCP

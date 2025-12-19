@@ -86,6 +86,21 @@ images:
     newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/graphql-gateway
     newTag: 178b5cc3
 
+  # Tier 5b: Feature Store (ML Features)
+  - name: nova/feature-store
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/feature-store
+    newTag: 178b5cc3
+
+  # Tier 5c: Streaming Service (RTMP Management)
+  - name: nova/streaming-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/streaming-service
+    newTag: 178b5cc3
+
+  # Tier 6b: AI Services
+  - name: asia-northeast1-docker.pkg.dev/PROJECT_ID/nova/alice-voice-service
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/alice-voice-service
+    newTag: latest
+
 # Staging-specific ConfigMap
 configMapGenerator:
   - name: nova-config

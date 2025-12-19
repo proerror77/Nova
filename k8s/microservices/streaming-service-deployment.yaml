@@ -1,0 +1,150 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: streaming-service
+  labels:
+    app: streaming-service
+    tier: backend
+  annotations:
+    description: "RTMP streaming management service - stream key auth and lifecycle"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: streaming-service
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: streaming-service
+        tier: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8088"
+        prometheus.io/path: "/metrics"
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+              - key: tier
+                operator: In
+                values:
+                - backend
+            weight: 50
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - streaming-service
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      
+      initContainers:
+      - name: wait-for-redis
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for Redis..."
+          until nc -z redis 6379; do
+            echo "Redis not ready, waiting..."
+            sleep 2
+          done
+          echo "Redis is ready"
+      
+      containers:
+      - name: streaming-service
+        image: nova/streaming-service
+        imagePullPolicy: IfNotPresent
+        
+        ports:
+        - name: http
+          containerPort: 8088
+          protocol: TCP
+        
+        envFrom:
+        - configMapRef:
+            name: streaming-service-config
+        - secretRef:
+            name: streaming-service-secret
+        
+        env:
+        - name: HOST
+          value: "0.0.0.0"
+        - name: PORT
+          value: "8088"
+        - name: RUST_LOG
+          value: "info,streaming_service=debug"
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8088
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8088
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8088
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 30
+        
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      
+      serviceAccountName: streaming-service
+      
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      
+      terminationGracePeriodSeconds: 30

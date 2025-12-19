@@ -1,5 +1,7 @@
 // gRPC server implementation for FeatureStore service
+use crate::services::near_line::NearLineFeatureService;
 use crate::services::online::OnlineFeatureStore;
+use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
@@ -17,11 +19,21 @@ use feature_store::*;
 #[derive(Clone)]
 pub struct AppState {
     pub online_store: Arc<OnlineFeatureStore>,
+    pub near_line_service: Arc<NearLineFeatureService>,
+    pub pg_pool: PgPool,
 }
 
 impl AppState {
-    pub fn new(online_store: Arc<OnlineFeatureStore>) -> Self {
-        Self { online_store }
+    pub fn new(
+        online_store: Arc<OnlineFeatureStore>,
+        near_line_service: Arc<NearLineFeatureService>,
+        pg_pool: PgPool,
+    ) -> Self {
+        Self {
+            online_store,
+            near_line_service,
+            pg_pool,
+        }
     }
 }
 
@@ -54,9 +66,9 @@ impl FeatureStoreImpl {
         if entity_type.is_empty() {
             return Err(Status::invalid_argument("entity_type cannot be empty"));
         }
-        if !matches!(entity_type, "user" | "post" | "video" | "creator" | "topic") {
+        if !matches!(entity_type, "user" | "post" | "video" | "creator" | "topic" | "comment") {
             return Err(Status::invalid_argument(format!(
-                "Invalid entity_type: {}. Must be one of: user, post, video, creator, topic",
+                "Invalid entity_type: {}. Must be one of: user, post, video, creator, topic, comment",
                 entity_type
             )));
         }
@@ -158,6 +170,18 @@ impl FeatureStoreImpl {
             .get("correlation-id")
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string())
+    }
+
+    /// Convert FeatureType to proto FeatureType
+    fn feature_type_to_proto(ft: crate::models::FeatureType) -> i32 {
+        match ft {
+            crate::models::FeatureType::Double => 1,
+            crate::models::FeatureType::Int => 2,
+            crate::models::FeatureType::String => 3,
+            crate::models::FeatureType::Bool => 4,
+            crate::models::FeatureType::DoubleList => 5,
+            crate::models::FeatureType::Timestamp => 6,
+        }
     }
 }
 
@@ -416,7 +440,7 @@ impl FeatureStore for FeatureStoreImpl {
     ///
     /// Process:
     /// 1. Validate request parameters
-    /// 2. Query PostgreSQL metadata table
+    /// 2. Query PostgreSQL metadata table via NearLineFeatureService
     /// 3. Return feature metadata
     ///
     /// Note: This is a low-frequency operation (used for debugging/monitoring)
@@ -444,11 +468,43 @@ impl FeatureStore for FeatureStoreImpl {
             req.entity_type, req.feature_name
         );
 
-        // TODO: Implement metadata retrieval from PostgreSQL
-        // For now, return unimplemented
-        Err(Status::unimplemented(
-            "get_feature_metadata not yet implemented - requires PostgreSQL integration",
-        ))
+        // Fetch metadata from NearLineFeatureService
+        let metadata = self
+            .state
+            .near_line_service
+            .get_feature_metadata(&req.entity_type, &req.feature_name)
+            .await
+            .map_err(|e| {
+                error!("Failed to get feature metadata: {}", e);
+                Status::internal(format!("Failed to get feature metadata: {}", e))
+            })?;
+
+        match metadata {
+            Some(def) => {
+                info!(
+                    "get_feature_metadata: found metadata for {}/{}",
+                    req.entity_type, req.feature_name
+                );
+
+                Ok(Response::new(GetFeatureMetadataResponse {
+                    feature_name: def.name,
+                    r#type: Self::feature_type_to_proto(def.feature_type),
+                    ttl_seconds: def.default_ttl_seconds,
+                    last_updated_timestamp: def.updated_at.timestamp(),
+                    description: def.description.unwrap_or_default(),
+                }))
+            }
+            None => {
+                warn!(
+                    "get_feature_metadata: no metadata found for {}/{}",
+                    req.entity_type, req.feature_name
+                );
+                Err(Status::not_found(format!(
+                    "Feature metadata not found for {}/{}",
+                    req.entity_type, req.feature_name
+                )))
+            }
+        }
     }
 }
 
@@ -470,6 +526,7 @@ mod tests {
         assert!(FeatureStoreImpl::validate_entity_type("video").is_ok());
         assert!(FeatureStoreImpl::validate_entity_type("creator").is_ok());
         assert!(FeatureStoreImpl::validate_entity_type("topic").is_ok());
+        assert!(FeatureStoreImpl::validate_entity_type("comment").is_ok());
         assert!(FeatureStoreImpl::validate_entity_type("invalid").is_err());
         assert!(FeatureStoreImpl::validate_entity_type("").is_err());
     }
@@ -487,5 +544,21 @@ mod tests {
         assert!(FeatureStoreImpl::validate_batch_size(&vec!["e1".to_string()]).is_ok());
         assert!(FeatureStoreImpl::validate_batch_size(&vec![]).is_err());
         assert!(FeatureStoreImpl::validate_batch_size(&vec!["e".to_string(); 101]).is_err());
+    }
+
+    #[test]
+    fn test_feature_type_to_proto() {
+        assert_eq!(
+            FeatureStoreImpl::feature_type_to_proto(crate::models::FeatureType::Double),
+            1
+        );
+        assert_eq!(
+            FeatureStoreImpl::feature_type_to_proto(crate::models::FeatureType::Int),
+            2
+        );
+        assert_eq!(
+            FeatureStoreImpl::feature_type_to_proto(crate::models::FeatureType::String),
+            3
+        );
     }
 }

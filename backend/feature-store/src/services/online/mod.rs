@@ -19,7 +19,7 @@ const FEATURE_TTL_SECONDS: i64 = 7 * 24 * 60 * 60; // 7 days
 /// - Batch operations optimized for feed rendering
 ///
 /// **Usage**:
-/// ```rust
+/// ```ignore
 /// let store = OnlineFeatureStore::new(redis_manager);
 ///
 /// // Get single user features

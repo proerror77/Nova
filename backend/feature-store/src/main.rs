@@ -2,6 +2,7 @@ use actix_web::{web, App, HttpServer};
 use anyhow::{Context, Result};
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tonic::transport::Server as GrpcServer;
 use tonic_health::server::health_reporter;
 use tracing::{error, info, warn};
@@ -16,7 +17,32 @@ mod services;
 mod utils;
 
 use crate::config::Config;
+use crate::services::near_line::NearLineFeatureService;
 use crate::services::online::OnlineFeatureStore;
+
+/// Shared application state for health checks
+struct HealthState {
+    redis_healthy: RwLock<bool>,
+    clickhouse_healthy: RwLock<bool>,
+    postgres_healthy: RwLock<bool>,
+}
+
+impl HealthState {
+    fn new() -> Self {
+        Self {
+            redis_healthy: RwLock::new(true),
+            clickhouse_healthy: RwLock::new(true),
+            postgres_healthy: RwLock::new(true),
+        }
+    }
+
+    async fn is_ready(&self) -> bool {
+        let redis = *self.redis_healthy.read().await;
+        let clickhouse = *self.clickhouse_healthy.read().await;
+        let postgres = *self.postgres_healthy.read().await;
+        redis && clickhouse && postgres
+    }
+}
 
 #[actix_web::main]
 async fn main() -> Result<()> {
@@ -54,7 +80,7 @@ async fn main() -> Result<()> {
     info!("PostgreSQL connection pool created");
 
     // TODO: Run migrations
-    // sqlx::migrate!("./migrations") requires DATABASE_URL at compile time
+    // sqlx::migrate!(\"./migrations\") requires DATABASE_URL at compile time
     // For now, migrations must be run manually or via deployment scripts
     warn!("Manual migrations required - run: sqlx migrate run --database-url $DATABASE_URL");
 
@@ -65,8 +91,8 @@ async fn main() -> Result<()> {
     let redis_manager = redis_pool.manager();
     info!("Redis connection pool initialized");
 
-    // Initialize ClickHouse client (not used yet - placeholder for future implementation)
-    let _clickhouse_client = clickhouse::Client::default()
+    // Initialize ClickHouse client
+    let clickhouse_client = clickhouse::Client::default()
         .with_url(&config.clickhouse_url)
         .with_database(&config.clickhouse_database);
     info!("ClickHouse client initialized");
@@ -75,14 +101,61 @@ async fn main() -> Result<()> {
     let online_store = Arc::new(OnlineFeatureStore::new(redis_manager));
     info!("OnlineFeatureStore initialized");
 
+    // Create NearLineFeatureService
+    let near_line_service = Arc::new(NearLineFeatureService::new(
+        clickhouse_client.clone(),
+        pg_pool.clone(),
+    ));
+    info!("NearLineFeatureService initialized");
+
+    // Create health state
+    let health_state = Arc::new(HealthState::new());
+
     // Create AppState for gRPC service
-    let app_state = Arc::new(grpc::AppState::new(online_store));
+    let app_state = Arc::new(grpc::AppState::new(
+        online_store,
+        near_line_service.clone(),
+        pg_pool.clone(),
+    ));
 
     // Compute HTTP and gRPC ports
     let http_port = config.http_port;
     let grpc_port = config.grpc_port;
 
     info!("HTTP port: {}, gRPC port: {}", http_port, grpc_port);
+
+    // Start background health checker
+    let health_state_clone = Arc::clone(&health_state);
+    let near_line_service_clone = Arc::clone(&near_line_service);
+    let pg_pool_clone = pg_pool.clone();
+    let redis_manager_for_health = redis_pool.manager();
+
+    tokio::spawn(async move {
+        loop {
+            // Check Redis
+            let redis_ok = {
+                let mut conn = redis_manager_for_health.lock().await;
+                redis::cmd("PING")
+                    .query_async::<_, String>(&mut *conn)
+                    .await
+                    .is_ok()
+            };
+            *health_state_clone.redis_healthy.write().await = redis_ok;
+
+            // Check ClickHouse
+            let clickhouse_ok = near_line_service_clone.health_check().await.unwrap_or(false);
+            *health_state_clone.clickhouse_healthy.write().await = clickhouse_ok;
+
+            // Check PostgreSQL
+            let postgres_ok = sqlx::query("SELECT 1")
+                .fetch_one(&pg_pool_clone)
+                .await
+                .is_ok();
+            *health_state_clone.postgres_healthy.write().await = postgres_ok;
+
+            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+        }
+    });
 
     // Start gRPC server in background
     let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", grpc_port)
@@ -109,7 +182,7 @@ async fn main() -> Result<()> {
             Ok(req)
         }
 
-        // ✅ P0-1: Load mTLS configuration
+        // Load mTLS configuration
         let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
             Ok(config) => {
                 info!("mTLS enabled - service-to-service authentication active");
@@ -172,10 +245,15 @@ async fn main() -> Result<()> {
     // Start HTTP server for health checks
     info!("Starting HTTP server on 0.0.0.0:{}", http_port);
 
+    let health_state_for_http = Arc::clone(&health_state);
+
     HttpServer::new(move || {
+        let health_state = Arc::clone(&health_state_for_http);
         App::new()
+            .app_data(web::Data::new(health_state))
             .route("/health", web::get().to(health_check))
             .route("/ready", web::get().to(readiness_check))
+            .route("/metrics", web::get().to(metrics_handler))
     })
     .bind(("0.0.0.0", http_port))
     .context("Failed to bind HTTP server")?
@@ -191,10 +269,39 @@ async fn health_check() -> actix_web::HttpResponse {
     }))
 }
 
-async fn readiness_check() -> actix_web::HttpResponse {
-    // TODO: Add actual readiness checks (Redis, ClickHouse, PostgreSQL)
-    actix_web::HttpResponse::Ok().json(serde_json::json!({
-        "status": "ready",
-        "service": "feature-store"
-    }))
+async fn readiness_check(health_state: web::Data<Arc<HealthState>>) -> actix_web::HttpResponse {
+    let redis = *health_state.redis_healthy.read().await;
+    let clickhouse = *health_state.clickhouse_healthy.read().await;
+    let postgres = *health_state.postgres_healthy.read().await;
+
+    let is_ready = redis && clickhouse && postgres;
+
+    let response = serde_json::json!({
+        "status": if is_ready { "ready" } else { "not_ready" },
+        "service": "feature-store",
+        "checks": {
+            "redis": if redis { "healthy" } else { "unhealthy" },
+            "clickhouse": if clickhouse { "healthy" } else { "unhealthy" },
+            "postgres": if postgres { "healthy" } else { "unhealthy" }
+        }
+    });
+
+    if is_ready {
+        actix_web::HttpResponse::Ok().json(response)
+    } else {
+        actix_web::HttpResponse::ServiceUnavailable().json(response)
+    }
+}
+
+async fn metrics_handler() -> actix_web::HttpResponse {
+    // TODO: Integrate with prometheus metrics
+    // For now, return basic metrics in Prometheus format
+    let metrics = r#"
+# HELP feature_store_up Feature store service is up
+# TYPE feature_store_up gauge
+feature_store_up 1
+"#;
+    actix_web::HttpResponse::Ok()
+        .content_type("text/plain; version=0.0.4")
+        .body(metrics)
 }

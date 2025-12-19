@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: streaming-service-config
+  labels:
+    app: streaming-service
+    tier: backend
+data:
+  # Comma-separated list of allowed stream keys (static allowlist)
+  RTMP_ALLOWED_KEYS: ""
+  
+  # Logging configuration
+  RUST_LOG: "info,streaming_service=debug"
+  RUST_BACKTRACE: "1"
