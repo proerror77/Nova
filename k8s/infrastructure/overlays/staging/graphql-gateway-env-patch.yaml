@@ -46,6 +46,10 @@ spec:
         - name: GRPC_CHAT_SERVICE_URL
           value: "https://realtime-chat-service.nova-staging.svc.cluster.local:9095"
 
+        # Chat service HTTP URL for Matrix API proxy (port 8080)
+        - name: CHAT_SERVICE_HTTP_URL
+          value: "http://realtime-chat-service:8080"
+
         # ============================================================
         # Notification and Graph services (now using GrpcConfig)
         # ============================================================
