@@ -1,137 +1,43 @@
 import SwiftUI
-import UIKit
 
-// MARK: - Post As Type (Legacy compatibility)
-
+// 发帖身份类型
 enum PostAsType {
     case realName
     case alias
 }
 
-// MARK: - Account Display Data
-
-/// Simple data structure for displaying account in UI
-/// Used to decouple UI from the Account model
-struct AccountDisplayData: Identifiable {
-    let id: String
-    let displayName: String
-    let subtitle: String
-    let avatarUrl: String?
-    let isAlias: Bool
-    let isPrimary: Bool
-    let isActive: Bool
-
-    /// Memberwise initializer
-    init(
-        id: String,
-        displayName: String,
-        subtitle: String,
-        avatarUrl: String?,
-        isAlias: Bool,
-        isPrimary: Bool,
-        isActive: Bool
-    ) {
-        self.id = id
-        self.displayName = displayName
-        self.subtitle = subtitle
-        self.avatarUrl = avatarUrl
-        self.isAlias = isAlias
-        self.isPrimary = isPrimary
-        self.isActive = isActive
-    }
-
-    /// Create from Account model
-    init(from account: Account) {
-        self.id = account.id
-        self.displayName = account.effectiveDisplayName
-        self.subtitle = account.isAlias ? "Alias name" : "@\(account.username)"
-        self.avatarUrl = account.avatarUrl
-        self.isAlias = account.isAlias
-        self.isPrimary = account.isPrimary
-        self.isActive = account.isActive
-    }
-
-    /// Create from user profile (for primary account fallback)
-    init(fromUser user: UserProfile) {
-        self.id = user.id
-        self.displayName = user.displayName ?? user.username
-        self.subtitle = "@\(user.username)"
-        self.avatarUrl = user.avatarUrl
-        self.isAlias = false
-        self.isPrimary = true
-        self.isActive = true
-    }
-
-    /// Create placeholder for alias when none exists
-    static var placeholderAlias: AccountDisplayData {
-        AccountDisplayData(
-            id: "placeholder-alias",
-            displayName: "Create Alias",
-            subtitle: "Set up your alias name",
-            avatarUrl: nil,
-            isAlias: true,
-            isPrimary: false,
-            isActive: false
-        )
-    }
-}
-
-// MARK: - Post As Selection Panel
-
 struct PostAsSelectionPanel: View {
-    /// Accounts to display
-    let accounts: [AccountDisplayData]
-
-    /// Currently selected account ID
-    let selectedAccountId: String?
-
-    /// Callback when account is tapped
-    let onAccountTap: (AccountDisplayData) -> Void
-
-    /// Optional: pending avatar for primary account (from AvatarManager)
-    var pendingPrimaryAvatar: UIImage?
-
-    /// Whether accounts are being loaded
-    var isLoading: Bool = false
+    @Binding var selectedType: PostAsType
+    let realName: String
+    let username: String
+    let avatarUrl: String?
 
     var body: some View {
         VStack(spacing: 0) {
-            if isLoading {
-                HStack {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                    Text("Loading accounts...")
-                        .font(.system(size: 14))
-                        .foregroundColor(DesignTokens.textSecondary)
-                }
-                .padding(.vertical, 20)
-            } else if accounts.isEmpty {
-                // Empty state - show placeholder
-                Text("No accounts available")
-                    .font(.system(size: 14))
-                    .foregroundColor(DesignTokens.textSecondary)
-                    .padding(.vertical, 20)
-            } else {
-                ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
-                    PostAsOptionRow(
-                        avatarUrl: account.avatarUrl,
-                        displayName: account.displayName,
-                        subtitle: account.subtitle,
-                        isSelected: account.id == selectedAccountId,
-                        isAlias: account.isAlias,
-                        borderColor: account.isAlias
-                            ? Color(red: 0.37, green: 0.37, blue: 0.37)
-                            : Color(red: 0.82, green: 0.11, blue: 0.26),
-                        action: { onAccountTap(account) },
-                        pendingAvatar: account.isPrimary ? pendingPrimaryAvatar : nil
-                    )
+            // 真名选项
+            PostAsOptionRow(
+                avatarUrl: avatarUrl,
+                displayName: realName,
+                subtitle: username,
+                isSelected: selectedType == .realName,
+                borderColor: Color(red: 0.82, green: 0.11, blue: 0.26)
+            ) {
+                selectedType = .realName
+            }
 
-                    // Add divider between items (not after the last one)
-                    if index < accounts.count - 1 {
-                        Divider()
-                            .padding(.leading, 80)
-                    }
-                }
+            // 分隔线
+            Divider()
+                .padding(.leading, 80)
+
+            // 别名选项
+            PostAsOptionRow(
+                avatarUrl: nil,
+                displayName: "Dreamer",
+                subtitle: "Alias name",
+                isSelected: selectedType == .alias,
+                borderColor: Color(red: 0.37, green: 0.37, blue: 0.37)
+            ) {
+                selectedType = .alias
             }
         }
         .padding(.horizontal, 16)
@@ -145,79 +51,20 @@ struct PostAsSelectionPanel: View {
     }
 }
 
-// MARK: - Convenience initializer for backward compatibility
-
-extension PostAsSelectionPanel {
-    /// Legacy initializer for backward compatibility
-    init(
-        selectedType: Binding<PostAsType>,
-        realName: String,
-        username: String,
-        avatarUrl: String?,
-        onRealNameTap: (() -> Void)? = nil,
-        onAliasTap: (() -> Void)? = nil
-    ) {
-        // Create display data from legacy parameters
-        let primaryAccount = AccountDisplayData(
-            id: "primary",
-            displayName: realName,
-            subtitle: "@\(username)",
-            avatarUrl: avatarUrl,
-            isAlias: false,
-            isPrimary: true,
-            isActive: true
-        )
-
-        let aliasAccount = AccountDisplayData(
-            id: "alias",
-            displayName: "Dreamer",
-            subtitle: "Alias name",
-            avatarUrl: nil,
-            isAlias: true,
-            isPrimary: false,
-            isActive: false
-        )
-
-        self.accounts = [primaryAccount, aliasAccount]
-        self.selectedAccountId = selectedType.wrappedValue == .realName ? "primary" : "alias"
-        self.pendingPrimaryAvatar = AvatarManager.shared.pendingAvatar
-        self.isLoading = false
-
-        self.onAccountTap = { account in
-            if account.isAlias {
-                onAliasTap?()
-            } else {
-                onRealNameTap?()
-            }
-        }
-    }
-}
-
-// MARK: - Post As Option Row
-
 struct PostAsOptionRow: View {
     let avatarUrl: String?
     let displayName: String
     let subtitle: String
     let isSelected: Bool
-    let isAlias: Bool
     let borderColor: Color
     let action: () -> Void
-    var pendingAvatar: UIImage? = nil
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                // Avatar - 56x56
-                // Priority: pendingAvatar > avatarUrl > default avatar
+                // 头像 - 放大到 56x56
                 ZStack {
-                    if let pendingAvatar = pendingAvatar {
-                        Image(uiImage: pendingAvatar)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 56, height: 56)
-                            .clipShape(Circle())
-                    } else if let avatarUrl = avatarUrl, let url = URL(string: avatarUrl) {
+                    if let avatarUrl = avatarUrl, let url = URL(string: avatarUrl) {
                         AsyncImage(url: url) { image in
                             image
                                 .resizable()
@@ -236,41 +83,34 @@ struct PostAsOptionRow: View {
                         .stroke(borderColor, lineWidth: 1.5)
                 )
 
-                // Name and subtitle
+                // 名称和副标题 - 放大字体
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Text(displayName)
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(DesignTokens.textPrimary)
-
-                        // Show "Alias" badge for alias accounts
-                        if isAlias && displayName != "Create Alias" {
-                            Text("Alias")
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color(red: 0.37, green: 0.37, blue: 0.37))
-                                .cornerRadius(4)
-                        }
-                    }
+                    Text(displayName)
+                        .font(Typography.semibold16)
+                        .foregroundColor(DesignTokens.textPrimary)
 
                     Text(subtitle)
-                        .font(.system(size: 13))
+                        .font(Typography.regular13)
                         .foregroundColor(DesignTokens.textSecondary)
                 }
 
                 Spacer()
 
-                // Checkmark for selected account or chevron for navigation
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(DesignTokens.accentColor)
-                } else {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
-                        .foregroundColor(DesignTokens.textSecondary)
+                // 选择指示器 - 放大到 22x22
+                ZStack {
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 22, height: 22)
+                        .overlay(
+                            Circle()
+                                .stroke(Color(red: 0.82, green: 0.13, blue: 0.25), lineWidth: isSelected ? 1.5 : 1)
+                        )
+
+                    if isSelected {
+                        Circle()
+                            .fill(Color(red: 0.82, green: 0.13, blue: 0.25))
+                            .frame(width: 14, height: 14)
+                    }
                 }
             }
             .padding(.vertical, 16)
@@ -278,55 +118,7 @@ struct PostAsOptionRow: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("With Accounts") {
-    let accounts = [
-        AccountDisplayData(
-            id: "1",
-            displayName: "Bruce Li",
-            subtitle: "@brucelichina",
-            avatarUrl: nil,
-            isAlias: false,
-            isPrimary: true,
-            isActive: true
-        ),
-        AccountDisplayData(
-            id: "2",
-            displayName: "Dreamer",
-            subtitle: "Alias name",
-            avatarUrl: nil,
-            isAlias: true,
-            isPrimary: false,
-            isActive: false
-        )
-    ]
-
-    VStack {
-        PostAsSelectionPanel(
-            accounts: accounts,
-            selectedAccountId: "1",
-            onAccountTap: { _ in }
-        )
-    }
-    .padding()
-    .background(Color.gray.opacity(0.1))
-}
-
-#Preview("Loading State") {
-    VStack {
-        PostAsSelectionPanel(
-            accounts: [],
-            selectedAccountId: nil,
-            onAccountTap: { _ in },
-            isLoading: true
-        )
-    }
-    .padding()
-    .background(Color.gray.opacity(0.1))
-}
-
-#Preview("Legacy Compatibility") {
+#Preview {
     VStack {
         PostAsSelectionPanel(
             selectedType: .constant(.realName),

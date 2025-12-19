@@ -2,166 +2,50 @@ import Foundation
 
 @MainActor
 final class SettingsViewModel: ObservableObject {
-    // MARK: - Theme Settings
     @Published var isDarkMode = false
-    @Published var isSavingDarkMode = false
-
-    // MARK: - Account Management
-    @Published var accounts: [Account] = []
-    @Published var currentAccountId: String?
-    @Published var isLoadingAccounts = false
-    @Published var isSwitchingAccount = false
-
-    // MARK: - General State
     @Published var isLoading = false
+    @Published var isSavingDarkMode = false
     @Published var userSettings: UserSettings?
     @Published var errorMessage: String?
 
-    // MARK: - Dependencies
     private let authManager: AuthenticationManager
     private let userService: UserService
     private let themeManager: ThemeManager
-    private let accountsService: AccountsService
-
-    // MARK: - Computed Properties
-
-    /// The primary (main) account
-    var primaryAccount: Account? {
-        accounts.first { $0.isPrimary }
-    }
-
-    /// Alias accounts (non-primary)
-    var aliasAccounts: [Account] {
-        accounts.filter { $0.isAlias }
-    }
-
-    /// Currently active account
-    var currentAccount: Account? {
-        guard let id = currentAccountId else { return nil }
-        return accounts.first { $0.id == id }
-    }
-
-    /// Check if user has any alias accounts
-    var hasAliasAccount: Bool {
-        !aliasAccounts.isEmpty
-    }
-
-    // MARK: - Initialization
 
     init(
         authManager: AuthenticationManager? = nil,
         userService: UserService? = nil,
-        themeManager: ThemeManager? = nil,
-        accountsService: AccountsService? = nil
+        themeManager: ThemeManager? = nil
     ) {
         self.authManager = authManager ?? AuthenticationManager.shared
         self.userService = userService ?? UserService.shared
         self.themeManager = themeManager ?? ThemeManager.shared
-        self.accountsService = accountsService ?? AccountsService.shared
         self.isDarkMode = self.themeManager.isDarkMode
     }
 
-    // MARK: - Lifecycle
-
     func onAppear() {
+        // 對於 iOS UI，深色模式只需讀取本機 ThemeManager 狀態，
+        // 不強依賴後端設定。
         isDarkMode = themeManager.isDarkMode
-        Task {
-            await loadAccounts()
-        }
     }
 
     func loadSettings() async {
+        // 保留函式簽名給未來擴充使用，但目前深色模式偏好只依賴本機 ThemeManager。
         isLoading = true
         errorMessage = nil
         isDarkMode = themeManager.isDarkMode
-        await loadAccounts()
         isLoading = false
     }
-
-    // MARK: - Account Management
-
-    /// Load all accounts for the current user
-    func loadAccounts() async {
-        isLoadingAccounts = true
-        errorMessage = nil
-
-        do {
-            let response = try await accountsService.getAccounts()
-            accounts = response.accounts
-            currentAccountId = response.currentAccountId
-
-            #if DEBUG
-            print("[SettingsViewModel] Loaded \(accounts.count) accounts, current: \(currentAccountId ?? "none")")
-            #endif
-        } catch {
-            #if DEBUG
-            print("[SettingsViewModel] Failed to load accounts: \(error)")
-            #endif
-            // Don't show error to user - accounts feature may not be available
-            // Just use empty state
-            accounts = []
-        }
-
-        isLoadingAccounts = false
-    }
-
-    /// Switch to a different account
-    /// - Parameter account: The account to switch to
-    func switchAccount(to account: Account) async {
-        guard account.id != currentAccountId else { return }
-
-        isSwitchingAccount = true
-        errorMessage = nil
-
-        do {
-            let response = try await accountsService.switchAccount(accountId: account.id)
-
-            // Update auth tokens
-            await authManager.updateTokens(
-                accessToken: response.accessToken,
-                refreshToken: response.refreshToken
-            )
-
-            // Update current account
-            currentAccountId = account.id
-
-            // Reload accounts to get fresh data
-            await loadAccounts()
-
-            #if DEBUG
-            print("[SettingsViewModel] Switched to account: \(account.effectiveDisplayName)")
-            #endif
-        } catch {
-            errorMessage = NSLocalizedString("Failed to switch account", comment: "")
-            #if DEBUG
-            print("[SettingsViewModel] Failed to switch account: \(error)")
-            #endif
-        }
-
-        isSwitchingAccount = false
-    }
-
-    /// Navigate to edit an alias account
-    /// - Parameter account: The alias account to edit
-    func editAliasAccount(_ account: Account) {
-        AliasEditState.shared.startEditing(account: account)
-    }
-
-    /// Create a new alias account (navigates to alias creation)
-    func createNewAliasAccount() {
-        AliasEditState.shared.clearEditingState()
-    }
-
-    // MARK: - Theme Settings
 
     func updateDarkMode(enabled: Bool) async {
         isSavingDarkMode = true
         errorMessage = nil
+
+        // iOS UI 只需要調整 App 本身的顏色模式，不需要依賴後端。
         themeManager.apply(isDarkMode: enabled)
+
         isSavingDarkMode = false
     }
-
-    // MARK: - Logout
 
     func logout() async {
         await authManager.logout()

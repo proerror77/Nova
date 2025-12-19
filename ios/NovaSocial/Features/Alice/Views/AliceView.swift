@@ -27,9 +27,6 @@ struct AliceView: View {
     @State private var showNewPost = false
     @State private var showWrite = false
     @State private var selectedModel = "gpt-4o-all"
-    
-    // MARK: - Voice Chat States
-    @State private var showVoiceChat = false
 
     // MARK: - Chat States
     @State private var messages: [AliceChatMessage] = []
@@ -73,9 +70,6 @@ struct AliceView: View {
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
         }
-        .fullScreenCover(isPresented: $showVoiceChat) {
-            VoiceChatView(isPresented: $showVoiceChat)
-        }
         .onChange(of: selectedImage) { oldValue, newValue in
             // 选择/拍摄照片后，自动跳转到NewPostView
             if newValue != nil {
@@ -95,10 +89,10 @@ struct AliceView: View {
                 // MARK: - 顶部导航栏
                 HStack(spacing: 5) {
                     Text(selectedModel)
-                        .font(.system(size: 20, weight: .bold))
+                        .font(Typography.bold20)
                         .foregroundColor(DesignTokens.textPrimary)
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(Typography.semibold16)
                         .foregroundColor(DesignTokens.textPrimary)
                 }
                 .frame(maxWidth: .infinity)
@@ -169,10 +163,10 @@ struct AliceView: View {
                             // Get Super alice 按钮
                             HStack(spacing: 8) {
                                 Image(systemName: "sparkles")
-                                    .font(.system(size: 18))
+                                    .font(Typography.regular18)
                                     .foregroundColor(DesignTokens.textPrimary)
                                 Text("Get Super alice")
-                                    .font(.system(size: 16, weight: .medium))
+                                    .font(Typography.semibold16)
                                     .foregroundColor(DesignTokens.textPrimary)
                             }
                             .padding(.horizontal, 16)
@@ -186,38 +180,17 @@ struct AliceView: View {
                             )
 
                             // Voice Mode 按钮
-                            Button(action: {
-                                showVoiceChat = true
-                            }) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "waveform")
-                                        .font(.system(size: 16))
-                                    Text("Voice Mode")
-                                        .font(.system(size: 16, weight: .medium))
-                                }
+                            Text("Voice Mode")
+                                .font(Typography.semibold16)
                                 .foregroundColor(DesignTokens.textPrimary)
-                                .frame(width: 140, height: 42)
-                                .background(
-                                    LinearGradient(
-                                        colors: [.purple.opacity(0.3), .blue.opacity(0.2)],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
+                                .frame(width: 131, height: 42)
+                                .background(DesignTokens.surface)
                                 .cornerRadius(21)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 21)
                                         .inset(by: 0.50)
-                                        .stroke(
-                                            LinearGradient(
-                                                colors: [.purple.opacity(0.5), .blue.opacity(0.3)],
-                                                startPoint: .leading,
-                                                endPoint: .trailing
-                                            ),
-                                            lineWidth: 1
-                                        )
+                                        .stroke(DesignTokens.borderColor, lineWidth: 0.50)
                                 )
-                            }
                         }
                         .padding(.horizontal, 16)
                     }
@@ -226,11 +199,11 @@ struct AliceView: View {
                     // 输入框区域
                     HStack(spacing: 12) {
                         Image(systemName: "plus")
-                            .font(.system(size: 20, weight: .medium))
+                            .font(Typography.semibold20)
                             .foregroundColor(DesignTokens.textPrimary)
 
                         TextField("Ask any questions", text: $inputText)
-                            .font(.system(size: 16))
+                            .font(Typography.regular16)
                             .foregroundColor(DesignTokens.textPrimary)
                             .submitLabel(.send)
                             .onSubmit {
@@ -260,7 +233,7 @@ struct AliceView: View {
                 .padding(.bottom, -25)
 
                 // MARK: - 底部导航栏
-                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)
+                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions)
             }
             .ignoresSafeArea(.keyboard, edges: .bottom)
 
@@ -409,7 +382,7 @@ struct AliceChatMessageView: View {
                 Spacer()
                 // 用户消息气泡
                 Text(message.content)
-                    .font(.system(size: 14))
+                    .font(Typography.regular14)
                     .foregroundColor(DesignTokens.textPrimary)
                     .padding(EdgeInsets(top: 10, leading: 13, bottom: 10, trailing: 13))
                     .background(DesignTokens.surface)
@@ -424,7 +397,7 @@ struct AliceChatMessageView: View {
                 // AI响应消息
                 VStack(alignment: .leading, spacing: 8) {
                     Text(message.content)
-                        .font(.system(size: 14))
+                        .font(Typography.regular14)
                         .foregroundColor(DesignTokens.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -446,11 +419,11 @@ struct ModelRowView: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(model.name)
-                        .font(.system(size: 16))
+                        .font(Typography.regular16)
                         .foregroundColor(DesignTokens.textPrimary)
 
                     Text(model.description)
-                        .font(.system(size: 14))
+                        .font(Typography.regular14)
                         .foregroundColor(DesignTokens.textSecondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -471,17 +444,138 @@ struct ModelRowView: View {
     }
 }
 
-// MARK: - Previews
+// MARK: - Alice AI Service (Inline)
+// 临时将服务代码放在这里，避免添加新文件到项目
 
-#Preview("Alice - Default") {
-    AliceView(currentPage: .constant(.alice))
-        .environmentObject(AuthenticationManager.shared)
+@Observable
+final class AliceService {
+    static let shared = AliceService()
+
+    private let baseURL: String
+    private let apiKey: String
+
+    private let apiClient = APIClient.shared
+
+    private init() {
+        // API requests are proxied through our backend
+        // Backend handles third-party AI provider authentication
+        self.baseURL = APIConfig.AI.baseURL
+        self.apiKey = ""  // Not used - backend manages API keys
+    }
+
+    @MainActor
+    func sendMessage(
+        messages: [AIChatMessage],
+        model: String = "gpt-4o-all"
+    ) async throws -> String {
+        guard let url = URL(string: "\(baseURL)/chat/completions") else {
+            throw AliceError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        // Use user's JWT token for authentication with our backend proxy
+        // Backend will then authenticate with the AI provider using server-side API keys
+        if let token = apiClient.getAuthToken() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let requestBody = ChatCompletionRequest(
+            model: model,
+            messages: messages
+        )
+
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        request.httpBody = try encoder.encode(requestBody)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AliceError.invalidResponse
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            if let errorResponse = try? JSONDecoder().decode(AIErrorResponse.self, from: data) {
+                throw AliceError.apiError(errorResponse.error.message)
+            }
+            throw AliceError.httpError(httpResponse.statusCode)
+        }
+
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let completionResponse = try decoder.decode(ChatCompletionResponse.self, from: data)
+
+        guard let firstChoice = completionResponse.choices.first else {
+            throw AliceError.emptyResponse
+        }
+
+        return firstChoice.message.content
+    }
 }
 
-#Preview("Alice - Dark Mode") {
+// MARK: - AI Data Models
+
+struct AIChatMessage: Codable, Sendable {
+    let role: String
+    let content: String
+}
+
+struct ChatCompletionRequest: Codable, Sendable {
+    let model: String
+    let messages: [AIChatMessage]
+}
+
+struct ChatCompletionResponse: Codable, Sendable {
+    let id: String
+    let object: String
+    let created: Int
+    let model: String
+    let choices: [Choice]
+
+    struct Choice: Codable, Sendable {
+        let index: Int
+        let message: AIChatMessage
+        let finishReason: String?
+    }
+}
+
+struct AIErrorResponse: Codable, Sendable {
+    let error: ErrorDetail
+
+    struct ErrorDetail: Codable, Sendable {
+        let message: String
+        let type: String?
+        let code: String?
+    }
+}
+
+enum AliceError: LocalizedError {
+    case invalidURL
+    case invalidResponse
+    case httpError(Int)
+    case apiError(String)
+    case emptyResponse
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL:
+            return "Invalid API URL"
+        case .invalidResponse:
+            return "Invalid response from server"
+        case .httpError(let code):
+            return "HTTP error: \(code)"
+        case .apiError(let message):
+            return "API error: \(message)"
+        case .emptyResponse:
+            return "Empty response from server"
+        }
+    }
+}
+
+#Preview {
     AliceView(currentPage: .constant(.alice))
-        .environmentObject(AuthenticationManager.shared)
-        .preferredColorScheme(.dark)
 }
 
 // MARK: - Keyboard Dismissal Extension

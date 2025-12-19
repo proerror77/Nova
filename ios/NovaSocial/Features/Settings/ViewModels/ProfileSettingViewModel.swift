@@ -122,37 +122,15 @@ final class ProfileSettingViewModel: ObservableObject {
                 newAvatarUrl = try await mediaService.uploadImage(imageData: imageData, filename: "avatar.jpg")
             }
 
-            var updatedUser = try await userService.updateProfile(
+            let updatedUser = try await userService.updateProfile(
                 userId: userId,
                 avatarUrl: newAvatarUrl,
                 location: location.isEmpty ? nil : location,
                 firstName: firstName.isEmpty ? nil : firstName,
                 lastName: lastName.isEmpty ? nil : lastName,
                 dateOfBirth: dateOfBirth.isEmpty ? nil : dateOfBirth,
-                gender: gender == .notSet ? nil : gender
+                gender: gender
             )
-
-            // Ensure avatar URL is preserved
-            // Backend may not return avatar_url in response, so preserve the URL
-            if updatedUser.avatarUrl == nil {
-                if let newUrl = newAvatarUrl {
-                    // Use newly uploaded avatar URL
-                    updatedUser.avatarUrl = newUrl
-                    #if DEBUG
-                    print("[ProfileSettingViewModel] Backend didn't return avatar_url, using uploaded URL: \(newUrl)")
-                    #endif
-                } else if let existingUrl = self.avatarUrl {
-                    // Preserve existing avatar URL when no new avatar was uploaded
-                    updatedUser.avatarUrl = existingUrl
-                    #if DEBUG
-                    print("[ProfileSettingViewModel] Backend didn't return avatar_url, preserving existing URL: \(existingUrl)")
-                    #endif
-                }
-            }
-
-            #if DEBUG
-            print("[ProfileSettingViewModel] Updating currentUser with avatarUrl: \(updatedUser.avatarUrl ?? "nil")")
-            #endif
 
             authManager.updateCurrentUser(updatedUser)
             avatarUrl = updatedUser.avatarUrl

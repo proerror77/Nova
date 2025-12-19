@@ -49,20 +49,3 @@ struct DateOfBirthPickerView: View {
         }
     }
 }
-
-// MARK: - Previews
-
-#Preview("DatePicker - Default") {
-    @Previewable @State var dateString = ""
-    @Previewable @State var isPresented = true
-
-    DateOfBirthPickerView(dateString: $dateString, isPresented: $isPresented)
-}
-
-#Preview("DatePicker - Dark Mode") {
-    @Previewable @State var dateString = ""
-    @Previewable @State var isPresented = true
-
-    DateOfBirthPickerView(dateString: $dateString, isPresented: $isPresented)
-        .preferredColorScheme(.dark)
-}

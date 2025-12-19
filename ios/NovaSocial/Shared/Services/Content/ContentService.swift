@@ -10,30 +10,32 @@ class ContentService {
     // MARK: - Posts
 
     func getPostsByAuthor(authorId: String, limit: Int = 20, offset: Int = 0) async throws -> GetPostsByAuthorResponse {
-        // Use GET /api/v2/content/user/{user_id} with query params
-        return try await client.get(
-            endpoint: APIConfig.Content.postsByUser(authorId),
-            queryParams: [
-                "limit": String(limit),
-                "offset": String(offset)
-            ]
+        struct Request: Codable {
+            let author_id: String
+            let status: String?
+            let limit: Int
+            let offset: Int
+        }
+
+        let request = Request(author_id: authorId, status: nil, limit: limit, offset: offset)
+        return try await client.request(
+            endpoint: APIConfig.Content.postsByAuthor,
+            body: request
         )
     }
 
-    func createPost(creatorId: String, content: String, mediaUrls: [String]? = nil, channelIds: [String]? = nil) async throws -> Post {
+    func createPost(creatorId: String, content: String, mediaUrls: [String]? = nil) async throws -> Post {
         // The graphql-gateway now accepts media_urls as a separate field
         // It extracts user_id from the JWT token (AuthenticatedUser)
         struct Request: Codable {
             let content: String
             let mediaUrls: [String]?
             let mediaType: String?
-            let channelIds: [String]?
 
             enum CodingKeys: String, CodingKey {
                 case content
                 case mediaUrls = "media_urls"
                 case mediaType = "media_type"
-                case channelIds = "channel_ids"
             }
         }
 
@@ -51,8 +53,7 @@ class ContentService {
         let request = Request(
             content: content,
             mediaUrls: mediaUrls,
-            mediaType: mediaType,
-            channelIds: channelIds
+            mediaType: mediaType
         )
         let response: Response = try await client.request(
             endpoint: APIConfig.Content.createPost,
@@ -65,57 +66,39 @@ class ContentService {
 
     /// Get single post by ID using GET /api/v2/content/{id}
     func getPost(postId: String) async throws -> Post? {
-        struct Response: Codable {
-            let post: Post
-            let found: Bool?
-            // Note: Uses convertFromSnakeCase decoder strategy
-        }
-
         do {
-            let response: Response = try await client.request(
+            let post: Post = try await client.request(
                 endpoint: APIConfig.Content.getPost(postId),
                 method: "GET"
             )
-            return response.post
+            return post
         } catch APIError.notFound {
             return nil
         }
     }
 
-    /// Batch fetch posts by IDs with limited concurrency
+    /// Batch fetch posts by IDs (parallel requests)
     func getPostsByIds(_ ids: [String]) async throws -> [Post] {
         guard !ids.isEmpty else { return [] }
 
-        let maxConcurrent = 6
-        var posts: [Post] = []
-
-        // Process in batches to limit concurrent requests
-        for batchStart in stride(from: 0, to: ids.count, by: maxConcurrent) {
-            let batchEnd = min(batchStart + maxConcurrent, ids.count)
-            let batchIds = Array(ids[batchStart..<batchEnd])
-
-            let batchPosts = try await withThrowingTaskGroup(of: Post?.self) { group in
-                for id in batchIds {
-                    group.addTask {
-                        try? await self.getPost(postId: id)
-                    }
+        return try await withThrowingTaskGroup(of: Post?.self) { group in
+            for id in ids {
+                group.addTask {
+                    try? await self.getPost(postId: id)
                 }
-
-                var results: [Post] = []
-                for try await post in group {
-                    if let post = post {
-                        results.append(post)
-                    }
-                }
-                return results
             }
 
-            posts.append(contentsOf: batchPosts)
-        }
+            var posts: [Post] = []
+            for try await post in group {
+                if let post = post {
+                    posts.append(post)
+                }
+            }
 
-        // Sort by original ID order
-        let idOrder = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0) })
-        return posts.sorted { (idOrder[$0.id] ?? Int.max) < (idOrder[$1.id] ?? Int.max) }
+            // Sort by original ID order
+            let idOrder = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0) })
+            return posts.sorted { (idOrder[$0.id] ?? Int.max) < (idOrder[$1.id] ?? Int.max) }
+        }
     }
 
     /// Update an existing post
@@ -248,13 +231,16 @@ class ContentService {
     // MARK: - Bookmarks
 
     func getUserBookmarks(userId: String, limit: Int = 20, offset: Int = 0) async throws -> GetUserBookmarksResponse {
-        return try await client.get(
-            endpoint: APIConfig.Social.getBookmarks,
-            queryParams: [
-                "user_id": userId,
-                "limit": String(limit),
-                "offset": String(offset)
-            ]
+        struct Request: Codable {
+            let user_id: String
+            let limit: Int
+            let offset: Int
+        }
+
+        let request = Request(user_id: userId, limit: limit, offset: offset)
+        return try await client.request(
+            endpoint: APIConfig.Content.bookmarks,
+            body: request
         )
     }
 }

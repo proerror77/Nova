@@ -1,179 +1,100 @@
 import SwiftUI
 
-// MARK: - Group Chat Message Model
-struct GroupChatMessage: Identifiable, Equatable {
-    let id: String
-    let text: String
-    let senderId: String
-    let senderName: String
-    let senderAvatarUrl: String?
-    let isFromMe: Bool
-    let timestamp: Date
-
-    static func == (lhs: GroupChatMessage, rhs: GroupChatMessage) -> Bool {
-        lhs.id == rhs.id
-    }
-}
-
-// MARK: - Group Chat View
 struct GroupChatView: View {
-    @Binding var showGroupChat: Bool
-
-    let conversationId: String
-    let groupName: String
-    let memberCount: Int
-
-    // MARK: - State
+    @Binding var currentPage: AppPage
     @State private var messageText = ""
     @State private var messages: [GroupChatMessage] = []
     @State private var showAttachmentOptions = false
-    @State private var isLoading = false
     @FocusState private var isInputFocused: Bool
 
-    // MARK: - Preview Mode
-    @State private var isPreviewMode = false
+    let groupName: String
+    let memberCount: Int
 
-    #if DEBUG
-    private static var usePreviewMode: Bool {
-        #if targetEnvironment(simulator)
-        return false  // 关闭模拟器预览模式，使用真实API
-        #else
-        return false
-        #endif
-    }
-    #else
-    private static let usePreviewMode = false
-    #endif
-
-    init(showGroupChat: Binding<Bool>, conversationId: String, groupName: String, memberCount: Int) {
-        self._showGroupChat = showGroupChat
-        self.conversationId = conversationId
+    init(currentPage: Binding<AppPage>, groupName: String = "ICERED", memberCount: Int = 5) {
+        self._currentPage = currentPage
         self.groupName = groupName
         self.memberCount = memberCount
     }
 
     var body: some View {
         ZStack {
-            DesignTokens.backgroundColor
+            Color(red: 0.97, green: 0.97, blue: 0.97)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // MARK: - Navigation Bar
-                navigationBar
+                // MARK: - 顶部导航栏
+                HStack(spacing: 0) {
+                    Button(action: {
+                        currentPage = .message
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .frame(width: 24, height: 24)
+                            .foregroundColor(.black)
+                    }
 
-                // MARK: - Messages List
-                messagesListView
+                    Spacer()
 
-                // MARK: - Input Area
+                    Text("\(groupName)(\(memberCount))")
+                        .font(Typography.semibold20)
+                        .foregroundColor(.black)
+
+                    Spacer()
+
+                    Button(action: {
+                        // TODO: 群聊设置
+                    }) {
+                        Image(systemName: "ellipsis")
+                            .font(Typography.regular20)
+                            .foregroundColor(.black)
+                            .frame(width: 24, height: 24)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 60)
+                .padding(.horizontal, 16)
+                .background(.white)
+                .overlay(
+                    Rectangle()
+                        .frame(height: 0.5)
+                        .foregroundColor(Color(red: 0.74, green: 0.74, blue: 0.74)),
+                    alignment: .bottom
+                )
+
+                // MARK: - 消息列表
+                ScrollView {
+                    VStack(spacing: 16) {
+                        Text(currentDateString())
+                            .font(Typography.regular12)
+                            .foregroundColor(Color(red: 0.59, green: 0.59, blue: 0.59))
+                            .padding(.top, 16)
+
+                        ForEach(messages) { message in
+                            GroupMessageBubbleView(message: message)
+                        }
+                    }
+                    .padding(.bottom, 16)
+                }
+                .onTapGesture {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    if showAttachmentOptions {
+                        showAttachmentOptions = false
+                    }
+                }
+
+                // MARK: - 输入区域
                 inputAreaView
             }
         }
-        .task {
-            await loadMessages()
-        }
     }
 
-    // MARK: - Navigation Bar
-    private var navigationBar: some View {
-        HStack(spacing: 0) {
-            Button(action: {
-                showGroupChat = false
-            }) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(DesignTokens.textPrimary)
-                    .frame(width: 24, height: 24)
-            }
-            .frame(width: 60, alignment: .leading)
-
-            Spacer()
-
-            Text("\(groupName)(\(memberCount))")
-                .font(Font.custom("Helvetica Neue", size: 20).weight(.medium))
-                .foregroundColor(DesignTokens.textPrimary)
-
-            Spacer()
-
-            Button(action: {
-                // TODO: Group settings
-            }) {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 20))
-                    .foregroundColor(DesignTokens.textPrimary)
-                    .frame(width: 24, height: 24)
-            }
-            .frame(width: 60, alignment: .trailing)
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 60)
-        .padding(.horizontal, 16)
-        .background(DesignTokens.surface)
-        .overlay(
-            Rectangle()
-                .frame(height: 0.5)
-                .foregroundColor(DesignTokens.borderColor),
-            alignment: .bottom
-        )
-    }
-
-    // MARK: - Messages List
-    private var messagesListView: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    // Preview mode indicator
-                    if isPreviewMode {
-                        HStack {
-                            Image(systemName: "eye.fill")
-                                .font(.system(size: 12))
-                            Text("Preview Mode - Mock Data")
-                                .font(.system(size: 12))
-                        }
-                        .foregroundColor(.orange)
-                        .padding(.vertical, 8)
-                    }
-
-                    ForEach(groupedMessages, id: \.date) { group in
-                        // Date separator
-                        Text(formatDateHeader(group.date))
-                            .font(Font.custom("Helvetica Neue", size: 12))
-                            .foregroundColor(Color(red: 0.59, green: 0.59, blue: 0.59))
-                            .padding(.vertical, 8)
-
-                        // Messages in this group
-                        ForEach(group.messages) { message in
-                            GroupMessageBubbleView(message: message)
-                                .id(message.id)
-                        }
-                    }
-                }
-                .padding(.vertical, 16)
-            }
-            .onChange(of: messages.count) { _, _ in
-                if let lastMessage = messages.last {
-                    withAnimation {
-                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                    }
-                }
-            }
-        }
-        .onTapGesture {
-            isInputFocused = false
-            if showAttachmentOptions {
-                showAttachmentOptions = false
-            }
-        }
-    }
-
-    // MARK: - Input Area
+    // MARK: - 输入区域
     private var inputAreaView: some View {
         VStack(spacing: 0) {
             Divider()
                 .frame(height: 0.5)
-                .background(DesignTokens.borderColor)
+                .background(Color(red: 0.74, green: 0.74, blue: 0.74))
 
             HStack(spacing: 12) {
-                // Attachment button
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         showAttachmentOptions.toggle()
@@ -181,48 +102,46 @@ struct GroupChatView: View {
                 }) {
                     ZStack {
                         Circle()
-                            .stroke(DesignTokens.accentColor, lineWidth: 2)
-                            .frame(width: 30, height: 30)
+                            .stroke(Color(red: 0.91, green: 0.18, blue: 0.30), lineWidth: 2)
+                            .frame(width: 26, height: 26)
 
                         Image(systemName: showAttachmentOptions ? "xmark" : "plus")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(DesignTokens.accentColor)
+                            .font(Typography.semibold14)
+                            .foregroundColor(Color(red: 0.91, green: 0.18, blue: 0.30))
                     }
                 }
 
-                // Text input field
                 HStack(spacing: 8) {
                     Image(systemName: "waveform")
-                        .font(.system(size: 14))
-                        .foregroundColor(DesignTokens.textMuted)
+                        .font(Typography.regular14)
+                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
 
                     TextField("Type a message...", text: $messageText)
-                        .font(Font.custom("Helvetica Neue", size: 16))
-                        .foregroundColor(DesignTokens.textPrimary)
+                        .font(Typography.regular16)
+                        .foregroundColor(Color(red: 0.34, green: 0.34, blue: 0.34))
                         .focused($isInputFocused)
                         .onSubmit {
                             sendMessage()
                         }
                 }
                 .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-                .background(Color(red: 0.85, green: 0.85, blue: 0.85))
-                .cornerRadius(28)
+                .background(Color(red: 0.53, green: 0.53, blue: 0.53).opacity(0.20))
+                .cornerRadius(26)
                 .onChange(of: isInputFocused) { _, focused in
                     if focused && showAttachmentOptions {
                         showAttachmentOptions = false
                     }
                 }
 
-                // Send button
                 Button(action: {
                     sendMessage()
                 }) {
                     Circle()
-                        .fill(messageText.isEmpty ? Color.gray : DesignTokens.accentColor)
+                        .fill(messageText.isEmpty ? Color.gray : Color(red: 0.91, green: 0.18, blue: 0.30))
                         .frame(width: 33, height: 33)
                         .overlay(
                             Image(systemName: "paperplane.fill")
-                                .font(.system(size: 14))
+                                .font(Typography.regular14)
                                 .foregroundColor(.white)
                         )
                 }
@@ -230,9 +149,8 @@ struct GroupChatView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(DesignTokens.surface)
+            .background(Color.white)
 
-            // Attachment options
             if showAttachmentOptions {
                 attachmentOptionsView
                     .transition(.move(edge: .bottom))
@@ -240,213 +158,63 @@ struct GroupChatView: View {
         }
     }
 
-    // MARK: - Attachment Options
+    // MARK: - 附件选项视图
     private var attachmentOptionsView: some View {
-        HStack(spacing: 15) {
-            GroupAttachmentButton(icon: "photo.on.rectangle", title: "Album") {
-                showAttachmentOptions = false
-            }
+        VStack(spacing: 0) {
+            HStack(spacing: 15) {
+                GroupChatAttachmentButton(icon: "photo.on.rectangle", title: "Album") {
+                    showAttachmentOptions = false
+                }
 
-            GroupAttachmentButton(icon: "camera", title: "Camera") {
-                showAttachmentOptions = false
-            }
+                GroupChatAttachmentButton(icon: "camera", title: "Camera") {
+                    showAttachmentOptions = false
+                }
 
-            GroupAttachmentButton(icon: "video.fill", title: "Video Call") {
-                showAttachmentOptions = false
-            }
+                GroupChatAttachmentButton(icon: "video.fill", title: "Video Call") {
+                    showAttachmentOptions = false
+                }
 
-            GroupAttachmentButton(icon: "phone.fill", title: "Voice Call") {
-                showAttachmentOptions = false
-            }
+                GroupChatAttachmentButton(icon: "phone.fill", title: "Voice Call") {
+                    showAttachmentOptions = false
+                }
 
-            GroupAttachmentButton(icon: "location.fill", title: "Location") {
-                showAttachmentOptions = false
+                GroupChatAttachmentButton(icon: "location.fill", title: "Location") {
+                    showAttachmentOptions = false
+                }
             }
+            .padding(.vertical, 16)
         }
-        .padding(.vertical, 16)
         .frame(maxWidth: .infinity)
-        .background(DesignTokens.tileBackground)
+        .background(Color(red: 0.91, green: 0.91, blue: 0.91))
     }
 
-    // MARK: - Grouped Messages
-    private var groupedMessages: [(date: Date, messages: [GroupChatMessage])] {
-        let calendar = Calendar.current
-        let grouped = Dictionary(grouping: messages) { message in
-            calendar.startOfDay(for: message.timestamp)
-        }
-        return grouped.map { (date: $0.key, messages: $0.value) }
-            .sorted { $0.date < $1.date }
-    }
-
-    // MARK: - Date Formatting
-    private func formatDateHeader(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy/MM/dd  HH:mm"
-        return formatter.string(from: date)
-    }
-
-    // MARK: - Load Messages
-    private func loadMessages() async {
-        if Self.usePreviewMode {
-            loadMockMessages()
-            isPreviewMode = true
-            return
-        }
-
-        isLoading = true
-        // TODO: Load real messages from API
-        isLoading = false
-    }
-
-    // MARK: - Send Message
+    // MARK: - 发送消息
     private func sendMessage() {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
 
-        let newMessage = GroupChatMessage(
-            id: UUID().uuidString,
+        let message = GroupChatMessage(
             text: trimmedText,
-            senderId: "me",
             senderName: "Me",
-            senderAvatarUrl: nil,
             isFromMe: true,
             timestamp: Date()
         )
+        messages.append(message)
 
-        messages.append(newMessage)
         messageText = ""
         showAttachmentOptions = false
-
-        // TODO: Send message to API
     }
 
-    // MARK: - Mock Data
-    private func loadMockMessages() {
-        let mockDate = Calendar.current.date(from: DateComponents(year: 2025, month: 10, day: 22, hour: 12, minute: 0)) ?? Date()
-
-        messages = [
-            GroupChatMessage(
-                id: "1",
-                text: "Has everyone come in?",
-                senderId: "user1",
-                senderName: "Alice",
-                senderAvatarUrl: nil,
-                isFromMe: false,
-                timestamp: mockDate
-            ),
-            GroupChatMessage(
-                id: "2",
-                text: "yup!",
-                senderId: "user2",
-                senderName: "Bob",
-                senderAvatarUrl: nil,
-                isFromMe: false,
-                timestamp: mockDate.addingTimeInterval(30)
-            ),
-            GroupChatMessage(
-                id: "3",
-                text: "I'm already in.",
-                senderId: "me",
-                senderName: "Me",
-                senderAvatarUrl: nil,
-                isFromMe: true,
-                timestamp: mockDate.addingTimeInterval(60)
-            ),
-            GroupChatMessage(
-                id: "4",
-                text: "Let's proceed to the next step.",
-                senderId: "user3",
-                senderName: "Charlie",
-                senderAvatarUrl: nil,
-                isFromMe: false,
-                timestamp: mockDate.addingTimeInterval(120)
-            ),
-        ]
+    // MARK: - 获取当前日期字符串
+    private func currentDateString() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy/MM/dd  HH:mm"
+        return formatter.string(from: Date())
     }
 }
 
-// MARK: - Group Message Bubble View
-struct GroupMessageBubbleView: View {
-    let message: GroupChatMessage
-
-    private let myBubbleColor = Color(red: 0.92, green: 0.20, blue: 0.34)
-    private let otherBubbleColor = Color(red: 0.92, green: 0.92, blue: 0.92)
-    private let otherTextColor = Color(red: 0.34, green: 0.34, blue: 0.34)
-
-    var body: some View {
-        if message.isFromMe {
-            myMessageView
-        } else {
-            otherMessageView
-        }
-    }
-
-    // MARK: - My Message (Right side)
-    private var myMessageView: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Spacer()
-
-            Text(message.text)
-                .font(Font.custom("Helvetica Neue", size: 16))
-                .lineSpacing(4)
-                .foregroundColor(.white)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
-                .background(myBubbleColor)
-                .cornerRadius(14)
-                .frame(maxWidth: 220, alignment: .trailing)
-
-            avatarView(url: message.senderAvatarUrl)
-        }
-        .padding(.horizontal, 16)
-    }
-
-    // MARK: - Other's Message (Left side)
-    private var otherMessageView: some View {
-        HStack(alignment: .top, spacing: 10) {
-            avatarView(url: message.senderAvatarUrl)
-
-            Text(message.text)
-                .font(Font.custom("Helvetica Neue", size: 16))
-                .lineSpacing(4)
-                .foregroundColor(otherTextColor)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
-                .background(otherBubbleColor)
-                .cornerRadius(14)
-                .frame(maxWidth: 220, alignment: .leading)
-
-            Spacer()
-        }
-        .padding(.horizontal, 16)
-    }
-
-    // MARK: - Avatar View
-    @ViewBuilder
-    private func avatarView(url: String?) -> some View {
-        if let avatarUrl = url, let imageUrl = URL(string: avatarUrl) {
-            AsyncImage(url: imageUrl) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-            } placeholder: {
-                Circle()
-                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-            }
-            .frame(width: 40, height: 40)
-            .clipShape(Circle())
-        } else {
-            Circle()
-                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                .frame(width: 40, height: 40)
-        }
-    }
-}
-
-// MARK: - Group Attachment Button
-struct GroupAttachmentButton: View {
+// MARK: - 附件选项按钮（群聊专用）
+private struct GroupChatAttachmentButton: View {
     let icon: String
     let title: String
     let action: () -> Void
@@ -456,17 +224,16 @@ struct GroupAttachmentButton: View {
             Rectangle()
                 .foregroundColor(.clear)
                 .frame(width: 60, height: 60)
-                .background(DesignTokens.surface)
+                .background(.white)
                 .cornerRadius(10)
                 .overlay(
                     Image(systemName: icon)
-                        .font(.system(size: 24))
-                        .foregroundColor(DesignTokens.textPrimary)
+                        .font(Typography.semibold24)
+                        .foregroundColor(.black)
                 )
-
             Text(title)
-                .font(.system(size: 12))
-                .foregroundColor(DesignTokens.textPrimary)
+                .font(Typography.regular12)
+                .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
         }
         .frame(width: 60)
         .onTapGesture {
@@ -475,27 +242,70 @@ struct GroupAttachmentButton: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("GroupChat - Default") {
-    GroupChatView(
-        showGroupChat: .constant(true),
-        conversationId: "preview_group_123",
-        groupName: "ICERED",
-        memberCount: 5
-    )
-    .environmentObject(AuthenticationManager.shared)
-    .environmentObject(ThemeManager.shared)
+// MARK: - 群聊消息模型
+struct GroupChatMessage: Identifiable {
+    let id = UUID()
+    let text: String
+    let senderName: String
+    let isFromMe: Bool
+    let timestamp: Date
 }
 
-#Preview("GroupChat - Dark Mode") {
-    GroupChatView(
-        showGroupChat: .constant(true),
-        conversationId: "preview_group_123",
-        groupName: "ICERED",
-        memberCount: 5
-    )
-    .environmentObject(AuthenticationManager.shared)
-    .environmentObject(ThemeManager.shared)
-    .preferredColorScheme(.dark)
+// MARK: - 群聊消息气泡
+struct GroupMessageBubbleView: View {
+    let message: GroupChatMessage
+
+    var body: some View {
+        if message.isFromMe {
+            myMessageView
+        } else {
+            otherMessageView
+        }
+    }
+
+    private var myMessageView: some View {
+        HStack(spacing: 6) {
+            Spacer()
+
+            Text(message.text)
+                .font(Typography.regular18)
+                .foregroundColor(Color(red: 0.34, green: 0.34, blue: 0.34))
+                .padding(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+                .background(Color(red: 0.85, green: 0.85, blue: 0.85))
+                .cornerRadius(23)
+
+            Circle()
+                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                .frame(width: 50, height: 50)
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private var otherMessageView: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Circle()
+                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                .frame(width: 50, height: 50)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(message.senderName)
+                    .font(Typography.semibold14)
+                    .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
+
+                Text(message.text)
+                    .font(Typography.regular18)
+                    .foregroundColor(Color(red: 0.34, green: 0.34, blue: 0.34))
+                    .padding(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+                    .background(Color(red: 0.85, green: 0.85, blue: 0.85))
+                    .cornerRadius(23)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+    }
+}
+
+#Preview {
+    GroupChatView(currentPage: .constant(.groupChat))
 }

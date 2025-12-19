@@ -4,10 +4,8 @@ struct SettingsView: View {
     @Binding var currentPage: AppPage
     @StateObject private var viewModel = SettingsViewModel()
     @EnvironmentObject private var authManager: AuthenticationManager
-    @EnvironmentObject private var pushManager: PushNotificationManager
     @State private var isPostAsExpanded = false
     @State private var selectedPostAsType: PostAsType = .realName
-    @State private var isPushEnabled = false
 
     var body: some View {
         ZStack {
@@ -28,7 +26,7 @@ struct SettingsView: View {
                     Spacer()
 
                     Text(LocalizedStringKey("Settings"))
-                        .font(.system(size: 24, weight: .medium))
+                        .font(Typography.semibold24)
                         .foregroundColor(DesignTokens.textPrimary)
 
                     Spacer()
@@ -46,7 +44,19 @@ struct SettingsView: View {
                         // MARK: - Account Settings Group
                         VStack(alignment: .leading, spacing: 0) {
                             VStack(spacing: 0) {
-                                // MARK: - Choose account (可展开)
+                                SettingsRow(
+                                    icon: "person.crop.circle",
+                                    title: "Profile Settings",
+                                    showChevron: true,
+                                    action: {
+                                        currentPage = .profileSetting
+                                    }
+                                )
+
+                                Divider()
+                                    .padding(.leading, 60)
+
+                                // MARK: - Post As (可展开)
                                 Button(action: {
                                     withAnimation(.easeInOut(duration: 0.25)) {
                                         isPostAsExpanded.toggle()
@@ -54,18 +64,18 @@ struct SettingsView: View {
                                 }) {
                                     HStack(spacing: 16) {
                                         Image(systemName: "person.crop.square.filled.and.at.rectangle")
-                                            .font(.system(size: 18))
+                                            .font(Typography.regular18)
                                             .foregroundColor(DesignTokens.accentColor)
                                             .frame(width: 24)
 
-                                        Text("Choose account")
-                                            .font(.system(size: 14, weight: .medium))
+                                        Text("Post as")
+                                            .font(Typography.semibold14)
                                             .foregroundColor(DesignTokens.textPrimary)
 
                                         Spacer()
 
                                         Image(systemName: isPostAsExpanded ? "chevron.down" : "chevron.right")
-                                            .font(.system(size: 12))
+                                            .font(Typography.regular12)
                                             .foregroundColor(DesignTokens.textSecondary)
                                             .animation(.easeInOut(duration: 0.2), value: isPostAsExpanded)
                                     }
@@ -78,13 +88,7 @@ struct SettingsView: View {
                                     selectedType: $selectedPostAsType,
                                     realName: authManager.currentUser?.displayName ?? authManager.currentUser?.username ?? "User",
                                     username: authManager.currentUser?.username ?? "username",
-                                    avatarUrl: authManager.currentUser?.avatarUrl,
-                                    onRealNameTap: {
-                                        currentPage = .profileSetting
-                                    },
-                                    onAliasTap: {
-                                        currentPage = .aliasName
-                                    }
+                                    avatarUrl: authManager.currentUser?.avatarUrl
                                 )
                                 .frame(height: isPostAsExpanded ? nil : 0, alignment: .top)
                                 .clipped()
@@ -140,12 +144,12 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 0) {
                             HStack(spacing: 16) {
                                 Image(systemName: "moon.fill")
-                                    .font(.system(size: 18))
+                                    .font(Typography.regular18)
                                     .foregroundColor(DesignTokens.accentColor)
                                     .frame(width: 24)
 
                                 Text("Dark Mode")
-                                    .font(.system(size: 14, weight: .medium))
+                                    .font(Typography.semibold14)
                                     .foregroundColor(DesignTokens.textPrimary)
 
                                 Spacer()
@@ -179,62 +183,6 @@ struct SettingsView: View {
                         }
                         .padding(.horizontal, 12)
 
-                        // MARK: - Notification Settings
-                        VStack(alignment: .leading, spacing: 0) {
-                            HStack(spacing: 16) {
-                                Image(systemName: "bell.fill")
-                                    .font(.system(size: 18))
-                                    .foregroundColor(DesignTokens.accentColor)
-                                    .frame(width: 24)
-
-                                Text("Push Notifications")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(DesignTokens.textPrimary)
-
-                                Spacer()
-
-                                Toggle("", isOn: $isPushEnabled)
-                                    .labelsHidden()
-                                    .tint(DesignTokens.accentColor)
-                                    .onChange(of: isPushEnabled) { _, newValue in
-                                        Task {
-                                            if newValue {
-                                                let granted = await pushManager.requestAuthorization()
-                                                if !granted {
-                                                    // Open system settings if permission denied
-                                                    isPushEnabled = false
-                                                    if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
-                                                        await MainActor.run {
-                                                            UIApplication.shared.open(settingsUrl)
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                            }
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 16)
-                            .background(DesignTokens.surface)
-                            .cornerRadius(8)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color(red: 0.68, green: 0.68, blue: 0.68).opacity(0.3), lineWidth: 0.5)
-                            )
-                            .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                isPushEnabled.toggle()
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .onAppear {
-                            isPushEnabled = pushManager.isAuthorized
-                        }
-                        .onChange(of: pushManager.isAuthorized) { _, newValue in
-                            isPushEnabled = newValue
-                        }
-
                         // MARK: - Actions
                         VStack(alignment: .leading, spacing: 0) {
                             Button(action: {
@@ -244,12 +192,12 @@ struct SettingsView: View {
                             }) {
                                 HStack(spacing: 16) {
                                     Image(systemName: "rectangle.portrait.and.arrow.right")
-                                        .font(.system(size: 18))
+                                        .font(Typography.regular18)
                                         .foregroundColor(DesignTokens.accentColor)
                                         .frame(width: 24)
 
                                     Text("Sign Out")
-                                        .font(.system(size: 14, weight: .medium))
+                                        .font(Typography.semibold14)
                                         .foregroundColor(DesignTokens.textPrimary)
 
                                     Spacer()
@@ -276,7 +224,7 @@ struct SettingsView: View {
         .overlay(alignment: .top) {
             if let error = viewModel.errorMessage {
                 Text(LocalizedStringKey(error))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(Typography.semibold13)
                     .foregroundColor(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -291,17 +239,7 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("Settings - Default") {
+#Preview {
     SettingsView(currentPage: .constant(.setting))
         .environmentObject(AuthenticationManager.shared)
-        .environmentObject(PushNotificationManager.shared)
-}
-
-#Preview("Settings - Dark Mode") {
-    SettingsView(currentPage: .constant(.setting))
-        .environmentObject(AuthenticationManager.shared)
-        .environmentObject(PushNotificationManager.shared)
-        .preferredColorScheme(.dark)
 }

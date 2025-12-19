@@ -4,23 +4,6 @@ import PhotosUI
 // MARK: - Create Account View
 
 struct CreateAccountView: View {
-    // MARK: - Design Constants
-    private enum Layout {
-        static let inputFieldWidth: CGFloat = 343
-        static let inputFieldHeight: CGFloat = 49
-        static let buttonHeight: CGFloat = 46
-        static let buttonCornerRadius: CGFloat = 31.5
-        static let fieldCornerRadius: CGFloat = 6
-        static let socialButtonSize: CGFloat = 46
-        static let socialButtonCornerRadius: CGFloat = 23
-    }
-
-    private enum Colors {
-        static let brandRed = Color(red: 0.87, green: 0.11, blue: 0.26)
-        static let placeholder = Color.white.opacity(0.4)
-        static let secondaryText = Color(white: 0.53)
-    }
-
     // MARK: - Bindings
     @Binding var currentPage: AppPage
 
@@ -37,23 +20,21 @@ struct CreateAccountView: View {
     @State private var showConfirmPassword = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var selectedAvatar: UIImage?
-    @State private var isGoogleLoading = false
-    @State private var isAppleLoading = false
 
     // MARK: - Focus State
     @FocusState private var focusedField: Field?
 
-    private enum Field {
+    enum Field {
         case email
         case username
         case password
         case confirmPassword
     }
 
-    // MARK: - Environment
+    // Access global AuthenticationManager
     @EnvironmentObject private var authManager: AuthenticationManager
 
-    // MARK: - Avatar
+    // Access AvatarManager
     @StateObject private var avatarManager = AvatarManager.shared
 
     var body: some View {
@@ -83,28 +64,74 @@ struct CreateAccountView: View {
                         AvatarView(image: selectedAvatar, url: nil, size: 136)
                             .offset(x: 0.50, y: -290)
 
-                        // Add Photo Button
+                        // Add Photo Button - 使用 PhotosPicker
                         PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                             ZStack {
                                 Circle()
-                                    .fill(Colors.brandRed)
+                                    .fill(Color(red: 0.87, green: 0.11, blue: 0.26))
                                     .frame(width: 35, height: 35)
 
                                 Image(systemName: selectedAvatar != nil ? "checkmark" : "plus")
-                                    .font(.system(size: 18, weight: .medium))
+                                    .font(Typography.semibold18)
                                     .foregroundColor(.white)
                             }
                         }
                         .offset(x: 48, y: -242.50)
 
 
+                        // SHOW button for PASSWORD - 优化点击响应
+                        Button(action: {
+                            // 直接切换显示状态，不需要延迟
+                            let wasFocused = focusedField == .password
+                            withAnimation(.none) {
+                                showPassword.toggle()
+                            }
+                            // 如果之前有焦点，立即恢复焦点
+                            if wasFocused {
+                                focusedField = .password
+                            }
+                        }) {
+                            Text(showPassword ? "HIDE" : "SHOW")
+                                .font(Typography.regular12)
+                                .lineSpacing(20)
+                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                                .padding(.horizontal, 30)
+                                .padding(.vertical, 24)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: 138.50, y: -20)
+
+                        // SHOW button for CONFIRM PASSWORD - 优化点击响应
+                        Button(action: {
+                            // 直接切换显示状态，不需要延迟
+                            let wasFocused = focusedField == .confirmPassword
+                            withAnimation(.none) {
+                                showConfirmPassword.toggle()
+                            }
+                            // 如果之前有焦点，立即恢复焦点
+                            if wasFocused {
+                                focusedField = .confirmPassword
+                            }
+                        }) {
+                            Text(showConfirmPassword ? "HIDE" : "SHOW")
+                                .font(Typography.regular12)
+                                .lineSpacing(20)
+                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                                .padding(.horizontal, 30)
+                                .padding(.vertical, 24)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: 138.50, y: 49)
+
                         // Email Input Field
                         Rectangle()
                             .foregroundColor(.clear)
-                            .frame(width: Layout.inputFieldWidth, height: Layout.inputFieldHeight)
-                            .cornerRadius(Layout.fieldCornerRadius)
+                            .frame(width: 343, height: 49)
+                            .cornerRadius(6)
                             .overlay(
-                                RoundedRectangle(cornerRadius: Layout.fieldCornerRadius)
+                                RoundedRectangle(cornerRadius: 6)
                                     .inset(by: 0.20)
                                     .stroke(.white, lineWidth: 0.20)
                             )
@@ -113,10 +140,10 @@ struct CreateAccountView: View {
                         // Username Input Field
                         Rectangle()
                             .foregroundColor(.clear)
-                            .frame(width: Layout.inputFieldWidth, height: Layout.inputFieldHeight)
-                            .cornerRadius(Layout.fieldCornerRadius)
+                            .frame(width: 343, height: 49)
+                            .cornerRadius(6)
                             .overlay(
-                                RoundedRectangle(cornerRadius: Layout.fieldCornerRadius)
+                                RoundedRectangle(cornerRadius: 6)
                                     .inset(by: 0.20)
                                     .stroke(.white, lineWidth: 0.20)
                             )
@@ -125,10 +152,10 @@ struct CreateAccountView: View {
                         // Password Input Field
                         Rectangle()
                             .foregroundColor(.clear)
-                            .frame(width: Layout.inputFieldWidth, height: Layout.inputFieldHeight)
-                            .cornerRadius(Layout.fieldCornerRadius)
+                            .frame(width: 343, height: 49)
+                            .cornerRadius(6)
                             .overlay(
-                                RoundedRectangle(cornerRadius: Layout.fieldCornerRadius)
+                                RoundedRectangle(cornerRadius: 6)
                                     .inset(by: 0.20)
                                     .stroke(.white, lineWidth: 0.20)
                             )
@@ -137,10 +164,10 @@ struct CreateAccountView: View {
                         // Confirm Password Input Field
                         Rectangle()
                             .foregroundColor(.clear)
-                            .frame(width: Layout.inputFieldWidth, height: Layout.inputFieldHeight)
-                            .cornerRadius(Layout.fieldCornerRadius)
+                            .frame(width: 343, height: 49)
+                            .cornerRadius(6)
                             .overlay(
-                                RoundedRectangle(cornerRadius: Layout.fieldCornerRadius)
+                                RoundedRectangle(cornerRadius: 6)
                                     .inset(by: 0.20)
                                     .stroke(.white, lineWidth: 0.20)
                             )
@@ -148,94 +175,81 @@ struct CreateAccountView: View {
                     }
 
                     Group {
-                        // Email TextField
-                        TextField("", text: $email, prompt: Text("Enter your email").foregroundColor(Colors.placeholder))
+                        // Text fields for input
+                        TextField("", text: $email, prompt: Text("Enter your email").foregroundColor(Color.white.opacity(0.4)))
                             .foregroundColor(.white)
-                            .font(.system(size: 14))
+                            .font(Typography.regular14)
                             .padding(.horizontal, 16)
-                            .frame(width: Layout.inputFieldWidth, height: Layout.inputFieldHeight)
+                            .frame(width: 343, height: 49)
                             .autocapitalization(.none)
                             .keyboardType(.emailAddress)
                             .autocorrectionDisabled()
                             .offset(x: 0, y: -157.50)
                             .accessibilityIdentifier("emailTextField")
 
-                        // Username TextField
-                        TextField("", text: $username, prompt: Text("Your Username").foregroundColor(Colors.placeholder))
+                        TextField("", text: $username, prompt: Text("Your Username").foregroundColor(Color.white.opacity(0.4)))
                             .foregroundColor(.white)
-                            .font(.system(size: 14))
+                            .font(Typography.regular14)
                             .padding(.horizontal, 16)
-                            .frame(width: Layout.inputFieldWidth, height: Layout.inputFieldHeight)
+                            .frame(width: 343, height: 49)
                             .autocapitalization(.none)
                             .autocorrectionDisabled()
                             .offset(x: 0, y: -88.50)
                             .accessibilityIdentifier("usernameTextField")
 
-                        // Password TextField
-                        HStack {
+                        // Password field - 优化版本，避免视图重建
+                        Group {
                             if showPassword {
-                                TextField("", text: $password, prompt: Text("Enter your password").foregroundColor(Colors.placeholder))
+                                TextField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
-                                    .font(.system(size: 14))
+                                    .font(Typography.regular14)
+                                    .padding(.horizontal, 16)
+                                    .frame(width: 343, height: 49)
                                     .autocapitalization(.none)
                                     .autocorrectionDisabled()
                                     .textContentType(.password)
                                     .accessibilityIdentifier("passwordTextField")
                                     .focused($focusedField, equals: .password)
                             } else {
-                                SecureField("", text: $password, prompt: Text("Enter your password").foregroundColor(Colors.placeholder))
+                                SecureField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
-                                    .font(.system(size: 14))
+                                    .font(Typography.regular14)
+                                    .padding(.horizontal, 16)
+                                    .frame(width: 343, height: 49)
                                     .textContentType(.password)
                                     .accessibilityIdentifier("passwordTextField")
                                     .focused($focusedField, equals: .password)
                             }
-
-                            Text(showPassword ? "HIDE" : "SHOW")
-                                .font(.system(size: 12, weight: .light))
-                                .foregroundColor(Colors.secondaryText)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    showPassword.toggle()
-                                }
                         }
-                        .padding(.horizontal, 16)
-                        .frame(width: Layout.inputFieldWidth, height: Layout.inputFieldHeight)
                         .offset(x: 0, y: -19.50)
 
-                        // Confirm Password TextField
-                        HStack {
+                        // Confirm Password field - 优化版本，避免视图重建
+                        Group {
                             if showConfirmPassword {
-                                TextField("", text: $confirmPassword, prompt: Text("Confirm your password").foregroundColor(Colors.placeholder))
+                                TextField("", text: $confirmPassword, prompt: Text("Confirm your password").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
-                                    .font(.system(size: 14))
+                                    .font(Typography.regular14)
+                                    .padding(.horizontal, 16)
+                                    .frame(width: 343, height: 49)
                                     .autocapitalization(.none)
                                     .autocorrectionDisabled()
                                     .textContentType(.password)
                                     .accessibilityIdentifier("confirmPasswordTextField")
                                     .focused($focusedField, equals: .confirmPassword)
                             } else {
-                                SecureField("", text: $confirmPassword, prompt: Text("Confirm your password").foregroundColor(Colors.placeholder))
+                                SecureField("", text: $confirmPassword, prompt: Text("Confirm your password").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
-                                    .font(.system(size: 14))
+                                    .font(Typography.regular14)
+                                    .padding(.horizontal, 16)
+                                    .frame(width: 343, height: 49)
                                     .textContentType(.password)
                                     .accessibilityIdentifier("confirmPasswordTextField")
                                     .focused($focusedField, equals: .confirmPassword)
                             }
-
-                            Text(showConfirmPassword ? "HIDE" : "SHOW")
-                                .font(.system(size: 12, weight: .light))
-                                .foregroundColor(Colors.secondaryText)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    showConfirmPassword.toggle()
-                                }
                         }
-                        .padding(.horizontal, 16)
-                        .frame(width: Layout.inputFieldWidth, height: Layout.inputFieldHeight)
                         .offset(x: 0, y: 49.50)
 
-                        // Sign Up Button
+                        // Sign up Button
                         Button(action: {
                             Task {
                                 await handleRegister()
@@ -247,13 +261,13 @@ struct CreateAccountView: View {
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                 }
                                 Text(LocalizedStringKey("Sign_Up"))
-                                    .font(.system(size: 16, weight: .medium))
+                                    .font(Typography.semibold16)
                                     .lineSpacing(20)
                                     .foregroundColor(.white)
                             }
-                            .frame(width: Layout.inputFieldWidth, height: Layout.buttonHeight)
-                            .background(Colors.brandRed)
-                            .cornerRadius(Layout.buttonCornerRadius)
+                            .frame(width: 343, height: 46)
+                            .background(Color(red: 0.87, green: 0.11, blue: 0.26))
+                            .cornerRadius(31.50)
                         }
                         .disabled(isLoading)
                         .offset(x: 0, y: 137)
@@ -261,7 +275,7 @@ struct CreateAccountView: View {
 
                         // "or you can" text
                         Text(LocalizedStringKey("Or_you_can"))
-                            .font(.system(size: 16, weight: .medium))
+                            .font(Typography.semibold16)
                             .lineSpacing(20)
                             .foregroundColor(.white)
                             .offset(x: 0.50, y: 200)
@@ -285,89 +299,72 @@ struct CreateAccountView: View {
                         HStack(spacing: 54) {
                             // Phone button
                             Button(action: {
-                                currentPage = .phoneRegistration
+                                // TODO: Phone login
                             }) {
-                                Image(systemName: "iphone")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(.white)
-                                    .frame(width: Layout.socialButtonSize, height: Layout.socialButtonSize)
-                                    .cornerRadius(Layout.socialButtonCornerRadius)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: Layout.socialButtonCornerRadius)
-                                            .inset(by: 0.20)
-                                            .stroke(.white, lineWidth: 0.20)
-                                    )
+                                HStack(spacing: 8) {
+                                    Image(systemName: "iphone")
+                                        .font(Typography.regular20)
+                                        .foregroundColor(.white)
+                                }
+                                .frame(width: 46, height: 46)
+                                .cornerRadius(23)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 23)
+                                        .inset(by: 0.20)
+                                        .stroke(.white, lineWidth: 0.20)
+                                )
                             }
-                            .disabled(isLoading || isGoogleLoading || isAppleLoading)
 
                             // Apple button
                             Button(action: {
-                                Task {
-                                    await handleAppleSignIn()
-                                }
+                                // TODO: Apple login
                             }) {
-                                ZStack {
-                                    if isAppleLoading {
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                            .scaleEffect(0.8)
-                                    } else {
-                                        Image(systemName: "apple.logo")
-                                            .font(.system(size: 20))
-                                            .foregroundColor(.white)
-                                    }
+                                HStack(spacing: 8) {
+                                    Image(systemName: "apple.logo")
+                                        .font(Typography.regular20)
+                                        .foregroundColor(.white)
                                 }
-                                .frame(width: Layout.socialButtonSize, height: Layout.socialButtonSize)
-                                .cornerRadius(Layout.socialButtonCornerRadius)
+                                .frame(width: 46, height: 46)
+                                .cornerRadius(23)
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: Layout.socialButtonCornerRadius)
+                                    RoundedRectangle(cornerRadius: 23)
                                         .inset(by: 0.20)
                                         .stroke(.white, lineWidth: 0.20)
                                 )
                             }
-                            .disabled(isLoading || isGoogleLoading || isAppleLoading)
 
                             // Google button
                             Button(action: {
-                                Task {
-                                    await handleGoogleSignIn()
-                                }
+                                // TODO: Google login
                             }) {
-                                ZStack {
-                                    if isGoogleLoading {
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                            .scaleEffect(0.8)
-                                    } else {
-                                        Text("G")
-                                            .font(.system(size: 20, weight: .bold))
-                                            .foregroundColor(.white)
-                                    }
+                                HStack(spacing: 8) {
+                                    Text("G")
+                                        .font(Typography.bold20)
+                                        .foregroundColor(.white)
                                 }
-                                .frame(width: Layout.socialButtonSize, height: Layout.socialButtonSize)
-                                .cornerRadius(Layout.socialButtonCornerRadius)
+                                .frame(width: 46, height: 46)
+                                .cornerRadius(23)
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: Layout.socialButtonCornerRadius)
+                                    RoundedRectangle(cornerRadius: 23)
                                         .inset(by: 0.20)
                                         .stroke(.white, lineWidth: 0.20)
                                 )
                             }
-                            .disabled(isLoading || isGoogleLoading || isAppleLoading)
                         }
                         .offset(x: 0.50, y: 263)
 
                         // Already have an account
                         HStack(spacing: 4) {
                             Text("Already have an account?")
-                                .font(.system(size: 16, weight: .light))
+                                .font(Typography.regular16)
                                 .lineSpacing(20)
-                                .foregroundColor(Colors.secondaryText)
+                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
 
                             Button(action: {
                                 currentPage = .login
                             }) {
                                 Text(LocalizedStringKey("Sign_in"))
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(Typography.semibold16)
                                     .lineSpacing(20)
                                     .underline()
                                     .foregroundColor(.white)
@@ -378,13 +375,10 @@ struct CreateAccountView: View {
                         // Error Message
                         if let errorMessage = errorMessage {
                             Text(LocalizedStringKey(errorMessage))
-                                .font(.system(size: 12))
+                                .font(Typography.regular12)
                                 .foregroundColor(.red)
                                 .multilineTextAlignment(.center)
-                                .lineLimit(nil)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(maxWidth: 300)
-                                .padding(.horizontal, 20)
+                                .padding(.horizontal, 40)
                                 .offset(x: 0, y: 100)
                         }
                     }
@@ -403,7 +397,7 @@ struct CreateAccountView: View {
         // 移除 .ignoresSafeArea(.keyboard) 防止页面随键盘浮动
         .scrollDismissesKeyboard(.interactively)
         .onChange(of: selectedPhotoItem) { oldValue, newValue in
-            _Concurrency.Task { @MainActor in
+            Task {
                 if let photoItem = newValue,
                    let data = try? await photoItem.loadTransferable(type: Data.self),
                    let image = UIImage(data: data) {
@@ -476,56 +470,6 @@ struct CreateAccountView: View {
         isLoading = false
     }
 
-    private func handleGoogleSignIn() async {
-        isGoogleLoading = true
-        errorMessage = nil
-
-        do {
-            let _ = try await authManager.loginWithGoogle()
-            // Success - AuthenticationManager will update isAuthenticated and navigate
-            await MainActor.run {
-                currentPage = .home
-            }
-        } catch {
-            let errorDesc = error.localizedDescription.lowercased()
-            if errorDesc.contains("cancel") {
-                // User cancelled, no error message needed
-            } else {
-                errorMessage = error.localizedDescription
-            }
-            #if DEBUG
-            print("[CreateAccountView] Google sign-in error: \(error)")
-            #endif
-        }
-
-        isGoogleLoading = false
-    }
-
-    private func handleAppleSignIn() async {
-        isAppleLoading = true
-        errorMessage = nil
-
-        do {
-            let _ = try await authManager.loginWithApple()
-            // Success - AuthenticationManager will update isAuthenticated and navigate
-            await MainActor.run {
-                currentPage = .home
-            }
-        } catch {
-            let errorDesc = error.localizedDescription.lowercased()
-            if errorDesc.contains("cancel") {
-                // User cancelled, no error message needed
-            } else {
-                errorMessage = error.localizedDescription
-            }
-            #if DEBUG
-            print("[CreateAccountView] Apple sign-in error: \(error)")
-            #endif
-        }
-
-        isAppleLoading = false
-    }
-
     // MARK: - Validation
 
     private func validateRegister() -> Bool {
@@ -549,8 +493,13 @@ struct CreateAccountView: View {
             return false
         }
 
-        if password.count < 8 {
-            errorMessage = "Password must be at least 8 characters"
+        if password.count < 6 {
+            errorMessage = "Password must be at least 6 characters"
+            return false
+        }
+
+        if !isStrongPassword(password) {
+            errorMessage = "Password must be at least 6 characters"
             return false
         }
 
@@ -573,20 +522,14 @@ struct CreateAccountView: View {
     }
 
     private func isStrongPassword(_ password: String) -> Bool {
-        // Simplified validation - only check minimum length (8 characters)
-        return password.count >= 8
+        // Simplified validation - only check minimum length
+        return password.count >= 6
     }
 }
 
-// MARK: - Previews
+// MARK: - Preview
 
-#Preview("CreateAccount - Default") {
+#Preview {
     CreateAccountView(currentPage: .constant(.createAccount))
         .environmentObject(AuthenticationManager.shared)
-}
-
-#Preview("CreateAccount - Dark Mode") {
-    CreateAccountView(currentPage: .constant(.createAccount))
-        .environmentObject(AuthenticationManager.shared)
-        .preferredColorScheme(.dark)
 }

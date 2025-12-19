@@ -17,7 +17,7 @@ struct SaveDraftModal: View {
             // 弹窗内容
             VStack(spacing: 0) {
                 Text("Do you want to save it")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(Typography.semibold17)
                     .lineSpacing(20)
                     .foregroundColor(.black)
                     .padding(.top, 20)
@@ -35,7 +35,7 @@ struct SaveDraftModal: View {
                         }
                     }) {
                         Text("No")
-                            .font(.system(size: 17, weight: .medium))
+                            .font(Typography.semibold17)
                             .foregroundColor(.black)
                             .frame(maxWidth: .infinity)
                             .frame(height: 44)
@@ -53,7 +53,7 @@ struct SaveDraftModal: View {
                         }
                     }) {
                         Text("Yes")
-                            .font(.system(size: 17, weight: .medium))
+                            .font(Typography.semibold17)
                             .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                             .frame(maxWidth: .infinity)
                             .frame(height: 44)
@@ -72,9 +72,7 @@ struct SaveDraftModal: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("SaveDraft - Default") {
+#Preview {
     ZStack {
         Color.gray.opacity(0.3)
             .ignoresSafeArea()
@@ -85,18 +83,4 @@ struct SaveDraftModal: View {
             onYes: {}
         )
     }
-}
-
-#Preview("SaveDraft - Dark Mode") {
-    ZStack {
-        Color.gray.opacity(0.3)
-            .ignoresSafeArea()
-
-        SaveDraftModal(
-            isPresented: .constant(true),
-            onNo: {},
-            onYes: {}
-        )
-    }
-    .preferredColorScheme(.dark)
 }

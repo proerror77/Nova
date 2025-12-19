@@ -1,49 +1,5 @@
 import SwiftUI
 import Foundation
-import PhotosUI
-
-// MARK: - HomeView Navigation State Machine
-
-/// 全螢幕導航狀態 (互斥)
-enum HomeFullScreenDestination: Equatable {
-    case home
-    case notification
-    case search
-    case newPost
-    case generateImage
-    case write
-    case postDetail(FeedPost)
-    case userProfile(String)
-
-    static func == (lhs: HomeFullScreenDestination, rhs: HomeFullScreenDestination) -> Bool {
-        switch (lhs, rhs) {
-        case (.home, .home), (.notification, .notification), (.search, .search),
-             (.newPost, .newPost), (.generateImage, .generateImage), (.write, .write):
-            return true
-        case (.postDetail(let lPost), .postDetail(let rPost)):
-            return lPost.id == rPost.id
-        case (.userProfile(let lId), .userProfile(let rId)):
-            return lId == rId
-        default:
-            return false
-        }
-    }
-}
-
-/// Sheet 彈窗狀態
-enum HomeSheetType: Identifiable {
-    case report
-    case comments(FeedPost)
-    case camera
-
-    var id: String {
-        switch self {
-        case .report: return "report"
-        case .comments(let post): return "comments_\(post.id)"
-        case .camera: return "camera"
-        }
-    }
-}
 
 // MARK: - HomeView
 
@@ -52,136 +8,60 @@ struct HomeView: View {
     @EnvironmentObject private var authManager: AuthenticationManager
     @Environment(\.dismiss) var dismiss
     @StateObject private var feedViewModel = FeedViewModel()
-
-    // MARK: - Consolidated Navigation State (原本 24 個變數 → 6 個)
-    @State private var fullScreenDestination: HomeFullScreenDestination = .home
-    @State private var activeSheet: HomeSheetType?
-    @State private var showPhotoOptions = false
-    @State private var showSystemPhotoPicker = false
-    @State private var selectedPhotosFromPicker: [PhotosPickerItem] = []
+    @State private var showReportView = false
     @State private var showThankYouView = false
+    @State private var showNewPost = false
+    @State private var showSearch = false
+    @State private var showNotification = false
+    @State private var showPhotoOptions = false
+    @State private var showComments = false
+    @State private var selectedPostForComment: FeedPost?
+    @State private var showImagePicker = false
+    @State private var showCamera = false
+    @State private var selectedImage: UIImage?
+    @State private var showGenerateImage = false
+    @State private var showWrite = false
+    @State private var selectedPostForDetail: FeedPost?
+    @State private var showPostDetail = false
+    @State private var showChannelBar = true
+    @State private var lastScrollOffset: CGFloat = 0
+    @State private var selectedChannel: String = "Fashion"
 
-    // MARK: - Media Data State (保持獨立，因為是實際數據)
-    @State private var selectedMediaItems: [PostMediaItem] = []
-    @State private var cameraImage: UIImage?
-
-    // NOTE: Channels are now loaded dynamically via feedViewModel.channels
-    // Old hardcoded channels removed - using backend API instead
-
-    // MARK: - Binding Helpers (橋接新舊 API)
-    private var showNotificationBinding: Binding<Bool> {
-        Binding(
-            get: { fullScreenDestination == .notification },
-            set: { if !$0 { fullScreenDestination = .home } }
-        )
-    }
-
-    private var showSearchBinding: Binding<Bool> {
-        Binding(
-            get: { fullScreenDestination == .search },
-            set: { if !$0 { fullScreenDestination = .home } }
-        )
-    }
-
-    private var showNewPostBinding: Binding<Bool> {
-        Binding(
-            get: { fullScreenDestination == .newPost },
-            set: { newValue in
-                if newValue {
-                    fullScreenDestination = .newPost
-                } else {
-                    fullScreenDestination = .home
-                    selectedMediaItems = []
-                    cameraImage = nil
-                }
-            }
-        )
-    }
-
-    private var showGenerateImageBinding: Binding<Bool> {
-        Binding(
-            get: { fullScreenDestination == .generateImage },
-            set: { if !$0 { fullScreenDestination = .home } }
-        )
-    }
-
-    private var showWriteBinding: Binding<Bool> {
-        Binding(
-            get: { fullScreenDestination == .write },
-            set: { if !$0 { fullScreenDestination = .home } }
-        )
-    }
-
-    private var showUserProfileBinding: Binding<Bool> {
-        Binding(
-            get: { if case .userProfile = fullScreenDestination { return true } else { return false } },
-            set: { if !$0 { fullScreenDestination = .home } }
-        )
-    }
-
-    private var currentUserId: String {
-        if case .userProfile(let id) = fullScreenDestination { return id }
-        return ""
-    }
-
-    private var showReportBinding: Binding<Bool> {
-        Binding(
-            get: { if case .report = activeSheet { return true } else { return false } },
-            set: { if !$0 { activeSheet = nil } }
-        )
-    }
+    // Channel 列表
+    private let channels = ["Fashion", "Travel", "Fitness", "Pets", "Study", "Career", "Tech", "Art"]
 
     var body: some View {
         ZStack {
-            // 条件渲染：根据状态即时切换视图 (使用狀態機)
-            switch fullScreenDestination {
-            case .notification:
-                NotificationView(showNotification: showNotificationBinding)
+            // 条件渲染：根据状态即时切换视图
+            if showNotification {
+                NotificationView(showNotification: $showNotification)
                     .transition(.identity)
-
-            case .search:
-                SearchView(showSearch: showSearchBinding)
+            } else if showSearch {
+                SearchView(showSearch: $showSearch)
                     .transition(.identity)
-
-            case .newPost:
+            } else if showNewPost {
                 NewPostView(
-                    showNewPost: showNewPostBinding,
-                    initialMediaItems: selectedMediaItems,
-                    initialImage: cameraImage,
+                    showNewPost: $showNewPost,
+                    initialImage: selectedImage,
                     onPostSuccess: { newPost in
+                        // Post 成功后直接添加到 Feed 顶部（优化版本，不需要重新加载整个feed）
                         feedViewModel.addNewPost(newPost)
                     }
                 )
                 .transition(.identity)
-
-            case .generateImage:
-                GenerateImage01View(showGenerateImage: showGenerateImageBinding)
+            } else if showGenerateImage {
+                GenerateImage01View(showGenerateImage: $showGenerateImage)
                     .transition(.identity)
-
-            case .write:
-                WriteView(showWrite: showWriteBinding, currentPage: $currentPage)
+            } else if showWrite {
+                WriteView(showWrite: $showWrite, currentPage: $currentPage)
                     .transition(.identity)
-
-            case .postDetail(let post):
-                PostDetailView(
-                    post: post,
-                    onDismiss: {
-                        fullScreenDestination = .home
-                    },
-                    onAvatarTapped: { authorId in
-                        fullScreenDestination = .userProfile(authorId)
-                    }
-                )
+            } else if showPostDetail, let post = selectedPostForDetail {
+                PostDetailView(post: post, onDismiss: {
+                    showPostDetail = false
+                    selectedPostForDetail = nil
+                })
                 .transition(.identity)
-
-            case .userProfile(let userId):
-                UserProfileView(
-                    showUserProfile: showUserProfileBinding,
-                    userId: userId
-                )
-                .transition(.identity)
-
-            case .home:
+            } else {
                 homeContent
             }
 
@@ -190,125 +70,140 @@ struct HomeView: View {
                 PhotoOptionsModal(
                     isPresented: $showPhotoOptions,
                     onChoosePhoto: {
-                        showSystemPhotoPicker = true
+                        showImagePicker = true
                     },
                     onTakePhoto: {
-                        activeSheet = .camera
+                        showCamera = true
                     },
                     onGenerateImage: {
-                        fullScreenDestination = .generateImage
+                        showGenerateImage = true
                     },
                     onWrite: {
-                        fullScreenDestination = .write
+                        showWrite = true
                     }
                 )
             }
         }
-        .animation(.none, value: fullScreenDestination)
+        .animation(.none, value: showNotification)
+        .animation(.none, value: showSearch)
+        .animation(.none, value: showNewPost)
+        .animation(.none, value: showGenerateImage)
+        .animation(.none, value: showWrite)
+        .animation(.none, value: showPostDetail)
         .navigationBarBackButtonHidden(true)
-        .sheet(item: $activeSheet) { sheet in
-            switch sheet {
-            case .report:
-                ReportModal(isPresented: showReportBinding, showThankYouView: $showThankYouView)
-            case .comments(let post):
-                CommentSheetView(
-                    post: post,
-                    isPresented: Binding(
-                        get: { activeSheet != nil },
-                        set: { if !$0 { activeSheet = nil } }
-                    ),
-                    onAvatarTapped: { userId in
-                        activeSheet = nil
-                        fullScreenDestination = .userProfile(userId)
-                    }
-                )
-            case .camera:
-                ImagePicker(sourceType: .camera, selectedImage: $cameraImage)
+        .sheet(isPresented: $showReportView) {
+            ReportModal(isPresented: $showReportView, showThankYouView: $showThankYouView)
+        }
+        .sheet(isPresented: $showComments) {
+            if let post = selectedPostForComment {
+                CommentSheetView(post: post, isPresented: $showComments)
             }
         }
-        .photosPicker(
-            isPresented: $showSystemPhotoPicker,
-            selection: $selectedPhotosFromPicker,
-            maxSelectionCount: 5,
-            matching: .any(of: [.images, .livePhotos])
-        )
-        .onChange(of: cameraImage) { oldValue, newValue in
-            // 相机拍摄后，跳转到NewPostView
+        .sheet(isPresented: $showImagePicker) {
+            ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
+        }
+        .sheet(isPresented: $showCamera) {
+            ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
+        }
+        .onChange(of: selectedImage) { oldValue, newValue in
+            // 选择/拍摄照片后，自动跳转到NewPostView
             if newValue != nil {
-                fullScreenDestination = .newPost
+                showNewPost = true
             }
         }
-        .onChange(of: selectedPhotosFromPicker) { oldValue, newValue in
-            // 从系统相册选择后，加载图片并跳转到 NewPostView
-            guard !newValue.isEmpty else { return }
-            Task {
-                do {
-                    let mediaItems = try await LivePhotoManager.shared.loadMedia(from: newValue, maxCount: 5)
-                    await MainActor.run {
-                        selectedMediaItems = mediaItems
-                        selectedPhotosFromPicker = []  // 清空以便下次选择
-                        fullScreenDestination = .newPost
-                    }
-                } catch {
-                    #if DEBUG
-                    print("[HomeView] Failed to load photos: \(error)")
-                    #endif
-                    selectedPhotosFromPicker = []
-                }
-            }
-        }
-        .task {
+        .onAppear {
             // Load feed when view appears
             if feedViewModel.posts.isEmpty {
-                await feedViewModel.loadFeed()
+                Task { await feedViewModel.loadFeed() }
             }
         }
     }
 
     var homeContent: some View {
-        ZStack {
-            // 背景色 - 白色
-            Color.white
+        ZStack(alignment: .top) {
+            // 背景色
+            DesignTokens.backgroundColor
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // MARK: - 顶部导航栏
-                HStack {
-                    Button(action: { fullScreenDestination = .search }) {
-                        Image(systemName: "magnifyingglass")
-                            .frame(width: 24, height: 24)
-                            .foregroundColor(DesignTokens.textPrimary)
+                // MARK: - 顶部导航栏（延伸到安全区域顶部）
+                ZStack(alignment: .bottom) {
+                    // 白色背景延伸到顶部（覆盖Dynamic Island区域）
+                    Rectangle()
+                        .fill(.white)
+                        .ignoresSafeArea(edges: .top)
+
+                    // 导航内容（在安全区域内）
+                    HStack {
+                        Button(action: { showSearch = true }) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 22, weight: .regular))
+                                .frame(width: 24, height: 24)
+                                .foregroundColor(DesignTokens.textPrimary)
+                        }
+                        Spacer()
+                        Image("Icered-icon")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 20)
+                            .foregroundColor(.black)
+                        Spacer()
+                        Button(action: { showNotification = true }) {
+                            Image(systemName: "bell")
+                                .font(.system(size: 22, weight: .regular))
+                                .frame(width: 24, height: 24)
+                                .foregroundColor(DesignTokens.textPrimary)
+                        }
                     }
-                    Spacer()
-                    Image("Icered-icon")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(height: 18)
-                    Spacer()
-                    Button(action: { fullScreenDestination = .notification }) {
-                        Image(systemName: "bell")
-                            .frame(width: 24, height: 24)
-                            .foregroundColor(DesignTokens.textPrimary)
-                    }
+                    .frame(width: 343)
+                    .padding(.bottom, 10)
                 }
-                .frame(height: DesignTokens.topBarHeight)
-                .padding(.horizontal, 16)
-                .background(DesignTokens.surface)
+                .frame(height: 50)
 
                 // MARK: - Channel 栏
-                channelBar
+                if showChannelBar {
+                    channelBar
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
 
-                // MARK: - 可滚动内容区
-                ScrollView {
-                        LazyVStack(spacing: DesignTokens.spacing20) {
-                            // MARK: - Promo Banner (活动/广告区域)
-                            PromoBannerView(onTap: {
-                                // TODO: 处理广告点击事件
-                            })
+                // MARK: - 内容区域（固定背景 + 滚动内容）
+                ZStack(alignment: .top) {
+                    // 固定背景图片
+                    Image("promo-banner-bg")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(height: 220)
+                        .frame(maxWidth: .infinity)
+                        .clipped()
+
+                    // 可滚动内容区
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            // 滚动位置检测
+                            GeometryReader { geometry in
+                                Color.clear
+                                    .preference(key: ScrollOffsetPreferenceKey.self, value: geometry.frame(in: .named("scroll")).minY)
+                            }
+                            .frame(height: 0)
+                            // MARK: - Promo Banner 内容 (Icon + 文字，随滚动移动)
+                            VStack(spacing: 8) {
+                                Image("home-icon")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 50, height: 40)
+
+                                Text("This is ICERED.")
+                                    .font(.custom("SF Pro Display", size: 24))
+                                    .tracking(0.24)
+                                    .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
+                            }
+                            .frame(height: 180)
                             .frame(maxWidth: .infinity)
-                            .padding(.horizontal, -16) // 突破外层 padding，贴紧屏幕边缘
 
-                            // MARK: - Loading State
+                            // Feed 内容区域（白色背景，覆盖背景图）
+                            VStack(spacing: DesignTokens.spacing20) {
+                                // MARK: - Loading State
                             if feedViewModel.isLoading && feedViewModel.posts.isEmpty {
                                 ProgressView("Loading feed...")
                                     .padding()
@@ -321,20 +216,29 @@ struct HomeView: View {
                                         .font(.system(size: 40))
                                         .foregroundColor(.orange)
                                     Text(error)
-                                        .font(.system(size: 14))
+                                        .font(Typography.regular14)
                                         .foregroundColor(.gray)
                                         .multilineTextAlignment(.center)
 
-                                    // Show retry button for all errors - let APIClient handle re-authentication
-                                    Button("Retry") {
-                                        Task { await feedViewModel.loadFeed() }
+                                    if error.contains("Session expired") || error.contains("login") {
+                                        // Session expired - show login button
+                                        Button("Login") {
+                                            Task {
+                                                await authManager.logout()
+                                            }
+                                        }
+                                        .font(.system(size: DesignTokens.fontMedium, weight: .medium))
+                                        .foregroundColor(DesignTokens.textOnAccent)
+                                        .padding(.horizontal, 24)
+                                        .padding(.vertical, DesignTokens.spacing10)
+                                        .background(DesignTokens.accentColor)
+                                        .cornerRadius(DesignTokens.buttonCornerRadius)
+                                    } else {
+                                        Button("Retry") {
+                                            Task { await feedViewModel.loadFeed() }
+                                        }
+                                        .foregroundColor(DesignTokens.accentColor)
                                     }
-                                    .font(.system(size: DesignTokens.fontMedium, weight: .medium))
-                                    .foregroundColor(DesignTokens.textOnAccent)
-                                    .padding(.horizontal, 24)
-                                    .padding(.vertical, DesignTokens.spacing10)
-                                    .background(DesignTokens.accentColor)
-                                    .cornerRadius(DesignTokens.buttonCornerRadius)
                                 }
                                 .padding()
                             }
@@ -347,27 +251,20 @@ struct HomeView: View {
                                 case .post(let index, let post):
                                     FeedPostCard(
                                         post: post,
-                                        showReportView: showReportBinding,
+                                        showReportView: $showReportView,
                                         onLike: { Task { await feedViewModel.toggleLike(postId: post.id) } },
                                         onComment: {
-                                            activeSheet = .comments(post)
+                                            selectedPostForComment = post
+                                            showComments = true
                                         },
                                         onShare: { Task { await feedViewModel.sharePost(postId: post.id) } },
-                                        onBookmark: { Task { await feedViewModel.toggleBookmark(postId: post.id) } },
-                                        onAvatarTapped: { authorId in
-                                            fullScreenDestination = .userProfile(authorId)
-                                        }
+                                        onBookmark: { feedViewModel.toggleBookmark(postId: post.id) }
                                     )
-                                    // 让卡片左右贴边显示
-                                    .padding(.horizontal, -DesignTokens.spacing16)
-                                    .ignoresSafeArea(.container, edges: .horizontal)
                                     .onTapGesture {
-                                        fullScreenDestination = .postDetail(post)
+                                        selectedPostForDetail = post
+                                        showPostDetail = true
                                     }
                                     .onAppear {
-                                        // Prefetch images for upcoming posts
-                                        feedViewModel.onPostAppear(at: index)
-
                                         // Auto-load more when reaching near the end (3 posts before)
                                         if index >= feedViewModel.posts.count - 3 && feedViewModel.hasMore && !feedViewModel.isLoadingMore {
                                             Task { await feedViewModel.loadMore() }
@@ -423,75 +320,132 @@ struct HomeView: View {
                                 .padding()
                             }
 
+                            }
+                            .padding(.vertical, DesignTokens.spacing16)
+                            .padding(.horizontal)
+                            .background(DesignTokens.backgroundColor)
                         }
-                        .padding(.vertical, DesignTokens.spacing16)
-                        .padding(.horizontal)
                     }
                     .refreshable {
                         await feedViewModel.refresh()
                     }
+                    .coordinateSpace(name: "scroll")
+                    .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
+                        let delta = offset - lastScrollOffset
+                        // 向上滚动 (offset 变小，delta < 0) 隐藏 Channel 栏
+                        // 向下滚动/下拉 (offset 变大，delta > 0) 显示 Channel 栏
+                        if abs(delta) > 10 {
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                if delta < -10 {
+                                    showChannelBar = false
+                                } else if delta > 10 || offset > -50 {
+                                    showChannelBar = true
+                                }
+                            }
+                            lastScrollOffset = offset
+                        }
+                    }
+                }
 
                 // MARK: - ScrollView 下方间距
                 Color.clear
-                    .frame(height: 0) // ← 调整 ScrollView 下方的间距
+                    .frame(height: 0)
             }
             .safeAreaInset(edge: .bottom) {
-                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: showNewPostBinding)
+                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions)
                     .padding(.top, 80)
             }
         }
     }
 
-    // MARK: - Channel Bar (Dynamic from Backend)
+    // MARK: - Channel Bar
     private var channelBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 24) {
-                // "For You" option - shows all content (no channel filter)
-                Button(action: {
-                    Task { await feedViewModel.selectChannel(nil) }
-                }) {
-                    Text("For You")
-                        .font(.system(size: 14))
-                        .lineSpacing(20)
-                        .foregroundColor(feedViewModel.selectedChannelId == nil ? .black : Color(red: 0.53, green: 0.53, blue: 0.53))
-                        .fontWeight(feedViewModel.selectedChannelId == nil ? .medium : .regular)
+        ZStack {
+            // 白色背景（无阴影）
+            Rectangle()
+                .fill(.white)
+
+            HStack(spacing: 0) {
+                // 可滚动的 Channel 列表
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 28) {
+                        ForEach(channels, id: \.self) { channel in
+                            Button(action: {
+                                selectedChannel = channel
+                                // TODO: 根据 channel 筛选 feed
+                            }) {
+                                Text(channel)
+                                    .font(.custom("SF Pro Display", size: 14))
+                                    .foregroundColor(selectedChannel == channel ? .black : Color(red: 0.53, green: 0.53, blue: 0.53))
+                                    .fontWeight(selectedChannel == channel ? .semibold : .regular)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.trailing, 60) // 为右侧渐变留出空间
                 }
 
-                // Dynamic channels from backend
-                ForEach(feedViewModel.channels) { channel in
-                    Button(action: {
-                        Task { await feedViewModel.selectChannel(channel.id) }
-                    }) {
-                        Text(channel.name)
-                            .font(.system(size: 14))
-                            .lineSpacing(20)
-                            .foregroundColor(feedViewModel.selectedChannelId == channel.id ? .black : Color(red: 0.53, green: 0.53, blue: 0.53))
-                            .fontWeight(feedViewModel.selectedChannelId == channel.id ? .medium : .regular)
-                    }
-                }
+                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 16)
+
+            // 右侧渐变遮罩 + 箭头
+            HStack(spacing: 0) {
+                Spacer()
+
+                // 渐变遮罩
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color.white.opacity(0),
+                        Color.white.opacity(0.8),
+                        Color.white
+                    ]),
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(width: 60)
+
+                // 箭头按钮
+                Button(action: {
+                    // TODO: 展开更多 channels
+                }) {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                }
+                .frame(width: 30)
+                .background(.white)
+            }
         }
         .frame(height: 36)
-        .background(.white)
-        .task {
-            // Load channels when view appears
-            if feedViewModel.channels.isEmpty {
-                await feedViewModel.loadChannels()
-            }
+        // 只在底部添加阴影
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color.black.opacity(0),
+                            Color.black.opacity(0.08)
+                        ]),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(height: 4)
+                .offset(y: 4)
         }
     }
 }
 
-// MARK: - Previews
+// MARK: - Scroll Offset Preference Key
+struct ScrollOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
 
-#Preview("Home - Default") {
+#Preview {
     HomeView(currentPage: .constant(.home))
         .environmentObject(AuthenticationManager.shared)
 }
 
-#Preview("Home - Dark Mode") {
-    HomeView(currentPage: .constant(.home))
-        .environmentObject(AuthenticationManager.shared)
-        .preferredColorScheme(.dark)
-}

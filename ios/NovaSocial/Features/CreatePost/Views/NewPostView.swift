@@ -3,7 +3,6 @@ import PhotosUI
 
 struct NewPostView: View {
     @Binding var showNewPost: Bool
-    var initialMediaItems: [PostMediaItem]? = nil  // Live Photo items from PhotosPicker
     var initialImage: UIImage? = nil  // 从PhotoOptionsModal传入的图片
     var onPostSuccess: ((Post) -> Void)? = nil  // 成功发布后的回调，传递创建的Post对象
     @EnvironmentObject private var authManager: AuthenticationManager
@@ -13,11 +12,7 @@ struct NewPostView: View {
     @State private var showCamera = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var selectedImages: [UIImage] = []
-    @State private var selectedMediaItems: [PostMediaItem] = []  // Live Photo support
-    @State private var isProcessingMedia = false  // Live Photo processing indicator
     @State private var isPosting = false
-    @State private var uploadProgress: Double = 0.0  // Upload progress (0.0 to 1.0)
-    @State private var uploadStatus: String = ""  // Upload status message
     @State private var postError: String?
     @State private var showNameSelector = false  // 控制名称选择弹窗
     @State private var selectedNameType: NameDisplayType = .realName  // 选择的名称类型
@@ -26,18 +21,6 @@ struct NewPostView: View {
     @State private var isTextEditorFocused: Bool = false  // 用于自定义 TextView 的焦点状态
     @State private var showSaveDraftModal: Bool = false  // 控制保存草稿弹窗
 
-    // Enhance with Alice states
-    @State private var isEnhancing: Bool = false  // 正在獲取 AI 建議
-    @State private var showEnhanceSuggestion: Bool = false  // 顯示建議彈窗
-    @State private var enhanceSuggestion: PostEnhancementSuggestion?  // AI 建議結果
-    @State private var enhanceError: String?  // 增強錯誤訊息
-
-    // Channel selection states
-    @State private var showChannelPicker: Bool = false
-    @State private var selectedChannelIds: [String] = []
-    @State private var suggestedChannels: [ChannelSuggestion] = []
-    @State private var isLoadingSuggestions: Bool = false
-
     // Draft storage keys
     private let draftTextKey = "NewPostDraftText"
     private let draftImagesKey = "NewPostDraftImages"
@@ -45,9 +28,6 @@ struct NewPostView: View {
     // Services
     private let mediaService = MediaService()
     private let contentService = ContentService()
-    private let livePhotoManager = LivePhotoManager.shared
-    private let aliceService = AliceService.shared
-    private let feedService = FeedService()
 
     var body: some View {
         ZStack {
@@ -70,7 +50,7 @@ struct NewPostView: View {
                 // MARK: - Error Message
                 if let error = postError {
                     Text(error)
-                        .font(.system(size: 12))
+                        .font(Typography.regular12)
                         .foregroundColor(.red)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
@@ -80,31 +60,29 @@ struct NewPostView: View {
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: .constant(nil))
         }
-        // PhotosPicker with Live Photo and video support
-        .photosPicker(
-            isPresented: $showPhotoPicker,
-            selection: $selectedPhotos,
-            maxSelectionCount: 5 - selectedMediaItems.count,
-            matching: .any(of: [.images, .livePhotos, .videos])  // Support images, Live Photos, and videos
-        )
+        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotos, maxSelectionCount: 5 - selectedImages.count, matching: .images)
         .onChange(of: selectedPhotos) { oldValue, newValue in
             Task {
-                await processSelectedPhotos(newValue)
+                // 将新选择的照片添加到已有照片中（不清空）
+                for item in newValue {
+                    // 检查是否已达到最大数量
+                    guard selectedImages.count < 5 else { break }
+
+                    if let data = try? await item.loadTransferable(type: Data.self),
+                       let image = UIImage(data: data) {
+                        selectedImages.append(image)
+                    }
+                }
+                // 清空 selectedPhotos 以便下次继续选择
+                selectedPhotos = []
             }
         }
         .onAppear {
-            // 如果有初始媒体项目（来自 PhotosPicker），添加到 selectedMediaItems
-            if let mediaItems = initialMediaItems, !mediaItems.isEmpty, selectedMediaItems.isEmpty {
-                selectedMediaItems = mediaItems
-                // 同步到 legacy selectedImages
-                selectedImages = mediaItems.map { $0.displayImage }
-            }
             // 如果有初始图片，添加到selectedImages
-            else if let image = initialImage, selectedImages.isEmpty {
+            if let image = initialImage, selectedImages.isEmpty {
                 selectedImages = [image]
-                selectedMediaItems = [.image(image)]
-            } else if initialMediaItems == nil && initialImage == nil {
-                // 没有初始媒体时，尝试加载草稿
+            } else if initialImage == nil {
+                // 没有初始图片时，尝试加载草稿
                 loadDraft()
             }
         }
@@ -140,31 +118,6 @@ struct NewPostView: View {
                 isPresented: $showLocationPicker
             )
         }
-        .sheet(isPresented: $showEnhanceSuggestion) {
-            if let suggestion = enhanceSuggestion {
-                // EnhanceSuggestionView - placeholder until file is added to project
-                VStack(spacing: 20) {
-                    Text("Alice's Suggestions")
-                        .font(.headline)
-                    Text(suggestion.description)
-                        .padding()
-                    Button("Apply") {
-                        postText = suggestion.description
-                        showEnhanceSuggestion = false
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding()
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-            }
-        }
-        .sheet(isPresented: $showChannelPicker) {
-            ChannelPickerView(
-                selectedChannelIds: $selectedChannelIds,
-                isPresented: $showChannelPicker
-            )
-        }
     }
 
     // MARK: - Top Navigation Bar
@@ -182,7 +135,7 @@ struct NewPostView: View {
                 }
             }) {
                 Text("Cancel")
-                    .font(.system(size: 14))
+                    .font(Typography.regular14)
                     .lineSpacing(20)
                     .foregroundColor(.black)
             }
@@ -191,7 +144,7 @@ struct NewPostView: View {
 
             // 标题
             Text("Newpost")
-                .font(.system(size: 18, weight: .medium))
+                .font(Typography.semibold18)
                 .lineSpacing(20)
                 .foregroundColor(.black)
 
@@ -204,32 +157,18 @@ struct NewPostView: View {
                 }
             }) {
                 if isPosting {
-                    HStack(spacing: 4) {
-                        // Circular progress indicator with percentage
-                        ZStack {
-                            Circle()
-                                .stroke(Color.gray.opacity(0.2), lineWidth: 2)
-                            Circle()
-                                .trim(from: 0, to: uploadProgress)
-                                .stroke(Color(red: 0.87, green: 0.11, blue: 0.26), lineWidth: 2)
-                                .rotationEffect(.degrees(-90))
-                                .animation(.linear(duration: 0.2), value: uploadProgress)
-                        }
-                        .frame(width: 18, height: 18)
-                        
-                        Text("\(Int(uploadProgress * 100))%")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
-                    }
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: Color(red: 0.87, green: 0.11, blue: 0.26)))
+                        .scaleEffect(0.8)
                 } else {
                     Text("Post")
-                        .font(.system(size: 14))
+                        .font(Typography.regular14)
                         .lineSpacing(20)
                         .foregroundColor(canPost ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.53, green: 0.53, blue: 0.53))
                 }
             }
             .disabled(!canPost || isPosting)
-            .frame(minWidth: 36)
+            .frame(width: 36)
         }
         .frame(height: DesignTokens.topBarHeight)
         .padding(.horizontal, 16)
@@ -304,13 +243,13 @@ struct NewPostView: View {
 
             // 显示名称 - 根据选择的类型显示真实名称或别名
             Text(displayedName)
-                .font(.system(size: 14, weight: .medium))
+                .font(Typography.semibold14)
                 .lineSpacing(20)
                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
             ZStack {
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 10))
+                    .font(Typography.regular10)
                     .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
             }
             .frame(width: 16, height: 16)
@@ -336,165 +275,43 @@ struct NewPostView: View {
         }
     }
 
-    // MARK: - Image Preview Section (with Live Photo support)
+    // MARK: - Image Preview Section
     private var imagePreviewSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 12) {
-                // Processing indicator
-                if isProcessingMedia {
-                    ZStack {
-                        Rectangle()
-                            .foregroundColor(.clear)
+                // 显示所有选中的图片
+                ForEach(Array(selectedImages.enumerated()), id: \.offset) { index, image in
+                    ZStack(alignment: .topTrailing) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
                             .frame(width: 239, height: 290)
-                            .background(Color(red: 0.91, green: 0.91, blue: 0.91))
                             .cornerRadius(10)
-                        
-                        VStack(spacing: 12) {
-                            ProgressView()
-                                .scaleEffect(1.2)
-                            Text("Processing...")
-                                .font(.system(size: 12))
-                                .foregroundColor(.gray)
-                        }
-                    }
-                }
-                
-                // Display all selected media (images and Live Photos)
-                ForEach(Array(selectedMediaItems.enumerated()), id: \.element.id) { index, mediaItem in
-                    ZStack {
-                        // Top-right alignment for delete button
-                        ZStack(alignment: .topTrailing) {
-                            switch mediaItem {
-                            case .image(let image):
-                                // Regular image preview
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 239, height: 290)
-                                    .cornerRadius(10)
-                                    .clipped()
+                            .clipped()
 
-                            case .livePhoto(let livePhotoData):
-                                // Live Photo preview with play capability
-                                LivePhotoPreviewCard(
-                                    livePhotoData: livePhotoData,
-                                    onDelete: {
-                                        removeMediaItem(at: index)
-                                    }
+                        // 删除按钮
+                        Button(action: {
+                            removeImage(at: index)
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(Typography.regular20)
+                                .foregroundColor(.white)
+                                .background(
+                                    Circle()
+                                        .fill(Color.black.opacity(0.5))
+                                        .frame(width: 20, height: 20)
                                 )
-
-                            case .video(let videoData):
-                                // Video preview with thumbnail and duration
-                                ZStack(alignment: .bottomTrailing) {
-                                    Image(uiImage: videoData.thumbnail)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 239, height: 290)
-                                        .cornerRadius(10)
-                                        .clipped()
-
-                                    // Video duration badge
-                                    Text(formatDuration(videoData.duration))
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.black.opacity(0.6))
-                                        .cornerRadius(4)
-                                        .padding(8)
-
-                                    // Play icon overlay
-                                    Image(systemName: "play.circle.fill")
-                                        .font(.system(size: 40))
-                                        .foregroundColor(.white.opacity(0.9))
-                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                }
-                            }
-
-                            // Delete button (for images and videos, Live Photo has its own)
-                            if !mediaItem.isLivePhoto {
-                                Button(action: {
-                                    removeMediaItem(at: index)
-                                }) {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 20))
-                                        .foregroundColor(.white)
-                                        .background(
-                                            Circle()
-                                                .fill(Color.black.opacity(0.5))
-                                                .frame(width: 20, height: 20)
-                                        )
-                                }
-                                .padding(4)
-                            }
                         }
-
-                        // Enhance with Alice button (only on first image)
-                        if index == 0 {
-                            VStack {
-                                Spacer()
-                                HStack {
-                                    enhanceWithAliceButton
-                                        .padding(.leading, 8)
-                                        .padding(.bottom, 8)
-                                    Spacer()
-                                }
-                            }
-                            .frame(width: 239, height: 290)
-                        }
-                    }
-                }
-                
-                // Legacy support: show selectedImages if selectedMediaItems is empty
-                if selectedMediaItems.isEmpty {
-                    ForEach(Array(selectedImages.enumerated()), id: \.offset) { index, image in
-                        ZStack {
-                            ZStack(alignment: .topTrailing) {
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 239, height: 290)
-                                    .cornerRadius(10)
-                                    .clipped()
-
-                                Button(action: {
-                                    removeImage(at: index)
-                                }) {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 20))
-                                        .foregroundColor(.white)
-                                        .background(
-                                            Circle()
-                                                .fill(Color.black.opacity(0.5))
-                                                .frame(width: 20, height: 20)
-                                        )
-                                }
-                                .padding(4)
-                            }
-
-                            // Enhance with Alice button (only on first image)
-                            if index == 0 {
-                                VStack {
-                                    Spacer()
-                                    HStack {
-                                        enhanceWithAliceButton
-                                            .padding(.leading, 8)
-                                            .padding(.bottom, 8)
-                                        Spacer()
-                                    }
-                                }
-                                .frame(width: 239, height: 290)
-                            }
-                        }
+                        .padding(4)
                     }
                 }
 
-                // Add more media button (max 5) - always shown on the right
-                if totalMediaCount < 5 && !isProcessingMedia {
+                // 添加更多图片按钮（最多5张）- 始终显示在最右边
+                if selectedImages.count < 5 {
                     ZStack {
                         Rectangle()
                             .foregroundColor(.clear)
-                            .frame(width: totalMediaCount == 0 ? 239 : 100, height: totalMediaCount == 0 ? 290 : 210)
+                            .frame(width: selectedImages.isEmpty ? 239 : 100, height: selectedImages.isEmpty ? 290 : 210)
                             .background(Color(red: 0.91, green: 0.91, blue: 0.91))
                             .cornerRadius(10)
 
@@ -503,17 +320,10 @@ struct NewPostView: View {
                                 .font(.system(size: 30, weight: .light))
                                 .foregroundColor(.white)
 
-                            if totalMediaCount > 0 {
-                                Text("\(totalMediaCount)/5")
-                                    .font(.system(size: 12))
+                            if selectedImages.count > 0 {
+                                Text("\(selectedImages.count)/5")
+                                    .font(Typography.regular12)
                                     .foregroundColor(.white)
-                            }
-                            
-                            // Hint for Live Photo support
-                            if totalMediaCount == 0 {
-                                Text("Photos & Live Photos")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.white.opacity(0.8))
                             }
                         }
                     }
@@ -526,194 +336,8 @@ struct NewPostView: View {
         }
         .padding(.top, 16)
     }
-    
-    // MARK: - Total media count
-    private var totalMediaCount: Int {
-        selectedMediaItems.isEmpty ? selectedImages.count : selectedMediaItems.count
-    }
 
-    // MARK: - Enhance with Alice Button
-    private var enhanceWithAliceButton: some View {
-        Button(action: {
-            requestEnhancement()
-        }) {
-            HStack(spacing: 6) {
-                if isEnhancing {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                        .frame(width: 14, height: 14)
-                } else {
-                    Image("alice-center-icon")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 14, height: 14)
-                }
-
-                Text(isEnhancing ? "Analyzing..." : "Enhance with alice")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.black)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
-            )
-        }
-        .disabled(isEnhancing)
-    }
-
-    // MARK: - Request Enhancement from Alice
-    private func requestEnhancement() {
-        // Get the first image for analysis
-        guard let firstImage = getFirstImage() else { return }
-
-        isEnhancing = true
-        enhanceError = nil
-
-        Task {
-            do {
-                let suggestion = try await aliceService.enhancePost(
-                    image: firstImage,
-                    existingText: postText.isEmpty ? nil : postText,
-                    includeTrending: true
-                )
-
-                await MainActor.run {
-                    enhanceSuggestion = suggestion
-                    showEnhanceSuggestion = true
-                    isEnhancing = false
-                }
-
-                // Also fetch channel suggestions based on Alice's analysis
-                await fetchChannelSuggestions(
-                    content: suggestion.description,
-                    hashtags: suggestion.hashtags
-                )
-            } catch {
-                await MainActor.run {
-                    enhanceError = error.localizedDescription
-                    isEnhancing = false
-                }
-                #if DEBUG
-                print("[NewPost] Enhancement failed: \(error)")
-                #endif
-            }
-        }
-    }
-
-    // MARK: - Fetch Channel Suggestions
-    private func fetchChannelSuggestions(content: String, hashtags: [String]) async {
-        await MainActor.run {
-            isLoadingSuggestions = true
-        }
-
-        do {
-            let suggestions = try await feedService.suggestChannels(
-                content: content,
-                hashtags: hashtags.map { "#\($0)" }
-            )
-
-            await MainActor.run {
-                suggestedChannels = suggestions
-                isLoadingSuggestions = false
-                #if DEBUG
-                print("[NewPost] Got \(suggestions.count) channel suggestions")
-                #endif
-            }
-        } catch {
-            await MainActor.run {
-                isLoadingSuggestions = false
-            }
-            #if DEBUG
-            print("[NewPost] Channel suggestion failed: \(error)")
-            #endif
-        }
-    }
-
-    // MARK: - Get First Image for Enhancement
-    private func getFirstImage() -> UIImage? {
-        if !selectedMediaItems.isEmpty {
-            return selectedMediaItems.first?.displayImage
-        } else if !selectedImages.isEmpty {
-            return selectedImages.first
-        }
-        return nil
-    }
-
-    // MARK: - Process Selected Photos (with Live Photo support)
-    private func processSelectedPhotos(_ items: [PhotosPickerItem]) async {
-        guard !items.isEmpty else { return }
-        
-        await MainActor.run {
-            isProcessingMedia = true
-        }
-        
-        defer {
-            Task { @MainActor in
-                isProcessingMedia = false
-                selectedPhotos = []  // Clear for next selection
-            }
-        }
-        
-        do {
-            let maxToAdd = 5 - selectedMediaItems.count
-            let newMedia = try await livePhotoManager.loadMedia(from: items, maxCount: maxToAdd)
-            
-            await MainActor.run {
-                selectedMediaItems.append(contentsOf: newMedia)
-                
-                // Also update legacy selectedImages for backward compatibility
-                for media in newMedia {
-                    selectedImages.append(media.displayImage)
-                }
-            }
-        } catch {
-            #if DEBUG
-            print("[NewPost] Failed to process photos: \(error)")
-            #endif
-            
-            // Fallback to regular image loading
-            for item in items {
-                guard selectedMediaItems.count < 5 else { break }
-                
-                if let data = try? await item.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    await MainActor.run {
-                        selectedMediaItems.append(.image(image))
-                        selectedImages.append(image)
-                    }
-                }
-            }
-        }
-    }
-    
-    // MARK: - Remove media item
-    private func removeMediaItem(at index: Int) {
-        guard index < selectedMediaItems.count else { return }
-
-        let item = selectedMediaItems[index]
-
-        // Clean up temporary files for Live Photos and videos
-        switch item {
-        case .livePhoto(let data):
-            try? FileManager.default.removeItem(at: data.videoURL)
-        case .video(let data):
-            try? FileManager.default.removeItem(at: data.url)
-        case .image:
-            break
-        }
-
-        selectedMediaItems.remove(at: index)
-
-        // Sync with legacy selectedImages
-        if index < selectedImages.count {
-            selectedImages.remove(at: index)
-        }
-    }
-
-    // MARK: - 删除图片 (legacy support)
+    // MARK: - 删除图片
     private func removeImage(at index: Int) {
         guard index < selectedImages.count else { return }
         selectedImages.remove(at: index)
@@ -721,11 +345,6 @@ struct NewPostView: View {
         // 同步更新 selectedPhotos
         if index < selectedPhotos.count {
             selectedPhotos.remove(at: index)
-        }
-        
-        // Also remove from selectedMediaItems if applicable
-        if index < selectedMediaItems.count {
-            removeMediaItem(at: index)
         }
     }
 
@@ -745,7 +364,7 @@ struct NewPostView: View {
                                 .frame(width: 14, height: 14)
 
                             Text("Enhance with alice")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(Typography.semibold14)
                                 .foregroundColor(.black)
                         }
                         .padding(.horizontal, 16)
@@ -784,109 +403,24 @@ struct NewPostView: View {
 
     // MARK: - Channels and Enhance Section
     private var channelsAndEnhanceSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                // Channel selection button
-                Button(action: {
-                    showChannelPicker = true
-                }) {
-                    HStack(spacing: 6) {
-                        Text("#")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(selectedChannelIds.isEmpty
-                                ? Color(red: 0.27, green: 0.27, blue: 0.27)
-                                : Color(red: 0.82, green: 0.13, blue: 0.25))
+        HStack(spacing: 10) {
+            HStack(spacing: 3) {
+                Text("#")
+                    .font(Typography.regular16)
+                    .lineSpacing(20)
+                    .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
 
-                        if selectedChannelIds.isEmpty {
-                            Text("Add Channels")
-                                .font(.system(size: 12))
-                                .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
-                        } else {
-                            Text("\(selectedChannelIds.count) selected")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
-                        }
-
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 10))
-                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                    }
-                    .padding(.horizontal, 14)
-                    .frame(height: 28)
-                    .background(selectedChannelIds.isEmpty
-                        ? Color(red: 0.91, green: 0.91, blue: 0.91)
-                        : Color(red: 0.98, green: 0.95, blue: 0.96))
-                    .cornerRadius(24)
-                }
-
-                Spacer()
+                Text("Channels")
+                    .font(Typography.regular10)
+                    .lineSpacing(20)
+                    .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
             }
+            .padding(.horizontal, 16)
+            .frame(height: 26)
+            .background(Color(red: 0.91, green: 0.91, blue: 0.91))
+            .cornerRadius(24)
 
-            // AI-suggested channels (show when available and no manual selection)
-            if !suggestedChannels.isEmpty && selectedChannelIds.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 11))
-                            .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
-                        Text("Suggested by Alice")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                    }
-
-                    HStack(spacing: 8) {
-                        ForEach(suggestedChannels) { suggestion in
-                            Button(action: {
-                                // Add suggested channel to selection
-                                if !selectedChannelIds.contains(suggestion.id) && selectedChannelIds.count < 3 {
-                                    selectedChannelIds.append(suggestion.id)
-                                }
-                            }) {
-                                HStack(spacing: 4) {
-                                    Text("#\(suggestion.name)")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
-                                    Text("\(Int(suggestion.confidence * 100))%")
-                                        .font(.system(size: 10))
-                                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Color(red: 0.98, green: 0.95, blue: 0.96))
-                                .cornerRadius(16)
-                            }
-                        }
-
-                        // Accept all button
-                        if suggestedChannels.count > 1 {
-                            Button(action: {
-                                // Add all suggestions (up to 3)
-                                for suggestion in suggestedChannels.prefix(3) {
-                                    if !selectedChannelIds.contains(suggestion.id) {
-                                        selectedChannelIds.append(suggestion.id)
-                                    }
-                                }
-                            }) {
-                                Text("Use All")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color(red: 0.82, green: 0.13, blue: 0.25))
-                                    .cornerRadius(16)
-                            }
-                        }
-                    }
-                }
-            } else if isLoadingSuggestions {
-                HStack(spacing: 6) {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                    Text("Getting suggestions...")
-                        .font(.system(size: 11))
-                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                }
-            }
+            Spacer()
         }
         .padding(.horizontal, 16)
         .padding(.top, 20)
@@ -901,14 +435,14 @@ struct NewPostView: View {
                 .frame(width: 20, height: 20)
 
             Text(selectedLocation.isEmpty ? "Check in" : selectedLocation)
-                .font(.system(size: 16))
+                .font(Typography.regular16)
                 .lineSpacing(40.94)
                 .foregroundColor(.black)
 
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 14))
+                .font(Typography.regular14)
                 .foregroundColor(.gray)
         }
         .padding(.horizontal, 16)
@@ -930,12 +464,12 @@ struct NewPostView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Invite alice")
-                    .font(.system(size: 16))
+                    .font(Typography.regular16)
                     .lineSpacing(40.94)
                     .foregroundColor(.black)
 
                 Text("add AI insight to this conversation")
-                    .font(.system(size: 12))
+                    .font(Typography.regular12)
                     .lineSpacing(40.94)
                     .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
             }
@@ -972,7 +506,7 @@ struct NewPostView: View {
             .frame(width: 9.60, height: 9.60)
 
             Text("Invite Alice to join the discussion")
-                .font(.system(size: 12, weight: .medium))
+                .font(Typography.bold12)
                 .lineSpacing(20)
                 .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
 
@@ -1045,36 +579,6 @@ struct NewPostView: View {
             image.draw(in: CGRect(origin: .zero, size: newSize))
         }
     }
-    
-    // MARK: - 异步调整图片大小（在背景线程执行）
-    private func resizeImageForUploadAsync(_ image: UIImage, maxDimension: CGFloat = 1024) async -> UIImage {
-        // Run image processing on a background thread to avoid blocking UI
-        return await Task.detached(priority: .userInitiated) {
-            let size = image.size
-            
-            // 如果图片已经足够小，直接返回
-            if size.width <= maxDimension && size.height <= maxDimension {
-                return image
-            }
-            
-            // 计算缩放比例
-            let ratio = min(maxDimension / size.width, maxDimension / size.height)
-            let newSize = CGSize(width: size.width * ratio, height: size.height * ratio)
-            
-            // 使用 UIGraphicsImageRenderer 进行高质量缩放
-            let renderer = UIGraphicsImageRenderer(size: newSize)
-            return renderer.image { _ in
-                image.draw(in: CGRect(origin: .zero, size: newSize))
-            }
-        }.value
-    }
-
-    // MARK: - Format video duration
-    private func formatDuration(_ duration: TimeInterval) -> String {
-        let minutes = Int(duration) / 60
-        let seconds = Int(duration) % 60
-        return String(format: "%d:%02d", minutes, seconds)
-    }
 
     // MARK: - 提交帖子
     private func submitPost() async {
@@ -1088,220 +592,56 @@ struct NewPostView: View {
 
         isPosting = true
         postError = nil
-        uploadProgress = 0.0
-        uploadStatus = "Preparing..."
 
         do {
-            // Step 1: Upload media (images and Live Photos) - now with parallel uploads!
+            // Step 1: 上传图片 (如果有，带重试逻辑)
             var mediaUrls: [String] = []
-            
-            // Use new media items if available, otherwise fall back to legacy selectedImages
-            let itemsToUpload: [PostMediaItem] = selectedMediaItems.isEmpty 
-                ? selectedImages.map { .image($0) } 
-                : selectedMediaItems
-            
-            guard !itemsToUpload.isEmpty else {
-                // No media to upload, skip to post creation
-                uploadProgress = 0.5
-                uploadStatus = "Creating post..."
-                
-                // Jump to Step 2 (post creation) below
-                let content = postText.trimmingCharacters(in: .whitespacesAndNewlines)
-                var post: Post?
-                var lastError: Error?
-
-                for attempt in 1...3 {
-                    do {
-                        post = try await contentService.createPost(
-                            creatorId: userId,
-                            content: content.isEmpty ? " " : content,
-                            mediaUrls: nil,
-                            channelIds: selectedChannelIds.isEmpty ? nil : selectedChannelIds
-                        )
-                        break
-                    } catch let error as APIError {
-                        lastError = error
-                        if case .serverError(let statusCode, _) = error, statusCode == 503 {
-                            if attempt < 3 {
-                                try await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000)
-                                continue
-                            }
-                        }
-                        throw error
-                    }
-                }
-
-                guard let createdPost = post else {
-                    throw lastError ?? APIError.serverError(statusCode: 503, message: "Service unavailable")
-                }
-
-                await MainActor.run {
-                    isPosting = false
-                    uploadProgress = 1.0
-                    clearDraft()
-                    showNewPost = false
-                    onPostSuccess?(createdPost)
-                }
-                return
-            }
-            
-            // Separate regular images, Live Photos, and videos for different handling
-            var regularImages: [(data: Data, filename: String, index: Int)] = []
-            var livePhotos: [(data: LivePhotoData, index: Int)] = []
-            var videos: [(data: VideoData, index: Int)] = []
-
-            // Process images in parallel on background thread for faster preparation
-            await MainActor.run {
-                uploadStatus = "Processing media..."
-            }
-
-            // Collect images, live photos, and videos first
-            var imagesToProcess: [(image: UIImage, index: Int)] = []
-            for (index, item) in itemsToUpload.enumerated() {
-                switch item {
-                case .image(let image):
-                    imagesToProcess.append((image: image, index: index))
-                case .livePhoto(let livePhotoData):
-                    livePhotos.append((data: livePhotoData, index: index))
-                case .video(let videoData):
-                    videos.append((data: videoData, index: index))
-                }
-            }
-            
-            // Process images in parallel on background threads
-            if !imagesToProcess.isEmpty {
-                await withTaskGroup(of: (data: Data, filename: String, index: Int)?.self) { group in
-                    for imageInfo in imagesToProcess {
-                        group.addTask {
-                            // Perform resize and compression on background thread
-                            let resizedImage = await self.resizeImageForUploadAsync(imageInfo.image)
-                            if let imageData = resizedImage.jpegData(compressionQuality: 0.6) {
-                                return (data: imageData, filename: "post_\(UUID().uuidString).jpg", index: imageInfo.index)
-                            }
-                            return nil
-                        }
-                    }
-                    
-                    for await result in group {
-                        if let result = result {
-                            regularImages.append(result)
-                        }
-                    }
-                }
-                // Sort by original index to maintain order
-                regularImages.sort { $0.index < $1.index }
-            }
-            
-            let totalItems = regularImages.count + livePhotos.count
-            var completedItems = 0
-            var uploadResults: [(index: Int, urls: [String])] = []
-            
-            // Upload regular images in parallel
-            if !regularImages.isEmpty {
-                await MainActor.run {
-                    uploadStatus = "Uploading images..."
-                }
-                
-                #if DEBUG
-                print("[NewPost] Starting parallel upload of \(regularImages.count) images")
-                #endif
-                
-                let imagesToUpload = regularImages.map { (data: $0.data, filename: $0.filename) }
-                let batchResult = await mediaService.uploadImagesInParallel(
-                    images: imagesToUpload,
-                    maxConcurrent: 5,
-                    progressCallback: { [totalItems] progress in
-                        Task { @MainActor in
-                            // Calculate overall progress (images take 80% of progress)
-                            let imageWeight = Double(regularImages.count) / Double(totalItems)
-                            self.uploadProgress = progress * 0.8 * imageWeight
-                        }
-                    }
-                )
-                
-                // Process results maintaining order using urlsByIndex mapping
-                for (arrayIndex, imageInfo) in regularImages.enumerated() {
-                    if let url = batchResult.url(for: arrayIndex) {
-                        uploadResults.append((index: imageInfo.index, urls: [url]))
-                    }
-                }
-                
-                completedItems += batchResult.urlsByIndex.count
-                
-                // Check for failures
-                if !batchResult.failedIndices.isEmpty {
+            for image in selectedImages {
+                // 先调整图片大小再压缩，避免上传过大的文件
+                let resizedImage = resizeImageForUpload(image)
+                if let imageData = resizedImage.jpegData(compressionQuality: 0.3) {
                     #if DEBUG
-                    print("[NewPost] \(batchResult.failedIndices.count) image(s) failed to upload")
+                    print("[NewPost] Uploading image: \(imageData.count / 1024) KB")
                     #endif
-                    // Continue with successful uploads rather than failing entirely
-                }
-            }
-            
-            // Upload Live Photos (these need sequential handling due to image+video pairing)
-            for (livePhotoIndex, livePhotoInfo) in livePhotos.enumerated() {
-                await MainActor.run {
-                    uploadStatus = "Uploading Live Photo \(livePhotoIndex + 1)/\(livePhotos.count)..."
-                }
-                
-                let resizedImage = resizeImageForUpload(livePhotoInfo.data.stillImage)
-                guard let imageData = resizedImage.jpegData(compressionQuality: 0.5) else {
-                    continue
-                }
-                
-                var livePhotoResult: LivePhotoUploadResult?
-                var lastError: Error?
-                
-                for attempt in 1...3 {
-                    do {
-                        livePhotoResult = try await mediaService.uploadLivePhoto(
-                            imageData: imageData,
-                            videoURL: livePhotoInfo.data.videoURL
-                        )
-                        break
-                    } catch let error as APIError {
-                        lastError = error
-                        if case .serverError(let statusCode, _) = error, statusCode == 503 {
-                            #if DEBUG
-                            print("[NewPost] Live Photo upload attempt \(attempt) failed with 503, retrying...")
-                            #endif
-                            if attempt < 3 {
-                                try await Task.sleep(nanoseconds: UInt64(attempt) * 2_000_000_000)
-                                continue
+
+                    // 重试逻辑处理 503 错误
+                    var mediaUrl: String?
+                    var lastError: Error?
+
+                    for attempt in 1...3 {
+                        do {
+                            mediaUrl = try await mediaService.uploadImage(
+                                imageData: imageData,
+                                filename: "post_\(UUID().uuidString).jpg"
+                            )
+                            break  // 成功则跳出循环
+                        } catch let error as APIError {
+                            lastError = error
+                            if case .serverError(let statusCode, _) = error, statusCode == 503 {
+                                #if DEBUG
+                                print("[NewPost] Image upload attempt \(attempt) failed with 503, retrying in \(attempt * 2)s...")
+                                #endif
+                                if attempt < 3 {
+                                    try await Task.sleep(nanoseconds: UInt64(attempt) * 2_000_000_000)  // 2s, 4s delay
+                                    continue
+                                }
                             }
+                            throw error
                         }
-                        throw error
                     }
-                }
-                
-                if let result = livePhotoResult {
-                    uploadResults.append((index: livePhotoInfo.index, urls: [result.imageUrl, result.videoUrl]))
-                    completedItems += 1
-                    
-                    await MainActor.run {
-                        let progress = Double(completedItems) / Double(totalItems)
-                        uploadProgress = 0.8 * progress
+
+                    guard let uploadedUrl = mediaUrl else {
+                        throw lastError ?? APIError.serverError(statusCode: 503, message: "Image upload failed")
                     }
-                    
+
+                    mediaUrls.append(uploadedUrl)
                     #if DEBUG
-                    print("[NewPost] Live Photo uploaded - Image: \(result.imageUrl), Video: \(result.videoUrl)")
+                    print("[NewPost] Uploaded image: \(uploadedUrl)")
                     #endif
                 }
             }
-            
-            // Sort results by original index to maintain order
-            uploadResults.sort { $0.index < $1.index }
-            mediaUrls = uploadResults.flatMap { $0.urls }
-            
-            #if DEBUG
-            print("[NewPost] Upload complete: \(mediaUrls.count) URLs")
-            #endif
 
             // Step 2: 创建帖子 (带重试逻辑处理 503 错误)
-            await MainActor.run {
-                uploadProgress = 0.85
-                uploadStatus = "Creating post..."
-            }
-            
             let content = postText.trimmingCharacters(in: .whitespacesAndNewlines)
             var post: Post?
             var lastError: Error?
@@ -1311,8 +651,7 @@ struct NewPostView: View {
                     post = try await contentService.createPost(
                         creatorId: userId,
                         content: content.isEmpty ? " " : content,  // 至少需要空格
-                        mediaUrls: mediaUrls.isEmpty ? nil : mediaUrls,
-                        channelIds: selectedChannelIds.isEmpty ? nil : selectedChannelIds
+                        mediaUrls: mediaUrls.isEmpty ? nil : mediaUrls
                     )
                     break  // 成功则跳出循环
                 } catch let error as APIError {
@@ -1336,8 +675,6 @@ struct NewPostView: View {
 
             // Step 3: 成功后关闭页面并触发刷新回调
             await MainActor.run {
-                uploadProgress = 1.0
-                uploadStatus = "Done!"
                 isPosting = false
                 // 发帖成功后清除草稿
                 clearDraft()
@@ -1349,8 +686,6 @@ struct NewPostView: View {
         } catch {
             await MainActor.run {
                 isPosting = false
-                uploadProgress = 0.0
-                uploadStatus = ""
                 postError = "Failed to create post: \(error.localizedDescription)"
             }
         }

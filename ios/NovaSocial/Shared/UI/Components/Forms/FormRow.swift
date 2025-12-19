@@ -7,12 +7,12 @@ struct FormRow: View {
     var body: some View {
         HStack {
             Text(label)
-                .font(.system(size: 15))
+                .font(Typography.regular15)
                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
                 .frame(width: 100, alignment: .leading)
 
             TextField("", text: $text)
-                .font(.system(size: 15))
+                .font(Typography.regular15)
                 .foregroundColor(.black)
         }
         .padding(.horizontal, 20)

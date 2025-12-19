@@ -19,11 +19,11 @@ struct SearchView: View {
                         // 搜索框
                         HStack(spacing: 10) {
                             Image(systemName: "magnifyingglass")
-                                .font(.system(size: 15))
+                                .font(Typography.regular15)
                                 .foregroundColor(DesignTokens.textMuted)
 
                             TextField("Search", text: $searchText)
-                                .font(.system(size: 15))
+                                .font(Typography.regular15)
                                 .foregroundColor(DesignTokens.textPrimary)
                                 .focused($isSearchFocused)
                         }
@@ -37,7 +37,7 @@ struct SearchView: View {
                             showSearch = false
                         }) {
                             Text("Cancel")
-                                .font(.system(size: 14))
+                                .font(Typography.regular14)
                                 .foregroundColor(DesignTokens.textPrimary)
                         }
                         .frame(width: 44)
@@ -99,11 +99,11 @@ struct SearchResultItem: View {
             // 内容
             VStack(alignment: .leading, spacing: 4) {
                 Text("Search Result")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(Typography.semibold15)
                     .foregroundColor(DesignTokens.textPrimary)
 
                 Text("Description")
-                    .font(.system(size: 13))
+                    .font(Typography.regular13)
                     .foregroundColor(DesignTokens.textSecondary)
             }
 
@@ -115,13 +115,6 @@ struct SearchResultItem: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("Search - Default") {
+#Preview {
     SearchView(showSearch: .constant(true))
-}
-
-#Preview("Search - Dark Mode") {
-    SearchView(showSearch: .constant(true))
-        .preferredColorScheme(.dark)
 }

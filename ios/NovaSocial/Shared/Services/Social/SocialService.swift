@@ -67,9 +67,8 @@ class SocialService {
 
     func getPostLikes(postId: String, limit: Int = 20, offset: Int = 0) async throws -> (userIds: [String], totalCount: Int) {
         struct Response: Codable {
-            let userIds: [String]
-            let totalCount: Int
-            // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase
+            let user_ids: [String]
+            let total_count: Int
         }
 
         let response: Response = try await client.get(
@@ -80,7 +79,7 @@ class SocialService {
             ]
         )
 
-        return (response.userIds, response.totalCount)
+        return (response.user_ids, response.total_count)
     }
 
     func checkUserLiked(postId: String, userId: String) async throws -> Bool {
@@ -93,25 +92,6 @@ class SocialService {
         )
 
         return response.liked
-    }
-
-    /// Get posts liked by a user (paginated)
-    func getUserLikedPosts(userId: String, limit: Int = 20, offset: Int = 0) async throws -> (postIds: [String], total: Int) {
-        struct Response: Codable {
-            let postIds: [String]
-            let total: Int
-            // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase
-        }
-
-        let response: Response = try await client.get(
-            endpoint: APIConfig.Social.getUserLikedPosts(userId),
-            queryParams: [
-                "limit": String(limit),
-                "offset": String(offset)
-            ]
-        )
-
-        return (response.postIds, response.total)
     }
 
     // MARK: - Comments
@@ -149,9 +129,8 @@ class SocialService {
 
     func getComments(postId: String, limit: Int = 20, offset: Int = 0) async throws -> (comments: [SocialComment], totalCount: Int) {
         let response: GetCommentsResponse = try await client.get(
-            endpoint: APIConfig.Social.getComments,
+            endpoint: APIConfig.Social.getComments(postId),
             queryParams: [
-                "post_id": postId,
                 "limit": String(limit),
                 "offset": String(offset)
             ]
@@ -209,94 +188,6 @@ class SocialService {
         )
 
         return response.stats
-    }
-
-    // MARK: - Bookmarks
-
-    /// Create a bookmark for a post
-    func createBookmark(postId: String, userId: String) async throws {
-        struct Request: Codable {
-            let post_id: String
-            let user_id: String
-        }
-
-        struct Response: Codable {
-            let success: Bool
-        }
-
-        let request = Request(post_id: postId, user_id: userId)
-        let _: Response = try await client.request(
-            endpoint: APIConfig.Social.createBookmark,
-            body: request
-        )
-    }
-
-    /// Delete a bookmark from a post
-    func deleteBookmark(postId: String) async throws {
-        struct Response: Codable {
-            let success: Bool
-        }
-
-        let _: Response = try await client.request(
-            endpoint: APIConfig.Social.deleteBookmark(postId),
-            method: "DELETE"
-        )
-    }
-
-    /// Get user's bookmarked posts
-    func getBookmarks(limit: Int = 20, offset: Int = 0) async throws -> (postIds: [String], totalCount: Int) {
-        struct Response: Codable {
-            let postIds: [String]
-            let totalCount: Int
-            // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase
-        }
-
-        let response: Response = try await client.get(
-            endpoint: APIConfig.Social.getBookmarks,
-            queryParams: [
-                "limit": String(limit),
-                "offset": String(offset)
-            ]
-        )
-
-        return (response.postIds, response.totalCount)
-    }
-
-    /// Check if user has bookmarked a post
-    func checkBookmarked(postId: String) async throws -> Bool {
-        struct Response: Codable {
-            let bookmarked: Bool
-        }
-
-        let response: Response = try await client.get(
-            endpoint: APIConfig.Social.checkBookmarked(postId)
-        )
-
-        return response.bookmarked
-    }
-
-    /// Batch check if user has bookmarked multiple posts
-    func batchCheckBookmarked(postIds: [String]) async throws -> Set<String> {
-        struct Request: Codable {
-            let postIds: [String]
-
-            enum CodingKeys: String, CodingKey {
-                case postIds = "post_ids"
-            }
-        }
-
-        struct Response: Codable {
-            let bookmarkedPostIds: [String]
-            // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase
-        }
-
-        let request = Request(postIds: postIds)
-        let response: Response = try await client.request(
-            endpoint: APIConfig.Social.batchCheckBookmarked,
-            body: request
-        )
-
-        return Set(response.bookmarkedPostIds)
     }
 
     // MARK: - Polls (投票榜单)
@@ -526,7 +417,6 @@ struct PostStats: Codable {
 }
 
 /// Comment model matching backend proto: social_service.proto Comment message
-/// Note: Using camelCase property names that match APIClient's convertFromSnakeCase strategy
 struct SocialComment: Codable, Identifiable {
     let id: String
     let userId: String
@@ -535,13 +425,14 @@ struct SocialComment: Codable, Identifiable {
     let parentCommentId: String?
     let createdAt: String?  // ISO8601 timestamp from backend
 
-    // Author information (enriched by graphql-gateway)
-    let authorUsername: String?
-    let authorDisplayName: String?
-    let authorAvatarUrl: String?
-
-    // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase which automatically
-    // converts snake_case JSON keys (user_id, post_id, etc.) to camelCase Swift properties
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case postId = "post_id"
+        case content
+        case parentCommentId = "parent_comment_id"
+        case createdAt = "created_at"
+    }
 
     /// Convert backend timestamp to Date
     var createdDate: Date {
@@ -549,18 +440,6 @@ struct SocialComment: Codable, Identifiable {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.date(from: createdAt) ?? Date()
-    }
-
-    /// Display name for the comment author with fallback
-    var displayAuthorName: String {
-        if let displayName = authorDisplayName, !displayName.isEmpty {
-            return displayName
-        }
-        if let username = authorUsername, !username.isEmpty {
-            return username
-        }
-        // Fallback to truncated userId
-        return "User \(userId.prefix(8))"
     }
 }
 
@@ -572,7 +451,6 @@ struct GetCommentsResponse: Codable {
 // MARK: - Poll Models
 
 /// Summary of a poll for carousel/list display
-/// Note: Uses automatic snake_case conversion via JSONDecoder.keyDecodingStrategy
 struct PollSummary: Codable, Identifiable {
     let id: String
     let title: String
@@ -584,19 +462,32 @@ struct PollSummary: Codable, Identifiable {
     let topCandidates: [CandidatePreview]?
     let tags: [String]?
     let endsAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, status, tags
+        case coverImageUrl = "cover_image_url"
+        case pollType = "poll_type"
+        case totalVotes = "total_votes"
+        case candidateCount = "candidate_count"
+        case topCandidates = "top_candidates"
+        case endsAt = "ends_at"
+    }
 }
 
 /// Preview of a candidate (for top 3 display)
-/// Note: Uses automatic snake_case conversion via JSONDecoder.keyDecodingStrategy
 struct CandidatePreview: Codable, Identifiable {
     let id: String
     let name: String
     let avatarUrl: String?
     let rank: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, rank
+        case avatarUrl = "avatar_url"
+    }
 }
 
 /// Full candidate details with vote stats
-/// Note: Uses automatic snake_case conversion via JSONDecoder.keyDecodingStrategy
 struct PollCandidate: Codable, Identifiable {
     let id: String
     let name: String
@@ -607,17 +498,31 @@ struct PollCandidate: Codable, Identifiable {
     let rank: Int
     let rankChange: Int
     let votePercentage: Double
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, description, rank
+        case avatarUrl = "avatar_url"
+        case userId = "user_id"
+        case voteCount = "vote_count"
+        case rankChange = "rank_change"
+        case votePercentage = "vote_percentage"
+    }
 }
 
 struct TrendingPollsResponse: Codable {
     let polls: [PollSummary]
 }
 
-/// Note: Uses automatic snake_case conversion via JSONDecoder.keyDecodingStrategy
 struct PollRankingsResponse: Codable {
     let rankings: [PollCandidate]
     let totalCandidates: Int?
     let totalVotes: Int64?
+
+    enum CodingKeys: String, CodingKey {
+        case rankings
+        case totalCandidates = "total_candidates"
+        case totalVotes = "total_votes"
+    }
 }
 
 /// Poll candidate input for creating polls

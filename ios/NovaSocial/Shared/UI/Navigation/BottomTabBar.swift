@@ -5,7 +5,6 @@ import SwiftUI
 struct BottomTabBar: View {
     @Binding var currentPage: AppPage
     @Binding var showPhotoOptions: Bool
-    @Binding var showNewPost: Bool  // 新增：直接打开 NewPost 页面
 
     // 头像管理
     @State private var avatarManager = AvatarManager.shared
@@ -50,15 +49,7 @@ struct BottomTabBar: View {
             }
 
             // New Post
-            NewPostButtonComponent(
-                showNewPost: $showPhotoOptions,
-                onTapWithDraft: {
-                    showNewPost = true  // 有草稿，直接打开 NewPost
-                },
-                onTapNoDraft: {
-                    showPhotoOptions = true  // 无草稿，显示选项弹窗
-                }
-            )
+            NewPostButtonComponent(showNewPost: $showPhotoOptions)
 
             // Alice
             VStack(spacing: -12) {
@@ -140,8 +131,6 @@ struct BottomTabBar: View {
 struct NewPostButtonComponent: View {
     @State private var isPressed = false
     @Binding var showNewPost: Bool
-    var onTapWithDraft: (() -> Void)?  // 有草稿时的回调
-    var onTapNoDraft: (() -> Void)?    // 无草稿时的回调
 
     var body: some View {
         VStack(spacing: -10) {
@@ -159,12 +148,7 @@ struct NewPostButtonComponent: View {
         .onTapGesture {
             isPressed = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                // 检查是否有草稿
-                if DraftManager.hasDraft() {
-                    onTapWithDraft?()
-                } else {
-                    onTapNoDraft?()
-                }
+                showNewPost = true
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 isPressed = false
@@ -173,40 +157,14 @@ struct NewPostButtonComponent: View {
     }
 }
 
-// MARK: - Draft Manager
-struct DraftManager {
-    private static let draftTextKey = "NewPostDraftText"
-    private static let draftImagesKey = "NewPostDraftImages"
+// MARK: - Preview
 
-    /// 检查是否有保存的草稿
-    static func hasDraft() -> Bool {
-        let hasText = UserDefaults.standard.string(forKey: draftTextKey)?.isEmpty == false
-        let hasImages = (UserDefaults.standard.array(forKey: draftImagesKey) as? [Data])?.isEmpty == false
-        return hasText || hasImages
-    }
-}
-
-// MARK: - Previews
-
-#Preview("TabBar - Default") {
+#Preview {
     VStack {
         Spacer()
         BottomTabBar(
             currentPage: .constant(.home),
-            showPhotoOptions: .constant(false),
-            showNewPost: .constant(false)
+            showPhotoOptions: .constant(false)
         )
     }
-}
-
-#Preview("TabBar - Dark Mode") {
-    VStack {
-        Spacer()
-        BottomTabBar(
-            currentPage: .constant(.home),
-            showPhotoOptions: .constant(false),
-            showNewPost: .constant(false)
-        )
-    }
-    .preferredColorScheme(.dark)
 }

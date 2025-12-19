@@ -5,11 +5,11 @@ struct SimpleCarouselView: View {
         VStack(spacing: 20) {
             // 标题
             Text("Hottest Banker in H.K.")
-                .font(.system(size: 22, weight: .bold))
+                .font(Typography.bold22)
                 .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
 
             Text("Corporate Poll")
-                .font(.system(size: 16, weight: .medium))
+                .font(Typography.semibold16)
                 .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
 
             // 轮播卡片
@@ -21,7 +21,7 @@ struct SimpleCarouselView: View {
 
                 HStack(spacing: 12) {
                     Text("1")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(Typography.semibold16)
                         .foregroundColor(.white)
                         .frame(width: 35, height: 35)
                         .background(Color(red: 0.82, green: 0.11, blue: 0.26))
@@ -29,17 +29,17 @@ struct SimpleCarouselView: View {
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Lucy Liu")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(Typography.semibold16)
                             .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
                         Text("Morgan Stanley")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(Typography.bold12)
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
                     }
 
                     Spacer()
 
                     Text("2293")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Typography.bold12)
                         .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
                 }
             }
@@ -70,7 +70,7 @@ struct SimpleCarouselView: View {
             // View more 按钮
             HStack(spacing: 8) {
                 Text("view more")
-                    .font(.system(size: 13))
+                    .font(Typography.regular13)
                     .foregroundColor(Color(red: 0.81, green: 0.13, blue: 0.25))
 
                 Rectangle()
@@ -104,7 +104,7 @@ struct SimpleCarouselView: View {
                 }
 
                 Text("up kyleegigstead Cyborg dreams...")
-                    .font(.system(size: 13))
+                    .font(Typography.regular13)
                     .foregroundColor(.black)
 
                 HStack(spacing: 24) {
@@ -141,13 +141,6 @@ struct SimpleCarouselView: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("SimpleCarousel - Default") {
+#Preview {
     SimpleCarouselView()
-}
-
-#Preview("SimpleCarousel - Dark Mode") {
-    SimpleCarouselView()
-        .preferredColorScheme(.dark)
 }

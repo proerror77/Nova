@@ -12,29 +12,7 @@ class ProfileData {
     var likedPosts: [Post] = []
 
     var isLoading = false
-    var isLoadingMore = false
     var errorMessage: String?
-
-    // MARK: - Pagination
-    private let pageSize = 20
-    private var postsOffset = 0
-    private var savedPostsOffset = 0
-    private var likedPostsOffset = 0
-    private var totalPosts = 0
-    private var totalSavedPosts = 0
-    private var totalLikedPosts = 0
-
-    var hasMorePosts: Bool { posts.count < totalPosts }
-    var hasMoreSavedPosts: Bool { savedPosts.count < totalSavedPosts }
-    var hasMoreLikedPosts: Bool { likedPosts.count < totalLikedPosts }
-
-    var hasMoreCurrentTabContent: Bool {
-        switch selectedTab {
-        case .posts: return hasMorePosts
-        case .saved: return hasMoreSavedPosts
-        case .liked: return hasMoreLikedPosts
-        }
-    }
 
     // MARK: - Services
 
@@ -58,23 +36,6 @@ class ProfileData {
 
     var selectedTab: ContentTab = .posts
 
-    // MARK: - Cache Management
-    private var lastLoadTime: [ContentTab: Date] = [:]
-    private let cacheValidDuration: TimeInterval = 300 // 5 minutes
-
-    private func shouldRefreshTab(_ tab: ContentTab) -> Bool {
-        guard let lastLoad = lastLoadTime[tab] else { return true }
-        return Date().timeIntervalSince(lastLoad) > cacheValidDuration
-    }
-
-    private func hasCachedContent(for tab: ContentTab) -> Bool {
-        switch tab {
-        case .posts: return !posts.isEmpty
-        case .saved: return !savedPosts.isEmpty
-        case .liked: return !likedPosts.isEmpty
-        }
-    }
-
     // MARK: - Lifecycle Methods
 
     func loadUserProfile(userId: String) async {
@@ -95,13 +56,8 @@ class ProfileData {
         isLoading = false
     }
 
-    func loadContent(for tab: ContentTab, forceRefresh: Bool = false) async {
+    func loadContent(for tab: ContentTab) async {
         guard let userId = userProfile?.id else { return }
-
-        // Skip loading if we have valid cached content
-        if !forceRefresh && hasCachedContent(for: tab) && !shouldRefreshTab(tab) {
-            return
-        }
 
         isLoading = true
         errorMessage = nil
@@ -109,84 +65,24 @@ class ProfileData {
         do {
             switch tab {
             case .posts:
-                // Reset pagination for initial load
-                postsOffset = 0
-                let response = try await contentService.getPostsByAuthor(authorId: userId, limit: pageSize, offset: 0)
+                let response = try await contentService.getPostsByAuthor(authorId: userId)
                 posts = response.posts
-                totalPosts = response.totalCount
 
             case .saved:
-                savedPostsOffset = 0
-                let bookmarksResponse = try await contentService.getUserBookmarks(userId: userId)
-                totalSavedPosts = bookmarksResponse.totalCount
-                if !bookmarksResponse.postIds.isEmpty {
-                    // Only fetch first page worth of saved posts
-                    let idsToFetch = Array(bookmarksResponse.postIds.prefix(pageSize))
-                    savedPosts = try await contentService.getPostsByIds(idsToFetch)
-                } else {
-                    savedPosts = []
-                }
+                let response = try await contentService.getUserBookmarks(userId: userId)
+                savedPosts = response.posts
 
             case .liked:
-                likedPostsOffset = 0
-                let (postIds, total) = try await socialService.getUserLikedPosts(userId: userId, limit: pageSize, offset: 0)
-                totalLikedPosts = total
-                if !postIds.isEmpty {
-                    likedPosts = try await contentService.getPostsByIds(postIds)
-                } else {
-                    likedPosts = []
-                }
+                // TODO: Need to fetch liked posts
+                // SocialService provides user IDs who liked a post, not posts liked by a user
+                // This may need a different endpoint or approach
+                likedPosts = []
             }
-
-            // Update cache timestamp
-            lastLoadTime[tab] = Date()
         } catch {
             handleError(error)
         }
 
         isLoading = false
-    }
-
-    func loadMoreContent(for tab: ContentTab) async {
-        guard let userId = userProfile?.id, !isLoadingMore else { return }
-
-        isLoadingMore = true
-
-        do {
-            switch tab {
-            case .posts:
-                guard hasMorePosts else { isLoadingMore = false; return }
-                let newOffset = posts.count
-                let response = try await contentService.getPostsByAuthor(authorId: userId, limit: pageSize, offset: newOffset)
-                posts.append(contentsOf: response.posts)
-                postsOffset = newOffset
-
-            case .saved:
-                guard hasMoreSavedPosts else { isLoadingMore = false; return }
-                let bookmarksResponse = try await contentService.getUserBookmarks(userId: userId)
-                let newOffset = savedPosts.count
-                if newOffset < bookmarksResponse.postIds.count {
-                    let idsToFetch = Array(bookmarksResponse.postIds.dropFirst(newOffset).prefix(pageSize))
-                    let morePosts = try await contentService.getPostsByIds(idsToFetch)
-                    savedPosts.append(contentsOf: morePosts)
-                    savedPostsOffset = newOffset
-                }
-
-            case .liked:
-                guard hasMoreLikedPosts else { isLoadingMore = false; return }
-                let newOffset = likedPosts.count
-                let (postIds, _) = try await socialService.getUserLikedPosts(userId: userId, limit: pageSize, offset: newOffset)
-                if !postIds.isEmpty {
-                    let morePosts = try await contentService.getPostsByIds(postIds)
-                    likedPosts.append(contentsOf: morePosts)
-                    likedPostsOffset = newOffset
-                }
-            }
-        } catch {
-            handleError(error)
-        }
-
-        isLoadingMore = false
     }
 
     // MARK: - User Actions

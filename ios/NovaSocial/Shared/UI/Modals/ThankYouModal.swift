@@ -50,7 +50,7 @@ struct ThankYouModal: View {
                     // Thank you message
                     VStack(alignment: .center, spacing: 16) {
                         Text("Thank you for your feedback!")
-                            .font(.system(size: 20, weight: .bold))
+                            .font(Typography.bold20)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .multilineTextAlignment(.center)
                     }
@@ -63,7 +63,7 @@ struct ThankYouModal: View {
                         isPresented = false  // 关闭 ReportModal sheet，返回 HomeView
                     }) {
                         Text("Done")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(Typography.semibold16)
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity, maxHeight: 46)
                             .background(Color(red: 0.81, green: 0.13, blue: 0.25))
@@ -78,17 +78,8 @@ struct ThankYouModal: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("ThankYou - Default") {
+#Preview {
     @Previewable @State var showThankYouView = true
     @Previewable @State var isPresented = true
     ThankYouModal(showThankYouView: $showThankYouView, isPresented: $isPresented)
-}
-
-#Preview("ThankYou - Dark Mode") {
-    @Previewable @State var showThankYouView = true
-    @Previewable @State var isPresented = true
-    ThankYouModal(showThankYouView: $showThankYouView, isPresented: $isPresented)
-        .preferredColorScheme(.dark)
 }

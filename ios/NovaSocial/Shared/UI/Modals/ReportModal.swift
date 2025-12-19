@@ -51,13 +51,13 @@ struct ReportModal: View {
                     VStack(alignment: .center, spacing: 16) {
                         // Title
                         Text("Why are you reporting this post?")
-                            .font(.system(size: 20, weight: .bold))
+                            .font(Typography.bold20)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .multilineTextAlignment(.center)
 
                         // Description
                         Text("Your report is anonymous. If someone is in immediate danger, call the local emergency services - don't wait.")
-                            .font(.system(size: 14))
+                            .font(Typography.regular14)
                             .foregroundColor(Color(red: 0.60, green: 0.60, blue: 0.60))
                             .frame(maxWidth: .infinity, alignment: .center)
                             .multilineTextAlignment(.center)
@@ -104,7 +104,7 @@ struct ReportOptionNavigable: View {
             VStack(spacing: 0) {
                 HStack {
                     Text(title)
-                        .font(.system(size: 18))
+                        .font(Typography.regular18)
                         .foregroundColor(.black)
                     Spacer()
                     Image(systemName: "chevron.right")
@@ -123,17 +123,8 @@ struct ReportOptionNavigable: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("Report - Default") {
+#Preview {
     @Previewable @State var isPresented = true
     @Previewable @State var showThankYouView = false
     ReportModal(isPresented: $isPresented, showThankYouView: $showThankYouView)
-}
-
-#Preview("Report - Dark Mode") {
-    @Previewable @State var isPresented = true
-    @Previewable @State var showThankYouView = false
-    ReportModal(isPresented: $isPresented, showThankYouView: $showThankYouView)
-        .preferredColorScheme(.dark)
 }

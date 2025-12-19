@@ -8,41 +8,23 @@ struct CarouselCardItem: View {
     let company: String
     let votes: String
     let imageAssetName: String
-    var imageUrl: String? = nil  // Optional URL for remote images
 
     var body: some View {
         VStack(spacing: 18) {
-            // Image section (top) - using CachedAsyncImage for disk caching
-            if let urlString = imageUrl, let url = URL(string: urlString) {
-                CachedAsyncImage(
-                    url: url,
-                    targetSize: CGSize(width: 235 * 2, height: 250 * 2)  // 2x for Retina displays
-                ) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 235, height: 250)
-                        .clipped()
-                        .cornerRadius(5)
-                } placeholder: {
-                    ProgressView()
-                        .frame(width: 235, height: 250)
-                }
-            } else {
-                Image(imageAssetName)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 235, height: 250)
-                    .clipped()
-                    .cornerRadius(5)
-            }
+            // Image section (top)
+            Image(imageAssetName)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 235, height: 250)
+                .clipped()
+                .cornerRadius(5)
 
             // Bottom section: Rank, Name/Company, and Votes
             HStack {
                 HStack(spacing: 10) {
                     // Rank badge
                     Text(rankNumber)
-                        .font(.system(size: 20, weight: .medium))
+                        .font(Typography.semibold20)
                         .foregroundColor(.white)
                         .frame(width: 35, height: 35)
                         .background(Color(red: 0.82, green: 0.11, blue: 0.26))
@@ -51,12 +33,12 @@ struct CarouselCardItem: View {
                     // Name and company
                     VStack(alignment: .leading, spacing: 0) {
                         Text(name)
-                            .font(.system(size: 18, weight: .bold))
+                            .font(Typography.bold18)
                             .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
                             .lineLimit(1)
                             .truncationMode(.tail)
                         Text(company)
-                            .font(.system(size: 14, weight: .medium))
+                            .font(Typography.semibold14)
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -72,7 +54,7 @@ struct CarouselCardItem: View {
                         .scaledToFit()
                         .frame(width: 15, height: 15)
                     Text(votes)
-                        .font(.system(size: 9))
+                        .font(Typography.regular9)
                         .lineSpacing(13)
                         .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                 }
@@ -88,21 +70,20 @@ struct CarouselCardItem: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("CarouselCard - Default") {
+// MARK: - Preview
+#Preview {
     VStack(spacing: 0) {
         // MARK: - 标题部分
         HStack {
             Text("Hottest Banker in H.K.")
-                .font(.system(size: 20, weight: .bold))
+                .font(Typography.bold20)
                 .foregroundColor(.black)
 
             Spacer()
 
             Button(action: {}) {
                 Text("View more")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(Typography.regular10)
                     .foregroundColor(.black)
             }
         }
@@ -146,45 +127,4 @@ struct CarouselCardItem: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(DesignTokens.backgroundColor)
-}
-
-#Preview("CarouselCard - Dark Mode") {
-    VStack(spacing: 0) {
-        HStack {
-            Text("Hottest Banker in H.K.")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(.black)
-
-            Spacer()
-
-            Button(action: {}) {
-                Text("View more")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.black)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 16)
-        .padding(.top, 0)
-        .padding(.bottom, 5)
-
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 20) {
-                CarouselCardItem(
-                    rankNumber: "1",
-                    name: "Lucy Liu",
-                    company: "Morgan Stanley",
-                    votes: "2293",
-                    imageAssetName: "PollCard-1"
-                )
-            }
-            .padding(.horizontal, 16)
-        }
-        .frame(height: 360)
-
-        Spacer()
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(DesignTokens.backgroundColor)
-    .preferredColorScheme(.dark)
 }

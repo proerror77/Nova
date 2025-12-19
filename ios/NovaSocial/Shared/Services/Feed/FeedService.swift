@@ -14,9 +14,8 @@ class FeedService {
     ///   - algo: Algorithm type ("ch" for chronological, "time" for time-based)
     ///   - limit: Number of posts to fetch (1-100, default 20)
     ///   - cursor: Pagination cursor from previous response
-    ///   - channelId: Optional channel ID or slug to filter feed by channel
     /// - Returns: FeedResponse containing post IDs and pagination info
-    func getFeed(algo: FeedAlgorithm = .chronological, limit: Int = 20, cursor: String? = nil, channelId: String? = nil) async throws -> FeedResponse {
+    func getFeed(algo: FeedAlgorithm = .chronological, limit: Int = 20, cursor: String? = nil) async throws -> FeedResponse {
         var queryParams: [String: String] = [
             "algo": algo.rawValue,
             "limit": String(min(max(limit, 1), 100))
@@ -26,72 +25,8 @@ class FeedService {
             queryParams["cursor"] = cursor
         }
 
-        // Add channel filter if provided
-        if let channelId = channelId {
-            queryParams["channel_id"] = channelId
-        }
-
         // Use unified APIClient.get() for consistent error handling and auth
         return try await client.get(endpoint: APIConfig.Feed.getFeed, queryParams: queryParams)
-    }
-
-    // MARK: - Channels
-
-    /// Fetch available channels for feed navigation
-    /// - Parameters:
-    ///   - enabledOnly: If true, only return enabled channels (default: true)
-    ///   - limit: Maximum number of channels to return (default: 50)
-    /// - Returns: Array of FeedChannel sorted by display order
-    func getChannels(enabledOnly: Bool = true, limit: Int = 50) async throws -> [FeedChannel] {
-        var queryParams: [String: String] = [
-            "limit": String(limit),
-            "enabled_only": String(enabledOnly)
-        ]
-
-        struct Response: Codable {
-            let channels: [FeedChannel]
-            let total: Int?
-        }
-
-        let response: Response = try await client.get(
-            endpoint: APIConfig.Channels.getAllChannels,
-            queryParams: queryParams
-        )
-
-        // Sort by display order (lower = first)
-        return response.channels.sorted { $0.displayOrder < $1.displayOrder }
-    }
-
-    /// Get AI-powered channel suggestions based on post content
-    /// - Parameters:
-    ///   - content: The post text content
-    ///   - hashtags: Optional hashtags from Alice image analysis
-    ///   - themes: Optional themes from Alice image analysis
-    /// - Returns: Array of channel suggestions with confidence scores
-    func suggestChannels(content: String, hashtags: [String]? = nil, themes: [String]? = nil) async throws -> [ChannelSuggestion] {
-        struct Request: Codable {
-            let content: String
-            let hashtags: [String]
-            let themes: [String]
-        }
-
-        struct Response: Codable {
-            let suggestions: [ChannelSuggestion]
-        }
-
-        let request = Request(
-            content: content,
-            hashtags: hashtags ?? [],
-            themes: themes ?? []
-        )
-
-        let response: Response = try await client.request(
-            endpoint: APIConfig.Channels.suggestChannels,
-            method: "POST",
-            body: request
-        )
-
-        return response.suggestions
     }
 
     // MARK: - Guest Feed (No Authentication)
@@ -334,11 +269,6 @@ struct FeedPostRaw: Codable {
     let mediaUrls: [String]?
     let thumbnailUrls: [String]?
     let mediaType: String?
-
-    // Author information (optional for backward compatibility)
-    let authorUsername: String?
-    let authorDisplayName: String?
-    let authorAvatar: String?
 }
 
 /// Response from feed-service /api/v2/feed endpoint
@@ -369,72 +299,9 @@ struct FeedWithDetailsResponse {
     let totalCount: Int?
 }
 
-// MARK: - Media Type
-
-/// Media type for feed posts
-enum FeedMediaType: String, Codable {
-    case image = "image"
-    case video = "video"
-    case livePhoto = "live_photo"  // Live Photo (still image + short video)
-    case mixed = "mixed"  // Post contains both images and videos
-    case none = "none"  // Text-only post with no media
-
-    /// Determine media type from URL extension
-    static func from(url: String) -> FeedMediaType {
-        let lowercased = url.lowercased()
-        // Skip non-URL placeholders (e.g., "text-content-xxx")
-        guard lowercased.hasPrefix("http://") || lowercased.hasPrefix("https://") else {
-            return .none
-        }
-        if lowercased.contains(".mp4") || lowercased.contains(".m4v") || lowercased.contains(".webm") {
-            return .video
-        }
-        // MOV could be Live Photo video or regular video
-        if lowercased.contains(".mov") {
-            return .video
-        }
-        return .image
-    }
-    
-    /// Determine media type from array of URLs
-    static func from(urls: [String]) -> FeedMediaType {
-        guard !urls.isEmpty else { return .none }
-
-        let types = urls.map { FeedMediaType.from(url: $0) }
-        let hasVideo = types.contains(.video)
-        let hasImage = types.contains(.image)
-
-        // If all URLs are invalid (e.g., text-content-xxx), return none
-        if !hasVideo && !hasImage {
-            return .none
-        }
-
-        if hasVideo && hasImage {
-            return .mixed
-        } else if hasVideo {
-            return .video
-        }
-        return .image
-    }
-    
-    /// Check if this is a Live Photo type
-    var isLivePhoto: Bool {
-        self == .livePhoto
-    }
-}
-
 /// Feed post with full details for UI display
 /// Note: Uses APIClient's convertFromSnakeCase for automatic key mapping
-/// Equatable for efficient SwiftUI diffing
-struct FeedPost: Identifiable, Codable, Equatable {
-    // MARK: - Equatable (only compare fields that affect UI)
-    static func == (lhs: FeedPost, rhs: FeedPost) -> Bool {
-        lhs.id == rhs.id &&
-        lhs.likeCount == rhs.likeCount &&
-        lhs.commentCount == rhs.commentCount &&
-        lhs.isLiked == rhs.isLiked &&
-        lhs.isBookmarked == rhs.isBookmarked
-    }
+struct FeedPost: Identifiable, Codable {
     let id: String
     let authorId: String
     let authorName: String
@@ -442,7 +309,6 @@ struct FeedPost: Identifiable, Codable, Equatable {
     let content: String
     let mediaUrls: [String]
     let thumbnailUrls: [String]
-    let mediaType: FeedMediaType
     let createdAt: Date
     let likeCount: Int
     let commentCount: Int
@@ -451,123 +317,22 @@ struct FeedPost: Identifiable, Codable, Equatable {
     let isBookmarked: Bool
 
     /// Prefer thumbnails for list performance; fall back to originals when missing.
-    /// Normalizes relative URLs and filters out invalid URLs (e.g., "text-content-xxx" placeholders).
-    /// If thumbnails are present but unusable, falls back to original media URLs.
     var displayMediaUrls: [String] {
-        func normalize(_ url: String) -> String? {
-            let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return nil }
-
-            let lowercased = trimmed.lowercased()
-
-            // Skip non-URL placeholders (e.g., "text-content-xxx")
-            if !(lowercased.hasPrefix("http://") || lowercased.hasPrefix("https://") || lowercased.hasPrefix("/") || lowercased.hasPrefix("//")) {
-                return nil
-            }
-
-            if lowercased.hasPrefix("http://") || lowercased.hasPrefix("https://") {
-                return trimmed
-            }
-
-            // Scheme-relative URL (e.g., //cdn.example.com/a.jpg)
-            if lowercased.hasPrefix("//") {
-                return "https:\(trimmed)"
-            }
-
-            // Relative path returned by backend (e.g., /media/abc.jpg)
-            if lowercased.hasPrefix("/") {
-                return "\(APIConfig.current.baseURL)\(trimmed)"
-            }
-
-            return nil
+        if !thumbnailUrls.isEmpty {
+            return thumbnailUrls
         }
-
-        let normalizedThumbnails = thumbnailUrls.compactMap(normalize)
-        if !normalizedThumbnails.isEmpty {
-            return normalizedThumbnails
-        }
-
-        let normalizedMedia = mediaUrls.compactMap(normalize)
-        #if DEBUG
-        if normalizedThumbnails.isEmpty, !thumbnailUrls.isEmpty {
-            print("[Feed] ⚠️ Thumbnails unusable for post \(id.prefix(8)): thumbnailUrls=\(thumbnailUrls)")
-        }
-        if normalizedMedia.isEmpty, !mediaUrls.isEmpty {
-            print("[Feed] ⚠️ Media URLs unusable for post \(id.prefix(8)): mediaUrls=\(mediaUrls)")
-        }
-        #endif
-        return normalizedMedia
-    }
-    
-    /// Check if this post contains video content
-    var hasVideo: Bool {
-        mediaType == .video || mediaType == .mixed
-    }
-    
-    /// Check if this post is a Live Photo
-    var isLivePhoto: Bool {
-        mediaType == .livePhoto
-    }
-    
-    /// Get the first video URL if available
-    var firstVideoUrl: URL? {
-        guard hasVideo else { return nil }
-        return mediaUrls.first { FeedMediaType.from(url: $0) == .video }
-            .flatMap { URL(string: $0) }
-    }
-    
-    /// Get thumbnail URL for video (first thumbnail or nil)
-    var videoThumbnailUrl: URL? {
-        guard hasVideo else { return nil }
-        return thumbnailUrls.first.flatMap { URL(string: $0) }
-    }
-    
-    /// Get Live Photo image URL (first URL for live_photo type)
-    var livePhotoImageUrl: URL? {
-        guard isLivePhoto, let first = mediaUrls.first else { return nil }
-        return URL(string: first)
-    }
-    
-    /// Get Live Photo video URL (second URL for live_photo type)
-    var livePhotoVideoUrl: URL? {
-        guard isLivePhoto, mediaUrls.count >= 2 else { return nil }
-        return URL(string: mediaUrls[1])
+        return mediaUrls
     }
 
     /// Create FeedPost from raw backend response
     init(from raw: FeedPostRaw) {
         self.id = raw.id
         self.authorId = raw.userId
-
-        // Use real author information from backend with graceful fallback
-        // Priority: display_name > username > placeholder
-        if let displayName = raw.authorDisplayName, !displayName.isEmpty {
-            self.authorName = displayName
-        } else if let username = raw.authorUsername, !username.isEmpty {
-            self.authorName = username
-        } else {
-            // Fallback to placeholder for backward compatibility
-            self.authorName = "User \(raw.userId.prefix(8))"
-        }
-
-        self.authorAvatar = raw.authorAvatar
+        self.authorName = "User \(raw.userId.prefix(8))"  // Placeholder until user profile fetch
+        self.authorAvatar = nil
         self.content = raw.content
         self.mediaUrls = raw.mediaUrls ?? []
-
-        #if DEBUG
-        if let urls = raw.mediaUrls, !urls.isEmpty {
-            print("[Feed] Post \(raw.id.prefix(8)): mediaUrls=\(urls)")
-        } else if raw.mediaUrls == nil {
-            print("[Feed] Post \(raw.id.prefix(8)): mediaUrls is nil")
-        }
-        #endif
         self.thumbnailUrls = raw.thumbnailUrls ?? self.mediaUrls
-        // Determine media type from backend or infer from URLs
-        if let rawType = raw.mediaType {
-            self.mediaType = FeedMediaType(rawValue: rawType) ?? FeedMediaType.from(urls: self.mediaUrls)
-        } else {
-            self.mediaType = FeedMediaType.from(urls: self.mediaUrls)
-        }
         self.createdAt = Date(timeIntervalSince1970: Double(raw.createdAt))
         self.likeCount = raw.likeCount ?? 0
         self.commentCount = raw.commentCount ?? 0
@@ -576,9 +341,9 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.isBookmarked = false
     }
 
-    // Keep existing init for Codable conformance and manual creation
+    // Keep existing init for Codable conformance
     init(id: String, authorId: String, authorName: String, authorAvatar: String?,
-        content: String, mediaUrls: [String], mediaType: FeedMediaType? = nil, createdAt: Date,
+        content: String, mediaUrls: [String], createdAt: Date,
          likeCount: Int, commentCount: Int, shareCount: Int,
          isLiked: Bool, isBookmarked: Bool) {
         self.id = id
@@ -588,8 +353,6 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.content = content
         self.mediaUrls = mediaUrls
         self.thumbnailUrls = mediaUrls
-        // Use provided type or infer from URLs
-        self.mediaType = mediaType ?? FeedMediaType.from(urls: mediaUrls)
         self.createdAt = createdAt
         self.likeCount = likeCount
         self.commentCount = commentCount
@@ -600,7 +363,6 @@ struct FeedPost: Identifiable, Codable, Equatable {
 
     /// Create a copy with optional field overrides (eliminates duplicate creation code)
     func copying(
-        authorAvatar: String?? = nil,  // Double optional: nil = keep original, .some(nil) = set to nil, .some(value) = update
         likeCount: Int? = nil,
         commentCount: Int? = nil,
         shareCount: Int? = nil,
@@ -611,10 +373,9 @@ struct FeedPost: Identifiable, Codable, Equatable {
             id: self.id,
             authorId: self.authorId,
             authorName: self.authorName,
-            authorAvatar: authorAvatar ?? self.authorAvatar,
+            authorAvatar: self.authorAvatar,
             content: self.content,
             mediaUrls: self.mediaUrls,
-            mediaType: self.mediaType,
             createdAt: self.createdAt,
             likeCount: likeCount ?? self.likeCount,
             commentCount: commentCount ?? self.commentCount,
@@ -622,24 +383,6 @@ struct FeedPost: Identifiable, Codable, Equatable {
             isLiked: isLiked ?? self.isLiked,
             isBookmarked: isBookmarked ?? self.isBookmarked
         )
-    }
-
-    /// Create FeedPost from content-service Post model (for Profile page navigation)
-    init(from post: Post, authorName: String, authorAvatar: String?) {
-        self.id = post.id
-        self.authorId = post.authorId
-        self.authorName = authorName
-        self.authorAvatar = authorAvatar
-        self.content = post.content
-        self.mediaUrls = post.mediaUrls ?? []
-        self.thumbnailUrls = post.mediaUrls ?? []
-        self.mediaType = FeedMediaType.from(urls: post.mediaUrls ?? [])
-        self.createdAt = Date(timeIntervalSince1970: Double(post.createdAt))
-        self.likeCount = post.likeCount ?? 0
-        self.commentCount = post.commentCount ?? 0
-        self.shareCount = post.shareCount ?? 0
-        self.isLiked = false
-        self.isBookmarked = false
     }
 }
 
@@ -694,61 +437,4 @@ struct RankingContext: Codable {
         case deviceType = "device_type"
         case timeOfDay = "time_of_day"
     }
-}
-
-// MARK: - Channel Models
-
-/// Channel for feed navigation and filtering
-/// Represents a content category or topic that users can browse
-struct FeedChannel: Codable, Identifiable, Hashable {
-    let id: String
-    let name: String
-    let slug: String
-    let description: String?
-    let category: String?
-    let iconUrl: String?
-    let displayOrder: Int
-    let isEnabled: Bool
-    let subscriberCount: Int?
-
-    // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase which automatically
-    // converts snake_case keys (display_order, icon_url, etc.) to camelCase properties.
-    // Having explicit CodingKeys conflicts with this automatic conversion.
-
-    // Default initializer for fallback/mock data
-    init(id: String, name: String, slug: String, description: String? = nil,
-         category: String? = nil, iconUrl: String? = nil,
-         displayOrder: Int = 100, isEnabled: Bool = true, subscriberCount: Int? = nil) {
-        self.id = id
-        self.name = name
-        self.slug = slug
-        self.description = description
-        self.category = category
-        self.iconUrl = iconUrl
-        self.displayOrder = displayOrder
-        self.isEnabled = isEnabled
-        self.subscriberCount = subscriberCount
-    }
-
-    // Fallback channels when API is unavailable
-    static let fallbackChannels: [FeedChannel] = [
-        FeedChannel(id: "fashion", name: "Fashion", slug: "fashion", displayOrder: 1),
-        FeedChannel(id: "travel", name: "Travel", slug: "travel", displayOrder: 2),
-        FeedChannel(id: "fitness", name: "Fitness", slug: "fitness", displayOrder: 3),
-        FeedChannel(id: "pets", name: "Pets", slug: "pets", displayOrder: 4),
-        FeedChannel(id: "study", name: "Study", slug: "study", displayOrder: 5),
-        FeedChannel(id: "career", name: "Career", slug: "career", displayOrder: 6),
-        FeedChannel(id: "tech", name: "Tech", slug: "tech", displayOrder: 7)
-    ]
-}
-
-/// AI-powered channel suggestion for post classification
-struct ChannelSuggestion: Codable, Identifiable {
-    let id: String
-    let name: String
-    let slug: String
-    /// Confidence score (0.0 - 1.0)
-    let confidence: Float
-    /// Keywords that matched the post content
-    let matchedKeywords: [String]
 }

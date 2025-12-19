@@ -22,11 +22,10 @@ enum APIEnvironment {
                !stagingURL.hasPrefix("$(") {  // Skip unresolved build variables
                 return stagingURL
             }
-            // Staging API via GKE Ingress IP (34.8.163.8)
-            // Note: api.staging.gcp.icered.com DNS may resolve to VPN proxy IP which doesn't work in iOS Simulator
+            // Default staging API: direct LB IP to bypass DNS/proxy issues
             return "http://34.8.163.8"
         case .production:
-            return "http://api.icered.com:8000"
+            return "https://api.nova.social"
         }
     }
 
@@ -60,10 +59,8 @@ struct APIConfig {
         static let followers = "/api/v2/graph/followers"
         static let following = "/api/v2/graph/following"
         static let follow = "/api/v2/graph/follow"
-        // unfollow uses DELETE /api/v2/graph/follow/{user_id}
-        static func unfollow(_ userId: String) -> String { "/api/v2/graph/follow/\(userId)" }
-        // isFollowing uses GET /api/v2/graph/is-following/{user_id}
-        static func isFollowing(_ userId: String) -> String { "/api/v2/graph/is-following/\(userId)" }
+        static let unfollow = "/api/v2/graph/unfollow"
+        static let isFollowing = "/api/v2/graph/is-following"
         static let areMutuals = "/api/v2/graph/are-mutuals"
         static let batchCheckFollowing = "/api/v2/graph/batch-check-following"
 
@@ -88,21 +85,12 @@ struct APIConfig {
         static func deleteLike(_ postId: String) -> String { "/api/v2/social/unlike/\(postId)" }
         static func getLikes(_ postId: String) -> String { "/api/v2/social/likes/\(postId)" }
         static func checkLiked(_ postId: String) -> String { "/api/v2/social/check-liked/\(postId)" }
-        /// GET /api/v2/social/users/{user_id}/liked-posts 獲取用戶點讚的帖子
-        static func getUserLikedPosts(_ userId: String) -> String { "/api/v2/social/users/\(userId)/liked-posts" }
         static let createComment = "/api/v2/social/comment"
         static func deleteComment(_ commentId: String) -> String { "/api/v2/social/comment/\(commentId)" }
-        static let getComments = "/api/v2/social/comments"
+        static func getComments(_ postId: String) -> String { "/api/v2/social/comments/\(postId)" }
         static let createShare = "/api/v2/social/share"
         static func getShareCount(_ postId: String) -> String { "/api/v2/social/shares/count/\(postId)" }
         static let batchGetStats = "/api/v2/social/stats/batch"
-
-        // Bookmark endpoints
-        static let createBookmark = "/api/v2/social/bookmark"
-        static func deleteBookmark(_ postId: String) -> String { "/api/v2/social/bookmark/\(postId)" }
-        static let getBookmarks = "/api/v2/social/bookmarks"
-        static func checkBookmarked(_ postId: String) -> String { "/api/v2/social/check-bookmarked/\(postId)" }
-        static let batchCheckBookmarked = "/api/v2/social/bookmarks/batch-check"
     }
 
     struct Content {
@@ -127,15 +115,10 @@ struct APIConfig {
     }
 
     struct Media {
-        // 輕量級上傳初始化端點：只發送元數據，獲取 presigned URL
-        static let uploadInitiate = "/api/v2/media/upload/initiate"
-        // 舊的多部分上傳端點（保留向後兼容）
+        // 單次上傳端點：後端提供 /api/v2/media/upload
         static let uploadStart = "/api/v2/media/upload"
         static let uploadProgress = "/api/v2/media/upload"
-        // 完成上傳端點：需要 upload_id 作為路徑參數
-        static func uploadComplete(_ uploadId: String) -> String {
-            "/api/v2/media/upload/\(uploadId)/complete"
-        }
+        static let uploadComplete = "/api/v2/media/upload"
         static let reels = "/api/v2/media/reels"
         static let videos = "/api/v2/media/videos"
     }
@@ -151,8 +134,8 @@ struct APIConfig {
 
         // Password Management
         static let changePassword = "/api/v2/auth/change-password"
-        static let requestPasswordReset = "/api/v2/auth/password/reset/request"
-        static let resetPassword = "/api/v2/auth/password/reset"
+        static let requestPasswordReset = "/api/v2/auth/request-password-reset"
+        static let resetPassword = "/api/v2/auth/reset-password"
 
         // Token Management
         static let verifyToken = "/api/v2/auth/verify-token"
@@ -219,38 +202,6 @@ struct APIConfig {
         static let getStatus = "/api/v2/alice/status"  // GET 獲取 Alice 服務狀態
         static let sendMessage = "/api/v2/alice/chat"  // POST 發送聊天消息
         static let voiceMode = "/api/v2/alice/voice"  // POST 語音模式
-        static let enhancePost = "/api/v2/alice/enhance"  // POST 圖片分析與內容建議
-    }
-
-    // MARK: - Alice Voice Service API (TEN Agent)
-    struct AliceVoice {
-        /// TEN Agent 服務器基礎 URL
-        /// Note: Uses URL rewriting via GCE URL Map routeRules
-        /// Staging: Uses main API gateway with /alice-voice path prefix
-        /// Production: https://api.nova.social/alice-voice
-        static var baseURL: String {
-            switch current {
-            case .development:
-                if let localURL = ProcessInfo.processInfo.environment["ALICE_VOICE_URL"] {
-                    return localURL
-                }
-                return "http://localhost:8080"
-            case .staging:
-                // Route through main API gateway with URL rewriting
-                return "\(current.baseURL)/alice-voice"
-            case .production:
-                return "https://api.nova.social/alice-voice"
-            }
-        }
-
-        /// POST /start - 啟動 TEN Agent 會話
-        static var start: String { "\(baseURL)/start" }
-        /// POST /stop - 停止 TEN Agent 會話
-        static var stop: String { "\(baseURL)/stop" }
-        /// POST /ping - Keep-alive for TEN Agent 會話
-        static var ping: String { "\(baseURL)/ping" }
-        /// GET /health - 健康檢查
-        static var health: String { "\(baseURL)/health" }
     }
 
     // MARK: - AI Configuration (Backend Proxy)
@@ -274,27 +225,14 @@ struct APIConfig {
         static func getProfile(_ id: String) -> String { "/api/v2/users/\(id)" }
     }
 
-    // MARK: - User Profile Data API (ranking-service via graphql-gateway)
-    struct UserProfile {
-        /// POST /api/v2/photo-analysis/upload - 上傳照片分析結果
-        /// Used by iOS Vision photo library analysis for interest building
-        static let uploadPhotoAnalysis = "/api/v2/photo-analysis/upload"
-        /// POST /api/v2/photo-analysis/onboarding - 上傳 Onboarding 選擇的興趣
-        static let uploadOnboardingInterests = "/api/v2/photo-analysis/onboarding"
-        /// GET /api/v2/profile/interests - 獲取用戶興趣標籤
-        static let getInterests = "/api/v2/profile/interests"
-    }
-
-    // MARK: - User Settings API (identity-service - SINGLE SOURCE OF TRUTH)
+    // MARK: - User Settings API
     struct Settings {
         /// GET /api/v2/auth/users/{id}/settings 獲取用戶設定
-        /// NOTE: identity-service is the SINGLE SOURCE OF TRUTH for all user settings
-        /// including dm_permission (P0 migration completed).
-        /// Do NOT use Relationships.getPrivacySettings - it is deprecated.
+        /// NOTE: HTTP 網關目前將使用者設定掛在 auth-service 之下，
+        /// 對應 backend/proto/services/auth_service.proto GetUserSettings。
+        /// 如果之後遷移到 user-service，請同步更新為 /api/v2/users/{id}/settings。
         static func getSettings(_ userId: String) -> String { "/api/v2/auth/users/\(userId)/settings" }
         /// PUT /api/v2/auth/users/{id}/settings 更新用戶設定
-        /// NOTE: identity-service is the SINGLE SOURCE OF TRUTH.
-        /// Use this endpoint for all settings updates including dm_permission.
         static func updateSettings(_ userId: String) -> String { "/api/v2/auth/users/\(userId)/settings" }
     }
 
@@ -316,8 +254,6 @@ struct APIConfig {
         static let unsubscribeChannel = "/api/v2/channels/unsubscribe"  // DELETE 取消訂閱頻道
         /// GET /api/v2/channels/{id} 獲取頻道詳情
         static func getChannelDetails(_ channelId: String) -> String { "/api/v2/channels/\(channelId)" }
-        /// POST /api/v2/channels/suggest AI-powered channel suggestions
-        static let suggestChannels = "/api/v2/channels/suggest"
     }
 
     // MARK: - Account Management API
@@ -325,11 +261,6 @@ struct APIConfig {
         static let getAccounts = "/api/v2/accounts"  // GET 獲取用戶所有帳戶
         static let switchAccount = "/api/v2/accounts/switch"  // POST 切換帳戶
         static let removeAccount = "/api/v2/accounts"  // DELETE /api/v2/accounts/{id} 刪除帳戶
-
-        // Alias account endpoints
-        static let createAlias = "/api/v2/accounts/alias"  // POST 創建別名帳戶
-        static let updateAlias = "/api/v2/accounts/alias"  // PUT /api/v2/accounts/alias/{id} 更新別名帳戶
-        static let getAlias = "/api/v2/accounts/alias"  // GET /api/v2/accounts/alias/{id} 獲取別名帳戶
     }
 
     // MARK: - Device Management API
@@ -385,22 +316,6 @@ struct APIConfig {
         static func unregisterPushToken(_ token: String) -> String { "/api/v2/notifications/push-token/\(token)" }
         /// POST /api/v2/notifications/batch - Batch create notifications
         static let batchCreate = "/api/v2/notifications/batch"
-    }
-
-    // MARK: - Trending API
-    struct Trending {
-        /// GET /api/v2/trending - Get trending content
-        static let getTrending = "/api/v2/trending"
-        /// GET /api/v2/trending/videos - Get trending videos
-        static let getVideos = "/api/v2/trending/videos"
-        /// GET /api/v2/trending/posts - Get trending posts
-        static let getPosts = "/api/v2/trending/posts"
-        /// GET /api/v2/trending/streams - Get trending streams
-        static let getStreams = "/api/v2/trending/streams"
-        /// GET /api/v2/trending/categories - Get trending categories
-        static let getCategories = "/api/v2/trending/categories"
-        /// POST /api/v2/trending/engagement - Record engagement
-        static let recordEngagement = "/api/v2/trending/engagement"
     }
 
     // MARK: - Chat & Messaging API
@@ -498,13 +413,8 @@ struct APIConfig {
         static func getRelationship(_ userId: String) -> String { "/api/v2/relationships/\(userId)" }
 
         // Privacy Settings
-        // ⚠️ DEPRECATED: Use APIConfig.Settings.getSettings/updateSettings instead
-        // dm_permission is now managed by identity-service (SINGLE SOURCE OF TRUTH)
-        // These endpoints will be removed in a future version
-        @available(*, deprecated, message: "Use APIConfig.Settings.getSettings instead. dm_permission is now in identity-service.")
-        static let getPrivacySettings = "/api/v2/settings/privacy"
-        @available(*, deprecated, message: "Use APIConfig.Settings.updateSettings instead. dm_permission is now in identity-service.")
-        static let updatePrivacySettings = "/api/v2/settings/privacy"
+        static let getPrivacySettings = "/api/v2/settings/privacy"  // GET 獲取私訊權限設定
+        static let updatePrivacySettings = "/api/v2/settings/privacy"  // PUT 更新私訊權限 {dm_permission: "anyone"|"followers"|"mutuals"|"nobody"}
 
         // Message Requests (when dm_permission restricts non-followers)
         static let getMessageRequests = "/api/v2/message-requests"  // GET 獲取待處理的訊息請求
@@ -536,28 +446,6 @@ struct APIConfig {
         static let getTrending = "/api/v2/search/trending"  // Alias for SearchService
     }
 
-    // MARK: - Matrix E2EE Integration API
-    struct Matrix {
-        /// POST /api/v2/matrix/token - Get Matrix access token for current user
-        /// DEPRECATED: This endpoint returns a service account token, not a user-specific token.
-        /// Use MatrixSSOManager.startSSOLogin() for proper user authentication via Zitadel SSO.
-        /// This endpoint will be removed in a future version.
-        @available(*, deprecated, message: "Use MatrixSSOManager.startSSOLogin() instead. This endpoint returns a service account token.")
-        static let getToken = "/api/v2/matrix/token"
-        /// GET /api/v2/matrix/rooms - Get all conversation-to-room mappings for current user
-        static let getRoomMappings = "/api/v2/matrix/rooms"
-        /// POST /api/v2/matrix/rooms - Save a new conversation-to-room mapping
-        static let saveRoomMapping = "/api/v2/matrix/rooms"
-        /// GET /api/v2/matrix/rooms/{conversation_id} - Get room ID for a conversation
-        static func getRoomMapping(_ conversationId: String) -> String {
-            "/api/v2/matrix/rooms/\(conversationId)"
-        }
-        /// GET /api/v2/matrix/conversations - Get conversation ID for a room (query: room_id)
-        static let getConversationMapping = "/api/v2/matrix/conversations"
-        /// GET /api/v2/matrix/config - Get Matrix homeserver configuration
-        static let getConfig = "/api/v2/matrix/config"
-    }
-
     // MARK: - E2EE (End-to-End Encryption) API
     struct E2EE {
         /// POST /api/v2/e2ee/devices - Register device for E2EE
@@ -578,18 +466,6 @@ struct APIConfig {
         static let sendMessage = "/api/v2/e2ee/messages"
         /// GET /api/v2/e2ee/messages - Get E2EE messages for conversation
         static let getMessages = "/api/v2/e2ee/messages"
-    }
-
-    // MARK: - Analytics API (推薦系統信號)
-    struct Analytics {
-        /// POST /api/v2/analytics/watch-events - 批量上報觀看事件
-        static let recordWatchEvents = "/api/v2/analytics/watch-events"
-        /// POST /api/v2/analytics/engagement - 上報互動信號
-        static let recordEngagement = "/api/v2/analytics/engagement"
-        /// POST /api/v2/analytics/negative-signal - 上報負面信號
-        static let recordNegativeSignal = "/api/v2/analytics/negative-signal"
-        /// POST /api/v2/analytics/session - 上報會話數據
-        static let recordSession = "/api/v2/analytics/session"
     }
 
     // MARK: - Service Ports (for direct gRPC access if needed)

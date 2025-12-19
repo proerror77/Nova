@@ -16,11 +16,6 @@ struct Post: Codable, Identifiable {
     let commentCount: Int?
     let shareCount: Int?
 
-    // Optional author enrichment fields (populated by graphql-gateway when available)
-    let authorUsername: String?
-    let authorDisplayName: String?
-    let authorAvatarUrl: String?
-
     // 便利属性，保持向后兼容
     var creatorId: String { authorId }
 
@@ -30,18 +25,6 @@ struct Post: Codable, Identifiable {
     /// Convert timestamp to Date for display
     var createdDate: Date {
         Date(timeIntervalSince1970: Double(createdAt))
-    }
-
-    /// Display name for the post author
-    var displayAuthorName: String {
-        if let displayName = authorDisplayName, !displayName.isEmpty {
-            return displayName
-        }
-        if let username = authorUsername, !username.isEmpty {
-            return username
-        }
-        // Fallback to truncated authorId
-        return "User \(authorId.prefix(8))"
     }
 }
 
@@ -100,15 +83,21 @@ struct GetPostsByAuthorRequest: Codable {
 struct GetPostsByAuthorResponse: Codable {
     let posts: [Post]
     let totalCount: Int
-    // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase which automatically
-    // converts JSON "total_count" to Swift "totalCount"
+
+    enum CodingKeys: String, CodingKey {
+        case posts
+        case totalCount = "total_count"
+    }
 }
 
 struct GetUserBookmarksResponse: Codable {
-    let postIds: [String]
-    let totalCount: Int
-    // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase which automatically
-    // converts JSON "post_ids" to Swift "postIds"
+    let posts: [Post]
+    let total: Int
+
+    enum CodingKeys: String, CodingKey {
+        case posts
+        case total
+    }
 }
 
 struct LikePostRequest: Codable {

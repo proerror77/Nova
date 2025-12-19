@@ -6,28 +6,28 @@ import Foundation
 struct UserProfile: Codable, Identifiable {
     let id: String
     let username: String
-    var email: String? = nil
-    var displayName: String? = nil
-    var bio: String? = nil
-    var avatarUrl: String? = nil
-    var coverUrl: String? = nil
-    var website: String? = nil
-    var location: String? = nil
-    var isVerified: Bool? = nil
-    var isPrivate: Bool? = nil
-    var isBanned: Bool? = nil
-    var followerCount: Int? = nil
-    var followingCount: Int? = nil
-    var postCount: Int? = nil
-    var createdAt: Int64? = nil
-    var updatedAt: Int64? = nil
-    var deletedAt: Int64? = nil
+    let email: String?
+    let displayName: String?
+    let bio: String?
+    let avatarUrl: String?
+    let coverUrl: String?
+    let website: String?
+    let location: String?
+    let isVerified: Bool?
+    let isPrivate: Bool?
+    let isBanned: Bool?
+    let followerCount: Int?
+    let followingCount: Int?
+    let postCount: Int?
+    let createdAt: Int64?
+    let updatedAt: Int64?
+    let deletedAt: Int64?
 
     // Extended profile fields (for profile settings)
-    var firstName: String? = nil
-    var lastName: String? = nil
-    var dateOfBirth: String? = nil  // ISO 8601 date format (YYYY-MM-DD)
-    var gender: Gender? = nil
+    let firstName: String?
+    let lastName: String?
+    let dateOfBirth: String?  // ISO 8601 date format (YYYY-MM-DD)
+    let gender: Gender?
 
     // Safe accessors with defaults
     var safeIsVerified: Bool { isVerified ?? false }
@@ -92,9 +92,7 @@ enum Gender: String, Codable, CaseIterable {
 }
 
 // MARK: - User Settings Model
-// Matches: backend/proto/services_v2/identity_service.proto UserSettings
-// NOTE: identity-service is now the SINGLE SOURCE OF TRUTH for user settings
-// including dm_permission (P0 migration completed)
+// Matches: backend/proto/services_v2/user_service.proto UserSettings
 
 struct UserSettings: Codable {
     let userId: String
@@ -107,10 +105,6 @@ struct UserSettings: Codable {
     let privacyLevel: PrivacyLevel?
     let allowMessages: Bool?
     let showOnlineStatus: Bool?
-    /// DM permission setting - controls who can send direct messages
-    /// Values: "anyone", "followers", "mutuals", "nobody"
-    /// Default: "mutuals" (only mutual followers can DM)
-    let dmPermission: DmPermission?
     let createdAt: Int64?
     let updatedAt: Int64?
 
@@ -124,7 +118,6 @@ struct UserSettings: Codable {
     var safePrivacyLevel: PrivacyLevel { privacyLevel ?? .public }
     var safeAllowMessages: Bool { allowMessages ?? true }
     var safeShowOnlineStatus: Bool { showOnlineStatus ?? true }
-    var safeDmPermission: DmPermission { dmPermission ?? .mutuals }
 
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
@@ -137,43 +130,8 @@ struct UserSettings: Codable {
         case privacyLevel = "privacy_level"
         case allowMessages = "allow_messages"
         case showOnlineStatus = "show_online_status"
-        case dmPermission = "dm_permission"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
-    }
-}
-
-// MARK: - DM Permission Enum
-// Controls who can send direct messages to the user
-// Matches: backend/proto/services_v2/identity_service.proto DmPermission
-enum DmPermission: String, Codable, CaseIterable {
-    case anyone = "anyone"
-    case followers = "followers"
-    case mutuals = "mutuals"
-    case nobody = "nobody"
-
-    var displayName: String {
-        switch self {
-        case .anyone: return "Anyone"
-        case .followers: return "Followers Only"
-        case .mutuals: return "Mutuals Only"
-        case .nobody: return "Nobody"
-        }
-    }
-
-    var description: String {
-        switch self {
-        case .anyone: return "Anyone can send you direct messages"
-        case .followers: return "Only people you follow can message you"
-        case .mutuals: return "Only mutual followers can message you"
-        case .nobody: return "No one can send you direct messages"
-        }
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        let rawValue = try container.decode(String.self)
-        self = DmPermission(rawValue: rawValue.lowercased()) ?? .mutuals
     }
 }
 
@@ -254,8 +212,7 @@ struct UpdateUserProfileRequest: Codable {
 }
 
 // MARK: - Update Settings Request
-// Matches: backend/proto/services_v2/identity_service.proto UpdateSettingsRequest
-// NOTE: identity-service is now the SINGLE SOURCE OF TRUTH for user settings
+// Matches: backend/proto/services_v2/user_service.proto UpdateSettingsRequest
 
 struct UpdateSettingsRequest: Codable {
     let userId: String
@@ -268,9 +225,6 @@ struct UpdateSettingsRequest: Codable {
     var privacyLevel: String?
     var allowMessages: Bool?
     var showOnlineStatus: Bool?
-    /// DM permission setting - controls who can send direct messages
-    /// Values: "anyone", "followers", "mutuals", "nobody"
-    var dmPermission: String?
 
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
@@ -283,6 +237,5 @@ struct UpdateSettingsRequest: Codable {
         case privacyLevel = "privacy_level"
         case allowMessages = "allow_messages"
         case showOnlineStatus = "show_online_status"
-        case dmPermission = "dm_permission"
     }
 }

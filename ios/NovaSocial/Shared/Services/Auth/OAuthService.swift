@@ -6,13 +6,10 @@ import CryptoKit
 
 /// Handles OAuth authentication flows (Google, Apple)
 /// Communicates with backend identity-service for token exchange
-class OAuthService: NSObject {
+class OAuthService {
     static let shared = OAuthService()
 
     private let apiClient = APIClient.shared
-
-    // Apple Sign-In continuation for async/await
-    private var appleSignInContinuation: CheckedContinuation<ASAuthorization, Error>?
 
     // MARK: - OAuth Provider
 
@@ -76,22 +73,8 @@ class OAuthService: NSObject {
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw OAuthError.startFlowFailed
-        }
-
-        #if DEBUG
-        print("[OAuth] Start flow response status: \(httpResponse.statusCode)")
-        if let responseString = String(data: data, encoding: .utf8) {
-            print("[OAuth] Start flow response: \(responseString)")
-        }
-        #endif
-
-        if httpResponse.statusCode != 200 {
-            // Try to parse error message
-            if let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
-                throw OAuthError.serverError(errorResponse.message ?? errorResponse.error ?? "Start flow failed")
-            }
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
             throw OAuthError.startFlowFailed
         }
 
@@ -135,172 +118,58 @@ class OAuthService: NSObject {
         return try JSONDecoder().decode(OAuthCallbackResponse.self, from: data)
     }
 
-    // MARK: - Google Sign-In (Web-based flow with backend proxy)
-
-    /// Perform Google Sign-In using ASWebAuthenticationSession
-    /// Uses backend proxy flow: Google redirects to backend, backend exchanges tokens and redirects to iOS
-    func signInWithGoogle() async throws -> OAuthCallbackResponse {
-        // 1. Start flow to get authorization URL
-        let startResponse = try await startOAuthFlow(provider: .google)
-
-        // 2. Present web authentication session
-        // The callback will come from the backend with tokens (not from Google with code)
-        let callbackURL = try await presentWebAuth(
-            url: URL(string: startResponse.authorizationUrl)!,
-            callbackScheme: "icered"
-        )
-
-        // 3. Parse callback URL - backend redirects with tokens directly
-        guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
-            throw OAuthError.invalidCallback
-        }
-
-        // Check for error in callback
-        if let error = components.queryItems?.first(where: { $0.name == "error" })?.value {
-            let message = components.queryItems?.first(where: { $0.name == "message" })?.value ?? error
-            throw OAuthError.serverError(message)
-        }
-
-        // Extract tokens from callback URL (backend proxy flow)
-        guard let userId = components.queryItems?.first(where: { $0.name == "user_id" })?.value,
-              let token = components.queryItems?.first(where: { $0.name == "token" })?.value else {
-            throw OAuthError.invalidCallback
-        }
-
-        let refreshToken = components.queryItems?.first(where: { $0.name == "refresh_token" })?.value
-        let expiresInString = components.queryItems?.first(where: { $0.name == "expires_in" })?.value
-        let expiresIn = Int64(expiresInString ?? "3600") ?? 3600
-        let isNewUserString = components.queryItems?.first(where: { $0.name == "is_new_user" })?.value
-        let isNewUser = isNewUserString == "true"
-        let username = components.queryItems?.first(where: { $0.name == "username" })?.value ?? ""
-        let email = components.queryItems?.first(where: { $0.name == "email" })?.value
-
-        // Build response from callback parameters
-        let user = UserProfile(
-            id: userId,
-            username: username,
-            email: email,
-            displayName: nil,
-            avatarUrl: nil
-        )
-
-        return OAuthCallbackResponse(
-            userId: userId,
-            token: token,
-            refreshToken: refreshToken,
-            expiresIn: expiresIn,
-            isNewUser: isNewUser,
-            user: user
-        )
-    }
-
     // MARK: - Apple Sign-In (Native flow)
 
-    /// Perform Apple Sign-In using native AuthenticationServices
-    @MainActor
+    /// Perform Apple Sign-In using native ASAuthorizationController
     func signInWithApple() async throws -> OAuthCallbackResponse {
-        // 1. Request Apple authorization
-        let authorization = try await requestAppleAuthorization()
-
-        guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential else {
-            throw OAuthError.invalidCallback
-        }
-
-        // 2. Extract authorization code
-        guard let authorizationCodeData = appleIDCredential.authorizationCode,
-              let authorizationCode = String(data: authorizationCodeData, encoding: .utf8) else {
-            throw OAuthError.invalidCallback
-        }
-
-        // 3. Extract identity token for verification
-        guard let identityTokenData = appleIDCredential.identityToken,
-              let identityToken = String(data: identityTokenData, encoding: .utf8) else {
-            throw OAuthError.invalidCallback
-        }
-
-        // 4. Get user info (only available on first sign-in)
-        let fullName = appleIDCredential.fullName
-        let email = appleIDCredential.email
-
-        // 5. Exchange with backend
-        return try await completeAppleSignIn(
-            authorizationCode: authorizationCode,
-            identityToken: identityToken,
-            userIdentifier: appleIDCredential.user,
-            email: email,
-            fullName: fullName
-        )
-    }
-
-    /// Request Apple authorization using ASAuthorizationController
-    @MainActor
-    private func requestAppleAuthorization() async throws -> ASAuthorization {
         try await withCheckedThrowingContinuation { continuation in
-            self.appleSignInContinuation = continuation
-
             let appleIDProvider = ASAuthorizationAppleIDProvider()
             let request = appleIDProvider.createRequest()
             request.requestedScopes = [.fullName, .email]
 
             let authorizationController = ASAuthorizationController(authorizationRequests: [request])
-            authorizationController.delegate = self
-            authorizationController.presentationContextProvider = self
+            let delegate = AppleSignInDelegate(continuation: continuation)
+
+            // Store delegate to keep it alive
+            objc_setAssociatedObject(authorizationController, "delegate", delegate, .OBJC_ASSOCIATION_RETAIN)
+
+            authorizationController.delegate = delegate
+            authorizationController.presentationContextProvider = WebAuthPresentationContext.shared
             authorizationController.performRequests()
         }
     }
 
-    /// Complete Apple Sign-In by exchanging credentials with backend
-    private func completeAppleSignIn(
-        authorizationCode: String,
-        identityToken: String,
-        userIdentifier: String,
-        email: String?,
-        fullName: PersonNameComponents?
-    ) async throws -> OAuthCallbackResponse {
-        let url = URL(string: "\(APIConfig.current.baseURL)/api/v2/auth/oauth/apple/native")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    // MARK: - Google Sign-In (Web-based flow)
 
-        var body: [String: Any] = [
-            "authorization_code": authorizationCode,
-            "identity_token": identityToken,
-            "user_identifier": userIdentifier
-        ]
+    /// Perform Google Sign-In using ASWebAuthenticationSession
+    func signInWithGoogle() async throws -> OAuthCallbackResponse {
+        // 1. Start flow to get authorization URL
+        let startResponse = try await startOAuthFlow(provider: .google)
 
-        if let email = email {
-            body["email"] = email
+        // 2. Present web authentication session
+        let callbackURL = try await presentWebAuth(
+            url: URL(string: startResponse.authorizationUrl)!,
+            callbackScheme: "icered"
+        )
+
+        // 3. Extract code and state from callback URL
+        guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
+              let code = components.queryItems?.first(where: { $0.name == "code" })?.value,
+              let returnedState = components.queryItems?.first(where: { $0.name == "state" })?.value else {
+            throw OAuthError.invalidCallback
         }
 
-        if let fullName = fullName {
-            var nameDict: [String: String] = [:]
-            if let givenName = fullName.givenName {
-                nameDict["given_name"] = givenName
-            }
-            if let familyName = fullName.familyName {
-                nameDict["family_name"] = familyName
-            }
-            if !nameDict.isEmpty {
-                body["full_name"] = nameDict
-            }
+        // Verify state matches
+        guard returnedState == startResponse.state else {
+            throw OAuthError.stateMismatch
         }
 
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw OAuthError.callbackFailed
-        }
-
-        if httpResponse.statusCode != 200 {
-            if let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
-                throw OAuthError.serverError(errorResponse.message ?? "Unknown error")
-            }
-            throw OAuthError.callbackFailed
-        }
-
-        return try JSONDecoder().decode(OAuthCallbackResponse.self, from: data)
+        // 4. Exchange code for tokens
+        return try await completeOAuthFlow(
+            provider: .google,
+            code: code,
+            state: startResponse.state
+        )
     }
 
     // MARK: - Web Authentication
@@ -340,66 +209,9 @@ class OAuthService: NSObject {
 
     // MARK: - Helpers
 
-    /// Returns the redirect URI based on the OAuth flow type
-    /// For backend proxy flow (Google), we use the staging API domain (must match Google OAuth config)
-    /// For native flow (Apple), we use the custom URL scheme
     private func getRedirectUri(for provider: OAuthProvider) -> String {
-        switch provider {
-        case .google:
-            // Backend proxy flow - Google redirects to backend, backend redirects to iOS
-            // MUST use the exact URL configured in Google OAuth Console
-            return "https://staging-api.icered.com/api/v2/auth/oauth/google/callback"
-        case .apple:
-            // Apple uses native flow, but for web-based fallback use custom scheme
-            return "icered://oauth/apple/callback"
-        }
-    }
-}
-
-// MARK: - ASAuthorizationControllerDelegate
-
-extension OAuthService: ASAuthorizationControllerDelegate {
-    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
-        appleSignInContinuation?.resume(returning: authorization)
-        appleSignInContinuation = nil
-    }
-
-    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
-        if let authError = error as? ASAuthorizationError {
-            switch authError.code {
-            case .canceled:
-                appleSignInContinuation?.resume(throwing: OAuthError.userCancelled)
-            case .failed:
-                appleSignInContinuation?.resume(throwing: OAuthError.webAuthFailed("Apple Sign-In failed"))
-            case .invalidResponse:
-                appleSignInContinuation?.resume(throwing: OAuthError.invalidCallback)
-            case .notHandled:
-                appleSignInContinuation?.resume(throwing: OAuthError.webAuthFailed("Apple Sign-In not handled"))
-            case .notInteractive:
-                appleSignInContinuation?.resume(throwing: OAuthError.webAuthFailed("Apple Sign-In requires interaction"))
-            case .unknown:
-                appleSignInContinuation?.resume(throwing: OAuthError.webAuthFailed("Unknown Apple Sign-In error"))
-            case .matchedExcludedCredential:
-                appleSignInContinuation?.resume(throwing: OAuthError.webAuthFailed("Credential excluded"))
-            @unknown default:
-                appleSignInContinuation?.resume(throwing: OAuthError.webAuthFailed(error.localizedDescription))
-            }
-        } else {
-            appleSignInContinuation?.resume(throwing: OAuthError.webAuthFailed(error.localizedDescription))
-        }
-        appleSignInContinuation = nil
-    }
-}
-
-// MARK: - ASAuthorizationControllerPresentationContextProviding
-
-extension OAuthService: ASAuthorizationControllerPresentationContextProviding {
-    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = scene.windows.first else {
-            return UIWindow()
-        }
-        return window
+        // Use custom URL scheme for iOS callback
+        return "icered://oauth/\(provider.rawValue)/callback"
     }
 }
 
@@ -443,7 +255,7 @@ private struct ErrorResponse: Codable {
 
 // MARK: - Web Auth Presentation Context
 
-class WebAuthPresentationContext: NSObject, ASWebAuthenticationPresentationContextProviding {
+class WebAuthPresentationContext: NSObject, ASWebAuthenticationPresentationContextProviding, ASAuthorizationControllerPresentationContextProviding {
     static let shared = WebAuthPresentationContext()
 
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
@@ -453,5 +265,111 @@ class WebAuthPresentationContext: NSObject, ASWebAuthenticationPresentationConte
             return UIWindow()
         }
         return window
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = scene.windows.first else {
+            return UIWindow()
+        }
+        return window
+    }
+}
+
+// MARK: - Apple Sign-In Delegate
+
+private class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate {
+    private let continuation: CheckedContinuation<OAuthService.OAuthCallbackResponse, Error>
+
+    init(continuation: CheckedContinuation<OAuthService.OAuthCallbackResponse, Error>) {
+        self.continuation = continuation
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+            continuation.resume(throwing: OAuthError.invalidCallback)
+            return
+        }
+
+        let userId = appleIDCredential.user
+
+        // Get identity token
+        guard let identityTokenData = appleIDCredential.identityToken,
+              let identityToken = String(data: identityTokenData, encoding: .utf8) else {
+            continuation.resume(throwing: OAuthError.invalidCallback)
+            return
+        }
+
+        // Build display name from full name components
+        var displayName: String?
+        if let fullName = appleIDCredential.fullName {
+            let components = [fullName.givenName, fullName.familyName].compactMap { $0 }
+            if !components.isEmpty {
+                displayName = components.joined(separator: " ")
+            }
+        }
+
+        // Create user profile
+        let user = UserProfile(
+            id: userId,
+            username: "user_\(userId.prefix(8))",
+            email: appleIDCredential.email,
+            displayName: displayName,
+            bio: nil,
+            avatarUrl: nil,
+            coverUrl: nil,
+            website: nil,
+            location: nil,
+            isVerified: false,
+            isPrivate: false,
+            isBanned: false,
+            followerCount: 0,
+            followingCount: 0,
+            postCount: 0,
+            createdAt: nil,
+            updatedAt: nil,
+            deletedAt: nil,
+            firstName: appleIDCredential.fullName?.givenName,
+            lastName: appleIDCredential.fullName?.familyName,
+            dateOfBirth: nil,
+            gender: nil
+        )
+
+        // Return response with Apple identity token
+        let response = OAuthService.OAuthCallbackResponse(
+            userId: userId,
+            token: identityToken,
+            refreshToken: nil,
+            expiresIn: 3600,
+            isNewUser: appleIDCredential.email != nil, // If email is provided, likely new user
+            user: user
+        )
+
+        continuation.resume(returning: response)
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        if let authError = error as? ASAuthorizationError {
+            switch authError.code {
+            case .canceled:
+                continuation.resume(throwing: OAuthError.userCancelled)
+            case .failed:
+                continuation.resume(throwing: OAuthError.webAuthFailed("Apple Sign-In failed"))
+            case .invalidResponse:
+                continuation.resume(throwing: OAuthError.invalidCallback)
+            case .notHandled:
+                continuation.resume(throwing: OAuthError.webAuthFailed("Apple Sign-In not handled"))
+            case .unknown:
+                continuation.resume(throwing: OAuthError.webAuthFailed("Unknown error"))
+            case .notInteractive:
+                continuation.resume(throwing: OAuthError.webAuthFailed("Not interactive"))
+            case .matchedExcludedCredential:
+                continuation.resume(throwing: OAuthError.webAuthFailed("Excluded credential"))
+            @unknown default:
+                continuation.resume(throwing: OAuthError.webAuthFailed(error.localizedDescription))
+            }
+        } else {
+            continuation.resume(throwing: OAuthError.webAuthFailed(error.localizedDescription))
+        }
     }
 }

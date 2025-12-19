@@ -27,14 +27,14 @@ struct GetVerifiedView: View {
             Spacer()
 
             Text("Get verified")
-                .font(.system(size: 18, weight: .medium))
+                .font(Typography.semibold18)
                 .foregroundColor(DesignTokens.textPrimary)
 
             Spacer()
 
             Button(action: { /* TODO: Show help */ }) {
                 Text("Help")
-                    .font(.system(size: 14))
+                    .font(Typography.regular14)
                     .foregroundColor(DesignTokens.textPrimary)
             }
             .frame(width: 50, alignment: .trailing)
@@ -62,13 +62,13 @@ struct GetVerifiedView: View {
 
             // Title
             Text("Profile verification required")
-                .font(.system(size: 20, weight: .bold))
+                .font(Typography.bold20)
                 .foregroundColor(DesignTokens.textPrimary)
                 .padding(.bottom, 16)
 
             // Description
             Text("Recent activity has caused us to lock your account. To continue swiping, please verify your profile photos.")
-                .font(.system(size: 16))
+                .font(Typography.regular16)
                 .foregroundColor(DesignTokens.textSecondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
@@ -79,7 +79,7 @@ struct GetVerifiedView: View {
             // Action Button
             Button(action: { /* TODO: Handle verification */ }) {
                 Text("Get started")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(Typography.semibold16)
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity, minHeight: 46)
                     .background(DesignTokens.accentColor)
@@ -91,13 +91,6 @@ struct GetVerifiedView: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("GetVerified - Default") {
+#Preview {
     GetVerifiedView(currentPage: .constant(.getVerified))
-}
-
-#Preview("GetVerified - Dark Mode") {
-    GetVerifiedView(currentPage: .constant(.getVerified))
-        .preferredColorScheme(.dark)
 }

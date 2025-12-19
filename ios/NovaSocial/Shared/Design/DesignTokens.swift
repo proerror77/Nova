@@ -1,102 +1,6 @@
 import SwiftUI
 import UIKit
 
-// MARK: - Screen Scale Adapter
-/// 基于 iPhone 13 Mini 的等比缩放系统
-/// 设计稿基准: iPhone 13 Mini (375 x 812 pt)
-/// 性能优化：缓存屏幕尺寸避免重复计算
-struct ScreenScale {
-    /// iPhone 13 Mini 的屏幕宽度 (基准)
-    static let baseWidth: CGFloat = 375
-    /// iPhone 13 Mini 的屏幕高度 (基准)
-    static let baseHeight: CGFloat = 812
-
-    // MARK: - 缓存的屏幕尺寸 (性能优化)
-    /// 当前设备屏幕宽度 (缓存值，启动时计算一次)
-    static let screenWidth: CGFloat = UIScreen.main.bounds.width
-
-    /// 当前设备屏幕高度 (缓存值，启动时计算一次)
-    static let screenHeight: CGFloat = UIScreen.main.bounds.height
-
-    /// 宽度缩放比例 (缓存值)
-    static let widthScale: CGFloat = screenWidth / baseWidth
-
-    /// 高度缩放比例 (缓存值)
-    static let heightScale: CGFloat = screenHeight / baseHeight
-
-    /// 统一缩放比例 (取宽度比例，保持元素比例一致)
-    static let scale: CGFloat = widthScale
-
-    /// 水平方向缩放 (用于宽度、水平间距、水平 padding)
-    @inlinable
-    static func w(_ value: CGFloat) -> CGFloat {
-        value * widthScale
-    }
-
-    /// 垂直方向缩放 (用于高度、垂直间距、垂直 padding、offset)
-    @inlinable
-    static func h(_ value: CGFloat) -> CGFloat {
-        value * heightScale
-    }
-
-    /// 统一缩放 (用于字体大小、圆角、图标尺寸等需要保持比例的元素)
-    @inlinable
-    static func s(_ value: CGFloat) -> CGFloat {
-        value * scale
-    }
-
-    /// 字体缩放 (带最小值限制，避免字体过小)
-    @inlinable
-    static func font(_ size: CGFloat, minSize: CGFloat = 10) -> CGFloat {
-        max(size * scale, minSize)
-    }
-}
-
-// MARK: - CGFloat Extension for Easy Scaling
-extension CGFloat {
-    /// 水平缩放
-    var w: CGFloat { ScreenScale.w(self) }
-
-    /// 垂直缩放
-    var h: CGFloat { ScreenScale.h(self) }
-
-    /// 统一缩放
-    var s: CGFloat { ScreenScale.s(self) }
-
-    /// 字体缩放
-    var f: CGFloat { ScreenScale.font(self) }
-}
-
-// MARK: - Int Extension for Easy Scaling
-extension Int {
-    /// 水平缩放
-    var w: CGFloat { ScreenScale.w(CGFloat(self)) }
-
-    /// 垂直缩放
-    var h: CGFloat { ScreenScale.h(CGFloat(self)) }
-
-    /// 统一缩放
-    var s: CGFloat { ScreenScale.s(CGFloat(self)) }
-
-    /// 字体缩放
-    var f: CGFloat { ScreenScale.font(CGFloat(self)) }
-}
-
-// MARK: - Double Extension for Easy Scaling
-extension Double {
-    /// 水平缩放
-    var w: CGFloat { ScreenScale.w(CGFloat(self)) }
-
-    /// 垂直缩放
-    var h: CGFloat { ScreenScale.h(CGFloat(self)) }
-
-    /// 统一缩放
-    var s: CGFloat { ScreenScale.s(CGFloat(self)) }
-
-    /// 字体缩放
-    var f: CGFloat { ScreenScale.font(CGFloat(self)) }
-}
-
 // MARK: - Design Tokens
 /// 统一的设计规范，供所有页面使用
 struct DesignTokens {
@@ -163,10 +67,6 @@ struct DesignTokens {
     static let indicatorActive = Color(red: 0.82, green: 0.11, blue: 0.26)
     static let indicatorInactive = Color(red: 0.73, green: 0.73, blue: 0.73)
 
-    /// Icon Colors
-    static let iconActive = Color(red: 0.82, green: 0.11, blue: 0.26)
-    static let iconInactive = Color(red: 0.73, green: 0.73, blue: 0.73)
-
     /// Chat Colors
     static let chatBubbleOther = Color.dynamic(
         light: UIColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1.0),
@@ -216,7 +116,7 @@ struct DesignTokens {
     static let tagWidth: CGFloat = 173.36
     static let tagHeight: CGFloat = 30.80
 
-    // MARK: - Typography Sizes
+    // MARK: - Typography Sizes (Legacy - 建议使用 Typography 结构体)
 
     static let fontCaption: CGFloat = 9
     static let fontSmall: CGFloat = 11
@@ -225,6 +125,212 @@ struct DesignTokens {
     static let fontLarge: CGFloat = 16
     static let fontTitle: CGFloat = 18
     static let fontHeadline: CGFloat = 22
+}
+
+// MARK: - Typography System (从 Figma 导出)
+/// 统一的字体样式系统，基于 Figma 设计规范
+struct Typography {
+
+    // MARK: - Regular (400)
+
+    /// Regular 9pt - 用于最小文字、标签
+    static let regular9 = Font.system(size: 9, weight: .regular)
+
+    /// Regular 10pt - 用于辅助信息
+    static let regular10 = Font.system(size: 10, weight: .regular)
+
+    /// Regular 12pt - 用于小号正文、说明文字
+    static let regular12 = Font.system(size: 12, weight: .regular)
+
+    /// Regular 14pt - 用于正文
+    static let regular14 = Font.system(size: 14, weight: .regular)
+
+    /// Regular 16pt - 用于大号正文
+    static let regular16 = Font.system(size: 16, weight: .regular)
+
+    // MARK: - Extended Regular (项目扩展)
+
+    /// Regular 13pt - 用于辅助正文
+    static let regular13 = Font.system(size: 13, weight: .regular)
+
+    /// Regular 15pt - 用于搜索框等
+    static let regular15 = Font.system(size: 15, weight: .regular)
+
+    /// Regular 18pt - 用于设置项
+    static let regular18 = Font.system(size: 18, weight: .regular)
+
+    /// Regular 20pt - 用于图标
+    static let regular20 = Font.system(size: 20, weight: .regular)
+
+    // MARK: - Semibold (600)
+
+    /// Semibold 14pt - 用于强调文字、按钮
+    static let semibold14 = Font.system(size: 14, weight: .semibold)
+
+    /// Semibold 16pt - 用于小标题
+    static let semibold16 = Font.system(size: 16, weight: .semibold)
+
+    /// Semibold 24pt - 用于大标题
+    static let semibold24 = Font.system(size: 24, weight: .semibold)
+
+    // MARK: - Extended Semibold/Medium (项目扩展)
+
+    /// Semibold 13pt
+    static let semibold13 = Font.system(size: 13, weight: .semibold)
+
+    /// Semibold 15pt
+    static let semibold15 = Font.system(size: 15, weight: .semibold)
+
+    /// Semibold 17pt
+    static let semibold17 = Font.system(size: 17, weight: .semibold)
+
+    /// Semibold 18pt
+    static let semibold18 = Font.system(size: 18, weight: .semibold)
+
+    /// Semibold 20pt
+    static let semibold20 = Font.system(size: 20, weight: .semibold)
+
+    /// Semibold 22pt
+    static let semibold22 = Font.system(size: 22, weight: .semibold)
+
+    // MARK: - Bold (700)
+
+    /// Bold 12pt - 用于强调小文字
+    static let bold12 = Font.system(size: 12, weight: .bold)
+
+    // MARK: - Extended Bold (项目扩展)
+
+    /// Bold 16pt
+    static let bold16 = Font.system(size: 16, weight: .bold)
+
+    /// Bold 17pt
+    static let bold17 = Font.system(size: 17, weight: .bold)
+
+    /// Bold 18pt
+    static let bold18 = Font.system(size: 18, weight: .bold)
+
+    /// Bold 19pt
+    static let bold19 = Font.system(size: 19, weight: .bold)
+
+    /// Bold 20pt
+    static let bold20 = Font.system(size: 20, weight: .bold)
+
+    /// Bold 22pt
+    static let bold22 = Font.system(size: 22, weight: .bold)
+
+    /// Bold 24pt
+    static let bold24 = Font.system(size: 24, weight: .bold)
+
+    // MARK: - Heavy (900)
+
+    /// Heavy 16pt - 用于特别强调
+    static let heavy16 = Font.system(size: 16, weight: .heavy)
+
+    // MARK: - Light (300)
+
+    /// Light 14pt - 用于轻量文字
+    static let light14 = Font.system(size: 14, weight: .light)
+
+    // MARK: - Thin (100)
+
+    /// Thin 11pt - 用于极轻文字
+    static let thin11 = Font.system(size: 11, weight: .thin)
+
+    // MARK: - 语义化别名 (推荐使用)
+
+    /// 标题 - Semibold 24pt
+    static let title = semibold24
+
+    /// 副标题 - Semibold 16pt
+    static let subtitle = semibold16
+
+    /// 正文 - Regular 14pt
+    static let body = regular14
+
+    /// 正文大号 - Regular 16pt
+    static let bodyLarge = regular16
+
+    /// 说明文字 - Regular 12pt
+    static let caption = regular12
+
+    /// 小说明 - Regular 10pt
+    static let captionSmall = regular10
+
+    /// 按钮文字 - Semibold 14pt
+    static let button = semibold14
+
+    /// 标签文字 - Regular 9pt
+    static let label = regular9
+}
+
+// MARK: - Line Height 行高配置
+struct LineHeight {
+    static let regular9: CGFloat = 10.8
+    static let regular10: CGFloat = 12
+    static let regular12: CGFloat = 14.4
+    static let regular14: CGFloat = 16.8
+    static let regular16: CGFloat = 19.2
+    static let semibold14: CGFloat = 16.8
+    static let semibold16: CGFloat = 19.2
+    static let semibold24: CGFloat = 28.8
+    static let bold12: CGFloat = 14.4
+    static let heavy16: CGFloat = 19.2
+    static let light14: CGFloat = 16.8
+    static let thin11: CGFloat = 13.2
+}
+
+// MARK: - Letter Spacing 字间距配置
+struct LetterSpacing {
+    static let regular9: CGFloat = 0.36
+    static let regular10: CGFloat = 0
+    static let regular12: CGFloat = 0.24
+    static let regular14: CGFloat = 0.28
+    static let regular16: CGFloat = 0
+    static let semibold14: CGFloat = 0.28
+    static let semibold16: CGFloat = 0
+    static let semibold24: CGFloat = 0
+    static let bold12: CGFloat = 0.24
+    static let heavy16: CGFloat = 0.32
+    static let light14: CGFloat = 0
+    static let thin11: CGFloat = 0.22
+}
+
+// MARK: - Text Style Modifier (完整样式应用)
+extension View {
+    /// 应用完整的 Figma 文字样式（包含字体、行高、字间距）
+    func textStyle(_ font: Font, lineHeight: CGFloat, letterSpacing: CGFloat = 0) -> some View {
+        self
+            .font(font)
+            .lineSpacing(lineHeight - 16) // 近似行高调整
+            .tracking(letterSpacing)
+    }
+
+    // MARK: - 快捷样式方法
+
+    /// 标题样式 - Semibold 24pt
+    func titleStyle() -> some View {
+        textStyle(Typography.title, lineHeight: LineHeight.semibold24)
+    }
+
+    /// 副标题样式 - Semibold 16pt
+    func subtitleStyle() -> some View {
+        textStyle(Typography.subtitle, lineHeight: LineHeight.semibold16)
+    }
+
+    /// 正文样式 - Regular 14pt
+    func bodyStyle() -> some View {
+        textStyle(Typography.body, lineHeight: LineHeight.regular14, letterSpacing: LetterSpacing.regular14)
+    }
+
+    /// 说明文字样式 - Regular 12pt
+    func captionStyle() -> some View {
+        textStyle(Typography.caption, lineHeight: LineHeight.regular12, letterSpacing: LetterSpacing.regular12)
+    }
+
+    /// 按钮文字样式 - Semibold 14pt
+    func buttonStyle() -> some View {
+        textStyle(Typography.button, lineHeight: LineHeight.semibold14, letterSpacing: LetterSpacing.semibold14)
+    }
 }
 
 private extension Color {
@@ -242,7 +348,7 @@ final class ThemeManager: ObservableObject {
 
     @Published private(set) var isDarkMode: Bool
 
-    private let userDefaultsKey = "Icered_Theme_IsDarkMode"
+    private let userDefaultsKey = "ICERED_Theme_IsDarkMode"
 
     private init() {
         if let stored = UserDefaults.standard.object(forKey: userDefaultsKey) as? Bool {

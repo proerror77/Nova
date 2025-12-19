@@ -26,10 +26,10 @@ struct RankingListView: View {
 
                     VStack(spacing: 5) {
                         Text("Hottest Banker in H.K.")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(Typography.semibold16)
                             .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
                         Text("Corporate Poll")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(Typography.bold12)
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
                     }
 
@@ -60,10 +60,10 @@ struct RankingListView: View {
                         // Search bar
                         HStack(spacing: 10) {
                             Image(systemName: "magnifyingglass")
-                                .font(.system(size: 15))
+                                .font(Typography.regular15)
                                 .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
                             Text("Search")
-                                .font(.system(size: 15))
+                                .font(Typography.regular15)
                                 .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
                             Spacer()
                         }
@@ -185,7 +185,7 @@ struct RankingListView: View {
                                 .background(Color(red: 0.74, green: 0.74, blue: 0.74))
                                 .cornerRadius(99)
                             Text("Comfire you may vote again on 24h")
-                                .font(.system(size: 13))
+                                .font(Typography.regular13)
                                 .foregroundColor(.white)
                         }
                         .frame(maxWidth: 280)
@@ -228,11 +228,11 @@ struct RankingListItem: View {
             // Name, company, and progress
             VStack(alignment: .leading, spacing: 3) {
                 Text(name)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(Typography.semibold16)
                     .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
 
                 Text(company)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(Typography.regular10)
                     .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
 
                 // Progress indicators - overlapping circles
@@ -271,10 +271,10 @@ struct RankingListItem: View {
             // Heart icon and percentage - smaller
             VStack(spacing: 4) {
                 Image(systemName: "heart")
-                    .font(.system(size: 24))
+                    .font(Typography.semibold24)
                     .foregroundColor(Color(red: 0.2, green: 0.2, blue: 0.2))
                 Text(percentage)
-                    .font(.system(size: 9))
+                    .font(Typography.regular9)
                     .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
             }
         }
@@ -286,13 +286,6 @@ struct RankingListItem: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("RankingList - Default") {
-    RankingListView(currentPage: .constant(.rankingList))
-}
-
-#Preview("RankingList - Dark Mode") {
-    RankingListView(currentPage: .constant(.rankingList))
-        .preferredColorScheme(.dark)
+#Preview {
+    RankingListView(currentPage: .constant(.home))
 }

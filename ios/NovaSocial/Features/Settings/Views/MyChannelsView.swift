@@ -37,7 +37,7 @@ struct MyChannelsView: View {
 
                     // 居中标题（参考 NewPost 页面样式）
                     Text(LocalizedStringKey("My_Channels_Title"))
-                        .font(.system(size: 18, weight: .medium))
+                        .font(Typography.semibold18)
                         .lineSpacing(20)
                         .foregroundColor(DesignTokens.textPrimary)
 
@@ -45,7 +45,7 @@ struct MyChannelsView: View {
 
                     // 右侧显示已选择数量（与左侧宽度一致以保持标题居中）
                     Text("\(selectedChannels.count)/\(maxChannelSelection)")
-                        .font(.system(size: 14))
+                        .font(Typography.regular14)
                         .foregroundColor(DesignTokens.textSecondary)
                         .frame(width: 50, alignment: .trailing)
                 }
@@ -132,7 +132,7 @@ struct MyChannelsView: View {
                     currentPage = .setting
                 }) {
                     Text("Confirm")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(Typography.semibold16)
                         .foregroundColor(.white)
                         .frame(width: 343, height: 46)
                         .background(Color(red: 0.87, green: 0.11, blue: 0.26))
@@ -183,7 +183,7 @@ struct ChannelCategory: View {
         VStack(alignment: .leading, spacing: 12) {
             // 分类标题
             Text(title)
-                .font(.system(size: 16, weight: .bold))
+                .font(Typography.semibold16)
                 .foregroundColor(DesignTokens.textPrimary)
                 .padding(.leading, 4)
 
@@ -231,7 +231,7 @@ struct SelectableChannelTag: View {
                     .foregroundColor(isSelected ? DesignTokens.accentColor : DesignTokens.textPrimary)
 
                 Text(name)
-                    .font(.system(size: 12))
+                    .font(Typography.regular12)
                     .foregroundColor(isSelected ? DesignTokens.accentColor : DesignTokens.textPrimary)
                     .lineLimit(1)
             }
@@ -247,15 +247,6 @@ struct SelectableChannelTag: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("MyChannels - Default") {
-    MyChannelsView(currentPage: .constant(.myChannels))
-        .environmentObject(AuthenticationManager.shared)
-}
-
-#Preview("MyChannels - Dark Mode") {
-    MyChannelsView(currentPage: .constant(.myChannels))
-        .environmentObject(AuthenticationManager.shared)
-        .preferredColorScheme(.dark)
+#Preview {
+    MyChannelsView(currentPage: .constant(.setting))
 }

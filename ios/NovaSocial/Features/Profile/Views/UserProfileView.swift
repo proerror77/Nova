@@ -1,284 +1,318 @@
 import SwiftUI
 
-// MARK: - UserProfile 用户数据模型
-struct UserProfileData {
-    let userId: String
-    var username: String
-    var avatarUrl: String?
-    var location: String?
-    var profession: String?
-    var followingCount: Int
-    var followersCount: Int
-    var likesCount: Int
-    var isVerified: Bool
-    var posts: [UserProfilePostData]
-
-    // Alias account support
-    var isAlias: Bool = false
-    var aliasName: String? = nil
-
-    /// 默认占位数据（用于加载中或预览）
-    static let placeholder = UserProfileData(
-        userId: "",
-        username: "Loading...",
-        avatarUrl: nil,
-        location: nil,
-        profession: nil,
-        followingCount: 0,
-        followersCount: 0,
-        likesCount: 0,
-        isVerified: false,
-        posts: []
-    )
-
-    /// 预览用示例数据
-    static let preview = UserProfileData(
-        userId: "preview-user-123",
-        username: "Juliette",
-        avatarUrl: nil,
-        location: "England",
-        profession: "Artist",
-        followingCount: 592,
-        followersCount: 1449,
-        likesCount: 452,
-        isVerified: true,
-        posts: []
-    )
-}
-
-// MARK: - UserProfileView
 struct UserProfileView: View {
-    // MARK: - 导航控制
     @Binding var showUserProfile: Bool
-
-    // MARK: - 用户数据
-    let userId: String  // 要显示的用户ID
-    @State private var userData: UserProfileData = .placeholder
-    @State private var isLoading = true
-
     @State private var selectedTab: ProfileTab = .posts
     @State private var isFollowing = true
 
-    // MARK: - Services
-    private let userService = UserService.shared
-    private let contentService = ContentService()
-
     enum ProfileTab {
-        case posts
-    }
-
-    // MARK: - 便捷初始化器（兼容旧代码）
-    init(showUserProfile: Binding<Bool>, userId: String = "preview-user") {
-        self._showUserProfile = showUserProfile
-        self.userId = userId
-    }
-
-    // MARK: - 布局配置
-    private let headerBackgroundColor = Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50)
-    private let contentBackgroundColor = Color(red: 0.96, green: 0.96, blue: 0.96)
-    private let accentColor = Color(red: 0.82, green: 0.11, blue: 0.26)
-    private let buttonColor = Color(red: 0.87, green: 0.11, blue: 0.26)
-
-    // MARK: - 导航栏布局配置（可调整位置）
-    private var navBarLayout: UserProfileNavBarLayout {
-        UserProfileNavBarLayout(
-            horizontalPadding: 20,      // 与 Profile 一致
-            topPadding: 60,             // 与 Profile 一致
-            bottomPadding: 40,          // 与 Profile 一致
-            backButtonSize: 20,
-            shareIconSize: 24
-        )
-    }
-
-    // MARK: - 用户信息区块垂直位置调整
-    // 正值向下移动，负值向上移动（与 Profile 页面一致）
-    private let userInfoBlockVerticalOffset: CGFloat = -30
-
-    // MARK: - 操作按钮区块垂直位置调整
-    // 正值向下移动，负值向上移动
-    private let actionButtonsVerticalOffset: CGFloat = -40
-
-    // MARK: - 内容区域（Posts）垂直位置调整
-    // 正值向下移动，负值向上移动
-    private let contentSectionVerticalOffset: CGFloat = -40
-
-    // MARK: - 用户信息布局配置（可调整位置）
-    private var userInfoLayout: UserProfileUserInfoLayout {
-        UserProfileUserInfoLayout(
-            topPadding: 0,              // 与 Profile 一致
-            bottomPadding: 10,          // 与 Profile 一致
-            avatarOuterSize: 108,
-            avatarInnerSize: 100,
-            usernameFontSize: 20,
-            usernameTopPadding: 9,      // 与 Profile 一致
-            locationFontSize: 12,
-            locationTopPadding: 4,
-            professionFontSize: 12,
-            professionTopPadding: 7,    // 与 Profile 一致
-            statsTopPadding: 8,         // 与 Profile 一致
-            statsItemWidth: 132,        // 与 Profile 一致
-            statsFontSize: 16,
-            statsDividerHeight: 24      // 与 Profile 一致
-        )
+        case posts, saved, liked
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .top) {
-                // MARK: - 背景层（贴紧屏幕边缘）
-                VStack(spacing: 0) {
-                    // 头部背景 - 完全贴边
-                    Image("UserProfile-background")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(height: 520)
-                        .frame(maxWidth: .infinity)
-                        .clipped()
-                        .blur(radius: 15)
-                        .overlay(Color.black.opacity(0.2))
-
-                    // 内容区域背景 - 填充剩余空间
-                    contentBackgroundColor
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ZStack {
+            Color.white
                 .ignoresSafeArea()
 
-                // MARK: - 内容层（居中对齐）
-                VStack(spacing: 0) {
-                    // 顶部导航栏（使用组件）
-                    UserProfileTopNavigationBar(
-                        isVerified: userData.isVerified,
-                        layout: navBarLayout,
-                        onBackTapped: {
-                            showUserProfile = false
-                        },
-                        onShareTapped: {
-                            // 分享操作
-                        }
-                    )
+            VStack(spacing: 0) {
+                // MARK: - 顶部背景区域
+                ZStack(alignment: .top) {
+                    // 背景图片
+                    Rectangle()
+                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                        .frame(height: 500)
+                        .clipped()
+                        .blur(radius: 20)
+                        .overlay(
+                            Color.black.opacity(0.3)
+                        )
+                        .ignoresSafeArea(edges: .top)
 
-                    // 用户信息区域（使用组件）- 居中
-                    UserProfileUserInfoSection(
-                        avatarUrl: userData.avatarUrl,
-                        username: userData.username,
-                        location: userData.location,
-                        profession: userData.profession,
-                        followingCount: userData.followingCount,
-                        followersCount: userData.followersCount,
-                        likesCount: userData.likesCount,
-                        isAlias: userData.isAlias,
-                        aliasName: userData.aliasName,
-                        layout: userInfoLayout,
-                        onFollowingTapped: {
-                            // 点击 Following
-                        },
-                        onFollowersTapped: {
-                            // 点击 Followers
-                        },
-                        onLikesTapped: {
-                            // 点击 Likes
-                        }
-                    )
-                    .frame(maxWidth: .infinity)  // 确保居中
-                    .offset(y: userInfoBlockVerticalOffset)  // 应用垂直偏移（与 Profile 一致）
+                    VStack(spacing: 0) {
+                        // MARK: - 顶部导航栏
+                        HStack {
+                            // 返回按钮
+                            Button(action: {
+                                showUserProfile = false
+                            }) {
+                                Image(systemName: "chevron.left")
+                                    .frame(width: 24, height: 24)
+                                    .foregroundColor(.white)
+                            }
 
-                    // 操作按钮（使用组件）- 居中
-                    UserProfileActionButtons(
-                        isFollowing: $isFollowing,
-                        onFollowTapped: {
-                            // 关注操作
-                        },
-                        onAddFriendsTapped: {
-                            // 添加好友操作
-                        },
-                        onMessageTapped: {
-                            // 消息操作
-                        }
-                    )
-                    .frame(maxWidth: .infinity)  // 确保居中
-                    .offset(y: actionButtonsVerticalOffset)  // 第 36 行调整
+                            Spacer()
 
-                    // 内容区域（使用组件）
-                    UserProfileContentSection(
-                        posts: userData.posts,
-                        onSearchTapped: {
-                            // 搜索操作
-                        },
-                        onPostTapped: { postId in
-                            // 点击帖子
+                            // 分享按钮
+                            Button(action: {
+                                // 分享操作
+                            }) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .frame(width: 24, height: 24)
+                                    .foregroundColor(.white)
+                            }
                         }
-                    )
-                    .padding(.top, contentSectionVerticalOffset)  // 使用 padding 代替 offset，不会产生布局空白
+                        .padding(.horizontal, 20)
+                        .padding(.top, 60)
+                        .padding(.bottom, 20)
+
+                        // MARK: - 认证徽章
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(Typography.regular20)
+                                .foregroundColor(.blue)
+
+                            Text("Verified Icered Partner")
+                                .font(Typography.regular13)
+                                .foregroundColor(.white)
+                        }
+                        .padding(.bottom, 16)
+
+                        // MARK: - 用户信息区域
+                        VStack(spacing: 12) {
+                            // 头像
+                            ZStack {
+                                Circle()
+                                    .fill(Color.white)
+                                    .frame(width: 110, height: 110)
+
+                                Circle()
+                                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                    .frame(width: 100, height: 100)
+                            }
+
+                            // 用户名
+                            Text("Eli")
+                                .font(Typography.bold20)
+                                .foregroundColor(.white)
+
+                            // 位置
+                            Text("China")
+                                .font(Typography.regular12)
+                                .foregroundColor(.white)
+
+                            // 职位
+                            Text("Illustrator / Junior Illustrator")
+                                .font(.system(size: 12, weight: .light))
+                                .foregroundColor(.white.opacity(0.9))
+
+                            // MARK: - 统计数据
+                            HStack(spacing: 0) {
+                                // Following
+                                VStack(spacing: 4) {
+                                    Text("Following")
+                                        .font(Typography.regular16)
+                                        .foregroundColor(.white)
+                                    Text("592")
+                                        .font(Typography.regular16)
+                                        .foregroundColor(.white)
+                                }
+                                .frame(maxWidth: .infinity)
+
+                                // 分隔线
+                                Rectangle()
+                                    .fill(.white)
+                                    .frame(width: 1, height: 30)
+
+                                // Followers
+                                VStack(spacing: 4) {
+                                    Text("Followers")
+                                        .font(Typography.regular16)
+                                        .foregroundColor(.white)
+                                    Text("1449")
+                                        .font(Typography.regular16)
+                                        .foregroundColor(.white)
+                                }
+                                .frame(maxWidth: .infinity)
+
+                                // 分隔线
+                                Rectangle()
+                                    .fill(.white)
+                                    .frame(width: 1, height: 30)
+
+                                // Likes
+                                VStack(spacing: 4) {
+                                    Text("Likes")
+                                        .font(Typography.regular16)
+                                        .foregroundColor(.white)
+                                    Text("452")
+                                        .font(Typography.regular16)
+                                        .foregroundColor(.white)
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .padding(.horizontal, 40)
+                            .padding(.top, 10)
+
+                            // MARK: - 操作按钮
+                            HStack(spacing: 10) {
+                                // Following 按钮
+                                Button(action: {
+                                    isFollowing.toggle()
+                                }) {
+                                    Text(isFollowing ? "Following" : "Follow")
+                                        .font(Typography.regular12)
+                                        .foregroundColor(.white)
+                                        .frame(width: 105, height: 34)
+                                        .background(Color(red: 0.87, green: 0.11, blue: 0.26))
+                                        .cornerRadius(57)
+                                }
+
+                                // Add friends 按钮
+                                Button(action: {
+                                    // Add friends 操作
+                                }) {
+                                    Text("Add friends")
+                                        .font(Typography.regular12)
+                                        .foregroundColor(.white)
+                                        .frame(width: 105, height: 34)
+                                        .cornerRadius(57)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 57)
+                                                .stroke(Color(red: 0.91, green: 0.91, blue: 0.91), lineWidth: 0.5)
+                                        )
+                                }
+
+                                // Message 按钮
+                                Button(action: {
+                                    // Message 操作
+                                }) {
+                                    Text("Message")
+                                        .font(Typography.regular12)
+                                        .foregroundColor(.white)
+                                        .frame(width: 105, height: 34)
+                                        .cornerRadius(57)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 57)
+                                                .stroke(Color(red: 0.91, green: 0.91, blue: 0.91), lineWidth: 0.5)
+                                        )
+                                }
+                            }
+                            .padding(.top, 8)
+                        }
+                        .padding(.bottom, 30)
+                    }
                 }
-                .frame(maxWidth: .infinity)  // 整体居中
-                .ignoresSafeArea(edges: .bottom)  // 内容层延伸到底部
+                .frame(height: 500)
+
+                // MARK: - 标签栏
+                VStack(spacing: 0) {
+                    HStack {
+                        Spacer()
+
+                        HStack(spacing: 40) {
+                            Button(action: {
+                                selectedTab = .posts
+                            }) {
+                                Text("Posts")
+                                    .font(Typography.semibold16)
+                                    .foregroundColor(selectedTab == .posts ? Color(red: 0.82, green: 0.11, blue: 0.26) : .black)
+                            }
+
+                            Button(action: {
+                                selectedTab = .saved
+                            }) {
+                                Text("Saved")
+                                    .font(Typography.semibold16)
+                                    .foregroundColor(selectedTab == .saved ? Color(red: 0.82, green: 0.11, blue: 0.26) : .black)
+                            }
+
+                            Button(action: {
+                                selectedTab = .liked
+                            }) {
+                                Text("Liked")
+                                    .font(Typography.semibold16)
+                                    .foregroundColor(selectedTab == .liked ? Color(red: 0.82, green: 0.11, blue: 0.26) : .black)
+                            }
+                        }
+
+                        Spacer()
+
+                        Button(action: {
+                            // 搜索操作
+                        }) {
+                            Image(systemName: "magnifyingglass")
+                                .font(Typography.regular20)
+                                .foregroundColor(.black)
+                        }
+                        .padding(.trailing, 20)
+                    }
+                    .padding(.vertical, 16)
+                    .background(.white)
+
+                    // 分隔线
+                    Rectangle()
+                        .fill(Color(red: 0.74, green: 0.74, blue: 0.74))
+                        .frame(height: 0.5)
+                }
+
+                // MARK: - 帖子网格
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                        ForEach(0..<4, id: \.self) { index in
+                            UserPostGridCard()
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8)
+
+                    Color.clear
+                        .frame(height: 20)
+                }
+                .background(Color(red: 0.96, green: 0.96, blue: 0.96))
             }
         }
-        .task {
-            await loadUserData()
-        }
-    }
-
-    // MARK: - 加载用户数据
-    private func loadUserData() async {
-        isLoading = true
-
-        do {
-            // 1. 加载用户资料
-            let userProfile = try await userService.getUser(userId: userId)
-
-            // 2. 加载用户发布的帖子
-            let postsResponse = try await contentService.getPostsByAuthor(authorId: userId, limit: 50, offset: 0)
-
-            // 3. 将 Post 转换为 UserProfilePostData
-            let userPosts = postsResponse.posts.map { post in
-                UserProfilePostData(
-                    id: post.id,
-                    avatarUrl: userProfile.avatarUrl,
-                    username: userProfile.displayName ?? userProfile.username,
-                    likeCount: post.likeCount ?? 0,
-                    imageUrl: post.mediaUrls?.first,
-                    content: post.content
-                )
-            }
-
-            // 4. 更新 UI
-            await MainActor.run {
-                userData = UserProfileData(
-                    userId: userProfile.id,
-                    username: userProfile.displayName ?? userProfile.username,
-                    avatarUrl: userProfile.avatarUrl,
-                    location: userProfile.location,
-                    profession: userProfile.bio,
-                    followingCount: userProfile.safeFollowingCount,
-                    followersCount: userProfile.safeFollowerCount,
-                    likesCount: userProfile.safePostCount,
-                    isVerified: userProfile.safeIsVerified,
-                    posts: userPosts
-                )
-                isLoading = false
-            }
-
-            #if DEBUG
-            print("[UserProfile] Loaded \(userPosts.count) posts for user: \(userProfile.username)")
-            #endif
-
-        } catch {
-            #if DEBUG
-            print("[UserProfile] Failed to load user data: \(error)")
-            #endif
-
-            // 加载失败时使用占位数据
-            await MainActor.run {
-                userData = .placeholder
-                isLoading = false
-            }
-        }
+        .ignoresSafeArea()
     }
 }
 
-// MARK: - Previews
-#Preview("UserProfile") {
+// MARK: - 用户帖子卡片组件
+struct UserPostGridCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // 顶部用户信息
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                    .frame(width: 24, height: 24)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Simone Carter")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.black)
+
+                    Text("1d")
+                        .font(Typography.regular10)
+                        .foregroundColor(.gray)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+
+            // 图片占位符
+            Rectangle()
+                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                .frame(height: 200)
+                .cornerRadius(8)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+
+            // 文字描述
+            Text("kyleegigstead Cyborg dreams...")
+                .font(Typography.semibold13)
+                .foregroundColor(.black)
+                .lineLimit(2)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+        }
+        .background(.white)
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.05), radius: 3, y: 1)
+    }
+}
+
+#Preview {
     UserProfileView(showUserProfile: .constant(true))
 }

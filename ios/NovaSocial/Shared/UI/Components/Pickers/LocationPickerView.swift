@@ -75,11 +75,11 @@ struct LocationPickerView: View {
     private var searchBar: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15))
+                .font(Typography.regular15)
                 .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
 
             TextField("Search location", text: $searchText)
-                .font(.system(size: 15))
+                .font(Typography.regular15)
                 .foregroundColor(.black)
                 .autocorrectionDisabled()
                 .onChange(of: searchText) { _, newValue in
@@ -92,7 +92,7 @@ struct LocationPickerView: View {
                     searchResults = []
                 }) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 15))
+                        .font(Typography.regular15)
                         .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
                 }
             }
@@ -165,7 +165,7 @@ struct LocationPickerView: View {
                 // 搜索结果
                 if searchResults.isEmpty && !searchText.isEmpty && !isSearching {
                     Text("No results found")
-                        .font(.system(size: 14))
+                        .font(Typography.regular14)
                         .foregroundColor(.gray)
                         .padding(.top, 20)
                 } else {
@@ -203,17 +203,17 @@ struct LocationPickerView: View {
         }) {
             HStack(spacing: 12) {
                 Image(systemName: "location.fill")
-                    .font(.system(size: 20))
+                    .font(Typography.regular20)
                     .foregroundColor(.blue)
                     .frame(width: 32)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Current Location")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(Typography.semibold16)
                         .foregroundColor(.black)
 
                     Text(formatPlacemark(placemark))
-                        .font(.system(size: 14))
+                        .font(Typography.regular14)
                         .foregroundColor(.gray)
                         .lineLimit(1)
                 }
@@ -223,7 +223,7 @@ struct LocationPickerView: View {
                 if let selected = selectedMapItem,
                    selected.name == "Current Location" {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 20))
+                        .font(Typography.regular20)
                         .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
                 }
             }
@@ -247,18 +247,18 @@ struct LocationPickerView: View {
         }) {
             HStack(spacing: 12) {
                 Image(systemName: "mappin.circle.fill")
-                    .font(.system(size: 20))
+                    .font(Typography.regular20)
                     .foregroundColor(selectedMapItem == item ? Color(red: 0.82, green: 0.13, blue: 0.25) : .gray)
                     .frame(width: 32)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.name ?? "Unknown Location")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(Typography.semibold16)
                         .foregroundColor(.black)
                         .lineLimit(1)
 
                     Text(formatAddress(item))
-                        .font(.system(size: 14))
+                        .font(Typography.regular14)
                         .foregroundColor(.gray)
                         .lineLimit(1)
 
@@ -267,7 +267,7 @@ struct LocationPickerView: View {
                        let itemLocation = item.placemark.location {
                         let distance = userLocation.distance(from: itemLocation)
                         Text(formatDistance(distance))
-                            .font(.system(size: 12))
+                            .font(Typography.regular12)
                             .foregroundColor(.gray)
                     }
                 }
@@ -276,7 +276,7 @@ struct LocationPickerView: View {
 
                 if selectedMapItem == item {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 20))
+                        .font(Typography.regular20)
                         .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
                 }
             }
@@ -438,9 +438,7 @@ class LocationPickerManager: NSObject, ObservableObject, CLLocationManagerDelega
     }
 }
 
-// MARK: - Previews
-
-#Preview("LocationPicker - Default") {
+#Preview {
     @Previewable @State var selectedLocation = ""
     @Previewable @State var isPresented = true
 
@@ -448,15 +446,4 @@ class LocationPickerManager: NSObject, ObservableObject, CLLocationManagerDelega
         selectedLocation: $selectedLocation,
         isPresented: $isPresented
     )
-}
-
-#Preview("LocationPicker - Dark Mode") {
-    @Previewable @State var selectedLocation = ""
-    @Previewable @State var isPresented = true
-
-    LocationPickerView(
-        selectedLocation: $selectedLocation,
-        isPresented: $isPresented
-    )
-    .preferredColorScheme(.dark)
 }

@@ -19,7 +19,7 @@
 "Generate image" = "Generate image";
 "Cancel" = "Cancel";
 "Add Friends" = "Add Friends";
-"New Chat" = "New Chat";
+"Start Group Chat" = "Start Group Chat";
 "Scan QR Code" = "Scan QR Code";
 "No posts yet" = "No posts yet";
 "Be the first to share something!" = "Be the first to share something!";
@@ -99,48 +99,3 @@
 "Search_people_on_Icered" = "Search people on Icered";
 "Share_invitation_link" = "Share invitation link";
 "Invitations_left" = "You have 3 invitations left.";
-
-// MARK: - Password Reset
-"Back" = "Back";
-"Forgot_Password_Title" = "Reset Password";
-"Forgot_Password_Description" = "Enter your email address and we'll send you a link to reset your password.";
-"Enter_Your_Email" = "Enter your email address";
-"Send_Reset_Link" = "Send Reset Link";
-"Back_To_Login" = "Back to Login";
-"Password_Reset_Email_Sent" = "If an account exists with this email, you will receive a password reset link shortly.";
-"Reset_Password_Title" = "Create New Password";
-"Reset_Password_Description" = "Enter your new password below.";
-"New_Password" = "New Password";
-"Confirm_New_Password" = "Confirm New Password";
-"Reset_Password" = "Reset Password";
-"Password_Reset_Success" = "Your password has been reset successfully. You can now log in with your new password.";
-"Invalid_Reset_Token" = "This password reset link is invalid or has expired. Please request a new one.";
-"Password_Too_Short" = "Password must be at least 8 characters";
-
-// MARK: - Email Sent Confirmation
-"Email_Sent_Title" = "Check Your Email";
-"Email_Sent_Description" = "We've sent a password reset link to:";
-"Check_Email_Instruction_1" = "Open your email inbox";
-"Check_Email_Instruction_2" = "Click the reset link in the email";
-"Check_Email_Instruction_3" = "Create your new password";
-"Open_Email_App" = "Open Email App";
-"Resend_Email" = "Didn't receive the email? Resend";
-"Email_Resent_Title" = "Email Sent";
-"Email_Resent_Message" = "We've sent another password reset email. Please check your inbox.";
-
-// MARK: - Group Chat
-"group_chat.title" = "New Group Chat";
-"group_chat.create" = "Create";
-"group_chat.group_name" = "Group Name";
-"group_chat.group_name_placeholder" = "Enter group name";
-"group_chat.search_placeholder" = "Search friends...";
-"group_chat.selected_count" = "%d selected";
-"group_chat.clear" = "Clear";
-"group_chat.search_results" = "Search Results";
-"group_chat.friends_section" = "Friends";
-"group_chat.no_results" = "No users found";
-"group_chat.no_friends" = "No friends yet.\nAdd friends to start a group chat.";
-"group_chat.error.load_friends_failed" = "Failed to load friends";
-"group_chat.error.search_failed" = "Search failed";
-"group_chat.error.validation" = "Please select at least 2 members and enter a group name";
-"group_chat.error.create_failed" = "Failed to create group chat";

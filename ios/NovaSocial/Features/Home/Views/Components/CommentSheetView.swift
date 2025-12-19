@@ -5,7 +5,6 @@ import SwiftUI
 struct CommentSheetView: View {
     let post: FeedPost
     @Binding var isPresented: Bool
-    var onAvatarTapped: ((String) -> Void)?  // 点击头像回调
     @State private var commentText = ""
     @State private var comments: [SocialComment] = []
     @State private var isLoading = false
@@ -63,14 +62,7 @@ struct CommentSheetView: View {
                                 .padding(.bottom, DesignTokens.spacing8)
 
                             ForEach(comments) { comment in
-                                SocialCommentRow(
-                                    comment: comment,
-                                    onAvatarTapped: { userId in
-                                        // 关闭评论弹窗，触发头像点击回调
-                                        isPresented = false
-                                        onAvatarTapped?(userId)
-                                    }
-                                )
+                                SocialCommentRow(comment: comment)
                             }
                         }
                     }
@@ -177,48 +169,22 @@ struct CommentSheetView: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("CommentSheet - Default") {
-    CommentSheetView(
-        post: FeedPost.preview,
-        isPresented: .constant(true)
-    )
-}
-
-#Preview("CommentSheet - Dark Mode") {
-    CommentSheetView(
-        post: FeedPost.preview,
-        isPresented: .constant(true)
-    )
-    .preferredColorScheme(.dark)
-}
-
 // MARK: - Social Comment Row
 
 struct SocialCommentRow: View {
     let comment: SocialComment
-    var onAvatarTapped: ((String) -> Void)?  // 点击头像回调
 
     var body: some View {
         HStack(alignment: .top, spacing: DesignTokens.spacing12) {
-            // Avatar (点击跳转用户主页)
             Circle()
                 .fill(DesignTokens.avatarPlaceholder)
                 .frame(width: DesignTokens.avatarSmall, height: DesignTokens.avatarSmall)
-                .onTapGesture {
-                    onAvatarTapped?(comment.userId)
-                }
 
             VStack(alignment: .leading, spacing: DesignTokens.spacing4) {
                 HStack {
-                    // 用户名 (点击跳转用户主页)
                     Text("User \(comment.userId.prefix(8))")
                         .font(.system(size: DesignTokens.fontMedium, weight: .semibold))
                         .foregroundColor(.black)
-                        .onTapGesture {
-                            onAvatarTapped?(comment.userId)
-                        }
 
                     Text(comment.createdDate.timeAgoDisplay())
                         .font(.system(size: DesignTokens.fontSmall))

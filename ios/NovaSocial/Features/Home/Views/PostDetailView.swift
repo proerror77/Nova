@@ -1,172 +1,65 @@
 import SwiftUI
 
-// MARK: - Comment ViewModel
-
-/// ViewModel for managing comments on a post
-@MainActor
-@Observable
-class CommentViewModel {
-    // MARK: - Properties
-
-    private(set) var comments: [SocialComment] = []
-    private(set) var isLoading = false
-    private(set) var isLoadingMore = false
-    private(set) var isSendingComment = false
-    private(set) var error: String?
-    private(set) var totalCount = 0
-    private(set) var hasMore = true
-
-    private let socialService = SocialService()
-    private var currentOffset = 0
-    private let pageSize = 20
-
-    var postId: String = ""
-
-    // MARK: - Load Comments
-
-    func loadComments(postId: String) async {
-        guard !isLoading else { return }
-
-        self.postId = postId
-        isLoading = true
-        error = nil
-        currentOffset = 0
-
-        do {
-            let result = try await socialService.getComments(
-                postId: postId,
-                limit: pageSize,
-                offset: 0
-            )
-            comments = result.comments
-            totalCount = result.totalCount
-            hasMore = result.comments.count >= pageSize
-            currentOffset = result.comments.count
-        } catch {
-            self.error = "Failed to load comments"
-            #if DEBUG
-            print("[CommentViewModel] Load error: \(error)")
-            #endif
-        }
-
-        isLoading = false
-    }
-
-    // MARK: - Load More Comments
-
-    func loadMore() async {
-        guard !isLoadingMore, hasMore, !postId.isEmpty else { return }
-
-        isLoadingMore = true
-
-        do {
-            let result = try await socialService.getComments(
-                postId: postId,
-                limit: pageSize,
-                offset: currentOffset
-            )
-            comments.append(contentsOf: result.comments)
-            totalCount = result.totalCount
-            hasMore = result.comments.count >= pageSize
-            currentOffset += result.comments.count
-        } catch {
-            #if DEBUG
-            print("[CommentViewModel] Load more error: \(error)")
-            #endif
-        }
-
-        isLoadingMore = false
-    }
-
-    // MARK: - Send Comment
-
-    func sendComment(content: String, parentCommentId: String? = nil) async -> Bool {
-        guard !isSendingComment, !postId.isEmpty, !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return false
-        }
-
-        isSendingComment = true
-        error = nil
-
-        do {
-            let newComment = try await socialService.createComment(
-                postId: postId,
-                content: content.trimmingCharacters(in: .whitespacesAndNewlines),
-                parentCommentId: parentCommentId
-            )
-
-            // Add new comment at the beginning of the list
-            if parentCommentId == nil {
-                comments.insert(newComment, at: 0)
-                totalCount += 1
-            }
-
-            isSendingComment = false
-            return true
-        } catch {
-            self.error = "Failed to send comment"
-            #if DEBUG
-            print("[CommentViewModel] Send error: \(error)")
-            #endif
-            isSendingComment = false
-            return false
-        }
-    }
-
-    // MARK: - Delete Comment
-
-    func deleteComment(commentId: String, userId: String) async -> Bool {
-        do {
-            try await socialService.deleteComment(commentId: commentId, userId: userId)
-            comments.removeAll { $0.id == commentId }
-            totalCount -= 1
-            return true
-        } catch {
-            self.error = "Failed to delete comment"
-            #if DEBUG
-            print("[CommentViewModel] Delete error: \(error)")
-            #endif
-            return false
-        }
-    }
-
-    // MARK: - Refresh
-
-    func refresh() async {
-        await loadComments(postId: postId)
-    }
-}
-
 // MARK: - Post Detail View
 
 struct PostDetailView: View {
     let post: FeedPost
     var onDismiss: (() -> Void)?
-    var onAvatarTapped: ((String) -> Void)?  // 点击头像回调，传入 authorId
     @Environment(\.dismiss) private var dismiss
     @State private var currentImageIndex = 0
     @State private var isFollowing = false
+    @State private var showComments = false
 
-    // MARK: - Comment State
-    @State private var commentViewModel = CommentViewModel()
-    @State private var newCommentText = ""
-    @FocusState private var isCommentInputFocused: Bool
-
-    // MARK: - Interaction State
-    @State private var isPostLiked = false
-    @State private var isPostSaved = false
-    @State private var postLikeCount: Int = 0
-    @State private var postSaveCount: Int = 0
-
-    /// 当前显示的评论
-    private var displayComments: [SocialComment] {
-        commentViewModel.comments
-    }
-
-    /// 评论总数
-    private var displayCommentCount: Int {
-        commentViewModel.totalCount
-    }
+    // Sample comments data (will be replaced with API data)
+    private let sampleComments: [CommentData] = [
+        CommentData(
+            id: "1",
+            authorName: "Lucy Liu",
+            authorAvatar: nil,
+            content: "Let's give it a thumbs up together.",
+            timeAgo: "2d ago",
+            location: "Beijing",
+            likeCount: 12,
+            starCount: 10,
+            replies: [
+                ReplyData(
+                    id: "1-1",
+                    authorName: "Lusin",
+                    authorAvatar: nil,
+                    content: "Haha, this is alice who was bribed.",
+                    timeAgo: "2d ago",
+                    location: "Beijing",
+                    likeCount: 12,
+                    starCount: 10
+                )
+            ],
+            totalReplies: 3
+        ),
+        CommentData(
+            id: "2",
+            authorName: "Ben",
+            authorAvatar: nil,
+            content: "Nice shot!",
+            timeAgo: "2d ago",
+            location: "Beijing",
+            likeCount: 12,
+            starCount: 10,
+            replies: [],
+            totalReplies: 0
+        ),
+        CommentData(
+            id: "3",
+            authorName: "Jordyn",
+            authorAvatar: nil,
+            content: "Love EOs! We have TY and plant",
+            timeAgo: "2d ago",
+            location: "Beijing",
+            likeCount: 12,
+            starCount: 10,
+            replies: [],
+            totalReplies: 0
+        )
+    ]
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -200,22 +93,7 @@ struct PostDetailView: View {
             // MARK: - Bottom Action Bar
             bottomActionBar
         }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            // 点击空白区域退出键盘
-            isCommentInputFocused = false
-        }
         .navigationBarBackButtonHidden(true)
-        .task {
-            await commentViewModel.loadComments(postId: post.id)
-        }
-        .onAppear {
-            // 初始化点赞和收藏数量
-            postLikeCount = post.likeCount
-            postSaveCount = post.shareCount
-            isPostLiked = post.isLiked
-            isPostSaved = post.isBookmarked
-        }
     }
 
     // MARK: - Top Navigation Bar
@@ -232,43 +110,31 @@ struct PostDetailView: View {
                     }
                 }) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 20, weight: .medium))
+                        .font(Typography.semibold20)
                         .foregroundColor(DesignTokens.textPrimary)
                         .frame(width: 24, height: 24)
                 }
 
-                // User Info (点击头像或用户名跳转用户主页)
+                // User Info
                 HStack(spacing: 10) {
                     AvatarView(image: nil, url: post.authorAvatar, size: 36)
-                        .onTapGesture {
-                            onAvatarTapped?(post.authorId)
-                        }
 
                     Text(post.authorName)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(Typography.semibold16)
                         .foregroundColor(DesignTokens.textPrimary)
-                        .onTapGesture {
-                            onAvatarTapped?(post.authorId)
-                        }
 
                     // Verified Badge
                     Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 12))
+                        .font(Typography.regular12)
                         .foregroundColor(Color(red: 0.20, green: 0.60, blue: 1.0))
                 }
 
                 Spacer()
 
                 // Follow Button
-                Button(action: {
-                    var transaction = Transaction()
-                    transaction.disablesAnimations = true
-                    withTransaction(transaction) {
-                        isFollowing.toggle()
-                    }
-                }) {
+                Button(action: { isFollowing.toggle() }) {
                     Text(isFollowing ? "Following" : "Follow")
-                        .font(.system(size: 12))
+                        .font(Typography.regular12)
                         .foregroundColor(isFollowing ? DesignTokens.textSecondary : DesignTokens.accentColor)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 6)
@@ -283,7 +149,7 @@ struct PostDetailView: View {
                     Image("card-share-icon")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 18, height: 18)
+                        .frame(width: 22, height: 22)
                 }
             }
             .padding(.horizontal, 16)
@@ -302,37 +168,34 @@ struct PostDetailView: View {
     private var imageCarouselSection: some View {
         VStack(spacing: 8) {
             if !post.displayMediaUrls.isEmpty {
-                // Image/Video Carousel with caching for better performance
+                // Image Carousel
                 TabView(selection: $currentImageIndex) {
-                    ForEach(Array(post.displayMediaUrls.enumerated()), id: \.element) { index, mediaUrl in
-                        Group {
-                            if isVideoUrl(mediaUrl) {
-                                // Video content - use FeedVideoPlayer
-                                FeedVideoPlayer(
-                                    url: URL(string: mediaUrl)!,
-                                    autoPlay: true,
-                                    isMuted: true,
-                                    height: UIScreen.main.bounds.width * 4 / 3 - 40
-                                )
-                            } else {
-                                // Image content - use CachedAsyncImage
-                                CachedAsyncImage(
-                                    url: URL(string: mediaUrl),
-                                    targetSize: CGSize(width: 750, height: 1000)  // 2x for Retina
-                                ) { image in
-                                    image
-                                        .resizable()
-                                        .scaledToFill()
-                                } placeholder: {
-                                    Rectangle()
-                                        .fill(DesignTokens.placeholderColor)
-                                        .overlay(ProgressView().tint(.white))
-                                }
-                                .frame(maxWidth: .infinity)
-                                .aspectRatio(3/4, contentMode: .fill)
-                                .clipped()
+                    ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
+                        AsyncImage(url: URL(string: imageUrl)) { phase in
+                            switch phase {
+                            case .empty:
+                                Rectangle()
+                                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                    .overlay(ProgressView().tint(.white))
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                            case .failure:
+                                Rectangle()
+                                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                    .overlay(
+                                        Image(systemName: "photo")
+                                            .font(.system(size: 40))
+                                            .foregroundColor(.white.opacity(0.5))
+                                    )
+                            @unknown default:
+                                EmptyView()
                             }
                         }
+                        .frame(maxWidth: .infinity)
+                        .aspectRatio(3/4, contentMode: .fill)
+                        .clipped()
                         .tag(index)
                     }
                 }
@@ -368,28 +231,28 @@ struct PostDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             // Title
             Text("Beautiful scenery")
-                .font(.system(size: 16, weight: .bold))
+                .font(Typography.semibold16)
                 .foregroundColor(DesignTokens.textPrimary)
 
             // Description
             Text(post.content.isEmpty ? "The setting sun dyed the entire sea surface golden. The ship seemed to slowly sail into the light." : post.content)
-                .font(.system(size: 12))
+                .font(Typography.regular12)
                 .lineSpacing(6)
                 .foregroundColor(DesignTokens.textPrimary)
 
             // Tags
             Text("#Fashion #Sport #Art #Beautiful")
-                .font(.system(size: 12))
+                .font(Typography.regular12)
                 .foregroundColor(DesignTokens.accentColor)
 
             // Time and Location
             HStack(spacing: 5) {
                 Text(post.createdAt.timeAgoDisplay())
-                    .font(.system(size: 10))
+                    .font(Typography.regular10)
                     .foregroundColor(DesignTokens.textSecondary)
 
                 Text("Beijing")
-                    .font(.system(size: 10))
+                    .font(Typography.regular10)
                     .foregroundColor(DesignTokens.textSecondary)
             }
 
@@ -407,61 +270,15 @@ struct PostDetailView: View {
     private var commentsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Comments Count
-            HStack {
-                Text("\(displayCommentCount) comments")
-                    .font(.system(size: 14))
-                    .foregroundColor(DesignTokens.textPrimary)
-
-                if commentViewModel.isLoading {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                }
-            }
-            .padding(.horizontal, 17)
-            .padding(.top, 12)
+            Text("\(post.commentCount) comments")
+                .font(Typography.regular14)
+                .foregroundColor(DesignTokens.textPrimary)
+                .padding(.horizontal, 17)
+                .padding(.top, 12)
 
             // Comment List
-            if displayComments.isEmpty && !commentViewModel.isLoading {
-                Text("No comments yet. Be the first to comment!")
-                    .font(.system(size: 12))
-                    .foregroundColor(DesignTokens.textSecondary)
-                    .padding(.horizontal, 17)
-                    .padding(.vertical, 20)
-            } else {
-                ForEach(displayComments) { comment in
-                    SocialCommentItemView(
-                        comment: comment,
-                        onReplyTapped: {
-                            isCommentInputFocused = true
-                        },
-                        onAvatarTapped: onAvatarTapped
-                    )
-                }
-
-                // Load More Button
-                if commentViewModel.hasMore && !commentViewModel.isLoadingMore {
-                    Button(action: {
-                        Task {
-                            await commentViewModel.loadMore()
-                        }
-                    }) {
-                        Text("Load more comments...")
-                            .font(.system(size: 12))
-                            .foregroundColor(DesignTokens.accentColor)
-                    }
-                    .padding(.horizontal, 17)
-                    .padding(.vertical, 8)
-                }
-
-                if commentViewModel.isLoadingMore {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                            .scaleEffect(0.8)
-                        Spacer()
-                    }
-                    .padding(.vertical, 8)
-                }
+            ForEach(sampleComments) { comment in
+                CommentItemView(comment: comment)
             }
         }
     }
@@ -474,240 +291,247 @@ struct PostDetailView: View {
                 .frame(height: 0.25)
                 .background(Color(red: 0.77, green: 0.77, blue: 0.77))
 
-            // Stats Row
-            HStack(spacing: 16) {
-                // Like Button
-                Button(action: {
-                    isPostLiked.toggle()
-                    postLikeCount += isPostLiked ? 1 : -1
-                }) {
-                    HStack(spacing: 6) {
-                        Image(isPostLiked ? "Like-on" : "Like-off")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
-                        Text("\(postLikeCount)")
-                            .font(Font.custom("Helvetica Neue", size: 14))
-                            .lineSpacing(20)
-                            .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
-                    }
+            HStack(spacing: 10) {
+                // Like
+                HStack(spacing: 6) {
+                    Image("card-heart-icon")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 20, height: 20)
+                    Text("\(post.likeCount)")
+                        .font(Typography.regular14)
+                        .foregroundColor(DesignTokens.textSecondary)
                 }
 
-                // Comment Button (点击呼出键盘)
-                Button(action: {
-                    isCommentInputFocused = true
-                }) {
-                    HStack(spacing: 6) {
-                        Image("card-comment-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
-                        Text("\(displayCommentCount)")
-                            .font(Font.custom("Helvetica Neue", size: 14))
-                            .lineSpacing(20)
-                            .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
-                    }
+                // Comment
+                HStack(spacing: 6) {
+                    Image("card-comment-icon")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 20, height: 20)
+                    Text("\(post.commentCount)")
+                        .font(Typography.regular14)
+                        .foregroundColor(DesignTokens.textSecondary)
                 }
 
-                // Save Button
-                Button(action: {
-                    isPostSaved.toggle()
-                    postSaveCount += isPostSaved ? 1 : -1
-                }) {
-                    HStack(spacing: 6) {
-                        Image(isPostSaved ? "Save-on" : "Save-off")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
-                        Text("\(postSaveCount)")
-                            .font(Font.custom("Helvetica Neue", size: 14))
-                            .lineSpacing(20)
-                            .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
-                    }
+                // Bookmark
+                HStack(spacing: 6) {
+                    Image("card-star-icon")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 20, height: 20)
+                    Text("\(post.shareCount)")
+                        .font(Typography.regular14)
+                        .foregroundColor(DesignTokens.textSecondary)
                 }
 
                 Spacer()
             }
             .padding(.horizontal, 17)
-            .padding(.top, 20)
-            .padding(.bottom, 16)
+            .padding(.vertical, 16)
             .background(DesignTokens.surface)
-
-            // 隐藏的输入框 (键盘弹出时显示)
-            if isCommentInputFocused {
-                HStack(spacing: 10) {
-                    HStack {
-                        TextField("Add a comment...", text: $newCommentText)
-                            .font(.system(size: 14))
-                            .foregroundColor(DesignTokens.textPrimary)
-                            .focused($isCommentInputFocused)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(Color(red: 0.95, green: 0.95, blue: 0.95))
-                    .cornerRadius(20)
-
-                    // Send Button
-                    Button(action: {
-                        Task {
-                            await sendComment()
-                        }
-                    }) {
-                        if commentViewModel.isSendingComment {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                                .frame(width: 32, height: 32)
-                        } else {
-                            Image(systemName: "paperplane.fill")
-                                .font(.system(size: 16))
-                                .foregroundColor(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? DesignTokens.textSecondary : DesignTokens.accentColor)
-                                .frame(width: 32, height: 32)
-                        }
-                    }
-                    .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || commentViewModel.isSendingComment)
-                }
-                .padding(.horizontal, 17)
-                .padding(.bottom, 12)
-                .background(DesignTokens.surface)
-            }
         }
         .background(DesignTokens.surface)
     }
+}
 
-    // MARK: - Send Comment
+// MARK: - Comment Data Models
 
-    private func sendComment() async {
-        let content = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !content.isEmpty else { return }
+struct CommentData: Identifiable {
+    let id: String
+    let authorName: String
+    let authorAvatar: String?
+    let content: String
+    let timeAgo: String
+    let location: String
+    let likeCount: Int
+    let starCount: Int
+    let replies: [ReplyData]
+    let totalReplies: Int
+}
 
-        let success = await commentViewModel.sendComment(content: content)
-        if success {
-            newCommentText = ""
-            isCommentInputFocused = false
-        }
-    }
-
-    
-    /// Check if URL points to a video file
-    private func isVideoUrl(_ url: String) -> Bool {
-        let lowercased = url.lowercased()
-        return lowercased.contains(".mov") ||
-               lowercased.contains(".mp4") ||
-               lowercased.contains(".m4v") ||
-               lowercased.contains(".webm")
-    }
+struct ReplyData: Identifiable {
+    let id: String
+    let authorName: String
+    let authorAvatar: String?
+    let content: String
+    let timeAgo: String
+    let location: String
+    let likeCount: Int
+    let starCount: Int
 }
 
 // MARK: - Comment Item View
 
-struct SocialCommentItemView: View {
-    let comment: SocialComment
-    var onReplyTapped: (() -> Void)? = nil
-    var onAvatarTapped: ((String) -> Void)? = nil  // 点击头像回调
-    @State private var isLiked = false
-    @State private var isSaved = false
-    @State private var likeCount = 0
-    @State private var saveCount = 0
+struct CommentItemView: View {
+    let comment: CommentData
+    @State private var showAllReplies = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Main Comment
             HStack(alignment: .top, spacing: 10) {
-                // Avatar (点击跳转用户主页)
-                AvatarView(image: nil, url: comment.authorAvatarUrl, size: 30)
-                    .onTapGesture {
-                        onAvatarTapped?(comment.userId)
-                    }
+                // Avatar
+                AvatarView(image: nil, url: comment.authorAvatar, size: 30)
 
                 // Comment Content
                 VStack(alignment: .leading, spacing: 5) {
-                    // Author Name (点击跳转用户主页)
-                    Text(comment.displayAuthorName)
-                        .font(.system(size: 12, weight: .medium))
+                    // Author Name
+                    Text(comment.authorName)
+                        .font(Typography.bold12)
                         .foregroundColor(DesignTokens.textSecondary)
-                        .onTapGesture {
-                            onAvatarTapped?(comment.userId)
-                        }
 
                     // Comment Text
                     Text(comment.content)
-                        .font(.system(size: 12))
+                        .font(Typography.regular12)
                         .foregroundColor(DesignTokens.textPrimary)
 
-                    // Time, Location, Reply + Like & Save (same row)
+                    // Time, Location, Reply
                     HStack(spacing: 14) {
                         HStack(spacing: 5) {
-                            Text(comment.createdDate.timeAgoDisplay())
-                                .font(.system(size: 12))
+                            Text(comment.timeAgo)
+                                .font(Typography.regular12)
+                                .foregroundColor(DesignTokens.textSecondary)
+                            Text(comment.location)
+                                .font(Typography.regular12)
                                 .foregroundColor(DesignTokens.textSecondary)
                         }
 
-                        Button(action: {
-                            onReplyTapped?()
-                        }) {
+                        Button(action: {}) {
                             Text("Reply")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(Typography.bold12)
                                 .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                         }
+                    }
+                }
 
-                        Spacer()
+                Spacer()
 
-                        // Like & Save Buttons (Horizontal)
-                        HStack(spacing: 5) {
-                            // Like Button
-                            Button(action: {
-                                isLiked.toggle()
-                                likeCount += isLiked ? 1 : -1
-                            }) {
-                                HStack(spacing: 2) {
-                                    Image(isLiked ? "Like-on" : "Like-off")
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 12, height: 12)
-                                    Text("\(likeCount)")
-                                        .font(Font.custom("Helvetica Neue", size: 12))
-                                        .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
-                                }
-                            }
+                // Like & Star Counts
+                VStack(alignment: .trailing, spacing: 4) {
+                    HStack(spacing: 2) {
+                        Image(systemName: "heart")
+                            .font(Typography.regular12)
+                            .foregroundColor(DesignTokens.textSecondary)
+                        Text("\(comment.likeCount)")
+                            .font(Typography.regular12)
+                            .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                    }
 
-                            // Save Button
-                            Button(action: {
-                                isSaved.toggle()
-                                saveCount += isSaved ? 1 : -1
-                            }) {
-                                HStack(spacing: 2) {
-                                    Image(isSaved ? "Save-on" : "Save-off")
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 12, height: 12)
-                                    Text("\(saveCount)")
-                                        .font(Font.custom("Helvetica Neue", size: 12))
-                                        .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
-                                }
-                            }
-                        }
+                    HStack(spacing: 2) {
+                        Image(systemName: "star")
+                            .font(Typography.regular12)
+                            .foregroundColor(DesignTokens.textSecondary)
+                        Text("\(comment.starCount)")
+                            .font(Typography.regular12)
+                            .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                     }
                 }
             }
             .padding(.horizontal, 17)
             .padding(.vertical, 8)
+
+            // Replies
+            if !comment.replies.isEmpty {
+                ForEach(comment.replies) { reply in
+                    ReplyItemView(reply: reply)
+                }
+
+                // View More Replies
+                if comment.totalReplies > comment.replies.count {
+                    Button(action: { showAllReplies.toggle() }) {
+                        HStack(spacing: 8) {
+                            Rectangle()
+                                .fill(Color(red: 0.53, green: 0.53, blue: 0.53))
+                                .frame(width: 28, height: 0.25)
+
+                            Text("View \(comment.totalReplies) replies")
+                                .font(Typography.regular12)
+                                .foregroundColor(DesignTokens.textSecondary)
+                        }
+                    }
+                    .padding(.leading, 57)
+                    .padding(.vertical, 8)
+                }
+            }
         }
     }
 }
 
-// MARK: - Previews
+// MARK: - Reply Item View
 
-#Preview("PostDetail - Default") {
-    NavigationStack {
-        PostDetailView(post: FeedPost.preview)
+struct ReplyItemView: View {
+    let reply: ReplyData
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            // Avatar
+            AvatarView(image: nil, url: reply.authorAvatar, size: 20)
+
+            // Reply Content
+            VStack(alignment: .leading, spacing: 5) {
+                // Author Name
+                Text(reply.authorName)
+                    .font(Typography.regular12)
+                    .foregroundColor(DesignTokens.textSecondary)
+
+                // Reply Text
+                Text(reply.content)
+                    .font(Typography.regular12)
+                    .foregroundColor(DesignTokens.textPrimary)
+
+                // Time, Location, Reply
+                HStack(spacing: 14) {
+                    HStack(spacing: 5) {
+                        Text(reply.timeAgo)
+                            .font(Typography.regular12)
+                            .foregroundColor(DesignTokens.textSecondary)
+                        Text(reply.location)
+                            .font(Typography.regular12)
+                            .foregroundColor(DesignTokens.textSecondary)
+                    }
+
+                    Button(action: {}) {
+                        Text("Reply")
+                            .font(Typography.bold12)
+                            .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                    }
+                }
+            }
+
+            Spacer()
+
+            // Like & Star Counts
+            VStack(alignment: .trailing, spacing: 4) {
+                HStack(spacing: 2) {
+                    Image(systemName: "heart")
+                        .font(Typography.regular12)
+                        .foregroundColor(DesignTokens.textSecondary)
+                    Text("\(reply.likeCount)")
+                        .font(Typography.regular12)
+                        .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                }
+
+                HStack(spacing: 2) {
+                    Image(systemName: "star")
+                        .font(Typography.regular12)
+                        .foregroundColor(DesignTokens.textSecondary)
+                    Text("\(reply.starCount)")
+                        .font(Typography.regular12)
+                        .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                }
+            }
+        }
+        .padding(.leading, 57)
+        .padding(.trailing, 17)
+        .padding(.vertical, 8)
     }
-    .environmentObject(AuthenticationManager.shared)
 }
 
-#Preview("PostDetail - Dark Mode") {
+// MARK: - Preview
+
+#Preview {
     NavigationStack {
         PostDetailView(post: FeedPost.preview)
     }
-    .environmentObject(AuthenticationManager.shared)
-    .preferredColorScheme(.dark)
 }

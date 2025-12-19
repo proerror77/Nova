@@ -12,7 +12,7 @@ struct InviteFriendsView: View {
 
     // 分享内容
     private var shareMessage: String {
-        "Join me on Icered! \(invitationLink)"
+        "Join me on ICERED! \(invitationLink)"
     }
 
     var body: some View {
@@ -34,7 +34,7 @@ struct InviteFriendsView: View {
                     Spacer()
 
                     Text(LocalizedStringKey("Invite_Friends_Title"))
-                        .font(.system(size: 24, weight: .medium))
+                        .font(Typography.semibold24)
                         .foregroundColor(DesignTokens.textPrimary)
 
                     Spacer()
@@ -56,11 +56,11 @@ struct InviteFriendsView: View {
                     // MARK: - 搜索栏
                     HStack {
                         Image(systemName: "magnifyingglass")
-                            .font(.system(size: 16))
+                            .font(Typography.regular16)
                             .foregroundColor(DesignTokens.textSecondary)
 
                         TextField(LocalizedStringKey("Search_people_on_Icered"), text: $searchText)
-                            .font(.system(size: 15))
+                            .font(Typography.regular15)
                             .foregroundColor(DesignTokens.textPrimary)
                     }
                     .padding(.horizontal, 12)
@@ -77,11 +77,11 @@ struct InviteFriendsView: View {
                     }) {
                         HStack(spacing: 24) {
                             Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 16))
+                                .font(Typography.regular16)
                                 .foregroundColor(DesignTokens.accentColor)
 
 	                            Text(LocalizedStringKey("Share_invitation_link"))
-                                .font(.system(size: 15))
+                                .font(Typography.regular15)
                                 .foregroundColor(DesignTokens.textPrimary)
 
                             Spacer()
@@ -100,7 +100,7 @@ struct InviteFriendsView: View {
 
                     // MARK: - 剩余邀请次数
 	                    Text(LocalizedStringKey("Invitations_left"))
-                        .font(.system(size: 12))
+                        .font(Typography.regular12)
                         .foregroundColor(DesignTokens.textPrimary)
                         .padding(.top, 5)
                 }
@@ -116,15 +116,6 @@ struct InviteFriendsView: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("InviteFriends - Default") {
-    InviteFriendsView(currentPage: .constant(.inviteFriends))
-        .environmentObject(AuthenticationManager.shared)
-}
-
-#Preview("InviteFriends - Dark Mode") {
-    InviteFriendsView(currentPage: .constant(.inviteFriends))
-        .environmentObject(AuthenticationManager.shared)
-        .preferredColorScheme(.dark)
+#Preview {
+    InviteFriendsView(currentPage: .constant(.setting))
 }
