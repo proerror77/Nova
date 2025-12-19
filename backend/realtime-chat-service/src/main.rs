@@ -229,6 +229,24 @@ async fn main() -> Result<(), error::AppError> {
         None
     };
 
+    // Create Matrix Admin client if Matrix is enabled and admin token is available
+    // This is used for user provisioning (create users, generate login tokens)
+    let matrix_admin_client = if cfg.matrix.enabled && cfg.matrix.admin_token.is_some() {
+        let admin_token = cfg.matrix.admin_token.clone().unwrap();
+        let admin_client = realtime_chat_service::services::MatrixAdminClient::new(
+            cfg.matrix.homeserver_url.clone(),
+            admin_token,
+            cfg.matrix.server_name.clone(),
+        );
+        tracing::info!("✅ Matrix Admin client initialized for user provisioning");
+        Some(Arc::new(admin_client))
+    } else {
+        if cfg.matrix.enabled && cfg.matrix.admin_token.is_none() {
+            tracing::warn!("Matrix is enabled but MATRIX_ADMIN_TOKEN not set, user provisioning disabled");
+        }
+        None
+    };
+
     let state = AppState {
         db: db.clone(),
         registry: registry.clone(),
@@ -242,6 +260,7 @@ async fn main() -> Result<(), error::AppError> {
         matrix_client,
         graph_client,
         identity_client,
+        matrix_admin_client: matrix_admin_client.clone(),
     };
 
     // Start Redis Streams listener for cross-instance fanout
@@ -318,24 +337,7 @@ async fn main() -> Result<(), error::AppError> {
             cfg.kafka.consumer_group_id
         );
 
-        // Create Matrix Admin client if Matrix is enabled and admin token is available
-        let matrix_admin_client = if cfg.matrix.enabled && cfg.matrix.admin_token.is_some() {
-            let admin_token = cfg.matrix.admin_token.clone().unwrap();
-            let admin_client = realtime_chat_service::services::MatrixAdminClient::new(
-                cfg.matrix.homeserver_url.clone(),
-                admin_token,
-                cfg.matrix.server_name.clone(),
-            );
-            tracing::info!("✅ Matrix Admin client initialized for user lifecycle sync");
-            Some(Arc::new(admin_client))
-        } else {
-            if cfg.matrix.enabled && cfg.matrix.admin_token.is_none() {
-                tracing::warn!("Matrix is enabled but MATRIX_ADMIN_TOKEN not set, user lifecycle sync disabled");
-            }
-            None
-        };
-
-        // Create identity event consumer
+        // Create identity event consumer (reuse matrix_admin_client from AppState)
         let consumer_config = realtime_chat_service::services::IdentityEventConsumerConfig {
             brokers: cfg.kafka.brokers.clone(),
             group_id: cfg.kafka.consumer_group_id.clone(),

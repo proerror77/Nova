@@ -1,5 +1,39 @@
 import UIKit
 import CoreGraphics
+import ImageIO
+import UniformTypeIdentifiers
+
+// MARK: - Image Output Format
+
+enum ImageOutputFormat {
+    case jpeg
+    case webp
+    case heic
+
+    var fileExtension: String {
+        switch self {
+        case .jpeg: return "jpg"
+        case .webp: return "webp"
+        case .heic: return "heic"
+        }
+    }
+
+    var mimeType: String {
+        switch self {
+        case .jpeg: return "image/jpeg"
+        case .webp: return "image/webp"
+        case .heic: return "image/heic"
+        }
+    }
+
+    var utType: UTType {
+        switch self {
+        case .jpeg: return .jpeg
+        case .webp: return .webP
+        case .heic: return .heic
+        }
+    }
+}
 
 // MARK: - Image Compression Quality
 
@@ -9,10 +43,10 @@ enum ImageCompressionQuality: CaseIterable {
     case high       // 85% quality, max 2048px
     case original   // 100% quality, no resize
 
-    var jpegQuality: CGFloat {
+    var quality: CGFloat {
         switch self {
         case .low:
-            return 0.50  // Lower quality for faster uploads
+            return 0.50
         case .medium:
             return 0.70
         case .high:
@@ -25,7 +59,7 @@ enum ImageCompressionQuality: CaseIterable {
     var maxDimension: CGFloat {
         switch self {
         case .low:
-            return 1080  // Good enough for social media
+            return 1080
         case .medium:
             return 1440
         case .high:
@@ -39,15 +73,18 @@ enum ImageCompressionQuality: CaseIterable {
     var targetSizeBytes: Int {
         switch self {
         case .low:
-            return 150_000      // ~150 KB for fast uploads
+            return 100_000      // ~100 KB for WebP
         case .medium:
-            return 400_000      // ~400 KB
+            return 300_000      // ~300 KB
         case .high:
-            return 800_000      // ~800 KB
+            return 600_000      // ~600 KB
         case .original:
             return Int.max
         }
     }
+
+    // Legacy compatibility
+    var jpegQuality: CGFloat { quality }
 }
 
 // MARK: - Compression Result
@@ -59,6 +96,8 @@ struct ImageCompressionResult {
     let width: Int
     let height: Int
     let compressionRatio: Double
+    let format: ImageOutputFormat
+    let filename: String
 
     var savedBytes: Int {
         originalSize - compressedSize
@@ -78,58 +117,61 @@ actor ImageCompressor {
 
     private init() {}
 
+    /// Preferred output format (WebP for best compression)
+    var preferredFormat: ImageOutputFormat = .webp
+
     // MARK: - Compress Single Image
 
-    /// Compresses a UIImage with the specified quality
-    /// - Parameters:
-    ///   - image: Source UIImage
-    ///   - quality: Compression quality preset
-    /// - Returns: Compression result with data and statistics
+    /// Compresses a UIImage with the specified quality and format
     func compressImage(
         _ image: UIImage,
-        quality: ImageCompressionQuality = .medium
+        quality: ImageCompressionQuality = .low,
+        format: ImageOutputFormat? = nil,
+        stripMetadata: Bool = true
     ) async -> ImageCompressionResult {
         let startTime = CFAbsoluteTimeGetCurrent()
+        let outputFormat = format ?? preferredFormat
 
-        // Calculate original size (approximate from PNG)
-        let originalData = image.pngData() ?? Data()
+        // Calculate original size (approximate)
+        let originalData = image.jpegData(compressionQuality: 1.0) ?? Data()
         let originalSize = originalData.count
 
-        // Skip if original quality requested
+        // Skip compression if original quality requested
         if quality == .original {
-            let jpegData = image.jpegData(compressionQuality: 1.0) ?? originalData
+            let data = encodeImage(image, format: outputFormat, quality: 1.0, stripMetadata: stripMetadata)
+            let filename = "image_\(UUID().uuidString).\(outputFormat.fileExtension)"
             return ImageCompressionResult(
-                data: jpegData,
+                data: data,
                 originalSize: originalSize,
-                compressedSize: jpegData.count,
+                compressedSize: data.count,
                 width: Int(image.size.width * image.scale),
                 height: Int(image.size.height * image.scale),
-                compressionRatio: 1.0
+                compressionRatio: 1.0,
+                format: outputFormat,
+                filename: filename
             )
         }
 
         // Resize if needed
         let resizedImage = resizeImageIfNeeded(image, maxDimension: quality.maxDimension)
 
-        // Compress to JPEG with target quality
-        var compressedData = resizedImage.jpegData(compressionQuality: quality.jpegQuality) ?? Data()
+        // Compress with target quality
+        var compressedData = encodeImage(resizedImage, format: outputFormat, quality: quality.quality, stripMetadata: stripMetadata)
 
         // If still too large, progressively reduce quality
-        var currentQuality = quality.jpegQuality
-        while compressedData.count > quality.targetSizeBytes && currentQuality > 0.3 {
+        var currentQuality = quality.quality
+        while compressedData.count > quality.targetSizeBytes && currentQuality > 0.2 {
             currentQuality -= 0.1
-            if let newData = resizedImage.jpegData(compressionQuality: currentQuality) {
-                compressedData = newData
-            }
+            compressedData = encodeImage(resizedImage, format: outputFormat, quality: currentQuality, stripMetadata: stripMetadata)
         }
 
         let compressionRatio = originalSize > 0 ? Double(compressedData.count) / Double(originalSize) : 1.0
+        let filename = "image_\(UUID().uuidString).\(outputFormat.fileExtension)"
 
         #if DEBUG
         let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-        print("[ImageCompressor] Compressed in \(String(format: "%.2f", elapsed * 1000))ms")
-        print("[ImageCompressor] Original: \(originalSize / 1024) KB -> Compressed: \(compressedData.count / 1024) KB")
-        print("[ImageCompressor] Ratio: \(String(format: "%.1f", compressionRatio * 100))%")
+        print("[ImageCompressor] Format: \(outputFormat.fileExtension.uppercased()), Time: \(String(format: "%.0f", elapsed * 1000))ms")
+        print("[ImageCompressor] Size: \(originalSize / 1024) KB -> \(compressedData.count / 1024) KB (saved \(String(format: "%.0f", (1 - compressionRatio) * 100))%)")
         #endif
 
         return ImageCompressionResult(
@@ -138,37 +180,150 @@ actor ImageCompressor {
             compressedSize: compressedData.count,
             width: Int(resizedImage.size.width * resizedImage.scale),
             height: Int(resizedImage.size.height * resizedImage.scale),
-            compressionRatio: compressionRatio
+            compressionRatio: compressionRatio,
+            format: outputFormat,
+            filename: filename
         )
     }
 
-    /// Compresses image data (JPEG/PNG) with the specified quality
-    /// - Parameters:
-    ///   - data: Source image data
-    ///   - quality: Compression quality preset
-    /// - Returns: Compression result with data and statistics
-    func compressImageData(
-        _ data: Data,
-        quality: ImageCompressionQuality = .medium
-    ) async -> ImageCompressionResult? {
-        guard let image = UIImage(data: data) else {
-            return nil
+    // MARK: - Encode Image to Format
+
+    private func encodeImage(
+        _ image: UIImage,
+        format: ImageOutputFormat,
+        quality: CGFloat,
+        stripMetadata: Bool
+    ) -> Data {
+        switch format {
+        case .webp:
+            return encodeToWebP(image, quality: quality, stripMetadata: stripMetadata)
+        case .heic:
+            return encodeToHEIC(image, quality: quality, stripMetadata: stripMetadata)
+        case .jpeg:
+            return encodeToJPEG(image, quality: quality, stripMetadata: stripMetadata)
         }
-        return await compressImage(image, quality: quality)
     }
 
-    // MARK: - Batch Compression
+    /// Encode to WebP format (25-35% smaller than JPEG)
+    private func encodeToWebP(_ image: UIImage, quality: CGFloat, stripMetadata: Bool) -> Data {
+        guard let cgImage = image.cgImage else {
+            return encodeToJPEG(image, quality: quality, stripMetadata: stripMetadata)
+        }
 
-    /// Compresses multiple images in parallel
-    /// - Parameters:
-    ///   - images: Array of UIImages
-    ///   - quality: Compression quality preset
-    ///   - maxConcurrent: Maximum concurrent compressions (default: 4)
-    ///   - progressCallback: Called with overall progress (0.0 to 1.0)
-    /// - Returns: Array of compression results in order
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, UTType.webP.identifier as CFString, 1, nil) else {
+            // Fallback to JPEG if WebP not supported
+            return encodeToJPEG(image, quality: quality, stripMetadata: stripMetadata)
+        }
+
+        var options: [CFString: Any] = [
+            kCGImageDestinationLossyCompressionQuality: quality
+        ]
+
+        if stripMetadata {
+            options[kCGImageDestinationMetadata] = nil
+            options[kCGImagePropertyExifDictionary] = nil
+            options[kCGImagePropertyGPSDictionary] = nil
+        }
+
+        CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
+
+        guard CGImageDestinationFinalize(destination) else {
+            return encodeToJPEG(image, quality: quality, stripMetadata: stripMetadata)
+        }
+
+        return data as Data
+    }
+
+    /// Encode to HEIC format (most efficient, needs iOS 11+)
+    private func encodeToHEIC(_ image: UIImage, quality: CGFloat, stripMetadata: Bool) -> Data {
+        guard let cgImage = image.cgImage else {
+            return encodeToJPEG(image, quality: quality, stripMetadata: stripMetadata)
+        }
+
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, UTType.heic.identifier as CFString, 1, nil) else {
+            return encodeToJPEG(image, quality: quality, stripMetadata: stripMetadata)
+        }
+
+        var options: [CFString: Any] = [
+            kCGImageDestinationLossyCompressionQuality: quality
+        ]
+
+        if stripMetadata {
+            options[kCGImageDestinationMetadata] = nil
+        }
+
+        CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
+
+        guard CGImageDestinationFinalize(destination) else {
+            return encodeToJPEG(image, quality: quality, stripMetadata: stripMetadata)
+        }
+
+        return data as Data
+    }
+
+    /// Encode to JPEG format with optional metadata stripping
+    private func encodeToJPEG(_ image: UIImage, quality: CGFloat, stripMetadata: Bool) -> Data {
+        if stripMetadata {
+            // Use ImageIO to strip metadata
+            guard let cgImage = image.cgImage else {
+                return image.jpegData(compressionQuality: quality) ?? Data()
+            }
+
+            let data = NSMutableData()
+            guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else {
+                return image.jpegData(compressionQuality: quality) ?? Data()
+            }
+
+            let options: [CFString: Any] = [
+                kCGImageDestinationLossyCompressionQuality: quality,
+                kCGImageDestinationMetadata: NSNull(),
+                kCGImagePropertyExifDictionary: NSNull(),
+                kCGImagePropertyGPSDictionary: NSNull()
+            ]
+
+            CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
+            CGImageDestinationFinalize(destination)
+
+            return data as Data
+        } else {
+            return image.jpegData(compressionQuality: quality) ?? Data()
+        }
+    }
+
+    // MARK: - Batch Compression with Pipeline
+
+    /// Compresses multiple images in parallel with pipeline support
+    /// Each image is compressed and returned as soon as ready (for streaming upload)
+    func compressImagesWithPipeline(
+        images: [UIImage],
+        quality: ImageCompressionQuality = .low,
+        format: ImageOutputFormat? = nil,
+        onImageReady: @escaping @Sendable (Int, ImageCompressionResult) async -> Void
+    ) async {
+        guard !images.isEmpty else { return }
+
+        let outputFormat = format ?? preferredFormat
+
+        await withTaskGroup(of: (Int, ImageCompressionResult).self) { group in
+            for (index, image) in images.enumerated() {
+                group.addTask {
+                    let result = await self.compressImage(image, quality: quality, format: outputFormat)
+                    return (index, result)
+                }
+            }
+
+            for await (index, result) in group {
+                await onImageReady(index, result)
+            }
+        }
+    }
+
+    /// Compresses multiple images in parallel (legacy method)
     func compressImagesInParallel(
         images: [UIImage],
-        quality: ImageCompressionQuality = .medium,
+        quality: ImageCompressionQuality = .low,
         maxConcurrent: Int = 4,
         progressCallback: (@Sendable (Double) -> Void)? = nil
     ) async -> [ImageCompressionResult] {
@@ -178,7 +333,6 @@ actor ImageCompressor {
         var completedCount = 0
         var results = [(Int, ImageCompressionResult)]()
 
-        // Process in batches for controlled parallelism
         for batch in images.enumerated().chunked(into: maxConcurrent) {
             let batchResults = await withTaskGroup(of: (Int, ImageCompressionResult).self) { group in
                 for (index, image) in batch {
@@ -200,33 +354,7 @@ actor ImageCompressor {
             results.append(contentsOf: batchResults)
         }
 
-        // Sort by original index and return results
         return results.sorted { $0.0 < $1.0 }.map { $0.1 }
-    }
-
-    // MARK: - Prepare Images for Upload
-
-    /// Prepares images for upload by compressing and converting to upload-ready format
-    /// - Parameters:
-    ///   - images: Array of UIImages
-    ///   - quality: Compression quality preset
-    ///   - progressCallback: Called with overall progress (0.0 to 1.0)
-    /// - Returns: Array of (data, filename) tuples ready for upload
-    func prepareImagesForUpload(
-        images: [UIImage],
-        quality: ImageCompressionQuality = .medium,
-        progressCallback: (@Sendable (Double) -> Void)? = nil
-    ) async -> [(data: Data, filename: String)] {
-        let results = await compressImagesInParallel(
-            images: images,
-            quality: quality,
-            progressCallback: progressCallback
-        )
-
-        return results.enumerated().map { index, result in
-            let filename = "image_\(UUID().uuidString).jpg"
-            return (data: result.data, filename: filename)
-        }
     }
 
     // MARK: - Helper Methods
@@ -236,7 +364,6 @@ actor ImageCompressor {
         let originalHeight = image.size.height * image.scale
         let maxOriginalDimension = max(originalWidth, originalHeight)
 
-        // No resize needed
         guard maxOriginalDimension > maxDimension else {
             return image
         }
@@ -246,7 +373,6 @@ actor ImageCompressor {
         let newHeight = originalHeight * scaleFactor
         let newSize = CGSize(width: newWidth, height: newHeight)
 
-        // Use UIGraphicsImageRenderer for efficient resizing
         let renderer = UIGraphicsImageRenderer(size: newSize)
         let resizedImage = renderer.image { _ in
             image.draw(in: CGRect(origin: .zero, size: newSize))

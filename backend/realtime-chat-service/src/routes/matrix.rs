@@ -16,6 +16,7 @@ use crate::error::AppError;
 use crate::middleware::guards::User;
 use crate::services::matrix_client::MatrixClient;
 use crate::services::matrix_db;
+use crate::state::AppState;
 
 // ============================================================================
 // Request/Response Types
@@ -103,50 +104,90 @@ pub struct RoomStatusResponse {
 ///
 /// This endpoint exchanges a Nova JWT for a Matrix access token.
 /// The Matrix access token allows the iOS app to connect directly to Matrix.
+///
+/// Flow:
+/// 1. Verify Matrix is enabled
+/// 2. Create Matrix user if doesn't exist (via Synapse Admin API)
+/// 3. Generate a user-specific login token (via Synapse Admin API)
+/// 4. Return the login token for the iOS app to use
 pub async fn get_matrix_token(
     user: User,
-    matrix_client: web::Data<Option<MatrixClient>>,
-    config: web::Data<crate::config::Config>,
+    state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
     // Check if Matrix is enabled
-    let _matrix = match matrix_client.as_ref() {
-        Some(client) => client,
+    if state.matrix_client.is_none() {
+        return Ok(HttpResponse::ServiceUnavailable().json(serde_json::json!({
+            "error": "Matrix integration is not enabled"
+        })));
+    }
+
+    // Check if Matrix Admin client is available for user provisioning
+    let matrix_admin = match &state.matrix_admin_client {
+        Some(admin) => admin,
         None => {
-            return Ok(HttpResponse::ServiceUnavailable().json(serde_json::json!({
-                "error": "Matrix integration is not enabled"
-            })));
+            // Fallback: return service account token (not recommended for production)
+            tracing::warn!("Matrix Admin client not configured, returning service account token");
+            let matrix_config = &state.config.matrix;
+            let access_token = matrix_config.access_token.clone()
+                .unwrap_or_else(|| "not_configured".to_string());
+            let matrix_user_id = format!("@nova-{}:{}", user.id, matrix_config.server_name);
+            let device_id = format!("NOVA_IOS_{}", &user.id.to_string()[..8]);
+
+            return Ok(HttpResponse::Ok().json(MatrixTokenResponse {
+                access_token,
+                matrix_user_id,
+                device_id,
+                homeserver_url: Some(matrix_config.homeserver_url.clone()),
+            }));
         }
     };
 
-    // Get Matrix configuration
-    let matrix_config = &config.matrix;
-
-    // Generate Matrix user ID from Nova user ID
-    // P0: Use server_name (not homeserver_url) to ensure consistent MXID generation
-    // This matches the logic in matrix_admin.rs:user_id_to_mxid()
     let nova_user_id = user.id;
-    let matrix_user_id = format!("@nova-{}:{}", nova_user_id, matrix_config.server_name);
+    let matrix_config = &state.config.matrix;
 
-    // In a production environment, we would:
-    // 1. Check if user already has a Matrix account
-    // 2. Create one if not (via admin API)
-    // 3. Generate an access token for them
-    //
-    // For now, we return the service account token for simplicity
-    // The iOS app will use this to send messages on behalf of the user
+    // Provision user: create if doesn't exist, then generate login token
+    // The displayname could be fetched from identity service, but for now use user ID
+    let displayname = format!("Nova User {}", &nova_user_id.to_string()[..8]);
 
-    let access_token = matrix_config.access_token.clone()
-        .unwrap_or_else(|| "not_configured".to_string());
+    match matrix_admin.provision_user(nova_user_id, Some(displayname)).await {
+        Ok((matrix_user_id, login_token)) => {
+            // Generate a device ID for this user/device combination
+            let device_id = format!("NOVA_IOS_{}", &nova_user_id.to_string()[..8]);
 
-    // Generate a device ID for this user/device combination
-    let device_id = format!("NOVA_IOS_{}", &nova_user_id.to_string()[..8]);
+            tracing::info!(
+                "Successfully provisioned Matrix user: nova_user_id={}, matrix_user_id={}",
+                nova_user_id, matrix_user_id
+            );
 
-    Ok(HttpResponse::Ok().json(MatrixTokenResponse {
-        access_token,
-        matrix_user_id,
-        device_id,
-        homeserver_url: Some(matrix_config.homeserver_url.clone()),
-    }))
+            Ok(HttpResponse::Ok().json(MatrixTokenResponse {
+                access_token: login_token,
+                matrix_user_id,
+                device_id,
+                homeserver_url: Some(matrix_config.homeserver_url.clone()),
+            }))
+        }
+        Err(e) => {
+            tracing::error!(
+                "Failed to provision Matrix user: nova_user_id={}, error={}",
+                nova_user_id, e
+            );
+            
+            // Fallback to service account token to avoid breaking the app
+            // This is not ideal but prevents complete failure
+            tracing::warn!("Falling back to service account token due to provisioning failure");
+            let access_token = matrix_config.access_token.clone()
+                .unwrap_or_else(|| "not_configured".to_string());
+            let matrix_user_id = format!("@nova-{}:{}", nova_user_id, matrix_config.server_name);
+            let device_id = format!("NOVA_IOS_{}", &nova_user_id.to_string()[..8]);
+
+            Ok(HttpResponse::Ok().json(MatrixTokenResponse {
+                access_token,
+                matrix_user_id,
+                device_id,
+                homeserver_url: Some(matrix_config.homeserver_url.clone()),
+            }))
+        }
+    }
 }
 
 /// GET /api/v2/matrix/rooms/{conversation_id}

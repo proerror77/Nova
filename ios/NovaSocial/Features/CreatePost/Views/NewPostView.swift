@@ -48,6 +48,10 @@ struct NewPostView: View {
     private let livePhotoManager = LivePhotoManager.shared
     private let aliceService = AliceService.shared
     private let feedService = FeedService()
+    // WebP image compression (25-35% smaller than JPEG)
+    private let imageCompressor = ImageCompressor.shared
+    // Background upload manager for non-blocking uploads
+    private let uploadManager = BackgroundUploadManager.shared
 
     var body: some View {
         ZStack {
@@ -1086,76 +1090,116 @@ struct NewPostView: View {
             return
         }
 
+        // Use new media items if available, otherwise fall back to legacy selectedImages
+        let itemsToUpload: [PostMediaItem] = selectedMediaItems.isEmpty
+            ? selectedImages.map { .image($0) }
+            : selectedMediaItems
+
+        // For posts WITH media: Use background upload (user can continue using app)
+        if !itemsToUpload.isEmpty {
+            #if DEBUG
+            print("[NewPost] Starting background upload for \(itemsToUpload.count) media item(s)")
+            #endif
+
+            // Start background upload
+            uploadManager.startUpload(
+                mediaItems: itemsToUpload,
+                postText: postText,
+                channelIds: selectedChannelIds,
+                nameType: selectedNameType,
+                userId: userId,
+                onSuccess: { [onPostSuccess] post in
+                    onPostSuccess?(post)
+                }
+            )
+
+            // Clear draft and dismiss immediately - upload continues in background
+            clearDraft()
+            showNewPost = false
+            return
+        }
+
+        // For posts WITHOUT media: Create immediately (fast, no background needed)
+        isPosting = true
+        postError = nil
+
+        do {
+            let content = postText.trimmingCharacters(in: .whitespacesAndNewlines)
+            var post: Post?
+            var lastError: Error?
+
+            for attempt in 1...3 {
+                do {
+                    post = try await contentService.createPost(
+                        creatorId: userId,
+                        content: content.isEmpty ? " " : content,
+                        mediaUrls: nil,
+                        channelIds: selectedChannelIds.isEmpty ? nil : selectedChannelIds
+                    )
+                    break
+                } catch let error as APIError {
+                    lastError = error
+                    if case .serverError(let statusCode, _) = error, statusCode == 503 {
+                        if attempt < 3 {
+                            try await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000)
+                            continue
+                        }
+                    }
+                    throw error
+                }
+            }
+
+            guard let createdPost = post else {
+                throw lastError ?? APIError.serverError(statusCode: 503, message: "Service unavailable")
+            }
+
+            isPosting = false
+            clearDraft()
+            showNewPost = false
+            onPostSuccess?(createdPost)
+
+        } catch {
+            isPosting = false
+            postError = error.localizedDescription
+            #if DEBUG
+            print("[NewPost] Text-only post failed: \(error)")
+            #endif
+        }
+    }
+
+    // MARK: - Legacy inline upload (kept for reference/fallback)
+    private func submitPostInline() async {
+        guard canPost else { return }
+
+        guard let userId = authManager.currentUser?.id ?? authManager.storedUserId else {
+            postError = "Please login first"
+            return
+        }
+
         isPosting = true
         postError = nil
         uploadProgress = 0.0
         uploadStatus = "Preparing..."
 
         do {
-            // Step 1: Upload media (images and Live Photos) - now with parallel uploads!
-            var mediaUrls: [String] = []
-            
-            // Use new media items if available, otherwise fall back to legacy selectedImages
-            let itemsToUpload: [PostMediaItem] = selectedMediaItems.isEmpty 
-                ? selectedImages.map { .image($0) } 
+            let itemsToUpload: [PostMediaItem] = selectedMediaItems.isEmpty
+                ? selectedImages.map { .image($0) }
                 : selectedMediaItems
-            
+
             guard !itemsToUpload.isEmpty else {
-                // No media to upload, skip to post creation
-                uploadProgress = 0.5
-                uploadStatus = "Creating post..."
-                
-                // Jump to Step 2 (post creation) below
-                let content = postText.trimmingCharacters(in: .whitespacesAndNewlines)
-                var post: Post?
-                var lastError: Error?
-
-                for attempt in 1...3 {
-                    do {
-                        post = try await contentService.createPost(
-                            creatorId: userId,
-                            content: content.isEmpty ? " " : content,
-                            mediaUrls: nil,
-                            channelIds: selectedChannelIds.isEmpty ? nil : selectedChannelIds
-                        )
-                        break
-                    } catch let error as APIError {
-                        lastError = error
-                        if case .serverError(let statusCode, _) = error, statusCode == 503 {
-                            if attempt < 3 {
-                                try await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000)
-                                continue
-                            }
-                        }
-                        throw error
-                    }
-                }
-
-                guard let createdPost = post else {
-                    throw lastError ?? APIError.serverError(statusCode: 503, message: "Service unavailable")
-                }
-
-                await MainActor.run {
-                    isPosting = false
-                    uploadProgress = 1.0
-                    clearDraft()
-                    showNewPost = false
-                    onPostSuccess?(createdPost)
-                }
+                // No media - handled by submitPost now
                 return
             }
-            
+
             // Separate regular images, Live Photos, and videos for different handling
             var regularImages: [(data: Data, filename: String, index: Int)] = []
             var livePhotos: [(data: LivePhotoData, index: Int)] = []
             var videos: [(data: VideoData, index: Int)] = []
 
-            // Process images in parallel on background thread for faster preparation
             await MainActor.run {
                 uploadStatus = "Processing media..."
             }
 
-            // Collect images, live photos, and videos first
             var imagesToProcess: [(image: UIImage, index: Int)] = []
             for (index, item) in itemsToUpload.enumerated() {
                 switch item {
@@ -1167,21 +1211,29 @@ struct NewPostView: View {
                     videos.append((data: videoData, index: index))
                 }
             }
-            
-            // Process images in parallel on background threads
+
             if !imagesToProcess.isEmpty {
+                #if DEBUG
+                print("[NewPost] Compressing \(imagesToProcess.count) image(s)...")
+                #endif
+
                 await withTaskGroup(of: (data: Data, filename: String, index: Int)?.self) { group in
                     for imageInfo in imagesToProcess {
                         group.addTask {
-                            // Perform resize and compression on background thread
-                            let resizedImage = await self.resizeImageForUploadAsync(imageInfo.image)
-                            if let imageData = resizedImage.jpegData(compressionQuality: 0.6) {
-                                return (data: imageData, filename: "post_\(UUID().uuidString).jpg", index: imageInfo.index)
-                            }
-                            return nil
+                            // Use ImageCompressor for WebP format (25-35% smaller than JPEG)
+                            let result = await self.imageCompressor.compressImage(
+                                imageInfo.image,
+                                quality: .low,  // 50% quality, max 1080px, strips EXIF
+                                format: .webp,
+                                stripMetadata: true
+                            )
+                            #if DEBUG
+                            print("[NewPost] WebP compressed: \(result.compressedSize / 1024) KB (saved \(String(format: "%.0f", result.savedPercentage))%)")
+                            #endif
+                            return (data: result.data, filename: result.filename, index: imageInfo.index)
                         }
                     }
-                    
+
                     for await result in group {
                         if let result = result {
                             regularImages.append(result)
@@ -1242,20 +1294,28 @@ struct NewPostView: View {
                 await MainActor.run {
                     uploadStatus = "Uploading Live Photo \(livePhotoIndex + 1)/\(livePhotos.count)..."
                 }
-                
-                let resizedImage = resizeImageForUpload(livePhotoInfo.data.stillImage)
-                guard let imageData = resizedImage.jpegData(compressionQuality: 0.5) else {
-                    continue
-                }
-                
+
+                // Use WebP compression for Live Photo still image
+                let compressionResult = await imageCompressor.compressImage(
+                    livePhotoInfo.data.stillImage,
+                    quality: .low,  // 50% quality, max 1080px, strips EXIF
+                    format: .webp,
+                    stripMetadata: true
+                )
+
+                #if DEBUG
+                print("[NewPost] Live Photo WebP: \(compressionResult.compressedSize / 1024) KB (saved \(String(format: "%.0f", compressionResult.savedPercentage))%)")
+                #endif
+
                 var livePhotoResult: LivePhotoUploadResult?
                 var lastError: Error?
-                
+
                 for attempt in 1...3 {
                     do {
                         livePhotoResult = try await mediaService.uploadLivePhoto(
-                            imageData: imageData,
-                            videoURL: livePhotoInfo.data.videoURL
+                            imageData: compressionResult.data,
+                            videoURL: livePhotoInfo.data.videoURL,
+                            imageFilename: compressionResult.filename
                         )
                         break
                     } catch let error as APIError {
@@ -1290,8 +1350,8 @@ struct NewPostView: View {
             
             // Sort results by original index to maintain order
             uploadResults.sort { $0.index < $1.index }
-            mediaUrls = uploadResults.flatMap { $0.urls }
-            
+            let mediaUrls = uploadResults.flatMap { $0.urls }
+
             #if DEBUG
             print("[NewPost] Upload complete: \(mediaUrls.count) URLs")
             #endif

@@ -651,19 +651,54 @@ final class MatrixBridgeService {
 
     private func checkBridgeEnabled() async -> Bool {
         // Check feature flag from backend
+        // Use URLSession directly to avoid triggering global token refresh on 401
+        // The matrix/config endpoint may return 401 when Matrix is not configured,
+        // but this shouldn't log out the user from the main app
         do {
             struct ConfigResponse: Codable {
                 let enabled: Bool
                 let homeserverUrl: String?
             }
 
-            let response: ConfigResponse = try await apiClient.get(
-                endpoint: APIConfig.Matrix.getConfig
-            )
+            guard let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Matrix.getConfig)") else {
+                #if DEBUG
+                print("[MatrixBridge] Invalid config URL")
+                #endif
+                return true
+            }
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+            // Add auth token if available (but don't trigger refresh on failure)
+            if let token = AuthenticationManager.shared.authToken {
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                #if DEBUG
+                print("[MatrixBridge] Invalid HTTP response")
+                #endif
+                return true
+            }
+
+            // Accept 200-299 as success
+            guard (200...299).contains(httpResponse.statusCode) else {
+                #if DEBUG
+                print("[MatrixBridge] Config returned status \(httpResponse.statusCode) - Matrix may not be configured")
+                #endif
+                // Don't trigger logout, just assume Matrix is enabled (Matrix-first mode)
+                return true
+            }
+
+            let configResponse = try JSONDecoder().decode(ConfigResponse.self, from: data)
             #if DEBUG
-            print("[MatrixBridge] Backend config: enabled=\(response.enabled), homeserver=\(response.homeserverUrl ?? "nil")")
+            print("[MatrixBridge] Backend config: enabled=\(configResponse.enabled), homeserver=\(configResponse.homeserverUrl ?? "nil")")
             #endif
-            return response.enabled
+            return configResponse.enabled
         } catch {
             #if DEBUG
             print("[MatrixBridge] Failed to check bridge status: \(error)")

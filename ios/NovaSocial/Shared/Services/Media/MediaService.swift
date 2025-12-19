@@ -30,6 +30,33 @@ struct BatchUploadResult {
 class MediaService {
     private let client = APIClient.shared
 
+    // MARK: - Content Type Helper
+
+    /// Determine MIME content type from filename extension
+    static func contentType(for filename: String) -> String {
+        let ext = (filename as NSString).pathExtension.lowercased()
+        switch ext {
+        case "webp":
+            return "image/webp"
+        case "heic", "heif":
+            return "image/heic"
+        case "png":
+            return "image/png"
+        case "gif":
+            return "image/gif"
+        case "jpg", "jpeg":
+            return "image/jpeg"
+        case "mp4", "m4v":
+            return "video/mp4"
+        case "mov":
+            return "video/quicktime"
+        case "m4a":
+            return "audio/mp4"
+        default:
+            return "application/octet-stream"
+        }
+    }
+
     // MARK: - Upload Response
 
     /// Response from /api/v2/media/upload endpoint
@@ -301,22 +328,25 @@ class MediaService {
     /// This is much faster than multipart upload as it avoids sending image data twice.
     /// - Parameters:
     ///   - imageData: Image data to upload
-    ///   - filename: Original filename (e.g., "photo.jpg")
+    ///   - filename: Original filename (e.g., "photo.jpg", "image.webp", "photo.heic")
     /// - Returns: CDN URL for the uploaded image
     func uploadImage(imageData: Data, filename: String = "image.jpg") async throws -> String {
+        // Determine content type based on filename extension
+        let contentType = Self.contentType(for: filename)
+
         #if DEBUG
-        print("[Media] Starting upload: \(imageData.count / 1024) KB")
+        print("[Media] Starting upload: \(imageData.count / 1024) KB, type: \(contentType)")
         #endif
 
         // Try the new lightweight initiate endpoint first, fallback to legacy multipart if not available
-        let initiateResult = try await initiateUpload(filename: filename, sizeBytes: Int64(imageData.count), contentType: "image/jpeg", imageData: imageData)
+        let initiateResult = try await initiateUpload(filename: filename, sizeBytes: Int64(imageData.count), contentType: contentType, imageData: imageData)
 
         #if DEBUG
         print("[Media] Got presigned URL, upload_id: \(initiateResult.uploadId)")
         #endif
 
         // Step 2: Upload directly to GCS using presigned URL (this is the only time image data is sent!)
-        try await uploadToPresignedUrl(initiateResult.presignedUrl, data: imageData, contentType: "image/jpeg")
+        try await uploadToPresignedUrl(initiateResult.presignedUrl, data: imageData, contentType: contentType)
 
         #if DEBUG
         print("[Media] Upload to GCS completed, completing upload...")
@@ -1196,17 +1226,19 @@ class MediaService {
     }
 
     // MARK: - Live Photo Upload
-    
+
     /// Upload a Live Photo (both still image and video components)
     /// - Parameters:
-    ///   - imageData: Still image data (JPEG)
+    ///   - imageData: Still image data (JPEG, WebP, or HEIC)
     ///   - videoURL: URL to the video file (.mov)
+    ///   - imageFilename: Optional filename for the still image (defaults to jpg)
     /// - Returns: LivePhotoUploadResult with URLs for both components
-    func uploadLivePhoto(imageData: Data, videoURL: URL) async throws -> LivePhotoUploadResult {
-        // Upload still image first
+    func uploadLivePhoto(imageData: Data, videoURL: URL, imageFilename: String? = nil) async throws -> LivePhotoUploadResult {
+        // Upload still image first (use provided filename or default to jpg)
+        let filename = imageFilename ?? "livephoto_\(UUID().uuidString).jpg"
         let imageUrl = try await uploadImage(
             imageData: imageData,
-            filename: "livephoto_\(UUID().uuidString).jpg"
+            filename: filename
         )
         
         // Read video data

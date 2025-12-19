@@ -9,6 +9,7 @@ struct IceredApp: App {
     @StateObject private var authManager = AuthenticationManager.shared
     @StateObject private var themeManager = ThemeManager.shared
     @StateObject private var pushManager = PushNotificationManager.shared
+    @StateObject private var uploadManager = BackgroundUploadManager.shared
     @State private var currentPage: AppPage
 
     // 监听 App 生命周期状态
@@ -119,11 +120,15 @@ struct IceredApp: App {
                             .transition(.identity)
                     }
                 }
+
+                // Global upload progress overlay
+                UploadProgressOverlay()
             }
             .animation(.none, value: currentPage)
             .environmentObject(authManager)
             .environmentObject(themeManager)
             .environmentObject(pushManager)
+            .environmentObject(uploadManager)
             .preferredColorScheme(themeManager.colorScheme)
             .task {
                 // Check notification settings on app launch

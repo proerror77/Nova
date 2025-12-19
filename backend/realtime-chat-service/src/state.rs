@@ -3,7 +3,8 @@ use crate::{
     redis_client::RedisClient,
     services::{
         encryption::EncryptionService, graph_client::GraphClient, identity_client::IdentityClient,
-        key_exchange::KeyExchangeService, matrix_client::MatrixClient, MegolmService, OlmService,
+        key_exchange::KeyExchangeService, matrix_admin::MatrixAdminClient, matrix_client::MatrixClient,
+        MegolmService, OlmService,
     },
     websocket::ConnectionRegistry,
 };
@@ -31,4 +32,6 @@ pub struct AppState {
     /// Identity client for user settings (dm_permission) via identity-service
     /// P0: Single source of truth for dm_permission
     pub identity_client: Option<Arc<IdentityClient>>,
+    /// Matrix Admin client for user provisioning (create users, generate login tokens)
+    pub matrix_admin_client: Option<Arc<MatrixAdminClient>>,
 }

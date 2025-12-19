@@ -51,6 +51,51 @@ struct UpdateAvatarRequest {
     avatar_url: String,
 }
 
+/// Request body for creating/updating a Matrix user via Admin API
+/// PUT /_synapse/admin/v2/users/{user_id}
+#[derive(Debug, Serialize)]
+struct CreateUserRequest {
+    /// Display name for the user
+    displayname: Option<String>,
+    /// Whether the user is an admin (default: false)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    admin: Option<bool>,
+    /// Whether the user is deactivated (default: false)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    deactivated: Option<bool>,
+}
+
+/// Response from creating/updating a Matrix user
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct CreateUserResponse {
+    /// The Matrix user ID
+    pub name: String,
+    /// Display name
+    pub displayname: Option<String>,
+    /// Whether the user is an admin
+    pub admin: bool,
+    /// Whether the user is deactivated
+    pub deactivated: bool,
+}
+
+/// Request body for generating a login token
+/// POST /_synapse/admin/v1/users/{user_id}/login
+#[derive(Debug, Serialize)]
+struct LoginTokenRequest {
+    /// How long the token should be valid for (in milliseconds)
+    /// Default is 2 minutes (120000ms), max is typically 1 hour
+    #[serde(skip_serializing_if = "Option::is_none")]
+    valid_until_ms: Option<i64>,
+}
+
+/// Response containing the login token
+#[derive(Debug, Deserialize)]
+pub struct LoginTokenResponse {
+    /// The login token that can be used with `m.login.token` flow
+    pub login_token: String,
+}
+
 impl MatrixAdminClient {
     /// Create a new Matrix Admin API client
     ///
@@ -350,6 +395,172 @@ impl MatrixAdminClient {
             // Non-fatal: user may not exist or have no devices
             Ok(())
         }
+    }
+
+    /// Create or update a Matrix user via Synapse Admin API
+    ///
+    /// This calls PUT /_synapse/admin/v2/users/{user_id}
+    /// See: https://matrix-org.github.io/synapse/latest/admin_api/user_admin_api.html#create-or-modify-account
+    ///
+    /// If the user already exists, this is a no-op (returns success).
+    /// If the user doesn't exist, creates them with the given display name.
+    ///
+    /// # Arguments
+    /// * `user_id` - Nova user ID (will be converted to MXID)
+    /// * `displayname` - Display name for the user (optional)
+    ///
+    /// # Returns
+    /// Ok(mxid) if creation/update succeeded, Err otherwise
+    pub async fn create_or_get_user(
+        &self,
+        user_id: Uuid,
+        displayname: Option<String>,
+    ) -> Result<String, AppError> {
+        let mxid = self.user_id_to_mxid(user_id);
+        let url = format!(
+            "{}/_synapse/admin/v2/users/{}",
+            self.homeserver_url,
+            urlencoding::encode(&mxid)
+        );
+
+        info!(
+            "Creating/updating Matrix user: mxid={}, displayname={:?}, nova_user_id={}",
+            mxid, displayname, user_id
+        );
+
+        let request_body = CreateUserRequest {
+            displayname,
+            admin: Some(false),
+            deactivated: Some(false),
+        };
+
+        let response = self
+            .client
+            .put(&url)
+            .header("Authorization", format!("Bearer {}", self.admin_token))
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| {
+                error!("Failed to send create user request to Synapse: {}", e);
+                AppError::ServiceUnavailable(format!("Synapse API request failed: {}", e))
+            })?;
+
+        let status = response.status();
+        if status.is_success() {
+            info!(
+                "Successfully created/updated Matrix user: mxid={}, nova_user_id={}",
+                mxid, user_id
+            );
+            Ok(mxid)
+        } else {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            error!(
+                "Synapse create user API returned error: status={}, body={}, mxid={}",
+                status, error_text, mxid
+            );
+            Err(AppError::ServiceUnavailable(format!(
+                "Synapse create user failed ({}): {}",
+                status, error_text
+            )))
+        }
+    }
+
+    /// Generate a login token for a Matrix user via Synapse Admin API
+    ///
+    /// This calls POST /_synapse/admin/v1/users/{user_id}/login
+    /// See: https://matrix-org.github.io/synapse/latest/admin_api/user_admin_api.html#login-as-a-user
+    ///
+    /// The returned token can be used with the `m.login.token` login flow.
+    ///
+    /// # Arguments
+    /// * `user_id` - Nova user ID (will be converted to MXID)
+    /// * `valid_for_ms` - How long the token should be valid (optional, default ~2 minutes)
+    ///
+    /// # Returns
+    /// Ok(login_token) if successful, Err otherwise
+    pub async fn generate_user_login_token(
+        &self,
+        user_id: Uuid,
+        valid_for_ms: Option<i64>,
+    ) -> Result<String, AppError> {
+        let mxid = self.user_id_to_mxid(user_id);
+        let url = format!(
+            "{}/_synapse/admin/v1/users/{}/login",
+            self.homeserver_url,
+            urlencoding::encode(&mxid)
+        );
+
+        info!(
+            "Generating login token for Matrix user: mxid={}, nova_user_id={}",
+            mxid, user_id
+        );
+
+        let request_body = LoginTokenRequest {
+            valid_until_ms: valid_for_ms,
+        };
+
+        let response = self
+            .client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.admin_token))
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| {
+                error!("Failed to send login token request to Synapse: {}", e);
+                AppError::ServiceUnavailable(format!("Synapse API request failed: {}", e))
+            })?;
+
+        let status = response.status();
+        if status.is_success() {
+            let token_response: LoginTokenResponse = response.json().await.map_err(|e| {
+                error!("Failed to parse login token response: {}", e);
+                AppError::ServiceUnavailable(format!("Invalid response from Synapse: {}", e))
+            })?;
+            
+            info!(
+                "Successfully generated login token for Matrix user: mxid={}, nova_user_id={}",
+                mxid, user_id
+            );
+            Ok(token_response.login_token)
+        } else {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            error!(
+                "Synapse login token API returned error: status={}, body={}, mxid={}",
+                status, error_text, mxid
+            );
+            Err(AppError::ServiceUnavailable(format!(
+                "Synapse login token failed ({}): {}",
+                status, error_text
+            )))
+        }
+    }
+
+    /// Provision a Nova user for Matrix
+    ///
+    /// This is the main entry point for Nova -> Matrix user provisioning.
+    /// It creates the Matrix user if they don't exist, then generates a login token.
+    ///
+    /// # Arguments
+    /// * `user_id` - Nova user ID
+    /// * `displayname` - User's display name
+    ///
+    /// # Returns
+    /// Ok((mxid, login_token)) if successful, Err otherwise
+    pub async fn provision_user(
+        &self,
+        user_id: Uuid,
+        displayname: Option<String>,
+    ) -> Result<(String, String), AppError> {
+        // Step 1: Create or update the user
+        let mxid = self.create_or_get_user(user_id, displayname).await?;
+
+        // Step 2: Generate a login token for the user
+        // Token valid for 1 hour (3600000 ms)
+        let login_token = self.generate_user_login_token(user_id, Some(3600000)).await?;
+
+        Ok((mxid, login_token))
     }
 }
 
