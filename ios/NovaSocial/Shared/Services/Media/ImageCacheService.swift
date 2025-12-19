@@ -25,6 +25,7 @@ actor ImageCacheService {
     private let memoryCache = NSCache<NSString, UIImage>()
     private let fileManager = FileManager.default
     private var cacheDirectory: URL?
+    private let session: URLSession
 
     // Configuration
     private let maxMemoryCacheSize: Int = 150 * 1024 * 1024  // 150MB (increased for better performance)
@@ -43,6 +44,18 @@ actor ImageCacheService {
     private init() {
         // Setup cache synchronously since these are non-isolated operations
         memoryCache.totalCostLimit = maxMemoryCacheSize
+
+        // Dedicated URLSession for media fetching.
+        // Avoids coupling image downloads to APIClient's URLSession config/caching.
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 60
+        config.timeoutIntervalForResource = 300
+        config.urlCache = nil
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.httpShouldUsePipelining = true
+        config.httpMaximumConnectionsPerHost = 6
+        config.allowsCellularAccess = true
+        self.session = URLSession(configuration: config)
 
         // Setup disk cache directory
         if let cachesDir = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first {
@@ -87,9 +100,9 @@ actor ImageCacheService {
             // Configure request with priority
             var request = URLRequest(url: url)
             request.networkServiceType = priority == .immediate ? .responsiveData : .default
+            request.timeoutInterval = priority == .immediate ? 30 : 60
             
-            // Use APIClient's session for HTTP/2 connection pooling and caching
-            let (data, response) = try await APIClient.shared.session.data(for: request)
+            let (data, response) = try await session.data(for: request)
 
             if let httpResponse = response as? HTTPURLResponse {
                 // Accept 200-299 and cache revalidation 304.

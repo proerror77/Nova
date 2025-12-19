@@ -58,6 +58,10 @@ class FeedViewModel: ObservableObject {
     // Posts are kept for 5 minutes to allow backend indexing
     private var recentlyCreatedPosts: [(post: FeedPost, createdAt: Date)] = []
     private let recentPostRetentionDuration: TimeInterval = 300  // 5 minutes
+    
+    #if DEBUG
+    private var loadFeedInvocationCounter: Int = 0
+    #endif
 
     // Track ongoing bookmark operations to prevent concurrent calls for the same post
     private var ongoingBookmarkOperations: Set<String> = []
@@ -152,6 +156,12 @@ class FeedViewModel: ObservableObject {
         error = nil
         currentAlgorithm = algorithm
         currentCursor = nil
+        
+        #if DEBUG
+        loadFeedInvocationCounter += 1
+        let invocationId = loadFeedInvocationCounter
+        print("[FeedVM] loadFeed #\(invocationId) start auth=\(isAuthenticated) guestFallback=\(isGuestFallback) channelId=\(selectedChannelId ?? "nil")")
+        #endif
 
         do {
             // Use Guest Feed API when not authenticated, otherwise use authenticated Feed API
@@ -163,6 +173,11 @@ class FeedViewModel: ObservableObject {
                 // Guest Mode: fetch trending posts without authentication
                 response = try await feedService.getTrendingFeed(limit: 20, cursor: nil)
             }
+            
+            #if DEBUG
+            let responsePreview = response.posts.prefix(5).map { "\($0.id.prefix(8))(\($0.mediaUrls?.count ?? 0))" }.joined(separator: ",")
+            print("[FeedVM] loadFeed #\(invocationId) response posts=\(response.posts.count) preview=[\(responsePreview)] (format: idPrefix(mediaCount))")
+            #endif
 
             // Feed API now returns full post objects directly
             self.postIds = response.postIds
@@ -171,6 +186,12 @@ class FeedViewModel: ObservableObject {
 
             // Convert raw posts to FeedPost objects directly
             var allPosts = response.posts.map { FeedPost(from: $0) }
+
+            // DEBUG: Log posts after API conversion
+            print("[FeedVM] loadFeed AFTER API conversion: \(allPosts.count) posts")
+            for post in allPosts.prefix(3) {
+                print("[FeedVM]   -> \(post.id.prefix(8)): mediaUrls=\(post.mediaUrls.count), thumbnailUrls=\(post.thumbnailUrls.count)")
+            }
 
             // Sync current user's avatar for their own posts (ensures latest avatar is shown)
             allPosts = syncCurrentUserAvatar(allPosts)
@@ -185,8 +206,20 @@ class FeedViewModel: ObservableObject {
                 }
             }
 
+            // DEBUG: Log posts before merge
+            print("[FeedVM] BEFORE merge: \(allPosts.count) posts, recentlyCreatedPosts=\(recentlyCreatedPosts.count)")
+            for post in allPosts.prefix(3) {
+                print("[FeedVM]   -> \(post.id.prefix(8)): mediaUrls=\(post.mediaUrls.count)")
+            }
+
             // Merge recently created posts that may not be in server response yet
             mergeRecentlyCreatedPosts(into: &allPosts)
+
+            // DEBUG: Log posts after merge
+            print("[FeedVM] AFTER merge: \(allPosts.count) posts")
+            for post in allPosts.prefix(3) {
+                print("[FeedVM]   -> \(post.id.prefix(8)): mediaUrls=\(post.mediaUrls.count)")
+            }
             
             // Client-side deduplication: Remove duplicate posts by ID
             var seenIds = Set<String>()
@@ -195,6 +228,23 @@ class FeedViewModel: ObservableObject {
                 seenIds.insert(post.id)
                 return true
             }
+
+            // DEBUG: Log what posts are being set
+            for post in self.posts.prefix(5) {
+                print("[FeedVM] Post \(post.id.prefix(8)) set with mediaUrls=\(post.mediaUrls), thumbnailUrls=\(post.thumbnailUrls)")
+            }
+            
+            #if DEBUG
+            let responseIdSet = Set(response.posts.map { $0.id })
+            let finalIdSet = Set(self.posts.map { $0.id })
+            let missingFromFinal = responseIdSet.subtracting(finalIdSet)
+            if !missingFromFinal.isEmpty {
+                let preview = missingFromFinal.prefix(10).map { String($0.prefix(8)) }.joined(separator: ",")
+                print("[FeedVM] ⚠️ loadFeed #\(invocationId) missingFromFinal=\(missingFromFinal.count) preview=[\(preview)]")
+            } else {
+                print("[FeedVM] loadFeed #\(invocationId) missingFromFinal=0")
+            }
+            #endif
 
             // Prefetch images for first batch of posts
             prefetchImagesForPosts(self.posts, startIndex: 0, count: 10)
@@ -468,6 +518,10 @@ class FeedViewModel: ObservableObject {
             isLiked: false,
             isBookmarked: false
         )
+
+        #if DEBUG
+        print("[FeedVM] addNewPost id=\(post.id.prefix(8)) mediaUrlsCount=\(post.mediaUrls?.count ?? 0) firstUrl=\(post.mediaUrls?.first ?? "nil")")
+        #endif
 
         // Add to the top of the feed
         self.posts.insert(feedPost, at: 0)

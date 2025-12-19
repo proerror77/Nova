@@ -77,6 +77,7 @@ struct FeedPostCard: View {
             .padding(.horizontal, 16)
 
             // MARK: - Post Media (Images & Videos)
+            let _ = print("[DEBUG] Post \(post.id.prefix(8)) displayMediaUrls=\(post.displayMediaUrls), mediaUrls=\(post.mediaUrls), thumbnailUrls=\(post.thumbnailUrls)")
             if !post.displayMediaUrls.isEmpty {
                 VStack(spacing: 8) {
                     TabView(selection: $currentImageIndex) {

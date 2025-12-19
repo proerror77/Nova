@@ -555,11 +555,8 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.mediaUrls = raw.mediaUrls ?? []
 
         #if DEBUG
-        if let urls = raw.mediaUrls, !urls.isEmpty {
-            print("[Feed] Post \(raw.id.prefix(8)): mediaUrls=\(urls)")
-        } else if raw.mediaUrls == nil {
-            print("[Feed] Post \(raw.id.prefix(8)): mediaUrls is nil")
-        }
+        // Always log every post creation to trace ID flow
+        print("[Feed] Created post \(raw.id.prefix(8)): mediaUrls=\(raw.mediaUrls?.count ?? -1)")
         #endif
         self.thumbnailUrls = raw.thumbnailUrls ?? self.mediaUrls
         // Determine media type from backend or infer from URLs
@@ -581,6 +578,9 @@ struct FeedPost: Identifiable, Codable, Equatable {
         content: String, mediaUrls: [String], mediaType: FeedMediaType? = nil, createdAt: Date,
          likeCount: Int, commentCount: Int, shareCount: Int,
          isLiked: Bool, isBookmarked: Bool) {
+        #if DEBUG
+        print("[Feed] Created post via manual init: \(id.prefix(8)), mediaUrls=\(mediaUrls.count)")
+        #endif
         self.id = id
         self.authorId = authorId
         self.authorName = authorName
@@ -626,6 +626,9 @@ struct FeedPost: Identifiable, Codable, Equatable {
 
     /// Create FeedPost from content-service Post model (for Profile page navigation)
     init(from post: Post, authorName: String, authorAvatar: String?) {
+        #if DEBUG
+        print("[Feed] Created post from Post model: \(post.id.prefix(8))")
+        #endif
         self.id = post.id
         self.authorId = post.authorId
         self.authorName = authorName

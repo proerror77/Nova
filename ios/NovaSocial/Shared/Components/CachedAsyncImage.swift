@@ -88,7 +88,10 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
 
         if enableProgressiveLoading {
             // Try to load thumbnail first for quick preview
-            if let thumbnail = await ImageCacheService.shared.loadThumbnail(from: url.absoluteString) {
+            let thumbnailTask = Task.detached(priority: .utility) {
+                await ImageCacheService.shared.loadThumbnail(from: url.absoluteString)
+            }
+            if let thumbnail = await thumbnailTask.value, !Task.isCancelled {
                 await MainActor.run {
                     thumbnailImage = thumbnail
                     loadPhase = .thumbnail
@@ -97,14 +100,21 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
         }
 
         // Load full image
-        let loadedImage = await ImageCacheService.shared.loadImage(
-            from: url.absoluteString,
-            targetSize: targetSize,
-            priority: priority
-        )
+        let imageTask = Task.detached(priority: priority == .high ? .userInitiated : .utility) {
+            await ImageCacheService.shared.loadImage(
+                from: url.absoluteString,
+                targetSize: targetSize,
+                priority: priority
+            )
+        }
+        let loadedImage = await imageTask.value
         
         await MainActor.run {
-            if let loadedImage = loadedImage {
+            if Task.isCancelled {
+                // View task was cancelled (e.g., rapid re-render). Don't leave UI stuck in loading forever.
+                loadPhase = .failed
+                isLoading = false
+            } else if let loadedImage = loadedImage {
                 image = loadedImage
                 loadPhase = .loaded
             } else {

@@ -1294,7 +1294,16 @@ struct NewPostView: View {
             
             #if DEBUG
             print("[NewPost] Upload complete: \(mediaUrls.count) URLs")
+            print("[NewPost] mediaUrls = \(mediaUrls)")
             #endif
+
+            // If user selected media but uploads all failed, do NOT create an empty post.
+            if mediaUrls.isEmpty {
+                struct UploadFailedError: LocalizedError {
+                    var errorDescription: String? { "Image upload failed. Please try again." }
+                }
+                throw UploadFailedError()
+            }
 
             // Step 2: 创建帖子 (带重试逻辑处理 503 错误)
             await MainActor.run {
@@ -1314,6 +1323,9 @@ struct NewPostView: View {
                         mediaUrls: mediaUrls.isEmpty ? nil : mediaUrls,
                         channelIds: selectedChannelIds.isEmpty ? nil : selectedChannelIds
                     )
+                    #if DEBUG
+                    print("[NewPost] Created post: id=\(post?.id ?? "nil"), mediaUrls=\(post?.mediaUrls ?? [])")
+                    #endif
                     break  // 成功则跳出循环
                 } catch let error as APIError {
                     lastError = error

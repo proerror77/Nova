@@ -94,11 +94,28 @@ class MediaService {
                     
                     group.addTask {
                         do {
-                            let url = try await self.uploadImage(
-                                imageData: image.data,
-                                filename: image.filename
-                            )
-                            return (index, .success(url))
+                            var lastError: Error?
+                            for attempt in 1...3 {
+                                do {
+                                    let url = try await self.uploadImage(
+                                        imageData: image.data,
+                                        filename: image.filename
+                                    )
+                                    return (index, .success(url))
+                                } catch let apiError as APIError {
+                                    lastError = apiError
+                                    // Retry transient backend failures (e.g., 503s from gateway/media-service).
+                                    if apiError.isRetryable, attempt < 3 {
+                                        try? await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000)
+                                        continue
+                                    }
+                                    throw apiError
+                                } catch {
+                                    lastError = error
+                                    throw error
+                                }
+                            }
+                            return (index, .failure(lastError ?? APIError.serviceUnavailable))
                         } catch {
                             return (index, .failure(error))
                         }

@@ -30,9 +30,9 @@ spec:
         - name: GRPC_SEARCH_SERVICE_URL
           value: "http://search-service.nova-staging.svc.cluster.local:9086"
 
-        # Media service - gRPC port 9082 with mTLS
+        # Media service - gRPC port 9085 with mTLS
         - name: GRPC_MEDIA_SERVICE_URL
-          value: "https://media-service.nova-staging.svc.cluster.local:9082"
+          value: "https://media-service.nova-staging.svc.cluster.local:9085"
 
         # Identity service - gRPC port 50051 with mTLS
         - name: GRPC_IDENTITY_SERVICE_URL
