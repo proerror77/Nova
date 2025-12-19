@@ -1,17 +1,13 @@
 name: Release Automation
 
-# Automated release workflow with semantic versioning
+# Manual release workflow with semantic versioning
+# - Triggered manually via GitHub Actions UI or gh CLI
 # - Auto-generates changelogs from conventional commits
 # - Creates GitHub releases
 # - Tags Docker images with version
 # - Supports environment promotions
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'backend/**'
-      - 'ios/**'
   workflow_dispatch:
     inputs:
       release_type:
