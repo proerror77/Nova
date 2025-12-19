@@ -49,6 +49,7 @@ struct NewPostView: View {
     private let aliceService = AliceService.shared
     private let feedService = FeedService()
     private let videoCompressor = VideoCompressor.shared
+    private let imageCompressor = ImageCompressor.shared
 
     var body: some View {
         ZStack {
@@ -1169,28 +1170,55 @@ struct NewPostView: View {
                 }
             }
             
-            // Process images in parallel on background threads
+            // Compress images in parallel using ImageCompressor
             if !imagesToProcess.isEmpty {
-                await withTaskGroup(of: (data: Data, filename: String, index: Int)?.self) { group in
-                    for imageInfo in imagesToProcess {
-                        group.addTask {
-                            // Perform resize and compression on background thread
-                            let resizedImage = await self.resizeImageForUploadAsync(imageInfo.image)
-                            if let imageData = resizedImage.jpegData(compressionQuality: 0.6) {
-                                return (data: imageData, filename: "post_\(UUID().uuidString).jpg", index: imageInfo.index)
-                            }
-                            return nil
-                        }
-                    }
-                    
-                    for await result in group {
-                        if let result = result {
-                            regularImages.append(result)
-                        }
-                    }
+                await MainActor.run {
+                    uploadStatus = "Compressing images..."
                 }
+
+                #if DEBUG
+                print("[NewPost] Starting compression of \(imagesToProcess.count) image(s)")
+                #endif
+
+                // Extract just the images for compression
+                let images = imagesToProcess.map { $0.image }
+
+                // Compress all images in parallel
+                let compressionResults = await imageCompressor.compressImagesInParallel(
+                    images: images,
+                    quality: .medium,
+                    progressCallback: { progress in
+                        #if DEBUG
+                        print("[NewPost] Image compression progress: \(String(format: "%.0f", progress * 100))%")
+                        #endif
+                    }
+                )
+
+                // Map compression results to regularImages array
+                for (arrayIndex, result) in compressionResults.enumerated() {
+                    let originalIndex = imagesToProcess[arrayIndex].index
+                    regularImages.append((
+                        data: result.data,
+                        filename: "post_\(UUID().uuidString).jpg",
+                        index: originalIndex
+                    ))
+
+                    #if DEBUG
+                    if result.savedPercentage > 0 {
+                        print("[NewPost] Image \(arrayIndex + 1) compressed: saved \(String(format: "%.1f", result.savedPercentage))%")
+                    }
+                    #endif
+                }
+
                 // Sort by original index to maintain order
                 regularImages.sort { $0.index < $1.index }
+
+                #if DEBUG
+                let totalOriginal = compressionResults.reduce(0) { $0 + $1.originalSize }
+                let totalCompressed = compressionResults.reduce(0) { $0 + $1.compressedSize }
+                let savedMB = Double(totalOriginal - totalCompressed) / 1_000_000.0
+                print("[NewPost] Total compression savings: \(String(format: "%.2f", savedMB)) MB")
+                #endif
             }
             
             let totalItems = regularImages.count + livePhotos.count + videos.count
@@ -1243,11 +1271,17 @@ struct NewPostView: View {
                 await MainActor.run {
                     uploadStatus = "Uploading Live Photo \(livePhotoIndex + 1)/\(livePhotos.count)..."
                 }
-                
-                let resizedImage = resizeImageForUpload(livePhotoInfo.data.stillImage)
-                guard let imageData = resizedImage.jpegData(compressionQuality: 0.5) else {
-                    continue
-                }
+
+                // Compress the still image component
+                let compressionResult = await imageCompressor.compressImage(
+                    livePhotoInfo.data.stillImage,
+                    quality: .medium
+                )
+                let imageData = compressionResult.data
+
+                #if DEBUG
+                print("[NewPost] Live Photo still image compressed: saved \(String(format: "%.1f", compressionResult.savedPercentage))%")
+                #endif
                 
                 var livePhotoResult: LivePhotoUploadResult?
                 var lastError: Error?
