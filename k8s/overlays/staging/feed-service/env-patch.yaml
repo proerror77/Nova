@@ -41,8 +41,8 @@ spec:
             # Redis 用於 feed 緩存，避免每次都走後端服務/資料庫
             - name: REDIS_URL
               value: "redis://redis.nova-staging.svc.cluster.local:6379"
-            # Rewrite media URLs to go through GCP Cloud CDN front in staging
+            # Use GCS public URL until Cloud CDN is deployed
             - name: FEED_MEDIA_CDN_BASE_URL
-              value: "http://35.186.234.219"
+              value: "https://storage.googleapis.com/nova-media-staging"
             - name: FEED_MEDIA_GCS_PREFIX
               value: "https://storage.googleapis.com/nova-media-staging/"

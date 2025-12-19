@@ -8,8 +8,9 @@ spec:
       containers:
         - name: media-service
           env:
-            # 將媒體網址改寫到 GCP Cloud CDN 前端（目前 staging 直接使用 LB IP）
+            # Use GCS public URL until Cloud CDN is deployed
+            # After CDN deployment, update to: https://media-staging.nova.social
             - name: CDN_URL
-              value: "http://35.186.234.219"
+              value: "https://storage.googleapis.com/nova-media-staging"
             - name: MEDIA_CDN_BASE_URL
-              value: "http://35.186.234.219"
+              value: "https://storage.googleapis.com/nova-media-staging"

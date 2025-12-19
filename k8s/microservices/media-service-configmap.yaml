@@ -2,6 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: media-service-config
+  namespace: nova-staging
   labels:
     app: media-service
     tier: backend
@@ -17,7 +18,9 @@ data:
   AWS_REGION: auto
   S3_BUCKET: nova-media-staging
   S3_ENDPOINT: https://storage.googleapis.com
-  CDN_URL: http://35.186.234.219
+  # Use GCS public URL until Cloud CDN is deployed
+  # After CDN deployment, update to: https://media-staging.nova.social
+  CDN_URL: https://storage.googleapis.com/nova-media-staging
   # Upload limits (in bytes)
   UPLOAD_MAX_IMAGE_SIZE: "10485760"    # 10MB
   UPLOAD_MAX_VIDEO_SIZE: "104857600"   # 100MB
