@@ -53,18 +53,18 @@ spec:
           imagePullPolicy: Always
           env:
             - name: GRPC_SERVER_CERT_PATH
-              value: /etc/grpc/certs/server.crt
+              value: /etc/nova/certs/server.crt
             - name: GRPC_SERVER_KEY_PATH
-              value: /etc/grpc/certs/server.key
+              value: /etc/nova/certs/server.key
             - name: GRPC_CA_CERT_PATH
-              value: /etc/grpc/certs/ca.crt
+              value: /etc/nova/certs/ca.crt
             - name: NSFW_DETECTION_ENABLED
               value: "false"
             - name: HEALTH_PORT
-              value: "8080"
+              value: "8086"
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: 8086
               protocol: TCP
             - name: grpc
               containerPort: 50056
@@ -79,7 +79,7 @@ spec:
           startupProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8086
             initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 5
@@ -88,7 +88,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8086
             initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
@@ -96,8 +96,8 @@ spec:
 
           readinessProbe:
             httpGet:
-              path: /ready
-              port: 8080
+              path: /health
+              port: 8086
             initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
@@ -112,14 +112,14 @@ spec:
               mountPath: /tmp
             - name: var-tmp
               mountPath: /var/tmp
-            - name: grpc-certs
-              mountPath: /etc/grpc/certs
+            - name: grpc-mtls-shared
+              mountPath: /etc/nova/certs
               readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
         - name: var-tmp
           emptyDir: {}
-        - name: grpc-certs
+        - name: grpc-mtls-shared
           secret:
             secretName: grpc-mtls-shared

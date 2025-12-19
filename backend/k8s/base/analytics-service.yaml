@@ -41,6 +41,12 @@ spec:
           value: "9000"
         - name: RUST_LOG
           value: "info"
+        - name: GRPC_SERVER_CERT_PATH
+          value: "/etc/nova/certs/tls.crt"
+        - name: GRPC_SERVER_KEY_PATH
+          value: "/etc/nova/certs/tls.key"
+        - name: GRPC_TLS_CA_CERT_PATH
+          value: "/etc/nova/certs/ca.crt"
         envFrom:
         - configMapRef:
             name: nova-backend-config
@@ -78,6 +84,14 @@ spec:
           periodSeconds: 5
           timeoutSeconds: 3
           failureThreshold: 30
+        volumeMounts:
+        - name: grpc-mtls-certs
+          mountPath: /etc/nova/certs
+          readOnly: true
+      volumes:
+      - name: grpc-mtls-certs
+        secret:
+          secretName: grpc-mtls-shared
       restartPolicy: Always
 
 ---
