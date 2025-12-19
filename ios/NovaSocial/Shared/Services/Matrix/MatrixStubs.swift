@@ -1,31 +1,46 @@
 import Foundation
 
-// MARK: - Matrix Integration Status
-//
-// This file previously contained stub implementations for MatrixBridgeService.
-// The full Matrix integration is now enabled via:
-//
-// - MatrixService.swift: Core Matrix Rust SDK wrapper
-// - MatrixBridgeService.swift: Nova-Matrix bridge service
-// - MatrixSSOManager.swift: SSO authentication flow
-//
-// Configuration:
-// - Staging homeserver: https://matrix.staging.gcp.icered.com
-// - Matrix server name: staging.gcp.icered.com
-// - SSO callback URLs configured in Info.plist:
-//   - nova-staging://matrix-sso-callback (staging)
-//   - nova://matrix-sso-callback (production)
-//
-// To use Matrix E2EE in the app:
-// 1. Initialize MatrixBridgeService after user login
-// 2. Check MatrixBridgeService.shared.isE2EEAvailable
-// 3. Use MatrixBridgeService.shared to send/receive encrypted messages
-//
-// Note: The MatrixRustSDK package must be added to the Xcode project
-// via Swift Package Manager for full functionality.
-// Package URL: https://github.com/matrix-org/matrix-rust-components-swift
+// MARK: - Matrix Stubs
+// Placeholder implementations for Matrix services that are not yet fully implemented
 
-// No stub types needed - all implementations are in their respective files:
-// - MatrixService.swift
-// - MatrixBridgeService.swift
-// - MatrixSSOManager.swift
+enum VerificationState {
+    case unknown
+    case verified
+    case unverified
+}
+
+struct DirectRoom {
+    let id: String
+}
+
+final class MatrixBridgeService {
+    static let shared = MatrixBridgeService()
+
+    private init() {}
+
+    var isEnabled: Bool { false }
+    var isConnected: Bool { false }
+    var isInitialized: Bool { false }
+
+    func initialize(requireLogin: Bool = false) async throws {}
+    func connect() async throws {}
+    func disconnect() async throws {}
+
+    func createDirectConversation(withUserId userId: String, displayName: String) async throws -> DirectRoom {
+        return DirectRoom(id: "")
+    }
+
+    func shutdown(clearCredentials: Bool = false) async {}
+}
+
+final class MatrixService {
+    static let shared = MatrixService()
+
+    private init() {}
+
+    var isLoggedIn: Bool { false }
+
+    func getVerificationState() -> VerificationState {
+        return .unknown
+    }
+}

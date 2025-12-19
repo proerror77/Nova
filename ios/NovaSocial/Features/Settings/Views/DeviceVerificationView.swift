@@ -591,3 +591,61 @@ enum VerificationFlowState {
         DeviceVerificationView()
     }
 }
+
+// MARK: - Default Session Verification Delegate
+
+final class DefaultSessionVerificationDelegate: SessionVerificationControllerDelegate, @unchecked Sendable {
+    private let onRequestReceived: (SessionVerificationRequestDetails) -> Void
+    private let onRequestAccepted: () -> Void
+    private let onSasStarted: () -> Void
+    private let onVerificationData: (SessionVerificationData) -> Void
+    private let onFailed: () -> Void
+    private let onCancelled: () -> Void
+    private let onFinished: () -> Void
+
+    init(
+        onRequestReceived: @escaping (SessionVerificationRequestDetails) -> Void,
+        onRequestAccepted: @escaping () -> Void,
+        onSasStarted: @escaping () -> Void,
+        onVerificationData: @escaping (SessionVerificationData) -> Void,
+        onFailed: @escaping () -> Void,
+        onCancelled: @escaping () -> Void,
+        onFinished: @escaping () -> Void
+    ) {
+        self.onRequestReceived = onRequestReceived
+        self.onRequestAccepted = onRequestAccepted
+        self.onSasStarted = onSasStarted
+        self.onVerificationData = onVerificationData
+        self.onFailed = onFailed
+        self.onCancelled = onCancelled
+        self.onFinished = onFinished
+    }
+
+    func didReceiveVerificationRequest(details: SessionVerificationRequestDetails) {
+        onRequestReceived(details)
+    }
+
+    func didAcceptVerificationRequest() {
+        onRequestAccepted()
+    }
+
+    func didStartSasVerification() {
+        onSasStarted()
+    }
+
+    func didReceiveVerificationData(data: SessionVerificationData) {
+        onVerificationData(data)
+    }
+
+    func didFail() {
+        onFailed()
+    }
+
+    func didCancel() {
+        onCancelled()
+    }
+
+    func didFinish() {
+        onFinished()
+    }
+}

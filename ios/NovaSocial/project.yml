@@ -35,6 +35,19 @@ targets:
           - "Tests"
           - "ICEREDUITests"
           - "Scripts"
+          - "Frameworks"
+          - "Features/Settings/Views/DeviceVerificationView.swift"
+          - "Features/Settings/Views/KeyBackupSettingsView.swift"
+          - "Features/Settings/Views/PasskeySettingsView.swift"
+          - "Features/Call"
+          - "Shared/Services/Call"
+          - "Shared/Services/Matrix/MatrixService.swift"
+          - "Shared/Services/Matrix/MatrixBridgeService.swift"
+          - "Shared/Services/Matrix/MatrixSSOManager.swift"
+          - "Shared/Services/Chat"
+          - "Features/Chat"
+          - "Features/GroupChat"
+          - "Features/AddFriends"
     resources:
       - path: Assets.xcassets
       - path: en.lproj

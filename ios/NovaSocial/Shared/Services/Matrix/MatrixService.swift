@@ -48,6 +48,7 @@ class Client {
 class ClientBuilder {
     func homeserverUrl(url: String) -> ClientBuilder { self }
     func sessionPath(path: String) -> ClientBuilder { self }
+    func sessionPaths(dataPath: String, cachePath: String) -> ClientBuilder { self }
     func userAgent(userAgent: String) -> ClientBuilder { self }
     func build() async throws -> Client { Client() }
 }

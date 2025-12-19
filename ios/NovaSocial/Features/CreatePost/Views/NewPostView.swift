@@ -48,6 +48,7 @@ struct NewPostView: View {
     private let livePhotoManager = LivePhotoManager.shared
     private let aliceService = AliceService.shared
     private let feedService = FeedService()
+    private let videoCompressor = VideoCompressor.shared
 
     var body: some View {
         ZStack {
@@ -1192,7 +1193,7 @@ struct NewPostView: View {
                 regularImages.sort { $0.index < $1.index }
             }
             
-            let totalItems = regularImages.count + livePhotos.count
+            let totalItems = regularImages.count + livePhotos.count + videos.count
             var completedItems = 0
             var uploadResults: [(index: Int, urls: [String])] = []
             
@@ -1288,6 +1289,136 @@ struct NewPostView: View {
                 }
             }
             
+            // Compress and upload videos in parallel
+            if !videos.isEmpty {
+                await MainActor.run {
+                    uploadStatus = "Compressing videos..."
+                }
+                
+                #if DEBUG
+                print("[NewPost] Starting compression of \(videos.count) video(s)")
+                #endif
+                
+                // Compress all videos in parallel first
+                var compressedVideos: [(index: Int, url: URL, isCompressed: Bool)] = []
+                
+                await withTaskGroup(of: (index: Int, url: URL, isCompressed: Bool)?.self) { group in
+                    for videoInfo in videos {
+                        group.addTask {
+                            do {
+                                let result = try await self.videoCompressor.compressVideo(
+                                    inputURL: videoInfo.data.url,
+                                    quality: .medium
+                                )
+                                
+                                #if DEBUG
+                                if result.savedPercentage > 0 {
+                                    print("[NewPost] Video compressed: saved \(String(format: "%.1f", result.savedPercentage))%")
+                                }
+                                #endif
+                                
+                                let isCompressed = result.outputURL != videoInfo.data.url
+                                return (index: videoInfo.index, url: result.outputURL, isCompressed: isCompressed)
+                            } catch {
+                                #if DEBUG
+                                print("[NewPost] Video compression failed, using original: \(error)")
+                                #endif
+                                // Fall back to original video if compression fails
+                                return (index: videoInfo.index, url: videoInfo.data.url, isCompressed: false)
+                            }
+                        }
+                    }
+                    
+                    for await result in group {
+                        if let result = result {
+                            compressedVideos.append(result)
+                        }
+                    }
+                }
+                
+                // Sort by original index
+                compressedVideos.sort { $0.index < $1.index }
+                
+                // Upload compressed videos in parallel
+                await MainActor.run {
+                    uploadStatus = "Uploading videos..."
+                }
+                
+                await withTaskGroup(of: (index: Int, url: String)?.self) { group in
+                    for (videoIndex, videoInfo) in compressedVideos.enumerated() {
+                        group.addTask {
+                            // Read video data
+                            guard let videoData = try? Data(contentsOf: videoInfo.url) else {
+                                #if DEBUG
+                                print("[NewPost] Failed to read video data from \(videoInfo.url)")
+                                #endif
+                                return nil
+                            }
+                            
+                            // Upload with retry
+                            var videoUrl: String?
+                            
+                            for attempt in 1...3 {
+                                do {
+                                    videoUrl = try await self.mediaService.uploadVideo(
+                                        videoData: videoData,
+                                        filename: "post_video_\(UUID().uuidString).mp4"
+                                    )
+                                    break
+                                } catch let error as APIError {
+                                    if case .serverError(let statusCode, _) = error, statusCode == 503 {
+                                        #if DEBUG
+                                        print("[NewPost] Video upload attempt \(attempt) failed with 503, retrying...")
+                                        #endif
+                                        if attempt < 3 {
+                                            try? await Task.sleep(nanoseconds: UInt64(attempt) * 2_000_000_000)
+                                            continue
+                                        }
+                                    }
+                                    #if DEBUG
+                                    print("[NewPost] Video upload failed: \(error)")
+                                    #endif
+                                    break
+                                } catch {
+                                    #if DEBUG
+                                    print("[NewPost] Video upload failed: \(error)")
+                                    #endif
+                                    break
+                                }
+                            }
+                            
+                            // Clean up compressed file if it was created
+                            if videoInfo.isCompressed {
+                                try? FileManager.default.removeItem(at: videoInfo.url)
+                            }
+                            
+                            if let url = videoUrl {
+                                return (index: videoInfo.index, url: url)
+                            }
+                            return nil
+                        }
+                    }
+                    
+                    var videoCompletedCount = 0
+                    for await result in group {
+                        if let result = result {
+                            uploadResults.append((index: result.index, urls: [result.url]))
+                            completedItems += 1
+                            videoCompletedCount += 1
+                            
+                            await MainActor.run {
+                                let progress = Double(completedItems) / Double(totalItems)
+                                self.uploadProgress = 0.8 * progress
+                            }
+                            
+                            #if DEBUG
+                            print("[NewPost] Video \(videoCompletedCount)/\(compressedVideos.count) uploaded: \(result.url)")
+                            #endif
+                        }
+                    }
+                }
+            }
+            
             // Sort results by original index to maintain order
             uploadResults.sort { $0.index < $1.index }
             mediaUrls = uploadResults.flatMap { $0.urls }
@@ -1300,7 +1431,7 @@ struct NewPostView: View {
             // If user selected media but uploads all failed, do NOT create an empty post.
             if mediaUrls.isEmpty {
                 struct UploadFailedError: LocalizedError {
-                    var errorDescription: String? { "Image upload failed. Please try again." }
+                    var errorDescription: String? { "Media upload failed. Please try again." }
                 }
                 throw UploadFailedError()
             }
@@ -1346,7 +1477,20 @@ struct NewPostView: View {
                 throw lastError ?? APIError.serverError(statusCode: 503, message: "Service unavailable")
             }
 
-            // Step 3: 成功后关闭页面并触发刷新回调
+            // Step 3: Clean up temporary files and close
+            // Clean up temporary video/Live Photo files after successful upload
+            for item in selectedMediaItems {
+                switch item {
+                case .livePhoto(let data):
+                    try? FileManager.default.removeItem(at: data.videoURL)
+                case .video(let data):
+                    try? FileManager.default.removeItem(at: data.url)
+                case .image:
+                    break
+                }
+            }
+            
+            // 成功后关闭页面并触发刷新回调
             await MainActor.run {
                 uploadProgress = 1.0
                 uploadStatus = "Done!"

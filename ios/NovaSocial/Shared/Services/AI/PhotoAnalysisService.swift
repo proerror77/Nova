@@ -19,11 +19,16 @@ final class PhotoAnalysisService {
     private(set) var lastAnalysisDate: Date?
 
     // Vision requests
-    private lazy var classificationRequest: VNClassifyImageRequest = {
+    private var _classificationRequest: VNClassifyImageRequest?
+    private var classificationRequest: VNClassifyImageRequest {
+        if let request = _classificationRequest {
+            return request
+        }
         let request = VNClassifyImageRequest()
         request.revision = VNClassifyImageRequestRevision1
+        _classificationRequest = request
         return request
-    }()
+    }
 
     private init() {
         loadLastAnalysisDate()
@@ -105,19 +110,22 @@ final class PhotoAnalysisService {
         }
 
         // Convert to PhotoTheme array
-        let detectedThemes = themeCounter.values
-            .filter { $0.photoCount >= 2 } // At least 2 photos with this theme
-            .map { accumulator -> PhotoTheme in
-                let avgConfidence = accumulator.totalConfidence / Float(accumulator.photoCount)
-                return PhotoTheme(
-                    theme: mapVisionIdentifierToTheme(accumulator.identifier),
-                    confidence: avgConfidence,
-                    photoCount: accumulator.photoCount,
-                    subCategories: getSubCategories(for: accumulator.identifier)
-                )
-            }
-            .sorted { $0.confidence * Float($0.photoCount) > $1.confidence * Float($1.photoCount) }
-            .prefix(20) // Top 20 themes
+        let filteredThemes = themeCounter.values.filter { $0.photoCount >= 2 }
+
+        var mappedThemes: [PhotoTheme] = []
+        for accumulator in filteredThemes {
+            let avgConfidence = accumulator.totalConfidence / Float(accumulator.photoCount)
+            let theme = PhotoTheme(
+                theme: mapVisionIdentifierToTheme(accumulator.identifier),
+                confidence: avgConfidence,
+                photoCount: accumulator.photoCount,
+                subCategories: getSubCategories(for: accumulator.identifier)
+            )
+            mappedThemes.append(theme)
+        }
+
+        let sortedThemes = mappedThemes.sorted { $0.confidence * Float($0.photoCount) > $1.confidence * Float($1.photoCount) }
+        let detectedThemes = sortedThemes.prefix(20) // Top 20 themes
 
         let result = PhotoAnalysisResult(
             detectedThemes: Array(detectedThemes),

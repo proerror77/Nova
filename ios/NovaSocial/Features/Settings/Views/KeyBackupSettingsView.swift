@@ -1,4 +1,5 @@
 import SwiftUI
+import MatrixRustSDK
 
 // MARK: - Key Backup Settings View
 
