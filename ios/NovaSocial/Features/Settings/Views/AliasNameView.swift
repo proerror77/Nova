@@ -384,12 +384,12 @@ struct AliasNameView: View {
 // MARK: - Previews
 
 #Preview("AliasName - Default") {
-    AliasNameView(currentPage: .constant(.aliasName))
+    AliasNameView(currentPage: .constant(.setting))
         .environmentObject(AuthenticationManager.shared)
 }
 
 #Preview("AliasName - Dark Mode") {
-    AliasNameView(currentPage: .constant(.aliasName))
+    AliasNameView(currentPage: .constant(.setting))
         .environmentObject(AuthenticationManager.shared)
         .preferredColorScheme(.dark)
 }
