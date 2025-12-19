@@ -56,26 +56,8 @@ struct IceredApp: App {
                     case .login:
                         LoginView(currentPage: $currentPage)
                             .transition(.identity)
-                    case .phoneLogin:
-                        PhoneLoginView(currentPage: $currentPage)
-                            .transition(.identity)
-                    case .phoneRegistration:
-                        PhoneRegistrationView(currentPage: $currentPage)
-                            .transition(.identity)
-                    case .forgotPassword:
-                        ForgotPasswordView(currentPage: $currentPage)
-                            .transition(.identity)
-                    case .emailSentConfirmation(let email):
-                        EmailSentConfirmationView(currentPage: $currentPage, email: email)
-                            .transition(.identity)
-                    case .resetPassword(let token):
-                        ResetPasswordView(currentPage: $currentPage, resetToken: token)
-                            .transition(.identity)
                     case .createAccount:
                         CreateAccountView(currentPage: $currentPage)
-                            .transition(.identity)
-                    case .phoneRegistration:
-                        PhoneRegistrationView(currentPage: $currentPage)
                             .transition(.identity)
                     case .home:
                         // Skip 跳过登录直接进入Home
@@ -114,9 +96,6 @@ struct IceredApp: App {
                     case .profileSetting:
                         ProfileSettingView(currentPage: $currentPage)
                             .transition(.identity)
-                    case .aliasName:
-                        AliasNameView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .devices:
                         DevicesView(currentPage: $currentPage)
                             .transition(.identity)
@@ -146,9 +125,6 @@ struct IceredApp: App {
             .environmentObject(themeManager)
             .environmentObject(pushManager)
             .preferredColorScheme(themeManager.colorScheme)
-            .onOpenURL { url in
-                handleDeepLink(url)
-            }
             .task {
                 // Check notification settings on app launch
                 await pushManager.checkNotificationSettings()
@@ -211,48 +187,6 @@ struct IceredApp: App {
                     // 重置时间戳
                     backgroundEntryTime = nil
                 }
-            }
-        }
-    }
-
-    // MARK: - Deep Link Handler
-
-    /// Handle deep links for password reset and other app navigation
-    /// Supported URL formats:
-    /// - nova://reset-password?token=xxx
-    /// - icered://reset-password?token=xxx
-    /// - https://app.nova.dev/reset-password?token=xxx
-    private func handleDeepLink(_ url: URL) {
-        #if DEBUG
-        print("[DeepLink] Received URL: \(url)")
-        #endif
-
-        // Extract the path from different URL schemes
-        let path: String
-        if url.scheme == "https" {
-            path = url.path
-        } else {
-            // For custom schemes like nova:// or icered://
-            path = url.host ?? ""
-        }
-
-        // Handle reset-password deep link
-        if path == "reset-password" || path == "/reset-password" {
-            // Extract token from query parameters
-            if let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
-               let queryItems = components.queryItems,
-               let token = queryItems.first(where: { $0.name == "token" })?.value,
-               !token.isEmpty {
-                #if DEBUG
-                print("[DeepLink] Password reset token received")
-                #endif
-                currentPage = .resetPassword(token: token)
-            } else {
-                #if DEBUG
-                print("[DeepLink] No valid token in reset-password URL")
-                #endif
-                // Show error or redirect to forgot password
-                currentPage = .forgotPassword
             }
         }
     }
