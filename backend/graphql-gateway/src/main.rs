@@ -464,6 +464,7 @@ async fn main() -> std::io::Result<()> {
                 web::post().to(rest_api::upload_avatar),
             )
             .service(rest_api::upload_media)
+            .service(rest_api::media::initiate_upload)
             .service(rest_api::media::get_media)
             .service(rest_api::media::complete_upload)
             .service(rest_api::media::get_user_media)

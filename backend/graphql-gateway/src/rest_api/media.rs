@@ -112,6 +112,133 @@ pub async fn upload_media(
 // Additional Media API Endpoints
 // ============================================================================
 
+/// Request body for initiating an upload (lightweight, no file data)
+#[derive(Debug, Deserialize)]
+pub struct InitiateUploadBody {
+    pub filename: String,
+    pub size_bytes: i64,
+    #[serde(default)]
+    pub content_type: Option<String>,
+}
+
+/// Response for initiate upload - includes presigned URL for direct GCS upload
+#[derive(Debug, Serialize)]
+pub struct InitiateUploadResponse {
+    pub upload_id: String,
+    pub presigned_url: String,
+    pub expires_at: i64,
+}
+
+/// POST /api/v2/media/upload/initiate
+/// Lightweight endpoint to get presigned URL without uploading file data.
+/// Client should then PUT the file directly to the presigned URL.
+#[post("/api/v2/media/upload/initiate")]
+pub async fn initiate_upload(
+    http_req: HttpRequest,
+    clients: web::Data<ServiceClients>,
+    body: web::Json<InitiateUploadBody>,
+) -> HttpResponse {
+    let user_id = match http_req.extensions().get::<AuthenticatedUser>().copied() {
+        Some(AuthenticatedUser(id)) => id.to_string(),
+        None => return HttpResponse::Unauthorized().finish(),
+    };
+
+    info!(
+        user_id = %user_id,
+        filename = %body.filename,
+        size_bytes = %body.size_bytes,
+        "POST /api/v2/media/upload/initiate"
+    );
+
+    if body.filename.is_empty() {
+        return HttpResponse::BadRequest().json(ErrorResponse::new("filename is required"));
+    }
+
+    if body.size_bytes <= 0 {
+        return HttpResponse::BadRequest().json(ErrorResponse::new("size_bytes must be positive"));
+    }
+
+    const MAX_UPLOAD_BYTES: i64 = 20 * 1024 * 1024; // 20MB
+    if body.size_bytes > MAX_UPLOAD_BYTES {
+        return HttpResponse::PayloadTooLarge()
+            .json(ErrorResponse::new("File size exceeds 20MB limit"));
+    }
+
+    let ext = body
+        .filename
+        .rsplit('.')
+        .next()
+        .map(|ext| ext.to_lowercase());
+
+    // Infer MIME type from file extension or use provided content_type
+    let (media_type, mime_type) = if let Some(ct) = &body.content_type {
+        let mt = if ct.starts_with("image/") {
+            MediaType::Image as i32
+        } else if ct.starts_with("video/") {
+            MediaType::Video as i32
+        } else if ct.starts_with("audio/") {
+            MediaType::Audio as i32
+        } else {
+            MediaType::Unspecified as i32
+        };
+        (mt, ct.clone())
+    } else {
+        match ext.as_deref() {
+            Some("jpg") | Some("jpeg") => (MediaType::Image as i32, "image/jpeg".to_string()),
+            Some("png") => (MediaType::Image as i32, "image/png".to_string()),
+            Some("gif") => (MediaType::Image as i32, "image/gif".to_string()),
+            Some("webp") => (MediaType::Image as i32, "image/webp".to_string()),
+            Some("heic") | Some("heif") => (MediaType::Image as i32, "image/heic".to_string()),
+            Some("mp4") => (MediaType::Video as i32, "video/mp4".to_string()),
+            Some("mov") => (MediaType::Video as i32, "video/quicktime".to_string()),
+            Some("mkv") => (MediaType::Video as i32, "video/x-matroska".to_string()),
+            Some("avi") => (MediaType::Video as i32, "video/x-msvideo".to_string()),
+            Some("webm") => (MediaType::Video as i32, "video/webm".to_string()),
+            Some("mp3") => (MediaType::Audio as i32, "audio/mpeg".to_string()),
+            Some("wav") => (MediaType::Audio as i32, "audio/wav".to_string()),
+            Some("aac") => (MediaType::Audio as i32, "audio/aac".to_string()),
+            Some("m4a") => (MediaType::Audio as i32, "audio/mp4".to_string()),
+            Some("ogg") => (MediaType::Audio as i32, "audio/ogg".to_string()),
+            _ => (
+                MediaType::Unspecified as i32,
+                "application/octet-stream".to_string(),
+            ),
+        }
+    };
+
+    let mut media_client: MediaServiceClient<_> = clients.media_client();
+
+    let req = InitiateUploadRequest {
+        user_id,
+        filename: body.filename.clone(),
+        media_type,
+        mime_type,
+        size_bytes: body.size_bytes,
+    };
+
+    match media_client.initiate_upload(req).await {
+        Ok(resp) => {
+            let inner = resp.into_inner();
+            info!(
+                upload_id = %inner.upload_id,
+                "InitiateUpload successful"
+            );
+            HttpResponse::Ok().json(InitiateUploadResponse {
+                upload_id: inner.upload_id,
+                presigned_url: inner.presigned_url,
+                expires_at: inner.expires_at,
+            })
+        }
+        Err(e) => {
+            error!("InitiateUpload failed: {}", e);
+            HttpResponse::ServiceUnavailable().json(ErrorResponse::with_message(
+                "Failed to initiate upload",
+                e.message(),
+            ))
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CompleteUploadBody {
     pub checksum: Option<String>,
