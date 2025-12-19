@@ -71,15 +71,7 @@ struct FeedVideoPlayer: View {
                 playPauseOverlay
             }
             
-            // Duration badge (top right)
-            VStack {
-                HStack {
-                    Spacer()
-                    durationBadge
-                }
-                Spacer()
-            }
-            .padding(12)
+
             
             // Mute indicator (bottom right)
             VStack {
@@ -262,6 +254,7 @@ final class FeedVideoPlayerViewModel: ObservableObject {
     @Published private(set) var isMuted: Bool
     @Published private(set) var currentTime: TimeInterval = 0
     @Published private(set) var duration: TimeInterval = 0
+    @Published private(set) var isCached = false
     
     private var timeObserver: Any?
     private var statusObserver: NSKeyValueObservation?
@@ -275,7 +268,31 @@ final class FeedVideoPlayerViewModel: ObservableObject {
     func prepare() {
         guard player == nil else { return }
         
-        let playerItem = AVPlayerItem(url: url)
+        // Check video cache first for faster loading
+        Task {
+            let videoURL = await getVideoURL()
+            await setupPlayer(with: videoURL)
+        }
+    }
+    
+    private func getVideoURL() async -> URL {
+        let urlString = url.absoluteString
+        
+        // Check if video is cached
+        if let cachedURL = await VideoCacheService.shared.getCachedVideoURL(for: urlString) {
+            isCached = true
+            return cachedURL
+        }
+        
+        // Start prefetching for next time (but use remote URL now for streaming)
+        await VideoCacheService.shared.prefetchVideo(urlString: urlString, priority: .high)
+        
+        // Return remote URL for now (AVPlayer will stream it)
+        return url
+    }
+    
+    private func setupPlayer(with videoURL: URL) async {
+        let playerItem = AVPlayerItem(url: videoURL)
         let avPlayer = AVPlayer(playerItem: playerItem)
         avPlayer.isMuted = isMuted
         

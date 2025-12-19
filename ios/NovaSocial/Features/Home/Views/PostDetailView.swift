@@ -302,24 +302,37 @@ struct PostDetailView: View {
     private var imageCarouselSection: some View {
         VStack(spacing: 8) {
             if !post.displayMediaUrls.isEmpty {
-                // Image Carousel with caching for better performance
+                // Image/Video Carousel with caching for better performance
                 TabView(selection: $currentImageIndex) {
-                    ForEach(Array(post.displayMediaUrls.enumerated()), id: \.element) { index, imageUrl in
-                        CachedAsyncImage(
-                            url: URL(string: imageUrl),
-                            targetSize: CGSize(width: 750, height: 1000)  // 2x for Retina
-                        ) { image in
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        } placeholder: {
-                            Rectangle()
-                                .fill(DesignTokens.placeholderColor)
-                                .overlay(ProgressView().tint(.white))
+                    ForEach(Array(post.displayMediaUrls.enumerated()), id: \.element) { index, mediaUrl in
+                        Group {
+                            if isVideoUrl(mediaUrl) {
+                                // Video content - use FeedVideoPlayer
+                                FeedVideoPlayer(
+                                    url: URL(string: mediaUrl)!,
+                                    autoPlay: true,
+                                    isMuted: true,
+                                    height: UIScreen.main.bounds.width * 4 / 3 - 40
+                                )
+                            } else {
+                                // Image content - use CachedAsyncImage
+                                CachedAsyncImage(
+                                    url: URL(string: mediaUrl),
+                                    targetSize: CGSize(width: 750, height: 1000)  // 2x for Retina
+                                ) { image in
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                } placeholder: {
+                                    Rectangle()
+                                        .fill(DesignTokens.placeholderColor)
+                                        .overlay(ProgressView().tint(.white))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .aspectRatio(3/4, contentMode: .fill)
+                                .clipped()
+                            }
                         }
-                        .frame(maxWidth: .infinity)
-                        .aspectRatio(3/4, contentMode: .fill)
-                        .clipped()
                         .tag(index)
                     }
                 }
@@ -572,6 +585,16 @@ struct PostDetailView: View {
             newCommentText = ""
             isCommentInputFocused = false
         }
+    }
+
+    
+    /// Check if URL points to a video file
+    private func isVideoUrl(_ url: String) -> Bool {
+        let lowercased = url.lowercased()
+        return lowercased.contains(".mov") ||
+               lowercased.contains(".mp4") ||
+               lowercased.contains(".m4v") ||
+               lowercased.contains(".webm")
     }
 }
 
