@@ -12,6 +12,9 @@ struct FeedPostCard: View {
 
     @State private var currentImageIndex = 0
 
+    // Target size for feed images (optimized for display)
+    private let imageTargetSize = CGSize(width: 750, height: 1000)
+
     var body: some View {
         VStack(spacing: 8) {
             // MARK: - User Info Header
@@ -60,57 +63,9 @@ struct FeedPostCard: View {
             }
             .padding(.horizontal, 16)
 
-            // MARK: - Post Images (375x500)
+            // MARK: - Post Media (Images/Video/Live Photo)
             if !post.displayMediaUrls.isEmpty {
-                VStack(spacing: 8) {
-                    TabView(selection: $currentImageIndex) {
-                        ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
-                            AsyncImage(url: URL(string: imageUrl)) { phase in
-                                switch phase {
-                                case .empty:
-                                    Rectangle()
-                                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                        .overlay(
-                                            ProgressView()
-                                                .tint(.white)
-                                        )
-                                case .success(let image):
-                                    image
-                                        .resizable()
-                                        .scaledToFill()
-                                case .failure:
-                                    Rectangle()
-                                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                        .overlay(
-                                            Image(systemName: "photo")
-                                                .font(.system(size: 30))
-                                                .foregroundColor(.white.opacity(0.5))
-                                        )
-                                @unknown default:
-                                    EmptyView()
-                                }
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .clipped()
-                            .tag(index)
-                        }
-                    }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
-                    .frame(height: 500)
-
-                    // 自定义页面指示器
-                    if post.displayMediaUrls.count > 1 {
-                        HStack(spacing: 11) {
-                            ForEach(0..<post.displayMediaUrls.count, id: \.self) { index in
-                                Circle()
-                                    .fill(index == currentImageIndex ?
-                                          Color(red: 0.81, green: 0.13, blue: 0.25) :
-                                          Color(red: 0.85, green: 0.85, blue: 0.85))
-                                    .frame(width: 6, height: 6)
-                            }
-                        }
-                    }
-                }
+                mediaContent
             }
 
             // MARK: - Post Content & Interaction
@@ -180,6 +135,202 @@ struct FeedPostCard: View {
         .background(.white)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Post by \(post.authorName)")
+    }
+
+    // MARK: - Media Content View
+
+    @ViewBuilder
+    private var mediaContent: some View {
+        VStack(spacing: 8) {
+            switch post.mediaType {
+            case .video:
+                // Video post - show video player
+                videoContent
+
+            case .livePhoto:
+                // Live Photo - show with indicator
+                livePhotoContent
+
+            case .image, .mixed, .none:
+                // Image carousel (default)
+                imageCarousel
+            }
+
+            // Page indicator for multiple media items
+            if mediaItemCount > 1 {
+                pageIndicator
+            }
+        }
+    }
+
+    // MARK: - Video Content
+
+    @ViewBuilder
+    private var videoContent: some View {
+        if let videoUrl = post.mediaUrls.first,
+           let url = URL(string: videoUrl) {
+            // Get thumbnail URL (second URL or from thumbnailUrls)
+            let thumbnailUrl: URL? = {
+                if let thumb = post.thumbnailUrls.first {
+                    return URL(string: thumb)
+                } else if post.mediaUrls.count > 1 {
+                    return URL(string: post.mediaUrls[1])
+                }
+                return nil
+            }()
+
+            FeedVideoPlayer(
+                url: url,
+                thumbnailUrl: thumbnailUrl,
+                autoPlay: true,
+                isMuted: true,
+                height: 500
+            )
+        }
+    }
+
+    // MARK: - Live Photo Content
+
+    @ViewBuilder
+    private var livePhotoContent: some View {
+        // For Live Photo, show the still image with a Live Photo badge
+        // The first URL is the still image
+        if let imageUrl = post.displayMediaUrls.first {
+            ZStack(alignment: .topLeading) {
+                FeedCachedImage(
+                    url: URL(string: imageUrl),
+                    targetSize: imageTargetSize
+                ) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Rectangle()
+                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                        .overlay(
+                            ProgressView()
+                                .tint(.white)
+                        )
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 500)
+                .clipped()
+
+                // Live Photo badge
+                HStack(spacing: 4) {
+                    Image(systemName: "livephoto")
+                        .font(.system(size: 12, weight: .medium))
+                    Text("LIVE")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.black.opacity(0.6))
+                .cornerRadius(4)
+                .padding(12)
+            }
+        }
+    }
+
+    // MARK: - Image Carousel
+
+    @ViewBuilder
+    private var imageCarousel: some View {
+        TabView(selection: $currentImageIndex) {
+            ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
+                mediaItemView(for: imageUrl, at: index)
+                    .tag(index)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        .frame(height: 500)
+    }
+
+    // MARK: - Single Media Item View
+
+    @ViewBuilder
+    private func mediaItemView(for urlString: String, at index: Int) -> some View {
+        // Check if this URL is a video (for mixed content posts)
+        if isVideoUrl(urlString), let url = URL(string: urlString) {
+            // Get thumbnail for this video
+            let thumbnailUrl: URL? = {
+                // For mixed content, thumbnail might be the next URL
+                if index + 1 < post.mediaUrls.count {
+                    let nextUrl = post.mediaUrls[index + 1]
+                    if !isVideoUrl(nextUrl) {
+                        return URL(string: nextUrl)
+                    }
+                }
+                // Or from thumbnailUrls
+                if index < post.thumbnailUrls.count {
+                    return URL(string: post.thumbnailUrls[index])
+                }
+                return nil
+            }()
+
+            FeedVideoPlayer(
+                url: url,
+                thumbnailUrl: thumbnailUrl,
+                autoPlay: true,
+                isMuted: true,
+                height: 500
+            )
+        } else {
+            // Image - use cached image loading
+            FeedCachedImage(
+                url: URL(string: urlString),
+                targetSize: imageTargetSize
+            ) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+            } placeholder: {
+                Rectangle()
+                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                    .overlay(
+                        ProgressView()
+                            .tint(.white)
+                    )
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+        }
+    }
+
+    // MARK: - Page Indicator
+
+    private var pageIndicator: some View {
+        HStack(spacing: 11) {
+            ForEach(0..<mediaItemCount, id: \.self) { index in
+                Circle()
+                    .fill(index == currentImageIndex ?
+                          Color(red: 0.81, green: 0.13, blue: 0.25) :
+                          Color(red: 0.85, green: 0.85, blue: 0.85))
+                    .frame(width: 6, height: 6)
+            }
+        }
+    }
+
+    // MARK: - Helper Properties
+
+    /// Number of media items to display (excluding thumbnail URLs for videos)
+    private var mediaItemCount: Int {
+        switch post.mediaType {
+        case .video, .livePhoto:
+            return 1 // Video and Live Photo show as single item
+        default:
+            return post.displayMediaUrls.count
+        }
+    }
+
+    /// Check if a URL points to a video file
+    private func isVideoUrl(_ urlString: String) -> Bool {
+        let lowercased = urlString.lowercased()
+        return lowercased.contains(".mp4") ||
+               lowercased.contains(".m4v") ||
+               lowercased.contains(".mov") ||
+               lowercased.contains(".webm")
     }
 }
 
