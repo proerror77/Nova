@@ -3,25 +3,6 @@ import SwiftUI
 // MARK: - Login View
 
 struct LoginView: View {
-    // MARK: - Design Constants
-    private enum Layout {
-        static let contentOffset: CGFloat = 200
-        static let inputFieldHeight: CGFloat = 49
-        static let buttonHeight: CGFloat = 46
-        static let buttonCornerRadius: CGFloat = 31.5
-        static let fieldCornerRadius: CGFloat = 6
-        static let fieldSpacing: CGFloat = 28
-        static let errorOffset: CGFloat = 32
-    }
-
-    private enum Colors {
-        static let placeholder = Color(white: 0.77)
-        static let secondaryText = Color(white: 0.53)
-        static let disabledText = Color(white: 0.40)
-        static let errorText = Color(red: 1, green: 0.4, blue: 0.4)
-        static let fieldBorder = Color.white.opacity(0.3)
-    }
-
     // MARK: - Binding
     @Binding var currentPage: AppPage
 
@@ -30,6 +11,7 @@ struct LoginView: View {
     @State private var password = ""
     @State private var isLoading = false
     @State private var isGoogleLoading = false
+    @State private var isAppleLoading = false
     @State private var errorMessage: String?
     @State private var showPassword = false
 
@@ -40,321 +22,370 @@ struct LoginView: View {
     // MARK: - Focus State
     @FocusState private var focusedField: Field?
 
-    private enum Field {
+    enum Field {
         case email
         case password
     }
 
-    // MARK: - Environment
+    // Access global AuthenticationManager
     @EnvironmentObject private var authManager: AuthenticationManager
 
-    // MARK: - Computed Properties
-    /// Forgot Password 按钮启用条件：email 格式正确且无错误（電話不支援忘記密碼）
-    private var isForgotPasswordEnabled: Bool {
-        let trimmedInput = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmedInput.isEmpty && isValidEmail(trimmedInput) && emailError == nil
-    }
-
-    /// 檢查輸入是否為電話號碼格式
-    private var isPhoneInput: Bool {
-        let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        return isValidPhone(trimmed)
-    }
-
     var body: some View {
-        ZStack {
-            // Background Image - Fixed size to prevent scaling when keyboard appears
-            Image("Registration-background")
-                .resizable()
-                .scaledToFill()
-                .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
-                .clipped()
-                .ignoresSafeArea(.all)
+        GeometryReader { geometry in
+            ZStack {
+                // Background Image
+                Image("Login-BG")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+                    .ignoresSafeArea(.all)
 
-            // Dark overlay
-            Color.black
-                .opacity(0.4)
-                .ignoresSafeArea()
-
-            // Main Content
-            VStack(spacing: 0) {
+                // Main Content
                 VStack(spacing: 0) {
+                    Spacer()
+
                     // Logo Section
                     logoSection
 
                     Spacer()
-                        .frame(height: 40.h)
+                        .frame(height: 50)
 
-                    // Welcome Text
-                    Text("Welcome to Icered")
-                        .font(.system(size: 30.f, weight: .bold))
+                    // Input Fields Section
+                    inputFieldsSection
+
+                    Spacer()
+                        .frame(height: 32)
+
+                    // Login Button
+                    loginButton
+
+                    Spacer()
+                        .frame(height: 24)
+
+                    // "or" separator
+                    Text("or")
+                        .font(Typography.regular14)
+                        .tracking(LetterSpacing.regular14)
                         .foregroundColor(.white)
 
                     Spacer()
-                        .frame(height: 36.h)
+                        .frame(height: 24)
 
-                    // Input Fields
-                    VStack(spacing: 28.h) {
-                        // Email Field
-                        emailTextField
-
-                        // Password Field
-                        passwordTextField
-                    }
-                    .padding(.horizontal, 16.w)
-
-                    // Forgot Password
-                    HStack {
-                        Spacer()
-                        Button(action: {
-                            currentPage = .forgotPassword
-                        }) {
-                            Text(LocalizedStringKey("Forgot_Password"))
-                                .font(.system(size: 12.f, weight: .light))
-                                .foregroundColor(isForgotPasswordEnabled ? Colors.placeholder : Colors.disabledText)
-                        }
-                        .disabled(!isForgotPasswordEnabled)
-                    }
-                    .padding(.horizontal, 20.w)
-                    .padding(.top, 12.h)
-
-                    // Error Message - 使用固定高度容器，避免影响按钮位置
-                    Text(errorMessage != nil ? LocalizedStringKey(errorMessage!) : " ")
-                        .font(.system(size: 12.f))
-                        .foregroundColor(.red)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(nil)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 20.w)
-                        .frame(minHeight: 20.h)
-                        .opacity(errorMessage != nil ? 1 : 0)
+                    // Social Login Buttons
+                    socialLoginButtons
 
                     Spacer()
-                        .frame(height: 12.h)
+                        .frame(height: 40)
 
-                    // Buttons
-                    VStack(spacing: 12.h) {
-                        // Log In Button
-                        logInButton
+                    // Create Account Link
+                    createAccountLink
 
-                        // Google & Apple Buttons (side by side)
-                        HStack(spacing: 11.w) {
-                            googleButton
-                            appleButton
-                        }
+                    Spacer()
 
-                        // Create Account Button
-                        createAccountButton
-                    }
-                    .padding(.horizontal, 16.w)
+                    // Terms and Privacy Links
+                    termsAndPrivacyLinks
+
+                    Spacer()
+                        .frame(height: 20)
                 }
-                .offset(y: Layout.contentOffset.h)
-
-                Spacer()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
             .onTapGesture {
-                focusedField = nil
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
         }
-        .ignoresSafeArea(.keyboard)
+        .ignoresSafeArea()
     }
 
     // MARK: - Logo Section
     private var logoSection: some View {
-        VStack(spacing: 4.s) {
+        VStack(spacing: 8) {
             Image("Logo-R")
                 .resizable()
                 .scaledToFit()
-                .frame(height: 50.s)
+                .frame(height: 60)
                 .colorInvert()
                 .brightness(1)
+
+            Text("For the masters of the universe")
+                .font(Typography.bold12)
+                .tracking(LetterSpacing.bold12)
+                .foregroundColor(Color(red: 0.90, green: 0.90, blue: 0.90))
         }
+    }
+
+    // MARK: - Input Fields Section
+    private var inputFieldsSection: some View {
+        VStack(spacing: 16) {
+            // Email Field
+            emailTextField
+
+            // Password Field
+            passwordTextField
+
+            // Forgot Password + Error Message (fixed height container)
+            ZStack {
+                // Forgot Password (always visible)
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        // TODO: Handle forgot password
+                    }) {
+                        Text("Forgot password?")
+                            .font(Typography.regular12)
+                            .tracking(LetterSpacing.regular12)
+                            .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64))
+                    }
+                }
+
+                // Error Message (overlay, doesn't affect layout)
+                if let errorMessage = errorMessage {
+                    Text(LocalizedStringKey(errorMessage))
+                        .font(Typography.regular12)
+                        .foregroundColor(.red)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .offset(y: 28)
+                }
+            }
+            .frame(height: 20)
+        }
+        .padding(.horizontal, 38)
     }
 
     // MARK: - Email TextField
     private var emailTextField: some View {
-        ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: Layout.fieldCornerRadius.s)
-                .fill(Color.clear)
-                .frame(height: Layout.inputFieldHeight.h)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Layout.fieldCornerRadius.s)
-                        .stroke(emailError != nil ? Color.red : Colors.fieldBorder, lineWidth: emailError != nil ? 1 : 0.5)
-                )
+        VStack(alignment: .leading, spacing: 4) {
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(red: 0.85, green: 0.85, blue: 0.85).opacity(0.25))
+                    .frame(height: 49)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(emailError != nil ? Color.red : Color.white, lineWidth: 0.5)
+                    )
 
-            TextField("", text: $email, prompt: Text(LocalizedStringKey("email or phone number")).foregroundColor(Colors.placeholder))
-                .foregroundColor(.white)
-                .font(.system(size: 14.f, weight: .light))
-                .padding(.horizontal, 16.w)
-                .autocapitalization(.none)
-                .keyboardType(.emailAddress)
-                .autocorrectionDisabled()
-                .accessibilityIdentifier("loginEmailTextField")
-                .focused($focusedField, equals: .email)
-                .onChange(of: email) { _, newValue in
-                    validateEmailRealtime(newValue)
-                }
+                TextField("", text: $email, prompt: Text("Email or phone number").foregroundColor(.white.opacity(0.7)))
+                    .foregroundColor(.white)
+                    .font(Typography.regular14)
+                    .tracking(LetterSpacing.regular14)
+                    .padding(.horizontal, 16)
+                    .autocapitalization(.none)
+                    .keyboardType(.emailAddress)
+                    .autocorrectionDisabled()
+                    .accessibilityIdentifier("loginEmailTextField")
+                    .focused($focusedField, equals: .email)
+                    .onChange(of: email) { _, newValue in
+                        validateEmailRealtime(newValue)
+                    }
+            }
 
             if let error = emailError {
                 Text(LocalizedStringKey(error))
-                    .font(.system(size: 11.f))
-                    .foregroundColor(Colors.errorText)
-                    .padding(.leading, 4.w)
-                    .offset(y: Layout.errorOffset.h)
+                    .font(Typography.thin11)
+                    .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
+                    .padding(.leading, 4)
             }
         }
     }
 
     // MARK: - Password TextField
     private var passwordTextField: some View {
-        ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: Layout.fieldCornerRadius.s)
-                .fill(Color.clear)
-                .frame(height: Layout.inputFieldHeight.h)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Layout.fieldCornerRadius.s)
-                        .stroke(passwordError != nil ? Color.red : Colors.fieldBorder, lineWidth: passwordError != nil ? 1 : 0.5)
-                )
+        VStack(alignment: .leading, spacing: 4) {
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(red: 0.85, green: 0.85, blue: 0.85).opacity(0.25))
+                    .frame(height: 49)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(passwordError != nil ? Color.red : Color.white, lineWidth: 0.5)
+                    )
 
-            HStack {
-                if showPassword {
-                    TextField("", text: $password, prompt: Text(LocalizedStringKey("password")).foregroundColor(Colors.placeholder))
-                        .foregroundColor(.white)
-                        .font(.system(size: 14.f, weight: .light))
-                        .autocapitalization(.none)
-                        .autocorrectionDisabled()
-                        .accessibilityIdentifier("loginPasswordTextField")
-                        .focused($focusedField, equals: .password)
-                } else {
-                    SecureField("", text: $password, prompt: Text(LocalizedStringKey("password")).foregroundColor(Colors.placeholder))
-                        .foregroundColor(.white)
-                        .font(.system(size: 14.f, weight: .light))
-                        .accessibilityIdentifier("loginPasswordTextField")
-                        .focused($focusedField, equals: .password)
-                }
-
-                Text(showPassword ? "HIDE" : "SHOW")
-                    .font(.system(size: 12.f, weight: .light))
-                    .foregroundColor(Colors.secondaryText)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        showPassword.toggle()
+                HStack {
+                    if showPassword {
+                        TextField("", text: $password, prompt: Text("Password").foregroundColor(.white.opacity(0.7)))
+                            .foregroundColor(.white)
+                            .font(Typography.regular14)
+                            .tracking(LetterSpacing.regular14)
+                            .autocapitalization(.none)
+                            .autocorrectionDisabled()
+                            .accessibilityIdentifier("loginPasswordTextField")
+                            .focused($focusedField, equals: .password)
+                    } else {
+                        SecureField("", text: $password, prompt: Text("Password").foregroundColor(.white.opacity(0.7)))
+                            .foregroundColor(.white)
+                            .font(Typography.regular14)
+                            .tracking(LetterSpacing.regular14)
+                            .accessibilityIdentifier("loginPasswordTextField")
+                            .focused($focusedField, equals: .password)
                     }
+
+                    Button(action: {
+                        showPassword.toggle()
+                    }) {
+                        Image(systemName: showPassword ? "eye" : "eye.slash")
+                            .foregroundColor(.white.opacity(0.7))
+                            .frame(width: 24, height: 24)
+                    }
+                }
+                .padding(.horizontal, 16)
             }
-            .padding(.horizontal, 16.w)
 
             if let error = passwordError {
                 Text(LocalizedStringKey(error))
-                    .font(.system(size: 11.f))
-                    .foregroundColor(Colors.errorText)
-                    .padding(.leading, 4.w)
-                    .offset(y: Layout.errorOffset.h)
+                    .font(Typography.thin11)
+                    .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
+                    .padding(.leading, 4)
             }
         }
     }
 
-    // MARK: - Log In Button
-    private var logInButton: some View {
+    // MARK: - Login Button
+    private var loginButton: some View {
         Button(action: {
             Task {
                 await handleLogin()
             }
         }) {
-            HStack(spacing: 8.w) {
+            HStack(spacing: 8) {
                 if isLoading {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .black))
                         .scaleEffect(0.9)
                 }
                 Text("Log in")
-                    .font(Font.custom("Helvetica Neue", size: 17.f).weight(.bold))
-                    .lineSpacing(20)
+                    .font(Typography.heavy16)
+                    .tracking(LetterSpacing.heavy16)
                     .foregroundColor(.black)
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: Layout.buttonHeight.h)
-            .background(Color.white)
-            .cornerRadius(Layout.buttonCornerRadius.s)
+            .frame(width: 300, height: 49)
+            .background(.white)
+            .cornerRadius(31.50)
         }
-        .disabled(isLoading || isGoogleLoading)
-        .accessibilityIdentifier("logInButton")
+        .disabled(isLoading || isGoogleLoading || isAppleLoading)
+        .accessibilityIdentifier("signInButton")
     }
 
-    // MARK: - Google Button (Icon Only)
-    private var googleButton: some View {
-        Button(action: {
-            Task {
-                await handleGoogleSignIn()
-            }
-        }) {
-            ZStack {
-                if isGoogleLoading {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(0.9)
-                } else {
+    // MARK: - Social Login Buttons
+    private var socialLoginButtons: some View {
+        VStack(spacing: 16) {
+            // Continue with Google
+            Button(action: {
+                Task {
+                    await handleGoogleSignIn()
+                }
+            }) {
+                HStack(spacing: 12) {
+                    // Google "G" logo
                     Text("G")
-                        .font(.system(size: 20.f, weight: .bold))
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .frame(width: 20, height: 20)
+
+                    if isGoogleLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.8)
+                    }
+
+                    Text("Continue with Google")
+                        .font(Typography.heavy16)
+                        .tracking(LetterSpacing.heavy16)
                         .foregroundColor(.white)
                 }
+                .frame(width: 300, height: 49)
+                .background(Color.clear)
+                .cornerRadius(65)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 65)
+                        .stroke(.white, lineWidth: 0.5)
+                )
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: Layout.buttonHeight.h)
-            .background(Color.clear)
-            .cornerRadius(65.s)
-            .overlay(
-                RoundedRectangle(cornerRadius: 65.s)
-                    .stroke(Color.white, lineWidth: 0.5)
-            )
+            .disabled(isLoading || isGoogleLoading || isAppleLoading)
+            .accessibilityIdentifier("googleSignInButton")
+
+            // Continue with Apple
+            Button(action: {
+                Task {
+                    await handleAppleSignIn()
+                }
+            }) {
+                HStack(spacing: 12) {
+                    Image(systemName: "apple.logo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 20, height: 20)
+                        .foregroundColor(.white)
+
+                    if isAppleLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.8)
+                    }
+
+                    Text("Continue with Apple")
+                        .font(Typography.heavy16)
+                        .tracking(LetterSpacing.heavy16)
+                        .foregroundColor(.white)
+                }
+                .frame(width: 300, height: 49)
+                .background(Color.clear)
+                .cornerRadius(65)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 65)
+                        .stroke(.white, lineWidth: 0.5)
+                )
+            }
+            .disabled(isLoading || isGoogleLoading || isAppleLoading)
+            .accessibilityIdentifier("appleSignInButton")
         }
-        .disabled(isLoading || isGoogleLoading)
-        .accessibilityIdentifier("googleButton")
     }
 
-    // MARK: - Apple Button (Icon Only)
-    private var appleButton: some View {
-        Button(action: {
-            Task {
-                await handleAppleSignIn()
-            }
-        }) {
-            Image(systemName: "apple.logo")
-                .font(.system(size: 20.f, weight: .medium))
+    // MARK: - Create Account Link
+    private var createAccountLink: some View {
+        HStack(spacing: 4) {
+            Text("New to Icered?")
+                .font(Typography.regular14)
+                .tracking(LetterSpacing.regular14)
                 .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: Layout.buttonHeight.h)
-                .background(Color.clear)
-                .cornerRadius(65.s)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 65.s)
-                        .stroke(Color.white, lineWidth: 0.5)
-                )
+
+            Button(action: {
+                currentPage = .createAccount
+            }) {
+                Text("Create an Account")
+                    .font(Typography.semibold14)
+                    .tracking(LetterSpacing.semibold14)
+                    .foregroundColor(.white)
+                    .underline()
+            }
+            .accessibilityIdentifier("createAccountButton")
         }
-        .disabled(isLoading || isGoogleLoading)
-        .accessibilityIdentifier("appleButton")
     }
 
-    // MARK: - Create Account Button
-    private var createAccountButton: some View {
-        Button(action: {
-            currentPage = .welcome
-        }) {
-            Text("Create account")
-                .font(Font.custom("Helvetica Neue", size: 17.f).weight(.bold))
-                .lineSpacing(20)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: Layout.buttonHeight.h)
-                .background(Color.clear)
-                .cornerRadius(40.s)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 40.s)
-                        .stroke(Color.white, lineWidth: 0.5)
-                )
+    // MARK: - Terms and Privacy Links
+    private var termsAndPrivacyLinks: some View {
+        HStack(spacing: 16) {
+            Button(action: {
+                // TODO: Show Terms and Conditions
+            }) {
+                Text("Terms and Conditions")
+                    .font(Typography.thin11)
+                    .tracking(LetterSpacing.thin11)
+                    .underline()
+                    .foregroundColor(.white)
+            }
+
+            Button(action: {
+                // TODO: Show Privacy Statement
+            }) {
+                Text("Privacy Statement")
+                    .font(Typography.thin11)
+                    .tracking(LetterSpacing.thin11)
+                    .underline()
+                    .foregroundColor(.white)
+            }
         }
-        .accessibilityIdentifier("createAccountButton")
     }
 
     // MARK: - Actions
@@ -409,13 +440,14 @@ struct LoginView: View {
     }
 
     private func handleAppleSignIn() async {
-        isLoading = true
+        isAppleLoading = true
         errorMessage = nil
 
         do {
             let _ = try await authManager.loginWithApple()
             // Success - AuthenticationManager will update isAuthenticated
         } catch {
+            // Check if user cancelled
             let errorDesc = error.localizedDescription.lowercased()
             if errorDesc.contains("cancel") {
                 // User cancelled, no error message needed
@@ -424,27 +456,26 @@ struct LoginView: View {
             }
         }
 
-        isLoading = false
+        isAppleLoading = false
     }
 
     // MARK: - Validation
 
     private func validateLogin() -> Bool {
-        let trimmedInput = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if trimmedInput.isEmpty {
-            errorMessage = "Please_enter_your_email_or_phone"
+            if trimmedEmail.isEmpty {
+                errorMessage = "Please_enter_your_email"
             return false
         }
 
-        // 驗證是否為有效的 email 或電話號碼
-        if !isValidEmail(trimmedInput) && !isValidPhone(trimmedInput) {
-            errorMessage = "Please_enter_a_valid_email_or_phone"
+            if !isValidEmail(trimmedEmail) {
+                errorMessage = "Please_enter_a_valid_email"
             return false
         }
 
-        if password.isEmpty {
-            errorMessage = "Please_enter_your_password"
+            if password.isEmpty {
+                errorMessage = "Please_enter_your_password"
             return false
         }
 
@@ -457,8 +488,8 @@ struct LoginView: View {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             emailError = nil  // Don't show error for empty field until submit
-        } else if !isValidEmail(trimmed) && !isValidPhone(trimmed) {
-            emailError = "Invalid_email_or_phone_format"
+        } else if !isValidEmail(trimmed) {
+            emailError = "Invalid_email_format"
         } else {
             emailError = nil
         }
@@ -471,33 +502,11 @@ struct LoginView: View {
         let emailRegex = #"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"#
         return email.range(of: emailRegex, options: .regularExpression) != nil
     }
-
-    private func isValidPhone(_ phone: String) -> Bool {
-        // 支援多種電話格式：
-        // - 純數字 (至少7位): 0912345678, 912345678
-        // - 帶國碼: +886912345678, +1234567890
-        // - 帶空格或連字號: 0912-345-678, 0912 345 678
-        let digitsOnly = phone.filter { $0.isNumber }
-
-        // 檢查是否以 + 開頭（國際電話格式）
-        if phone.hasPrefix("+") {
-            return digitsOnly.count >= 7 && digitsOnly.count <= 15
-        }
-
-        // 純數字電話號碼
-        return digitsOnly.count >= 7 && digitsOnly.count <= 15
-    }
 }
 
-// MARK: - Previews
+// MARK: - Preview
 
-#Preview("Login - Default") {
+#Preview {
     LoginView(currentPage: .constant(.login))
         .environmentObject(AuthenticationManager.shared)
-}
-
-#Preview("Login - Dark Mode") {
-    LoginView(currentPage: .constant(.login))
-        .environmentObject(AuthenticationManager.shared)
-        .preferredColorScheme(.dark)
 }

@@ -12,14 +12,14 @@ struct HottestBankerSection: View {
             // MARK: - 标题部分
             HStack {
                 Text(LocalizedStringKey("Hottest Banker in H.K."))
-                    .font(.system(size: 20, weight: .bold))
+                    .font(Typography.bold20)
                     .foregroundColor(.black)
 
                 Spacer()
 
                 Button(action: onSeeAllTapped) {
                     Text(LocalizedStringKey("View more"))
-                        .font(.system(size: 10, weight: .medium))
+                        .font(Typography.regular10)
                         .foregroundColor(.black)
                 }
             }
@@ -84,23 +84,12 @@ struct HottestBankerSection: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("HottestBanker - Default") {
+// MARK: - Preview
+#Preview {
     VStack {
         HottestBankerSection()
         Spacer()
     }
     .padding(.horizontal, 16)
     .background(DesignTokens.backgroundColor)
-}
-
-#Preview("HottestBanker - Dark Mode") {
-    VStack {
-        HottestBankerSection()
-        Spacer()
-    }
-    .padding(.horizontal, 16)
-    .background(DesignTokens.backgroundColor)
-    .preferredColorScheme(.dark)
 }
