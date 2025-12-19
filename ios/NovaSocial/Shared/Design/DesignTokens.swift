@@ -97,6 +97,48 @@ extension Double {
     var f: CGFloat { ScreenScale.font(CGFloat(self)) }
 }
 
+// MARK: - Typography
+/// 统一字体样式
+enum Typography {
+    // Regular weights
+    static let regular10: Font = .system(size: 10.f, weight: .regular)
+    static let regular12: Font = .system(size: 12.f, weight: .regular)
+    static let regular13: Font = .system(size: 13.f, weight: .regular)
+    static let regular14: Font = .system(size: 14.f, weight: .regular)
+    static let regular15: Font = .system(size: 15.f, weight: .regular)
+    static let regular16: Font = .system(size: 16.f, weight: .regular)
+    static let regular20: Font = .system(size: 20.f, weight: .regular)
+
+    // Light weights
+    static let light14: Font = .system(size: 14.f, weight: .light)
+    static let thin11: Font = .system(size: 11.f, weight: .thin)
+
+    // Semibold weights
+    static let semibold14: Font = .system(size: 14.f, weight: .semibold)
+    static let semibold15: Font = .system(size: 15.f, weight: .semibold)
+    static let semibold16: Font = .system(size: 16.f, weight: .semibold)
+    static let semibold18: Font = .system(size: 18.f, weight: .semibold)
+    static let semibold24: Font = .system(size: 24.f, weight: .semibold)
+
+    // Bold weights
+    static let bold12: Font = .system(size: 12.f, weight: .bold)
+    static let bold20: Font = .system(size: 20.f, weight: .bold)
+
+    // Heavy weights
+    static let heavy16: Font = .system(size: 16.f, weight: .heavy)
+}
+
+// MARK: - Letter Spacing
+/// 统一字间距样式
+enum LetterSpacing {
+    static let thin11: CGFloat = 0
+    static let regular12: CGFloat = 0
+    static let regular14: CGFloat = 0
+    static let semibold14: CGFloat = 0
+    static let bold12: CGFloat = 0
+    static let heavy16: CGFloat = 0
+}
+
 // MARK: - Design Tokens
 /// 统一的设计规范，供所有页面使用
 struct DesignTokens {

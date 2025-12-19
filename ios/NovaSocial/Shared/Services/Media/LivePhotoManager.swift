@@ -183,15 +183,18 @@ class LivePhotoManager: ObservableObject {
             return nil
         }
 
-        // Request Live Photo
+        // Request Live Photo - use fastFormat for speed, we'll get full quality on upload
         return try await withCheckedThrowingContinuation { continuation in
             let options = PHLivePhotoRequestOptions()
-            options.deliveryMode = .highQualityFormat
+            options.deliveryMode = .fastFormat  // Fast loading for display
             options.isNetworkAccessAllowed = true
+
+            // Use a reasonable target size instead of maximum
+            let targetSize = CGSize(width: 1920, height: 1920)
 
             PHImageManager.default().requestLivePhoto(
                 for: asset,
-                targetSize: PHImageManagerMaximumSize,
+                targetSize: targetSize,
                 contentMode: .aspectFit,
                 options: options
             ) { livePhoto, info in
@@ -204,10 +207,7 @@ class LivePhotoManager: ObservableObject {
                     return
                 }
 
-                // Check if this is the final result
-                let isDegraded = (info?[PHImageResultIsDegradedKey] as? Bool) ?? false
-                if isDegraded { return }
-
+                // Accept even degraded version for fast display
                 Task {
                     do {
                         if let data = try await self.extractLivePhotoComponents(from: livePhoto) {
@@ -223,25 +223,88 @@ class LivePhotoManager: ObservableObject {
         }
     }
     
-    /// Load multiple media items from PhotosPickerItems
+    /// Load multiple media items from PhotosPickerItems - PARALLEL processing for speed
     func loadMedia(from items: [PhotosPickerItem], maxCount: Int = 5) async throws -> [PostMediaItem] {
-        var results: [PostMediaItem] = []
         let itemsToProcess = Array(items.prefix(maxCount))
-        
-        for (index, item) in itemsToProcess.enumerated() {
-            processingProgress = Double(index) / Double(itemsToProcess.count)
-            
-            do {
-                let media = try await loadMedia(from: item)
-                results.append(media)
-            } catch {
-                // Log error but continue processing other items
-                print("[LivePhotoManager] Failed to load item \(index): \(error)")
+        guard !itemsToProcess.isEmpty else { return [] }
+
+        isProcessing = true
+        defer { isProcessing = false }
+
+        #if DEBUG
+        let startTime = CFAbsoluteTimeGetCurrent()
+        print("[LivePhotoManager] Starting parallel load of \(itemsToProcess.count) items")
+        #endif
+
+        // Process all items in parallel using TaskGroup
+        let results = await withTaskGroup(of: (Int, PostMediaItem?).self) { group in
+            for (index, item) in itemsToProcess.enumerated() {
+                group.addTask {
+                    do {
+                        let media = try await self.loadMediaItem(from: item)
+                        return (index, media)
+                    } catch {
+                        #if DEBUG
+                        print("[LivePhotoManager] Failed to load item \(index): \(error)")
+                        #endif
+                        return (index, nil)
+                    }
+                }
+            }
+
+            var indexedResults: [(Int, PostMediaItem)] = []
+            var completed = 0
+
+            for await (index, media) in group {
+                completed += 1
+                processingProgress = Double(completed) / Double(itemsToProcess.count)
+
+                if let media = media {
+                    indexedResults.append((index, media))
+                }
+            }
+
+            // Sort by original index to maintain order
+            return indexedResults.sorted { $0.0 < $1.0 }.map { $0.1 }
+        }
+
+        processingProgress = 1.0
+
+        #if DEBUG
+        let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+        print("[LivePhotoManager] Loaded \(results.count) items in \(String(format: "%.2f", elapsed))s")
+        #endif
+
+        return results
+    }
+
+    /// Load single media item without setting isProcessing (for parallel use)
+    private func loadMediaItem(from item: PhotosPickerItem) async throws -> PostMediaItem {
+        let supportedTypes = item.supportedContentTypes
+
+        // Check if it's a video
+        let videoTypes = supportedTypes.filter { $0.conforms(to: .movie) || $0.conforms(to: .video) }
+        if !videoTypes.isEmpty {
+            if let videoData = try await loadVideo(from: item) {
+                return .video(videoData)
             }
         }
-        
-        processingProgress = 1.0
-        return results
+
+        // Check if it's a Live Photo (has both image and video components)
+        let hasLivePhotoType = supportedTypes.contains { $0.identifier == "com.apple.live-photo" }
+        if hasLivePhotoType {
+            if let livePhotoData = try await loadLivePhoto(from: item) {
+                return .livePhoto(livePhotoData)
+            }
+        }
+
+        // Fall back to regular image - use faster loading
+        if let data = try? await item.loadTransferable(type: Data.self),
+           let image = UIImage(data: data) {
+            return .image(image)
+        }
+
+        throw LivePhotoError.loadFailed
     }
     
     // MARK: - Extract Live Photo Components

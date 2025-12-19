@@ -258,7 +258,7 @@ struct HomeView: View {
                                             showComments = true
                                         },
                                         onShare: { Task { await feedViewModel.sharePost(postId: post.id) } },
-                                        onBookmark: { feedViewModel.toggleBookmark(postId: post.id) }
+                                        onBookmark: { Task { await feedViewModel.toggleBookmark(postId: post.id) } }
                                     )
                                     .onTapGesture {
                                         selectedPostForDetail = post
@@ -352,7 +352,7 @@ struct HomeView: View {
                     .frame(height: 0)
             }
             .safeAreaInset(edge: .bottom) {
-                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions)
+                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)
                     .padding(.top, 80)
             }
         }

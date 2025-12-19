@@ -48,6 +48,13 @@ targets:
           - "Features/Chat"
           - "Features/GroupChat"
           - "Features/AddFriends"
+          - "Features/Home/Views/NotificationView.swift"
+          - "Features/Home/Views/SearchView.swift"
+          - "Features/Auth/Views/ResetPasswordView.swift"
+          - "Features/Auth/Views/PhoneRegistrationView.swift"
+          - "Features/Auth/Views/PhoneLoginView.swift"
+          - "Features/Auth/Views/ForgotPasswordView.swift"
+          - "Features/Auth/Views/EmailSentConfirmationView.swift"
     resources:
       - path: Assets.xcassets
       - path: en.lproj

@@ -5,6 +5,11 @@ enum AppPage: Equatable {
     case splash
     case welcome
     case login
+    case phoneLogin
+    case phoneRegistration
+    case forgotPassword
+    case emailSentConfirmation(email: String)
+    case resetPassword(token: String)
     case createAccount
     case home
     case rankingList
@@ -16,6 +21,7 @@ enum AppPage: Equatable {
     case alice
     case setting
     case profileSetting
+    case aliasName
     case devices
     case inviteFriends
     case myChannels
