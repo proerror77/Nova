@@ -322,9 +322,10 @@ pub async fn get_room_status(
 // ============================================================================
 
 /// Configure Matrix API routes
+/// Note: This is called within /api/v2 scope in main.rs, so paths here are relative to /api/v2
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
-        web::scope("/api/v2/matrix")
+        web::scope("/matrix")
             // Token exchange
             .route("/token", web::post().to(get_matrix_token))
             // Room mappings

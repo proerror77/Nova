@@ -30,9 +30,20 @@ impl Default for DmSettings {
 
 impl From<UserSettings> for DmSettings {
     fn from(settings: UserSettings) -> Self {
+        // dm_permission is an i32 enum: 0=none, 1=mutuals, 2=verified, 3=everyone
+        // Convert to string representation
+        let dm_permission_str = match settings.dm_permission {
+            0 => "none",
+            1 => "mutuals",
+            2 => "verified",
+            3 => "everyone",
+            _ => "mutuals", // Default to mutuals for unknown values
+        };
+        // allow_messages is derived from dm_permission: 0 (none) means no messages allowed
+        let allow_messages = settings.dm_permission != 0;
         Self {
-            dm_permission: settings.dm_permission,
-            allow_messages: settings.allow_messages,
+            dm_permission: dm_permission_str.to_string(),
+            allow_messages,
         }
     }
 }
