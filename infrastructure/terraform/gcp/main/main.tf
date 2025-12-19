@@ -152,6 +152,22 @@ module "iam" {
   depends_on = [module.compute]
 }
 
+# CDN Module (Cloud CDN + Media Storage)
+module "cdn" {
+  source = "../cdn"
+
+  gcp_project       = var.gcp_project_id
+  gcp_region        = var.gcp_region
+  environment       = var.environment
+  media_bucket_name = var.media_bucket_name
+  cdn_domain        = var.cdn_domain
+  cors_origins      = var.cdn_cors_origins
+  create_dns_record = var.cdn_create_dns_record
+  dns_zone_name     = var.cdn_dns_zone_name
+
+  tags = local.common_labels
+}
+
 # Local variables
 locals {
   common_labels = {
@@ -308,4 +324,30 @@ output "workload_identity_pool_id" {
 output "project_number" {
   description = "GCP Project Number"
   value       = module.iam.project_number
+}
+
+# Outputs - CDN
+output "cdn_ip_address" {
+  description = "CDN static IP address"
+  value       = module.cdn.cdn_ip_address
+}
+
+output "cdn_url" {
+  description = "CDN URL for media access"
+  value       = module.cdn.cdn_url
+}
+
+output "media_bucket_name" {
+  description = "Media storage bucket name"
+  value       = module.cdn.media_bucket_name
+}
+
+output "media_bucket_url" {
+  description = "Direct GCS URL (for fallback)"
+  value       = module.cdn.media_bucket_url
+}
+
+output "media_uploader_service_account" {
+  description = "Service account email for media uploads"
+  value       = module.cdn.media_uploader_service_account
 }

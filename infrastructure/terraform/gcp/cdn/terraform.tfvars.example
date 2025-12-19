@@ -1,0 +1,37 @@
+# =============================================================================
+# Cloud CDN Configuration Example
+# =============================================================================
+# Copy this file to terraform.tfvars and update values as needed
+
+# GCP Project Configuration
+gcp_project = "banded-pad-479802-k9"
+gcp_region  = "asia-northeast1"
+
+# Environment
+environment = "staging"
+
+# Media Bucket
+media_bucket_name = "nova-media-staging"
+
+# CDN Domain (must be a domain you control)
+cdn_domain = "media-staging.nova.social"
+
+# CORS Configuration
+cors_origins = [
+  "https://nova.social",
+  "https://staging.nova.social",
+  "https://localhost:3000",
+  "*"  # For development; remove in production
+]
+
+# DNS Configuration (optional)
+# Set to true if using Cloud DNS for domain management
+create_dns_record = false
+dns_zone_name     = ""  # e.g., "nova-social-zone"
+
+# Additional Tags
+tags = {
+  project     = "nova"
+  environment = "staging"
+  managed_by  = "terraform"
+}

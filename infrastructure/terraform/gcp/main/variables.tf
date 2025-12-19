@@ -226,3 +226,34 @@ variable "tags" {
     managed_by  = "terraform"
   }
 }
+
+# CDN Configuration
+variable "media_bucket_name" {
+  description = "GCS bucket name for media storage"
+  type        = string
+  default     = "nova-media-staging"
+}
+
+variable "cdn_domain" {
+  description = "Domain name for CDN (e.g., media.nova.social)"
+  type        = string
+  default     = "media-staging.nova.social"
+}
+
+variable "cdn_cors_origins" {
+  description = "Allowed CORS origins for media CDN"
+  type        = list(string)
+  default     = ["*"]
+}
+
+variable "cdn_create_dns_record" {
+  description = "Whether to create DNS record in Cloud DNS"
+  type        = bool
+  default     = false
+}
+
+variable "cdn_dns_zone_name" {
+  description = "Cloud DNS zone name (required if cdn_create_dns_record is true)"
+  type        = string
+  default     = ""
+}
