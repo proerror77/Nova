@@ -89,13 +89,37 @@ actor ImageCacheService {
             request.networkServiceType = priority == .immediate ? .responsiveData : .default
             
             // Use APIClient's session for HTTP/2 connection pooling and caching
-            let (data, _) = try await APIClient.shared.session.data(for: request)
+            let (data, response) = try await APIClient.shared.session.data(for: request)
+
+            if let httpResponse = response as? HTTPURLResponse {
+                // Accept 200-299 and cache revalidation 304.
+                if !(200...299).contains(httpResponse.statusCode) && httpResponse.statusCode != 304 {
+                    let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type") ?? "unknown"
+                    imageLogger.error("❌ Image request failed: \(urlString, privacy: .public) status=\(httpResponse.statusCode) contentType=\(contentType, privacy: .public) bytes=\(data.count)")
+                    #if DEBUG
+                    if let bodyPreview = String(data: data.prefix(256), encoding: .utf8), !bodyPreview.isEmpty {
+                        imageLogger.debug("Body preview: \(bodyPreview, privacy: .public)")
+                    }
+                    #endif
+                    return nil
+                }
+            }
 
             var image: UIImage?
             if let targetSize = targetSize {
                 image = downsample(data: data, to: targetSize, scale: displayScale)
             } else {
                 image = UIImage(data: data)
+            }
+
+            if image == nil {
+                #if DEBUG
+                let contentType = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type") ?? "unknown"
+                imageLogger.error("❌ Failed to decode image data: \(urlString, privacy: .public) contentType=\(contentType, privacy: .public) bytes=\(data.count)")
+                if let bodyPreview = String(data: data.prefix(256), encoding: .utf8), !bodyPreview.isEmpty {
+                    imageLogger.debug("Body preview: \(bodyPreview, privacy: .public)")
+                }
+                #endif
             }
 
             if let image = image {

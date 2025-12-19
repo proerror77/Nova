@@ -451,14 +451,52 @@ struct FeedPost: Identifiable, Codable, Equatable {
     let isBookmarked: Bool
 
     /// Prefer thumbnails for list performance; fall back to originals when missing.
-    /// Filters out invalid URLs (e.g., "text-content-xxx" placeholders)
+    /// Normalizes relative URLs and filters out invalid URLs (e.g., "text-content-xxx" placeholders).
+    /// If thumbnails are present but unusable, falls back to original media URLs.
     var displayMediaUrls: [String] {
-        let urls = !thumbnailUrls.isEmpty ? thumbnailUrls : mediaUrls
-        // Only return valid HTTP/HTTPS URLs
-        return urls.filter { url in
-            let lowercased = url.lowercased()
-            return lowercased.hasPrefix("http://") || lowercased.hasPrefix("https://")
+        func normalize(_ url: String) -> String? {
+            let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+
+            let lowercased = trimmed.lowercased()
+
+            // Skip non-URL placeholders (e.g., "text-content-xxx")
+            if !(lowercased.hasPrefix("http://") || lowercased.hasPrefix("https://") || lowercased.hasPrefix("/") || lowercased.hasPrefix("//")) {
+                return nil
+            }
+
+            if lowercased.hasPrefix("http://") || lowercased.hasPrefix("https://") {
+                return trimmed
+            }
+
+            // Scheme-relative URL (e.g., //cdn.example.com/a.jpg)
+            if lowercased.hasPrefix("//") {
+                return "https:\(trimmed)"
+            }
+
+            // Relative path returned by backend (e.g., /media/abc.jpg)
+            if lowercased.hasPrefix("/") {
+                return "\(APIConfig.current.baseURL)\(trimmed)"
+            }
+
+            return nil
         }
+
+        let normalizedThumbnails = thumbnailUrls.compactMap(normalize)
+        if !normalizedThumbnails.isEmpty {
+            return normalizedThumbnails
+        }
+
+        let normalizedMedia = mediaUrls.compactMap(normalize)
+        #if DEBUG
+        if normalizedThumbnails.isEmpty, !thumbnailUrls.isEmpty {
+            print("[Feed] ⚠️ Thumbnails unusable for post \(id.prefix(8)): thumbnailUrls=\(thumbnailUrls)")
+        }
+        if normalizedMedia.isEmpty, !mediaUrls.isEmpty {
+            print("[Feed] ⚠️ Media URLs unusable for post \(id.prefix(8)): mediaUrls=\(mediaUrls)")
+        }
+        #endif
+        return normalizedMedia
     }
     
     /// Check if this post contains video content
@@ -515,6 +553,14 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.authorAvatar = raw.authorAvatar
         self.content = raw.content
         self.mediaUrls = raw.mediaUrls ?? []
+
+        #if DEBUG
+        if let urls = raw.mediaUrls, !urls.isEmpty {
+            print("[Feed] Post \(raw.id.prefix(8)): mediaUrls=\(urls)")
+        } else if raw.mediaUrls == nil {
+            print("[Feed] Post \(raw.id.prefix(8)): mediaUrls is nil")
+        }
+        #endif
         self.thumbnailUrls = raw.thumbnailUrls ?? self.mediaUrls
         // Determine media type from backend or infer from URLs
         if let rawType = raw.mediaType {

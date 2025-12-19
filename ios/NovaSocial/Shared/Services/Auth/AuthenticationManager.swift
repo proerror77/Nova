@@ -69,16 +69,32 @@ class AuthenticationManager: ObservableObject {
 
     /// Load saved authentication from Keychain
     func loadSavedAuth() {
+        #if DEBUG
+        print("[Auth] 📂 Loading saved auth from Keychain...")
+        #endif
+
         if let token = keychain.get(.authToken),
            let userId = keychain.get(.userId) {
             self.authToken = token
             APIClient.shared.setAuthToken(token)
             self.isAuthenticated = true
 
+            let hasRefreshToken = keychain.exists(.refreshToken)
+            #if DEBUG
+            print("[Auth]   ✅ Found saved auth:")
+            print("[Auth]   - Access token: \(token.prefix(20))...")
+            print("[Auth]   - User ID: \(userId)")
+            print("[Auth]   - Has refresh token: \(hasRefreshToken)")
+            #endif
+
             // Load user profile in background
             Task {
                 try? await loadCurrentUser(userId: userId)
             }
+        } else {
+            #if DEBUG
+            print("[Auth]   ℹ️ No saved auth found in Keychain")
+            #endif
         }
     }
 
@@ -303,6 +319,33 @@ class AuthenticationManager: ObservableObject {
         keychain.clearAll()
     }
 
+    /// Force logout due to session expiration - posts notification to navigate to login
+    /// Use this when token refresh fails and user needs to re-authenticate
+    func forceLogoutDueToSessionExpiry() async {
+        #if DEBUG
+        print("[Auth] ⚠️ Force logout due to session expiry")
+        #endif
+
+        // Clear local state first
+        self.authToken = nil
+        self.currentUser = nil
+        self.isAuthenticated = false
+
+        // Clear APIClient token
+        APIClient.shared.setAuthToken("")
+
+        // Clear Keychain
+        keychain.clearAll()
+
+        // Post notification to trigger navigation to login page
+        // App.swift listens for this notification
+        NotificationCenter.default.post(
+            name: NSNotification.Name("SessionExpired"),
+            object: nil,
+            userInfo: ["reason": "token_refresh_failed"]
+        )
+    }
+
     // MARK: - Update Tokens (for account switching)
 
     /// Update authentication tokens (used when switching accounts)
@@ -356,10 +399,19 @@ class AuthenticationManager: ObservableObject {
 
         guard let storedRefreshToken = keychain.get(.refreshToken) else {
             #if DEBUG
-            print("[Auth] No refresh token available")
+            print("[Auth] ❌ No refresh token available in Keychain!")
+            print("[Auth]   This means the session cannot be renewed.")
+            print("[Auth]   User needs to login again.")
             #endif
+            // No refresh token means we can't renew - force logout
+            await forceLogoutDueToSessionExpiry()
             return false
         }
+
+        #if DEBUG
+        print("[Auth] 🔄 Attempting token refresh...")
+        print("[Auth]   - Refresh token length: \(storedRefreshToken.count) chars")
+        #endif
 
         // Create and store the refresh task
         let task = Task<Bool, Never> { [weak self] in
@@ -387,18 +439,22 @@ class AuthenticationManager: ObservableObject {
                         continue
                     }
 
-                    // Don't auto-logout on any error - let the UI handle it gracefully
-                    // This prevents unexpected logouts and SSO dialogs
-                    #if DEBUG
+                    // Handle based on error type
                     if self.isAuthenticationError(error) {
-                        print("[Auth] Authentication error - NOT logging out, UI will handle")
+                        // Authentication error (401/403) - refresh token is invalid/expired
+                        // Force logout and navigate to login page
+                        #if DEBUG
+                        print("[Auth] Authentication error - forcing logout and navigating to login")
+                        #endif
+                        await self.forceLogoutDueToSessionExpiry()
+                        return false
                     } else {
+                        // Network error - keep session, user can retry later
+                        #if DEBUG
                         print("[Auth] Network error - keeping session, user can retry later")
+                        #endif
+                        return false
                     }
-                    #endif
-                    // Return false to indicate refresh failed, but don't logout
-                    // The calling code should handle this gracefully (e.g., show guest content)
-                    return false
                 }
             }
             return false
@@ -509,10 +565,25 @@ class AuthenticationManager: ObservableObject {
         APIClient.shared.setAuthToken(token)
 
         // Save to Keychain (secure storage)
-        _ = keychain.save(token, for: .authToken)
-        _ = keychain.save(user.id, for: .userId)
+        let tokenSaved = keychain.save(token, for: .authToken)
+        let userIdSaved = keychain.save(user.id, for: .userId)
+
+        #if DEBUG
+        print("[Auth] 💾 Saving auth to Keychain:")
+        print("[Auth]   - Access token saved: \(tokenSaved)")
+        print("[Auth]   - User ID saved: \(userIdSaved)")
+        #endif
+
         if let refreshToken = refreshToken {
-            _ = keychain.save(refreshToken, for: .refreshToken)
+            let refreshSaved = keychain.save(refreshToken, for: .refreshToken)
+            #if DEBUG
+            print("[Auth]   - Refresh token saved: \(refreshSaved)")
+            print("[Auth]   - Refresh token length: \(refreshToken.count) chars")
+            #endif
+        } else {
+            #if DEBUG
+            print("[Auth]   ⚠️ No refresh token provided!")
+            #endif
         }
     }
 }

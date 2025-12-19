@@ -156,18 +156,290 @@ class MediaService {
         filename: String = "image.jpg",
         progressCallback: UploadProgressCallback? = nil
     ) async throws -> String {
+        #if DEBUG
+        print("[Media] Starting lightweight upload with progress: \(imageData.count / 1024) KB")
+        #endif
+
+        // Step 1: Call initiate endpoint with only metadata (no file data) - instant
+        let initiateUrl = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.uploadInitiate)")!
+
+        struct InitiateRequest: Codable {
+            let filename: String
+            let sizeBytes: Int64
+            let contentType: String?
+
+            enum CodingKeys: String, CodingKey {
+                case filename
+                case sizeBytes = "size_bytes"
+                case contentType = "content_type"
+            }
+        }
+
+        struct InitiateResponse: Codable {
+            let uploadId: String
+            let presignedUrl: String
+            let expiresAt: Int64
+
+            enum CodingKeys: String, CodingKey {
+                case uploadId = "upload_id"
+                case presignedUrl = "presigned_url"
+                case expiresAt = "expires_at"
+            }
+        }
+
+        var initiateRequest = URLRequest(url: initiateUrl)
+        initiateRequest.httpMethod = "POST"
+        initiateRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        initiateRequest.timeoutInterval = 30
+
+        if let token = client.getAuthToken() {
+            initiateRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let initiateBody = InitiateRequest(
+            filename: filename,
+            sizeBytes: Int64(imageData.count),
+            contentType: "image/jpeg"
+        )
+        initiateRequest.httpBody = try JSONEncoder().encode(initiateBody)
+
+        let (initiateData, initiateHttpResponse) = try await URLSession.shared.data(for: initiateRequest)
+
+        guard let initiateResponse = initiateHttpResponse as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+
+        guard initiateResponse.statusCode >= 200 && initiateResponse.statusCode < 300 else {
+            let message = String(data: initiateData, encoding: .utf8) ?? "Initiate upload failed"
+            throw APIError.serverError(statusCode: initiateResponse.statusCode, message: message)
+        }
+
+        let decoder = JSONDecoder()
+        let initiateResult = try decoder.decode(InitiateResponse.self, from: initiateData)
+
+        #if DEBUG
+        print("[Media] Got presigned URL, upload_id: \(initiateResult.uploadId)")
+        #endif
+
+        // Step 2: Upload directly to GCS using presigned URL with progress tracking
+        guard let gcsUrl = URL(string: initiateResult.presignedUrl) else {
+            throw APIError.invalidResponse
+        }
+
+        var gcsRequest = URLRequest(url: gcsUrl)
+        gcsRequest.httpMethod = "PUT"
+        gcsRequest.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+        gcsRequest.timeoutInterval = 120
+
+        // Use upload task for progress tracking
+        let delegate = UploadProgressDelegate(progressCallback: { progress in
+            // Scale GCS upload progress to 0.1-0.9 range (initiate was 0.0-0.1, complete will be 0.9-1.0)
+            let scaledProgress = 0.1 + (progress * 0.8)
+            progressCallback?(scaledProgress)
+        })
+        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+
+        defer {
+            session.finishTasksAndInvalidate()
+        }
+
+        // Report initial progress
+        await MainActor.run {
+            progressCallback?(0.1)
+        }
+
+        let (_, gcsResponse) = try await session.upload(for: gcsRequest, from: imageData)
+
+        guard let gcsHttpResponse = gcsResponse as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+
+        guard gcsHttpResponse.statusCode >= 200 && gcsHttpResponse.statusCode < 300 else {
+            throw APIError.serverError(statusCode: gcsHttpResponse.statusCode, message: "GCS upload failed")
+        }
+
+        #if DEBUG
+        print("[Media] GCS upload completed")
+        #endif
+
+        // Step 3: Complete the upload to get the final CDN URL
+        await MainActor.run {
+            progressCallback?(0.9)
+        }
+
+        let mediaUrl = try await completeUpload(uploadId: initiateResult.uploadId)
+
+        await MainActor.run {
+            progressCallback?(1.0)
+        }
+
+        #if DEBUG
+        print("[Media] Upload complete, CDN URL: \(mediaUrl)")
+        #endif
+
+        return mediaUrl
+    }
+
+    /// Lightweight upload: only sends metadata to get presigned URL, then uploads directly to GCS
+    /// This is much faster than multipart upload as it avoids sending image data twice.
+    /// - Parameters:
+    ///   - imageData: Image data to upload
+    ///   - filename: Original filename (e.g., "photo.jpg")
+    /// - Returns: CDN URL for the uploaded image
+    func uploadImage(imageData: Data, filename: String = "image.jpg") async throws -> String {
+        #if DEBUG
+        print("[Media] Starting upload: \(imageData.count / 1024) KB")
+        #endif
+
+        // Try the new lightweight initiate endpoint first, fallback to legacy multipart if not available
+        let initiateResult = try await initiateUpload(filename: filename, sizeBytes: Int64(imageData.count), contentType: "image/jpeg", imageData: imageData)
+
+        #if DEBUG
+        print("[Media] Got presigned URL, upload_id: \(initiateResult.uploadId)")
+        #endif
+
+        // Step 2: Upload directly to GCS using presigned URL (this is the only time image data is sent!)
+        try await uploadToPresignedUrl(initiateResult.presignedUrl, data: imageData, contentType: "image/jpeg")
+
+        #if DEBUG
+        print("[Media] Upload to GCS completed, completing upload...")
+        #endif
+
+        // Step 3: Complete the upload to get the final CDN URL
+        let mediaUrl = try await completeUpload(uploadId: initiateResult.uploadId)
+
+        #if DEBUG
+        print("[Media] Upload complete, media URL: \(mediaUrl)")
+        #endif
+
+        return mediaUrl
+    }
+
+
+    /// Response from initiate upload (works with both new and legacy endpoints)
+    private struct InitiateUploadResult {
+        let uploadId: String
+        let presignedUrl: String
+    }
+
+    /// Initiate upload - tries new lightweight endpoint first, falls back to legacy multipart if not available
+    private func initiateUpload(filename: String, sizeBytes: Int64, contentType: String, imageData: Data) async throws -> InitiateUploadResult {
+        #if DEBUG
+        print("[Media] Initiating upload for: \(filename), size: \(sizeBytes) bytes")
+        #endif
+
+        // First try the new lightweight endpoint (no file data sent)
+        do {
+            let result = try await initiateUploadNew(filename: filename, sizeBytes: sizeBytes, contentType: contentType)
+            #if DEBUG
+            print("[Media] ✅ Using new lightweight initiate endpoint - upload_id: \(result.uploadId)")
+            #endif
+            return result
+        } catch {
+            #if DEBUG
+            print("[Media] ⚠️ New endpoint failed: \(error.localizedDescription), falling back to legacy...")
+            #endif
+        }
+
+        // Fallback to legacy multipart endpoint
+        #if DEBUG
+        print("[Media] 📤 Using legacy multipart upload endpoint")
+        #endif
+
+        do {
+            let result = try await initiateUploadLegacy(filename: filename, imageData: imageData)
+            #if DEBUG
+            print("[Media] ✅ Legacy upload initiated - upload_id: \(result.uploadId)")
+            #endif
+            return result
+        } catch {
+            #if DEBUG
+            print("[Media] ❌ Legacy upload also failed: \(error.localizedDescription)")
+            #endif
+            throw error
+        }
+    }
+
+    /// New lightweight initiate endpoint (JSON body, no file data)
+    private func initiateUploadNew(filename: String, sizeBytes: Int64, contentType: String) async throws -> InitiateUploadResult {
+        struct InitiateRequest: Codable {
+            let filename: String
+            let sizeBytes: Int64
+            let contentType: String?
+
+            enum CodingKeys: String, CodingKey {
+                case filename
+                case sizeBytes = "size_bytes"
+                case contentType = "content_type"
+            }
+        }
+
+        struct InitiateResponse: Codable {
+            let uploadId: String
+            let presignedUrl: String
+            let expiresAt: Int64
+
+            enum CodingKeys: String, CodingKey {
+                case uploadId = "upload_id"
+                case presignedUrl = "presigned_url"
+                case expiresAt = "expires_at"
+            }
+        }
+
+        let initiateUrl = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.uploadInitiate)")!
+
+        var request = URLRequest(url: initiateUrl)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30
+
+        if let token = client.getAuthToken() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let requestBody = InitiateRequest(filename: filename, sizeBytes: sizeBytes, contentType: contentType)
+        request.httpBody = try JSONEncoder().encode(requestBody)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.serverError(statusCode: httpResponse.statusCode, message: "Initiate failed")
+        }
+
+        let initiateResponse = try JSONDecoder().decode(InitiateResponse.self, from: data)
+        return InitiateUploadResult(uploadId: initiateResponse.uploadId, presignedUrl: initiateResponse.presignedUrl)
+    }
+
+    /// Legacy multipart initiate endpoint (file data is sent but drained by server)
+    private func initiateUploadLegacy(filename: String, imageData: Data) async throws -> InitiateUploadResult {
+        struct LegacyResponse: Codable {
+            let uploadId: String
+            let presignedUrl: String
+            let expiresAt: Int64?
+
+            enum CodingKeys: String, CodingKey {
+                case uploadId = "upload_id"
+                case presignedUrl = "presigned_url"
+                case expiresAt = "expires_at"
+            }
+        }
+
         let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.uploadStart)")!
-        
         let boundary = "Boundary-\(UUID().uuidString)"
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 120
-        
+
         if let token = client.getAuthToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        
+
         // Build multipart body
         var body = Data()
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
@@ -176,272 +448,205 @@ class MediaService {
         body.append(imageData)
         body.append("\r\n".data(using: .utf8)!)
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        
-        // Use upload task for progress tracking
-        let delegate = UploadProgressDelegate(progressCallback: progressCallback)
-        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
-        
-        defer {
-            session.finishTasksAndInvalidate()
-        }
-        
-        let (data, response) = try await session.upload(for: request, from: body)
-        
+
+        let (data, response) = try await URLSession.shared.upload(for: request, from: body)
+
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
         }
-        
-        switch httpResponse.statusCode {
-        case 200...299:
-            let decoder = JSONDecoder()
-            let uploadResponse = try decoder.decode(UploadResponse.self, from: data)
-            
-            if let mediaUrl = uploadResponse.mediaUrl, !mediaUrl.isEmpty {
-                return mediaUrl
-            } else if let presignedUrl = uploadResponse.presignedUrl, !presignedUrl.isEmpty {
-                try await uploadToPresignedUrl(presignedUrl, data: imageData, contentType: "image/jpeg")
-                return presignedUrl.components(separatedBy: "?").first ?? presignedUrl
-            } else if let uploadId = uploadResponse.uploadId, !uploadId.isEmpty {
-                return uploadId
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            if httpResponse.statusCode == 401 {
+                throw APIError.unauthorized
             }
-            
-            throw APIError.serverError(statusCode: 200, message: "Upload response missing required fields")
-        case 401:
-            throw APIError.unauthorized
-        case 413:
-            throw APIError.serverError(statusCode: 413, message: "File too large (max 20MB)")
-        default:
             let message = String(data: data, encoding: .utf8) ?? "Upload failed"
             throw APIError.serverError(statusCode: httpResponse.statusCode, message: message)
         }
+
+        let legacyResponse = try JSONDecoder().decode(LegacyResponse.self, from: data)
+        return InitiateUploadResult(uploadId: legacyResponse.uploadId, presignedUrl: legacyResponse.presignedUrl)
     }
 
-    /// Upload image using multipart/form-data
+    /// Lightweight video upload: only sends metadata to get presigned URL, then uploads directly to GCS
     /// - Parameters:
-    ///   - imageData: Image data to upload
-    ///   - filename: Original filename (e.g., "photo.jpg")
-    /// - Returns: Media URL or upload ID for the uploaded image
-    func uploadImage(imageData: Data, filename: String = "image.jpg") async throws -> String {
-        let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.uploadStart)")!
-
-        let boundary = "Boundary-\(UUID().uuidString)"
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 120  // 2 minutes timeout for individual request
-
-        // Add auth token
-        if let token = client.getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        // Build multipart body
-        var body = Data()
-
-        // Add file field
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
-        body.append(imageData)
-        body.append("\r\n".data(using: .utf8)!)
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-
-        request.httpBody = body
-
-        #if DEBUG
-        print("[Media] Starting upload: \(imageData.count / 1024) KB to \(url.absoluteString)")
-        #endif
-
-        let (data, response) = try await uploadSession.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.invalidResponse
-        }
-
-        #if DEBUG
-        print("[Media] Upload response - Status: \(httpResponse.statusCode), Size: \(data.count) bytes")
-        if let responseStr = String(data: data, encoding: .utf8) {
-            print("[Media] Upload response body: \(responseStr)")
-        }
-        #endif
-
-        switch httpResponse.statusCode {
-        case 200...299:
-            // Note: Don't use .convertFromSnakeCase when CodingKeys already define snake_case mappings
-            let decoder = JSONDecoder()
-            let uploadResponse = try decoder.decode(UploadResponse.self, from: data)
-
-            #if DEBUG
-            print("[Media] Upload response decoded - mediaUrl: \(uploadResponse.mediaUrl ?? "nil"), presignedUrl: \(uploadResponse.presignedUrl ?? "nil"), uploadId: \(uploadResponse.uploadId ?? "nil")")
-            #endif
-
-            // Return media URL if available, otherwise presigned URL
-            if let mediaUrl = uploadResponse.mediaUrl, !mediaUrl.isEmpty {
-                return mediaUrl
-            } else if let presignedUrl = uploadResponse.presignedUrl, !presignedUrl.isEmpty {
-                // If we got a presigned URL, we need to PUT the file there
-                // Content-Type must match what was used when generating the presigned URL
-                try await uploadToPresignedUrl(presignedUrl, data: imageData, contentType: "image/jpeg")
-                return presignedUrl.components(separatedBy: "?").first ?? presignedUrl
-            } else if let uploadId = uploadResponse.uploadId, !uploadId.isEmpty {
-                // BUG FIX: Backend returns upload_id, we must call completeUpload to get the actual media_url
-                // Without this, avatars are never saved to the database because upload_id is not a URL
-                #if DEBUG
-                print("[Media] Got upload_id: \(uploadId), completing upload to get media_url...")
-                #endif
-                return try await completeUpload(uploadId: uploadId)
-            }
-
-            // 如果所有字段都为空，抛出错误
-            throw APIError.serverError(statusCode: 200, message: "Upload response missing required fields (media_url, presigned_url, or upload_id)")
-        case 401:
-            throw APIError.unauthorized
-        case 413:
-            throw APIError.serverError(statusCode: 413, message: "File too large (max 20MB)")
-        default:
-            let message = String(data: data, encoding: .utf8) ?? "Upload failed"
-            throw APIError.serverError(statusCode: httpResponse.statusCode, message: message)
-        }
-    }
-
-    /// Upload video using multipart/form-data
+    ///   - videoData: Video data to upload
+    ///   - filename: Original filename (e.g., "video.mp4")
+    /// - Returns: CDN URL for the uploaded video
     func uploadVideo(videoData: Data, filename: String = "video.mp4") async throws -> String {
-        let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.uploadStart)")!
-
-        let boundary = "Boundary-\(UUID().uuidString)"
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 300  // 5 minutes timeout for video uploads
-
-        if let token = client.getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        var body = Data()
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: video/mp4\r\n\r\n".data(using: .utf8)!)
-        body.append(videoData)
-        body.append("\r\n".data(using: .utf8)!)
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-
-        request.httpBody = body
-
         #if DEBUG
-        print("[Media] Starting video upload: \(videoData.count / 1024) KB")
+        print("[Media] Starting lightweight video upload: \(videoData.count / 1024) KB")
         #endif
 
-        let (data, response) = try await uploadSession.data(for: request)
+        // Step 1: Call initiate endpoint with only metadata (no file data)
+        let initiateUrl = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.uploadInitiate)")!
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.invalidResponse
-        }
+        struct InitiateRequest: Codable {
+            let filename: String
+            let sizeBytes: Int64
+            let contentType: String?
 
-        switch httpResponse.statusCode {
-        case 200...299:
-            // Note: Don't use .convertFromSnakeCase when CodingKeys already define snake_case mappings
-            let decoder = JSONDecoder()
-            let uploadResponse = try decoder.decode(UploadResponse.self, from: data)
-
-            if let mediaUrl = uploadResponse.mediaUrl, !mediaUrl.isEmpty {
-                return mediaUrl
-            } else if let presignedUrl = uploadResponse.presignedUrl, !presignedUrl.isEmpty {
-                // Content-Type must match what was used when generating the presigned URL
-                try await uploadToPresignedUrl(presignedUrl, data: videoData, contentType: "video/mp4")
-                return presignedUrl.components(separatedBy: "?").first ?? presignedUrl
-            } else if let uploadId = uploadResponse.uploadId, !uploadId.isEmpty {
-                // BUG FIX: Backend returns upload_id, we must call completeUpload to get the actual media_url
-                #if DEBUG
-                print("[Media] Got upload_id for video: \(uploadId), completing upload...")
-                #endif
-                return try await completeUpload(uploadId: uploadId)
+            enum CodingKeys: String, CodingKey {
+                case filename
+                case sizeBytes = "size_bytes"
+                case contentType = "content_type"
             }
-
-            throw APIError.serverError(statusCode: 200, message: "Upload response missing required fields (media_url, presigned_url, or upload_id)")
-        case 401:
-            throw APIError.unauthorized
-        case 413:
-            throw APIError.serverError(statusCode: 413, message: "File too large (max 20MB)")
-        default:
-            let message = String(data: data, encoding: .utf8) ?? "Upload failed"
-            throw APIError.serverError(statusCode: httpResponse.statusCode, message: message)
         }
+
+        struct InitiateResponse: Codable {
+            let uploadId: String
+            let presignedUrl: String
+            let expiresAt: Int64
+
+            enum CodingKeys: String, CodingKey {
+                case uploadId = "upload_id"
+                case presignedUrl = "presigned_url"
+                case expiresAt = "expires_at"
+            }
+        }
+
+        var initiateRequest = URLRequest(url: initiateUrl)
+        initiateRequest.httpMethod = "POST"
+        initiateRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        initiateRequest.timeoutInterval = 30
+
+        if let token = client.getAuthToken() {
+            initiateRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let requestBody = InitiateRequest(
+            filename: filename,
+            sizeBytes: Int64(videoData.count),
+            contentType: "video/mp4"
+        )
+        initiateRequest.httpBody = try JSONEncoder().encode(requestBody)
+
+        let (initiateData, initiateResponse) = try await URLSession.shared.data(for: initiateRequest)
+
+        guard let httpResponse = initiateResponse as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            let statusCode = (initiateResponse as? HTTPURLResponse)?.statusCode ?? 0
+            if statusCode == 401 {
+                throw APIError.unauthorized
+            }
+            if statusCode == 413 {
+                throw APIError.serverError(statusCode: 413, message: "File too large")
+            }
+            let message = String(data: initiateData, encoding: .utf8) ?? "Failed to initiate upload"
+            throw APIError.serverError(statusCode: statusCode, message: message)
+        }
+
+        let initiateResult = try JSONDecoder().decode(InitiateResponse.self, from: initiateData)
+
+        #if DEBUG
+        print("[Media] Got presigned URL for video, upload_id: \(initiateResult.uploadId)")
+        #endif
+
+        // Step 2: Upload directly to GCS using presigned URL
+        try await uploadToPresignedUrl(initiateResult.presignedUrl, data: videoData, contentType: "video/mp4")
+
+        #if DEBUG
+        print("[Media] Video upload to GCS completed, completing upload...")
+        #endif
+
+        // Step 3: Complete the upload to get the final CDN URL
+        let mediaUrl = try await completeUpload(uploadId: initiateResult.uploadId)
+
+        #if DEBUG
+        print("[Media] Video upload complete, CDN URL: \(mediaUrl)")
+        #endif
+
+        return mediaUrl
     }
 
-    /// Upload audio (voice message) using multipart/form-data
+    /// Lightweight audio upload: only sends metadata to get presigned URL, then uploads directly to GCS
     /// - Parameters:
     ///   - audioData: Audio data to upload (M4A format)
     ///   - filename: Original filename (e.g., "voice.m4a")
-    /// - Returns: Media URL or upload ID for the uploaded audio
+    /// - Returns: CDN URL for the uploaded audio
     func uploadAudio(audioData: Data, filename: String = "voice.m4a") async throws -> String {
-        let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.uploadStart)")!
+        #if DEBUG
+        print("[Media] Starting lightweight audio upload: \(audioData.count / 1024) KB")
+        #endif
 
-        let boundary = "Boundary-\(UUID().uuidString)"
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 120  // 2 minutes timeout for audio uploads
+        // Step 1: Call initiate endpoint with only metadata
+        let initiateUrl = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.uploadInitiate)")!
+
+        struct InitiateRequest: Codable {
+            let filename: String
+            let sizeBytes: Int64
+            let contentType: String?
+
+            enum CodingKeys: String, CodingKey {
+                case filename
+                case sizeBytes = "size_bytes"
+                case contentType = "content_type"
+            }
+        }
+
+        struct InitiateResponse: Codable {
+            let uploadId: String
+            let presignedUrl: String
+            let expiresAt: Int64
+
+            enum CodingKeys: String, CodingKey {
+                case uploadId = "upload_id"
+                case presignedUrl = "presigned_url"
+                case expiresAt = "expires_at"
+            }
+        }
+
+        var initiateRequest = URLRequest(url: initiateUrl)
+        initiateRequest.httpMethod = "POST"
+        initiateRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        initiateRequest.timeoutInterval = 30
 
         if let token = client.getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            initiateRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
-        var body = Data()
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: audio/mp4\r\n\r\n".data(using: .utf8)!)  // M4A is audio/mp4
-        body.append(audioData)
-        body.append("\r\n".data(using: .utf8)!)
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        let requestBody = InitiateRequest(
+            filename: filename,
+            sizeBytes: Int64(audioData.count),
+            contentType: "audio/mp4"  // M4A is audio/mp4
+        )
+        initiateRequest.httpBody = try JSONEncoder().encode(requestBody)
 
-        request.httpBody = body
+        let (initiateData, initiateResponse) = try await URLSession.shared.data(for: initiateRequest)
 
-        #if DEBUG
-        print("[Media] Starting audio upload: \(audioData.count / 1024) KB")
-        #endif
-
-        let (data, response) = try await uploadSession.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.invalidResponse
-        }
-
-        #if DEBUG
-        print("[Media] Audio upload response - Status: \(httpResponse.statusCode)")
-        if let responseStr = String(data: data, encoding: .utf8) {
-            print("[Media] Audio upload response body: \(responseStr)")
-        }
-        #endif
-
-        switch httpResponse.statusCode {
-        case 200...299:
-            let decoder = JSONDecoder()
-            let uploadResponse = try decoder.decode(UploadResponse.self, from: data)
-
-            if let mediaUrl = uploadResponse.mediaUrl, !mediaUrl.isEmpty {
-                return mediaUrl
-            } else if let presignedUrl = uploadResponse.presignedUrl, !presignedUrl.isEmpty {
-                // Content-Type must match what was used when generating the presigned URL
-                try await uploadToPresignedUrl(presignedUrl, data: audioData, contentType: "audio/mp4")
-                return presignedUrl.components(separatedBy: "?").first ?? presignedUrl
-            } else if let uploadId = uploadResponse.uploadId, !uploadId.isEmpty {
-                // BUG FIX: Backend returns upload_id, we must call completeUpload to get the actual media_url
-                #if DEBUG
-                print("[Media] Got upload_id for audio: \(uploadId), completing upload...")
-                #endif
-                return try await completeUpload(uploadId: uploadId)
+        guard let httpResponse = initiateResponse as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            let statusCode = (initiateResponse as? HTTPURLResponse)?.statusCode ?? 0
+            if statusCode == 401 {
+                throw APIError.unauthorized
             }
-
-            throw APIError.serverError(statusCode: 200, message: "Upload response missing required fields (media_url, presigned_url, or upload_id)")
-        case 401:
-            throw APIError.unauthorized
-        case 413:
-            throw APIError.serverError(statusCode: 413, message: "File too large (max 20MB)")
-        default:
-            let message = String(data: data, encoding: .utf8) ?? "Upload failed"
-            throw APIError.serverError(statusCode: httpResponse.statusCode, message: message)
+            if statusCode == 413 {
+                throw APIError.serverError(statusCode: 413, message: "File too large")
+            }
+            let message = String(data: initiateData, encoding: .utf8) ?? "Failed to initiate upload"
+            throw APIError.serverError(statusCode: statusCode, message: message)
         }
+
+        let initiateResult = try JSONDecoder().decode(InitiateResponse.self, from: initiateData)
+
+        #if DEBUG
+        print("[Media] Got presigned URL for audio, upload_id: \(initiateResult.uploadId)")
+        #endif
+
+        // Step 2: Upload directly to GCS using presigned URL
+        try await uploadToPresignedUrl(initiateResult.presignedUrl, data: audioData, contentType: "audio/mp4")
+
+        #if DEBUG
+        print("[Media] Audio upload to GCS completed, completing upload...")
+        #endif
+
+        // Step 3: Complete the upload to get the final CDN URL
+        let mediaUrl = try await completeUpload(uploadId: initiateResult.uploadId)
+
+        #if DEBUG
+        print("[Media] Audio upload complete, CDN URL: \(mediaUrl)")
+        #endif
+
+        return mediaUrl
     }
 
     // MARK: - Private Methods
@@ -553,49 +758,89 @@ class MediaService {
 
     /// Mark upload as complete
     /// - Parameter uploadId: Upload ID
-    /// - Returns: Final media URL
+    /// - Returns: Final CDN URL for the uploaded media
     func completeUpload(uploadId: String) async throws -> String {
-        struct Request: Codable {
-            let uploadId: String
+        // Request body for complete upload (only checksum, optional)
+        struct CompleteRequest: Codable {
+            let checksum: String?
+        }
+
+        // Response from complete upload endpoint - backend returns MediaResponse with cdn_url
+        struct CompleteResponse: Codable {
+            let id: String
+            let userId: String
+            let filename: String
+            let mediaType: String
+            let mimeType: String
+            let sizeBytes: Int64
+            let cdnUrl: String
+            let thumbnailUrl: String
+            let status: String
+            let createdAt: Int64
 
             enum CodingKeys: String, CodingKey {
-                case uploadId = "upload_id"
+                case id
+                case userId = "user_id"
+                case filename
+                case mediaType = "media_type"
+                case mimeType = "mime_type"
+                case sizeBytes = "size_bytes"
+                case cdnUrl = "cdn_url"
+                case thumbnailUrl = "thumbnail_url"
+                case status
+                case createdAt = "created_at"
             }
         }
 
-        struct Response: Codable {
-            let mediaUrl: String
-
-            enum CodingKeys: String, CodingKey {
-                case mediaUrl = "media_url"
-            }
-        }
-
-        let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.uploadComplete)")!
+        // Use the correct URL format with upload_id as path parameter
+        let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.uploadComplete(uploadId))")!
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30
 
         if let token = client.getAuthToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
-        let requestBody = Request(uploadId: uploadId)
+        // Send empty checksum (optional field)
+        let requestBody = CompleteRequest(checksum: nil)
         request.httpBody = try JSONEncoder().encode(requestBody)
+
+        #if DEBUG
+        print("[Media] Completing upload: \(uploadId)")
+        #endif
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
+        guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
         }
 
-        // Note: Don't use .convertFromSnakeCase when CodingKeys already define snake_case mappings
-        let decoder = JSONDecoder()
-        let uploadResponse = try decoder.decode(Response.self, from: data)
+        #if DEBUG
+        print("[Media] Complete upload response - Status: \(httpResponse.statusCode)")
+        if let responseStr = String(data: data, encoding: .utf8) {
+            print("[Media] Complete upload response body: \(responseStr)")
+        }
+        #endif
 
-        return uploadResponse.mediaUrl
+        guard (200...299).contains(httpResponse.statusCode) else {
+            if httpResponse.statusCode == 401 {
+                throw APIError.unauthorized
+            }
+            let message = String(data: data, encoding: .utf8) ?? "Failed to complete upload"
+            throw APIError.serverError(statusCode: httpResponse.statusCode, message: message)
+        }
+
+        let decoder = JSONDecoder()
+        let uploadResponse = try decoder.decode(CompleteResponse.self, from: data)
+
+        #if DEBUG
+        print("[Media] Upload completed - CDN URL: \(uploadResponse.cdnUrl)")
+        #endif
+
+        return uploadResponse.cdnUrl
     }
 
     /// Cancel an ongoing upload

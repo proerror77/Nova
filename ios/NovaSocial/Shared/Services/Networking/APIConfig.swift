@@ -127,10 +127,15 @@ struct APIConfig {
     }
 
     struct Media {
-        // 單次上傳端點：後端提供 /api/v2/media/upload
+        // 輕量級上傳初始化端點：只發送元數據，獲取 presigned URL
+        static let uploadInitiate = "/api/v2/media/upload/initiate"
+        // 舊的多部分上傳端點（保留向後兼容）
         static let uploadStart = "/api/v2/media/upload"
         static let uploadProgress = "/api/v2/media/upload"
-        static let uploadComplete = "/api/v2/media/upload"
+        // 完成上傳端點：需要 upload_id 作為路徑參數
+        static func uploadComplete(_ uploadId: String) -> String {
+            "/api/v2/media/upload/\(uploadId)/complete"
+        }
         static let reels = "/api/v2/media/reels"
         static let videos = "/api/v2/media/videos"
     }
