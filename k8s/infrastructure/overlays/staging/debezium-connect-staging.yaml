@@ -355,11 +355,73 @@ spec:
           echo "Waiting for connectors to start..."
           sleep 15
 
+          # ================================================
+          # Deploy nova-auth-cdc connector
+          # Tables: users (user profile data for analytics)
+          # ================================================
+          CONNECTOR_NAME="nova-auth-cdc"
+          echo "Deploying connector: ${CONNECTOR_NAME}"
+
+          if curl -sf "${CONNECT_URL}/connectors/${CONNECTOR_NAME}" > /dev/null 2>&1; then
+            echo "  Connector ${CONNECTOR_NAME} already exists, skipping..."
+          else
+            curl -sf -X POST "${CONNECT_URL}/connectors" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "name": "nova-auth-cdc",
+                "config": {
+                  "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+                  "tasks.max": "1",
+                  "database.hostname": "postgres.nova-staging.svc.cluster.local",
+                  "database.port": "5432",
+                  "database.user": "'"${POSTGRES_USER}"'",
+                  "database.password": "'"${POSTGRES_PASSWORD}"'",
+                  "database.dbname": "nova_auth",
+                  "database.server.name": "nova-auth",
+                  "schema.history.internal.kafka.bootstrap.servers": "kafka.nova-staging.svc.cluster.local:9092",
+                  "schema.history.internal.kafka.topic": "schemahistory.nova-auth-cdc",
+                  "plugin.name": "pgoutput",
+                  "publication.name": "auth_cdc_publication",
+                  "publication.autocreate.mode": "filtered",
+                  "slot.name": "auth_cdc_slot",
+                  "table.include.list": "public.users",
+                  "topic.prefix": "nova-auth",
+                  "topic.creation.enable": "true",
+                  "topic.creation.default.replication.factor": "1",
+                  "topic.creation.default.partitions": "3",
+                  "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+                  "key.converter.schemas.enable": "false",
+                  "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+                  "value.converter.schemas.enable": "false",
+                  "transforms": "route",
+                  "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+                  "transforms.route.regex": "nova-auth\\.public\\.(.+)",
+                  "transforms.route.replacement": "cdc.$1",
+                  "snapshot.mode": "initial",
+                  "decimal.handling.mode": "string",
+                  "time.precision.mode": "connect",
+                  "heartbeat.interval.ms": "30000",
+                  "errors.tolerance": "all",
+                  "errors.log.enable": "true",
+                  "errors.log.include.messages": "true",
+                  "errors.deadletterqueue.topic.name": "dlq.nova-auth-cdc",
+                  "errors.deadletterqueue.topic.replication.factor": "1",
+                  "errors.deadletterqueue.context.headers.enable": "true"
+                }
+              }'
+            echo "  Connector ${CONNECTOR_NAME} created"
+          fi
+          echo ""
+
+          # Wait for connectors to initialize
+          echo "Waiting for connectors to start..."
+          sleep 15
+
           # Check connector statuses
           echo ""
           echo "Connector Statuses:"
           echo "-------------------"
-          for connector in nova-content-cdc nova-graph-cdc; do
+          for connector in nova-content-cdc nova-graph-cdc nova-auth-cdc; do
             echo ""
             echo "${connector}:"
             curl -s "${CONNECT_URL}/connectors/${connector}/status" | head -100

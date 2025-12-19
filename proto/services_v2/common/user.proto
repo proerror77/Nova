@@ -1,0 +1,223 @@
+// ============================================================================
+// Nova Unified User Schema - Single Source of Truth
+// ============================================================================
+// This file contains the canonical user model definitions.
+// All services MUST use these definitions for consistency.
+//
+// Last Updated: 2024-12-19
+// ============================================================================
+
+syntax = "proto3";
+package nova.common.v2;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+option go_package = "github.com/nova/proto/common/v2;commonv2";
+
+// ============================================================================
+// ENUMS - Canonical Definitions
+// ============================================================================
+
+// Gender enum - replaces string representations ("male", "female", etc.)
+enum Gender {
+  GENDER_UNSPECIFIED = 0;
+  GENDER_MALE = 1;
+  GENDER_FEMALE = 2;
+  GENDER_OTHER = 3;
+  GENDER_PREFER_NOT_TO_SAY = 4;
+}
+
+// Privacy level enum - replaces string values ("public", "friends_only", "private")
+enum PrivacyLevel {
+  PRIVACY_LEVEL_UNSPECIFIED = 0;
+  PRIVACY_LEVEL_PUBLIC = 1;
+  PRIVACY_LEVEL_FRIENDS_ONLY = 2;
+  PRIVACY_LEVEL_PRIVATE = 3;
+}
+
+// DM Permission enum - replaces boolean allow_messages and string dm_permission
+enum DMPermission {
+  DM_PERMISSION_UNSPECIFIED = 0;
+  DM_PERMISSION_ANYONE = 1;
+  DM_PERMISSION_FOLLOWERS = 2;
+  DM_PERMISSION_MUTUALS = 3;
+  DM_PERMISSION_NOBODY = 4;
+}
+
+// ============================================================================
+// CORE USER MODEL
+// ============================================================================
+
+// User represents a complete user profile
+// Field naming convention: snake_case
+// Timestamp format: google.protobuf.Timestamp (consistent across all services)
+message User {
+  // ---- Core Identity (REQUIRED, Immutable) ----
+  string id = 1;                    // UUID
+  string username = 2;              // Unique, lowercase, alphanumeric + underscore
+  string email = 3;                 // Unique email address
+  
+  // ---- Profile Fields (OPTIONAL, Mutable) ----
+  // Empty string indicates "not set"
+  string display_name = 4;          // Display name (max 50 chars)
+  string bio = 5;                   // Biography (max 500 chars)
+  string avatar_url = 6;            // Avatar image URL
+  string cover_photo_url = 7;       // STANDARDIZED: cover_photo_url (not cover_url)
+  string website = 8;               // Personal website URL
+  string location = 9;              // Geographic location
+  
+  // ---- Extended Profile (OPTIONAL) ----
+  string first_name = 10;           // Legal first name
+  string last_name = 11;            // Legal last name
+  string date_of_birth = 12;        // ISO 8601 format (YYYY-MM-DD)
+  Gender gender = 13;               // STANDARDIZED: Gender enum (not string)
+  
+  // ---- Status Flags (REQUIRED) ----
+  bool is_verified = 14;            // Verification badge status
+  bool is_active = 15;              // Account active (false = deactivated)
+  bool is_banned = 16;              // Account banned
+  
+  // ---- Privacy Settings (REQUIRED) ----
+  bool is_private = 17;             // STANDARDIZED: is_private (not private_account)
+  PrivacyLevel privacy_level = 18;  // STANDARDIZED: PrivacyLevel enum
+  DMPermission dm_permission = 19;  // STANDARDIZED: DMPermission enum
+  
+  // ---- Denormalized Counts (REQUIRED for performance) ----
+  // Note: Use int64 for future-proofing (int32 max = 2.1B)
+  int64 follower_count = 20;
+  int64 following_count = 21;
+  int64 post_count = 22;
+  
+  // ---- Timestamps (REQUIRED) ----
+  // STANDARDIZED: Use google.protobuf.Timestamp (not int64)
+  google.protobuf.Timestamp created_at = 23;
+  google.protobuf.Timestamp updated_at = 24;
+  google.protobuf.Timestamp deleted_at = 25;  // Soft delete marker (null if active)
+}
+
+// UserBasicInfo represents a minimal user profile for lists and mentions
+message UserBasicInfo {
+  string id = 1;
+  string username = 2;
+  string display_name = 3;
+  string avatar_url = 4;
+  bool is_verified = 5;
+  bool is_private = 6;
+}
+
+// ============================================================================
+// USER SETTINGS
+// ============================================================================
+
+message UserSettings {
+  string user_id = 1;
+  
+  // Notification preferences
+  bool email_notifications = 2;
+  bool push_notifications = 3;
+  bool marketing_emails = 4;
+  
+  // Localization
+  string timezone = 5;              // IANA timezone (e.g., "Asia/Tokyo")
+  string language = 6;              // ISO 639-1 code (e.g., "zh-TW", "en")
+  
+  // Appearance
+  bool dark_mode = 7;
+  
+  // Privacy
+  PrivacyLevel privacy_level = 8;
+  DMPermission dm_permission = 9;
+  bool show_online_status = 10;
+  
+  // Timestamps
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+}
+
+// ============================================================================
+// ACCOUNT MANAGEMENT (Primary + Alias)
+// ============================================================================
+
+message Account {
+  string id = 1;                    // Account UUID
+  string user_id = 2;               // Owner user UUID
+  string username = 3;              // Account username
+  string display_name = 4;          // Account display name
+  string avatar_url = 5;            // Account avatar
+  
+  // Account type flags
+  bool is_primary = 6;              // True for main account
+  bool is_active = 7;               // Currently active
+  bool is_alias = 8;                // True for alias accounts
+  
+  // Alias-specific profile fields
+  string alias_name = 9;            // Alias persona name
+  string date_of_birth = 10;        // ISO 8601 (YYYY-MM-DD)
+  Gender gender = 11;               // Gender for this account
+  string profession = 12;           // Occupation
+  string location = 13;             // Geographic location
+  
+  // Timestamps
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp updated_at = 15;
+  google.protobuf.Timestamp last_active_at = 16;
+}
+
+// ============================================================================
+// REQUEST/RESPONSE MESSAGES
+// ============================================================================
+
+// UpdateProfileRequest uses wrappers for optional partial updates
+message UpdateProfileRequest {
+  string user_id = 1;
+  
+  // Profile fields (use wrapper for partial update semantics)
+  google.protobuf.StringValue display_name = 2;
+  google.protobuf.StringValue bio = 3;
+  google.protobuf.StringValue avatar_url = 4;
+  google.protobuf.StringValue cover_photo_url = 5;
+  google.protobuf.StringValue website = 6;
+  google.protobuf.StringValue location = 7;
+  google.protobuf.BoolValue is_private = 8;
+  
+  // Extended profile
+  google.protobuf.StringValue first_name = 9;
+  google.protobuf.StringValue last_name = 10;
+  google.protobuf.StringValue date_of_birth = 11;  // ISO 8601
+  Gender gender = 12;
+}
+
+message UpdateSettingsRequest {
+  string user_id = 1;
+  
+  google.protobuf.BoolValue email_notifications = 2;
+  google.protobuf.BoolValue push_notifications = 3;
+  google.protobuf.BoolValue marketing_emails = 4;
+  google.protobuf.StringValue timezone = 5;
+  google.protobuf.StringValue language = 6;
+  google.protobuf.BoolValue dark_mode = 7;
+  PrivacyLevel privacy_level = 8;
+  DMPermission dm_permission = 9;
+  google.protobuf.BoolValue show_online_status = 10;
+}
+
+message GetUserRequest {
+  string user_id = 1;
+}
+
+message GetUserResponse {
+  User user = 1;
+}
+
+message GetUserByUsernameRequest {
+  string username = 1;
+}
+
+message GetUsersRequest {
+  repeated string user_ids = 1;
+}
+
+message GetUsersResponse {
+  repeated User users = 1;
+}

@@ -211,10 +211,11 @@ pub struct PostsCdcRow {
 }
 
 /// Row struct for follows_cdc table - used for type-safe ClickHouse inserts
+/// Note: Uses `followee_id` to match ClickHouse schema (PostgreSQL uses `following_id`)
 #[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct FollowsCdcRow {
     pub follower_id: Uuid,
-    pub followed_id: Uuid,
+    pub followee_id: Uuid,
     pub created_at: DateTime<Utc>,
     pub cdc_operation: i8,
     pub cdc_timestamp: DateTime<Utc>,
@@ -247,6 +248,23 @@ pub struct LikesCdcRow {
     pub like_count: i8,
 }
 
+/// Row struct for users_cdc table - used for type-safe ClickHouse inserts
+/// Note: Captures user profile changes for analytics (username, display_name, avatar_url, bio)
+#[derive(Debug, Clone, Row, Serialize, Deserialize)]
+pub struct UsersCdcRow {
+    pub id: Uuid,
+    pub username: String,
+    pub display_name: String,
+    pub email: String,
+    pub avatar_url: String,
+    pub bio: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+    pub cdc_operation: i8,
+    pub cdc_timestamp: DateTime<Utc>,
+}
+
 use super::models::{CdcMessage, CdcOperation};
 
 /// CDC Consumer configuration
@@ -277,7 +295,7 @@ impl CdcConsumerConfig {
             group_id: std::env::var("CDC_CONSUMER_GROUP")
                 .unwrap_or_else(|_| "analytics-cdc-consumer-v1".to_string()),
             topics: std::env::var("CDC_TOPICS")
-                .unwrap_or_else(|_| "cdc.posts,cdc.follows,cdc.comments,cdc.likes".to_string())
+                .unwrap_or_else(|_| "cdc.posts,cdc.follows,cdc.comments,cdc.likes,cdc.users".to_string())
                 .split(',')
                 .map(|s| s.trim().to_string())
                 .collect(),
@@ -519,6 +537,7 @@ impl CdcConsumer {
             "follows" => self.insert_follows_cdc(&cdc_msg).await?,
             "comments" => self.insert_comments_cdc(&cdc_msg).await?,
             "likes" => self.insert_likes_cdc(&cdc_msg).await?,
+            "users" => self.insert_users_cdc(&cdc_msg).await?,
             table => {
                 warn!("Unknown CDC table '{}', ignoring message", table);
             }
@@ -607,11 +626,11 @@ impl CdcConsumer {
         .ok_or_else(|| AnalyticsError::Validation("CDC message missing data field".to_string()))?;
 
         let follower_raw: String = Self::extract_field(data, "follower_id")?;
-        // PostgreSQL table uses "following_id", but ClickHouse expects "followed_id"
+        // PostgreSQL table uses "following_id", ClickHouse uses "followee_id"
         let following_raw: String = Self::extract_field(data, "following_id")?;
         let follower_id = Uuid::parse_str(&follower_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid follower UUID: {}", e)))?;
-        let followed_id = Uuid::parse_str(&following_raw)
+        let followee_id = Uuid::parse_str(&following_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid followee UUID: {}", e)))?;
         let created_at_raw: String = Self::extract_field(data, "created_at")?;
         let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
@@ -626,7 +645,7 @@ impl CdcConsumer {
         // Use type-safe parameterized insert to prevent SQL injection
         let row = FollowsCdcRow {
             follower_id,
-            followed_id,
+            followee_id,
             created_at,
             cdc_operation,
             cdc_timestamp,
@@ -649,8 +668,8 @@ impl CdcConsumer {
         })?;
 
         debug!(
-            "Inserted follows CDC: follower={}, followed={}, op={:?}",
-            follower_id, followed_id, op
+            "Inserted follows CDC: follower={}, followee={}, op={:?}",
+            follower_id, followee_id, op
         );
         Ok(())
     }
@@ -784,6 +803,76 @@ impl CdcConsumer {
             "Inserted likes CDC: user={}, post={}, op={:?}",
             user_id, post_id, op
         );
+        Ok(())
+    }
+
+    /// Insert users CDC message into ClickHouse using type-safe parameterized insert
+    async fn insert_users_cdc(&self, msg: &CdcMessage) -> Result<()> {
+        let op = msg.operation();
+        let data = match op {
+            CdcOperation::Delete => msg.payload().before.as_ref(),
+            _ => msg.payload().after.as_ref(),
+        }
+        .ok_or_else(|| AnalyticsError::Validation("CDC message missing data field".to_string()))?;
+
+        let id_raw: String = Self::extract_field(data, "id")?;
+        let user_id = Uuid::parse_str(&id_raw)
+            .map_err(|e| AnalyticsError::Validation(format!("Invalid user UUID: {}", e)))?;
+        
+        let username: String = Self::extract_field(data, "username")?;
+        let display_name: String = Self::extract_optional_field(data, "display_name").unwrap_or_default();
+        let email: String = Self::extract_optional_field(data, "email").unwrap_or_default();
+        let avatar_url: String = Self::extract_optional_field(data, "avatar_url").unwrap_or_default();
+        let bio: String = Self::extract_optional_field(data, "bio").unwrap_or_default();
+        
+        let created_at_raw: String = Self::extract_field(data, "created_at")?;
+        let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
+        let updated_at_raw: String = Self::extract_field(data, "updated_at")?;
+        let updated_at = Self::parse_datetime_best_effort(&updated_at_raw)?;
+        let deleted_at_raw: Option<String> = Self::extract_optional_field(data, "deleted_at");
+        let deleted_at = deleted_at_raw
+            .as_deref()
+            .map(Self::parse_datetime_best_effort)
+            .transpose()?;
+
+        let cdc_operation: i8 = match op {
+            CdcOperation::Insert | CdcOperation::Read => 1,
+            CdcOperation::Update => 2,
+            CdcOperation::Delete => 3,
+        };
+        let cdc_timestamp = msg.timestamp();
+
+        // Use type-safe parameterized insert to prevent SQL injection
+        let row = UsersCdcRow {
+            id: user_id,
+            username,
+            display_name,
+            email,
+            avatar_url,
+            bio,
+            created_at,
+            updated_at,
+            deleted_at,
+            cdc_operation,
+            cdc_timestamp,
+        };
+
+        let mut insert = self.ch_client.insert("users_cdc").map_err(|e| {
+            error!("ClickHouse insert preparation error: {}", e);
+            AnalyticsError::ClickHouse(e.to_string())
+        })?;
+
+        insert.write(&row).await.map_err(|e| {
+            error!("ClickHouse row write error: {}", e);
+            AnalyticsError::ClickHouse(e.to_string())
+        })?;
+
+        insert.end().await.map_err(|e| {
+            error!("ClickHouse insert error: {}", e);
+            AnalyticsError::ClickHouse(e.to_string())
+        })?;
+
+        debug!("Inserted users CDC: id={}, username={}, op={:?}", user_id, row.username, op);
         Ok(())
     }
 

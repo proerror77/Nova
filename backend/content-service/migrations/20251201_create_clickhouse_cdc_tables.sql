@@ -109,13 +109,13 @@ GROUP BY user_id, day;
 CREATE MATERIALIZED VIEW IF NOT EXISTS follower_growth_daily
 ENGINE = SummingMergeTree()
 PARTITION BY toYYYYMM(day)
-ORDER BY (followed_id, day)
+ORDER BY (followee_id, day)
 AS SELECT
-    followed_id AS user_id,
+    followee_id AS user_id,
     toStartOfDay(cdc_timestamp) AS day,
     sum(follow_count) AS net_followers
 FROM follows_cdc
-GROUP BY followed_id, day;
+GROUP BY followee_id, day;
 
 -- Sample queries:
 -- 1. Get total likes for a post:

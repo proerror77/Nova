@@ -179,14 +179,15 @@ message UpdateUserProfileRequest {
   optional string avatar_url = 4;
   optional string cover_photo_url = 5;
   optional string location = 6;
-  optional bool private_account = 7;
+  optional bool is_private = 7;        // STANDARDIZED: is_private (not private_account)
   // Extended profile fields
   optional string first_name = 8;
   optional string last_name = 9;
   optional string date_of_birth = 10;  // ISO 8601 date format (YYYY-MM-DD)
-  optional string gender = 11;         // male, female, other, prefer_not_to_say
+  Gender gender = 11;                  // STANDARDIZED: Gender enum (not string)
 }
 
+// NOTE: Field naming aligned with proto/services_v2/common/user.proto (source of truth)
 message UserProfile {
   string user_id = 1;
   string username = 2;
@@ -196,14 +197,14 @@ message UserProfile {
   optional string avatar_url = 6;
   optional string cover_photo_url = 7;
   optional string location = 8;
-  bool private_account = 9;
-  int64 created_at = 10;
-  int64 updated_at = 11;
+  bool is_private = 9;                 // STANDARDIZED: is_private (not private_account)
+  int64 created_at = 10;               // TODO: Migrate to google.protobuf.Timestamp
+  int64 updated_at = 11;               // TODO: Migrate to google.protobuf.Timestamp
   // Extended profile fields
   optional string first_name = 12;
   optional string last_name = 13;
   optional string date_of_birth = 14;  // ISO 8601 date format (YYYY-MM-DD)
-  optional string gender = 15;         // male, female, other, prefer_not_to_say
+  Gender gender = 15;                  // STANDARDIZED: Gender enum (not string)
 }
 
 message UpdateUserProfileResponse {
@@ -427,20 +428,21 @@ message GetReferralInfoResponse {
 // User Settings (P0: user-service migration)
 // ============================================================================
 
+// NOTE: Field naming aligned with proto/services_v2/common/user.proto (source of truth)
 message UserSettings {
   string user_id = 1;
-  string dm_permission = 2;           // "anyone", "followers", "mutuals", "nobody"
+  DMPermission dm_permission = 2;     // STANDARDIZED: DMPermission enum
   bool email_notifications = 3;
   bool push_notifications = 4;
   bool marketing_emails = 5;
   string timezone = 6;
   string language = 7;
   bool dark_mode = 8;
-  string privacy_level = 9;           // "public", "friends_only", "private"
-  bool allow_messages = 10;
+  PrivacyLevel privacy_level = 9;     // STANDARDIZED: PrivacyLevel enum
+  // Field 10 removed: allow_messages merged into dm_permission enum
   bool show_online_status = 11;
-  int64 created_at = 12;
-  int64 updated_at = 13;
+  int64 created_at = 12;              // TODO: Migrate to google.protobuf.Timestamp
+  int64 updated_at = 13;              // TODO: Migrate to google.protobuf.Timestamp
 }
 
 message GetUserSettingsRequest {
@@ -454,15 +456,15 @@ message GetUserSettingsResponse {
 
 message UpdateUserSettingsRequest {
   string user_id = 1;
-  optional string dm_permission = 2;
+  optional DMPermission dm_permission = 2;     // STANDARDIZED: DMPermission enum
   optional bool email_notifications = 3;
   optional bool push_notifications = 4;
   optional bool marketing_emails = 5;
   optional string timezone = 6;
   optional string language = 7;
   optional bool dark_mode = 8;
-  optional string privacy_level = 9;
-  optional bool allow_messages = 10;
+  optional PrivacyLevel privacy_level = 9;     // STANDARDIZED: PrivacyLevel enum
+  // Field 10 removed: allow_messages merged into dm_permission enum
   optional bool show_online_status = 11;
 }
 
@@ -1066,13 +1068,28 @@ service AuthService {
 // Account Management Messages (Multi-account & Alias)
 // ============================================================================
 
-// Gender enum for alias accounts
+// STANDARDIZED: Canonical enums aligned with proto/services_v2/common/user.proto
 enum Gender {
   GENDER_UNSPECIFIED = 0;
   GENDER_MALE = 1;
   GENDER_FEMALE = 2;
   GENDER_OTHER = 3;
   GENDER_PREFER_NOT_TO_SAY = 4;
+}
+
+enum PrivacyLevel {
+  PRIVACY_LEVEL_UNSPECIFIED = 0;
+  PRIVACY_LEVEL_PUBLIC = 1;
+  PRIVACY_LEVEL_FRIENDS_ONLY = 2;
+  PRIVACY_LEVEL_PRIVATE = 3;
+}
+
+enum DMPermission {
+  DM_PERMISSION_UNSPECIFIED = 0;
+  DM_PERMISSION_ANYONE = 1;
+  DM_PERMISSION_FOLLOWERS = 2;
+  DM_PERMISSION_MUTUALS = 3;
+  DM_PERMISSION_NOBODY = 4;
 }
 
 // Account representation (both primary and alias accounts)

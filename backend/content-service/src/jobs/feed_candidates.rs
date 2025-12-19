@@ -134,12 +134,12 @@ SELECT
     now()
 FROM posts_cdc AS p
 INNER JOIN (
-    SELECT follower_id, followed_id
+    SELECT follower_id, followee_id
     FROM follows_cdc
-    GROUP BY follower_id, followed_id
+    GROUP BY follower_id, followee_id
     HAVING sum(follow_count) > 0
 ) AS f
-    ON f.followed_id = p.user_id
+    ON f.followee_id = p.user_id
 LEFT JOIN (
     SELECT post_id, sum(like_count) AS likes_count
     FROM likes_cdc

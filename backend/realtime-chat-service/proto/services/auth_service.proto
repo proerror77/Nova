@@ -179,14 +179,15 @@ message UpdateUserProfileRequest {
   optional string avatar_url = 4;
   optional string cover_photo_url = 5;
   optional string location = 6;
-  optional bool private_account = 7;
+  optional bool is_private = 7;        // STANDARDIZED: is_private (not private_account)
   // Extended profile fields
   optional string first_name = 8;
   optional string last_name = 9;
   optional string date_of_birth = 10;  // ISO 8601 date format (YYYY-MM-DD)
-  optional string gender = 11;         // male, female, other, prefer_not_to_say
+  Gender gender = 11;                  // STANDARDIZED: Gender enum (not string)
 }
 
+// NOTE: Field naming aligned with proto/services_v2/common/user.proto (source of truth)
 message UserProfile {
   string user_id = 1;
   string username = 2;
@@ -196,14 +197,14 @@ message UserProfile {
   optional string avatar_url = 6;
   optional string cover_photo_url = 7;
   optional string location = 8;
-  bool private_account = 9;
-  int64 created_at = 10;
-  int64 updated_at = 11;
+  bool is_private = 9;                 // STANDARDIZED: is_private (not private_account)
+  int64 created_at = 10;               // TODO: Migrate to google.protobuf.Timestamp
+  int64 updated_at = 11;               // TODO: Migrate to google.protobuf.Timestamp
   // Extended profile fields
   optional string first_name = 12;
   optional string last_name = 13;
   optional string date_of_birth = 14;  // ISO 8601 date format (YYYY-MM-DD)
-  optional string gender = 15;         // male, female, other, prefer_not_to_say
+  Gender gender = 15;                  // STANDARDIZED: Gender enum (not string)
 }
 
 message UpdateUserProfileResponse {
@@ -427,20 +428,21 @@ message GetReferralInfoResponse {
 // User Settings (P0: user-service migration)
 // ============================================================================
 
+// NOTE: Field naming aligned with proto/services_v2/common/user.proto (source of truth)
 message UserSettings {
   string user_id = 1;
-  string dm_permission = 2;           // "anyone", "followers", "mutuals", "nobody"
+  DMPermission dm_permission = 2;     // STANDARDIZED: DMPermission enum
   bool email_notifications = 3;
   bool push_notifications = 4;
   bool marketing_emails = 5;
   string timezone = 6;
   string language = 7;
   bool dark_mode = 8;
-  string privacy_level = 9;           // "public", "friends_only", "private"
-  bool allow_messages = 10;
+  PrivacyLevel privacy_level = 9;     // STANDARDIZED: PrivacyLevel enum
+  // Field 10 removed: allow_messages merged into dm_permission enum
   bool show_online_status = 11;
-  int64 created_at = 12;
-  int64 updated_at = 13;
+  int64 created_at = 12;              // TODO: Migrate to google.protobuf.Timestamp
+  int64 updated_at = 13;              // TODO: Migrate to google.protobuf.Timestamp
 }
 
 message GetUserSettingsRequest {
@@ -454,15 +456,15 @@ message GetUserSettingsResponse {
 
 message UpdateUserSettingsRequest {
   string user_id = 1;
-  optional string dm_permission = 2;
+  optional DMPermission dm_permission = 2;     // STANDARDIZED: DMPermission enum
   optional bool email_notifications = 3;
   optional bool push_notifications = 4;
   optional bool marketing_emails = 5;
   optional string timezone = 6;
   optional string language = 7;
   optional bool dark_mode = 8;
-  optional string privacy_level = 9;
-  optional bool allow_messages = 10;
+  optional PrivacyLevel privacy_level = 9;     // STANDARDIZED: PrivacyLevel enum
+  // Field 10 removed: allow_messages merged into dm_permission enum
   optional bool show_online_status = 11;
 }
 
@@ -625,6 +627,65 @@ message AppleNativeSignInResponse {
   string username = 5;              // Username
   string email = 6;                 // Email address
   bool is_new_user = 7;             // True if this created a new account
+}
+
+// ============================================================================
+// Phone Authentication (SMS OTP)
+// ============================================================================
+
+// Request to send SMS verification code
+message SendPhoneCodeRequest {
+  string phone_number = 1;  // Phone number in E.164 format (e.g., +14155551234)
+}
+
+message SendPhoneCodeResponse {
+  bool success = 1;
+  optional string message = 2;
+  int32 expires_in = 3;  // Seconds until code expires (default: 300)
+}
+
+// Request to verify SMS code
+message VerifyPhoneCodeRequest {
+  string phone_number = 1;  // Phone number in E.164 format
+  string code = 2;          // 6-digit verification code
+}
+
+message VerifyPhoneCodeResponse {
+  bool success = 1;
+  optional string verification_token = 2;  // Token to use for registration/login
+  optional string message = 3;
+}
+
+// Request to register with verified phone number
+message PhoneRegisterRequest {
+  string phone_number = 1;        // Verified phone number
+  string verification_token = 2;  // Token from VerifyPhoneCodeResponse
+  string username = 3;            // Desired username
+  string password = 4;            // Account password
+  optional string display_name = 5;
+}
+
+message PhoneRegisterResponse {
+  string user_id = 1;
+  string token = 2;
+  string refresh_token = 3;
+  int64 expires_in = 4;
+  string username = 5;
+  bool is_new_user = 6;
+}
+
+// Request to login with verified phone number
+message PhoneLoginRequest {
+  string phone_number = 1;        // Phone number in E.164 format
+  string verification_token = 2;  // Token from VerifyPhoneCodeResponse
+}
+
+message PhoneLoginResponse {
+  string user_id = 1;
+  string token = 2;
+  string refresh_token = 3;
+  int64 expires_in = 4;
+  string username = 5;
 }
 
 // ============================================================================
@@ -922,4 +983,206 @@ service AuthService {
       body: "*"
     };
   }
+
+  // ========== Phone Authentication (SMS OTP) ==========
+  // Send verification code to phone number (public - no auth required)
+  rpc SendPhoneCode(SendPhoneCodeRequest) returns (SendPhoneCodeResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/phone/send-code"
+      body: "*"
+    };
+  }
+
+  // Verify SMS code (public - no auth required)
+  rpc VerifyPhoneCode(VerifyPhoneCodeRequest) returns (VerifyPhoneCodeResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/phone/verify"
+      body: "*"
+    };
+  }
+
+  // Register new user with verified phone number (public - no auth required)
+  rpc PhoneRegister(PhoneRegisterRequest) returns (PhoneRegisterResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/phone/register"
+      body: "*"
+    };
+  }
+
+  // Login with verified phone number (public - no auth required)
+  rpc PhoneLogin(PhoneLoginRequest) returns (PhoneLoginResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/phone/login"
+      body: "*"
+    };
+  }
+
+  // ========== Account Management (Multi-account & Alias) ==========
+  // List all accounts for a user (primary + aliases)
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/accounts"
+    };
+  }
+
+  // Switch to a different account (returns new tokens)
+  rpc SwitchAccount(SwitchAccountRequest) returns (SwitchAccountResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/accounts/switch"
+      body: "*"
+    };
+  }
+
+  // Create a new alias account
+  rpc CreateAliasAccount(CreateAliasAccountRequest) returns (CreateAliasAccountResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/accounts/alias"
+      body: "*"
+    };
+  }
+
+  // Update an existing alias account
+  rpc UpdateAliasAccount(UpdateAliasAccountRequest) returns (UpdateAliasAccountResponse) {
+    option (google.api.http) = {
+      put: "/api/v2/accounts/alias/{account_id}"
+      body: "*"
+    };
+  }
+
+  // Get alias account details
+  rpc GetAliasAccount(GetAliasAccountRequest) returns (GetAliasAccountResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/accounts/alias/{account_id}"
+    };
+  }
+
+  // Delete an alias account
+  rpc DeleteAliasAccount(DeleteAliasAccountRequest) returns (DeleteAliasAccountResponse) {
+    option (google.api.http) = {
+      delete: "/api/v2/accounts/alias/{account_id}"
+    };
+  }
+}
+
+// ============================================================================
+// Account Management Messages (Multi-account & Alias)
+// ============================================================================
+
+// STANDARDIZED: Canonical enums aligned with proto/services_v2/common/user.proto
+enum Gender {
+  GENDER_UNSPECIFIED = 0;
+  GENDER_MALE = 1;
+  GENDER_FEMALE = 2;
+  GENDER_OTHER = 3;
+  GENDER_PREFER_NOT_TO_SAY = 4;
+}
+
+enum PrivacyLevel {
+  PRIVACY_LEVEL_UNSPECIFIED = 0;
+  PRIVACY_LEVEL_PUBLIC = 1;
+  PRIVACY_LEVEL_FRIENDS_ONLY = 2;
+  PRIVACY_LEVEL_PRIVATE = 3;
+}
+
+enum DMPermission {
+  DM_PERMISSION_UNSPECIFIED = 0;
+  DM_PERMISSION_ANYONE = 1;
+  DM_PERMISSION_FOLLOWERS = 2;
+  DM_PERMISSION_MUTUALS = 3;
+  DM_PERMISSION_NOBODY = 4;
+}
+
+// Account representation (both primary and alias accounts)
+message Account {
+  string id = 1;                           // Account UUID
+  string user_id = 2;                      // Owner user UUID
+  string username = 3;                     // Username
+  string display_name = 4;                 // Display name
+  string avatar_url = 5;                   // Avatar URL
+  bool is_primary = 6;                     // True for main account
+  bool is_active = 7;                      // Currently active account
+  bool is_alias = 8;                       // True for alias accounts
+  int64 last_active_at = 9;                // Unix timestamp
+  int64 created_at = 10;                   // Unix timestamp
+
+  // Alias-specific fields (only populated for alias accounts)
+  string alias_name = 11;                  // Alias display name
+  string date_of_birth = 12;               // Date of birth (YYYY-MM-DD)
+  Gender gender = 13;                      // Gender
+  string profession = 14;                  // Profession/occupation
+  string location = 15;                    // Location
+}
+
+// -------- List Accounts --------
+message ListAccountsRequest {
+  string user_id = 1;                      // User to list accounts for
+}
+
+message ListAccountsResponse {
+  repeated Account accounts = 1;           // All accounts (primary + aliases)
+  string current_account_id = 2;           // Currently active account ID
+}
+
+// -------- Switch Account --------
+message SwitchAccountRequest {
+  string user_id = 1;                      // Current user ID
+  string target_account_id = 2;            // Account ID to switch to
+}
+
+message SwitchAccountResponse {
+  bool success = 1;
+  string access_token = 2;                 // New access token
+  string refresh_token = 3;                // New refresh token
+  Account account = 4;                     // Switched account details
+}
+
+// -------- Create Alias Account --------
+message CreateAliasAccountRequest {
+  string user_id = 1;                      // Owner user ID
+  string alias_name = 2;                   // Required: Alias display name
+  string avatar_url = 3;                   // Optional: Avatar URL
+  string date_of_birth = 4;                // Optional: Date of birth (YYYY-MM-DD)
+  Gender gender = 5;                       // Optional: Gender
+  string profession = 6;                   // Optional: Profession
+  string location = 7;                     // Optional: Location
+}
+
+message CreateAliasAccountResponse {
+  Account account = 1;                     // Created alias account
+}
+
+// -------- Update Alias Account --------
+message UpdateAliasAccountRequest {
+  string account_id = 1;                   // Alias account ID to update
+  string user_id = 2;                      // Owner user ID (for authorization)
+  string alias_name = 3;                   // Updated alias name
+  string avatar_url = 4;                   // Updated avatar URL
+  string date_of_birth = 5;                // Updated date of birth
+  Gender gender = 6;                       // Updated gender
+  string profession = 7;                   // Updated profession
+  string location = 8;                     // Updated location
+}
+
+message UpdateAliasAccountResponse {
+  Account account = 1;                     // Updated alias account
+}
+
+// -------- Get Alias Account --------
+message GetAliasAccountRequest {
+  string account_id = 1;                   // Alias account ID
+  string user_id = 2;                      // Owner user ID (for authorization)
+}
+
+message GetAliasAccountResponse {
+  Account account = 1;                     // Alias account details
+}
+
+// -------- Delete Alias Account --------
+message DeleteAliasAccountRequest {
+  string account_id = 1;                   // Alias account ID to delete
+  string user_id = 2;                      // Owner user ID (for authorization)
+}
+
+message DeleteAliasAccountResponse {
+  bool success = 1;
 }

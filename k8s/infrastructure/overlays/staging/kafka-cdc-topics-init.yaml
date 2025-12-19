@@ -8,6 +8,7 @@
 # - cdc.comments (3 partitions) - Comment events
 # - cdc.likes (3 partitions) - Like/unlike events
 # - cdc.follows (3 partitions) - Follow/unfollow events
+# - cdc.users (3 partitions) - User profile change events
 # Notification Event Topics:
 # - MessageCreated (3 partitions) - New message notifications
 # - FollowAdded (3 partitions) - New follower notifications
@@ -17,6 +18,7 @@
 # Dead Letter Queues:
 # - dlq.nova-content-cdc (1 partition) - Dead letter queue for content CDC
 # - dlq.nova-graph-cdc (1 partition) - Dead letter queue for graph CDC
+# - dlq.nova-auth-cdc (1 partition) - Dead letter queue for auth CDC
 # Kafka Connect Internal:
 # - connect-configs (1 partition) - Kafka Connect config storage
 # - connect-offsets (25 partitions) - Kafka Connect offset storage
@@ -82,6 +84,7 @@ spec:
             "cdc.comments:3:1"
             "cdc.likes:3:1"
             "cdc.follows:3:1"
+            "cdc.users:3:1"
           )
 
           # Notification event topics (consumed by notification-service)
@@ -97,6 +100,7 @@ spec:
           DLQ_TOPICS=(
             "dlq.nova-content-cdc:1:1"
             "dlq.nova-graph-cdc:1:1"
+            "dlq.nova-auth-cdc:1:1"
           )
 
           # Kafka Connect internal topics

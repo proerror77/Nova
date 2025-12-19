@@ -33,13 +33,15 @@ SETTINGS index_granularity = 8192;
 
 -- Follows CDC mirror (for feed/trending joins)
 -- TTL: 2 years retention for social graph data
+-- Note: followee_id = the user being followed (PostgreSQL uses following_id)
 CREATE TABLE IF NOT EXISTS follows_cdc (
   follower_id String,
   followee_id String,
   created_at DateTime,
   cdc_timestamp UInt64,
-  is_deleted UInt8 DEFAULT 0
-) ENGINE = ReplacingMergeTree(cdc_timestamp)
+  is_deleted UInt8 DEFAULT 0,
+  follow_count Int8 DEFAULT 1
+) ENGINE = SummingMergeTree((follow_count))
 ORDER BY (follower_id, followee_id)
 TTL created_at + INTERVAL 2 YEAR
 SETTINGS index_granularity = 8192;

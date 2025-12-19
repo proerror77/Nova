@@ -47,6 +47,7 @@ service UserService {
 // ============================================================================
 
 // -------- User Model --------
+// NOTE: Field naming aligned with proto/services_v2/common/user.proto (source of truth)
 message User {
   string id = 1;                  // UUID
   string username = 2;            // Unique username
@@ -54,24 +55,29 @@ message User {
   string display_name = 4;        // Display name
   string bio = 5;                 // User biography
   string avatar_url = 6;          // Avatar image URL
-  string cover_url = 7;           // Cover image URL
+  string cover_photo_url = 7;     // STANDARDIZED: cover_photo_url (not cover_url)
   string website = 8;             // Personal website
   string location = 9;            // Geographic location
   bool is_verified = 10;          // Verified badge
   bool is_private = 11;           // Private account
   bool is_banned = 12;            // Account banned
-  int32 follower_count = 13;      // Number of followers
-  int32 following_count = 14;     // Number following
-  int32 post_count = 15;          // Number of posts
+  int64 follower_count = 13;      // Number of followers (int64 for scale)
+  int64 following_count = 14;     // Number following (int64 for scale)
+  int64 post_count = 15;          // Number of posts (int64 for scale)
   google.protobuf.Timestamp created_at = 16;
   google.protobuf.Timestamp updated_at = 17;
   google.protobuf.Timestamp deleted_at = 18;  // Soft delete
-
+  
   // Extended profile fields
   string first_name = 19;         // User's first name
   string last_name = 20;          // User's last name
   string date_of_birth = 21;      // ISO 8601 date (YYYY-MM-DD)
   Gender gender = 22;             // User's gender
+  
+  // Privacy settings
+  PrivacyLevel privacy_level = 23;  // STANDARDIZED: PrivacyLevel enum
+  DMPermission dm_permission = 24;  // STANDARDIZED: DMPermission enum
+  bool is_active = 25;              // Account active status
 }
 
 // -------- Gender Enum --------
@@ -84,6 +90,7 @@ enum Gender {
 }
 
 // -------- Settings Model --------
+// NOTE: Field naming aligned with proto/services_v2/common/user.proto (source of truth)
 message UserSettings {
   string user_id = 1;
   bool email_notifications = 2;
@@ -93,7 +100,7 @@ message UserSettings {
   string language = 6;            // ISO 639-1 code
   bool dark_mode = 7;
   PrivacyLevel privacy_level = 8;
-  bool allow_messages = 9;
+  DMPermission dm_permission = 9; // STANDARDIZED: DMPermission enum (not bool allow_messages)
   bool show_online_status = 10;
   google.protobuf.Timestamp created_at = 11;
   google.protobuf.Timestamp updated_at = 12;
@@ -102,8 +109,17 @@ message UserSettings {
 enum PrivacyLevel {
   PRIVACY_LEVEL_UNSPECIFIED = 0;
   PRIVACY_LEVEL_PUBLIC = 1;
-  PRIVACY_LEVEL_PRIVATE = 2;
-  PRIVACY_LEVEL_FRIENDS_ONLY = 3;
+  PRIVACY_LEVEL_FRIENDS_ONLY = 2;  // REORDERED: friends_only before private
+  PRIVACY_LEVEL_PRIVATE = 3;
+}
+
+// STANDARDIZED: DMPermission enum replaces bool allow_messages
+enum DMPermission {
+  DM_PERMISSION_UNSPECIFIED = 0;
+  DM_PERMISSION_ANYONE = 1;
+  DM_PERMISSION_FOLLOWERS = 2;
+  DM_PERMISSION_MUTUALS = 3;
+  DM_PERMISSION_NOBODY = 4;
 }
 
 // -------- Get User --------
@@ -136,7 +152,7 @@ message UpdateProfileRequest {
   google.protobuf.StringValue display_name = 2;
   google.protobuf.StringValue bio = 3;
   google.protobuf.StringValue avatar_url = 4;
-  google.protobuf.StringValue cover_url = 5;
+  google.protobuf.StringValue cover_photo_url = 5;  // STANDARDIZED: cover_photo_url
   google.protobuf.StringValue website = 6;
   google.protobuf.StringValue location = 7;
   google.protobuf.BoolValue is_private = 8;
@@ -175,7 +191,7 @@ message UpdateSettingsRequest {
   google.protobuf.StringValue language = 6;
   google.protobuf.BoolValue dark_mode = 7;
   PrivacyLevel privacy_level = 8;
-  google.protobuf.BoolValue allow_messages = 9;
+  DMPermission dm_permission = 9; // STANDARDIZED: DMPermission enum
   google.protobuf.BoolValue show_online_status = 10;
 }
 
