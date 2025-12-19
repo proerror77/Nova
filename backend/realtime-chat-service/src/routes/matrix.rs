@@ -6,17 +6,25 @@
 // - Matrix configuration retrieval
 // - Encryption status
 
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use db_pool::PgPool;
 use matrix_sdk::ruma::RoomId;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::middleware::guards::User;
 use crate::services::matrix_client::MatrixClient;
 use crate::services::matrix_db;
 use crate::state::AppState;
+
+/// Extract user ID from X-User-Id header (for internal service-to-service calls)
+/// This is used when requests come from graphql-gateway which already validated JWT
+fn extract_user_id_from_header(req: &HttpRequest) -> Option<Uuid> {
+    req.headers()
+        .get("X-User-Id")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| Uuid::parse_str(s).ok())
+}
 
 // ============================================================================
 // Request/Response Types
@@ -111,9 +119,18 @@ pub struct RoomStatusResponse {
 /// 3. Generate a user-specific login token (via Synapse Admin API)
 /// 4. Return the login token for the iOS app to use
 pub async fn get_matrix_token(
-    user: User,
+    req: HttpRequest,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
+    // Extract user ID from X-User-Id header (internal service call from graphql-gateway)
+    let nova_user_id = extract_user_id_from_header(&req)
+        .ok_or_else(|| {
+            tracing::warn!("Missing or invalid X-User-Id header");
+            AppError::Unauthorized
+        })?;
+
+    tracing::info!(user_id = %nova_user_id, "Processing Matrix token request");
+
     // Check if Matrix is enabled
     if state.matrix_client.is_none() {
         return Ok(HttpResponse::ServiceUnavailable().json(serde_json::json!({
@@ -130,8 +147,8 @@ pub async fn get_matrix_token(
             let matrix_config = &state.config.matrix;
             let access_token = matrix_config.access_token.clone()
                 .unwrap_or_else(|| "not_configured".to_string());
-            let matrix_user_id = format!("@nova-{}:{}", user.id, matrix_config.server_name);
-            let device_id = format!("NOVA_IOS_{}", &user.id.to_string()[..8]);
+            let matrix_user_id = format!("@nova-{}:{}", nova_user_id, matrix_config.server_name);
+            let device_id = format!("NOVA_IOS_{}", &nova_user_id.to_string()[..8]);
 
             return Ok(HttpResponse::Ok().json(MatrixTokenResponse {
                 access_token,
@@ -142,7 +159,6 @@ pub async fn get_matrix_token(
         }
     };
 
-    let nova_user_id = user.id;
     let matrix_config = &state.config.matrix;
 
     // Provision user: create if doesn't exist, then generate login token
@@ -193,10 +209,13 @@ pub async fn get_matrix_token(
 /// GET /api/v2/matrix/rooms/{conversation_id}
 /// Get Matrix room ID for a Nova conversation
 pub async fn get_room_mapping(
-    _user: User,
+    req: HttpRequest,
     path: web::Path<String>,
     db: web::Data<PgPool>,
 ) -> Result<HttpResponse, AppError> {
+    // Validate X-User-Id header exists (authentication already done by graphql-gateway)
+    let _user_id = extract_user_id_from_header(&req)
+        .ok_or_else(|| AppError::Unauthorized)?;
     let conversation_id_str = path.into_inner();
     let conversation_id = Uuid::parse_str(&conversation_id_str)
         .map_err(|_| AppError::BadRequest("Invalid conversation ID".to_string()))?;
@@ -212,10 +231,13 @@ pub async fn get_room_mapping(
 /// GET /api/v2/matrix/conversations
 /// Get Nova conversation ID for a Matrix room ID (query param: room_id)
 pub async fn get_conversation_mapping(
-    _user: User,
+    req: HttpRequest,
     query: web::Query<std::collections::HashMap<String, String>>,
     db: web::Data<PgPool>,
 ) -> Result<HttpResponse, AppError> {
+    // Validate X-User-Id header exists (authentication already done by graphql-gateway)
+    let _user_id = extract_user_id_from_header(&req)
+        .ok_or_else(|| AppError::Unauthorized)?;
     let room_id = query.get("room_id")
         .ok_or_else(|| AppError::BadRequest("Missing room_id query parameter".to_string()))?;
 
@@ -230,9 +252,12 @@ pub async fn get_conversation_mapping(
 /// GET /api/v2/matrix/rooms
 /// Get all conversation-to-room mappings for the current user
 pub async fn get_all_room_mappings(
-    _user: User,
+    req: HttpRequest,
     db: web::Data<PgPool>,
 ) -> Result<HttpResponse, AppError> {
+    // Validate X-User-Id header exists (authentication already done by graphql-gateway)
+    let _user_id = extract_user_id_from_header(&req)
+        .ok_or_else(|| AppError::Unauthorized)?;
     // Load all room mappings
     // In production, we'd filter to only conversations the user is a member of
     let mappings = matrix_db::load_all_room_mappings(db.get_ref()).await?;
@@ -251,10 +276,13 @@ pub async fn get_all_room_mappings(
 /// POST /api/v2/matrix/rooms
 /// Save a new conversation-to-room mapping
 pub async fn save_room_mapping(
-    _user: User,
+    req: HttpRequest,
     body: web::Json<SaveRoomMappingRequest>,
     db: web::Data<PgPool>,
 ) -> Result<HttpResponse, AppError> {
+    // Validate X-User-Id header exists (authentication already done by graphql-gateway)
+    let _user_id = extract_user_id_from_header(&req)
+        .ok_or_else(|| AppError::Unauthorized)?;
     let conversation_id = Uuid::parse_str(&body.conversation_id)
         .map_err(|_| AppError::BadRequest("Invalid conversation ID".to_string()))?;
 
@@ -273,10 +301,13 @@ pub async fn save_room_mapping(
 /// GET /api/v2/matrix/config
 /// Get Matrix configuration (homeserver URL, enabled status, etc.)
 pub async fn get_matrix_config(
-    _user: User,
+    req: HttpRequest,
     config: web::Data<crate::config::Config>,
     matrix_client: web::Data<Option<MatrixClient>>,
 ) -> Result<HttpResponse, AppError> {
+    // Validate X-User-Id header exists (authentication already done by graphql-gateway)
+    let _user_id = extract_user_id_from_header(&req)
+        .ok_or_else(|| AppError::Unauthorized)?;
     let matrix_enabled = matrix_client.is_some() && config.matrix.enabled;
 
     Ok(HttpResponse::Ok().json(MatrixConfigResponse {
@@ -294,10 +325,13 @@ pub async fn get_matrix_config(
 /// GET /api/v2/matrix/encryption/status
 /// Get encryption status for the current user
 pub async fn get_encryption_status(
-    _user: User,
+    req: HttpRequest,
     matrix_client: web::Data<Option<MatrixClient>>,
     config: web::Data<crate::config::Config>,
 ) -> Result<HttpResponse, AppError> {
+    // Validate X-User-Id header exists (authentication already done by graphql-gateway)
+    let _user_id = extract_user_id_from_header(&req)
+        .ok_or_else(|| AppError::Unauthorized)?;
     let matrix_enabled = matrix_client.is_some() && config.matrix.enabled;
 
     // Check if recovery key is configured
@@ -318,12 +352,15 @@ pub async fn get_encryption_status(
 /// GET /api/v2/matrix/conversations/{conversation_id}/room-status
 /// Get detailed Matrix room status for a conversation
 pub async fn get_room_status(
-    _user: User,
+    req: HttpRequest,
     path: web::Path<String>,
     db: web::Data<PgPool>,
     matrix_client: web::Data<Option<MatrixClient>>,
     config: web::Data<crate::config::Config>,
 ) -> Result<HttpResponse, AppError> {
+    // Validate X-User-Id header exists (authentication already done by graphql-gateway)
+    let _user_id = extract_user_id_from_header(&req)
+        .ok_or_else(|| AppError::Unauthorized)?;
     let conversation_id_str = path.into_inner();
     let conversation_id = Uuid::parse_str(&conversation_id_str)
         .map_err(|_| AppError::BadRequest("Invalid conversation ID".to_string()))?;
