@@ -15,10 +15,8 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy workspace files from repo root
-COPY Cargo.toml Cargo.lock ./
-# Copy full backend workspace to satisfy workspace members
-COPY backend ./backend
+# Copy backend workspace files (build context is ./backend in GitHub Actions)
+COPY . ./
 
 # Build content-service
 RUN cargo build --release -p content-service --bin content-service

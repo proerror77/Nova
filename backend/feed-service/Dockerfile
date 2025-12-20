@@ -14,11 +14,8 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy backend workspace files (build context is repo root)
-COPY backend ./backend
-
-# Change to backend directory for workspace build
-WORKDIR /app/backend
+# Copy backend workspace files (build context is ./backend in GitHub Actions)
+COPY . ./
 
 # Build feed-service
 RUN cargo build --release -p feed-service --bin feed-service
@@ -37,7 +34,7 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 
 WORKDIR /app
 
-COPY --from=builder /app/backend/target/release/feed-service /app/feed-service
+COPY --from=builder /app/target/release/feed-service /app/feed-service
 
 # Adjust ownership and drop privileges
 RUN chown -R appuser:appuser /app
