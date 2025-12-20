@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::services::matrix_client::MatrixClient;
 use crate::services::matrix_db;
 use crate::state::AppState;
 
@@ -302,18 +301,17 @@ pub async fn save_room_mapping(
 /// Get Matrix configuration (homeserver URL, enabled status, etc.)
 pub async fn get_matrix_config(
     req: HttpRequest,
-    config: web::Data<crate::config::Config>,
-    matrix_client: web::Data<Option<MatrixClient>>,
+    state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
     // Validate X-User-Id header exists (authentication already done by graphql-gateway)
     let _user_id = extract_user_id_from_header(&req)
         .ok_or_else(|| AppError::Unauthorized)?;
-    let matrix_enabled = matrix_client.is_some() && config.matrix.enabled;
+    let matrix_enabled = state.matrix_client.is_some() && state.config.matrix.enabled;
 
     Ok(HttpResponse::Ok().json(MatrixConfigResponse {
         enabled: matrix_enabled,
         homeserver_url: if matrix_enabled {
-            Some(config.matrix.homeserver_url.clone())
+            Some(state.config.matrix.homeserver_url.clone())
         } else {
             None
         },
@@ -326,16 +324,15 @@ pub async fn get_matrix_config(
 /// Get encryption status for the current user
 pub async fn get_encryption_status(
     req: HttpRequest,
-    matrix_client: web::Data<Option<MatrixClient>>,
-    config: web::Data<crate::config::Config>,
+    state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
     // Validate X-User-Id header exists (authentication already done by graphql-gateway)
     let _user_id = extract_user_id_from_header(&req)
         .ok_or_else(|| AppError::Unauthorized)?;
-    let matrix_enabled = matrix_client.is_some() && config.matrix.enabled;
+    let matrix_enabled = state.matrix_client.is_some() && state.config.matrix.enabled;
 
     // Check if recovery key is configured
-    let recovery_key_status = if config.matrix.recovery_key.is_some() {
+    let recovery_key_status = if state.config.matrix.recovery_key.is_some() {
         "enabled"
     } else {
         "disabled"
@@ -343,7 +340,7 @@ pub async fn get_encryption_status(
 
     Ok(HttpResponse::Ok().json(EncryptionStatusResponse {
         e2ee_enabled: matrix_enabled,
-        backup_enabled: config.matrix.recovery_key.is_some(),
+        backup_enabled: state.config.matrix.recovery_key.is_some(),
         recovery_key_status: recovery_key_status.to_string(),
         device_verified: true, // Service account is always "verified"
     }))
@@ -355,8 +352,7 @@ pub async fn get_room_status(
     req: HttpRequest,
     path: web::Path<String>,
     db: web::Data<PgPool>,
-    matrix_client: web::Data<Option<MatrixClient>>,
-    config: web::Data<crate::config::Config>,
+    state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
     // Validate X-User-Id header exists (authentication already done by graphql-gateway)
     let _user_id = extract_user_id_from_header(&req)
@@ -365,13 +361,13 @@ pub async fn get_room_status(
     let conversation_id = Uuid::parse_str(&conversation_id_str)
         .map_err(|_| AppError::BadRequest("Invalid conversation ID".to_string()))?;
 
-    let matrix_enabled = matrix_client.is_some() && config.matrix.enabled;
+    let matrix_enabled = state.matrix_client.is_some() && state.config.matrix.enabled;
 
     // Load room mapping
     let room_id = matrix_db::load_room_mapping(db.get_ref(), conversation_id).await?;
 
     // Get room encryption status if room exists and Matrix is enabled
-    let is_encrypted = if let (Some(ref client), Some(ref rid)) = (matrix_client.as_ref(), &room_id) {
+    let is_encrypted = if let (Some(ref client), Some(ref rid)) = (state.matrix_client.as_ref(), &room_id) {
         client.is_room_encrypted(rid).await
     } else {
         false
