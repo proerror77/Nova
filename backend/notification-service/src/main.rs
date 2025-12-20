@@ -365,6 +365,10 @@ async fn main() -> io::Result<()> {
             .wrap(middleware::Logger::default())
             .wrap(metrics::MetricsMiddleware)
             .route("/health", web::get().to(|| async { "OK" }))
+            // Kubernetes health check endpoints
+            .route("/api/v1/health", web::get().to(|| async { "OK" }))
+            .route("/api/v1/health/ready", web::get().to(|| async { "OK" }))
+            .route("/api/v1/health/live", web::get().to(|| async { "OK" }))
             .route(
                 "/metrics",
                 web::get().to(notification_service::metrics::serve_metrics),
