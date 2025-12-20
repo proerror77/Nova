@@ -102,6 +102,8 @@ spec:
               value: "staging"
             - name: PORT
               value: "8080"
+            - name: GRPC_PORT
+              value: "9080"
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:

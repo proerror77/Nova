@@ -7,45 +7,53 @@ metadata:
     version: v2
 data:
   # Server configuration
-  server-host: "0.0.0.0"
-  server-port: "8080"
+  SERVER_HOST: "0.0.0.0"
+  SERVER_PORT: "8080"
 
-  # Service endpoints (V2 architecture)
-  auth-service-url: "http://identity-service.nova.svc.cluster.local:50051"
-  user-service-url: "http://user-service.nova.svc.cluster.local:50054"
-  content-service-url: "http://content-service.nova.svc.cluster.local:50055"
-  social-service-url: "http://social-service.nova.svc.cluster.local:50052"
-  communication-service-url: "http://communication-service.nova.svc.cluster.local:50053"
-  media-service-url: "http://media-service.nova.svc.cluster.local:50056"
-  search-service-url: "http://search-service.nova.svc.cluster.local:50057"
-  events-service-url: "http://events-service.nova.svc.cluster.local:50058"
+  # gRPC Service endpoints (must match GRPC_*_URL env vars expected by code)
+  # All services use port 9080 for gRPC (standardized)
+  GRPC_IDENTITY_SERVICE_URL: "http://identity-service:9080"
+  GRPC_CONTENT_SERVICE_URL: "http://content-service:9080"
+  GRPC_FEED_SERVICE_URL: "http://feed-service:9080"
+  GRPC_SOCIAL_SERVICE_URL: "http://social-service:9080"
+  GRPC_CHAT_SERVICE_URL: "http://realtime-chat-service:9080"
+  GRPC_MEDIA_SERVICE_URL: "http://media-service:9080"
+  GRPC_SEARCH_SERVICE_URL: "http://search-service:9080"
+  GRPC_NOTIFICATION_SERVICE_URL: "http://notification-service:9080"
+  GRPC_GRAPH_SERVICE_URL: "http://graph-service:9080"
+  GRPC_RANKING_SERVICE_URL: "http://ranking-service:9080"
+  GRPC_ANALYTICS_SERVICE_URL: "http://analytics-service:9080"
 
-  # GraphQL Security Configuration (P0-2)
-  # Based on Codex GPT-5 recommendations
-  graphql-max-complexity: "1000"
-  graphql-max-depth: "10"
-  graphql-max-backend-calls: "10"
-  graphql-max-queries-per-minute: "100"
-  graphql-max-mutations-per-minute: "20"
-  graphql-allow-introspection: "false"  # Disable in production
-  graphql-use-persisted-queries: "true"
+  # gRPC connection settings
+  GRPC_CONNECTION_TIMEOUT_SECS: "10"
+  GRPC_REQUEST_TIMEOUT_SECS: "30"
+
+  # GraphQL Security Configuration
+  GRAPHQL_MAX_COMPLEXITY: "1000"
+  GRAPHQL_MAX_DEPTH: "10"
+  GRAPHQL_MAX_BACKEND_CALLS: "10"
+  GRAPHQL_MAX_QUERIES_PER_MINUTE: "100"
+  GRAPHQL_MAX_MUTATIONS_PER_MINUTE: "20"
+  GRAPHQL_ALLOW_INTROSPECTION: "false"
+  GRAPHQL_USE_PERSISTED_QUERIES: "true"
 
   # Rate limiting
-  rate-limit-req-per-second: "100"
-  rate-limit-burst-size: "10"
+  RATE_LIMIT_REQ_PER_SECOND: "100"
+  RATE_LIMIT_BURST_SIZE: "10"
 
   # Timeout configuration
-  graphql-timeout: "30s"
-  grpc-timeout: "10s"
+  GRAPHQL_TIMEOUT: "30s"
+  GRPC_TIMEOUT: "10s"
 
   # Logging level
-  log-level: "info"
+  LOG_LEVEL: "info"
+  RUST_LOG: "info,graphql_gateway=debug"
 
   # Cache configuration
-  cache-ttl-default: "300"  # 5 minutes
+  CACHE_TTL_DEFAULT: "300"
 
   # Kafka configuration (for subscriptions)
-  kafka-brokers: "kafka-broker-0.kafka-headless.kafka:9092,kafka-broker-1.kafka-headless.kafka:9092,kafka-broker-2.kafka-headless.kafka:9092"
+  KAFKA_BROKERS: "kafka-broker-0.kafka-headless.kafka:9092,kafka-broker-1.kafka-headless.kafka:9092,kafka-broker-2.kafka-headless.kafka:9092"
 
-  # Matrix E2EE Integration (proxied to realtime-chat-service HTTP)
-  chat-service-http-url: "http://realtime-chat-service.nova.svc.cluster.local:8080"
+  # Matrix E2EE Integration (HTTP endpoint for chat service)
+  CHAT_SERVICE_HTTP_URL: "http://realtime-chat-service:8080"

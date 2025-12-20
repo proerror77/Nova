@@ -138,20 +138,22 @@ pub struct ServiceClients {
     ranking_cb: Arc<CircuitBreaker>,
 }
 
+/// Default implementation for testing only.
+/// In production, use `ServiceClients::from_grpc_config()` which reads from environment variables.
+/// All gRPC services are standardized to port 9080.
 impl Default for ServiceClients {
     fn default() -> Self {
         Self::new(
-            "http://identity-service.nova-staging.svc.cluster.local:9083",
-            // user-service removed - deprecated
-            "http://content-service.nova-staging.svc.cluster.local:9081",
-            "http://feed-service.nova-staging.svc.cluster.local:9084",
-            "http://social-service.nova-staging.svc.cluster.local:9082",
-            "http://realtime-chat-service.nova-staging.svc.cluster.local:9086",
-            "http://media-service.nova-staging.svc.cluster.local:9086",
-            "http://search-service.nova-staging.svc.cluster.local:9087",
-            "http://notification-service.nova-staging.svc.cluster.local:9080",
-            "http://graph-service.nova-staging.svc.cluster.local:9080",
-            "http://ranking-service.nova-staging.svc.cluster.local:9088",
+            "http://identity-service:9080",
+            "http://content-service:9080",
+            "http://feed-service:9080",
+            "http://social-service:9080",
+            "http://realtime-chat-service:9080",
+            "http://media-service:9080",
+            "http://search-service:9080",
+            "http://notification-service:9080",
+            "http://graph-service:9080",
+            "http://ranking-service:9080",
         )
     }
 }
