@@ -89,11 +89,12 @@ struct LoginTokenRequest {
     valid_until_ms: Option<i64>,
 }
 
-/// Response containing the login token
+/// Response containing the access token from Synapse Admin API
 #[derive(Debug, Deserialize)]
 pub struct LoginTokenResponse {
-    /// The login token that can be used with `m.login.token` flow
-    pub login_token: String,
+    /// The access token returned by Synapse Admin API
+    /// Note: This endpoint returns an access_token directly, not a login_token
+    pub access_token: String,
 }
 
 impl MatrixAdminClient {
@@ -520,10 +521,10 @@ impl MatrixAdminClient {
             })?;
             
             info!(
-                "Successfully generated login token for Matrix user: mxid={}, nova_user_id={}",
+                "Successfully generated access token for Matrix user: mxid={}, nova_user_id={}",
                 mxid, user_id
             );
-            Ok(token_response.login_token)
+            Ok(token_response.access_token)
         } else {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
             error!(
