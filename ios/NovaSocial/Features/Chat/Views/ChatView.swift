@@ -4,6 +4,7 @@ import CoreLocation
 import MapKit
 import Combine
 import AVFoundation
+import UniformTypeIdentifiers
 
 // MARK: - 聊天位置管理器
 class ChatLocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
@@ -326,6 +327,14 @@ struct ChatView: View {
     @State private var showMicrophonePermissionAlert = false
     @State private var showLocationAlert = false
 
+    // 通話相關
+    @State private var showVoiceCall = false
+    @State private var showVideoCall = false
+
+    // 檔案分享相關
+    @State private var showFilePicker = false
+    @State private var isUploadingFile = false
+
     // 当前用户ID（从Keychain获取）
     private var currentUserId: String {
         KeychainService.shared.get(.userId) ?? "unknown"
@@ -357,6 +366,25 @@ struct ChatView: View {
         }
         .fullScreenCover(isPresented: $showCamera) {
             CameraView(image: $cameraImage)
+        }
+        .fullScreenCover(isPresented: $showVoiceCall) {
+            CallView(
+                roomId: conversationId,
+                roomName: userName,
+                isVideoCall: false,
+                intent: .startCallDM
+            )
+        }
+        .fullScreenCover(isPresented: $showVideoCall) {
+            CallView(
+                roomId: conversationId,
+                roomName: userName,
+                isVideoCall: true,
+                intent: .startCallDM
+            )
+        }
+        .sheet(isPresented: $showFilePicker) {
+            DocumentPickerView(onDocumentPicked: handleDocumentPicked)
         }
         .onChange(of: selectedPhotoItem) { _, newItem in
             handlePhotoSelection(newItem)
@@ -758,16 +786,23 @@ struct ChatView: View {
 
                 AttachmentOptionButton(icon: "video.fill", title: "Video Call") {
                     showAttachmentOptions = false
+                    showVideoCall = true
                 }
 
                 AttachmentOptionButton(icon: "phone.fill", title: "Voice Call") {
                     showAttachmentOptions = false
+                    showVoiceCall = true
                 }
 
                 AttachmentOptionButton(icon: "location.fill", title: "Location") {
                     showAttachmentOptions = false
                     locationManager.requestLocation()
                     showLocationAlert = true
+                }
+
+                AttachmentOptionButton(icon: "doc.fill", title: "File") {
+                    showAttachmentOptions = false
+                    showFilePicker = true
                 }
             }
             .padding(.vertical, 16)
@@ -1291,6 +1326,152 @@ struct ChatView: View {
         let minutes = Int(duration) / 60
         let seconds = Int(duration) % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    // MARK: - 檔案處理
+
+    /// 處理選擇的檔案
+    private func handleDocumentPicked(_ url: URL) {
+        // 開始存取安全範圍的資源
+        guard url.startAccessingSecurityScopedResource() else {
+            error = "Cannot access file"
+            return
+        }
+
+        defer {
+            url.stopAccessingSecurityScopedResource()
+        }
+
+        Task {
+            isUploadingFile = true
+            isSending = true
+
+            do {
+                // 讀取檔案數據
+                let fileData = try Data(contentsOf: url)
+                let fileName = url.lastPathComponent
+                let mimeType = getMimeType(for: url)
+
+                // 將檔案複製到臨時目錄
+                let tempDir = FileManager.default.temporaryDirectory
+                let tempFileURL = tempDir.appendingPathComponent(fileName)
+                try fileData.write(to: tempFileURL)
+
+                #if DEBUG
+                print("[ChatView] 📎 Sending file: \(fileName) (\(fileData.count) bytes)")
+                #endif
+
+                // 使用 Matrix SDK 發送檔案
+                let eventId = try await MatrixBridgeService.shared.sendMessage(
+                    conversationId: conversationId,
+                    content: fileName,
+                    mediaURL: tempFileURL,
+                    mimeType: mimeType
+                )
+
+                // 清理臨時檔案
+                try? FileManager.default.removeItem(at: tempFileURL)
+
+                #if DEBUG
+                print("[ChatView] ✅ File sent via Matrix: \(eventId)")
+                #endif
+
+            } catch {
+                #if DEBUG
+                print("[ChatView] ❌ Failed to send file: \(error)")
+                #endif
+                self.error = "Failed to send file: \(error.localizedDescription)"
+            }
+
+            isUploadingFile = false
+            isSending = false
+        }
+    }
+
+    /// 獲取檔案的 MIME 類型
+    private func getMimeType(for url: URL) -> String {
+        let pathExtension = url.pathExtension.lowercased()
+        switch pathExtension {
+        case "pdf":
+            return "application/pdf"
+        case "doc":
+            return "application/msword"
+        case "docx":
+            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        case "xls":
+            return "application/vnd.ms-excel"
+        case "xlsx":
+            return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        case "ppt":
+            return "application/vnd.ms-powerpoint"
+        case "pptx":
+            return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        case "txt":
+            return "text/plain"
+        case "zip":
+            return "application/zip"
+        case "png":
+            return "image/png"
+        case "jpg", "jpeg":
+            return "image/jpeg"
+        case "gif":
+            return "image/gif"
+        case "mp3":
+            return "audio/mpeg"
+        case "mp4":
+            return "video/mp4"
+        case "mov":
+            return "video/quicktime"
+        default:
+            return "application/octet-stream"
+        }
+    }
+}
+
+// MARK: - Document Picker View
+
+/// 檔案選擇器視圖
+struct DocumentPickerView: UIViewControllerRepresentable {
+    let onDocumentPicked: (URL) -> Void
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [
+            .pdf,
+            .plainText,
+            .image,
+            .audio,
+            .video,
+            .data,
+            .spreadsheet,
+            .presentation,
+            .item
+        ])
+        picker.delegate = context.coordinator
+        picker.allowsMultipleSelection = false
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let parent: DocumentPickerView
+
+        init(_ parent: DocumentPickerView) {
+            self.parent = parent
+        }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            guard let url = urls.first else { return }
+            parent.onDocumentPicked(url)
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            // User cancelled - no action needed
+        }
     }
 }
 

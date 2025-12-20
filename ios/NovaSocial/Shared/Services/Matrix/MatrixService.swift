@@ -605,6 +605,11 @@ final class MatrixService: MatrixServiceProtocol {
 
     private(set) var userId: String?
 
+    /// Current device ID for this Matrix session
+    var currentDeviceId: String {
+        getOrCreateDeviceId()
+    }
+
     // MARK: - Private Properties
 
     /// Matrix client instance (from MatrixRustSDK)

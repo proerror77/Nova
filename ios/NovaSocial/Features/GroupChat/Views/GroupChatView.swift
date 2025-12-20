@@ -1,4 +1,6 @@
 import SwiftUI
+import PhotosUI
+import UniformTypeIdentifiers
 
 // MARK: - Group Chat Message Model
 struct GroupChatMessage: Identifiable, Equatable {
@@ -29,6 +31,19 @@ struct GroupChatView: View {
     @State private var showAttachmentOptions = false
     @State private var isLoading = false
     @FocusState private var isInputFocused: Bool
+
+    // 通話相關
+    @State private var showVoiceCall = false
+    @State private var showVideoCall = false
+
+    // 圖片選擇
+    @State private var selectedPhotoItem: PhotosPickerItem?
+
+    // 檔案選擇
+    @State private var showFilePicker = false
+
+    // Matrix 服務
+    private let matrixBridge = MatrixBridgeService.shared
 
     // MARK: - Preview Mode
     @State private var isPreviewMode = false
@@ -70,6 +85,28 @@ struct GroupChatView: View {
         }
         .task {
             await loadMessages()
+        }
+        .fullScreenCover(isPresented: $showVoiceCall) {
+            CallView(
+                roomId: conversationId,
+                roomName: groupName,
+                isVideoCall: false,
+                intent: .startCall
+            )
+        }
+        .fullScreenCover(isPresented: $showVideoCall) {
+            CallView(
+                roomId: conversationId,
+                roomName: groupName,
+                isVideoCall: true,
+                intent: .startCall
+            )
+        }
+        .sheet(isPresented: $showFilePicker) {
+            GroupDocumentPickerView(onDocumentPicked: handleDocumentPicked)
+        }
+        .onChange(of: selectedPhotoItem) { _, newItem in
+            handlePhotoSelection(newItem)
         }
     }
 
@@ -243,24 +280,39 @@ struct GroupChatView: View {
     // MARK: - Attachment Options
     private var attachmentOptionsView: some View {
         HStack(spacing: 15) {
-            GroupAttachmentButton(icon: "photo.on.rectangle", title: "Album") {
-                showAttachmentOptions = false
-            }
-
-            GroupAttachmentButton(icon: "camera", title: "Camera") {
-                showAttachmentOptions = false
+            // Album (使用 PhotosPicker)
+            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                VStack(spacing: 4) {
+                    Rectangle()
+                        .foregroundColor(.clear)
+                        .frame(width: 60, height: 60)
+                        .background(DesignTokens.surface)
+                        .cornerRadius(10)
+                        .overlay(
+                            Image(systemName: "photo.on.rectangle")
+                                .font(.system(size: 24))
+                                .foregroundColor(DesignTokens.textPrimary)
+                        )
+                    Text("Album")
+                        .font(.system(size: 12))
+                        .foregroundColor(DesignTokens.textPrimary)
+                }
+                .frame(width: 60)
             }
 
             GroupAttachmentButton(icon: "video.fill", title: "Video Call") {
                 showAttachmentOptions = false
+                showVideoCall = true
             }
 
             GroupAttachmentButton(icon: "phone.fill", title: "Voice Call") {
                 showAttachmentOptions = false
+                showVoiceCall = true
             }
 
-            GroupAttachmentButton(icon: "location.fill", title: "Location") {
+            GroupAttachmentButton(icon: "doc.fill", title: "File") {
                 showAttachmentOptions = false
+                showFilePicker = true
             }
         }
         .padding(.vertical, 16)
@@ -362,6 +414,128 @@ struct GroupChatView: View {
                 timestamp: mockDate.addingTimeInterval(120)
             ),
         ]
+    }
+
+    // MARK: - Photo Selection
+    private func handlePhotoSelection(_ newItem: PhotosPickerItem?) {
+        Task {
+            do {
+                if let data = try await newItem?.loadTransferable(type: Data.self) {
+                    // 將圖片複製到臨時目錄
+                    let tempDir = FileManager.default.temporaryDirectory
+                    let tempFileURL = tempDir.appendingPathComponent("\(UUID().uuidString).jpg")
+                    try data.write(to: tempFileURL)
+
+                    // 使用 Matrix 發送圖片
+                    _ = try await matrixBridge.sendMessage(
+                        conversationId: conversationId,
+                        content: "Image",
+                        mediaURL: tempFileURL,
+                        mimeType: "image/jpeg"
+                    )
+
+                    // 清理臨時檔案
+                    try? FileManager.default.removeItem(at: tempFileURL)
+
+                    #if DEBUG
+                    print("[GroupChatView] ✅ Image sent via Matrix")
+                    #endif
+                }
+            } catch {
+                #if DEBUG
+                print("[GroupChatView] ❌ Failed to send image: \(error)")
+                #endif
+            }
+        }
+    }
+
+    // MARK: - Document Handling
+    private func handleDocumentPicked(_ url: URL) {
+        guard url.startAccessingSecurityScopedResource() else {
+            return
+        }
+
+        defer {
+            url.stopAccessingSecurityScopedResource()
+        }
+
+        Task {
+            do {
+                let fileData = try Data(contentsOf: url)
+                let fileName = url.lastPathComponent
+
+                let tempDir = FileManager.default.temporaryDirectory
+                let tempFileURL = tempDir.appendingPathComponent(fileName)
+                try fileData.write(to: tempFileURL)
+
+                _ = try await matrixBridge.sendMessage(
+                    conversationId: conversationId,
+                    content: fileName,
+                    mediaURL: tempFileURL,
+                    mimeType: getMimeType(for: url)
+                )
+
+                try? FileManager.default.removeItem(at: tempFileURL)
+
+                #if DEBUG
+                print("[GroupChatView] ✅ File sent via Matrix: \(fileName)")
+                #endif
+            } catch {
+                #if DEBUG
+                print("[GroupChatView] ❌ Failed to send file: \(error)")
+                #endif
+            }
+        }
+    }
+
+    private func getMimeType(for url: URL) -> String {
+        let ext = url.pathExtension.lowercased()
+        switch ext {
+        case "pdf": return "application/pdf"
+        case "doc": return "application/msword"
+        case "docx": return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        case "xls": return "application/vnd.ms-excel"
+        case "xlsx": return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        case "txt": return "text/plain"
+        case "png": return "image/png"
+        case "jpg", "jpeg": return "image/jpeg"
+        case "mp3": return "audio/mpeg"
+        case "mp4": return "video/mp4"
+        default: return "application/octet-stream"
+        }
+    }
+}
+
+// MARK: - Group Document Picker View
+struct GroupDocumentPickerView: UIViewControllerRepresentable {
+    let onDocumentPicked: (URL) -> Void
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [
+            .pdf, .plainText, .image, .audio, .video, .data, .item
+        ])
+        picker.delegate = context.coordinator
+        picker.allowsMultipleSelection = false
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let parent: GroupDocumentPickerView
+
+        init(_ parent: GroupDocumentPickerView) {
+            self.parent = parent
+        }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            guard let url = urls.first else { return }
+            parent.onDocumentPicked(url)
+        }
     }
 }
 

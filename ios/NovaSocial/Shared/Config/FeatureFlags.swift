@@ -129,6 +129,9 @@ final class FeatureFlags {
     /// Enable video calls
     var enableVideoCalls: Bool = false
 
+    /// Enable voice calls
+    var enableVoiceCalls: Bool = false
+
     // MARK: - Profile Features
 
     /// Enable profile editing
@@ -358,6 +361,7 @@ extension FeatureFlags {
         flags.enableReels = true
         flags.enableVoiceMessages = true
         flags.enableVideoCalls = true
+        flags.enableVoiceCalls = true
         flags.enableE2EE = true
         flags.enableExperimentalFeatures = true
         return flags

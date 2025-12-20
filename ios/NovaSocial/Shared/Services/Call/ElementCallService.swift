@@ -60,10 +60,10 @@ final class ElementCallService: ObservableObject {
 
         do {
             // Get user info for widget
-            guard let userId = MatrixService.shared.userId,
-                  let deviceId = MatrixService.shared.currentDeviceId else {
+            guard let userId = MatrixService.shared.userId else {
                 throw CallError.notLoggedIn
             }
+            let deviceId = MatrixService.shared.currentDeviceId
 
             // Generate unique widget ID
             let widgetId = "nova-call-\(UUID().uuidString.prefix(8))"

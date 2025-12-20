@@ -7,6 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0C3F21458AD344499EBEE8A2 /* ElementCallService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 653A774AAB064EF7B1A019EB /* ElementCallService.swift */; };
+		22AB469947D04317A8A6AE6F /* CallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAFCCF1FE4F3454C8A12681A /* CallCoordinator.swift */; };
+		488D030072AA413DBEE63656 /* CallKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05E9AE8B428E4619A2AA464A /* CallKitManager.swift */; };
+		1C8F14C49D42488DAFAFB7D9 /* CallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CF9035A51B546CEBA9734DE /* CallView.swift */; };
+		0176A5EB063240B2B5E03030 /* IncomingCallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A631A4BB9A1947639B891DB8 /* IncomingCallView.swift */; };
+		7EF6A1CE93A84F3EB63D4280 /* ActiveCallBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F90708CDAF412DAFC194F3 /* ActiveCallBanner.swift */; };
 		33DEB3C67EC94DCEB8E8A02F /* AddFriendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D4C55111B9048F5AE0F478D /* AddFriendsView.swift */; };
 		00131FB01A97D166FFA80E77 /* FeedLayoutConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4B4FB253EA63E86B9FD37C7 /* FeedLayoutConfig.swift */; };
 		005F993F06AC13FFFBF2284E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = "TEMP_3B3E8F3F-A9B3-4FAC-B5F9-3CDEA9110FA6" /* Localizable.strings */; };
@@ -187,6 +193,12 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		653A774AAB064EF7B1A019EB /* ElementCallService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElementCallService.swift; sourceTree = "<group>"; };
+		AAFCCF1FE4F3454C8A12681A /* CallCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallCoordinator.swift; sourceTree = "<group>"; };
+		05E9AE8B428E4619A2AA464A /* CallKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallKitManager.swift; sourceTree = "<group>"; };
+		9CF9035A51B546CEBA9734DE /* CallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallView.swift; sourceTree = "<group>"; };
+		A631A4BB9A1947639B891DB8 /* IncomingCallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncomingCallView.swift; sourceTree = "<group>"; };
+		B3F90708CDAF412DAFC194F3 /* ActiveCallBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveCallBanner.swift; sourceTree = "<group>"; };
 		5D4C55111B9048F5AE0F478D /* AddFriendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddFriendsView.swift; sourceTree = "<group>"; };
 		008ABB2CAA1B95899AF1E4B9 /* UserProfileUserInfoSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileUserInfoSection.swift; sourceTree = "<group>"; };
 		00D95AE492E1F1BD615BB08A /* CommentSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentSheetView.swift; sourceTree = "<group>"; };
@@ -382,6 +394,34 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		E4D724DE0DEF4FA4B944CEF9 /* Call */ = {
+			isa = PBXGroup;
+			children = (
+				653A774AAB064EF7B1A019EB /* ElementCallService.swift */,
+				AAFCCF1FE4F3454C8A12681A /* CallCoordinator.swift */,
+				05E9AE8B428E4619A2AA464A /* CallKitManager.swift */,
+			);
+			path = Call;
+			sourceTree = "<group>";
+		};
+		6BA79B656EA94CA4B1DA5083 /* Call */ = {
+			isa = PBXGroup;
+			children = (
+				0FE3F4A0180C4230BF5E5970 /* Views */,
+			);
+			path = Call;
+			sourceTree = "<group>";
+		};
+		0FE3F4A0180C4230BF5E5970 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				9CF9035A51B546CEBA9734DE /* CallView.swift */,
+				A631A4BB9A1947639B891DB8 /* IncomingCallView.swift */,
+				B3F90708CDAF412DAFC194F3 /* ActiveCallBanner.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
 		EB59A4798E4147559317A57E /* AddFriends */ = {
 			isa = PBXGroup;
 			children = (
@@ -623,6 +663,7 @@
 				48FD19A72CFFC0097EB369A3 /* Trending */,
 				19FD8FC9C10AAC0CB2D45E6B /* Upload */,
 				1213BE807D3E0278A63C3064 /* User */,
+				E4D724DE0DEF4FA4B944CEF9 /* Call */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -651,6 +692,7 @@
 				8C47AD9D0E6307B10B7C94D6 /* Settings */,
 				38EA8233FBA1E047E07B889A /* Splash */,
 				EB59A4798E4147559317A57E /* AddFriends */,
+				6BA79B656EA94CA4B1DA5083 /* Call */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -1392,6 +1434,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0C3F21458AD344499EBEE8A2 /* ElementCallService.swift in Sources */,
+				22AB469947D04317A8A6AE6F /* CallCoordinator.swift in Sources */,
+				488D030072AA413DBEE63656 /* CallKitManager.swift in Sources */,
+				1C8F14C49D42488DAFAFB7D9 /* CallView.swift in Sources */,
+				0176A5EB063240B2B5E03030 /* IncomingCallView.swift in Sources */,
+				7EF6A1CE93A84F3EB63D4280 /* ActiveCallBanner.swift in Sources */,
 				33DEB3C67EC94DCEB8E8A02F /* AddFriendsView.swift in Sources */,
 				22E0C78030CDE594A3351101 /* APIClient.swift in Sources */,
 				5D3CEE9D7C0E99FCE63E6D0D /* APIConfig.swift in Sources */,
