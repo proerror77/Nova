@@ -124,6 +124,11 @@ data:
         min_lifetime: 1d
         max_lifetime: 365d
 
+    # Sliding Sync (MSC3575) - Required for Matrix Rust SDK
+    # Native sliding sync support (Synapse 1.109.0+)
+    experimental_features:
+      msc3575_enabled: true
+
   log.config: |
     version: 1
     formatters:

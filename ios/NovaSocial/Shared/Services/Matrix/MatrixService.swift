@@ -184,7 +184,7 @@ struct Session {
     var slidingSyncVersion: SlidingSyncVersion
 }
 
-enum SlidingSyncVersion { case none }
+enum SlidingSyncVersion { case none, native }
 
 struct CreateRoomParameters {
     var name: String?
@@ -718,7 +718,7 @@ final class MatrixService: MatrixServiceProtocol {
                 deviceId: deviceId,
                 homeserverUrl: homeserverURL ?? "",
                 oidcData: nil,
-                slidingSyncVersion: .none
+                slidingSyncVersion: .native
             )
 
             try await client.restoreSession(session: session)
@@ -809,7 +809,7 @@ final class MatrixService: MatrixServiceProtocol {
                 deviceId: credentials.deviceId,
                 homeserverUrl: homeserverURL ?? "",
                 oidcData: nil,
-                slidingSyncVersion: .none
+                slidingSyncVersion: .native
             )
 
             try await client.restoreSession(session: session)

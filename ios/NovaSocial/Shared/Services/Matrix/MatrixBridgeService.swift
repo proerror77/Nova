@@ -688,17 +688,11 @@ final class MatrixBridgeService {
         }
 
         struct MatrixTokenResponse: Codable {
+            // Note: No CodingKeys needed - APIClient uses .convertFromSnakeCase
             let accessToken: String
             let matrixUserId: String
             let deviceId: String
             let homeserverUrl: String?
-
-            enum CodingKeys: String, CodingKey {
-                case accessToken = "access_token"
-                case matrixUserId = "matrix_user_id"
-                case deviceId = "device_id"
-                case homeserverUrl = "homeserver_url"
-            }
         }
 
         let response: MatrixTokenResponse = try await apiClient.request(
