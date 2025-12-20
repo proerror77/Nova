@@ -31,7 +31,7 @@ fn default_algo() -> String {
 }
 
 fn default_limit() -> u32 {
-    20
+    50 // Increased from 20 for better user experience
 }
 
 /// Cursor format for timestamp-based pagination: "timestamp:post_id"

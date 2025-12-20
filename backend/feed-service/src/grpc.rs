@@ -215,23 +215,44 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
         }
 
         // Step 2: Cache miss - fetch from ContentService
+        // Increased default limit from 20 to 50 for better user experience
         let limit = if req.limit == 0 {
-            20
+            50
         } else {
             req.limit as usize
         }
         .min(100)
         .max(1);
 
-        // Fetch posts from content-service (with optional channel filter and pagination)
-        let posts = match self
-            .fetch_posts_from_content_service(limit as i32, &user_id, &channel_id)
-            .await
-        {
-            Ok(p) => p,
-            Err(e) => {
-                error!("Failed to fetch posts from content-service: {}", e);
-                vec![]
+        // Fetch posts based on algorithm:
+        // - "ch" (chronological): Posts from followed users only (personalized feed)
+        // - "v2", "recommended", or others: Global/trending posts (discovery feed)
+        let posts = if algorithm == "ch" {
+            // Personalized feed: fetch posts from followed users
+            match self
+                .fetch_followed_users_posts(limit as i32, &user_id, &channel_id)
+                .await
+            {
+                Ok(p) => p,
+                Err(e) => {
+                    warn!("Failed to fetch followed users' posts: {}, falling back to global", e);
+                    // Fallback to global posts if following feed fails
+                    self.fetch_posts_from_content_service(limit as i32, &user_id, &channel_id)
+                        .await
+                        .unwrap_or_default()
+                }
+            }
+        } else {
+            // Discovery/recommended feed: fetch global posts
+            match self
+                .fetch_posts_from_content_service(limit as i32, &user_id, &channel_id)
+                .await
+            {
+                Ok(p) => p,
+                Err(e) => {
+                    error!("Failed to fetch posts from content-service: {}", e);
+                    vec![]
+                }
             }
         };
         let posts_count = posts.len();
@@ -591,6 +612,172 @@ impl RecommendationServiceImpl {
         info!(
             "Fetched {} posts from content-service with social stats",
             posts.len()
+        );
+        Ok(posts)
+    }
+
+    /// Fetch posts from followed users (personalized feed)
+    ///
+    /// 1. Get user's following list from graph-service
+    /// 2. Call ListPostsByUsers to get posts from those users (sorted by time)
+    /// 3. Convert to CachedPost format with social stats
+    async fn fetch_followed_users_posts(
+        &self,
+        limit: i32,
+        user_id: &str,
+        _channel_id: &str,
+    ) -> Result<Vec<CachedFeedPost>, Status> {
+        use grpc_clients::nova::content_service::v2::{
+            GetPostsByIdsRequest, ListPostsByUsersRequest,
+        };
+        use grpc_clients::nova::graph_service::v2::GetFollowingRequest;
+        use grpc_clients::nova::social_service::v2::BatchGetCountsRequest;
+
+        // Step 1: Get user's following list from graph-service
+        let mut graph_client = self.grpc_pool.graph();
+        let following_response = graph_client
+            .get_following(GetFollowingRequest {
+                user_id: user_id.to_string(),
+                limit: 500, // Get up to 500 followed users
+                offset: 0,
+            })
+            .await
+            .map_err(|e| {
+                warn!("get_following failed for user {}: {}", user_id, e);
+                Status::internal(format!("Failed to get following list: {}", e))
+            })?
+            .into_inner();
+
+        let followed_user_ids = following_response.user_ids;
+
+        if followed_user_ids.is_empty() {
+            info!("User {} follows no one, returning empty personalized feed", user_id);
+            return Ok(vec![]);
+        }
+
+        info!(
+            "User {} follows {} users, fetching their posts",
+            user_id,
+            followed_user_ids.len()
+        );
+
+        // Step 2: Get posts from followed users using ListPostsByUsers API
+        let mut content_client = self.grpc_pool.content();
+        let list_response = content_client
+            .list_posts_by_users(ListPostsByUsersRequest {
+                user_ids: followed_user_ids.clone(),
+                limit,
+                before_timestamp: 0, // First page - no cursor
+                before_post_id: String::new(),
+            })
+            .await
+            .map_err(|e| {
+                error!("list_posts_by_users failed: {}", e);
+                Status::internal(format!("Failed to list posts by users: {}", e))
+            })?
+            .into_inner();
+
+        let post_ids: Vec<String> = list_response
+            .posts
+            .iter()
+            .map(|p| p.post_id.clone())
+            .collect();
+
+        if post_ids.is_empty() {
+            info!("No posts found from followed users for user {}", user_id);
+            return Ok(vec![]);
+        }
+
+        info!(
+            "Found {} posts from followed users for user {}",
+            post_ids.len(),
+            user_id
+        );
+
+        // Step 3: Get full post details
+        let get_response = content_client
+            .get_posts_by_ids(GetPostsByIdsRequest {
+                post_ids: post_ids.clone(),
+            })
+            .await
+            .map_err(|e| {
+                error!("get_posts_by_ids failed: {}", e);
+                Status::internal(format!("Failed to get posts by IDs: {}", e))
+            })?
+            .into_inner();
+
+        // Step 4: Fetch social stats from social-service
+        let mut social_client = self.grpc_pool.social();
+        let social_counts = match social_client
+            .batch_get_counts(BatchGetCountsRequest {
+                post_ids: post_ids.clone(),
+            })
+            .await
+        {
+            Ok(response) => {
+                let counts = response.into_inner().counts;
+                info!("Fetched social counts for {} posts", counts.len());
+                counts
+            }
+            Err(e) => {
+                warn!("Failed to fetch social counts: {}", e);
+                std::collections::HashMap::new()
+            }
+        };
+
+        // CDN rewrite configuration
+        let default_image_url = std::env::var("FEED_DEFAULT_IMAGE_URL").unwrap_or_default();
+        let cdn_base_url = std::env::var("FEED_MEDIA_CDN_BASE_URL")
+            .ok()
+            .filter(|v| !v.is_empty());
+        let gcs_prefix = std::env::var("FEED_MEDIA_GCS_PREFIX")
+            .ok()
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| "https://storage.googleapis.com/nova-media-staging/".to_string());
+
+        // Step 5: Convert to CachedFeedPost format
+        let posts: Vec<CachedFeedPost> = get_response
+            .posts
+            .into_iter()
+            .enumerate()
+            .map(|(idx, post)| {
+                let counts = social_counts.get(&post.id);
+                let mut media_urls = post.media_urls.clone();
+                let media_type = post.media_type.clone();
+                let mut thumbnail_urls = post.thumbnail_urls.clone();
+
+                if media_urls.is_empty() && media_type == "image" && !default_image_url.is_empty() {
+                    media_urls = vec![default_image_url.clone()];
+                }
+
+                if thumbnail_urls.is_empty() {
+                    thumbnail_urls = media_urls.clone();
+                }
+
+                let media_urls = rewrite_media_urls_for_cdn(media_urls, &cdn_base_url, &gcs_prefix);
+                let thumbnail_urls =
+                    rewrite_media_urls_for_cdn(thumbnail_urls, &cdn_base_url, &gcs_prefix);
+
+                CachedFeedPost {
+                    id: post.id.clone(),
+                    user_id: post.author_id,
+                    content: post.content,
+                    created_at: post.created_at,
+                    ranking_score: 1.0 - (idx as f64 * 0.001), // Higher precision for followed posts
+                    like_count: counts.map(|c| c.like_count as u32).unwrap_or(0),
+                    comment_count: counts.map(|c| c.comment_count as u32).unwrap_or(0),
+                    share_count: counts.map(|c| c.share_count as u32).unwrap_or(0),
+                    media_urls,
+                    media_type,
+                    thumbnail_urls,
+                }
+            })
+            .collect();
+
+        info!(
+            "Fetched {} posts from followed users with social stats for user {}",
+            posts.len(),
+            user_id
         );
         Ok(posts)
     }
