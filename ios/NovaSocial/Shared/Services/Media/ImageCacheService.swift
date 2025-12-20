@@ -454,6 +454,34 @@ actor ImageCacheService {
         )
     }
 
+    /// Pre-cache an image with a URL key
+    /// Used to cache locally-created images (e.g., uploaded images) with their CDN URLs
+    /// This ensures the image is immediately available when the feed tries to display it,
+    /// avoiding CDN propagation delay issues
+    func preCacheImage(_ image: UIImage, for urlString: String, targetSize: CGSize? = nil) {
+        let key = cacheKey(for: urlString, targetSize: targetSize)
+        let memoryCost = calculateActualMemoryCost(for: image)
+        memoryCache.setObject(image, forKey: key as NSString, cost: memoryCost)
+
+        // Also save to disk for persistence
+        Task.detached(priority: .background) { [weak self] in
+            await self?.saveToDisk(image: image, key: key)
+        }
+
+        // Create and cache thumbnail as well
+        Task.detached(priority: .background) { [weak self] in
+            guard let self = self else { return }
+            if let thumbnail = await self.createThumbnail(from: image) {
+                let thumbnailKey = "thumb_\(urlString)" as NSString
+                self.thumbnailCache.setObject(thumbnail, forKey: thumbnailKey)
+            }
+        }
+
+        #if DEBUG
+        imageLogger.info("📦 Pre-cached image for URL: \(urlString.suffix(50))")
+        #endif
+    }
+
     // MARK: - Private Helpers
 
     private func cacheKey(for urlString: String, targetSize: CGSize?) -> String {

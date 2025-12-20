@@ -244,16 +244,11 @@ final class BackgroundUploadManager: ObservableObject {
 
             completedPost = post
             isUploading = false
-            showCompletionBanner = true
+            // Don't show completion banner - user requested no popup after posting
+            // showCompletionBanner = true
 
             // Call success callback
             task.onSuccess?(post)
-
-            // Auto-dismiss banner after 3 seconds
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
-            if !Task.isCancelled {
-                dismissCompletionBanner()
-            }
 
             #if DEBUG
             print("[BackgroundUpload] Post created successfully: \(post.id)")
@@ -313,21 +308,22 @@ final class BackgroundUploadManager: ObservableObject {
         if !imagesToProcess.isEmpty {
             onProgress(0.1, "Compressing images...")
 
-            var compressedImages: [(data: Data, filename: String, index: Int)] = []
+            // Store original images alongside compressed data for pre-caching
+            var compressedImages: [(data: Data, filename: String, index: Int, originalImage: UIImage)] = []
 
-            await withTaskGroup(of: (data: Data, filename: String, index: Int)?.self) { group in
+            await withTaskGroup(of: (data: Data, filename: String, index: Int, originalImage: UIImage)?.self) { group in
                 for imageInfo in imagesToProcess {
                     group.addTask {
                         let result = await self.imageCompressor.compressImage(
                             imageInfo.image,
                             quality: .low,
                             format: .webp,
-                            stripMetadata: true
+                            stripMetadata: false  // Preserve EXIF, GPS, and other metadata
                         )
                         #if DEBUG
                         print("[BackgroundUpload] WebP: \(result.compressedSize / 1024) KB (saved \(String(format: "%.0f", result.savedPercentage))%)")
                         #endif
-                        return (data: result.data, filename: result.filename, index: imageInfo.index)
+                        return (data: result.data, filename: result.filename, index: imageInfo.index, originalImage: imageInfo.image)
                     }
                 }
 
@@ -357,6 +353,13 @@ final class BackgroundUploadManager: ObservableObject {
                 if let url = batchResult.url(for: arrayIndex) {
                     allUrls.append((index: imageInfo.index, urls: [url]))
                     processedCount += 1
+
+                    // Pre-cache the uploaded image with its URL to avoid CDN propagation delay issues
+                    // This ensures the image is immediately available when the feed tries to display it
+                    await ImageCacheService.shared.preCacheImage(imageInfo.originalImage, for: url)
+                    #if DEBUG
+                    print("[BackgroundUpload] Pre-cached image for URL: \(url)")
+                    #endif
                 }
             }
         }
@@ -366,7 +369,8 @@ final class BackgroundUploadManager: ObservableObject {
             onProgress(0.7, "Uploading Live Photos...")
 
             // Use task group for parallel Live Photo uploads
-            await withTaskGroup(of: (index: Int, urls: [String]?).self) { group in
+            // Include original stillImage for pre-caching
+            await withTaskGroup(of: (index: Int, urls: [String]?, originalImage: UIImage?).self) { group in
                 for livePhotoInfo in livePhotos {
                     group.addTask { [imageCompressor, mediaService] in
                         // Compress still image
@@ -374,7 +378,7 @@ final class BackgroundUploadManager: ObservableObject {
                             livePhotoInfo.data.stillImage,
                             quality: .low,
                             format: .webp,
-                            stripMetadata: true
+                            stripMetadata: false  // Preserve EXIF, GPS, and other metadata
                         )
 
                         do {
@@ -383,12 +387,12 @@ final class BackgroundUploadManager: ObservableObject {
                                 videoURL: livePhotoInfo.data.videoURL,
                                 imageFilename: compressionResult.filename
                             )
-                            return (index: livePhotoInfo.index, urls: [result.imageUrl, result.videoUrl])
+                            return (index: livePhotoInfo.index, urls: [result.imageUrl, result.videoUrl], originalImage: livePhotoInfo.data.stillImage)
                         } catch {
                             #if DEBUG
                             print("[BackgroundUpload] Live Photo upload failed: \(error)")
                             #endif
-                            return (index: livePhotoInfo.index, urls: nil)
+                            return (index: livePhotoInfo.index, urls: nil, originalImage: nil)
                         }
                     }
                 }
@@ -398,6 +402,15 @@ final class BackgroundUploadManager: ObservableObject {
                     if let urls = result.urls {
                         allUrls.append((index: result.index, urls: urls))
                         processedCount += 1
+
+                        // Pre-cache the Live Photo still image with its URL
+                        if let originalImage = result.originalImage, urls.count > 0 {
+                            let imageUrl = urls[0]
+                            await ImageCacheService.shared.preCacheImage(originalImage, for: imageUrl)
+                            #if DEBUG
+                            print("[BackgroundUpload] Pre-cached Live Photo still image for URL: \(imageUrl)")
+                            #endif
+                        }
                     }
                 }
             }

@@ -1157,9 +1157,9 @@ struct NewPostView: View {
                             // Use ImageCompressor for WebP format (25-35% smaller than JPEG)
                             let result = await self.imageCompressor.compressImage(
                                 imageInfo.image,
-                                quality: .low,  // 50% quality, max 1080px, strips EXIF
+                                quality: .low,  // 50% quality, max 1080px
                                 format: .webp,
-                                stripMetadata: true
+                                stripMetadata: false  // Preserve EXIF, GPS, and other metadata
                             )
                             #if DEBUG
                             print("[NewPost] WebP compressed: \(result.compressedSize / 1024) KB (saved \(String(format: "%.0f", result.savedPercentage))%)")
@@ -1232,9 +1232,9 @@ struct NewPostView: View {
                 // Use WebP compression for Live Photo still image
                 let compressionResult = await imageCompressor.compressImage(
                     livePhotoInfo.data.stillImage,
-                    quality: .low,  // 50% quality, max 1080px, strips EXIF
+                    quality: .low,  // 50% quality, max 1080px
                     format: .webp,
-                    stripMetadata: true
+                    stripMetadata: false  // Preserve EXIF, GPS, and other metadata
                 )
 
                 #if DEBUG

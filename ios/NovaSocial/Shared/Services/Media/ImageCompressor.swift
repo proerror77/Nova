@@ -138,8 +138,8 @@ actor ImageCompressor {
 
         // Skip compression if original quality requested
         if quality == .original {
-            let data = encodeImage(image, format: outputFormat, quality: 1.0, stripMetadata: stripMetadata)
-            let filename = "image_\(UUID().uuidString).\(outputFormat.fileExtension)"
+            let (data, actualFormat) = encodeImage(image, format: outputFormat, quality: 1.0, stripMetadata: stripMetadata)
+            let filename = "image_\(UUID().uuidString).\(actualFormat.fileExtension)"
             return ImageCompressionResult(
                 data: data,
                 originalSize: originalSize,
@@ -147,7 +147,7 @@ actor ImageCompressor {
                 width: Int(image.size.width * image.scale),
                 height: Int(image.size.height * image.scale),
                 compressionRatio: 1.0,
-                format: outputFormat,
+                format: actualFormat,
                 filename: filename
             )
         }
@@ -155,22 +155,28 @@ actor ImageCompressor {
         // Resize if needed
         let resizedImage = resizeImageIfNeeded(image, maxDimension: quality.maxDimension)
 
-        // Compress with target quality
-        var compressedData = encodeImage(resizedImage, format: outputFormat, quality: quality.quality, stripMetadata: stripMetadata)
+        // Compress with target quality - track actual format used (may differ if fallback occurred)
+        var (compressedData, actualFormat) = encodeImage(resizedImage, format: outputFormat, quality: quality.quality, stripMetadata: stripMetadata)
 
         // If still too large, progressively reduce quality
         var currentQuality = quality.quality
         while compressedData.count > quality.targetSizeBytes && currentQuality > 0.2 {
             currentQuality -= 0.1
-            compressedData = encodeImage(resizedImage, format: outputFormat, quality: currentQuality, stripMetadata: stripMetadata)
+            let result = encodeImage(resizedImage, format: outputFormat, quality: currentQuality, stripMetadata: stripMetadata)
+            compressedData = result.0
+            actualFormat = result.1
         }
 
         let compressionRatio = originalSize > 0 ? Double(compressedData.count) / Double(originalSize) : 1.0
-        let filename = "image_\(UUID().uuidString).\(outputFormat.fileExtension)"
+        // Use actualFormat for filename to ensure Content-Type matches data
+        let filename = "image_\(UUID().uuidString).\(actualFormat.fileExtension)"
 
         #if DEBUG
         let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-        print("[ImageCompressor] Format: \(outputFormat.fileExtension.uppercased()), Time: \(String(format: "%.0f", elapsed * 1000))ms")
+        if actualFormat != outputFormat {
+            print("[ImageCompressor] ⚠️ Format fallback: \(outputFormat.fileExtension.uppercased()) -> \(actualFormat.fileExtension.uppercased())")
+        }
+        print("[ImageCompressor] Format: \(actualFormat.fileExtension.uppercased()), Time: \(String(format: "%.0f", elapsed * 1000))ms")
         print("[ImageCompressor] Size: \(originalSize / 1024) KB -> \(compressedData.count / 1024) KB (saved \(String(format: "%.0f", (1 - compressionRatio) * 100))%)")
         #endif
 
@@ -181,39 +187,47 @@ actor ImageCompressor {
             width: Int(resizedImage.size.width * resizedImage.scale),
             height: Int(resizedImage.size.height * resizedImage.scale),
             compressionRatio: compressionRatio,
-            format: outputFormat,
+            format: actualFormat,  // Use actual format, not requested format
             filename: filename
         )
     }
 
     // MARK: - Encode Image to Format
 
+    /// Returns tuple of (data, actualFormat) - actualFormat may differ from requested format if fallback occurred
     private func encodeImage(
         _ image: UIImage,
         format: ImageOutputFormat,
         quality: CGFloat,
         stripMetadata: Bool
-    ) -> Data {
+    ) -> (Data, ImageOutputFormat) {
         switch format {
         case .webp:
             return encodeToWebP(image, quality: quality, stripMetadata: stripMetadata)
         case .heic:
-            return encodeToHEIC(image, quality: quality, stripMetadata: stripMetadata)
+            return (encodeToHEIC(image, quality: quality, stripMetadata: stripMetadata), .heic)
         case .jpeg:
-            return encodeToJPEG(image, quality: quality, stripMetadata: stripMetadata)
+            return (encodeToJPEG(image, quality: quality, stripMetadata: stripMetadata), .jpeg)
         }
     }
 
     /// Encode to WebP format (25-35% smaller than JPEG)
-    private func encodeToWebP(_ image: UIImage, quality: CGFloat, stripMetadata: Bool) -> Data {
+    /// Returns tuple of (data, actualFormat) to track if fallback was used
+    private func encodeToWebP(_ image: UIImage, quality: CGFloat, stripMetadata: Bool) -> (Data, ImageOutputFormat) {
         guard let cgImage = image.cgImage else {
-            return encodeToJPEG(image, quality: quality, stripMetadata: stripMetadata)
+            #if DEBUG
+            print("[ImageCompressor] WebP encoding failed: no cgImage, falling back to JPEG")
+            #endif
+            return (encodeToJPEG(image, quality: quality, stripMetadata: stripMetadata), .jpeg)
         }
 
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(data, UTType.webP.identifier as CFString, 1, nil) else {
             // Fallback to JPEG if WebP not supported
-            return encodeToJPEG(image, quality: quality, stripMetadata: stripMetadata)
+            #if DEBUG
+            print("[ImageCompressor] WebP encoding failed: CGImageDestination creation failed, falling back to JPEG")
+            #endif
+            return (encodeToJPEG(image, quality: quality, stripMetadata: stripMetadata), .jpeg)
         }
 
         var options: [CFString: Any] = [
@@ -229,10 +243,25 @@ actor ImageCompressor {
         CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
 
         guard CGImageDestinationFinalize(destination) else {
-            return encodeToJPEG(image, quality: quality, stripMetadata: stripMetadata)
+            #if DEBUG
+            print("[ImageCompressor] WebP encoding failed: CGImageDestinationFinalize failed, falling back to JPEG")
+            #endif
+            return (encodeToJPEG(image, quality: quality, stripMetadata: stripMetadata), .jpeg)
         }
 
-        return data as Data
+        // Verify the data is actually WebP (starts with "RIFF")
+        let resultData = data as Data
+        if resultData.count >= 4 {
+            let magic = resultData.prefix(4)
+            if magic != Data([0x52, 0x49, 0x46, 0x46]) { // "RIFF"
+                #if DEBUG
+                print("[ImageCompressor] WebP encoding produced invalid data (not RIFF), falling back to JPEG")
+                #endif
+                return (encodeToJPEG(image, quality: quality, stripMetadata: stripMetadata), .jpeg)
+            }
+        }
+
+        return (resultData, .webp)
     }
 
     /// Encode to HEIC format (most efficient, needs iOS 11+)
