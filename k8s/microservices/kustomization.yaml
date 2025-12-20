@@ -74,13 +74,13 @@ resources:
   - feature-store-service.yaml
   - feature-store-configmap.yaml
   - feature-store-serviceaccount.yaml
-  - feature-store-secret.yaml
+  # NOTE: feature-store-secret.yaml managed separately (SealedSecrets/ExternalSecrets)
 
   - streaming-service-deployment.yaml
   - streaming-service-service.yaml
   - streaming-service-configmap.yaml
   - streaming-service-serviceaccount.yaml
-  - streaming-service-secret.yaml
+  # NOTE: streaming-service-secret.yaml managed separately (SealedSecrets/ExternalSecrets)
 
   - alice-voice-service-deployment.yaml
   - alice-voice-service-service.yaml
