@@ -17,3 +17,26 @@ xcuserdata/
 # SwiftPM
 .swiftpm/
 .build/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+fastlane/.env
+fastlane/.env.*
+!fastlane/.env.default
+
+# Code signing (match stores these in git, but local copies should be ignored)
+*.cer
+*.p12
+*.mobileprovision
+*.provisionprofile
+
+# App Store Connect API Key (sensitive!)
+fastlane/AuthKey*.p8
+
+# Fastlane generated files
+*.ipa
+*.dSYM.zip
+*.app.dSYM.zip

@@ -1,0 +1,16 @@
+# App Identifier (Bundle ID)
+app_identifier("com.libruce.icered")
+
+# Apple ID (email address)
+# TODO: Replace with your Apple ID email
+apple_id(ENV["APPLE_ID"] || "your-apple-id@example.com")
+
+# Apple Developer Portal Team ID
+# TODO: Replace with your Team ID (found in Apple Developer Portal)
+team_id(ENV["TEAM_ID"] || "YOUR_TEAM_ID")
+
+# App Store Connect Team ID (usually same as team_id for individual developers)
+itc_team_id(ENV["ITC_TEAM_ID"] || ENV["TEAM_ID"] || "YOUR_TEAM_ID")
+
+# For more information about the Appfile, see:
+# https://docs.fastlane.tools/advanced/#appfile

@@ -69,6 +69,10 @@ class FeedViewModel: ObservableObject {
     // Image prefetch target size for feed cards
     private let prefetchTargetSize = CGSize(width: 750, height: 1000)
 
+    // Prefetch throttling (debounce)
+    private var lastPrefetchTime: Date = .distantPast
+    private let prefetchDebounceInterval: TimeInterval = 0.5
+
     // MARK: - Image Prefetching
 
     /// Prefetch images for upcoming posts to improve scroll performance
@@ -94,24 +98,32 @@ class FeedViewModel: ObservableObject {
     }
 
     /// Smart prefetch with visibility tracking for optimal performance
+    /// Uses debouncing to prevent excessive prefetch calls during rapid scrolling
     func onVisiblePostsChanged(visibleIndices: Set<Int>) {
         guard !posts.isEmpty else { return }
-        
+
+        // Debounce: skip if called too frequently (within 0.5 seconds)
+        let now = Date()
+        guard now.timeIntervalSince(lastPrefetchTime) > prefetchDebounceInterval else {
+            return
+        }
+        lastPrefetchTime = now
+
         let sortedIndices = visibleIndices.sorted()
         guard let firstVisible = sortedIndices.first,
               let lastVisible = sortedIndices.last else { return }
-        
+
         // Get URLs for currently visible posts (high priority)
         let visibleUrls = sortedIndices
             .filter { $0 < posts.count }
             .flatMap { posts[$0].displayMediaUrls }
-        
+
         // Get URLs for upcoming posts (prefetch with low priority)
         let prefetchStart = lastVisible + 1
         let prefetchEnd = min(prefetchStart + 8, posts.count)
         let upcomingUrls = (prefetchStart..<prefetchEnd)
             .flatMap { posts[$0].displayMediaUrls }
-        
+
         // Use smart prefetch for optimal loading
         Task.detached(priority: .utility) { [visibleUrls, upcomingUrls, prefetchTargetSize] in
             await ImageCacheService.shared.smartPrefetch(
@@ -148,7 +160,8 @@ class FeedViewModel: ObservableObject {
 
     func loadFeed(
         algorithm: FeedAlgorithm = .chronological,
-        isGuestFallback: Bool = false
+        isGuestFallback: Bool = false,
+        forceRefresh: Bool = false
     ) async {
         guard !isLoading else { return }
 
@@ -156,12 +169,44 @@ class FeedViewModel: ObservableObject {
         error = nil
         currentAlgorithm = algorithm
         currentCursor = nil
-        
+
         #if DEBUG
         loadFeedInvocationCounter += 1
         let invocationId = loadFeedInvocationCounter
-        print("[FeedVM] loadFeed #\(invocationId) start auth=\(isAuthenticated) guestFallback=\(isGuestFallback) channelId=\(selectedChannelId ?? "nil")")
+        print("[FeedVM] loadFeed #\(invocationId) start auth=\(isAuthenticated) guestFallback=\(isGuestFallback) channelId=\(selectedChannelId ?? "nil") forceRefresh=\(forceRefresh)")
         #endif
+
+        // OPTIMIZATION: Return cached data first for instant display (unless force refresh)
+        if !forceRefresh {
+            if let cachedResponse = await FeedCacheService.shared.getCachedFeed(
+                algo: algorithm,
+                channelId: selectedChannelId,
+                cursor: nil
+            ) {
+                #if DEBUG
+                print("[FeedVM] loadFeed #\(invocationId) using cached data (\(cachedResponse.posts.count) posts)")
+                #endif
+
+                var cachedPosts = cachedResponse.posts.map { FeedPost(from: $0) }
+                cachedPosts = syncCurrentUserAvatar(cachedPosts)
+                mergeRecentlyCreatedPosts(into: &cachedPosts)
+
+                var seenIds = Set<String>()
+                self.posts = cachedPosts.filter { post in
+                    guard !seenIds.contains(post.id) else { return false }
+                    seenIds.insert(post.id)
+                    return true
+                }
+                self.postIds = cachedResponse.postIds
+                self.hasMore = cachedResponse.hasMore
+
+                // Prefetch images for cached posts
+                prefetchImagesForPosts(self.posts, startIndex: 0, count: 10)
+
+                // Load bookmark status asynchronously (non-blocking)
+                loadBookmarkStatusAsync(for: self.posts.map { $0.id })
+            }
+        }
 
         do {
             // Use Guest Feed API when not authenticated, otherwise use authenticated Feed API
@@ -173,11 +218,19 @@ class FeedViewModel: ObservableObject {
                 // Guest Mode: fetch trending posts without authentication
                 response = try await feedService.getTrendingFeed(limit: 20, cursor: nil)
             }
-            
+
             #if DEBUG
             let responsePreview = response.posts.prefix(5).map { "\($0.id.prefix(8))(\($0.mediaUrls?.count ?? 0))" }.joined(separator: ",")
             print("[FeedVM] loadFeed #\(invocationId) response posts=\(response.posts.count) preview=[\(responsePreview)] (format: idPrefix(mediaCount))")
             #endif
+
+            // Cache the response for future use
+            await FeedCacheService.shared.cacheFeed(
+                response,
+                algo: algorithm,
+                channelId: selectedChannelId,
+                cursor: nil
+            )
 
             // Feed API now returns full post objects directly
             self.postIds = response.postIds
@@ -188,39 +241,35 @@ class FeedViewModel: ObservableObject {
             var allPosts = response.posts.map { FeedPost(from: $0) }
 
             // DEBUG: Log posts after API conversion
+            #if DEBUG
             print("[FeedVM] loadFeed AFTER API conversion: \(allPosts.count) posts")
             for post in allPosts.prefix(3) {
                 print("[FeedVM]   -> \(post.id.prefix(8)): mediaUrls=\(post.mediaUrls.count), thumbnailUrls=\(post.thumbnailUrls.count)")
             }
+            #endif
 
             // Sync current user's avatar for their own posts (ensures latest avatar is shown)
             allPosts = syncCurrentUserAvatar(allPosts)
 
-            // Fetch bookmark status for authenticated users (await before UI update to prevent flicker)
-            if isAuthenticated, !allPosts.isEmpty {
-                let postIds = allPosts.map { $0.id }
-                if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) {
-                    allPosts = allPosts.map { post in
-                        bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
-                    }
-                }
-            }
-
             // DEBUG: Log posts before merge
+            #if DEBUG
             print("[FeedVM] BEFORE merge: \(allPosts.count) posts, recentlyCreatedPosts=\(recentlyCreatedPosts.count)")
             for post in allPosts.prefix(3) {
                 print("[FeedVM]   -> \(post.id.prefix(8)): mediaUrls=\(post.mediaUrls.count)")
             }
+            #endif
 
             // Merge recently created posts that may not be in server response yet
             mergeRecentlyCreatedPosts(into: &allPosts)
 
             // DEBUG: Log posts after merge
+            #if DEBUG
             print("[FeedVM] AFTER merge: \(allPosts.count) posts")
             for post in allPosts.prefix(3) {
                 print("[FeedVM]   -> \(post.id.prefix(8)): mediaUrls=\(post.mediaUrls.count)")
             }
-            
+            #endif
+
             // Client-side deduplication: Remove duplicate posts by ID
             var seenIds = Set<String>()
             self.posts = allPosts.filter { post in
@@ -230,11 +279,11 @@ class FeedViewModel: ObservableObject {
             }
 
             // DEBUG: Log what posts are being set
+            #if DEBUG
             for post in self.posts.prefix(5) {
                 print("[FeedVM] Post \(post.id.prefix(8)) set with mediaUrls=\(post.mediaUrls), thumbnailUrls=\(post.thumbnailUrls)")
             }
-            
-            #if DEBUG
+
             let responseIdSet = Set(response.posts.map { $0.id })
             let finalIdSet = Set(self.posts.map { $0.id })
             let missingFromFinal = responseIdSet.subtracting(finalIdSet)
@@ -248,6 +297,10 @@ class FeedViewModel: ObservableObject {
 
             // Prefetch images for first batch of posts
             prefetchImagesForPosts(self.posts, startIndex: 0, count: 10)
+
+            // OPTIMIZATION: Load bookmark status asynchronously (non-blocking)
+            // This allows the feed to display immediately while bookmarks load in background
+            loadBookmarkStatusAsync(for: self.posts.map { $0.id })
 
             self.error = nil
         } catch let apiError as APIError {
@@ -282,25 +335,18 @@ class FeedViewModel: ObservableObject {
                     // Sync current user's avatar for their own posts
                     allPosts = syncCurrentUserAvatar(allPosts)
 
-                    // Fetch bookmark status for authenticated users (await before UI update)
-                    if isAuthenticated, !allPosts.isEmpty {
-                        let postIds = allPosts.map { $0.id }
-                        if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) {
-                            allPosts = allPosts.map { post in
-                                bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
-                            }
-                        }
-                    }
-
                     // Merge recently created posts that may not be in server response yet
                     mergeRecentlyCreatedPosts(into: &allPosts)
-                    
+
                     var seenIds = Set<String>()
                     self.posts = allPosts.filter { post in
                         guard !seenIds.contains(post.id) else { return false }
                         seenIds.insert(post.id)
                         return true
                     }
+
+                    // OPTIMIZATION: Load bookmark status asynchronously (non-blocking)
+                    loadBookmarkStatusAsync(for: self.posts.map { $0.id })
 
                     self.error = nil
                 } catch {
@@ -342,16 +388,6 @@ class FeedViewModel: ObservableObject {
             // Sync current user's avatar for their own posts
             newPosts = syncCurrentUserAvatar(newPosts)
 
-            // Fetch bookmark status for authenticated users (await before UI update to prevent flicker)
-            if isAuthenticated, !newPosts.isEmpty {
-                let newPostIds = newPosts.map { $0.id }
-                if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: newPostIds) {
-                    newPosts = newPosts.map { post in
-                        bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
-                    }
-                }
-            }
-
             // Client-side deduplication: Only add posts that aren't already in the feed
             let existingIds = Set(self.posts.map { $0.id })
             let uniqueNewPosts = newPosts.filter { !existingIds.contains($0.id) }
@@ -364,6 +400,9 @@ class FeedViewModel: ObservableObject {
                 #endif
             } else {
                 self.posts.append(contentsOf: uniqueNewPosts)
+
+                // OPTIMIZATION: Load bookmark status asynchronously for new posts
+                loadBookmarkStatusAsync(for: uniqueNewPosts.map { $0.id })
             }
 
         } catch {
@@ -395,6 +434,14 @@ class FeedViewModel: ObservableObject {
                 response = try await feedService.getTrendingFeed(limit: 20, cursor: nil)
             }
 
+            // Cache the refreshed response
+            await FeedCacheService.shared.cacheFeed(
+                response,
+                algo: currentAlgorithm,
+                channelId: selectedChannelId,
+                cursor: nil
+            )
+
             // 成功后更新数据
             self.postIds = response.postIds
             self.currentCursor = response.cursor
@@ -405,22 +452,15 @@ class FeedViewModel: ObservableObject {
             // Sync current user's avatar for their own posts
             allPosts = syncCurrentUserAvatar(allPosts)
 
-            // Fetch bookmark status for authenticated users
-            if isAuthenticated, !allPosts.isEmpty {
-                let postIds = allPosts.map { $0.id }
-                if let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) {
-                    allPosts = allPosts.map { post in
-                        bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
-                    }
-                }
-            }
-
             var seenIds = Set<String>()
             self.posts = allPosts.filter { post in
                 guard !seenIds.contains(post.id) else { return false }
                 seenIds.insert(post.id)
                 return true
             }
+
+            // OPTIMIZATION: Load bookmark status asynchronously (non-blocking)
+            loadBookmarkStatusAsync(for: self.posts.map { $0.id })
 
             // 成功时清除错误
             self.error = nil
@@ -536,6 +576,42 @@ class FeedViewModel: ObservableObject {
     private func cleanupExpiredRecentPosts() {
         let now = Date()
         recentlyCreatedPosts.removeAll { now.timeIntervalSince($0.createdAt) > recentPostRetentionDuration }
+    }
+
+    /// Load bookmark status asynchronously without blocking the main feed display
+    /// This optimization allows the feed to render immediately while bookmark states load in background
+    private func loadBookmarkStatusAsync(for postIds: [String]) {
+        guard isAuthenticated, !postIds.isEmpty else { return }
+
+        Task.detached(priority: .utility) { [weak self, socialService] in
+            guard let self = self else { return }
+
+            do {
+                let bookmarkedIds = try await socialService.batchCheckBookmarked(postIds: postIds)
+
+                await MainActor.run {
+                    self.updateBookmarkStates(bookmarkedIds)
+                }
+
+                #if DEBUG
+                print("[FeedVM] Async bookmark load complete: \(bookmarkedIds.count) bookmarked")
+                #endif
+            } catch {
+                #if DEBUG
+                print("[FeedVM] Async bookmark load failed: \(error)")
+                #endif
+                // Silently fail - bookmarks are non-critical for feed display
+            }
+        }
+    }
+
+    /// Update bookmark states for posts
+    private func updateBookmarkStates(_ bookmarkedIds: Set<String>) {
+        for i in posts.indices {
+            if bookmarkedIds.contains(posts[i].id) && !posts[i].isBookmarked {
+                posts[i] = posts[i].copying(isBookmarked: true)
+            }
+        }
     }
     
     /// Merge recently created posts that are not in the server response

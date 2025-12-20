@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import Network
 
 // MARK: - Video Constants
 
@@ -246,7 +247,7 @@ struct FeedVideoPlayer: View {
 final class FeedVideoPlayerViewModel: ObservableObject {
     let url: URL
     let autoPlay: Bool
-    
+
     @Published private(set) var player: AVPlayer?
     @Published private(set) var isPlaying = false
     @Published private(set) var isLoading = true
@@ -255,38 +256,68 @@ final class FeedVideoPlayerViewModel: ObservableObject {
     @Published private(set) var currentTime: TimeInterval = 0
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var isCached = false
-    
+
     private var timeObserver: Any?
     private var statusObserver: NSKeyValueObservation?
-    
+    private var prefetchTask: Task<Void, Never>?
+
+    // Network monitoring for prefetch priority
+    private static let networkMonitor = NWPathMonitor()
+    private static var isOnWiFi: Bool = true
+    private static var networkMonitorStarted = false
+
     init(url: URL, autoPlay: Bool = true, isMuted: Bool = true) {
         self.url = url
         self.autoPlay = autoPlay
         self.isMuted = isMuted
+
+        // Start network monitoring once
+        Self.startNetworkMonitoringIfNeeded()
     }
-    
+
+    private static func startNetworkMonitoringIfNeeded() {
+        guard !networkMonitorStarted else { return }
+        networkMonitorStarted = true
+
+        networkMonitor.pathUpdateHandler = { path in
+            // Check if using WiFi (not cellular)
+            isOnWiFi = !path.usesInterfaceType(.cellular)
+        }
+        networkMonitor.start(queue: DispatchQueue.global(qos: .utility))
+    }
+
     func prepare() {
         guard player == nil else { return }
-        
+
         // Check video cache first for faster loading
         Task {
             let videoURL = await getVideoURL()
             await setupPlayer(with: videoURL)
         }
     }
-    
+
     private func getVideoURL() async -> URL {
         let urlString = url.absoluteString
-        
+
         // Check if video is cached
         if let cachedURL = await VideoCacheService.shared.getCachedVideoURL(for: urlString) {
             isCached = true
             return cachedURL
         }
-        
-        // Start prefetching for next time (but use remote URL now for streaming)
-        await VideoCacheService.shared.prefetchVideo(urlString: urlString, priority: .high)
-        
+
+        // OPTIMIZATION: Delayed prefetch with network-aware priority
+        // Delay prefetch by 0.5 seconds to avoid wasted bandwidth if user scrolls past
+        prefetchTask = Task.detached(priority: .utility) { [urlString] in
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
+
+            // Check if task was cancelled (user scrolled away)
+            guard !Task.isCancelled else { return }
+
+            // Use lower priority on cellular to save bandwidth/battery
+            let priority: VideoLoadPriority = Self.isOnWiFi ? .high : .low
+            await VideoCacheService.shared.prefetchVideo(urlString: urlString, priority: priority)
+        }
+
         // Return remote URL for now (AVPlayer will stream it)
         return url
     }
@@ -355,6 +386,8 @@ final class FeedVideoPlayerViewModel: ObservableObject {
     
     func cleanup() {
         pause()
+        prefetchTask?.cancel()
+        prefetchTask = nil
         if let observer = timeObserver {
             player?.removeTimeObserver(observer)
         }

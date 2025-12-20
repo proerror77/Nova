@@ -239,12 +239,62 @@ struct FeedPostCard: View {
     private var imageCarousel: some View {
         TabView(selection: $currentImageIndex) {
             ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
-                mediaItemView(for: imageUrl, at: index)
-                    .tag(index)
+                // OPTIMIZATION: Only load images that are visible or adjacent (±1)
+                // This reduces memory usage for posts with many images
+                if shouldLoadImage(at: index) {
+                    mediaItemView(for: imageUrl, at: index)
+                        .tag(index)
+                        .onAppear {
+                            // Prefetch adjacent images when this one appears
+                            prefetchAdjacentImages(around: index)
+                        }
+                } else {
+                    // Placeholder for non-adjacent images (saves memory)
+                    Rectangle()
+                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.30))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .tag(index)
+                }
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .frame(height: 500)
+    }
+
+    /// Check if an image at given index should be loaded (within ±1 of current)
+    private func shouldLoadImage(at index: Int) -> Bool {
+        abs(index - currentImageIndex) <= 1
+    }
+
+    /// Prefetch images adjacent to the given index
+    private func prefetchAdjacentImages(around index: Int) {
+        // Prefetch next image if exists
+        if index + 1 < post.displayMediaUrls.count {
+            let nextUrl = post.displayMediaUrls[index + 1]
+            if !isVideoUrl(nextUrl) {
+                Task.detached(priority: .low) { [imageTargetSize] in
+                    _ = await ImageCacheService.shared.loadImage(
+                        from: nextUrl,
+                        targetSize: imageTargetSize,
+                        priority: .low
+                    )
+                }
+            }
+        }
+
+        // Prefetch previous image if exists
+        if index > 0 {
+            let prevUrl = post.displayMediaUrls[index - 1]
+            if !isVideoUrl(prevUrl) {
+                Task.detached(priority: .low) { [imageTargetSize] in
+                    _ = await ImageCacheService.shared.loadImage(
+                        from: prevUrl,
+                        targetSize: imageTargetSize,
+                        priority: .low
+                    )
+                }
+            }
+        }
     }
 
     // MARK: - Single Media Item View

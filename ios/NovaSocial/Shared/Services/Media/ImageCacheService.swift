@@ -27,21 +27,53 @@ actor ImageCacheService {
     private var cacheDirectory: URL?
     private let session: URLSession
 
-    // Configuration
-    private let maxMemoryCacheSize: Int = 150 * 1024 * 1024  // 150MB (increased for better performance)
+    // Configuration - dynamically sized based on device memory
+    private let maxMemoryCacheSize: Int
     private let maxDiskCacheSize: Int = 500 * 1024 * 1024    // 500MB
+    private let diskCacheExpiration: TimeInterval = 7 * 24 * 60 * 60  // 7 days
 
     // Prefetch and priority queue
     private var prefetchTasks: [String: Task<UIImage?, Never>] = [:]
     private var pendingRequests: [String: (priority: ImageLoadPriority, task: Task<UIImage?, Never>)] = [:]
     private var activeTasks: Set<String> = []
     private let maxConcurrentLoads = 6
-    
+
     // Thumbnail cache for quick preview
     private let thumbnailCache = NSCache<NSString, UIImage>()
     private let thumbnailSize = CGSize(width: 100, height: 100)
 
+    // MARK: - Dynamic Cache Sizing
+
+    /// Calculate optimal memory cache size based on device RAM
+    private static func getOptimalMemoryCacheSize() -> Int {
+        let totalMemory = ProcessInfo.processInfo.physicalMemory
+
+        // Adaptive sizing based on device memory
+        // < 2GB (older devices): 50MB
+        // 2-4GB (iPhone 11, etc): 100MB
+        // 4-6GB (iPhone 12-14): 150MB
+        // > 6GB (iPhone 15 Pro, etc): 200MB
+        if totalMemory < 2 * 1024 * 1024 * 1024 {
+            return 50 * 1024 * 1024
+        } else if totalMemory < 4 * 1024 * 1024 * 1024 {
+            return 100 * 1024 * 1024
+        } else if totalMemory < 6 * 1024 * 1024 * 1024 {
+            return 150 * 1024 * 1024
+        }
+        return 200 * 1024 * 1024
+    }
+
+    /// Calculate actual memory cost for a UIImage (not compressed data size)
+    private func calculateActualMemoryCost(for image: UIImage) -> Int {
+        // UIImage memory = width * height * scale^2 * 4 bytes (RGBA)
+        let pixelCount = Int(image.size.width * image.size.height * image.scale * image.scale)
+        return pixelCount * 4
+    }
+
     private init() {
+        // Dynamic cache sizing based on device memory
+        maxMemoryCacheSize = Self.getOptimalMemoryCacheSize()
+
         // Setup cache synchronously since these are non-isolated operations
         memoryCache.totalCostLimit = maxMemoryCacheSize
 
@@ -61,6 +93,117 @@ actor ImageCacheService {
         if let cachesDir = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first {
             cacheDirectory = cachesDir.appendingPathComponent("ImageCache", isDirectory: true)
             try? fileManager.createDirectory(at: cacheDirectory!, withIntermediateDirectories: true)
+        }
+
+        // Setup memory warning observer (on main actor)
+        Task { @MainActor in
+            NotificationCenter.default.addObserver(
+                forName: UIApplication.didReceiveMemoryWarningNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task {
+                    await self?.handleMemoryWarning()
+                }
+            }
+        }
+
+        // Start background disk cache cleanup
+        Task.detached(priority: .background) { [weak self] in
+            // Initial cleanup after 30 seconds
+            try? await Task.sleep(nanoseconds: 30 * 1_000_000_000)
+            await self?.performDiskCacheCleanup()
+
+            // Periodic cleanup every hour
+            while true {
+                try? await Task.sleep(nanoseconds: 3600 * 1_000_000_000)
+                await self?.performDiskCacheCleanup()
+            }
+        }
+    }
+
+    // MARK: - Memory Warning Handling
+
+    /// Handle memory warning by clearing caches
+    private func handleMemoryWarning() {
+        imageLogger.warning("⚠️ Memory warning received - clearing image caches")
+        memoryCache.removeAllObjects()
+        thumbnailCache.removeAllObjects()
+    }
+
+    // MARK: - Disk Cache Cleanup
+
+    /// Perform disk cache cleanup (removes expired and over-limit files)
+    private func performDiskCacheCleanup() async {
+        await cleanupExpiredDiskCache()
+        await enforceDiskCacheLimit()
+    }
+
+    /// Remove disk cache files older than expiration period
+    private func cleanupExpiredDiskCache() async {
+        guard let cacheDir = cacheDirectory else { return }
+
+        let cutoffDate = Date().addingTimeInterval(-diskCacheExpiration)
+        var removedCount = 0
+
+        if let enumerator = fileManager.enumerator(
+            at: cacheDir,
+            includingPropertiesForKeys: [.contentAccessDateKey, .creationDateKey]
+        ) {
+            for case let fileURL as URL in enumerator {
+                if let accessDate = try? fileURL.resourceValues(forKeys: [.contentAccessDateKey]).contentAccessDate,
+                   accessDate < cutoffDate {
+                    try? fileManager.removeItem(at: fileURL)
+                    removedCount += 1
+                }
+            }
+        }
+
+        if removedCount > 0 {
+            imageLogger.info("🗑️ Cleaned up \(removedCount) expired image cache files")
+        }
+    }
+
+    /// Enforce disk cache size limit using LRU eviction
+    private func enforceDiskCacheLimit() async {
+        guard let cacheDir = cacheDirectory else { return }
+
+        var files: [(url: URL, date: Date, size: Int64)] = []
+
+        if let enumerator = fileManager.enumerator(
+            at: cacheDir,
+            includingPropertiesForKeys: [.contentAccessDateKey, .fileSizeKey]
+        ) {
+            for case let fileURL as URL in enumerator {
+                let values = try? fileURL.resourceValues(forKeys: [.contentAccessDateKey, .fileSizeKey])
+                let date = values?.contentAccessDate ?? Date.distantPast
+                let size = Int64(values?.fileSize ?? 0)
+                files.append((url: fileURL, date: date, size: size))
+            }
+        }
+
+        // Calculate total size
+        let totalSize = files.reduce(0) { $0 + $1.size }
+
+        if totalSize > maxDiskCacheSize {
+            // Sort by access date (oldest first) for LRU eviction
+            files.sort { $0.date < $1.date }
+
+            var currentSize = totalSize
+            let targetSize = Int64(maxDiskCacheSize * 3 / 4) // Reduce to 75% of max
+            var removedCount = 0
+
+            for file in files {
+                if currentSize <= targetSize { break }
+
+                try? fileManager.removeItem(at: file.url)
+                currentSize -= file.size
+                removedCount += 1
+            }
+
+            if removedCount > 0 {
+                imageLogger.info("🗑️ LRU cleanup: removed \(removedCount) image cache files, freed \((totalSize - currentSize) / 1024)KB")
+            }
         }
     }
 
@@ -89,7 +232,8 @@ actor ImageCacheService {
 
         // Check disk cache (fast local read)
         if let diskCached = await loadFromDisk(key: cacheKey) {
-            memoryCache.setObject(diskCached, forKey: cacheKey as NSString, cost: diskCached.jpegData(compressionQuality: 1)?.count ?? 0)
+            let memoryCost = calculateActualMemoryCost(for: diskCached)
+            memoryCache.setObject(diskCached, forKey: cacheKey as NSString, cost: memoryCost)
             return diskCached
         }
 
@@ -136,8 +280,9 @@ actor ImageCacheService {
             }
 
             if let image = image {
-                // Cache to memory
-                memoryCache.setObject(image, forKey: cacheKey as NSString, cost: data.count)
+                // Cache to memory with actual memory cost (not compressed data size)
+                let memoryCost = calculateActualMemoryCost(for: image)
+                memoryCache.setObject(image, forKey: cacheKey as NSString, cost: memoryCost)
                 // Cache to disk asynchronously (don't block return)
                 Task.detached(priority: .background) { [weak self] in
                     await self?.saveToDisk(image: image, key: cacheKey)

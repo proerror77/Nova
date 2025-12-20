@@ -1,0 +1,196 @@
+# frozen_string_literal: true
+
+# Fastfile for ICERED iOS App
+# Documentation: https://docs.fastlane.tools
+
+default_platform(:ios)
+
+# Constants
+APP_IDENTIFIER = "com.libruce.icered"
+SCHEME = "ICERED"
+PROJECT_PATH = "ICERED.xcodeproj"
+
+# Helper method to get App Store Connect API Key
+def api_key
+  app_store_connect_api_key(
+    key_id: ENV["APP_STORE_CONNECT_API_KEY_KEY_ID"],
+    issuer_id: ENV["APP_STORE_CONNECT_API_KEY_ISSUER_ID"],
+    key_filepath: ENV["APP_STORE_CONNECT_API_KEY_KEY_FILEPATH"],
+    in_house: false
+  )
+end
+
+platform :ios do
+  # ==================== Setup ====================
+
+  desc "Setup development environment"
+  lane :setup do
+    setup_ci if is_ci
+
+    # Sync certificates and profiles
+    match(type: "development", readonly: is_ci, api_key: api_key)
+    match(type: "appstore", readonly: is_ci, api_key: api_key)
+  end
+
+  # ==================== Code Signing ====================
+
+  desc "Sync development certificates"
+  lane :sync_dev_certs do
+    match(type: "development", readonly: is_ci, api_key: api_key)
+  end
+
+  desc "Sync App Store certificates"
+  lane :sync_appstore_certs do
+    match(type: "appstore", readonly: is_ci, api_key: api_key)
+  end
+
+  desc "Register new devices and refresh profiles"
+  lane :add_device do |options|
+    device_name = options[:name] || UI.input("Device name: ")
+    device_udid = options[:udid] || UI.input("Device UDID: ")
+
+    register_devices(devices: { device_name => device_udid }, api_key: api_key)
+
+    # Refresh development profiles
+    match(type: "development", force_for_new_devices: true, api_key: api_key)
+  end
+
+  # ==================== Build ====================
+
+  desc "Build the app for testing"
+  lane :build do
+    sync_dev_certs
+
+    build_app(
+      scheme: SCHEME,
+      project: PROJECT_PATH,
+      configuration: "Debug",
+      skip_archive: true,
+      skip_codesigning: false
+    )
+  end
+
+  desc "Build for App Store / TestFlight"
+  lane :build_release do
+    sync_appstore_certs
+
+    # Increment build number
+    increment_build_number(
+      build_number: ENV["BUILD_NUMBER"] || (latest_testflight_build_number(api_key: api_key) + 1).to_s
+    )
+
+    build_app(
+      scheme: SCHEME,
+      project: PROJECT_PATH,
+      configuration: "Release",
+      export_method: "app-store",
+      export_options: {
+        provisioningProfiles: {
+          APP_IDENTIFIER => "match AppStore #{APP_IDENTIFIER}"
+        }
+      }
+    )
+  end
+
+  # ==================== TestFlight ====================
+
+  desc "Upload to TestFlight"
+  lane :testflight_upload do |options|
+    # Build release version
+    build_release
+
+    # Upload to TestFlight
+    upload_to_testflight(
+      api_key: api_key,
+      skip_waiting_for_build_processing: options[:skip_waiting] || false,
+      distribute_external: options[:external] || false,
+      notify_external_testers: options[:notify] || false,
+      changelog: options[:changelog] || "Bug fixes and improvements"
+    )
+
+    UI.success("Successfully uploaded to TestFlight!")
+  end
+
+  desc "Quick upload to TestFlight (skip waiting for processing)"
+  lane :beta do |options|
+    testflight_upload(
+      skip_waiting: true,
+      changelog: options[:changelog] || "New beta build"
+    )
+  end
+
+  desc "Release to external testers on TestFlight"
+  lane :beta_external do |options|
+    testflight_upload(
+      skip_waiting: false,
+      external: true,
+      notify: true,
+      changelog: options[:changelog] || "New beta build for external testing"
+    )
+  end
+
+  # ==================== App Store ====================
+
+  desc "Submit to App Store for review"
+  lane :release do |options|
+    # Build if no IPA exists
+    unless options[:skip_build]
+      build_release
+    end
+
+    # Upload to App Store
+    upload_to_app_store(
+      api_key: api_key,
+      skip_screenshots: options[:skip_screenshots] || true,
+      skip_metadata: options[:skip_metadata] || false,
+      submit_for_review: options[:submit] || false,
+      automatic_release: options[:auto_release] || false,
+      force: true
+    )
+
+    UI.success("Successfully uploaded to App Store!")
+  end
+
+  # ==================== Utility ====================
+
+  desc "Increment version number"
+  lane :bump_version do |options|
+    bump_type = options[:type] || "patch"
+    increment_version_number(bump_type: bump_type)
+
+    version = get_version_number(target: SCHEME)
+    UI.success("Version bumped to #{version}")
+  end
+
+  desc "Increment build number"
+  lane :bump_build do
+    increment_build_number
+    build = get_build_number
+    UI.success("Build number bumped to #{build}")
+  end
+
+  desc "Get the latest TestFlight build number"
+  lane :latest_build do
+    build_num = latest_testflight_build_number(api_key: api_key)
+    UI.success("Latest TestFlight build number: #{build_num}")
+    build_num
+  end
+
+  # ==================== Testing ====================
+
+  desc "Run unit tests"
+  lane :test do
+    run_tests(
+      scheme: SCHEME,
+      project: PROJECT_PATH,
+      device: "iPhone 16 Pro",
+      clean: true
+    )
+  end
+
+  # ==================== Error Handling ====================
+
+  error do |lane, exception|
+    UI.error("Lane #{lane} failed with error: #{exception.message}")
+  end
+end

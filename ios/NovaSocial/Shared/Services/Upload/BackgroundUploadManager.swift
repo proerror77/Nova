@@ -1,6 +1,26 @@
 import SwiftUI
 import Combine
 import UIKit
+import Network
+
+// MARK: - Upload Error Types
+
+enum UploadError: LocalizedError {
+    case noNetwork
+    case maxRetriesExceeded
+    case cancelled
+
+    var errorDescription: String? {
+        switch self {
+        case .noNetwork:
+            return "No network connection. Will retry when online."
+        case .maxRetriesExceeded:
+            return "Upload failed after multiple retries."
+        case .cancelled:
+            return "Upload was cancelled."
+        }
+    }
+}
 
 // MARK: - Upload Task Model
 
@@ -65,16 +85,71 @@ final class BackgroundUploadManager: ObservableObject {
     @Published private(set) var isUploading: Bool = false
     @Published private(set) var showCompletionBanner: Bool = false
     @Published private(set) var completedPost: Post?
+    @Published private(set) var isWaitingForNetwork: Bool = false
 
     // MARK: - Services
     private let mediaService = MediaService()
     private let contentService = ContentService()
     private let imageCompressor = ImageCompressor.shared
 
+    // MARK: - Network Monitoring
+    private let networkMonitor = NWPathMonitor()
+    private let networkMonitorQueue = DispatchQueue(label: "com.icered.networkMonitor")
+    private var isNetworkConnected: Bool = true
+
     // MARK: - Private Properties
     private var uploadCancellable: Task<Void, Never>?
 
-    private init() {}
+    private init() {
+        setupNetworkMonitor()
+    }
+
+    // MARK: - Network Monitoring Setup
+
+    private func setupNetworkMonitor() {
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            let isConnected = path.status == .satisfied
+            Task { @MainActor in
+                self?.isNetworkConnected = isConnected
+                if isConnected && self?.isWaitingForNetwork == true {
+                    self?.isWaitingForNetwork = false
+                    #if DEBUG
+                    print("[BackgroundUpload] Network restored, resuming upload...")
+                    #endif
+                }
+            }
+        }
+        networkMonitor.start(queue: networkMonitorQueue)
+    }
+
+    /// Wait for network connection with timeout
+    private func waitForNetworkConnection(timeout: TimeInterval = 60) async -> Bool {
+        let startTime = Date()
+
+        while !isNetworkConnected {
+            // Check timeout
+            if Date().timeIntervalSince(startTime) > timeout {
+                return false
+            }
+
+            // Check cancellation
+            if Task.isCancelled {
+                return false
+            }
+
+            // Update UI state
+            if !isWaitingForNetwork {
+                isWaitingForNetwork = true
+                updateTask { $0.statusMessage = "Waiting for network..." }
+            }
+
+            // Wait before checking again
+            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+        }
+
+        isWaitingForNetwork = false
+        return true
+    }
 
     // MARK: - Public Methods
 
@@ -286,30 +361,48 @@ final class BackgroundUploadManager: ObservableObject {
             }
         }
 
-        // Process Live Photos
-        for (livePhotoIndex, livePhotoInfo) in livePhotos.enumerated() {
-            onProgress(0.7 + Double(livePhotoIndex) / Double(totalItems) * 0.15, "Uploading Live Photo...")
+        // Process Live Photos in parallel for faster upload
+        if !livePhotos.isEmpty {
+            onProgress(0.7, "Uploading Live Photos...")
 
-            let compressionResult = await imageCompressor.compressImage(
-                livePhotoInfo.data.stillImage,
-                quality: .low,
-                format: .webp,
-                stripMetadata: true
-            )
+            // Use task group for parallel Live Photo uploads
+            await withTaskGroup(of: (index: Int, urls: [String]?).self) { group in
+                for livePhotoInfo in livePhotos {
+                    group.addTask { [imageCompressor, mediaService] in
+                        // Compress still image
+                        let compressionResult = await imageCompressor.compressImage(
+                            livePhotoInfo.data.stillImage,
+                            quality: .low,
+                            format: .webp,
+                            stripMetadata: true
+                        )
 
-            do {
-                let result = try await mediaService.uploadLivePhoto(
-                    imageData: compressionResult.data,
-                    videoURL: livePhotoInfo.data.videoURL,
-                    imageFilename: compressionResult.filename
-                )
-                allUrls.append((index: livePhotoInfo.index, urls: [result.imageUrl, result.videoUrl]))
-                processedCount += 1
-            } catch {
-                #if DEBUG
-                print("[BackgroundUpload] Live Photo upload failed: \(error)")
-                #endif
+                        do {
+                            let result = try await mediaService.uploadLivePhoto(
+                                imageData: compressionResult.data,
+                                videoURL: livePhotoInfo.data.videoURL,
+                                imageFilename: compressionResult.filename
+                            )
+                            return (index: livePhotoInfo.index, urls: [result.imageUrl, result.videoUrl])
+                        } catch {
+                            #if DEBUG
+                            print("[BackgroundUpload] Live Photo upload failed: \(error)")
+                            #endif
+                            return (index: livePhotoInfo.index, urls: nil)
+                        }
+                    }
+                }
+
+                // Collect results
+                for await result in group {
+                    if let urls = result.urls {
+                        allUrls.append((index: result.index, urls: urls))
+                        processedCount += 1
+                    }
+                }
             }
+
+            onProgress(0.85, "Live Photos uploaded")
         }
 
         // Process Videos
@@ -348,7 +441,7 @@ final class BackgroundUploadManager: ObservableObject {
         return allUrls.flatMap { $0.urls }
     }
 
-    // MARK: - Post Creation with Retry
+    // MARK: - Post Creation with Retry and Network Resilience
 
     private func createPostWithRetry(
         userId: String,
@@ -357,8 +450,30 @@ final class BackgroundUploadManager: ObservableObject {
         channelIds: [String]?
     ) async throws -> Post {
         var lastError: Error?
+        let maxRetries = 5
+        var backoffDelay: UInt64 = 1_000_000_000 // 1 second
 
-        for attempt in 1...3 {
+        for attempt in 1...maxRetries {
+            // Check for cancellation
+            if Task.isCancelled {
+                throw UploadError.cancelled
+            }
+
+            // Wait for network if disconnected
+            if !isNetworkConnected {
+                #if DEBUG
+                print("[BackgroundUpload] No network, waiting for connection...")
+                #endif
+                updateTask { $0.statusMessage = "Waiting for network..." }
+
+                let networkRestored = await waitForNetworkConnection(timeout: 120)
+                if !networkRestored {
+                    throw UploadError.noNetwork
+                }
+
+                updateTask { $0.statusMessage = "Creating post..." }
+            }
+
             do {
                 let post = try await contentService.createPost(
                     creatorId: userId,
@@ -369,21 +484,114 @@ final class BackgroundUploadManager: ObservableObject {
                 return post
             } catch let error as APIError {
                 lastError = error
-                if case .serverError(let statusCode, _) = error, statusCode == 503 {
+
+                // Check if error is retryable
+                let isRetryable: Bool
+                switch error {
+                case .networkError, .timeout, .noConnection:
+                    isRetryable = true
+                case .serverError(let statusCode, _):
+                    isRetryable = statusCode >= 500
+                default:
+                    isRetryable = false
+                }
+
+                if isRetryable && attempt < maxRetries {
                     #if DEBUG
-                    print("[BackgroundUpload] Post creation attempt \(attempt) failed with 503, retrying...")
+                    print("[BackgroundUpload] Post creation attempt \(attempt) failed, retrying in \(backoffDelay / 1_000_000_000)s...")
                     #endif
-                    if attempt < 3 {
-                        try await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000)
+
+                    updateTask { $0.statusMessage = "Retrying... (\(attempt)/\(maxRetries))" }
+
+                    try? await Task.sleep(nanoseconds: backoffDelay)
+                    backoffDelay = min(backoffDelay * 2, 30_000_000_000) // Max 30 seconds
+                    continue
+                }
+
+                throw error
+            } catch {
+                // Network error - wait and retry
+                if attempt < maxRetries {
+                    #if DEBUG
+                    print("[BackgroundUpload] Network error on attempt \(attempt), waiting for connection...")
+                    #endif
+
+                    let networkRestored = await waitForNetworkConnection(timeout: 60)
+                    if networkRestored {
                         continue
                     }
                 }
                 throw error
+            }
+        }
+
+        throw lastError ?? UploadError.maxRetriesExceeded
+    }
+
+    // MARK: - Resilient Media Upload
+
+    /// Upload media with network resilience and automatic retry
+    private func uploadMediaWithRetry<T>(
+        operation: @escaping () async throws -> T,
+        operationName: String,
+        maxRetries: Int = 5
+    ) async throws -> T {
+        var lastError: Error?
+        var backoffDelay: UInt64 = 1_000_000_000 // 1 second
+
+        for attempt in 1...maxRetries {
+            // Check for cancellation
+            if Task.isCancelled {
+                throw UploadError.cancelled
+            }
+
+            // Wait for network if disconnected
+            if !isNetworkConnected {
+                #if DEBUG
+                print("[BackgroundUpload] \(operationName): No network, waiting...")
+                #endif
+
+                let networkRestored = await waitForNetworkConnection(timeout: 120)
+                if !networkRestored {
+                    throw UploadError.noNetwork
+                }
+            }
+
+            do {
+                return try await operation()
             } catch {
+                lastError = error
+
+                // Check if we should retry
+                let shouldRetry: Bool
+                if let apiError = error as? APIError {
+                    switch apiError {
+                    case .networkError, .timeout, .noConnection:
+                        shouldRetry = true
+                    case .serverError(let statusCode, _):
+                        shouldRetry = statusCode >= 500
+                    default:
+                        shouldRetry = false
+                    }
+                } else {
+                    // Assume network-related errors are retryable
+                    shouldRetry = true
+                }
+
+                if shouldRetry && attempt < maxRetries {
+                    #if DEBUG
+                    print("[BackgroundUpload] \(operationName) attempt \(attempt) failed: \(error.localizedDescription)")
+                    #endif
+
+                    try? await Task.sleep(nanoseconds: backoffDelay)
+                    backoffDelay = min(backoffDelay * 2, 30_000_000_000) // Max 30 seconds
+                    continue
+                }
+
                 throw error
             }
         }
 
-        throw lastError ?? APIError.serverError(statusCode: 503, message: "Service unavailable")
+        throw lastError ?? UploadError.maxRetriesExceeded
     }
 }
