@@ -29,6 +29,9 @@ pub struct S3Config {
 pub struct MatrixConfig {
     pub enabled: bool,
     pub homeserver_url: String,
+    /// Public URL for Matrix homeserver (for mobile clients that can't access internal K8s DNS)
+    /// Falls back to homeserver_url if not set
+    pub public_url: Option<String>,
     pub service_user: String,
     pub access_token: Option<String>,
     pub device_name: String,
@@ -278,6 +281,7 @@ impl Config {
             enabled: matrix_enabled,
             homeserver_url: env::var("MATRIX_HOMESERVER_URL")
                 .unwrap_or_else(|_| "http://matrix-synapse:8008".to_string()),
+            public_url: env::var("MATRIX_PUBLIC_URL").ok(),
             service_user,
             access_token: env::var("MATRIX_ACCESS_TOKEN").ok(),
             device_name: env::var("MATRIX_DEVICE_NAME")
@@ -352,6 +356,7 @@ mod tests {
             matrix: MatrixConfig {
                 enabled: false,
                 homeserver_url: "https://matrix.example.com".to_string(),
+                public_url: None,
                 service_user: "@service:example.com".to_string(),
                 access_token: None,
                 device_name: "test".to_string(),
@@ -408,6 +413,7 @@ mod tests {
             matrix: MatrixConfig {
                 enabled: true,
                 homeserver_url: "https://matrix.test.com".to_string(),
+                public_url: None,
                 service_user: "@service:test.com".to_string(),
                 access_token: Some("token".to_string()),
                 device_name: "test-device".to_string(),

@@ -308,13 +308,17 @@ pub async fn get_matrix_config(
         .ok_or_else(|| AppError::Unauthorized)?;
     let matrix_enabled = state.matrix_client.is_some() && state.config.matrix.enabled;
 
+    // Return public_url if set (for mobile clients), otherwise fall back to homeserver_url
+    let client_url = if matrix_enabled {
+        state.config.matrix.public_url.clone()
+            .or_else(|| Some(state.config.matrix.homeserver_url.clone()))
+    } else {
+        None
+    };
+
     Ok(HttpResponse::Ok().json(MatrixConfigResponse {
         enabled: matrix_enabled,
-        homeserver_url: if matrix_enabled {
-            Some(state.config.matrix.homeserver_url.clone())
-        } else {
-            None
-        },
+        homeserver_url: client_url,
         e2ee_enabled: matrix_enabled, // E2EE is always on when Matrix is enabled
         voip_enabled: matrix_enabled, // VoIP is available via Matrix
     }))
