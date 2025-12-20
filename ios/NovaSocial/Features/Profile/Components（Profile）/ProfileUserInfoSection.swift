@@ -118,6 +118,7 @@ struct ProfileUserInfoSection: View {
     var layout: ProfileUserInfoLayout = .default
 
     // 点击回调
+    var onAvatarTapped: (() -> Void)?
     var onFollowingTapped: (() -> Void)?
     var onFollowersTapped: (() -> Void)?
 
@@ -165,9 +166,24 @@ struct ProfileUserInfoSection: View {
         VStack(spacing: layout.verticalSpacing) {
             // MARK: - 头像 + 用户名 + 位置
             VStack(spacing: layout.usernameSpacingFromAvatar) {
-                // 头像
-                avatarView
-                    .frame(width: layout.avatarOuterSize, height: layout.avatarOuterSize)
+                // 头像 - 可點擊更換
+                Button(action: { onAvatarTapped?() }) {
+                    ZStack(alignment: .bottomTrailing) {
+                        avatarView
+                            .frame(width: layout.avatarOuterSize, height: layout.avatarOuterSize)
+
+                        // 編輯圖標
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 28, height: 28)
+                            .overlay(
+                                Image(systemName: "camera.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.gray)
+                            )
+                            .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+                    }
+                }
 
                 // 用户名（始终显示，未填写时显示 "User"）
                 Text(displayUsername)

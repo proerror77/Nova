@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 // MARK: - Profile View State
 /// Enum representing the active overlay/sheet state in ProfileView
@@ -18,6 +19,8 @@ enum ProfileActiveSheet: Equatable {
     case accountSwitcher
     case shareSheet
     case editProfile
+    case avatarPicker       // 頭像選擇器
+    case backgroundPicker   // 背景圖選擇器
 
     static func == (lhs: ProfileActiveSheet, rhs: ProfileActiveSheet) -> Bool {
         switch (lhs, rhs) {
@@ -32,7 +35,9 @@ enum ProfileActiveSheet: Equatable {
              (.photoOptions, .photoOptions),
              (.accountSwitcher, .accountSwitcher),
              (.shareSheet, .shareSheet),
-             (.editProfile, .editProfile):
+             (.editProfile, .editProfile),
+             (.avatarPicker, .avatarPicker),
+             (.backgroundPicker, .backgroundPicker):
             return true
         case (.newPost(let img1), .newPost(let img2)):
             return img1 === img2
@@ -63,6 +68,17 @@ struct ProfileView: View {
     @State private var showDeleteConfirmation = false       // 显示删除确认
     @State private var postToDelete: Post? = nil            // 待删除的帖子
     @State private var isDeleting = false                   // 正在删除中
+
+    // MARK: - 頭像/背景圖更換狀態
+    @State private var avatarPhotoItem: PhotosPickerItem?   // 頭像選擇
+    @State private var backgroundPhotoItem: PhotosPickerItem? // 背景圖選擇
+    @State private var localBackgroundImage: UIImage? = nil // 本地背景圖
+    @State private var isUploadingAvatar = false            // 上傳頭像中
+    @State private var isUploadingBackground = false        // 上傳背景中
+
+    // Services
+    private let mediaService = MediaService()
+    private let identityService = IdentityService()
 
     // Access AvatarManager - @ObservedObject to observe pendingAvatar changes
     @ObservedObject private var avatarManager = AvatarManager.shared
@@ -191,7 +207,7 @@ struct ProfileView: View {
                 )
                 .transition(.identity)
 
-            case .none, .imagePicker, .camera, .photoOptions, .accountSwitcher, .shareSheet, .editProfile:
+            case .none, .imagePicker, .camera, .photoOptions, .accountSwitcher, .shareSheet, .editProfile, .avatarPicker, .backgroundPicker:
                 // 這些狀態顯示 profileContent，overlay/sheet 另外處理
                 profileContent
             }
@@ -299,6 +315,49 @@ struct ProfileView: View {
             })
             .environmentObject(authManager)
         }
+        // MARK: - 頭像選擇器
+        .photosPicker(
+            isPresented: Binding(
+                get: { activeSheet == .avatarPicker },
+                set: { if !$0 { activeSheet = .none } }
+            ),
+            selection: $avatarPhotoItem,
+            matching: .images
+        )
+        .onChange(of: avatarPhotoItem) { _, newItem in
+            Task {
+                await loadAndUploadAvatar(from: newItem)
+            }
+        }
+        // MARK: - 背景圖選擇器
+        .photosPicker(
+            isPresented: Binding(
+                get: { activeSheet == .backgroundPicker },
+                set: { if !$0 { activeSheet = .none } }
+            ),
+            selection: $backgroundPhotoItem,
+            matching: .images
+        )
+        .onChange(of: backgroundPhotoItem) { _, newItem in
+            Task {
+                await loadBackgroundImage(from: newItem)
+            }
+        }
+        // 上傳中指示器
+        .overlay {
+            if isUploadingAvatar || isUploadingBackground {
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .tint(.white)
+                        .scaleEffect(1.2)
+                    Text(isUploadingAvatar ? "上傳頭像中..." : "處理背景圖...")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white)
+                }
+            }
+        }
         .alert("刪除貼文", isPresented: $showDeleteConfirmation) {
             Button("取消", role: .cancel) {
                 postToDelete = nil
@@ -371,17 +430,43 @@ struct ProfileView: View {
     // MARK: - 用户信息头部区域
     private var userHeaderSection: some View {
         ZStack(alignment: .top) {
-            // 背景图片
-            Image("Profile-background")
-                .resizable()
-                .scaledToFill()
+            // 背景图片 - 可點擊更換
+            ZStack(alignment: .topTrailing) {
+                // 背景圖片內容
+                Group {
+                    if let bgImage = localBackgroundImage {
+                        Image(uiImage: bgImage)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        Image("Profile-background")
+                            .resizable()
+                            .scaledToFill()
+                    }
+                }
                 .frame(maxWidth: .infinity)
                 .clipped()
                 .blur(radius: 20)
-                .overlay(
-                    Color.black.opacity(0.3)
-                )
+                .overlay(Color.black.opacity(0.3))
                 .ignoresSafeArea(edges: .top)
+                .onTapGesture {
+                    activeSheet = .backgroundPicker
+                }
+
+                // 背景編輯圖標
+                Button(action: { activeSheet = .backgroundPicker }) {
+                    Circle()
+                        .fill(Color.black.opacity(0.5))
+                        .frame(width: 36, height: 36)
+                        .overlay(
+                            Image(systemName: "photo.fill")
+                                .font(.system(size: 16))
+                                .foregroundColor(.white)
+                        )
+                }
+                .padding(.top, 70)
+                .padding(.trailing, 16)
+            }
 
             VStack(spacing: 0) {
                 // MARK: - 顶部导航栏（独立组件）
@@ -410,6 +495,9 @@ struct ProfileView: View {
                     followersCount: displayUser?.safeFollowerCount ?? 0,
                     likesCount: userPostsManager.postCount,
                     layout: userInfoLayout,
+                    onAvatarTapped: {
+                        activeSheet = .avatarPicker  // 點擊頭像更換
+                    },
                     onFollowingTapped: {
                         activeSheet = .following  // 点击 Following 跳转
                     },
@@ -700,6 +788,109 @@ struct ProfileView: View {
         await MainActor.run {
             isDeleting = false
             postToDelete = nil
+        }
+    }
+
+    // MARK: - 載入並上傳頭像
+    private func loadAndUploadAvatar(from item: PhotosPickerItem?) async {
+        guard let item = item,
+              let userId = authManager.currentUser?.id else { return }
+
+        await MainActor.run {
+            isUploadingAvatar = true
+        }
+
+        do {
+            // 載入圖片數據
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data),
+                  let imageData = image.jpegData(compressionQuality: 0.8) else {
+                throw NSError(domain: "ProfileView", code: 1, userInfo: [NSLocalizedDescriptionKey: "無法載入圖片"])
+            }
+
+            // 立即顯示本地預覽
+            await MainActor.run {
+                localAvatarImage = image
+                avatarManager.pendingAvatar = image
+            }
+
+            // 上傳頭像到 MediaService
+            let avatarUrl = try await mediaService.uploadImage(image: imageData, userId: userId)
+
+            // 通過 IdentityService 更新用戶資料
+            let updates = UserProfileUpdate(
+                displayName: nil,
+                bio: nil,
+                avatarUrl: avatarUrl,
+                coverUrl: nil,
+                website: nil,
+                location: nil
+            )
+            let updatedUser = try await identityService.updateUser(userId: userId, updates: updates)
+
+            // 更新 AuthManager 中的當前用戶
+            await MainActor.run {
+                authManager.updateCurrentUser(updatedUser)
+            }
+
+            #if DEBUG
+            print("✅ Avatar uploaded successfully: \(avatarUrl)")
+            #endif
+
+        } catch {
+            #if DEBUG
+            print("❌ Failed to upload avatar: \(error)")
+            #endif
+            // 還原本地狀態
+            await MainActor.run {
+                localAvatarImage = nil
+                avatarManager.pendingAvatar = nil
+            }
+        }
+
+        await MainActor.run {
+            isUploadingAvatar = false
+            avatarPhotoItem = nil
+        }
+    }
+
+    // MARK: - 載入背景圖片（本地預覽）
+    private func loadBackgroundImage(from item: PhotosPickerItem?) async {
+        guard let item = item else { return }
+
+        await MainActor.run {
+            isUploadingBackground = true
+        }
+
+        do {
+            // 載入圖片數據
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else {
+                throw NSError(domain: "ProfileView", code: 2, userInfo: [NSLocalizedDescriptionKey: "無法載入背景圖片"])
+            }
+
+            // 顯示本地預覽
+            await MainActor.run {
+                localBackgroundImage = image
+            }
+
+            // TODO: 背景圖上傳到服務器的 API 待實現
+            // let backgroundUrl = try await mediaService.uploadBackgroundImage(image: image)
+            // try await userService.updateProfile(backgroundUrl: backgroundUrl)
+
+            #if DEBUG
+            print("✅ Background image loaded locally")
+            #endif
+
+        } catch {
+            #if DEBUG
+            print("❌ Failed to load background image: \(error)")
+            #endif
+        }
+
+        await MainActor.run {
+            isUploadingBackground = false
+            backgroundPhotoItem = nil
         }
     }
 
