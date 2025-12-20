@@ -30,8 +30,7 @@ struct FeedVideoPlayer: View {
     let height: CGFloat
     
     @StateObject private var viewModel: FeedVideoPlayerViewModel
-    @State private var showControls = false
-    @State private var controlsTimer: Timer?
+    @State private var userPaused = false  // Track if user manually paused
     
     init(
         url: URL,
@@ -67,8 +66,8 @@ struct FeedVideoPlayer: View {
                     .tint(.white)
             }
             
-            // Play/Pause overlay
-            if showControls || !viewModel.isPlaying {
+            // Play/Pause overlay - only show when user manually paused
+            if userPaused {
                 playPauseOverlay
             }
             
@@ -148,14 +147,14 @@ struct FeedVideoPlayer: View {
                 .fill(Color.black.opacity(0.5))
                 .frame(width: 60, height: 60)
                 .overlay(
-                    Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
+                    Image(systemName: "play.fill")
                         .font(.system(size: 24))
                         .foregroundColor(.white)
-                        .offset(x: viewModel.isPlaying ? 0 : 2)
+                        .offset(x: 2)
                 )
         }
         .transition(.opacity)
-        .animation(.easeInOut(duration: 0.2), value: showControls)
+        .animation(.easeInOut(duration: 0.2), value: userPaused)
     }
     
     private var durationBadge: some View {
@@ -220,23 +219,17 @@ struct FeedVideoPlayer: View {
     
     private func handleTap() {
         withAnimation {
-            showControls = true
-        }
-        
-        // Hide controls after 2 seconds
-        controlsTimer?.invalidate()
-        controlsTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { _ in
-            withAnimation {
-                showControls = false
-            }
+            togglePlayPause()
         }
     }
     
     private func togglePlayPause() {
         if viewModel.isPlaying {
             viewModel.pause()
+            userPaused = true
         } else {
             viewModel.play()
+            userPaused = false
         }
     }
 }

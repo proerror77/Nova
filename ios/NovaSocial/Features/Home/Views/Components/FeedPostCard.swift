@@ -10,7 +10,7 @@ struct FeedPostCard: View {
     var onShare: () -> Void = {}
     var onBookmark: () -> Void = {}
 
-    @State private var currentImageIndex = 0
+    @State private var scrollPosition = ScrollPosition(idType: Int.self)
     @State private var isVisible = false
 
     // Target size for feed images (optimized for display)
@@ -246,33 +246,31 @@ struct FeedPostCard: View {
 
     @ViewBuilder
     private var imageCarousel: some View {
-        TabView(selection: $currentImageIndex) {
-            ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
-                // OPTIMIZATION: Only load images that are visible or adjacent (±1)
-                // This reduces memory usage for posts with many images
-                if shouldLoadImage(at: index) {
-                    mediaItemView(for: imageUrl, at: index)
-                        .tag(index)
-                        .onAppear {
-                            // Prefetch adjacent images when this one appears
-                            prefetchAdjacentImages(around: index)
-                        }
-                } else {
-                    // Placeholder for non-adjacent images (saves memory)
-                    Rectangle()
-                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.30))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .tag(index)
+        GeometryReader { geometry in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 0) {
+                    ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
+                        mediaItemView(for: imageUrl, at: index)
+                            .frame(width: geometry.size.width, height: 500)
+                            .clipped()
+                            .id(index)
+                            .onAppear {
+                                prefetchAdjacentImages(around: index)
+                            }
+                    }
                 }
+                .scrollTargetLayout()
             }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition($scrollPosition)
+            .scrollClipDisabled(false)
         }
-        .tabViewStyle(.page(indexDisplayMode: .never))
         .frame(height: 500)
     }
-
-    /// Check if an image at given index should be loaded (within ±1 of current)
-    private func shouldLoadImage(at index: Int) -> Bool {
-        abs(index - currentImageIndex) <= 1
+    
+    /// Current visible image index based on scroll position
+    private var currentImageIndex: Int {
+        scrollPosition.viewID(type: Int.self) ?? 0
     }
 
     /// Prefetch images adjacent to the given index

@@ -1498,22 +1498,27 @@ final class MatrixService: MatrixServiceProtocol {
 
     // MARK: - Helper Methods
 
-    /// Convert Nova user ID to Matrix user ID format
-    /// Nova: uuid-string -> Matrix: @nova-<uuid>:staging.nova.internal
+    /// Convert username or Nova user ID to Matrix user ID format
+    /// Username: "alice" -> Matrix: @alice:staging.gcp.icered.com
+    /// If already Matrix format (@...), returns as-is
     private func convertToMatrixUserId(novaUserId: String) -> String {
         // If already in Matrix format, return as-is
         if novaUserId.hasPrefix("@") {
             return novaUserId
         }
 
-        // Convert UUID to Matrix format
+        // Extract domain from homeserver URL
         let domain = homeserverURL?
             .replacingOccurrences(of: "https://", with: "")
             .replacingOccurrences(of: "http://", with: "")
             .split(separator: "/").first
-            .map(String.init) ?? "staging.nova.internal"
+            .map(String.init) ?? "staging.gcp.icered.com"
 
-        return "@nova-\(novaUserId):\(domain)"
+        // Extract just the domain name for Matrix server (remove "matrix." prefix if present)
+        let serverName = domain.hasPrefix("matrix.") ? String(domain.dropFirst(7)) : domain
+
+        // Convert to Matrix format: @username:server
+        return "@\(novaUserId):\(serverName)"
     }
 
     /// Convert Matrix user ID back to Nova user ID

@@ -394,25 +394,26 @@ struct NewChatView: View {
                 try await matrixBridge.initialize()
             }
 
-            let participantIds = selectedUsers.map { $0.id }
+            // Use usernames for Matrix user ID construction (not Nova UUIDs)
+            let participantUsernames = selectedUsers.map { $0.username }
             let groupName: String? = selectedUsers.count > 1
                 ? selectedUsers.map { $0.displayName }.joined(separator: ", ")
                 : nil
 
             #if DEBUG
-            print("[NewChatView] Creating Matrix room...")
+            print("[NewChatView] Creating Matrix room with users: \(participantUsernames)")
             #endif
 
             let room: MatrixBridgeService.MatrixConversationInfo
             if selectedUsers.count == 1 {
                 room = try await matrixBridge.createDirectConversation(
-                    withUserId: participantIds[0],
+                    withUserId: participantUsernames[0],
                     displayName: selectedUsers[0].displayName
                 )
             } else {
                 room = try await matrixBridge.createGroupConversation(
                     name: groupName ?? "Group Chat",
-                    userIds: participantIds
+                    userIds: participantUsernames
                 )
             }
 
