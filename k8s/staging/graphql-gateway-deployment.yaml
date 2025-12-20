@@ -164,7 +164,7 @@ spec:
             - name: GRPC_CHAT_SERVICE_URL
               value: "https://realtime-chat-service.nova-staging.svc.cluster.local:9095"
             - name: GRPC_NOTIFICATION_SERVICE_URL
-              value: "http://notification-service.nova-staging.svc.cluster.local:9093"
+              value: "http://notification-service.nova-staging.svc.cluster.local:9080"
             - name: GRPC_CONTENT_SERVICE_URL
               value: "https://content-service.nova-staging.svc.cluster.local:9080"
             - name: GRPC_FEED_SERVICE_URL

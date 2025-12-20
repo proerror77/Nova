@@ -80,7 +80,8 @@ final class MatrixBridgeService {
     /// - Parameter requireLogin: If true, will trigger SSO login if session restore fails.
     ///                          If false, will silently fail without showing SSO dialog.
     ///                          Default is true for backwards compatibility with chat views.
-    func initialize(requireLogin: Bool = true) async throws {
+    /// - Parameter retryOnMismatch: If true, will clear session and retry on MismatchedAccount error.
+    func initialize(requireLogin: Bool = true, retryOnMismatch: Bool = true) async throws {
         guard !isInitialized else {
             #if DEBUG
             print("[MatrixBridge] Already initialized")
@@ -148,6 +149,20 @@ final class MatrixBridgeService {
             print("[MatrixBridge] Bridge initialized successfully")
             #endif
         } catch {
+            // Check if this is a MismatchedAccount error (device ID mismatch)
+            if retryOnMismatch && isMismatchedAccountError(error) {
+                #if DEBUG
+                print("[MatrixBridge] ⚠️ MismatchedAccount error detected, clearing session and retrying...")
+                #endif
+
+                // Clear corrupted session data
+                clearSessionData()
+
+                // Retry initialization once without retry flag to prevent infinite loop
+                try await initialize(requireLogin: requireLogin, retryOnMismatch: false)
+                return
+            }
+
             initializationError = error
             #if DEBUG
             print("[MatrixBridge] Initialization failed: \(error)")
@@ -249,6 +264,41 @@ final class MatrixBridgeService {
         #if DEBUG
         print("[MatrixBridge] Shutdown complete")
         #endif
+    }
+
+    /// Clear Matrix session data (crypto store) to fix MismatchedAccount errors
+    /// This should be called when device ID mismatch occurs
+    func clearSessionData() {
+        #if DEBUG
+        print("[MatrixBridge] Clearing Matrix session data...")
+        #endif
+
+        let sessionPath = MatrixConfiguration.sessionPath
+        let fileManager = FileManager.default
+
+        do {
+            if fileManager.fileExists(atPath: sessionPath) {
+                try fileManager.removeItem(atPath: sessionPath)
+                #if DEBUG
+                print("[MatrixBridge] Session data cleared at: \(sessionPath)")
+                #endif
+            }
+        } catch {
+            #if DEBUG
+            print("[MatrixBridge] Failed to clear session data: \(error)")
+            #endif
+        }
+
+        // Also clear SSO credentials to force re-login
+        matrixSSOManager.clearCredentials()
+        isInitialized = false
+    }
+
+    /// Check if error is a MismatchedAccount error
+    private func isMismatchedAccountError(_ error: Error) -> Bool {
+        let errorString = String(describing: error)
+        return errorString.contains("MismatchedAccount") ||
+               errorString.contains("doesn't match the account")
     }
 
     // MARK: - Conversation Mapping

@@ -111,8 +111,9 @@ impl Config {
                     .unwrap_or_else(|_| "http://content-service:50053".to_string()),
                 messaging_service: env::var("MESSAGING_SERVICE_URL")
                     .unwrap_or_else(|_| "http://messaging-service:50054".to_string()),
-                notification_service: env::var("NOTIFICATION_SERVICE_URL")
-                    .unwrap_or_else(|_| "http://notification-service:50055".to_string()),
+                notification_service: env::var("GRPC_NOTIFICATION_SERVICE_URL")
+                    .or_else(|_| env::var("NOTIFICATION_SERVICE_URL"))
+                    .unwrap_or_else(|_| "http://notification-service:9080".to_string()),
                 feed_service: env::var("FEED_SERVICE_URL")
                     .unwrap_or_else(|_| "http://feed-service:50056".to_string()),
                 video_service: env::var("VIDEO_SERVICE_URL")

@@ -42,6 +42,12 @@ struct GroupChatView: View {
     // 檔案選擇
     @State private var showFilePicker = false
 
+    // 語音錄製
+    @State private var audioRecorder = AudioRecorderService()
+    @State private var isRecordingVoice = false
+    @State private var voiceRecordDragOffset: CGFloat = 0
+    private let voiceCancelThreshold: CGFloat = -60
+
     // Matrix 服務
     private let matrixBridge = MatrixBridgeService.shared
 
@@ -250,20 +256,23 @@ struct GroupChatView: View {
                     }
                 }
 
-                // Send button
-                Button(action: {
-                    sendMessage()
-                }) {
-                    Circle()
-                        .fill(messageText.isEmpty ? Color.gray : DesignTokens.accentColor)
-                        .frame(width: 33, height: 33)
-                        .overlay(
-                            Image(systemName: "paperplane.fill")
-                                .font(.system(size: 14))
-                                .foregroundColor(.white)
-                        )
+                // Send button or Voice record button
+                if messageText.isEmpty {
+                    voiceRecordButton
+                } else {
+                    Button(action: {
+                        sendMessage()
+                    }) {
+                        Circle()
+                            .fill(DesignTokens.accentColor)
+                            .frame(width: 33, height: 33)
+                            .overlay(
+                                Image(systemName: "paperplane.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.white)
+                            )
+                    }
                 }
-                .disabled(messageText.isEmpty)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -318,6 +327,173 @@ struct GroupChatView: View {
         .padding(.vertical, 16)
         .frame(maxWidth: .infinity)
         .background(DesignTokens.tileBackground)
+    }
+
+    // MARK: - Voice Record Button
+    private var voiceRecordButton: some View {
+        ZStack {
+            // 錄音時的脈衝動畫背景
+            if isRecordingVoice {
+                Circle()
+                    .fill(Color.red.opacity(0.2))
+                    .frame(width: 50, height: 50)
+                    .scaleEffect(audioRecorder.audioLevel > 0.3 ? 1.3 : 1.0)
+                    .animation(.easeInOut(duration: 0.2), value: audioRecorder.audioLevel)
+            }
+
+            // 主按鈕
+            Circle()
+                .fill(isRecordingVoice ? Color.red : Color.gray.opacity(0.3))
+                .frame(width: 33, height: 33)
+                .overlay(
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(isRecordingVoice ? .white : DesignTokens.textMuted)
+                )
+                .scaleEffect(isRecordingVoice ? 1.1 : 1.0)
+                .offset(y: voiceRecordDragOffset)
+                .animation(.spring(response: 0.3), value: isRecordingVoice)
+
+            // 取消提示
+            if isRecordingVoice && voiceRecordDragOffset < voiceCancelThreshold {
+                VStack(spacing: 4) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.red)
+                    Text("鬆開取消")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+                .offset(y: -70)
+            }
+
+            // 錄音時長顯示
+            if isRecordingVoice {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 8, height: 8)
+
+                    Text(formatRecordingDuration(audioRecorder.recordingDuration))
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundColor(.red)
+
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+
+                    Text("上滑取消")
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color(.systemBackground))
+                .cornerRadius(16)
+                .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+                .offset(y: -55)
+            }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    handleVoiceRecordDragChanged(value)
+                }
+                .onEnded { value in
+                    handleVoiceRecordDragEnded(value)
+                }
+        )
+    }
+
+    // MARK: - Voice Recording Gesture Handlers
+    private func handleVoiceRecordDragChanged(_ value: DragGesture.Value) {
+        // 開始錄音
+        if !isRecordingVoice && !audioRecorder.isRecording {
+            startVoiceRecording()
+        }
+
+        // 追蹤拖動偏移（只允許向上）
+        voiceRecordDragOffset = min(0, value.translation.height)
+    }
+
+    private func handleVoiceRecordDragEnded(_ value: DragGesture.Value) {
+        // 檢查是否應該取消
+        if value.translation.height < voiceCancelThreshold {
+            cancelVoiceRecording()
+        } else {
+            stopAndSendVoiceMessage()
+        }
+
+        // 重置狀態
+        voiceRecordDragOffset = 0
+    }
+
+    // MARK: - Voice Recording Control
+    private func startVoiceRecording() {
+        Task {
+            let success = await audioRecorder.startRecording()
+            await MainActor.run {
+                isRecordingVoice = success
+            }
+        }
+    }
+
+    private func cancelVoiceRecording() {
+        audioRecorder.cancelRecording()
+        isRecordingVoice = false
+        #if DEBUG
+        print("[GroupChatView] 🎙️ Voice recording cancelled")
+        #endif
+    }
+
+    private func stopAndSendVoiceMessage() {
+        guard isRecordingVoice else { return }
+
+        if let result = audioRecorder.stopRecording() {
+            // 最少 0.5 秒才發送
+            if result.duration >= 0.5 {
+                sendVoiceMessage(data: result.data, duration: result.duration)
+            }
+            audioRecorder.cleanupTempFiles()
+        }
+
+        isRecordingVoice = false
+    }
+
+    private func sendVoiceMessage(data: Data, duration: TimeInterval) {
+        Task {
+            do {
+                // 保存到臨時檔案
+                let tempDir = FileManager.default.temporaryDirectory
+                let tempFileURL = tempDir.appendingPathComponent("\(UUID().uuidString).m4a")
+                try data.write(to: tempFileURL)
+
+                // 通過 Matrix 發送語音消息
+                _ = try await matrixBridge.sendMessage(
+                    conversationId: conversationId,
+                    content: "Voice message (\(Int(duration))s)",
+                    mediaURL: tempFileURL,
+                    mimeType: "audio/mp4"
+                )
+
+                // 清理臨時檔案
+                try? FileManager.default.removeItem(at: tempFileURL)
+
+                #if DEBUG
+                print("[GroupChatView] 🎙️ Voice message sent: \(duration)s, \(data.count) bytes")
+                #endif
+            } catch {
+                #if DEBUG
+                print("[GroupChatView] ❌ Failed to send voice message: \(error)")
+                #endif
+            }
+        }
+    }
+
+    private func formatRecordingDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
     }
 
     // MARK: - Grouped Messages

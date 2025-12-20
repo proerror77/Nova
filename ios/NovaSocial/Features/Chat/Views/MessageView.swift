@@ -197,11 +197,19 @@ struct MessageView: View {
                 print("✅ [MessageView] Matrix initialized successfully")
             } catch {
                 print("❌ [MessageView] Matrix initialization failed: \(error)")
+                let errorDetail: String
+                if let bridgeError = error as? MatrixBridgeError {
+                    errorDetail = bridgeError.localizedDescription
+                } else if let urlError = error as? URLError {
+                    errorDetail = "Network error: \(urlError.localizedDescription)"
+                } else {
+                    errorDetail = error.localizedDescription
+                }
                 await MainActor.run {
                     self.isMatrixInitializing = false
                     self.isLoading = false
-                    self.matrixInitError = "Matrix 連接失敗: \(error.localizedDescription)"
-                    self.errorMessage = "Failed to connect to messaging service"
+                    self.matrixInitError = "Matrix 連接失敗: \(errorDetail)"
+                    self.errorMessage = "Connection failed: \(errorDetail)"
                 }
                 return
             }

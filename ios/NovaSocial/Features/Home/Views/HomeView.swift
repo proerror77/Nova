@@ -2,6 +2,48 @@ import SwiftUI
 import Foundation
 import PhotosUI
 
+// MARK: - Feed Tab Model
+
+/// Represents the different feed tab types
+enum FeedTab: Identifiable, Hashable {
+    case forYou              // Recommended/trending posts (algo=v2)
+    case following           // Posts from followed users (algo=ch)
+    case interest(String)    // Interest-based channel
+
+    var id: String {
+        switch self {
+        case .forYou: return "for_you"
+        case .following: return "following"
+        case .interest(let name): return "interest_\(name)"
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .forYou: return "For You"
+        case .following: return "Following"
+        case .interest(let name): return name
+        }
+    }
+
+    /// The feed algorithm to use for this tab
+    var algorithm: FeedAlgorithm {
+        switch self {
+        case .forYou: return .recommended
+        case .following: return .chronological
+        case .interest: return .recommended  // Interests use recommended with channel filter
+        }
+    }
+
+    /// The channel ID to filter by (nil for For You and Following)
+    var channelId: String? {
+        switch self {
+        case .forYou, .following: return nil
+        case .interest(let name): return name.lowercased()
+        }
+    }
+}
+
 // MARK: - HomeView
 
 struct HomeView: View {
@@ -29,10 +71,17 @@ struct HomeView: View {
     @State private var showPostDetail = false
     @State private var showChannelBar = true
     @State private var lastScrollOffset: CGFloat = 0
-    @State private var selectedChannel: String = "Fashion"
+    @State private var selectedTab: FeedTab = .forYou
 
-    // Channel 列表
-    private let channels = ["Fashion", "Travel", "Fitness", "Pets", "Study", "Career", "Tech", "Art"]
+    // Interest channels (after For You and Following)
+    private let interestChannels = ["Fashion", "Travel", "Fitness", "Pets", "Study", "Career", "Tech", "Art"]
+
+    // All feed tabs: For You, Following, then interests
+    private var allTabs: [FeedTab] {
+        var tabs: [FeedTab] = [.forYou, .following]
+        tabs.append(contentsOf: interestChannels.map { .interest($0) })
+        return tabs
+    }
 
     var body: some View {
         ZStack {
@@ -130,9 +179,9 @@ struct HomeView: View {
             }
         }
         .onAppear {
-            // Load feed when view appears
+            // Load feed when view appears with the correct algorithm for selected tab
             if feedViewModel.posts.isEmpty {
-                Task { await feedViewModel.loadFeed() }
+                Task { await feedViewModel.loadFeed(algorithm: selectedTab.algorithm) }
             }
         }
     }
@@ -156,8 +205,9 @@ struct HomeView: View {
                         Button(action: { showSearch = true }) {
                             Image(systemName: "magnifyingglass")
                                 .font(.system(size: 22, weight: .regular))
-                                .frame(width: 24, height: 24)
                                 .foregroundColor(DesignTokens.textPrimary)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                         }
                         Spacer()
                         Image("Icered-icon")
@@ -170,8 +220,9 @@ struct HomeView: View {
                         Button(action: { showNotification = true }) {
                             Image(systemName: "bell")
                                 .font(.system(size: 22, weight: .regular))
-                                .frame(width: 24, height: 24)
                                 .foregroundColor(DesignTokens.textPrimary)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                         }
                     }
                     .frame(width: 343)
@@ -187,13 +238,14 @@ struct HomeView: View {
 
                 // MARK: - 内容区域（固定背景 + 滚动内容）
                 ZStack(alignment: .top) {
-                    // 固定背景图片
+                    // 固定背景图片 - disable hit testing to allow touches to pass through
                     Image("promo-banner-bg")
                         .resizable()
                         .scaledToFill()
                         .frame(height: 220)
                         .frame(maxWidth: .infinity)
                         .clipped()
+                        .allowsHitTesting(false)
 
                     // 可滚动内容区
                     ScrollView {
@@ -342,39 +394,29 @@ struct HomeView: View {
 
     // MARK: - Channel Bar
     private var channelBar: some View {
-        ZStack {
-            // 白色背景（无阴影）
-            Rectangle()
-                .fill(.white)
-
-            HStack(spacing: 0) {
-                // 可滚动的 Channel 列表
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 28) {
-                        ForEach(channels, id: \.self) { channel in
-                            Button(action: {
-                                selectedChannel = channel
-                                // TODO: 根据 channel 筛选 feed
-                            }) {
-                                Text(channel)
-                                    .font(.custom("SF Pro Display", size: 14))
-                                    .foregroundColor(selectedChannel == channel ? .black : Color(red: 0.53, green: 0.53, blue: 0.53))
-                                    .fontWeight(selectedChannel == channel ? .semibold : .regular)
-                            }
-                        }
+        // Scrollable tabs with background and gradient overlay
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 24) {
+                ForEach(allTabs) { tab in
+                    Button(action: {
+                        selectTab(tab)
+                    }) {
+                        Text(tab.displayName)
+                            .font(.custom("SF Pro Display", size: 14))
+                            .foregroundColor(selectedTab == tab ? .black : Color(red: 0.53, green: 0.53, blue: 0.53))
+                            .fontWeight(selectedTab == tab ? .semibold : .regular)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.trailing, 60) // 为右侧渐变留出空间
                 }
-
-                Spacer(minLength: 0)
             }
-
-            // 右侧渐变遮罩 + 箭头
+            .padding(.horizontal, 16)
+            .padding(.trailing, 60) // Space for gradient + button
+        }
+        .frame(height: 36)
+        .background(.white)
+        // Gradient overlay on the right side (doesn't block scroll/tap)
+        .overlay(alignment: .trailing) {
             HStack(spacing: 0) {
-                Spacer()
-
-                // 渐变遮罩
+                // Gradient fade
                 LinearGradient(
                     gradient: Gradient(colors: [
                         Color.white.opacity(0),
@@ -385,8 +427,9 @@ struct HomeView: View {
                     endPoint: .trailing
                 )
                 .frame(width: 60)
+                .allowsHitTesting(false)
 
-                // 箭头按钮
+                // Arrow button
                 Button(action: {
                     // TODO: 展开更多 channels
                 }) {
@@ -398,7 +441,6 @@ struct HomeView: View {
                 .background(.white)
             }
         }
-        .frame(height: 36)
         // 只在底部添加阴影
         .overlay(alignment: .bottom) {
             Rectangle()
@@ -414,6 +456,23 @@ struct HomeView: View {
                 )
                 .frame(height: 4)
                 .offset(y: 4)
+        }
+    }
+
+    // MARK: - Tab Selection Handler
+    private func selectTab(_ tab: FeedTab) {
+        guard selectedTab != tab else { return }
+        selectedTab = tab
+
+        // Switch feed algorithm based on tab type:
+        // - For You: recommended algorithm (v2)
+        // - Following: chronological algorithm (ch) - shows posts from followed users
+        // - Interests: recommended algorithm with channel filter
+        Task {
+            // First set the channel filter (will be used by loadFeed)
+            feedViewModel.selectedChannelId = tab.channelId
+            // Then load feed with the appropriate algorithm
+            await feedViewModel.loadFeed(algorithm: tab.algorithm, forceRefresh: true)
         }
     }
 

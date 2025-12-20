@@ -313,8 +313,9 @@ class FeedService {
 // MARK: - Feed Algorithm
 
 enum FeedAlgorithm: String {
-    case chronological = "ch"
-    case timeBased = "time"
+    case chronological = "ch"      // Following feed: posts from followed users
+    case recommended = "v2"         // For You feed: recommended/trending posts
+    case timeBased = "time"         // Legacy time-based algorithm
 }
 
 // MARK: - Response Models

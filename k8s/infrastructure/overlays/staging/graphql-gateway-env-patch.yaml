@@ -54,7 +54,7 @@ spec:
         # Notification and Graph services (now using GrpcConfig)
         # ============================================================
         - name: GRPC_NOTIFICATION_SERVICE_URL
-          value: "http://notification-service.nova-staging.svc.cluster.local:9093"
+          value: "http://notification-service.nova-staging.svc.cluster.local:9080"
         - name: GRPC_GRAPH_SERVICE_URL
           value: "https://graph-service.nova-staging.svc.cluster.local:9080"
 

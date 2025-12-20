@@ -647,56 +647,8 @@ struct ChatView: View {
                     }
                 }
 
-                // Voice Recording UI or Text Input
-                if isRecordingVoice {
-                    // Recording indicator
+                // Text Input (voice recording is handled by the mic button)
                     HStack(spacing: 8) {
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 10, height: 10)
-                            .opacity(audioRecorder.isRecording ? 1.0 : 0.3)
-                            .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: audioRecorder.isRecording)
-
-                        Text(formatDuration(audioRecorder.recordingDuration))
-                            .font(Font.custom("Helvetica Neue", size: 16).monospacedDigit())
-                            .foregroundColor(DesignTokens.textPrimary)
-
-                        // Audio level visualization
-                        HStack(spacing: 2) {
-                            ForEach(0..<8, id: \.self) { index in
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(Color.red.opacity(0.7))
-                                    .frame(width: 3, height: max(4, CGFloat(audioRecorder.audioLevel) * 20 * CGFloat.random(in: 0.5...1.5)))
-                                    .animation(.easeInOut(duration: 0.1), value: audioRecorder.audioLevel)
-                            }
-                        }
-                        .frame(height: 20)
-
-                        Spacer()
-
-                        // Cancel recording button
-                        Button(action: {
-                            cancelVoiceRecording()
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundColor(DesignTokens.textMuted)
-                        }
-                    }
-                    .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-                    .background(Color.red.opacity(0.1))
-                    .cornerRadius(26)
-                } else {
-                    HStack(spacing: 8) {
-                        // Microphone button for voice recording
-                        Button(action: {
-                            startVoiceRecording()
-                        }) {
-                            Image(systemName: "waveform")
-                                .font(.system(size: 14))
-                                .foregroundColor(DesignTokens.textMuted)
-                        }
-
                         TextField("Type a message...", text: $messageText)
                             .font(Font.custom("Helvetica Neue", size: 16))
                             .foregroundColor(DesignTokens.textPrimary)
@@ -723,26 +675,26 @@ struct ChatView: View {
                             showAttachmentOptions = false
                         }
                     }
-                }
 
-                // Send button (text message or voice message)
-                Button(action: {
-                    if isRecordingVoice {
-                        stopAndSendVoiceMessage()
-                    } else {
+                // Send button or Voice Record button
+                if messageText.isEmpty {
+                    // Press-and-hold voice record button
+                    voiceRecordButton
+                } else {
+                    // Send text message button
+                    Button(action: {
                         sendMessage()
+                    }) {
+                        Circle()
+                            .fill(Color(red: 0.91, green: 0.18, blue: 0.30))
+                            .frame(width: 33, height: 33)
+                            .overlay(
+                                Image(systemName: "paperplane.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.white)
+                            )
                     }
-                }) {
-                    Circle()
-                        .fill(isRecordingVoice ? Color.red : (messageText.isEmpty ? Color.gray : Color(red: 0.91, green: 0.18, blue: 0.30)))
-                        .frame(width: 33, height: 33)
-                        .overlay(
-                            Image(systemName: isRecordingVoice ? "stop.fill" : "paperplane.fill")
-                                .font(.system(size: 14))
-                                .foregroundColor(.white)
-                        )
                 }
-                .disabled(!isRecordingVoice && messageText.isEmpty)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -809,6 +761,96 @@ struct ChatView: View {
         }
         .frame(maxWidth: .infinity)
         .background(DesignTokens.attachmentBackground)
+    }
+
+    // MARK: - 按住录音按钮
+    /// 按住錄音、放開發送、向上滑動取消
+    @State private var voiceRecordDragOffset: CGFloat = 0
+    private let voiceCancelThreshold: CGFloat = -60
+
+    private var voiceRecordButton: some View {
+        ZStack {
+            // 錄音中的背景脈衝動畫
+            if isRecordingVoice {
+                Circle()
+                    .fill(Color.red.opacity(0.2))
+                    .frame(width: 50, height: 50)
+                    .scaleEffect(audioRecorder.audioLevel > 0.3 ? 1.3 : 1.0)
+                    .animation(.easeInOut(duration: 0.2), value: audioRecorder.audioLevel)
+            }
+
+            // 主按鈕
+            Circle()
+                .fill(isRecordingVoice ? Color.red : Color.gray.opacity(0.3))
+                .frame(width: 33, height: 33)
+                .overlay(
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(isRecordingVoice ? .white : DesignTokens.textMuted)
+                )
+                .scaleEffect(isRecordingVoice ? 1.2 : 1.0)
+                .offset(y: voiceRecordDragOffset)
+                .animation(.spring(response: 0.3), value: isRecordingVoice)
+
+            // 取消提示
+            if isRecordingVoice && voiceRecordDragOffset < voiceCancelThreshold {
+                VStack {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.red)
+                    Text("Release to Cancel")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+                .offset(y: -70)
+                .transition(.opacity)
+            }
+
+            // 錄音時間顯示
+            if isRecordingVoice {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 8, height: 8)
+
+                    Text(formatDuration(audioRecorder.recordingDuration))
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundColor(.red)
+                }
+                .offset(x: -80)
+                .transition(.opacity)
+            }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    handleVoiceRecordDragChanged(value)
+                }
+                .onEnded { value in
+                    handleVoiceRecordDragEnded(value)
+                }
+        )
+    }
+
+    private func handleVoiceRecordDragChanged(_ value: DragGesture.Value) {
+        // 開始錄音
+        if !isRecordingVoice {
+            startVoiceRecording()
+        }
+
+        // 追蹤拖動以支持取消手勢
+        voiceRecordDragOffset = min(0, value.translation.height)
+    }
+
+    private func handleVoiceRecordDragEnded(_ value: DragGesture.Value) {
+        // 檢查是否應該取消
+        if voiceRecordDragOffset < voiceCancelThreshold {
+            cancelVoiceRecording()
+        } else if isRecordingVoice {
+            stopAndSendVoiceMessage()
+        }
+
+        voiceRecordDragOffset = 0
     }
 
     // MARK: - 事件处理
