@@ -26,11 +26,14 @@ struct SearchView: View {
                                 .font(.system(size: 15))
                                 .foregroundColor(DesignTokens.textPrimary)
                                 .focused($isSearchFocused)
+                                .accessibilityLabel("Search field")
+                                .accessibilityHint("Enter text to search for users or content")
                         }
                         .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
                         .frame(height: 32)
                         .background(DesignTokens.inputBackground)
                         .cornerRadius(37)
+                        .accessibilityElement(children: .contain)
 
                         // 取消按钮
                         Button(action: {
@@ -41,6 +44,8 @@ struct SearchView: View {
                                 .foregroundColor(DesignTokens.textPrimary)
                         }
                         .frame(width: 44)
+                        .accessibilityLabel("Cancel")
+                        .accessibilityHint("Close search and return to previous screen")
                     }
                     .frame(height: DesignTokens.topBarHeight)
                     .padding(.horizontal, 16)
@@ -112,6 +117,10 @@ struct SearchResultItem: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(DesignTokens.surface)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Search Result, Description")
+        .accessibilityHint("Tap to view details")
+        .accessibilityAddTraits(.isButton)
     }
 }
 

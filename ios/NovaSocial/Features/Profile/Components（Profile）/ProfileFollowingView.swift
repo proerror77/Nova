@@ -398,14 +398,9 @@ struct ProfileFollowingView: View {
     private var followingContent: some View {
         LazyVStack(spacing: 0) {
             if isLoadingFollowing {
-                VStack(spacing: 12) {
-                    ProgressView()
-                    Text("載入中...")
-                        .font(.system(size: 14))
-                        .foregroundColor(.gray)
+                SkeletonListLoader(itemCount: 5) {
+                    AnyView(UserRowSkeleton())
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 40)
             } else if let error = followingError {
                 // 錯誤狀態
                 VStack(spacing: 16) {
@@ -467,14 +462,9 @@ struct ProfileFollowingView: View {
     private var followersContent: some View {
         LazyVStack(spacing: 0) {
             if isLoadingFollowers {
-                VStack(spacing: 12) {
-                    ProgressView()
-                    Text("載入中...")
-                        .font(.system(size: 14))
-                        .foregroundColor(.gray)
+                SkeletonListLoader(itemCount: 5) {
+                    AnyView(UserRowSkeleton())
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 40)
             } else if let error = followersError {
                 // 錯誤狀態
                 VStack(spacing: 16) {

@@ -14,6 +14,7 @@ struct LoginView: View {
     @State private var isAppleLoading = false
     @State private var errorMessage: String?
     @State private var showPassword = false
+    @State private var showErrorView = false
 
     // MARK: - Validation State
     @State private var emailError: String?
@@ -43,51 +44,67 @@ struct LoginView: View {
 
                 // Main Content
                 VStack(spacing: 0) {
-                    Spacer()
+                    if showErrorView, let error = errorMessage {
+                        // Full-screen error view with retry
+                        VStack {
+                            Spacer()
+                            ErrorStateView(
+                                errorMessage: error,
+                                onRetry: {
+                                    showErrorView = false
+                                    errorMessage = nil
+                                    await handleLogin()
+                                }
+                            )
+                            Spacer()
+                        }
+                    } else {
+                        Spacer()
 
-                    // Logo Section
-                    logoSection
+                        // Logo Section
+                        logoSection
 
-                    Spacer()
-                        .frame(height: 50)
+                        Spacer()
+                            .frame(height: 50)
 
-                    // Input Fields Section
-                    inputFieldsSection
+                        // Input Fields Section
+                        inputFieldsSection
 
-                    Spacer()
-                        .frame(height: 32)
+                        Spacer()
+                            .frame(height: 32)
 
-                    // Login Button
-                    loginButton
+                        // Login Button
+                        loginButton
 
-                    Spacer()
-                        .frame(height: 24)
+                        Spacer()
+                            .frame(height: 24)
 
-                    // "or" separator
-                    Text("or")
-                        .font(Typography.regular14)
-                        .tracking(LetterSpacing.regular14)
-                        .foregroundColor(.white)
+                        // "or" separator
+                        Text("or")
+                            .font(Typography.regular14)
+                            .tracking(LetterSpacing.regular14)
+                            .foregroundColor(.white)
 
-                    Spacer()
-                        .frame(height: 24)
+                        Spacer()
+                            .frame(height: 24)
 
-                    // Social Login Buttons
-                    socialLoginButtons
+                        // Social Login Buttons
+                        socialLoginButtons
 
-                    Spacer()
-                        .frame(height: 40)
+                        Spacer()
+                            .frame(height: 40)
 
-                    // Create Account Link
-                    createAccountLink
+                        // Create Account Link
+                        createAccountLink
 
-                    Spacer()
+                        Spacer()
 
-                    // Terms and Privacy Links
-                    termsAndPrivacyLinks
+                        // Terms and Privacy Links
+                        termsAndPrivacyLinks
 
-                    Spacer()
-                        .frame(height: 20)
+                        Spacer()
+                            .frame(height: 20)
+                    }
                 }
             }
             .contentShape(Rectangle())
@@ -395,6 +412,7 @@ struct LoginView: View {
 
         isLoading = true
         errorMessage = nil
+        showErrorView = false
 
         do {
             _ = try await authManager.login(
@@ -405,11 +423,14 @@ struct LoginView: View {
         } catch {
             // Provide user-friendly error messages
             if error.localizedDescription.contains("401") || error.localizedDescription.contains("Unauthorized") {
-                errorMessage = "Invalid_email_or_password"
+                errorMessage = "Invalid email or password. Please check your credentials and try again."
+                showErrorView = true
             } else if error.localizedDescription.contains("network") || error.localizedDescription.contains("connection") {
-                errorMessage = "Network_error"
+                errorMessage = "Unable to connect to the server. Please check your internet connection and try again."
+                showErrorView = true
             } else {
-                errorMessage = "Login_failed"
+                errorMessage = "Login failed. Please try again later."
+                showErrorView = true
             }
             #if DEBUG
             print("[LoginView] Login error: \(error)")

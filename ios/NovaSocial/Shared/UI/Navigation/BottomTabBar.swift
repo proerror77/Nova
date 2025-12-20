@@ -33,6 +33,10 @@ struct BottomTabBar: View {
             .onTapGesture {
                 currentPage = .home
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Home")
+            .accessibilityHint("Navigate to home feed")
+            .accessibilityAddTraits(isHome ? [.isButton, .isSelected] : .isButton)
 
             // Message
             VStack(spacing: DesignTokens.spacing4) {
@@ -48,6 +52,10 @@ struct BottomTabBar: View {
             .onTapGesture {
                 currentPage = .message
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Messages")
+            .accessibilityHint("View your messages and conversations")
+            .accessibilityAddTraits(isMessage ? [.isButton, .isSelected] : .isButton)
 
             // New Post
             NewPostButtonComponent(
@@ -73,6 +81,10 @@ struct BottomTabBar: View {
             .onTapGesture {
                 currentPage = .alice
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Alice AI")
+            .accessibilityHint("Chat with Alice AI assistant")
+            .accessibilityAddTraits(isAlice ? [.isButton, .isSelected] : .isButton)
 
             // Account
             VStack(spacing: 0) {
@@ -123,6 +135,10 @@ struct BottomTabBar: View {
             .onTapGesture {
                 currentPage = .account
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Account")
+            .accessibilityHint("View your profile and account settings")
+            .accessibilityAddTraits(isAccount ? [.isButton, .isSelected] : .isButton)
         }
         .frame(height: DesignTokens.bottomBarHeight)
         .padding(.bottom, 30) // ← 调整底部留白
@@ -170,6 +186,10 @@ struct NewPostButtonComponent: View {
                 isPressed = false
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Create new post")
+        .accessibilityHint("Create a new post with photos or text")
+        .accessibilityAddTraits(.isButton)
     }
 }
 

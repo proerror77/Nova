@@ -24,6 +24,8 @@ struct SettingsView: View {
                             .frame(width: 24, height: 24)
                             .foregroundColor(DesignTokens.textPrimary)
                     }
+                    .accessibilityLabel("Back")
+                    .accessibilityHint("Return to account screen")
 
                     Spacer()
 
@@ -72,6 +74,9 @@ struct SettingsView: View {
                                     .padding(.horizontal, 20)
                                     .padding(.vertical, 16)
                                 }
+                                .accessibilityLabel("Choose account")
+                                .accessibilityHint(isPostAsExpanded ? "Collapse account options" : "Expand to choose which account to post as")
+                                .accessibilityAddTraits(.isButton)
 
                                 // 展开的选择面板 - 使用高度动画
                                 PostAsSelectionPanel(
@@ -101,6 +106,8 @@ struct SettingsView: View {
                                         currentPage = .devices
                                     }
                                 )
+                                .accessibilityLabel("Devices")
+                                .accessibilityHint("Manage your connected devices")
 
                                 Divider()
                                     .padding(.leading, 60)
@@ -113,6 +120,8 @@ struct SettingsView: View {
                                         currentPage = .inviteFriends
                                     }
                                 )
+                                .accessibilityLabel("Invite Friends")
+                                .accessibilityHint("Share Nova Social with your friends")
 
                                 Divider()
                                     .padding(.leading, 60)
@@ -125,6 +134,8 @@ struct SettingsView: View {
                                         currentPage = .myChannels
                                     }
                                 )
+                                .accessibilityLabel("My Channels")
+                                .accessibilityHint("View and manage your channels")
                             }
                             .background(DesignTokens.surface)
                             .cornerRadius(8)
@@ -160,6 +171,8 @@ struct SettingsView: View {
                                         .onChange(of: viewModel.isDarkMode) { _, newValue in
                                             Task { await viewModel.updateDarkMode(enabled: newValue) }
                                         }
+                                        .accessibilityLabel("Dark Mode")
+                                        .accessibilityHint(viewModel.isDarkMode ? "Turn off dark mode" : "Turn on dark mode")
                                 }
                             }
                             .padding(.horizontal, 20)
@@ -176,6 +189,7 @@ struct SettingsView: View {
                                 guard !viewModel.isSavingDarkMode else { return }
                                 viewModel.isDarkMode.toggle()
                             }
+                            .accessibilityElement(children: .contain)
                         }
                         .padding(.horizontal, 12)
 
@@ -212,6 +226,8 @@ struct SettingsView: View {
                                             }
                                         }
                                     }
+                                    .accessibilityLabel("Push Notifications")
+                                    .accessibilityHint(isPushEnabled ? "Disable push notifications" : "Enable push notifications")
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
@@ -226,6 +242,7 @@ struct SettingsView: View {
                             .onTapGesture {
                                 isPushEnabled.toggle()
                             }
+                            .accessibilityElement(children: .contain)
                         }
                         .padding(.horizontal, 12)
                         .onAppear {
@@ -264,6 +281,8 @@ struct SettingsView: View {
                                     .stroke(Color(red: 0.68, green: 0.68, blue: 0.68).opacity(0.3), lineWidth: 0.5)
                             )
                             .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+                            .accessibilityLabel("Sign Out")
+                            .accessibilityHint("Sign out of your account")
                         }
                         .padding(.horizontal, 12)
                     }

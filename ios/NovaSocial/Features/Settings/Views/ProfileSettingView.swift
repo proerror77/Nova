@@ -34,8 +34,16 @@ struct ProfileSettingView: View {
 
                 if viewModel.isLoading {
                     Spacer()
-                    ProgressView(LocalizedStringKey("Loading messages..."))
+                    ProgressView(LocalizedStringKey("Loading profile..."))
                     Spacer()
+                } else if let error = viewModel.errorMessage {
+                    // Show error state with retry
+                    ErrorStateView(
+                        errorMessage: error,
+                        onRetry: {
+                            viewModel.onAppear()
+                        }
+                    )
                 } else {
                     ScrollView {
                         VStack(spacing: 12) {
@@ -66,8 +74,8 @@ struct ProfileSettingView: View {
                             }
                             .padding(.horizontal, 12)
 
-                            // Error message
-                            if let error = viewModel.errorMessage ?? viewModel.validationError {
+                            // Validation error message (inline errors, not full-screen)
+                            if let error = viewModel.validationError {
                                 Text(error)
                                     .font(.system(size: 14))
                                     .foregroundColor(.red)

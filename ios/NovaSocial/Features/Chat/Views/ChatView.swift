@@ -113,6 +113,8 @@ struct VoiceMessageView: View {
                             .foregroundColor(.white)
                     )
             }
+            .accessibilityLabel(isCurrentlyPlaying ? "Pause" : "Play")
+            .accessibilityHint(isCurrentlyPlaying ? "Pause voice message playback" : "Play voice message")
             HStack(spacing: 2) {
                 ForEach(0..<12, id: \.self) { _ in
                     RoundedRectangle(cornerRadius: 1)
@@ -127,6 +129,8 @@ struct VoiceMessageView: View {
         .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 16))
         .background(isFromMe ? Color(red: 0.91, green: 0.18, blue: 0.30) : DesignTokens.chatBubbleOther)
         .cornerRadius(20)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Voice message, duration \(formattedDuration)")
     }
 
     private var isCurrentlyPlaying: Bool { audioPlayer.playingMessageId == message.id && audioPlayer.isPlaying }
@@ -176,7 +180,10 @@ struct MessageBubbleView: View {
             Spacer()
             messageContent
             DefaultAvatarView(size: 40)
-        }.padding(.horizontal, 16)
+        }
+        .padding(.horizontal, 16)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(messageAccessibilityLabel(isFromMe: true))
     }
 
     private var otherMessageView: some View {
@@ -184,7 +191,23 @@ struct MessageBubbleView: View {
             DefaultAvatarView(size: 40)
             otherMessageContent
             Spacer()
-        }.padding(.horizontal, 16)
+        }
+        .padding(.horizontal, 16)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(messageAccessibilityLabel(isFromMe: false))
+    }
+
+    private func messageAccessibilityLabel(isFromMe: Bool) -> String {
+        let sender = isFromMe ? "You" : "Other person"
+        if message.image != nil {
+            return "\(sender) sent an image"
+        } else if message.location != nil {
+            return "\(sender) shared a location"
+        } else if message.audioData != nil || message.audioUrl != nil {
+            return "\(sender) sent a voice message"
+        } else {
+            return "\(sender) said: \(message.text)"
+        }
     }
 
     @ViewBuilder private var messageContent: some View {
@@ -232,7 +255,13 @@ struct AttachmentOptionButton: View {
                 Image(systemName: icon).font(.system(size: 24)).foregroundColor(DesignTokens.textPrimary)
             }
             Text(title).font(.system(size: 12)).lineSpacing(20).foregroundColor(DesignTokens.textPrimary)
-        }.frame(width: 60).onTapGesture { action() }
+        }
+        .frame(width: 60)
+        .onTapGesture { action() }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
+        .accessibilityHint("Attach \(title.lowercased()) to message")
+        .accessibilityAddTraits(.isButton)
     }
 }
 
@@ -433,6 +462,8 @@ struct ChatView: View {
                     .frame(width: 24, height: 24)
                     .foregroundColor(DesignTokens.textPrimary)
             }
+            .accessibilityLabel("Back")
+            .accessibilityHint("Return to messages list")
 
             HStack(spacing: 13) {
                 // 头像 - alice 使用自定义图片，其他用户使用默认头像
@@ -472,6 +503,10 @@ struct ChatView: View {
                     showUserProfile = true
                 }
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Chat with \(userName)")
+            .accessibilityHint("View user profile")
+            .accessibilityAddTraits(.isButton)
 
             Spacer()
         }
@@ -504,26 +539,24 @@ struct ChatView: View {
 
                     // 加载状态指示器
                     if isLoadingHistory {
-                        ProgressView("Loading messages...")
-                            .padding()
+                        VStack(spacing: 16) {
+                            MessageRowSkeleton(isFromMe: false)
+                            MessageRowSkeleton(isFromMe: true)
+                            MessageRowSkeleton(isFromMe: false)
+                            MessageRowSkeleton(isFromMe: false)
+                            MessageRowSkeleton(isFromMe: true)
+                        }
+                        .padding(.top, 16)
                     }
 
-                    // 错误提示
+                    // 错误提示 - 使用统一的 ErrorStateView
                     if let error = error {
-                        VStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle")
-                                .font(.system(size: 30))
-                                .foregroundColor(.orange)
-                            Text(error)
-                                .font(.system(size: 14))
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                            Button("Retry") {
-                                Task { await loadChatData() }
+                        ErrorStateView(
+                            errorMessage: error,
+                            onRetry: {
+                                await loadChatData()
                             }
-                            .buttonStyle(.bordered)
-                        }
-                        .padding()
+                        )
                     }
 
                     Text(currentDateString())
@@ -618,6 +651,8 @@ struct ChatView: View {
                             .foregroundColor(Color(red: 0.91, green: 0.18, blue: 0.30))
                     }
                 }
+                .accessibilityLabel(showAttachmentOptions ? "Close attachments" : "Add attachment")
+                .accessibilityHint(showAttachmentOptions ? "Close attachment options" : "Show options to attach photos, camera, or location")
 
                 // Voice Recording UI or Text Input
                 if isRecordingVoice {
@@ -654,10 +689,14 @@ struct ChatView: View {
                                 .font(.system(size: 24))
                                 .foregroundColor(DesignTokens.textMuted)
                         }
+                        .accessibilityLabel("Cancel recording")
+                        .accessibilityHint("Cancel voice message recording")
                     }
                     .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
                     .background(Color.red.opacity(0.1))
                     .cornerRadius(26)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel("Recording voice message, duration \(formatDuration(audioRecorder.recordingDuration))")
                 } else {
                     HStack(spacing: 8) {
                         // Microphone button for voice recording
@@ -668,6 +707,8 @@ struct ChatView: View {
                                 .font(.system(size: 14))
                                 .foregroundColor(DesignTokens.textMuted)
                         }
+                        .accessibilityLabel("Record voice message")
+                        .accessibilityHint("Start recording a voice message")
 
                         TextField("Type a message...", text: $messageText)
                             .font(Font.custom("Helvetica Neue", size: 16))
@@ -686,6 +727,8 @@ struct ChatView: View {
                                     Task { try? await matrixBridge.setTyping(conversationId: conversationId, isTyping: false) }
                                 }
                             }
+                            .accessibilityLabel("Message input field")
+                            .accessibilityHint("Enter your message to send")
                     }
                     .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
                     .background(DesignTokens.inputBackground)
@@ -695,6 +738,7 @@ struct ChatView: View {
                             showAttachmentOptions = false
                         }
                     }
+                    .accessibilityElement(children: .contain)
                 }
 
                 // Send button (text message or voice message)
@@ -715,6 +759,8 @@ struct ChatView: View {
                         )
                 }
                 .disabled(!isRecordingVoice && messageText.isEmpty)
+                .accessibilityLabel(isRecordingVoice ? "Stop and send" : "Send message")
+                .accessibilityHint(isRecordingVoice ? "Stop recording and send voice message" : "Send the message")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -750,6 +796,8 @@ struct ChatView: View {
                     }
                     .frame(width: 60)
                 }
+                .accessibilityLabel("Album")
+                .accessibilityHint("Choose photo from album to attach")
 
                 AttachmentOptionButton(icon: "camera", title: "Camera") {
                     showAttachmentOptions = false
@@ -966,11 +1014,13 @@ struct ChatView: View {
                 print("[ChatView] ✅ Message sent via Matrix: room=\(conversationId)")
                 #endif
             } catch {
-                // Send failed - mark message as failed (TODO: add retry UI)
+                // Send failed - show error message with retry option
                 #if DEBUG
                 print("[ChatView] Failed to send message: \(error)")
                 #endif
-                // Could remove failed message or add retry button here
+                await MainActor.run {
+                    self.error = "Failed to send message: \(error.localizedDescription)"
+                }
             }
             isSending = false
         }

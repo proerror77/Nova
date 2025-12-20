@@ -341,13 +341,9 @@ struct ProfileFollowersView: View {
     private var followersContent: some View {
         VStack(spacing: 0) {
             if isLoadingFollowers {
-                VStack(spacing: 12) {
-                    ProgressView()
-                    Text("載入中...")
-                        .font(.system(size: 14))
-                        .foregroundColor(.gray)
+                SkeletonListLoader(itemCount: 5) {
+                    AnyView(UserRowSkeleton())
                 }
-                .padding(.top, 40)
             } else if let error = followersError {
                 // 錯誤狀態
                 VStack(spacing: 16) {
@@ -449,13 +445,9 @@ struct ProfileFollowersView: View {
     private var followingContent: some View {
         VStack(spacing: 0) {
             if isLoadingFollowing {
-                VStack(spacing: 12) {
-                    ProgressView()
-                    Text("載入中...")
-                        .font(.system(size: 14))
-                        .foregroundColor(.gray)
+                SkeletonListLoader(itemCount: 5) {
+                    AnyView(UserRowSkeleton())
                 }
-                .padding(.top, 40)
             } else if let error = followingError {
                 // 錯誤狀態
                 VStack(spacing: 16) {

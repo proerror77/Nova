@@ -20,6 +20,7 @@ struct CreateAccountView: View {
     @State private var showConfirmPassword = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var selectedAvatar: UIImage?
+    @State private var showErrorView = false
 
     // MARK: - Focus State
     @FocusState private var focusedField: Field?
@@ -53,12 +54,27 @@ struct CreateAccountView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // 使用固定高度替代Spacer，防止键盘推动布局
-                Color.clear
-                    .frame(height: max(0, (UIScreen.main.bounds.height - 812) / 2))
+                if showErrorView, let error = errorMessage {
+                    // Full-screen error view with retry
+                    VStack {
+                        Spacer()
+                        ErrorStateView(
+                            errorMessage: error,
+                            onRetry: {
+                                showErrorView = false
+                                errorMessage = nil
+                                await handleRegister()
+                            }
+                        )
+                        Spacer()
+                    }
+                } else {
+                    // 使用固定高度替代Spacer，防止键盘推动布局
+                    Color.clear
+                        .frame(height: max(0, (UIScreen.main.bounds.height - 812) / 2))
 
-                // Main Content
-                ZStack {
+                    // Main Content
+                    ZStack {
                     Group {
                         // Profile Picture Circle - 显示选择的头像或默认头像
                         AvatarView(image: selectedAvatar, url: nil, size: 136)
@@ -382,12 +398,13 @@ struct CreateAccountView: View {
                                 .offset(x: 0, y: 100)
                         }
                     }
-                }
-                .frame(width: 375, height: 812)
+                    }
+                    .frame(width: 375, height: 812)
 
-                // 使用固定高度替代Spacer，防止键盘推动布局
-                Color.clear
-                    .frame(height: max(0, (UIScreen.main.bounds.height - 812) / 2))
+                    // 使用固定高度替代Spacer，防止键盘推动布局
+                    Color.clear
+                        .frame(height: max(0, (UIScreen.main.bounds.height - 812) / 2))
+                }
             }
             .contentShape(Rectangle())
             .onTapGesture {
@@ -421,6 +438,7 @@ struct CreateAccountView: View {
 
         isLoading = true
         errorMessage = nil
+        showErrorView = false
 
         let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -457,13 +475,17 @@ struct CreateAccountView: View {
 
             // Provide user-friendly error messages
             if error.localizedDescription.contains("409") || error.localizedDescription.contains("already exists") {
-                errorMessage = "Username_or_email_exists"
+                errorMessage = "This username or email is already registered. Please try a different one."
+                showErrorView = true
             } else if error.localizedDescription.contains("network") || error.localizedDescription.contains("connection") {
-                errorMessage = "Network_error"
+                errorMessage = "Unable to connect to the server. Please check your internet connection and try again."
+                showErrorView = true
             } else if error.localizedDescription.contains("invite") || error.localizedDescription.contains("code") {
-                errorMessage = "Invalid_invite_code"
+                errorMessage = "Invalid invite code. Please check your code and try again."
+                showErrorView = true
             } else {
-                errorMessage = String(format: NSLocalizedString("Registration_failed", comment: ""), error.localizedDescription)
+                errorMessage = "Registration failed. Please try again later."
+                showErrorView = true
             }
         }
 

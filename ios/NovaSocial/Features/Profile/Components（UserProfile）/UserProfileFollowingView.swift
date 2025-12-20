@@ -344,8 +344,9 @@ struct UserProfileFollowingView: View {
     private var followingContent: some View {
         LazyVStack(spacing: 0) {
             if isLoadingFollowing {
-                ProgressView()
-                    .padding(.top, 40)
+                SkeletonListLoader(itemCount: 5) {
+                    AnyView(UserRowSkeleton())
+                }
             } else if filteredFollowing.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "person.badge.plus")
@@ -378,8 +379,9 @@ struct UserProfileFollowingView: View {
     private var followersContent: some View {
         LazyVStack(spacing: 0) {
             if isLoadingFollowers {
-                ProgressView()
-                    .padding(.top, 40)
+                SkeletonListLoader(itemCount: 5) {
+                    AnyView(UserRowSkeleton())
+                }
             } else if filteredFollowers.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "person.2")
