@@ -202,14 +202,22 @@ async fn main() -> io::Result<()> {
     let connection_manager = Arc::new(ConnectionManager::new());
     tracing::info!("WebSocket connection manager initialized");
 
-    let port = std::env::var("PORT").unwrap_or_else(|_| "8000".to_string());
-    let addr = format!("0.0.0.0:{}", port);
+    // Support both PORT (legacy) and HTTP_PORT/SERVER_PORT (k8s) environment variables
+    let http_port = std::env::var("HTTP_PORT")
+        .or_else(|_| std::env::var("SERVER_PORT"))
+        .or_else(|_| std::env::var("PORT"))
+        .unwrap_or_else(|_| "8000".to_string());
+    let addr = format!("0.0.0.0:{}", http_port);
 
     tracing::info!("Starting HTTP server on {}", addr);
 
-    // Start gRPC server in background on port + 1000
-    let http_port_u16 = port.parse::<u16>().unwrap_or(8000);
-    let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", http_port_u16 + 1000)
+    // Support GRPC_PORT env var, fallback to HTTP port + 1000
+    let http_port_u16 = http_port.parse::<u16>().unwrap_or(8000);
+    let grpc_port = std::env::var("GRPC_PORT")
+        .ok()
+        .and_then(|p| p.parse::<u16>().ok())
+        .unwrap_or(http_port_u16 + 1000);
+    let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", grpc_port)
         .parse()
         .expect("Invalid gRPC address");
 
