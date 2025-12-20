@@ -2,11 +2,25 @@ import SwiftUI
 
 /// Profile 页面的帖子卡片组件
 /// 显示用户头像、用户名、点赞数、图片和内容摘要
-struct ProfilePostCard: View {
+/// 实现 Equatable 以减少不必要的视图重绘
+struct ProfilePostCard: View, Equatable {
     let post: Post
     let username: String
     let avatarUrl: String?
+    var isOwnPost: Bool = false  // 是否为自己的帖子（控制删除选项显示）
     var onTap: (() -> Void)? = nil  // 点击卡片回调
+    var onDelete: (() -> Void)? = nil  // 删除帖子回调
+
+    // Equatable 实现 - 基于关键属性比较，避免不必要的重绘
+    // 注意：回调函数不参与相等性比较
+    static func == (lhs: ProfilePostCard, rhs: ProfilePostCard) -> Bool {
+        lhs.post.id == rhs.post.id &&
+        lhs.post.likeCount == rhs.post.likeCount &&
+        lhs.username == rhs.username &&
+        lhs.avatarUrl == rhs.avatarUrl &&
+        lhs.post.content == rhs.post.content &&
+        lhs.isOwnPost == rhs.isOwnPost
+    }
 
     // 内容摘要（最多显示一定字数）
     private var contentPreview: String {
@@ -43,7 +57,7 @@ struct ProfilePostCard: View {
 
                 Spacer()
 
-                // 右侧：点赞图标 + 数量
+                // 右侧：点赞图标 + 数量 - 使用 Symbol Effects 和 numericText 动画
                 HStack(spacing: 2) {
                     Image(systemName: "heart")
                         .font(.system(size: 8))
@@ -52,6 +66,7 @@ struct ProfilePostCard: View {
                     Text(formattedLikeCount)
                         .font(.system(size: 7))
                         .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        .contentTransition(.numericText())  // iOS 17+ 数字变化动画
                 }
             }
             .padding(.horizontal, 6)
@@ -86,13 +101,38 @@ struct ProfilePostCard: View {
         .onTapGesture {
             onTap?()
         }
+        .contextMenu {
+            // 分享按钮
+            Button {
+                // TODO: Implement share functionality
+            } label: {
+                Label("分享", systemImage: "square.and.arrow.up")
+            }
+
+            // 删除按钮 - 仅对自己的帖子显示
+            if isOwnPost {
+                Divider()
+
+                Button(role: .destructive) {
+                    onDelete?()
+                } label: {
+                    Label("刪除貼文", systemImage: "trash")
+                }
+            }
+        }
     }
 
     // MARK: - Avatar View
+    // 使用 CachedAsyncImage 优化头像加载性能，支持磁盘缓存
     @ViewBuilder
     private var avatarView: some View {
         if let urlString = avatarUrl, let url = URL(string: urlString) {
-            AsyncImage(url: url) { image in
+            CachedAsyncImage(
+                url: url,
+                targetSize: CGSize(width: 34, height: 34),  // 2x for retina
+                enableProgressiveLoading: false,
+                priority: .normal
+            ) { image in
                 image
                     .resizable()
                     .scaledToFill()
@@ -111,25 +151,24 @@ struct ProfilePostCard: View {
     }
 
     // MARK: - Image Section
+    // 使用 CachedAsyncImage 优化帖子图片加载，支持渐进式加载和磁盘缓存
     private var imageSection: some View {
         Group {
             if let mediaUrls = post.mediaUrls, let firstUrl = mediaUrls.first, let url = URL(string: firstUrl) {
-                // 显示真实图片
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        imagePlaceholder
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 158, height: 216)
-                            .clipped()
-                    case .failure:
-                        imagePlaceholder
-                    @unknown default:
-                        imagePlaceholder
-                    }
+                // 显示真实图片 - 使用 CachedAsyncImage 优化性能
+                CachedAsyncImage(
+                    url: url,
+                    targetSize: CGSize(width: 316, height: 432),  // 2x for retina
+                    enableProgressiveLoading: true,
+                    priority: .normal
+                ) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 158, height: 216)
+                        .clipped()
+                } placeholder: {
+                    imagePlaceholder
                 }
             } else {
                 // 占位图

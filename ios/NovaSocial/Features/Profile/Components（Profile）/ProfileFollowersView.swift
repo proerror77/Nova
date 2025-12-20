@@ -533,9 +533,14 @@ struct FollowerRow: View {
 
     var body: some View {
         HStack(spacing: 13) {
-            // 头像
+            // 头像 - 使用 CachedAsyncImage 优化性能
             if let avatarUrl = user.avatarUrl, let url = URL(string: avatarUrl) {
-                AsyncImage(url: url) { image in
+                CachedAsyncImage(
+                    url: url,
+                    targetSize: CGSize(width: 100, height: 100),  // 2x for retina
+                    enableProgressiveLoading: false,
+                    priority: .normal
+                ) { image in
                     image
                         .resizable()
                         .scaledToFill()

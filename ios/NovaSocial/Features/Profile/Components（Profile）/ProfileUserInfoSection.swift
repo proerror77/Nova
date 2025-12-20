@@ -260,19 +260,18 @@ struct ProfileUserInfoSection: View {
                     .frame(width: layout.avatarInnerSize, height: layout.avatarInnerSize)
                     .clipShape(Ellipse())
             } else if let urlString = avatarUrl, let url = URL(string: urlString) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        DefaultAvatarView(size: layout.avatarInnerSize)
-                    case .empty:
-                        ProgressView()
-                    @unknown default:
-                        DefaultAvatarView(size: layout.avatarInnerSize)
-                    }
+                // 使用 CachedAsyncImage 优化头像加载，支持磁盘缓存
+                CachedAsyncImage(
+                    url: url,
+                    targetSize: CGSize(width: layout.avatarInnerSize * 2, height: layout.avatarInnerSize * 2),  // 2x for retina
+                    enableProgressiveLoading: false,
+                    priority: .high
+                ) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    ProgressView()
                 }
                 .frame(width: layout.avatarInnerSize, height: layout.avatarInnerSize)
                 .clipShape(Ellipse())
@@ -284,6 +283,7 @@ struct ProfileUserInfoSection: View {
     }
 
     // MARK: - Stats Item
+    // 使用 contentTransition(.numericText()) 实现数字变化动画
     private func statsItem(label: String, value: String) -> some View {
         VStack(alignment: .center, spacing: 1) {
             Text(LocalizedStringKey(label))
@@ -295,6 +295,7 @@ struct ProfileUserInfoSection: View {
                 .font(.system(size: layout.statsValueFontSize))
                 .lineSpacing(19)
                 .foregroundColor(layout.textColor)
+                .contentTransition(.numericText())  // iOS 17+ 数字变化动画
         }
     }
 }

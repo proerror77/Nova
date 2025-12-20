@@ -124,6 +124,7 @@ struct UserProfileUserInfoSection: View {
     }
 
     // MARK: - Avatar Section
+    // 使用 CachedAsyncImage 优化头像加载，支持磁盘缓存
     private var avatarSection: some View {
         ZStack {
             Circle()
@@ -131,7 +132,12 @@ struct UserProfileUserInfoSection: View {
                 .frame(width: layout.avatarOuterSize, height: layout.avatarOuterSize)
 
             if let urlString = avatarUrl, let url = URL(string: urlString) {
-                AsyncImage(url: url) { image in
+                CachedAsyncImage(
+                    url: url,
+                    targetSize: CGSize(width: layout.avatarInnerSize * 2, height: layout.avatarInnerSize * 2),  // 2x for retina
+                    enableProgressiveLoading: false,
+                    priority: .high
+                ) { image in
                     image
                         .resizable()
                         .scaledToFill()
@@ -149,6 +155,7 @@ struct UserProfileUserInfoSection: View {
     }
 
     // MARK: - Stats Section
+    // 使用 contentTransition(.numericText()) 实现数字变化动画
     private var statsSection: some View {
         HStack(spacing: 0) {
             // Following
@@ -160,6 +167,7 @@ struct UserProfileUserInfoSection: View {
                     Text("\(followingCount)")
                         .font(.system(size: layout.statsFontSize))
                         .foregroundColor(layout.textColor)
+                        .contentTransition(.numericText())  // iOS 17+ 数字变化动画
                 }
             }
             .frame(width: layout.statsItemWidth)
@@ -178,6 +186,7 @@ struct UserProfileUserInfoSection: View {
                     Text("\(followersCount)")
                         .font(.system(size: layout.statsFontSize))
                         .foregroundColor(layout.textColor)
+                        .contentTransition(.numericText())  // iOS 17+ 数字变化动画
                 }
             }
             .frame(width: layout.statsItemWidth)
@@ -196,6 +205,7 @@ struct UserProfileUserInfoSection: View {
                     Text("\(likesCount)")
                         .font(.system(size: layout.statsFontSize))
                         .foregroundColor(layout.textColor)
+                        .contentTransition(.numericText())  // iOS 17+ 数字变化动画
                 }
             }
             .frame(width: layout.statsItemWidth)

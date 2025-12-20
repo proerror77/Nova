@@ -514,6 +514,12 @@ struct APIConfig {
         static func acceptMessageRequest(_ requestId: String) -> String { "/api/v2/message-requests/\(requestId)/accept" }
         /// POST /api/v2/message-requests/{id}/reject 拒絕訊息請求
         static func rejectMessageRequest(_ requestId: String) -> String { "/api/v2/message-requests/\(requestId)/reject" }
+
+        // Report Management
+        /// POST /api/v2/reports 舉報用戶或內容
+        static let report = "/api/v2/reports"
+        /// GET /api/v2/reports 獲取自己的舉報列表
+        static let getReports = "/api/v2/reports"
     }
 
     // MARK: - Search API

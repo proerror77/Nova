@@ -3,7 +3,8 @@ import SwiftUI
 /// UserProfile 页面的帖子卡片组件
 /// 与 ProfilePostCard 样式完全一致
 /// 显示用户头像、用户名、点赞数、图片和内容摘要
-struct UserProfilePostCard: View {
+/// 实现 Equatable 以减少不必要的视图重绘
+struct UserProfilePostCard: View, Equatable {
     // Data
     var avatarUrl: String?
     var username: String = "User"
@@ -11,6 +12,15 @@ struct UserProfilePostCard: View {
     var imageUrl: String?
     var content: String = ""
     var onTap: (() -> Void)? = nil
+    
+    // Equatable 实现 - 基于关键属性比较，避免不必要的重绘
+    static func == (lhs: UserProfilePostCard, rhs: UserProfilePostCard) -> Bool {
+        lhs.avatarUrl == rhs.avatarUrl &&
+        lhs.username == rhs.username &&
+        lhs.likeCount == rhs.likeCount &&
+        lhs.imageUrl == rhs.imageUrl &&
+        lhs.content == rhs.content
+    }
 
     // 内容摘要（最多显示25个字符）
     private var contentPreview: String {
@@ -46,7 +56,7 @@ struct UserProfilePostCard: View {
 
                 Spacer()
 
-                // 右侧：点赞图标 + 数量
+                // 右侧：点赞图标 + 数量 - 使用 numericText 动画
                 HStack(spacing: 2) {
                     Image(systemName: "heart")
                         .font(.system(size: 8))
@@ -55,6 +65,7 @@ struct UserProfilePostCard: View {
                     Text(formattedLikeCount)
                         .font(.system(size: 7))
                         .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        .contentTransition(.numericText())  // iOS 17+ 数字变化动画
                 }
             }
             .padding(.horizontal, 6)
@@ -92,10 +103,16 @@ struct UserProfilePostCard: View {
     }
 
     // MARK: - Avatar View
+    // 使用 CachedAsyncImage 优化头像加载性能，支持磁盘缓存
     @ViewBuilder
     private var avatarView: some View {
         if let urlString = avatarUrl, let url = URL(string: urlString) {
-            AsyncImage(url: url) { image in
+            CachedAsyncImage(
+                url: url,
+                targetSize: CGSize(width: 34, height: 34),  // 2x for retina
+                enableProgressiveLoading: false,
+                priority: .normal
+            ) { image in
                 image
                     .resizable()
                     .scaledToFill()
@@ -114,25 +131,24 @@ struct UserProfilePostCard: View {
     }
 
     // MARK: - Image Section
+    // 使用 CachedAsyncImage 优化帖子图片加载，支持渐进式加载和磁盘缓存
     private var imageSection: some View {
         Group {
             if let urlString = imageUrl, let url = URL(string: urlString) {
-                // 显示真实图片
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        imagePlaceholder
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 158, height: 216)
-                            .clipped()
-                    case .failure:
-                        imagePlaceholder
-                    @unknown default:
-                        imagePlaceholder
-                    }
+                // 显示真实图片 - 使用 CachedAsyncImage 优化性能
+                CachedAsyncImage(
+                    url: url,
+                    targetSize: CGSize(width: 316, height: 432),  // 2x for retina
+                    enableProgressiveLoading: true,
+                    priority: .normal
+                ) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 158, height: 216)
+                        .clipped()
+                } placeholder: {
+                    imagePlaceholder
                 }
             } else {
                 // 占位图

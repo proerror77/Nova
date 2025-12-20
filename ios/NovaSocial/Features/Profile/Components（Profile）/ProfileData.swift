@@ -36,6 +36,22 @@ class ProfileData {
     }
 
     var selectedTab: ContentTab = .posts
+    
+    // MARK: - Search State
+    var searchQuery: String = ""
+    var isSearching: Bool = false
+    
+    /// 過濾後的帖子（根據搜索詞過濾）
+    var filteredPosts: [Post] {
+        guard !searchQuery.isEmpty else {
+            return currentTabPosts
+        }
+        return currentTabPosts.filter { post in
+            post.content.localizedCaseInsensitiveContains(searchQuery) ||
+            (post.authorUsername?.localizedCaseInsensitiveContains(searchQuery) ?? false) ||
+            (post.authorDisplayName?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+        }
+    }
 
     // MARK: - Lifecycle Methods
 
@@ -188,8 +204,27 @@ class ProfileData {
     }
 
     func searchInProfile(query: String) async {
-        // TODO: Implement profile content search
-        print("Searching for: \(query)")
+        await MainActor.run {
+            searchQuery = query
+            isSearching = !query.isEmpty
+        }
+        
+        #if DEBUG
+        print("[ProfileData] Searching for: \(query), found \(filteredPosts.count) results")
+        #endif
+    }
+    
+    /// 清除搜索
+    func clearSearch() {
+        searchQuery = ""
+        isSearching = false
+    }
+
+    /// 从本地状态中移除帖子
+    func removePost(postId: String) {
+        posts.removeAll { $0.id == postId }
+        savedPosts.removeAll { $0.id == postId }
+        likedPosts.removeAll { $0.id == postId }
     }
 
     // MARK: - Error Handling

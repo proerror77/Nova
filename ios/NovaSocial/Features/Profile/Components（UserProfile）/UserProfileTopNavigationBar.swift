@@ -12,8 +12,10 @@ struct UserProfileNavBarLayout {
     var backButtonWeight: Font.Weight = .semibold  // 返回箭头粗细
     var backButtonTapAreaSize: CGFloat = 44   // 返回按钮点击区域大小
 
-    // ==================== 右侧分享按钮 ====================
+    // ==================== 右侧按钮 ====================
     var shareIconSize: CGFloat = 24           // 分享图标大小
+    var moreIconSize: CGFloat = 24            // 更多按钮图标大小
+    var rightButtonsSpacing: CGFloat = 16     // 右侧按钮间距
 
     // ==================== 中间认证徽章 ====================
     var badgeIconSize: CGFloat = 20           // 认证图标大小
@@ -39,6 +41,7 @@ struct UserProfileTopNavigationBar: View {
     // Actions
     var onBackTapped: () -> Void = {}
     var onShareTapped: () -> Void = {}
+    var onMoreTapped: () -> Void = {}
 
     var body: some View {
         ZStack {
@@ -66,11 +69,19 @@ struct UserProfileTopNavigationBar: View {
 
                 Spacer()
 
-                Button(action: onShareTapped) {
-                    Image("share")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: layout.shareIconSize, height: layout.shareIconSize)
+                HStack(spacing: layout.rightButtonsSpacing) {
+                    Button(action: onShareTapped) {
+                        Image("share")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: layout.shareIconSize, height: layout.shareIconSize)
+                    }
+
+                    Button(action: onMoreTapped) {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: layout.moreIconSize, weight: .medium))
+                            .foregroundColor(layout.iconColor)
+                    }
                 }
             }
         }

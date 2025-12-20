@@ -58,6 +58,7 @@ struct UserProfileView: View {
 
     @State private var selectedTab: ProfileTab = .posts
     @State private var isFollowing = true
+    @State private var showBlockReportSheet = false
 
     // MARK: - Services
     private let userService = UserService.shared
@@ -155,6 +156,9 @@ struct UserProfileView: View {
                         },
                         onShareTapped: {
                             // 分享操作
+                        },
+                        onMoreTapped: {
+                            showBlockReportSheet = true
                         }
                     )
 
@@ -217,6 +221,19 @@ struct UserProfileView: View {
         }
         .task {
             await loadUserData()
+        }
+        .sheet(isPresented: $showBlockReportSheet) {
+            BlockReportSheet(
+                userId: userId,
+                username: userData.username,
+                onBlocked: {
+                    // 封鎖後關閉個人資料頁面
+                    showUserProfile = false
+                },
+                onReported: {
+                    // 舉報後可選擇是否關閉
+                }
+            )
         }
     }
 

@@ -15,6 +15,10 @@ class ProfileData {
     var isLoadingMore = false
     var errorMessage: String?
 
+    // MARK: - Search State
+    var searchQuery: String = ""
+    var isSearching = false
+
     // MARK: - Pagination
     private let pageSize = 20
     private var postsOffset = 0

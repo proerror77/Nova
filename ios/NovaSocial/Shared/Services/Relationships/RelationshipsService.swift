@@ -67,6 +67,71 @@ class RelationshipsService {
         )
     }
 
+    // MARK: - Report Management
+
+    /// Report a user or content
+    /// - Parameters:
+    ///   - targetType: Type of target ("user" or "post")
+    ///   - targetId: ID of the user or post to report
+    ///   - reason: Reason for reporting
+    ///   - details: Optional additional details
+    func report(targetType: ReportTargetType, targetId: String, reason: ReportReason, details: String? = nil) async throws {
+        struct Request: Codable {
+            let targetType: String
+            let targetId: String
+            let reason: String
+            let details: String?
+
+            enum CodingKeys: String, CodingKey {
+                case targetType = "target_type"
+                case targetId = "target_id"
+                case reason
+                case details
+            }
+        }
+
+        struct Response: Codable {
+            let success: Bool
+            let reportId: String?
+
+            enum CodingKeys: String, CodingKey {
+                case success
+                case reportId = "report_id"
+            }
+        }
+
+        let request = Request(
+            targetType: targetType.rawValue,
+            targetId: targetId,
+            reason: reason.rawValue,
+            details: details
+        )
+
+        let _: Response = try await client.request(
+            endpoint: APIConfig.Relationships.report,
+            method: "POST",
+            body: request
+        )
+    }
+
+    /// Report a user
+    /// - Parameters:
+    ///   - userId: ID of the user to report
+    ///   - reason: Reason for reporting
+    ///   - details: Optional additional details
+    func reportUser(userId: String, reason: ReportReason, details: String? = nil) async throws {
+        try await report(targetType: .user, targetId: userId, reason: reason, details: details)
+    }
+
+    /// Report a post
+    /// - Parameters:
+    ///   - postId: ID of the post to report
+    ///   - reason: Reason for reporting
+    ///   - details: Optional additional details
+    func reportPost(postId: String, reason: ReportReason, details: String? = nil) async throws {
+        try await report(targetType: .post, targetId: postId, reason: reason, details: details)
+    }
+
     // MARK: - Relationship Status
 
     /// Get relationship status with a user
@@ -290,5 +355,66 @@ struct MessageRequest: Codable, Identifiable {
         case senderAvatarUrl = "sender_avatar_url"
         case previewMessage = "preview_message"
         case createdAt = "created_at"
+    }
+}
+
+// MARK: - Report Types
+
+/// Report target type
+enum ReportTargetType: String, Codable {
+    case user = "user"
+    case post = "post"
+    case comment = "comment"
+    case message = "message"
+}
+
+/// Report reason
+enum ReportReason: String, Codable, CaseIterable, Identifiable {
+    case spam = "spam"
+    case harassment = "harassment"
+    case hateSpeech = "hate_speech"
+    case violence = "violence"
+    case nudity = "nudity"
+    case falseInfo = "false_information"
+    case scam = "scam"
+    case impersonation = "impersonation"
+    case intellectualProperty = "intellectual_property"
+    case selfHarm = "self_harm"
+    case other = "other"
+
+    var id: String { rawValue }
+
+    /// Display name in Traditional Chinese
+    var displayName: String {
+        switch self {
+        case .spam: return "垃圾訊息"
+        case .harassment: return "騷擾或霸凌"
+        case .hateSpeech: return "仇恨言論"
+        case .violence: return "暴力或危險內容"
+        case .nudity: return "裸露或色情內容"
+        case .falseInfo: return "虛假資訊"
+        case .scam: return "詐騙"
+        case .impersonation: return "假冒身份"
+        case .intellectualProperty: return "侵犯智慧財產權"
+        case .selfHarm: return "自殘或自殺"
+        case .other: return "其他"
+        }
+    }
+
+    /// Description for each reason
+    var description: String {
+        switch self {
+        case .spam: return "重複發送或無意義的內容"
+        case .harassment: return "針對特定用戶的騷擾、威脅或霸凌行為"
+        case .hateSpeech: return "基於種族、宗教、性別等的歧視性言論"
+        case .violence: return "鼓勵或美化暴力行為"
+        case .nudity: return "包含不當的裸露或性暗示內容"
+        case .falseInfo: return "故意散播虛假或誤導性資訊"
+        case .scam: return "試圖詐騙或欺騙他人"
+        case .impersonation: return "假冒他人身份"
+        case .intellectualProperty: return "未經授權使用受版權保護的內容"
+        case .selfHarm: return "鼓勵自殘或自殺行為"
+        case .other: return "其他違規行為"
+        }
     }
 }

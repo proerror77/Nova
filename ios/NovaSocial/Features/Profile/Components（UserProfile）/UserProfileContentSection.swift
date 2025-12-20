@@ -48,13 +48,14 @@ struct UserProfileContentSection: View {
                     .foregroundColor(layout.accentColor)
                     .frame(maxWidth: .infinity)
 
-                // 搜索图标 - 右对齐
+                // 搜索图标 - 右对齐，使用 Symbol Effect
                 HStack {
                     Spacer()
                     Button(action: onSearchTapped) {
                         Image(systemName: "magnifyingglass")
                             .font(.system(size: layout.searchIconSize))
                             .foregroundColor(layout.searchIconColor)
+                            .symbolEffect(.pulse, options: .speed(0.5))  // iOS 17+ 脉冲动画
                     }
                     .padding(.trailing, layout.searchIconTrailingPadding)
                 }
@@ -70,11 +71,12 @@ struct UserProfileContentSection: View {
             // MARK: - 帖子网格
             ScrollView {
                 if posts.isEmpty {
-                    // 空状态显示
+                    // 空状态显示 - 使用 Symbol Effect
                     VStack(spacing: 12) {
                         Image(systemName: "photo.on.rectangle.angled")
                             .font(.system(size: 48))
                             .foregroundColor(.gray.opacity(0.5))
+                            .symbolEffect(.breathe, options: .repeat(.continuous))  // iOS 17+ 呼吸动画
                         Text("No posts yet")
                             .font(.system(size: 16))
                             .foregroundColor(.gray)

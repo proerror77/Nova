@@ -17,7 +17,8 @@ enum ProfileActiveSheet: Equatable {
     case photoOptions
     case accountSwitcher
     case shareSheet
-    
+    case editProfile
+
     static func == (lhs: ProfileActiveSheet, rhs: ProfileActiveSheet) -> Bool {
         switch (lhs, rhs) {
         case (.none, .none),
@@ -30,7 +31,8 @@ enum ProfileActiveSheet: Equatable {
              (.camera, .camera),
              (.photoOptions, .photoOptions),
              (.accountSwitcher, .accountSwitcher),
-             (.shareSheet, .shareSheet):
+             (.shareSheet, .shareSheet),
+             (.editProfile, .editProfile):
             return true
         case (.newPost(let img1), .newPost(let img2)):
             return img1 === img2
@@ -47,22 +49,20 @@ struct ProfileView: View {
     // 全局认证状态从上层注入
     @EnvironmentObject private var authManager: AuthenticationManager
     @State private var profileData = ProfileData()
-    @State private var showNewPost = false
-    @State private var showSetting = false
-    @State private var showPhotoOptions = false
-    @State private var showImagePicker = false
-    @State private var showCamera = false
-    @State private var selectedImage: UIImage?
-    @State private var showGenerateImage = false
-    @State private var showWrite = false
-    @State private var showShareSheet = false
-    @State private var localAvatarImage: UIImage? = nil  // 本地选择的头像
-    @State private var showAccountSwitcher = false  // 账户切换弹窗
+
+    // MARK: - 統一的 Sheet 狀態管理
+    /// 使用 enum 統一管理所有 overlay/sheet 狀態，避免狀態衝突
+    @State private var activeSheet: ProfileActiveSheet = .none
+
+    // MARK: - 非 Sheet 相關狀態
+    @State private var selectedImage: UIImage?              // ImagePicker 選中的圖片
+    @State private var localAvatarImage: UIImage? = nil     // 本地选择的头像
     @State private var selectedAccountType: AccountDisplayType = .primary  // 当前选择的账户类型
-    @State private var showFollowing = false  // 显示 Following 页面
-    @State private var showFollowers = false  // 显示 Followers 页面
-    @State private var showPostDetail = false  // 显示帖子详情页面
-    @State private var selectedPostForDetail: Post? = nil  // 选中的帖子
+    @State private var showSearchBar = false                // 显示搜索框
+    @State private var searchText: String = ""              // 搜索文字
+    @State private var showDeleteConfirmation = false       // 显示删除确认
+    @State private var postToDelete: Post? = nil            // 待删除的帖子
+    @State private var isDeleting = false                   // 正在删除中
 
     // Access AvatarManager - @ObservedObject to observe pendingAvatar changes
     @ObservedObject private var avatarManager = AvatarManager.shared
@@ -75,6 +75,26 @@ struct ProfileView: View {
     // Computed property for user display
     private var displayUser: UserProfile? {
         authManager.currentUser ?? profileData.userProfile
+    }
+    
+    // Computed property for filtered user posts (搜索过滤 - Posts tab)
+    private var filteredUserPosts: [Post] {
+        guard !searchText.isEmpty else {
+            return userPostsManager.userPosts
+        }
+        return userPostsManager.userPosts.filter { post in
+            post.content.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+    
+    // Computed property for filtered profile posts (搜索过滤 - Saved/Liked tabs)
+    private var filteredProfilePosts: [Post] {
+        guard !searchText.isEmpty else {
+            return profileData.currentTabPosts
+        }
+        return profileData.currentTabPosts.filter { post in
+            post.content.localizedCaseInsensitiveContains(searchText)
+        }
     }
 
     // 根据选择的账户类型返回显示的用户名
@@ -98,42 +118,67 @@ struct ProfileView: View {
 
     var body: some View {
         ZStack {
-            // 条件渲染：根据状态切换视图
-            if showNewPost {
+            // 條件渲染：根據 activeSheet 狀態切換視圖
+            switch activeSheet {
+            case .newPost(let initialImage):
                 NewPostView(
-                    showNewPost: $showNewPost,
-                    initialImage: selectedImage,
+                    showNewPost: Binding(
+                        get: { activeSheet != .none },
+                        set: { if !$0 { activeSheet = .none } }
+                    ),
+                    initialImage: initialImage ?? selectedImage,
                     onPostSuccess: { post in
                         // 实时同步新帖子到 UserPostsManager
                         userPostsManager.addNewPost(post)
                     }
                 )
-                    .transition(.identity)
-            } else if showGenerateImage {
-                GenerateImage01View(showGenerateImage: $showGenerateImage)
-                    .transition(.identity)
-            } else if showWrite {
-                WriteView(showWrite: $showWrite)
-                    .transition(.identity)
-            } else if showSetting {
+                .transition(.identity)
+
+            case .generateImage:
+                GenerateImage01View(
+                    showGenerateImage: Binding(
+                        get: { activeSheet == .generateImage },
+                        set: { if !$0 { activeSheet = .none } }
+                    )
+                )
+                .transition(.identity)
+
+            case .write:
+                WriteView(
+                    showWrite: Binding(
+                        get: { activeSheet == .write },
+                        set: { if !$0 { activeSheet = .none } }
+                    )
+                )
+                .transition(.identity)
+
+            case .settings:
                 SettingsView(currentPage: $currentPage)
                     .transition(.identity)
-            } else if showFollowing {
-                // Following 页面
+
+            case .following:
                 ProfileFollowingView(
-                    isPresented: $showFollowing,
+                    isPresented: Binding(
+                        get: { activeSheet == .following },
+                        set: { if !$0 { activeSheet = .none } }
+                    ),
                     userId: displayUser?.id ?? "",
                     username: displayUser?.username ?? "User",
                     initialTab: .following
                 )
-                    .transition(.identity)
-            } else if showFollowers {
-                // Followers 页面
-                ProfileFollowersView(isPresented: $showFollowers)
-                    .transition(.identity)
-                    .environmentObject(authManager)
-            } else if showPostDetail, let post = selectedPostForDetail {
-                // 帖子详情页面
+                .transition(.identity)
+
+            case .followers:
+                ProfileFollowersView(
+                    isPresented: Binding(
+                        get: { activeSheet == .followers },
+                        set: { if !$0 { activeSheet = .none } }
+                    )
+                )
+                .transition(.identity)
+                .environmentObject(authManager)
+
+            case .postDetail(let post):
                 PostDetailView(
                     post: FeedPost(
                         from: post,
@@ -141,30 +186,33 @@ struct ProfileView: View {
                         authorAvatar: displayUser?.avatarUrl
                     ),
                     onDismiss: {
-                        showPostDetail = false
-                        selectedPostForDetail = nil
+                        activeSheet = .none
                     }
                 )
                 .transition(.identity)
-            } else {
+
+            case .none, .imagePicker, .camera, .photoOptions, .accountSwitcher, .shareSheet, .editProfile:
+                // 這些狀態顯示 profileContent，overlay/sheet 另外處理
                 profileContent
             }
         }
-        .animation(.none, value: showNewPost)
-        .animation(.none, value: showGenerateImage)
-        .animation(.none, value: showWrite)
-        .animation(.none, value: showSetting)
-        .animation(.none, value: showPostDetail)
-        .sheet(isPresented: $showImagePicker) {
+        .animation(.none, value: activeSheet)
+        .sheet(isPresented: Binding(
+            get: { activeSheet == .imagePicker },
+            set: { if !$0 { activeSheet = .none } }
+        )) {
             ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
         }
-        .sheet(isPresented: $showCamera) {
+        .sheet(isPresented: Binding(
+            get: { activeSheet == .camera },
+            set: { if !$0 { activeSheet = .none } }
+        )) {
             ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
         }
         .onChange(of: selectedImage) { oldValue, newValue in
             // 选择/拍摄照片后，自动跳转到NewPostView
             if newValue != nil {
-                showNewPost = true
+                activeSheet = .newPost(initialImage: newValue)
             }
         }
     }
@@ -190,28 +238,34 @@ struct ProfileView: View {
             }
 
             // MARK: - 照片选项弹窗
-            if showPhotoOptions {
+            if activeSheet == .photoOptions {
                 PhotoOptionsModal(
-                    isPresented: $showPhotoOptions,
+                    isPresented: Binding(
+                        get: { activeSheet == .photoOptions },
+                        set: { if !$0 { activeSheet = .none } }
+                    ),
                     onChoosePhoto: {
-                        showImagePicker = true
+                        activeSheet = .imagePicker
                     },
                     onTakePhoto: {
-                        showCamera = true
+                        activeSheet = .camera
                     },
                     onGenerateImage: {
-                        showGenerateImage = true
+                        activeSheet = .generateImage
                     },
                     onWrite: {
-                        showWrite = true
+                        activeSheet = .write
                     }
                 )
             }
 
             // MARK: - 账户切换弹窗
-            if showAccountSwitcher {
+            if activeSheet == .accountSwitcher {
                 AccountSwitcherSheet(
-                    isPresented: $showAccountSwitcher,
+                    isPresented: Binding(
+                        get: { activeSheet == .accountSwitcher },
+                        set: { if !$0 { activeSheet = .none } }
+                    ),
                     selectedAccountType: $selectedAccountType
                 )
                 .environmentObject(authManager)
@@ -225,8 +279,48 @@ struct ProfileView: View {
                 await userPostsManager.loadUserPosts(userId: userId)
             }
         }
-        .sheet(isPresented: $showShareSheet) {
+        .sheet(isPresented: Binding(
+            get: { activeSheet == .shareSheet },
+            set: { if !$0 { activeSheet = .none } }
+        )) {
             NovaShareSheet(items: shareItems)
+        }
+        .sheet(isPresented: Binding(
+            get: { activeSheet == .editProfile },
+            set: { if !$0 { activeSheet = .none } }
+        )) {
+            EditProfileView(onProfileUpdated: {
+                // 刷新個人資料
+                Task {
+                    if let userId = authManager.currentUser?.id {
+                        await profileData.loadUserProfile(userId: userId)
+                    }
+                }
+            })
+            .environmentObject(authManager)
+        }
+        .alert("刪除貼文", isPresented: $showDeleteConfirmation) {
+            Button("取消", role: .cancel) {
+                postToDelete = nil
+            }
+            Button("刪除", role: .destructive) {
+                if let post = postToDelete {
+                    Task {
+                        await deletePost(post)
+                    }
+                }
+            }
+        } message: {
+            Text("確定要刪除這則貼文嗎？此操作無法撤銷。")
+        }
+        .overlay {
+            if isDeleting {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                ProgressView()
+                    .tint(.white)
+                    .scaleEffect(1.2)
+            }
         }
     }
 
@@ -294,18 +388,17 @@ struct ProfileView: View {
                 ProfileTopNavigationBar(
                     username: displayUsername,
                     layout: navBarLayout,
-                    onShareTapped: { showShareSheet = true },
+                    onShareTapped: { activeSheet = .shareSheet },
                     onSettingsTapped: { currentPage = .setting },
                     onUsernameTapped: {
                         withAnimation(.easeOut(duration: 0.25)) {
-                            showAccountSwitcher = true
+                            activeSheet = .accountSwitcher
                         }
                     }
                 )
 
                 // MARK: - 用户信息区域（独立组件）
                 // 注意：当用户未填写信息时，组件会自动处理默认显示状态
-                // 第 236-248 行：用户信息区块，使用 userInfoBlockVerticalOffset 控制垂直位置
                 ProfileUserInfoSection(
                     avatarImage: avatarManager.pendingAvatar ?? localAvatarImage,
                     avatarUrl: displayUser?.avatarUrl,  // 使用 displayUser 确保与 authManager 同步
@@ -318,13 +411,37 @@ struct ProfileView: View {
                     likesCount: userPostsManager.postCount,
                     layout: userInfoLayout,
                     onFollowingTapped: {
-                        showFollowing = true  // 点击 Following 跳转
+                        activeSheet = .following  // 点击 Following 跳转
                     },
                     onFollowersTapped: {
-                        showFollowers = true  // 点击 Followers 跳转
+                        activeSheet = .followers  // 点击 Followers 跳转
                     }
                 )
-                .offset(y: userInfoBlockVerticalOffset)  // ← 第 250 行：应用垂直偏移
+                .offset(y: userInfoBlockVerticalOffset)  // 应用垂直偏移
+
+                // MARK: - 編輯個人資料按鈕
+                Button(action: {
+                    activeSheet = .editProfile
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 14, weight: .medium))
+                        Text("編輯個人資料")
+                            .font(.system(size: 14, weight: .medium))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(
+                        Capsule()
+                            .fill(Color.white.opacity(0.2))
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color.white.opacity(0.4), lineWidth: 1)
+                            )
+                    )
+                }
+                .offset(y: userInfoBlockVerticalOffset + 10)
             }
         }
     }
@@ -372,23 +489,67 @@ struct ProfileView: View {
                         }
                         .frame(maxWidth: .infinity)
 
-                        // 搜索图标 - 右对齐
+                        // 搜索图标 - 右对齐，使用 Symbol Effect
                         HStack {
                             Spacer()
                             Button(action: {
-                                Task {
-                                    await profileData.searchInProfile(query: "")
+                                let wasShowingSearch = showSearchBar
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    showSearchBar.toggle()
+                                }
+                                if wasShowingSearch {
+                                    searchText = ""
+                                    profileData.searchQuery = ""
+                                    profileData.isSearching = false
                                 }
                             }) {
-                                Image(systemName: "magnifyingglass")
+                                Image(systemName: showSearchBar ? "xmark.circle.fill" : "magnifyingglass")
                                     .font(.system(size: 20))
                                     .foregroundColor(DesignTokens.textPrimary)
+                                    .contentTransition(.symbolEffect(.replace))
                             }
                             .padding(.trailing, 20)
                         }
                     }
                     .padding(.vertical, 16)
                     .background(.white)
+                    
+                    // MARK: - 搜索框
+                    if showSearchBar {
+                        HStack(spacing: 10) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 14))
+                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                            
+                            TextField("搜索帖子內容...", text: $searchText)
+                                .font(.system(size: 14))
+                                .foregroundColor(.black)
+                                .textFieldStyle(.plain)
+                                .onChange(of: searchText) { _, newValue in
+                                    Task {
+                                        await profileData.searchInProfile(query: newValue)
+                                    }
+                                }
+                            
+                            if !searchText.isEmpty {
+                                Button(action: {
+                                    searchText = ""
+                                    profileData.searchQuery = ""
+                                    profileData.isSearching = false
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.gray)
+                                }
+                            }
+                        }
+                        .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                        .background(Color(red: 0.95, green: 0.95, blue: 0.95))
+                        .cornerRadius(10)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
 
                     // 分隔线
                     Rectangle()
@@ -405,14 +566,18 @@ struct ProfileView: View {
                                 .padding(.top, 40)
                         } else if userPostsManager.hasPosts {
                             LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                                ForEach(userPostsManager.userPosts) { post in
+                                ForEach(filteredUserPosts) { post in
                                     ProfilePostCard(
                                         post: post,
                                         username: displayUser?.displayName ?? displayUser?.username ?? "User",
                                         avatarUrl: displayUser?.avatarUrl,
+                                        isOwnPost: true,  // Posts tab 都是自己的帖子
                                         onTap: {
-                                            selectedPostForDetail = post
-                                            showPostDetail = true
+                                            activeSheet = .postDetail(post: post)
+                                        },
+                                        onDelete: {
+                                            postToDelete = post
+                                            showDeleteConfirmation = true
                                         }
                                     )
                                     .onAppear {
@@ -436,30 +601,40 @@ struct ProfileView: View {
                                 ProgressView()
                                     .padding(.vertical, 16)
                             }
+                        } else if !searchText.isEmpty && userPostsManager.hasPosts {
+                            // 搜索无结果
+                            searchEmptyStateView
                         } else {
                             emptyStateView
                         }
                     } else {
-                        // Saved/Liked 标签 - 使用 profileData
+                        // Saved/Liked 标签 - 使用 profileData (支持搜索过滤)
                         if profileData.isLoading {
                             ProgressView()
                                 .padding(.top, 40)
                         } else if profileData.hasContent {
                             LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                                ForEach(profileData.currentTabPosts) { post in
+                                ForEach(filteredProfilePosts) { post in
                                     ProfilePostCard(
                                         post: post,
                                         username: displayUser?.displayName ?? displayUser?.username ?? "User",
                                         avatarUrl: displayUser?.avatarUrl,
+                                        isOwnPost: post.authorId == authManager.currentUser?.id,
                                         onTap: {
-                                            selectedPostForDetail = post
-                                            showPostDetail = true
+                                            activeSheet = .postDetail(post: post)
+                                        },
+                                        onDelete: {
+                                            postToDelete = post
+                                            showDeleteConfirmation = true
                                         }
                                     )
                                 }
                             }
                             .padding(.horizontal, 8)
                             .padding(.top, 8)
+                        } else if !searchText.isEmpty && profileData.hasContent {
+                            // 搜索无结果
+                            searchEmptyStateView
                         } else {
                             emptyStateView
                         }
@@ -485,9 +660,62 @@ struct ProfileView: View {
         .padding(.top, 60)
     }
 
+    // MARK: - 搜索无结果视图
+    private var searchEmptyStateView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 48))
+                .foregroundColor(.gray)
+                .symbolEffect(.pulse, options: .repeating)
+            Text("找不到相關帖子")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.gray)
+            Text("試試其他關鍵詞")
+                .font(.system(size: 14))
+                .foregroundColor(.gray.opacity(0.7))
+        }
+        .padding(.top, 60)
+    }
+
+    // MARK: - 删除帖子
+    private func deletePost(_ post: Post) async {
+        await MainActor.run {
+            isDeleting = true
+        }
+
+        do {
+            // 调用 API 删除帖子
+            let contentService = ContentService()
+            try await contentService.deletePost(postId: post.id)
+
+            // 从本地状态中移除
+            userPostsManager.deletePost(postId: post.id)
+
+            print("✅ Post deleted successfully: \(post.id)")
+        } catch {
+            print("❌ Failed to delete post: \(error)")
+            // TODO: 显示错误提示给用户
+        }
+
+        await MainActor.run {
+            isDeleting = false
+            postToDelete = nil
+        }
+    }
+
     // MARK: - 底部导航栏
     private var bottomNavigationBar: some View {
-        BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)
+        BottomTabBar(
+            currentPage: $currentPage,
+            showPhotoOptions: Binding(
+                get: { activeSheet == .photoOptions },
+                set: { if $0 { activeSheet = .photoOptions } else { activeSheet = .none } }
+            ),
+            showNewPost: Binding(
+                get: { if case .newPost = activeSheet { return true } else { return false } },
+                set: { if $0 { activeSheet = .newPost(initialImage: nil) } else { activeSheet = .none } }
+            )
+        )
     }
 
 }
