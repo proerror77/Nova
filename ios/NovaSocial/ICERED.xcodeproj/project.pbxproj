@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		33DEB3C67EC94DCEB8E8A02F /* AddFriendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D4C55111B9048F5AE0F478D /* AddFriendsView.swift */; };
 		00131FB01A97D166FFA80E77 /* FeedLayoutConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4B4FB253EA63E86B9FD37C7 /* FeedLayoutConfig.swift */; };
 		005F993F06AC13FFFBF2284E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = "TEMP_3B3E8F3F-A9B3-4FAC-B5F9-3CDEA9110FA6" /* Localizable.strings */; };
 		0110DBA1EA84032CDEA590D7 /* ChatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8B1760D88CE8A2673D74AFB /* ChatService.swift */; };
@@ -126,7 +127,6 @@
 		AD625704C8BD7018F9A0E19F /* RelationshipsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEC81AD21C3D779062FDEEFD /* RelationshipsService.swift */; };
 		ADCA1CA875E340CD04D2237A /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE44BE89D96953ABCAA2E34E /* ProfileView.swift */; };
 		B0EE8CAD1973B1C29CB02702 /* MyQRCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B24BB2EE3F0021E5343878D /* MyQRCodeView.swift */; };
-		B1CA8F45D7423ED2C0996C64 /* ViewStubs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 932F3FD4B32E96CB5CDE8932 /* ViewStubs.swift */; };
 		B1D7184D4B2131AC5C5FC6B6 /* UserProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 893193464D16DA57F8243351 /* UserProfileView.swift */; };
 		B3156902D37DCD78DCA3AE24 /* ImageCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BAA081BD695A0ADA562F9F /* ImageCacheService.swift */; };
 		B758D4147BCE8D66A7CCF166 /* FriendsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD847153CD7FA68CE04B284E /* FriendsService.swift */; };
@@ -187,6 +187,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		5D4C55111B9048F5AE0F478D /* AddFriendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddFriendsView.swift; sourceTree = "<group>"; };
 		008ABB2CAA1B95899AF1E4B9 /* UserProfileUserInfoSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileUserInfoSection.swift; sourceTree = "<group>"; };
 		00D95AE492E1F1BD615BB08A /* CommentSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentSheetView.swift; sourceTree = "<group>"; };
 		027EF331C014E61B120CCBD6 /* HottestBankerSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HottestBankerSection.swift; sourceTree = "<group>"; };
@@ -277,7 +278,6 @@
 		893193464D16DA57F8243351 /* UserProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileView.swift; sourceTree = "<group>"; };
 		8D2FF599D8F2CEFBB0C88D1B /* FeatureFlags.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureFlags.swift; sourceTree = "<group>"; };
 		92B4358221460091EE5EECF1 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
-		932F3FD4B32E96CB5CDE8932 /* ViewStubs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewStubs.swift; sourceTree = "<group>"; };
 		97F7FCDB6FA0CE2782E24A74 /* NotificationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationViewModel.swift; sourceTree = "<group>"; };
 		9807B62C70CB46565FFBC30D /* VoiceChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceChatView.swift; sourceTree = "<group>"; };
 		9B24BB2EE3F0021E5343878D /* MyQRCodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyQRCodeView.swift; sourceTree = "<group>"; };
@@ -382,6 +382,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		EB59A4798E4147559317A57E /* AddFriends */ = {
+			isa = PBXGroup;
+			children = (
+				A493E0846A844E6F840E3C14 /* Views */,
+			);
+			path = AddFriends;
+			sourceTree = "<group>";
+		};
+		A493E0846A844E6F840E3C14 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				5D4C55111B9048F5AE0F478D /* AddFriendsView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
 		00D23E0A2E752DBA61667BFA /* Chat */ = {
 			isa = PBXGroup;
 			children = (
@@ -634,6 +650,7 @@
 				77317EC0B94A3B71353A56FE /* Search */,
 				8C47AD9D0E6307B10B7C94D6 /* Settings */,
 				38EA8233FBA1E047E07B889A /* Splash */,
+				EB59A4798E4147559317A57E /* AddFriends */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -1048,7 +1065,6 @@
 		C45E51A1487869A364D62B7B /* Stubs */ = {
 			isa = PBXGroup;
 			children = (
-				932F3FD4B32E96CB5CDE8932 /* ViewStubs.swift */,
 			);
 			path = Stubs;
 			sourceTree = "<group>";
@@ -1376,6 +1392,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				33DEB3C67EC94DCEB8E8A02F /* AddFriendsView.swift in Sources */,
 				22E0C78030CDE594A3351101 /* APIClient.swift in Sources */,
 				5D3CEE9D7C0E99FCE63E6D0D /* APIConfig.swift in Sources */,
 				ACF209A76A3C5E01292691FB /* APIError.swift in Sources */,
@@ -1527,7 +1544,6 @@
 				B1D7184D4B2131AC5C5FC6B6 /* UserProfileView.swift in Sources */,
 				E703C7313E17C9B58A056F35 /* UserService.swift in Sources */,
 				0A96B08A3CE594DA58842B9B /* VideoCompressor.swift in Sources */,
-				B1CA8F45D7423ED2C0996C64 /* ViewStubs.swift in Sources */,
 				28D1CB51128CF8588FF25756 /* VisibilityTracker.swift in Sources */,
 				38D9B4683E0D9D955F1A127E /* VoiceChatService.swift in Sources */,
 				705D1C2F493FFF2281781676 /* VoiceChatView.swift in Sources */,
