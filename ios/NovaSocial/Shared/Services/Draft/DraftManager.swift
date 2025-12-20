@@ -2,7 +2,7 @@ import Foundation
 import UIKit
 import os.log
 
-private let draftLogger = Logger(subsystem: "com.libruce.icered", category: "DraftManager")
+private let draftLogger = Logger(subsystem: "com.app.icered", category: "DraftManager")
 
 // MARK: - Draft Media Item (File-based)
 

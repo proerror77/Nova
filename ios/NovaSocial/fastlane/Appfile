@@ -1,5 +1,5 @@
 # App Identifier (Bundle ID)
-app_identifier("com.libruce.icered")
+app_identifier("com.app.icered")
 
 # Apple ID (email address)
 # TODO: Replace with your Apple ID email

@@ -32,8 +32,8 @@ class FeedPerformanceMonitor {
     /// - Parameters:
     ///   - source: Source of the load (initial, refresh, pagination)
     ///   - fromCache: Whether this load is from cache
-    /// - Returns: A signpost ID for tracking this operation
-    func beginFeedLoad(source: FeedLoadSource, fromCache: Bool) -> OSSignpostID {
+    /// - Returns: A signpost interval state for tracking this operation
+    func beginFeedLoad(source: FeedLoadSource, fromCache: Bool) -> OSSignpostIntervalState {
         let signpostID = signposter.makeSignpostID()
         let state = signposter.beginInterval("FeedLoad", id: signpostID)
 
@@ -46,16 +46,16 @@ class FeedPerformanceMonitor {
             }
         }
 
-        return signpostID
+        return state
     }
 
     /// End tracking a feed load operation
     /// - Parameters:
-    ///   - signpostID: The signpost ID from beginFeedLoad
+    ///   - signpostID: The signpost interval state from beginFeedLoad
     ///   - success: Whether the load succeeded
     ///   - postCount: Number of posts loaded
     ///   - duration: Duration in seconds
-    func endFeedLoad(signpostID: OSSignpostID, success: Bool, postCount: Int, duration: TimeInterval) {
+    func endFeedLoad(signpostID: OSSignpostIntervalState, success: Bool, postCount: Int, duration: TimeInterval) {
         signposter.endInterval("FeedLoad", signpostID)
 
         logger.info("Feed load completed - success: \(success), posts: \(postCount), duration: \(String(format: "%.2f", duration))s")
@@ -155,16 +155,16 @@ class FeedPerformanceMonitor {
     // MARK: - Image Loading Tracking
 
     /// Begin tracking image prefetch operation
-    func beginImagePrefetch(urlCount: Int) -> OSSignpostID {
+    func beginImagePrefetch(urlCount: Int) -> OSSignpostIntervalState {
         let signpostID = signposter.makeSignpostID()
-        signposter.beginInterval("ImagePrefetch", id: signpostID)
+        let state = signposter.beginInterval("ImagePrefetch", id: signpostID)
 
         logger.debug("Image prefetch started - urls: \(urlCount)")
-        return signpostID
+        return state
     }
 
     /// End tracking image prefetch operation
-    func endImagePrefetch(signpostID: OSSignpostID, successCount: Int, failCount: Int) {
+    func endImagePrefetch(signpostID: OSSignpostIntervalState, successCount: Int, failCount: Int) {
         signposter.endInterval("ImagePrefetch", signpostID)
 
         logger.info("Image prefetch completed - success: \(successCount), failed: \(failCount)")

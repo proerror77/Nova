@@ -328,6 +328,10 @@ class FeedViewModel: ObservableObject {
             self.currentCursor = response.cursor
             self.hasMore = response.hasMore
 
+            #if DEBUG
+            print("[Feed] loadFeed response: \(response.posts.count) posts, hasMore=\(response.hasMore), cursor=\(response.cursor ?? "nil"), totalCount=\(response.totalCount ?? -1)")
+            #endif
+
             // Convert raw posts to FeedPost objects directly
             var allPosts = response.posts.map { FeedPost(from: $0) }
 
@@ -519,13 +523,18 @@ class FeedViewModel: ObservableObject {
             let existingIds = Set(self.posts.map { $0.id })
             let uniqueNewPosts = newPosts.filter { !existingIds.contains($0.id) }
 
-            // If no new unique posts, stop pagination (backend returned duplicates or empty)
-            if uniqueNewPosts.isEmpty {
-                self.hasMore = false
+            // If we got some posts from API but all were duplicates, this indicates a pagination issue
+            // However, we should NOT stop pagination - the server might have more posts after these duplicates
+            // Only stop if hasMore is explicitly false from the server response
+            if uniqueNewPosts.isEmpty && !newPosts.isEmpty {
                 #if DEBUG
-                print("[Feed] loadMore returned no new unique posts, stopping pagination")
+                print("[Feed] loadMore returned \(newPosts.count) posts but all were duplicates - server has_more=\(response.hasMore)")
                 #endif
-            } else {
+                // Trust the server's has_more flag instead of stopping on duplicates
+                // This prevents premature pagination termination due to edge cases
+            }
+
+            if !uniqueNewPosts.isEmpty {
                 self.posts.append(contentsOf: uniqueNewPosts)
 
                 #if DEBUG

@@ -6,7 +6,7 @@
 default_platform(:ios)
 
 # Constants
-APP_IDENTIFIER = "com.libruce.icered"
+APP_IDENTIFIER = "com.app.icered"
 SCHEME = "ICERED"
 PROJECT_PATH = "ICERED.xcodeproj"
 
@@ -79,11 +79,21 @@ platform :ios do
       build_number: ENV["BUILD_NUMBER"] || (latest_testflight_build_number(api_key: api_key) + 1).to_s
     )
 
+    # Update code signing settings to use manual signing with match profile
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      team_id: "2C77AZCA8W",
+      profile_name: "match AppStore #{APP_IDENTIFIER}",
+      code_sign_identity: "Apple Distribution",
+      path: PROJECT_PATH
+    )
+
     build_app(
       scheme: SCHEME,
       project: PROJECT_PATH,
       configuration: "Release",
       export_method: "app-store",
+      xcargs: "-allowProvisioningUpdates",
       export_options: {
         provisioningProfiles: {
           APP_IDENTIFIER => "match AppStore #{APP_IDENTIFIER}"

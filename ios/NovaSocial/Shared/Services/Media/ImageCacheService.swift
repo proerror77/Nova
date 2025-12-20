@@ -3,7 +3,7 @@ import UIKit
 import CommonCrypto
 import os.log
 
-private let imageLogger = Logger(subsystem: "com.libruce.icered", category: "ImageCache")
+private let imageLogger = Logger(subsystem: "com.app.icered", category: "ImageCache")
 
 /// Priority level for image loading requests
 enum ImageLoadPriority: Int, Comparable {
@@ -532,7 +532,7 @@ private extension String {
 
 // MARK: - Video Cache Service
 
-private let videoLogger = Logger(subsystem: "com.libruce.icered", category: "VideoCache")
+private let videoLogger = Logger(subsystem: "com.app.icered", category: "VideoCache")
 
 /// Priority levels for video loading
 enum VideoLoadPriority: Int, Comparable {

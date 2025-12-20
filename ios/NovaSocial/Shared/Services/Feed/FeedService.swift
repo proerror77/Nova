@@ -348,13 +348,19 @@ struct FeedResponse: Codable {
     let posts: [FeedPostRaw]
     let hasMore: Bool
     /// Cursor for next page (base64 encoded offset from backend)
-    let cursor: String?
+    /// Backend returns this as `next_cursor` which maps to `nextCursor` via convertFromSnakeCase
+    let nextCursor: String?
     /// Total count of posts (approximation from backend)
     let totalCount: Int?
 
     /// Convenience accessor for post IDs
     var postIds: [String] {
         posts.map { $0.id }
+    }
+
+    /// Compatibility accessor for cursor (used by FeedViewModel)
+    var cursor: String? {
+        nextCursor
     }
 }
 

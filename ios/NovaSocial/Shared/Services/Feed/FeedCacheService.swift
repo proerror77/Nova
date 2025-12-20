@@ -1,7 +1,7 @@
 import Foundation
 import os.log
 
-private let feedCacheLogger = Logger(subsystem: "com.libruce.icered", category: "FeedCache")
+private let feedCacheLogger = Logger(subsystem: "com.app.icered", category: "FeedCache")
 
 // MARK: - Cached Feed Response Wrapper
 
