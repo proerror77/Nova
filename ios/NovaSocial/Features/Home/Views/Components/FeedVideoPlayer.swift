@@ -254,6 +254,7 @@ final class FeedVideoPlayerViewModel: ObservableObject {
     private var timeObserver: Any?
     private var statusObserver: NSKeyValueObservation?
     private var prefetchTask: Task<Void, Never>?
+    private var loopObserver: NSObjectProtocol?  // NotificationCenter observer for video loop
 
     // Network monitoring for prefetch priority (nonisolated for cross-actor access)
     private static let networkMonitor = NWPathMonitor()
@@ -352,8 +353,8 @@ final class FeedVideoPlayerViewModel: ObservableObject {
             }
         }
         
-        // Loop video
-        NotificationCenter.default.addObserver(
+        // Loop video - store observer reference for cleanup
+        loopObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: playerItem,
             queue: .main
@@ -389,7 +390,14 @@ final class FeedVideoPlayerViewModel: ObservableObject {
         if let observer = timeObserver {
             player?.removeTimeObserver(observer)
         }
+        timeObserver = nil
         statusObserver?.invalidate()
+        statusObserver = nil
+        // Remove NotificationCenter observer to prevent memory leak
+        if let loopObserver = loopObserver {
+            NotificationCenter.default.removeObserver(loopObserver)
+        }
+        loopObserver = nil
         player = nil
     }
     

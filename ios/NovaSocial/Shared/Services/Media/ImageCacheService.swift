@@ -38,6 +38,9 @@ actor ImageCacheService {
     private var activeTasks: Set<String> = []
     private let maxConcurrentLoads = 6
 
+    // NotificationCenter observer reference for cleanup
+    private var memoryWarningObserver: NSObjectProtocol?
+
     // Thumbnail cache for quick preview
     private let thumbnailCache = NSCache<NSString, UIImage>()
     private let thumbnailSize = CGSize(width: 100, height: 100)
@@ -95,9 +98,9 @@ actor ImageCacheService {
             try? fileManager.createDirectory(at: cacheDirectory!, withIntermediateDirectories: true)
         }
 
-        // Setup memory warning observer (on main actor)
-        Task { @MainActor in
-            NotificationCenter.default.addObserver(
+        // Setup memory warning observer (on main actor) - store reference for proper cleanup
+        Task { @MainActor [weak self] in
+            let observer = NotificationCenter.default.addObserver(
                 forName: UIApplication.didReceiveMemoryWarningNotification,
                 object: nil,
                 queue: .main
@@ -106,6 +109,7 @@ actor ImageCacheService {
                     await self?.handleMemoryWarning()
                 }
             }
+            await self?.setMemoryWarningObserver(observer)
         }
 
         // Start background disk cache cleanup
@@ -124,11 +128,23 @@ actor ImageCacheService {
 
     // MARK: - Memory Warning Handling
 
+    /// Set the memory warning observer reference (called from Task)
+    private func setMemoryWarningObserver(_ observer: NSObjectProtocol) {
+        memoryWarningObserver = observer
+    }
+
     /// Handle memory warning by clearing caches
     private func handleMemoryWarning() {
         imageLogger.warning("⚠️ Memory warning received - clearing image caches")
         memoryCache.removeAllObjects()
         thumbnailCache.removeAllObjects()
+    }
+
+    /// Cleanup resources (for completeness, though singleton rarely deinits)
+    deinit {
+        if let observer = memoryWarningObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     // MARK: - Disk Cache Cleanup

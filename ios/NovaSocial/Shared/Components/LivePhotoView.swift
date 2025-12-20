@@ -10,10 +10,11 @@ struct LivePhotoView: View {
     let size: CGSize
     var showBadge: Bool = true
     var autoPlay: Bool = false
-    
+
     @State private var isPlaying = false
     @State private var player: AVPlayer?
-    
+    @State private var playbackObserver: NSObjectProtocol?
+
     var body: some View {
         ZStack {
             // Still image (always shown as base)
@@ -64,32 +65,43 @@ struct LivePhotoView: View {
     
     private func startPlaying() {
         guard !isPlaying else { return }
-        
+
+        // Remove any existing observer before adding new one
+        if let observer = playbackObserver {
+            NotificationCenter.default.removeObserver(observer)
+            playbackObserver = nil
+        }
+
         // Create player if needed
         if player == nil {
             player = AVPlayer(url: livePhotoData.videoURL)
         }
-        
+
         // Reset to beginning and play
         player?.seek(to: .zero)
         player?.play()
-        
+
         withAnimation(.easeInOut(duration: 0.15)) {
             isPlaying = true
         }
-        
-        // Add observer for end of playback
-        NotificationCenter.default.addObserver(
+
+        // Add observer for end of playback - store reference for cleanup
+        playbackObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: player?.currentItem,
             queue: .main
-        ) { _ in
+        ) { [self] _ in
             stopPlaying()
         }
     }
-    
+
     private func stopPlaying() {
         player?.pause()
+        // Remove observer to prevent memory leak
+        if let observer = playbackObserver {
+            NotificationCenter.default.removeObserver(observer)
+            playbackObserver = nil
+        }
         withAnimation(.easeInOut(duration: 0.15)) {
             isPlaying = false
         }
@@ -125,10 +137,11 @@ struct LivePhotoBadge: View {
 struct LivePhotoPreviewCard: View {
     let livePhotoData: LivePhotoData
     let onDelete: () -> Void
-    
+
     @State private var isPlaying = false
     @State private var player: AVPlayer?
-    
+    @State private var playbackObserver: NSObjectProtocol?
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
             // Live Photo content
@@ -201,29 +214,41 @@ struct LivePhotoPreviewCard: View {
     
     private func startPlaying() {
         guard !isPlaying else { return }
-        
+
+        // Remove any existing observer before adding new one
+        if let observer = playbackObserver {
+            NotificationCenter.default.removeObserver(observer)
+            playbackObserver = nil
+        }
+
         if player == nil {
             player = AVPlayer(url: livePhotoData.videoURL)
         }
-        
+
         player?.seek(to: .zero)
         player?.play()
-        
+
         withAnimation(.easeInOut(duration: 0.15)) {
             isPlaying = true
         }
-        
-        NotificationCenter.default.addObserver(
+
+        // Store observer reference for cleanup
+        playbackObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: player?.currentItem,
             queue: .main
-        ) { _ in
+        ) { [self] _ in
             stopPlaying()
         }
     }
-    
+
     private func stopPlaying() {
         player?.pause()
+        // Remove observer to prevent memory leak
+        if let observer = playbackObserver {
+            NotificationCenter.default.removeObserver(observer)
+            playbackObserver = nil
+        }
         withAnimation(.easeInOut(duration: 0.15)) {
             isPlaying = false
         }
@@ -237,11 +262,12 @@ struct FeedLivePhotoPlayer: View {
     let imageUrl: String
     let videoUrl: String
     let height: CGFloat
-    
+
     @State private var isPlaying = false
     @State private var player: AVPlayer?
     @State private var stillImage: UIImage?
-    
+    @State private var playbackObserver: NSObjectProtocol?
+
     var body: some View {
         ZStack {
             // Still image (loaded from URL)
@@ -298,29 +324,41 @@ struct FeedLivePhotoPlayer: View {
     
     private func startPlaying() {
         guard !isPlaying, let url = URL(string: videoUrl) else { return }
-        
+
+        // Remove any existing observer before adding new one
+        if let observer = playbackObserver {
+            NotificationCenter.default.removeObserver(observer)
+            playbackObserver = nil
+        }
+
         if player == nil {
             player = AVPlayer(url: url)
         }
-        
+
         player?.seek(to: .zero)
         player?.play()
-        
+
         withAnimation(.easeInOut(duration: 0.15)) {
             isPlaying = true
         }
-        
-        NotificationCenter.default.addObserver(
+
+        // Store observer reference for cleanup
+        playbackObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: player?.currentItem,
             queue: .main
-        ) { _ in
+        ) { [self] _ in
             stopPlaying()
         }
     }
-    
+
     private func stopPlaying() {
         player?.pause()
+        // Remove observer to prevent memory leak
+        if let observer = playbackObserver {
+            NotificationCenter.default.removeObserver(observer)
+            playbackObserver = nil
+        }
         withAnimation(.easeInOut(duration: 0.15)) {
             isPlaying = false
         }
@@ -363,6 +401,7 @@ struct MediaPreviewView: View {
     // Live Photo 播放状态
     @State private var isPlayingLivePhoto = false
     @State private var player: AVPlayer?
+    @State private var playbackObserver: NSObjectProtocol?
 
     var body: some View {
         ZStack {
@@ -754,6 +793,12 @@ struct MediaPreviewView: View {
     private func startLivePhotoPlayback(data: LivePhotoData) {
         guard !isPlayingLivePhoto else { return }
 
+        // Remove any existing observer before adding new one
+        if let observer = playbackObserver {
+            NotificationCenter.default.removeObserver(observer)
+            playbackObserver = nil
+        }
+
         if player == nil {
             player = AVPlayer(url: data.videoURL)
         }
@@ -765,17 +810,23 @@ struct MediaPreviewView: View {
             isPlayingLivePhoto = true
         }
 
-        NotificationCenter.default.addObserver(
+        // Store observer reference for cleanup
+        playbackObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: player?.currentItem,
             queue: .main
-        ) { _ in
+        ) { [self] _ in
             stopLivePhotoPlayback()
         }
     }
 
     private func stopLivePhotoPlayback() {
         player?.pause()
+        // Remove observer to prevent memory leak
+        if let observer = playbackObserver {
+            NotificationCenter.default.removeObserver(observer)
+            playbackObserver = nil
+        }
         withAnimation(.easeInOut(duration: 0.15)) {
             isPlayingLivePhoto = false
         }
