@@ -96,12 +96,20 @@ async fn main() -> Result<()> {
         settings.database.max_connections
     );
 
-    // Run database migrations
-    sqlx::migrate!("./migrations")
-        .run(&db_pool)
-        .await
-        .context("Failed to run database migrations")?;
-    info!("Database migrations completed");
+    // Run database migrations (can be skipped with SKIP_MIGRATIONS=true)
+    let skip_migrations = std::env::var("SKIP_MIGRATIONS")
+        .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+        .unwrap_or(false);
+
+    if skip_migrations {
+        info!("Skipping database migrations (SKIP_MIGRATIONS=true)");
+    } else {
+        sqlx::migrate!("./migrations")
+            .run(&db_pool)
+            .await
+            .context("Failed to run database migrations")?;
+        info!("Database migrations completed");
+    }
 
     // Initialize Redis connection pool
     let redis_pool = RedisPool::connect(&settings.redis.url, None)
