@@ -222,121 +222,85 @@ struct HomeView: View {
                             // Feed 内容区域（白色背景，覆盖背景图）
                             VStack(spacing: DesignTokens.spacing20) {
                                 // MARK: - Loading State
-                            if feedViewModel.isLoading && feedViewModel.posts.isEmpty {
-                                ProgressView("Loading feed...")
-                                    .padding()
-                            }
+                                if feedViewModel.isLoading && feedViewModel.posts.isEmpty {
+                                    ProgressView("Loading feed...")
+                                        .padding()
+                                }
 
-                            // MARK: - Error State
-                            if let error = feedViewModel.error {
-                                VStack(spacing: 12) {
-                                    Image(systemName: "exclamationmark.triangle")
-                                        .font(.system(size: 40))
-                                        .foregroundColor(.orange)
-                                    Text(error)
-                                        .font(Typography.regular14)
-                                        .foregroundColor(.gray)
-                                        .multilineTextAlignment(.center)
-
-                                    if error.contains("Session expired") || error.contains("login") {
-                                        // Session expired - show login button
-                                        Button("Login") {
+                                // MARK: - Error State
+                                if let error = feedViewModel.error, feedViewModel.posts.isEmpty {
+                                    FeedErrorView(
+                                        errorMessage: error,
+                                        onRetry: {
+                                            await feedViewModel.loadFeed()
+                                        },
+                                        onLogin: {
                                             Task {
                                                 await authManager.logout()
                                             }
                                         }
-                                        .font(.system(size: DesignTokens.fontMedium, weight: .medium))
-                                        .foregroundColor(DesignTokens.textOnAccent)
-                                        .padding(.horizontal, 24)
-                                        .padding(.vertical, DesignTokens.spacing10)
-                                        .background(DesignTokens.accentColor)
-                                        .cornerRadius(DesignTokens.buttonCornerRadius)
-                                    } else {
-                                        Button("Retry") {
-                                            Task { await feedViewModel.loadFeed() }
-                                        }
-                                        .foregroundColor(DesignTokens.accentColor)
-                                    }
-                                }
-                                .padding()
-                            }
-
-                            // MARK: - Feed Posts + Carousel (Dynamic Layout)
-                            // 配置在 FeedLayoutConfig.swift 中修改
-                            // 当前设置：每 4 个帖子后显示一次轮播图
-                            ForEach(FeedLayoutBuilder.buildFeedItems(from: feedViewModel.posts)) { item in
-                                switch item {
-                                case .post(let index, let post):
-                                    FeedPostCard(
-                                        post: post,
-                                        showReportView: $showReportView,
-                                        onLike: { Task { await feedViewModel.toggleLike(postId: post.id) } },
-                                        onComment: {
-                                            selectedPostForComment = post
-                                            showComments = true
-                                        },
-                                        onShare: { Task { await feedViewModel.sharePost(postId: post.id) } },
-                                        onBookmark: { Task { await feedViewModel.toggleBookmark(postId: post.id) } }
                                     )
-                                    .onTapGesture {
-                                        selectedPostForDetail = post
-                                        showPostDetail = true
-                                    }
-                                    .onAppear {
-                                        // Auto-load more when reaching near the end (3 posts before)
-                                        if index >= feedViewModel.posts.count - 3 && feedViewModel.hasMore && !feedViewModel.isLoadingMore {
-                                            Task { await feedViewModel.loadMore() }
+                                }
+
+                                // MARK: - Feed Posts + Carousel (Dynamic Layout)
+                                // 配置在 FeedLayoutConfig.swift 中修改
+                                // 当前设置：每 4 个帖子后显示一次轮播图
+                                if !feedViewModel.posts.isEmpty {
+                                    ForEach(FeedLayoutBuilder.buildFeedItems(from: feedViewModel.posts)) { item in
+                                        switch item {
+                                        case .post(let index, let post):
+                                            FeedPostCard(
+                                                post: post,
+                                                showReportView: $showReportView,
+                                                onLike: { Task { await feedViewModel.toggleLike(postId: post.id) } },
+                                                onComment: {
+                                                    selectedPostForComment = post
+                                                    showComments = true
+                                                },
+                                                onShare: { Task { await feedViewModel.sharePost(postId: post.id) } },
+                                                onBookmark: { Task { await feedViewModel.toggleBookmark(postId: post.id) } }
+                                            )
+                                            .onTapGesture {
+                                                selectedPostForDetail = post
+                                                showPostDetail = true
+                                            }
+                                            .onAppear {
+                                                // Auto-load more when reaching near the end (3 posts before)
+                                                if index >= feedViewModel.posts.count - 3 && feedViewModel.hasMore && !feedViewModel.isLoadingMore {
+                                                    Task { await feedViewModel.loadMore() }
+                                                }
+                                            }
+
+                                        case .carousel:
+                                            HottestBankerSection(onSeeAllTapped: {
+                                                currentPage = .rankingList
+                                            })
                                         }
                                     }
-
-                                case .carousel:
-                                    HottestBankerSection(onSeeAllTapped: {
-                                        currentPage = .rankingList
-                                    })
                                 }
-                            }
 
-                            // MARK: - Empty State (no posts in feed)
-                            if feedViewModel.posts.isEmpty && !feedViewModel.isLoading && feedViewModel.error == nil {
-                                VStack(spacing: DesignTokens.spacing16) {
-                                    Image(systemName: "square.stack.3d.up.slash")
-                                        .font(.system(size: 50))
-                                        .foregroundColor(DesignTokens.accentColor.opacity(0.6))
+                                // MARK: - Empty State (no posts in feed)
+                                if feedViewModel.posts.isEmpty && !feedViewModel.isLoading && feedViewModel.error == nil {
+                                    EmptyFeedView(
+                                        onRefresh: {
+                                            await feedViewModel.refresh()
+                                        },
+                                        onCreatePost: {
+                                            showPhotoOptions = true
+                                        }
+                                    )
+                                }
 
-                                    Text(LocalizedStringKey("No posts yet"))
-                                        .font(.system(size: DesignTokens.fontTitle, weight: .semibold))
-                                        .foregroundColor(DesignTokens.textPrimary)
-
-                                    Text(LocalizedStringKey("Be the first to share something!"))
-                                        .font(.system(size: DesignTokens.fontMedium))
-                                        .foregroundColor(DesignTokens.textSecondary)
-                                        .multilineTextAlignment(.center)
-
-                                    Button(action: { showPhotoOptions = true }) {
-                                        Text(LocalizedStringKey("Create Post"))
-                                            .font(.system(size: DesignTokens.fontMedium, weight: .medium))
-                                            .foregroundColor(DesignTokens.textOnAccent)
-                                            .padding(.horizontal, 24)
-                                            .padding(.vertical, DesignTokens.spacing10)
-                                            .background(DesignTokens.accentColor)
-                                            .cornerRadius(DesignTokens.buttonCornerRadius)
+                                // MARK: - Loading More Indicator
+                                if feedViewModel.isLoadingMore {
+                                    HStack {
+                                        Spacer()
+                                        ProgressView()
+                                            .tint(DesignTokens.accentColor)
+                                        Spacer()
                                     }
-                                    .padding(.top, DesignTokens.spacing8)
+                                    .padding()
                                 }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 40)
-                            }
-
-                            // MARK: - Loading More Indicator
-                            if feedViewModel.isLoadingMore {
-                                HStack {
-                                    Spacer()
-                                    ProgressView()
-                                        .tint(DesignTokens.accentColor)
-                                    Spacer()
-                                }
-                                .padding()
-                            }
 
                             }
                             .padding(.vertical, DesignTokens.spacing16)

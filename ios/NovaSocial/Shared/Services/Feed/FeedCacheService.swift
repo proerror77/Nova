@@ -273,6 +273,34 @@ actor FeedCacheService {
         }
     }
 
+    /// Invalidate cache when user creates new post
+    /// This ensures the feed shows the new post after posting
+    func invalidateCacheOnNewPost() async {
+        // Clear memory cache completely for instant refresh
+        memoryCache.removeAllObjects()
+
+        // Clear disk cache for first page only (cursor = nil)
+        // This implements stale-while-revalidate: we keep paginated caches but refresh the first page
+        guard let cacheDir = cacheDirectory else { return }
+
+        do {
+            let files = try fileManager.contentsOfDirectory(at: cacheDir, includingPropertiesForKeys: nil)
+
+            for file in files {
+                let filename = file.lastPathComponent
+                // Remove only first-page caches (containing "_first")
+                if filename.contains("_first") {
+                    try fileManager.removeItem(at: file)
+                    feedCacheLogger.debug("Invalidated first-page cache: \(filename)")
+                }
+            }
+
+            feedCacheLogger.info("Cache invalidated for new post")
+        } catch {
+            feedCacheLogger.error("Failed to invalidate cache on new post: \(error.localizedDescription)")
+        }
+    }
+
     /// Clear all caches
     func clearAllCache() async {
         memoryCache.removeAllObjects()

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import OSLog
 
 // MARK: - Feed Logger
 enum FeedLogger {
@@ -47,6 +48,7 @@ class FeedViewModel: ObservableObject {
     private let contentService: ContentService
     private let socialService: SocialService
     private let authManager: AuthenticationManager
+    private let performanceMonitor = FeedPerformanceMonitor.shared
     private var currentCursor: String?
     private var currentAlgorithm: FeedAlgorithm = .chronological
     private var currentUserId: String? {
@@ -55,11 +57,16 @@ class FeedViewModel: ObservableObject {
 
     // Track ongoing like operations to prevent concurrent calls for the same post
     private var ongoingLikeOperations: Set<String> = []
-    
+
     // Track recently created posts to preserve them after refresh (optimistic update)
     // Posts are kept for 5 minutes to allow backend indexing
     private var recentlyCreatedPosts: [(post: FeedPost, createdAt: Date)] = []
     private let recentPostRetentionDuration: TimeInterval = 300  // 5 minutes
+
+    // MARK: - Memory Management
+
+    // Maximum number of posts to keep in memory to prevent excessive memory usage
+    private let maxPostsInMemory = 100
     
     #if DEBUG
     private var loadFeedInvocationCounter: Int = 0
@@ -77,6 +84,10 @@ class FeedViewModel: ObservableObject {
 
     // MARK: - Image Prefetching
 
+    // Track failed prefetch URLs to avoid repeated attempts
+    private var failedPrefetchUrls: Set<String> = []
+    private let maxPrefetchRetries = 2
+
     /// Prefetch images for upcoming posts to improve scroll performance
     private func prefetchImagesForPosts(_ posts: [FeedPost], startIndex: Int = 0, count: Int = 5) {
         let endIndex = min(startIndex + count, posts.count)
@@ -84,12 +95,41 @@ class FeedViewModel: ObservableObject {
 
         let upcomingPosts = posts[startIndex..<endIndex]
         let urls = upcomingPosts.flatMap { $0.displayMediaUrls }
+            .filter { !failedPrefetchUrls.contains($0) }  // Skip previously failed URLs
 
         guard !urls.isEmpty else { return }
 
-        // Run prefetch asynchronously with low priority to avoid blocking main actor
-        Task.detached(priority: .utility) { [urls, prefetchTargetSize] in
-            await ImageCacheService.shared.prefetch(urls: urls, targetSize: prefetchTargetSize, priority: .low)
+        // Start tracking image prefetch
+        let signpostID = performanceMonitor.beginImagePrefetch(urlCount: urls.count)
+
+        // Run prefetch asynchronously with low priority and error handling
+        // Use Task instead of Task.detached to maintain MainActor context for failedPrefetchUrls access
+        Task(priority: .utility) { [urls, prefetchTargetSize, weak self] in
+            var successCount = 0
+            var failCount = 0
+
+            do {
+                await ImageCacheService.shared.prefetch(urls: urls, targetSize: prefetchTargetSize, priority: .low)
+                successCount = urls.count
+            } catch {
+                // Log prefetch errors in debug mode, mark URLs as failed
+                FeedLogger.debug("Prefetch failed for \(urls.count) URLs: \(error.localizedDescription)")
+                failCount = urls.count
+
+                // Already on MainActor, can safely access failedPrefetchUrls
+                guard let self = self else { return }
+                // Mark failed URLs to avoid repeated attempts
+                for url in urls {
+                    self.failedPrefetchUrls.insert(url)
+                }
+                // Limit failed URL cache size
+                if self.failedPrefetchUrls.count > 100 {
+                    self.failedPrefetchUrls.removeFirst()
+                }
+            }
+
+            // Track prefetch completion
+            self?.performanceMonitor.endImagePrefetch(signpostID: signpostID, successCount: successCount, failCount: failCount)
         }
     }
 
@@ -112,28 +152,46 @@ class FeedViewModel: ObservableObject {
         lastPrefetchTime = now
 
         let sortedIndices = visibleIndices.sorted()
-        guard let firstVisible = sortedIndices.first,
+        guard let _ = sortedIndices.first,
               let lastVisible = sortedIndices.last else { return }
 
         // Get URLs for currently visible posts (high priority)
         let visibleUrls = sortedIndices
             .filter { $0 < posts.count }
             .flatMap { posts[$0].displayMediaUrls }
+            .filter { !failedPrefetchUrls.contains($0) }
 
         // Get URLs for upcoming posts (prefetch with low priority)
         let prefetchStart = lastVisible + 1
         let prefetchEnd = min(prefetchStart + 8, posts.count)
         let upcomingUrls = (prefetchStart..<prefetchEnd)
             .flatMap { posts[$0].displayMediaUrls }
+            .filter { !failedPrefetchUrls.contains($0) }
 
-        // Use smart prefetch for optimal loading
-        Task.detached(priority: .utility) { [visibleUrls, upcomingUrls, prefetchTargetSize] in
-            await ImageCacheService.shared.smartPrefetch(
-                visibleUrls: visibleUrls,
-                upcomingUrls: upcomingUrls,
-                targetSize: prefetchTargetSize
-            )
+        // Use smart prefetch for optimal loading with error handling
+        // Use Task instead of Task.detached to maintain MainActor context for failedPrefetchUrls access
+        Task(priority: .utility) { [visibleUrls, upcomingUrls, prefetchTargetSize, weak self] in
+            do {
+                await ImageCacheService.shared.smartPrefetch(
+                    visibleUrls: visibleUrls,
+                    upcomingUrls: upcomingUrls,
+                    targetSize: prefetchTargetSize
+                )
+            } catch {
+                FeedLogger.debug("Smart prefetch failed: \(error.localizedDescription)")
+                // Already on MainActor, can safely access failedPrefetchUrls
+                guard let self = self else { return }
+                // Mark failed URLs
+                for url in visibleUrls + upcomingUrls {
+                    self.failedPrefetchUrls.insert(url)
+                }
+            }
         }
+    }
+
+    /// Clear failed prefetch cache (called on refresh)
+    func clearPrefetchFailures() {
+        failedPrefetchUrls.removeAll()
     }
 
     // MARK: - Public Methods
@@ -188,6 +246,10 @@ class FeedViewModel: ObservableObject {
     ) async {
         guard !isLoading else { return }
 
+        // Start performance tracking
+        let loadStartTime = Date()
+        let signpostID = performanceMonitor.beginFeedLoad(source: .initial, fromCache: false)
+
         isLoading = true
         error = nil
         currentAlgorithm = algorithm
@@ -210,6 +272,9 @@ class FeedViewModel: ObservableObject {
                 print("[FeedVM] loadFeed #\(invocationId) using cached data (\(cachedResponse.posts.count) posts)")
                 #endif
 
+                // Track cache hit
+                performanceMonitor.recordCacheAccess(hit: true)
+
                 var cachedPosts = cachedResponse.posts.map { FeedPost(from: $0) }
                 cachedPosts = syncCurrentUserAvatar(cachedPosts)
                 mergeRecentlyCreatedPosts(into: &cachedPosts)
@@ -228,6 +293,9 @@ class FeedViewModel: ObservableObject {
 
                 // Load bookmark status asynchronously (non-blocking)
                 loadBookmarkStatusAsync(for: self.posts.map { $0.id })
+            } else {
+                // Track cache miss
+                performanceMonitor.recordCacheAccess(hit: false)
             }
         }
 
@@ -326,7 +394,13 @@ class FeedViewModel: ObservableObject {
             loadBookmarkStatusAsync(for: self.posts.map { $0.id })
 
             self.error = nil
+
+            // Track successful load
+            let duration = Date().timeIntervalSince(loadStartTime)
+            performanceMonitor.endFeedLoad(signpostID: signpostID, success: true, postCount: self.posts.count, duration: duration)
         } catch let apiError as APIError {
+            // Track error
+            performanceMonitor.recordError(apiError, context: "loadFeed")
             // Handle unauthorized: try token refresh or fallback to guest mode
             if case .unauthorized = apiError, isAuthenticated, !isGuestFallback {
                 let refreshed = await authManager.attemptTokenRefresh()
@@ -382,10 +456,21 @@ class FeedViewModel: ObservableObject {
                 // Show error and stop retrying
                 self.error = apiError.localizedDescription
                 self.posts = []
+
+                // Track failed load
+                let duration = Date().timeIntervalSince(loadStartTime)
+                performanceMonitor.endFeedLoad(signpostID: signpostID, success: false, postCount: 0, duration: duration)
             }
         } catch {
+            // Track error
+            performanceMonitor.recordError(error, context: "loadFeed")
+
             self.error = "Failed to load feed: \(error.localizedDescription)"
             self.posts = []
+
+            // Track failed load
+            let duration = Date().timeIntervalSince(loadStartTime)
+            performanceMonitor.endFeedLoad(signpostID: signpostID, success: false, postCount: 0, duration: duration)
         }
 
         isLoading = false
@@ -426,6 +511,9 @@ class FeedViewModel: ObservableObject {
 
                 // OPTIMIZATION: Load bookmark status asynchronously for new posts
                 loadBookmarkStatusAsync(for: uniqueNewPosts.map { $0.id })
+
+                // Enforce memory limit after adding new posts
+                enforceMemoryLimit()
             }
 
         } catch {
@@ -445,8 +533,13 @@ class FeedViewModel: ObservableObject {
     func refresh() async {
         guard !isLoading && !isRefreshing else { return }
 
+        // Start performance tracking for refresh
+        let refreshStartTime = Date()
+        let signpostID = performanceMonitor.beginFeedLoad(source: .refresh, fromCache: false)
+
         isLoading = true
         isRefreshing = true
+        clearPrefetchFailures()  // Reset failed prefetch cache on refresh
         // 刷新时不立即清除错误，只有在成功或真正的错误时才更新
 
         do {
@@ -490,7 +583,13 @@ class FeedViewModel: ObservableObject {
             self.error = nil
             self.lastRefreshedAt = Date()
 
+            // Track successful refresh
+            let duration = Date().timeIntervalSince(refreshStartTime)
+            performanceMonitor.endFeedLoad(signpostID: signpostID, success: true, postCount: self.posts.count, duration: duration)
+
         } catch let apiError as APIError {
+            // Track error
+            performanceMonitor.recordError(apiError, context: "refresh")
             // 检查是否是取消错误（用户快速滑动导致）
             if case .networkError(let underlyingError) = apiError {
                 let nsError = underlyingError as NSError
@@ -504,8 +603,15 @@ class FeedViewModel: ObservableObject {
             // 非取消错误：只有当前没有数据时才显示错误
             if posts.isEmpty {
                 self.error = apiError.localizedDescription
+
+                // Track failed refresh
+                let duration = Date().timeIntervalSince(refreshStartTime)
+                performanceMonitor.endFeedLoad(signpostID: signpostID, success: false, postCount: 0, duration: duration)
             }
         } catch {
+            // Track error
+            performanceMonitor.recordError(error, context: "refresh")
+
             let nsError = error as NSError
             // 检查是否是取消错误
             if nsError.code == NSURLErrorCancelled || nsError.localizedDescription.lowercased().contains("cancelled") {
@@ -517,6 +623,10 @@ class FeedViewModel: ObservableObject {
             // 非取消错误：只有当前没有数据时才显示错误
             if posts.isEmpty {
                 self.error = "Failed to refresh: \(error.localizedDescription)"
+
+                // Track failed refresh
+                let duration = Date().timeIntervalSince(refreshStartTime)
+                performanceMonitor.endFeedLoad(signpostID: signpostID, success: false, postCount: 0, duration: duration)
             }
         }
 
@@ -560,8 +670,15 @@ class FeedViewModel: ObservableObject {
             FeedLogger.debug("Selected: For You (all content)")
         }
 
-        // Reload feed with new channel filter
+        // Reload feed with new channel filter (track as channel switch)
+        let loadStartTime = Date()
+        let signpostID = performanceMonitor.beginFeedLoad(source: .channelSwitch, fromCache: false)
+
         await loadFeed(algorithm: currentAlgorithm)
+
+        // Note: loadFeed handles its own tracking, but we track the overall channel switch duration here
+        let duration = Date().timeIntervalSince(loadStartTime)
+        FeedLogger.debug("Channel switch completed in \(String(format: "%.2f", duration))s")
     }
 
     /// Add a newly created post to the top of the feed (optimistic update)
@@ -571,7 +688,7 @@ class FeedViewModel: ObservableObject {
         let currentUser = authManager.currentUser
         let authorName = currentUser?.displayName ?? currentUser?.username ?? "User \(post.authorId.prefix(8))"
         let authorAvatar = currentUser?.avatarUrl
-        
+
         let feedPost = FeedPost(
             id: post.id,
             authorId: post.authorId,
@@ -594,10 +711,18 @@ class FeedViewModel: ObservableObject {
         // Add to the top of the feed
         self.posts.insert(feedPost, at: 0)
         self.postIds.insert(post.id, at: 0)
-        
+
         // Track recently created post to preserve after refresh
         cleanupExpiredRecentPosts()
         recentlyCreatedPosts.append((post: feedPost, createdAt: Date()))
+
+        // Invalidate feed cache to ensure fresh data on next load
+        Task.detached(priority: .utility) {
+            await FeedCacheService.shared.invalidateCacheOnNewPost()
+        }
+
+        // Enforce memory limit
+        enforceMemoryLimit()
     }
     
     /// Clean up expired recently created posts
@@ -606,20 +731,35 @@ class FeedViewModel: ObservableObject {
         recentlyCreatedPosts.removeAll { now.timeIntervalSince($0.createdAt) > recentPostRetentionDuration }
     }
 
+    /// Enforce memory limit by removing oldest posts when exceeding maxPostsInMemory
+    /// This prevents excessive memory usage in long scrolling sessions
+    private func enforceMemoryLimit() {
+        guard posts.count > maxPostsInMemory else { return }
+
+        let excessCount = posts.count - maxPostsInMemory
+        // Remove oldest posts (from the end of the array)
+        posts.removeLast(excessCount)
+        postIds.removeLast(excessCount)
+
+        #if DEBUG
+        print("[FeedVM] Enforced memory limit: removed \(excessCount) oldest posts, now at \(posts.count) posts")
+        #endif
+    }
+
     /// Load bookmark status asynchronously without blocking the main feed display
     /// This optimization allows the feed to render immediately while bookmark states load in background
     private func loadBookmarkStatusAsync(for postIds: [String]) {
         guard isAuthenticated, !postIds.isEmpty else { return }
 
-        Task.detached(priority: .utility) { [weak self, socialService] in
+        // Use Task instead of Task.detached to maintain MainActor context
+        Task(priority: .utility) { [weak self] in
             guard let self = self else { return }
 
             do {
-                let bookmarkedIds = try await socialService.batchCheckBookmarked(postIds: postIds)
+                let bookmarkedIds = try await self.socialService.batchCheckBookmarked(postIds: postIds)
 
-                await MainActor.run {
-                    self.updateBookmarkStates(bookmarkedIds)
-                }
+                // Already on MainActor, can safely update state
+                self.updateBookmarkStates(bookmarkedIds)
 
                 #if DEBUG
                 print("[FeedVM] Async bookmark load complete: \(bookmarkedIds.count) bookmarked")
@@ -963,6 +1103,25 @@ class FeedViewModel: ObservableObject {
         }
         let nsError = error as NSError
         return nsError.code == NSURLErrorCancelled || nsError.localizedDescription.lowercased().contains("cancelled")
+    }
+
+    // MARK: - Performance Monitoring
+
+    /// Get current performance metrics for debugging
+    func getPerformanceMetrics() -> FeedMetrics {
+        return performanceMonitor.getMetrics()
+    }
+
+    /// Log performance metrics report to console (debug builds only)
+    func logPerformanceMetrics() {
+        #if DEBUG
+        performanceMonitor.logMetrics()
+        #endif
+    }
+
+    /// Reset performance metrics (for testing or new session)
+    func resetPerformanceMetrics() {
+        performanceMonitor.resetMetrics()
     }
 
     /// Fetch post details from content-service and social stats (legacy method)

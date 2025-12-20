@@ -12,8 +12,7 @@ struct NewPostView: View {
     @State private var showPhotoPicker = false
     @State private var showCamera = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
-    @State private var selectedImages: [UIImage] = []
-    @State private var selectedMediaItems: [PostMediaItem] = []  // Live Photo support
+    @State private var selectedMediaItems: [PostMediaItem] = []  // Unified media items (images, videos, live photos)
     @State private var isProcessingMedia = false  // Live Photo processing indicator
     @State private var isPosting = false
     @State private var uploadProgress: Double = 0.0  // Upload progress (0.0 to 1.0)
@@ -37,10 +36,6 @@ struct NewPostView: View {
     @State private var selectedChannelIds: [String] = []
     @State private var suggestedChannels: [ChannelSuggestion] = []
     @State private var isLoadingSuggestions: Bool = false
-
-    // Draft storage keys
-    private let draftTextKey = "NewPostDraftText"
-    private let draftImagesKey = "NewPostDraftImages"
 
     // Services
     private let mediaService = MediaService()
@@ -100,12 +95,9 @@ struct NewPostView: View {
             // 如果有初始媒体项目（来自 PhotosPicker），添加到 selectedMediaItems
             if let mediaItems = initialMediaItems, !mediaItems.isEmpty, selectedMediaItems.isEmpty {
                 selectedMediaItems = mediaItems
-                // 同步到 legacy selectedImages
-                selectedImages = mediaItems.map { $0.displayImage }
             }
-            // 如果有初始图片，添加到selectedImages
-            else if let image = initialImage, selectedImages.isEmpty {
-                selectedImages = [image]
+            // 如果有初始图片，添加到 selectedMediaItems
+            else if let image = initialImage, selectedMediaItems.isEmpty {
                 selectedMediaItems = [.image(image)]
             } else if initialMediaItems == nil && initialImage == nil {
                 // 没有初始媒体时，尝试加载草稿
@@ -449,50 +441,6 @@ struct NewPostView: View {
                     }
                 }
                 
-                // Legacy support: show selectedImages if selectedMediaItems is empty
-                if selectedMediaItems.isEmpty {
-                    ForEach(Array(selectedImages.enumerated()), id: \.offset) { index, image in
-                        ZStack {
-                            ZStack(alignment: .topTrailing) {
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 239, height: 290)
-                                    .cornerRadius(10)
-                                    .clipped()
-
-                                Button(action: {
-                                    removeImage(at: index)
-                                }) {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 20))
-                                        .foregroundColor(.white)
-                                        .background(
-                                            Circle()
-                                                .fill(Color.black.opacity(0.5))
-                                                .frame(width: 20, height: 20)
-                                        )
-                                }
-                                .padding(4)
-                            }
-
-                            // Enhance with Alice button (only on first image)
-                            if index == 0 {
-                                VStack {
-                                    Spacer()
-                                    HStack {
-                                        enhanceWithAliceButton
-                                            .padding(.leading, 8)
-                                            .padding(.bottom, 8)
-                                        Spacer()
-                                    }
-                                }
-                                .frame(width: 239, height: 290)
-                            }
-                        }
-                    }
-                }
-
                 // Add more media button (max 5) - always shown on the right
                 if totalMediaCount < 5 && !isProcessingMedia {
                     ZStack {
@@ -533,7 +481,7 @@ struct NewPostView: View {
     
     // MARK: - Total media count
     private var totalMediaCount: Int {
-        selectedMediaItems.isEmpty ? selectedImages.count : selectedMediaItems.count
+        selectedMediaItems.count
     }
 
     // MARK: - Enhance with Alice Button
@@ -638,12 +586,7 @@ struct NewPostView: View {
 
     // MARK: - Get First Image for Enhancement
     private func getFirstImage() -> UIImage? {
-        if !selectedMediaItems.isEmpty {
-            return selectedMediaItems.first?.displayImage
-        } else if !selectedImages.isEmpty {
-            return selectedImages.first
-        }
-        return nil
+        selectedMediaItems.first?.displayImage
     }
 
     // MARK: - Process Selected Photos (with Live Photo support)
@@ -667,11 +610,6 @@ struct NewPostView: View {
             
             await MainActor.run {
                 selectedMediaItems.append(contentsOf: newMedia)
-                
-                // Also update legacy selectedImages for backward compatibility
-                for media in newMedia {
-                    selectedImages.append(media.displayImage)
-                }
             }
         } catch {
             #if DEBUG
@@ -681,12 +619,11 @@ struct NewPostView: View {
             // Fallback to regular image loading
             for item in items {
                 guard selectedMediaItems.count < 5 else { break }
-                
+
                 if let data = try? await item.loadTransferable(type: Data.self),
                    let image = UIImage(data: data) {
                     await MainActor.run {
                         selectedMediaItems.append(.image(image))
-                        selectedImages.append(image)
                     }
                 }
             }
@@ -711,25 +648,9 @@ struct NewPostView: View {
 
         selectedMediaItems.remove(at: index)
 
-        // Sync with legacy selectedImages
-        if index < selectedImages.count {
-            selectedImages.remove(at: index)
-        }
-    }
-
-    // MARK: - 删除图片 (legacy support)
-    private func removeImage(at index: Int) {
-        guard index < selectedImages.count else { return }
-        selectedImages.remove(at: index)
-
-        // 同步更新 selectedPhotos
+        // Sync selectedPhotos if applicable
         if index < selectedPhotos.count {
             selectedPhotos.remove(at: index)
-        }
-        
-        // Also remove from selectedMediaItems if applicable
-        if index < selectedMediaItems.count {
-            removeMediaItem(at: index)
         }
     }
 
@@ -988,40 +909,58 @@ struct NewPostView: View {
 
     // MARK: - 是否可以发布
     private var canPost: Bool {
-        !postText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedImages.isEmpty
+        !postText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedMediaItems.isEmpty
     }
 
     // MARK: - 是否有内容（用于判断是否显示保存弹窗）
     private var hasContent: Bool {
-        !postText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedImages.isEmpty
+        !postText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedMediaItems.isEmpty
     }
 
-    // MARK: - 保存草稿
+    // MARK: - 保存草稿 (uses PostDraftManager for file-based storage)
     private func saveDraft() {
-        // 保存文本
-        UserDefaults.standard.set(postText, forKey: draftTextKey)
-
-        // 保存图片（转为 Data 数组）
-        let imageDataArray = selectedImages.compactMap { $0.jpegData(compressionQuality: 0.8) }
-        UserDefaults.standard.set(imageDataArray, forKey: draftImagesKey)
+        Task {
+            do {
+                try await PostDraftManager.shared.saveDraft(
+                    text: postText,
+                    mediaItems: selectedMediaItems,
+                    channelIds: selectedChannelIds
+                )
+            } catch {
+                #if DEBUG
+                print("[NewPost] Failed to save draft: \(error)")
+                #endif
+            }
+        }
     }
 
     // MARK: - 清除草稿
     private func clearDraft() {
-        UserDefaults.standard.removeObject(forKey: draftTextKey)
-        UserDefaults.standard.removeObject(forKey: draftImagesKey)
+        Task {
+            await PostDraftManager.shared.clearDraft()
+        }
     }
 
     // MARK: - 加载草稿
     private func loadDraft() {
-        // 加载文本
-        if let savedText = UserDefaults.standard.string(forKey: draftTextKey) {
-            postText = savedText
-        }
-
-        // 加载图片
-        if let imageDataArray = UserDefaults.standard.array(forKey: draftImagesKey) as? [Data] {
-            selectedImages = imageDataArray.compactMap { UIImage(data: $0) }
+        Task {
+            do {
+                if let draft = try await PostDraftManager.shared.loadDraft() {
+                    await MainActor.run {
+                        postText = draft.text
+                        selectedChannelIds = draft.channelIds
+                    }
+                    // Load media items from disk
+                    let mediaItems = await PostDraftManager.shared.loadMediaForDraft(draft)
+                    await MainActor.run {
+                        selectedMediaItems = mediaItems
+                    }
+                }
+            } catch {
+                #if DEBUG
+                print("[NewPost] Failed to load draft: \(error)")
+                #endif
+            }
         }
     }
 
@@ -1090,10 +1029,7 @@ struct NewPostView: View {
             return
         }
 
-        // Use new media items if available, otherwise fall back to legacy selectedImages
-        let itemsToUpload: [PostMediaItem] = selectedMediaItems.isEmpty
-            ? selectedImages.map { .image($0) }
-            : selectedMediaItems
+        let itemsToUpload: [PostMediaItem] = selectedMediaItems
 
         // For posts WITH media: Use background upload (user can continue using app)
         if !itemsToUpload.isEmpty {
@@ -1182,9 +1118,7 @@ struct NewPostView: View {
         uploadStatus = "Preparing..."
 
         do {
-            let itemsToUpload: [PostMediaItem] = selectedMediaItems.isEmpty
-                ? selectedImages.map { .image($0) }
-                : selectedMediaItems
+            let itemsToUpload: [PostMediaItem] = selectedMediaItems
 
             guard !itemsToUpload.isEmpty else {
                 // No media - handled by submitPost now

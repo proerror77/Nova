@@ -11,6 +11,7 @@ struct FeedPostCard: View {
     var onBookmark: () -> Void = {}
 
     @State private var currentImageIndex = 0
+    @State private var isVisible = false
 
     // Target size for feed images (optimized for display)
     private let imageTargetSize = CGSize(width: 750, height: 1000)
@@ -135,6 +136,14 @@ struct FeedPostCard: View {
         .background(.white)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Post by \(post.authorName)")
+        .onAppear {
+            isVisible = true
+        }
+        .onDisappear {
+            isVisible = false
+            // Clean up off-screen resources
+            cleanupOffScreenResources()
+        }
     }
 
     // MARK: - Media Content View
@@ -381,6 +390,19 @@ struct FeedPostCard: View {
                lowercased.contains(".m4v") ||
                lowercased.contains(".mov") ||
                lowercased.contains(".webm")
+    }
+
+    // MARK: - Resource Cleanup
+
+    /// Clean up resources when card goes off-screen to reduce memory usage
+    private func cleanupOffScreenResources() {
+        // Cancel any ongoing image prefetch operations for this post
+        // The ImageCacheService maintains its own cache, so images will be quickly
+        // reloaded if user scrolls back to this post
+        Task.detached(priority: .utility) { [displayUrls = post.displayMediaUrls] in
+            // Evict off-screen images from memory cache (but keep on disk)
+            await ImageCacheService.shared.evictFromMemory(urls: displayUrls)
+        }
     }
 }
 

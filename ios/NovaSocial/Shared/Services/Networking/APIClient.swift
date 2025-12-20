@@ -55,6 +55,10 @@ class APIClient {
     private let deduplicationStore = RequestDeduplicationStore()
 
     // MARK: - Retry Configuration (重試配置)
+    // Issue #9: Consolidated retry logic with exponential backoff
+    // - Retries transient errors (network issues, timeouts, 5xx server errors)
+    // - Uses exponential backoff: 0.5s, 1s, 2s (max 3 attempts)
+    // - Adds jitter to prevent thundering herd
     private let maxRetryAttempts = 3
     private let baseRetryDelay: TimeInterval = 0.5  // 500ms base delay
 

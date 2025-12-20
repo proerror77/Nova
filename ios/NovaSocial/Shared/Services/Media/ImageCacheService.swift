@@ -400,6 +400,20 @@ actor ImageCacheService {
         }
     }
 
+    /// Evict specific URLs from memory cache (keeps disk cache intact)
+    /// Used to free memory for off-screen images while preserving quick reload capability
+    func evictFromMemory(urls: [String]) {
+        for urlString in urls {
+            // Remove all size variants for this URL
+            let baseKey = cacheKey(for: urlString, targetSize: nil)
+            memoryCache.removeObject(forKey: baseKey as NSString)
+
+            // Also remove thumbnail if exists
+            let thumbnailKey = "thumb_\(urlString)" as NSString
+            thumbnailCache.removeObject(forKey: thumbnailKey)
+        }
+    }
+
     /// Prefetch images with smart prioritization based on visibility
     /// - Parameters:
     ///   - visibleUrls: URLs currently visible on screen (high priority)
