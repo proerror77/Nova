@@ -13,7 +13,7 @@ class FeedService {
     /// - Parameters:
     ///   - algo: Algorithm type ("ch" for chronological, "time" for time-based)
     ///   - limit: Number of posts to fetch (1-100, default 20)
-    ///   - cursor: Pagination cursor from previous response
+    ///   - cursor: Pagination cursor from previous response (base64 encoded offset)
     ///   - channelId: Optional channel ID or slug to filter feed by channel
     /// - Returns: FeedResponse containing post IDs and pagination info
     func getFeed(algo: FeedAlgorithm = .chronological, limit: Int = 20, cursor: String? = nil, channelId: String? = nil) async throws -> FeedResponse {
@@ -347,17 +347,15 @@ struct FeedPostRaw: Codable {
 struct FeedResponse: Codable {
     let posts: [FeedPostRaw]
     let hasMore: Bool
+    /// Cursor for next page (base64 encoded offset from backend)
+    let cursor: String?
+    /// Total count of posts (approximation from backend)
+    let totalCount: Int?
 
     /// Convenience accessor for post IDs
     var postIds: [String] {
         posts.map { $0.id }
     }
-
-    /// Placeholder for cursor-based pagination (backend doesn't return cursor yet)
-    var cursor: String? { nil }
-
-    /// Placeholder for total count
-    var totalCount: Int? { posts.count }
 }
 
 /// Extended feed response with full post details

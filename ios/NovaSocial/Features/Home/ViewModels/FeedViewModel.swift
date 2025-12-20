@@ -477,18 +477,37 @@ class FeedViewModel: ObservableObject {
     }
 
     /// Load more posts (pagination)
+    /// Uses cursor-based pagination with base64-encoded offset from backend
     func loadMore() async {
-        // Note: Backend doesn't support cursor pagination yet, so this is disabled
         guard !isLoadingMore, hasMore else { return }
+
+        // Must have a cursor to load more (first page is loaded via loadFeed)
+        guard currentCursor != nil else {
+            #if DEBUG
+            print("[Feed] loadMore skipped: no cursor available")
+            #endif
+            hasMore = false
+            return
+        }
 
         isLoadingMore = true
 
         do {
-            let response = try await feedService.getFeed(algo: currentAlgorithm, limit: 20, cursor: currentCursor)
+            // Use cursor-based pagination: pass the cursor from previous response
+            let response = try await feedService.getFeed(
+                algo: currentAlgorithm,
+                limit: 20,
+                cursor: currentCursor,
+                channelId: selectedChannelId
+            )
 
             self.postIds.append(contentsOf: response.postIds)
             self.currentCursor = response.cursor
             self.hasMore = response.hasMore
+
+            #if DEBUG
+            print("[Feed] loadMore response: \(response.posts.count) posts, hasMore=\(response.hasMore), nextCursor=\(response.cursor ?? "nil")")
+            #endif
 
             // Convert raw posts to FeedPost objects directly
             var newPosts = response.posts.map { FeedPost(from: $0) }
@@ -504,10 +523,14 @@ class FeedViewModel: ObservableObject {
             if uniqueNewPosts.isEmpty {
                 self.hasMore = false
                 #if DEBUG
-                print("[Feed] loadMore returned no new posts, stopping pagination")
+                print("[Feed] loadMore returned no new unique posts, stopping pagination")
                 #endif
             } else {
                 self.posts.append(contentsOf: uniqueNewPosts)
+
+                #if DEBUG
+                print("[Feed] loadMore added \(uniqueNewPosts.count) new posts, total: \(self.posts.count)")
+                #endif
 
                 // OPTIMIZATION: Load bookmark status asynchronously for new posts
                 loadBookmarkStatusAsync(for: uniqueNewPosts.map { $0.id })
@@ -517,11 +540,9 @@ class FeedViewModel: ObservableObject {
             }
 
         } catch {
-            // Stop pagination on error to prevent infinite retry loop
-            // Backend doesn't support cursor pagination yet, so errors here are expected
-            self.hasMore = false
+            // Don't stop pagination on error - allow retry
             #if DEBUG
-            print("[Feed] loadMore error (stopping pagination): \(error)")
+            print("[Feed] loadMore error: \(error)")
             #endif
         }
 
