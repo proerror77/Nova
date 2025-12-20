@@ -669,18 +669,18 @@ impl AuthService for IdentityServiceServer {
                 avatar_url: user.avatar_url.clone(),
                 cover_photo_url: user.cover_photo_url.clone(),
                 location: user.location.clone(),
-                private_account: user.private_account,
+                is_private: user.private_account, // Proto renamed field
                 created_at: user.created_at.timestamp(),
                 updated_at: user.updated_at.timestamp(),
                 first_name: user.first_name.clone(),
                 last_name: user.last_name.clone(),
                 date_of_birth: user.date_of_birth.map(|d| d.format("%Y-%m-%d").to_string()),
                 gender: user.gender.map(|g| match g {
-                    crate::models::user::Gender::Male => "male".to_string(),
-                    crate::models::user::Gender::Female => "female".to_string(),
-                    crate::models::user::Gender::Other => "other".to_string(),
-                    crate::models::user::Gender::PreferNotToSay => "prefer_not_to_say".to_string(),
-                }),
+                    crate::models::user::Gender::Male => 1,           // GENDER_MALE
+                    crate::models::user::Gender::Female => 2,         // GENDER_FEMALE
+                    crate::models::user::Gender::Other => 3,          // GENDER_OTHER
+                    crate::models::user::Gender::PreferNotToSay => 4, // GENDER_PREFER_NOT_TO_SAY
+                }).unwrap_or(0), // GENDER_UNSPECIFIED
             })
             .collect();
 
@@ -886,20 +886,14 @@ impl AuthService for IdentityServiceServer {
                 .ok()
         });
 
-        // Parse gender if provided
-        let gender = req
-            .gender
-            .as_ref()
-            .and_then(|g| match g.to_lowercase().as_str() {
-                "male" => Some(crate::models::user::Gender::Male),
-                "female" => Some(crate::models::user::Gender::Female),
-                "other" => Some(crate::models::user::Gender::Other),
-                "prefer_not_to_say" => Some(crate::models::user::Gender::PreferNotToSay),
-                _ => {
-                    warn!(user_id = %user_id, gender = %g, "Invalid gender value");
-                    None
-                }
-            });
+        // Parse gender from proto enum (i32) if provided
+        let gender = match req.gender {
+            1 => Some(crate::models::user::Gender::Male),           // GENDER_MALE
+            2 => Some(crate::models::user::Gender::Female),         // GENDER_FEMALE
+            3 => Some(crate::models::user::Gender::Other),          // GENDER_OTHER
+            4 => Some(crate::models::user::Gender::PreferNotToSay), // GENDER_PREFER_NOT_TO_SAY
+            _ => None, // GENDER_UNSPECIFIED or invalid
+        };
 
         // Update profile fields
         let fields = db::users::UpdateUserProfileFields {
@@ -908,7 +902,7 @@ impl AuthService for IdentityServiceServer {
             avatar_url: req.avatar_url,
             cover_photo_url: req.cover_photo_url,
             location: req.location,
-            private_account: req.private_account,
+            private_account: req.is_private, // Proto field renamed from private_account to is_private
             // Extended profile fields
             first_name: req.first_name,
             last_name: req.last_name,
@@ -958,7 +952,7 @@ impl AuthService for IdentityServiceServer {
                 avatar_url: user.avatar_url.clone(),
                 cover_photo_url: user.cover_photo_url.clone(),
                 location: user.location.clone(),
-                private_account: user.private_account,
+                is_private: user.private_account, // Proto renamed field
                 created_at: user.created_at.timestamp(),
                 updated_at: user.updated_at.timestamp(),
                 // Extended profile fields
@@ -966,11 +960,11 @@ impl AuthService for IdentityServiceServer {
                 last_name: user.last_name.clone(),
                 date_of_birth: user.date_of_birth.map(|d| d.format("%Y-%m-%d").to_string()),
                 gender: user.gender.map(|g| match g {
-                    crate::models::user::Gender::Male => "male".to_string(),
-                    crate::models::user::Gender::Female => "female".to_string(),
-                    crate::models::user::Gender::Other => "other".to_string(),
-                    crate::models::user::Gender::PreferNotToSay => "prefer_not_to_say".to_string(),
-                }),
+                    crate::models::user::Gender::Male => 1,           // GENDER_MALE
+                    crate::models::user::Gender::Female => 2,         // GENDER_FEMALE
+                    crate::models::user::Gender::Other => 3,          // GENDER_OTHER
+                    crate::models::user::Gender::PreferNotToSay => 4, // GENDER_PREFER_NOT_TO_SAY
+                }).unwrap_or(0), // GENDER_UNSPECIFIED
             }),
             error: None,
         }))
@@ -1197,34 +1191,33 @@ impl AuthService for IdentityServiceServer {
         let user_id = Uuid::parse_str(&req.user_id)
             .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
 
-        // Validate dm_permission if provided
-        if let Some(ref dm) = req.dm_permission {
-            if !["anyone", "followers", "mutuals", "nobody"].contains(&dm.as_str()) {
-                return Err(Status::invalid_argument(
-                    "Invalid dm_permission: must be 'anyone', 'followers', 'mutuals', or 'nobody'",
-                ));
-            }
-        }
+        // Convert dm_permission from proto enum (i32) to database string
+        let dm_permission_str = req.dm_permission.map(|dm| match dm {
+            1 => "anyone".to_string(),    // DM_PERMISSION_ANYONE
+            2 => "followers".to_string(), // DM_PERMISSION_FOLLOWERS
+            3 => "mutuals".to_string(),   // DM_PERMISSION_MUTUALS
+            4 => "nobody".to_string(),    // DM_PERMISSION_NOBODY
+            _ => "mutuals".to_string(),   // Default
+        });
 
-        // Validate privacy_level if provided
-        if let Some(ref pl) = req.privacy_level {
-            if !["public", "friends_only", "private"].contains(&pl.as_str()) {
-                return Err(Status::invalid_argument(
-                    "Invalid privacy_level: must be 'public', 'friends_only', or 'private'",
-                ));
-            }
-        }
+        // Convert privacy_level from proto enum (i32) to database string
+        let privacy_level_str = req.privacy_level.map(|pl| match pl {
+            1 => "public".to_string(),       // PRIVACY_LEVEL_PUBLIC
+            2 => "friends_only".to_string(), // PRIVACY_LEVEL_FRIENDS_ONLY
+            3 => "private".to_string(),      // PRIVACY_LEVEL_PRIVATE
+            _ => "public".to_string(),       // Default
+        });
 
         let fields = db::user_settings::UpdateUserSettingsFields {
-            dm_permission: req.dm_permission,
+            dm_permission: dm_permission_str,
             email_notifications: req.email_notifications,
             push_notifications: req.push_notifications,
             marketing_emails: req.marketing_emails,
             timezone: req.timezone,
             language: req.language,
             dark_mode: req.dark_mode,
-            privacy_level: req.privacy_level,
-            allow_messages: req.allow_messages,
+            privacy_level: privacy_level_str,
+            allow_messages: None, // Deprecated - merged into dm_permission
             show_online_status: req.show_online_status,
         };
 
@@ -2156,17 +2149,33 @@ fn user_model_to_proto(user: &crate::models::User) -> User {
 }
 
 fn settings_to_proto(settings: &db::user_settings::UserSettingsRecord) -> UserSettings {
+    // Convert dm_permission from database string to proto enum (i32)
+    let dm_permission_i32 = match settings.dm_permission.to_lowercase().as_str() {
+        "anyone" => 1,       // DM_PERMISSION_ANYONE
+        "followers" => 2,    // DM_PERMISSION_FOLLOWERS
+        "mutuals" => 3,      // DM_PERMISSION_MUTUALS
+        "nobody" => 4,       // DM_PERMISSION_NOBODY
+        _ => 3,              // Default to mutuals
+    };
+
+    // Convert privacy_level from database string to proto enum (i32)
+    let privacy_level_i32 = match settings.privacy_level.to_lowercase().as_str() {
+        "public" => 1,       // PRIVACY_LEVEL_PUBLIC
+        "friends_only" => 2, // PRIVACY_LEVEL_FRIENDS_ONLY
+        "private" => 3,      // PRIVACY_LEVEL_PRIVATE
+        _ => 1,              // Default to public
+    };
+
     UserSettings {
         user_id: settings.user_id.to_string(),
-        dm_permission: settings.dm_permission.clone(),
+        dm_permission: dm_permission_i32,
         email_notifications: settings.email_notifications,
         push_notifications: settings.push_notifications,
         marketing_emails: settings.marketing_emails,
         timezone: settings.timezone.clone(),
         language: settings.language.clone(),
         dark_mode: settings.dark_mode,
-        privacy_level: settings.privacy_level.clone(),
-        allow_messages: settings.allow_messages,
+        privacy_level: privacy_level_i32,
         show_online_status: settings.show_online_status,
         created_at: settings.created_at.timestamp(),
         updated_at: settings.updated_at.timestamp(),
