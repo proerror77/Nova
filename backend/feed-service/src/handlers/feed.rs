@@ -34,7 +34,15 @@ fn default_limit() -> u32 {
     20
 }
 
+/// Cursor format for timestamp-based pagination: "timestamp:post_id"
+#[derive(Debug, Clone, Default)]
+pub struct FeedCursor {
+    pub timestamp: i64,
+    pub post_id: String,
+}
+
 impl FeedQueryParams {
+    /// Decode cursor - supports both legacy offset format and new timestamp:post_id format
     fn decode_cursor(&self) -> Result<usize> {
         match &self.cursor {
             Some(cursor) if !cursor.is_empty() => {
@@ -51,8 +59,41 @@ impl FeedQueryParams {
         }
     }
 
+    /// Decode timestamp-based cursor for proper pagination
+    fn decode_timestamp_cursor(&self) -> Result<FeedCursor> {
+        match &self.cursor {
+            Some(cursor) if !cursor.is_empty() => {
+                let decoded = general_purpose::STANDARD
+                    .decode(cursor)
+                    .map_err(|_| AppError::BadRequest("Invalid cursor format".to_string()))?;
+                let cursor_str = String::from_utf8(decoded)
+                    .map_err(|_| AppError::BadRequest("Invalid cursor encoding".to_string()))?;
+
+                // New format: "timestamp:post_id"
+                if let Some((ts_str, post_id)) = cursor_str.split_once(':') {
+                    let timestamp = ts_str.parse::<i64>()
+                        .map_err(|_| AppError::BadRequest("Invalid cursor timestamp".to_string()))?;
+                    Ok(FeedCursor {
+                        timestamp,
+                        post_id: post_id.to_string(),
+                    })
+                } else {
+                    // Legacy format: just an offset number - convert to empty cursor
+                    Ok(FeedCursor::default())
+                }
+            }
+            _ => Ok(FeedCursor::default()),
+        }
+    }
+
     fn encode_cursor(offset: usize) -> String {
         general_purpose::STANDARD.encode(offset.to_string())
+    }
+
+    /// Encode timestamp-based cursor
+    fn encode_timestamp_cursor(timestamp: i64, post_id: &str) -> String {
+        let cursor_str = format!("{}:{}", timestamp, post_id);
+        general_purpose::STANDARD.encode(cursor_str)
     }
 }
 
@@ -101,7 +142,10 @@ pub async fn get_feed(
         })
         .await;
 
-    let (posts, posts_count, total_count, has_more) = match following_result {
+    // Decode timestamp-based cursor for proper pagination
+    let feed_cursor = query.decode_timestamp_cursor()?;
+
+    let (posts, posts_count, total_count, has_more, next_cursor_ts, next_cursor_post_id) = match following_result {
         Ok(following_resp) => {
             // Step 2: Get posts from followed users via batch gRPC call
             let followed_user_ids: Vec<String> = following_resp
@@ -117,63 +161,97 @@ pub async fn get_feed(
                     "User {} follows no one, falling back to global feed",
                     user_id
                 );
-                fetch_global_posts(&state.content_client, user_id, limit, offset).await?
+                let (posts, count, total, more) = fetch_global_posts(&state.content_client, user_id, limit, offset).await?;
+                (posts, count, total, more, 0i64, String::new())
             } else {
-                // Fetch posts from followed users and respect pagination (offset/cursor)
-                // Note: For now we do a simple round-robin scan; ranking-service can be plugged in later.
-                let mut posts: Vec<Uuid> = Vec::new();
-                let mut skipped = offset; // apply cursor across aggregated stream
-                let mut remaining = limit as usize;
+                // Use new ListPostsByUsers API with timestamp-based pagination
+                use grpc_clients::nova::content_service::v2::ListPostsByUsersRequest;
 
-                for uid in followed_user_ids.iter() {
-                    if remaining == 0 {
-                        break;
+                let list_request = ListPostsByUsersRequest {
+                    user_ids: followed_user_ids.clone(),
+                    limit: limit as i32,
+                    before_timestamp: feed_cursor.timestamp,
+                    before_post_id: feed_cursor.post_id.clone(),
+                };
+
+                match state.content_client.list_posts_by_users(list_request).await {
+                    Ok(resp) => {
+                        let posts: Vec<Uuid> = resp.posts
+                            .iter()
+                            .filter_map(|p| Uuid::parse_str(&p.post_id).ok())
+                            .collect();
+
+                        let posts_count = posts.len();
+                        let total_count = posts_count; // Approximate
+                        let has_more = resp.has_more;
+                        let next_ts = resp.next_cursor_timestamp;
+                        let next_post_id = resp.next_cursor_post_id.clone();
+
+                        info!(
+                            "Feed generated for user: {} (followers: {}, posts: {}, has_more: {})",
+                            user_id,
+                            followed_user_ids.len(),
+                            posts_count,
+                            has_more
+                        );
+
+                        (posts, posts_count, total_count, has_more, next_ts, next_post_id)
                     }
+                    Err(e) => {
+                        // Fallback to legacy round-robin if new API fails
+                        warn!(
+                            "ListPostsByUsers failed ({}), falling back to round-robin for user {}",
+                            e, user_id
+                        );
 
-                    match state
-                        .content_client
-                        .get_user_posts(GetUserPostsRequest {
-                            user_id: uid.clone(),
-                            limit: remaining as i32, // bound fetch to what's still needed
-                            offset: 0,
-                            status: ContentStatus::Published as i32,
-                        })
-                        .await
-                    {
-                        Ok(resp) => {
-                            for post in resp.posts {
-                                if remaining == 0 {
-                                    break;
+                        // Legacy round-robin logic for backward compatibility
+                        let mut posts: Vec<Uuid> = Vec::new();
+                        let mut skipped = offset;
+                        let mut remaining = limit as usize;
+
+                        for uid in followed_user_ids.iter() {
+                            if remaining == 0 {
+                                break;
+                            }
+
+                            match state
+                                .content_client
+                                .get_user_posts(GetUserPostsRequest {
+                                    user_id: uid.clone(),
+                                    limit: remaining as i32,
+                                    offset: 0,
+                                    status: ContentStatus::Published as i32,
+                                })
+                                .await
+                            {
+                                Ok(resp) => {
+                                    for post in resp.posts {
+                                        if remaining == 0 {
+                                            break;
+                                        }
+                                        if skipped > 0 {
+                                            skipped -= 1;
+                                            continue;
+                                        }
+                                        if let Ok(post_id) = Uuid::parse_str(&post.id) {
+                                            posts.push(post_id);
+                                            remaining -= 1;
+                                        }
+                                    }
                                 }
-                                if skipped > 0 {
-                                    skipped -= 1;
-                                    continue;
-                                }
-                                if let Ok(post_id) = Uuid::parse_str(&post.id) {
-                                    posts.push(post_id);
-                                    remaining -= 1;
+                                Err(e) => {
+                                    debug!("Failed to fetch posts from user {}: {}", uid, e);
                                 }
                             }
                         }
-                        Err(e) => {
-                            debug!("Failed to fetch posts from user {}: {}", uid, e);
-                            // Continue fetching other users' posts on partial failure
-                        }
+
+                        let posts_count = posts.len();
+                        let total_count = offset + posts_count;
+                        let has_more = remaining == 0;
+
+                        (posts, posts_count, total_count, has_more, 0i64, String::new())
                     }
                 }
-
-                let posts_count = posts.len();
-                let total_count = offset + posts_count; // best-effort; exact total would need a count query
-                let has_more = remaining == 0;
-
-                info!(
-                    "Feed generated for user: {} (followers: {}, posts: {})",
-                    user_id,
-                    followed_user_ids.len(),
-                    posts_count
-                );
-
-                (posts, posts_count, total_count, has_more)
             }
         }
         Err(e) => {
@@ -182,12 +260,18 @@ pub async fn get_feed(
                 "Graph-service unavailable ({}), falling back to global feed for user {}",
                 e, user_id
             );
-            fetch_global_posts(&state.content_client, user_id, limit, offset).await?
+            let (posts, count, total, more) = fetch_global_posts(&state.content_client, user_id, limit, offset).await?;
+            (posts, count, total, more, 0i64, String::new())
         }
     };
 
+    // Use timestamp-based cursor if available, otherwise fall back to offset-based
     let cursor = if has_more {
-        Some(FeedQueryParams::encode_cursor(offset + posts_count))
+        if next_cursor_ts > 0 && !next_cursor_post_id.is_empty() {
+            Some(FeedQueryParams::encode_timestamp_cursor(next_cursor_ts, &next_cursor_post_id))
+        } else {
+            Some(FeedQueryParams::encode_cursor(offset + posts_count))
+        }
     } else {
         None
     };
@@ -327,7 +411,7 @@ async fn fetch_full_posts(
 /// or user doesn't follow anyone
 async fn fetch_global_posts(
     content_client: &ContentServiceClient,
-    user_id: Uuid,
+    _user_id: Uuid,
     limit: u32,
     offset: usize,
 ) -> Result<(Vec<Uuid>, usize, usize, bool)> {

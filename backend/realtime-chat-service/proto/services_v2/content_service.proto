@@ -42,6 +42,7 @@ message CreatePostRequest {
   string content = 2;
   repeated string media_urls = 3;  // CDN URLs for attached media (images/videos)
   string media_type = 4;           // Type of media: "image", "video", "none"
+  repeated string channel_ids = 5; // Channel UUIDs or slugs to tag this post with (max 3)
 }
 
 message CreatePostResponse {
@@ -71,24 +72,6 @@ message GetUserPostsResponse {
   repeated Post posts = 1;
   int32 total_count = 2;
   bool has_more = 3;
-}
-
-// BatchGetUserPosts - Get recent posts from multiple users in a single call
-// Optimizes N+1 query pattern in graph recall (P0-2)
-message BatchGetUserPostsRequest {
-  repeated string user_ids = 1;     // List of user IDs to fetch posts from
-  int32 posts_per_user = 2;         // Maximum posts to return per user (default: 5)
-  ContentStatus status = 3;         // Filter by content status (default: PUBLISHED)
-}
-
-message UserPostsList {
-  repeated Post posts = 1;
-}
-
-message BatchGetUserPostsResponse {
-  map<string, UserPostsList> posts_by_user = 1;  // Map of user_id -> their posts
-  int32 total_posts = 2;                          // Total number of posts returned
-  repeated string failed_user_ids = 3;            // User IDs that failed to fetch
 }
 
 message ListRecentPostsRequest {
@@ -129,12 +112,18 @@ message Channel {
   string description = 3;
   string category = 4;
   uint32 subscriber_count = 5;
+  string slug = 6;              // URL-friendly unique identifier
+  string icon_url = 7;          // Channel icon image URL
+  int32 display_order = 8;      // Ordering priority (lower = first)
+  bool is_enabled = 9;          // Whether channel is visible to users
+  string topic_keywords = 10;   // JSON array of keywords for AI classification
 }
 
 message ListChannelsRequest {
   int32 limit = 1;
   int32 offset = 2;
   string category = 3;
+  bool enabled_only = 4;  // If true, only return channels where is_enabled=true
 }
 
 message ListChannelsResponse {
@@ -149,6 +138,40 @@ message GetChannelRequest {
 message GetChannelResponse {
   Channel channel = 1;
   bool found = 2;
+}
+
+// ListPostsByChannel - Get posts associated with a specific channel
+message ListPostsByChannelRequest {
+  string channel_id = 1;  // Channel UUID or slug
+  int32 limit = 2;
+  string cursor = 3;      // Base64 encoded pagination cursor (post_id:created_at)
+}
+
+message ListPostsByChannelResponse {
+  repeated string post_ids = 1;
+  string next_cursor = 2;
+  bool has_more = 3;
+}
+
+// ListPostsByUsers - Get posts from multiple users with timestamp-based pagination
+// Used for efficient feed generation - returns posts sorted by created_at DESC
+message ListPostsByUsersRequest {
+  repeated string user_ids = 1;       // List of user IDs to fetch posts from
+  int32 limit = 2;                    // Max posts to return (1-100)
+  int64 before_timestamp = 3;         // Return posts created before this Unix timestamp (0 = no filter)
+  string before_post_id = 4;          // For tie-breaking: exclude posts with this ID or later at same timestamp
+}
+
+message PostWithTimestamp {
+  string post_id = 1;
+  int64 created_at = 2;               // Unix timestamp for cursor construction
+}
+
+message ListPostsByUsersResponse {
+  repeated PostWithTimestamp posts = 1;
+  int64 next_cursor_timestamp = 2;    // Timestamp for next page cursor (0 if no more)
+  string next_cursor_post_id = 3;     // Post ID for tie-breaking
+  bool has_more = 4;
 }
 
 service ContentService {
@@ -186,14 +209,6 @@ service ContentService {
       additional_bindings {
         get: "/api/v2/content/user/{user_id}"
       }
-    };
-  }
-
-  // Batch get posts from multiple users (optimizes N+1 query pattern)
-  rpc BatchGetUserPosts(BatchGetUserPostsRequest) returns (BatchGetUserPostsResponse) {
-    option (google.api.http) = {
-      post: "/api/v2/content/posts/batch-by-users"
-      body: "*"
     };
   }
 
@@ -239,6 +254,21 @@ service ContentService {
   rpc GetChannel(GetChannelRequest) returns (GetChannelResponse) {
     option (google.api.http) = {
       get: "/api/v2/channels/{id}"
+    };
+  }
+
+  rpc ListPostsByChannel(ListPostsByChannelRequest) returns (ListPostsByChannelResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/channels/{channel_id}/posts"
+    };
+  }
+
+  // ListPostsByUsers - Batch fetch posts from multiple users with timestamp cursor pagination
+  // Used by feed-service to efficiently generate chronological feeds
+  rpc ListPostsByUsers(ListPostsByUsersRequest) returns (ListPostsByUsersResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/content/posts/by-users"
+      body: "*"
     };
   }
 }

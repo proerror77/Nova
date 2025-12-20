@@ -34,6 +34,7 @@ pub mod nova {
 pub use clients::ContentServiceClient;
 
 use crate::cache::{CachedFeed, CachedFeedPost, FeedCache};
+use base64::{engine::general_purpose, Engine};
 use chrono::Utc;
 use grpc_clients::{config::GrpcConfig, GrpcClientPool};
 use grpc_metrics::layer::RequestGuard;
@@ -41,6 +42,24 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
 use tracing::{debug, error, info, warn};
+
+/// Decode a base64-encoded cursor to get the pagination offset
+fn decode_cursor(cursor: &str) -> usize {
+    if cursor.is_empty() {
+        return 0;
+    }
+    general_purpose::STANDARD
+        .decode(cursor)
+        .ok()
+        .and_then(|decoded| String::from_utf8(decoded).ok())
+        .and_then(|offset_str| offset_str.parse::<usize>().ok())
+        .unwrap_or(0)
+}
+
+/// Encode an offset as a base64 cursor
+fn encode_cursor(offset: usize) -> String {
+    general_purpose::STANDARD.encode(offset.to_string())
+}
 
 // Generated protobuf types and service traits
 pub mod proto {
@@ -123,6 +142,7 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
         let user_id = req.user_id.clone();
         let algorithm = req.algorithm.clone();
         let channel_id = req.channel_id.clone();
+        let offset = decode_cursor(&req.cursor);
 
         // Build cache key that includes channel_id when present
         let cache_key_algo = if channel_id.is_empty() {
@@ -132,10 +152,11 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
         };
 
         info!(
-            "Getting feed for user: {} (algo: {}, limit: {}, channel: {})",
+            "Getting feed for user: {} (algo: {}, limit: {}, offset: {}, channel: {})",
             user_id,
             algorithm,
             req.limit,
+            offset,
             if channel_id.is_empty() {
                 "all"
             } else {
@@ -143,47 +164,54 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
             }
         );
 
-        // Step 1: Check Redis cache
-        match self.cache.get_feed(&user_id, &cache_key_algo).await {
-            Ok(Some(cached)) => {
-                debug!(
-                    "Cache hit for user {} with algorithm {}",
-                    user_id, algorithm
-                );
-                // Return cached feed
-                guard.complete("0");
-                return Ok(Response::new(GetFeedResponse {
-                    posts: cached
-                        .posts
-                        .iter()
-                        .map(|post| FeedPost {
-                            id: post.id.clone(),
-                            user_id: post.user_id.clone(),
-                            content: post.content.clone(),
-                            created_at: post.created_at,
-                            ranking_score: post.ranking_score,
-                            like_count: post.like_count,
-                            comment_count: post.comment_count,
-                            share_count: post.share_count,
-                            media_urls: post.media_urls.clone(),
-                            media_type: post.media_type.clone(),
-                            thumbnail_urls: post.thumbnail_urls.clone(),
-                        })
-                        .collect(),
-                    next_cursor: cached.cursor.unwrap_or_default(),
-                    has_more: cached.has_more,
-                }));
+        // Step 1: Check Redis cache (only for first page, offset == 0)
+        if offset == 0 {
+            match self.cache.get_feed(&user_id, &cache_key_algo).await {
+                Ok(Some(cached)) => {
+                    debug!(
+                        "Cache hit for user {} with algorithm {}",
+                        user_id, algorithm
+                    );
+                    // Return cached feed
+                    guard.complete("0");
+                    return Ok(Response::new(GetFeedResponse {
+                        posts: cached
+                            .posts
+                            .iter()
+                            .map(|post| FeedPost {
+                                id: post.id.clone(),
+                                user_id: post.user_id.clone(),
+                                content: post.content.clone(),
+                                created_at: post.created_at,
+                                ranking_score: post.ranking_score,
+                                like_count: post.like_count,
+                                comment_count: post.comment_count,
+                                share_count: post.share_count,
+                                media_urls: post.media_urls.clone(),
+                                media_type: post.media_type.clone(),
+                                thumbnail_urls: post.thumbnail_urls.clone(),
+                            })
+                            .collect(),
+                        next_cursor: cached.cursor.unwrap_or_default(),
+                        has_more: cached.has_more,
+                    }));
+                }
+                Ok(None) => {
+                    debug!(
+                        "Cache miss for user {} with algorithm {}",
+                        user_id, algorithm
+                    );
+                }
+                Err(e) => {
+                    warn!("Cache retrieval error for user {}: {}", user_id, e);
+                    // Continue with cache miss, don't fail
+                }
             }
-            Ok(None) => {
-                debug!(
-                    "Cache miss for user {} with algorithm {}",
-                    user_id, algorithm
-                );
-            }
-            Err(e) => {
-                warn!("Cache retrieval error for user {}: {}", user_id, e);
-                // Continue with cache miss, don't fail
-            }
+        } else {
+            debug!(
+                "Skipping cache for paginated request (offset: {})",
+                offset
+            );
         }
 
         // Step 2: Cache miss - fetch from ContentService
@@ -195,7 +223,7 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
         .min(100)
         .max(1);
 
-        // Fetch posts from content-service (with optional channel filter)
+        // Fetch posts from content-service (with optional channel filter and pagination)
         let posts = match self
             .fetch_posts_from_content_service(limit as i32, &user_id, &channel_id)
             .await
@@ -206,24 +234,38 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
                 vec![]
             }
         };
-        let has_more = posts.len() >= limit;
+        let posts_count = posts.len();
+        let has_more = posts_count >= limit;
 
-        // Step 3: Cache the result
-        let cached_feed = CachedFeed {
-            posts: posts.clone(),
-            cursor: None,
-            has_more,
-            total_count: 0,
-            cached_at: Utc::now().timestamp(),
+        // Calculate next cursor for pagination
+        let next_cursor = if has_more {
+            encode_cursor(offset + posts_count)
+        } else {
+            String::new()
         };
 
-        if let Err(e) = self
-            .cache
-            .set_feed(&user_id, &cache_key_algo, &cached_feed)
-            .await
-        {
-            warn!("Failed to cache feed for user {}: {}", user_id, e);
-            // Don't fail the request, just log the error
+        // Step 3: Cache the result (only cache first page)
+        if offset == 0 {
+            let cached_feed = CachedFeed {
+                posts: posts.clone(),
+                cursor: if has_more {
+                    Some(next_cursor.clone())
+                } else {
+                    None
+                },
+                has_more,
+                total_count: 0,
+                cached_at: Utc::now().timestamp(),
+            };
+
+            if let Err(e) = self
+                .cache
+                .set_feed(&user_id, &cache_key_algo, &cached_feed)
+                .await
+            {
+                warn!("Failed to cache feed for user {}: {}", user_id, e);
+                // Don't fail the request, just log the error
+            }
         }
 
         // Step 4: Return feed
@@ -245,7 +287,7 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
                     thumbnail_urls: post.thumbnail_urls.clone(),
                 })
                 .collect(),
-            next_cursor: "".to_string(),
+            next_cursor,
             has_more,
         }))
     }

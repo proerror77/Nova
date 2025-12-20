@@ -153,6 +153,27 @@ message ListPostsByChannelResponse {
   bool has_more = 3;
 }
 
+// ListPostsByUsers - Get posts from multiple users with timestamp-based pagination
+// Used for efficient feed generation - returns posts sorted by created_at DESC
+message ListPostsByUsersRequest {
+  repeated string user_ids = 1;       // List of user IDs to fetch posts from
+  int32 limit = 2;                    // Max posts to return (1-100)
+  int64 before_timestamp = 3;         // Return posts created before this Unix timestamp (0 = no filter)
+  string before_post_id = 4;          // For tie-breaking: exclude posts with this ID or later at same timestamp
+}
+
+message PostWithTimestamp {
+  string post_id = 1;
+  int64 created_at = 2;               // Unix timestamp for cursor construction
+}
+
+message ListPostsByUsersResponse {
+  repeated PostWithTimestamp posts = 1;
+  int64 next_cursor_timestamp = 2;    // Timestamp for next page cursor (0 if no more)
+  string next_cursor_post_id = 3;     // Post ID for tie-breaking
+  bool has_more = 4;
+}
+
 service ContentService {
   // Post CRUD operations
   rpc CreatePost(CreatePostRequest) returns (CreatePostResponse) {
@@ -239,6 +260,15 @@ service ContentService {
   rpc ListPostsByChannel(ListPostsByChannelRequest) returns (ListPostsByChannelResponse) {
     option (google.api.http) = {
       get: "/api/v2/channels/{channel_id}/posts"
+    };
+  }
+
+  // ListPostsByUsers - Batch fetch posts from multiple users with timestamp cursor pagination
+  // Used by feed-service to efficiently generate chronological feeds
+  rpc ListPostsByUsers(ListPostsByUsersRequest) returns (ListPostsByUsersResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/content/posts/by-users"
+      body: "*"
     };
   }
 }

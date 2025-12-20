@@ -1,6 +1,7 @@
 use grpc_clients::nova::content_service::v2::{
     GetPostsByIdsRequest, GetPostsByIdsResponse, GetUserPostsRequest, GetUserPostsResponse,
-    ListRecentPostsRequest, ListRecentPostsResponse,
+    ListPostsByUsersRequest, ListPostsByUsersResponse, ListRecentPostsRequest,
+    ListRecentPostsResponse,
 };
 /// gRPC clients for calling other services (centralized)
 ///
@@ -65,6 +66,19 @@ impl ContentServiceClient {
         let mut client = self.pool.content();
         client
             .list_recent_posts(request)
+            .await
+            .map(|resp| resp.into_inner())
+    }
+
+    /// List posts by multiple users with timestamp-based pagination
+    /// Used for efficient feed generation with proper chronological ordering
+    pub async fn list_posts_by_users(
+        &self,
+        request: ListPostsByUsersRequest,
+    ) -> Result<ListPostsByUsersResponse, Status> {
+        let mut client = self.pool.content();
+        client
+            .list_posts_by_users(request)
             .await
             .map(|resp| resp.into_inner())
     }

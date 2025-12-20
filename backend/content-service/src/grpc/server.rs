@@ -8,7 +8,16 @@ use base64::Engine;
 use grpc_clients::nova::content_service::v2::content_service_server::{
     ContentService, ContentServiceServer,
 };
-use grpc_clients::nova::content_service::v2::*;
+use grpc_clients::nova::content_service::v2::{
+    Channel, ContentStatus, CreatePostRequest, CreatePostResponse, DeletePostRequest,
+    DeletePostResponse, GetChannelRequest, GetChannelResponse, GetPostRequest, GetPostResponse,
+    GetPostsByIdsRequest, GetPostsByIdsResponse, GetUserPostsRequest, GetUserPostsResponse,
+    ListChannelsRequest, ListChannelsResponse, ListPostsByChannelRequest,
+    ListPostsByChannelResponse, ListPostsByUsersRequest, ListPostsByUsersResponse,
+    ListRecentPostsRequest, ListRecentPostsResponse, ListTrendingPostsRequest,
+    ListTrendingPostsResponse, Post, PostWithTimestamp, UpdatePostRequest, UpdatePostResponse,
+    Visibility,
+};
 use grpc_metrics::layer::RequestGuard;
 use sqlx::{PgPool, QueryBuilder, Row};
 use std::fs;
@@ -590,6 +599,147 @@ impl ContentService for ContentServiceImpl {
         Ok(Response::new(ListChannelsResponse {
             channels: channels.iter().map(convert_channel_to_proto).collect(),
             total: total as i32,
+        }))
+    }
+
+    async fn list_posts_by_users(
+        &self,
+        request: Request<ListPostsByUsersRequest>,
+    ) -> Result<Response<ListPostsByUsersResponse>, Status> {
+        let req = request.into_inner();
+        let limit = req.limit.clamp(1, 100) as i64;
+
+        if req.user_ids.is_empty() {
+            return Ok(Response::new(ListPostsByUsersResponse {
+                posts: vec![],
+                next_cursor_timestamp: 0,
+                next_cursor_post_id: String::new(),
+                has_more: false,
+            }));
+        }
+
+        // Parse user IDs
+        let user_ids: Vec<Uuid> = req
+            .user_ids
+            .iter()
+            .filter_map(|id| Uuid::parse_str(id).ok())
+            .take(100) // Limit to 100 users max
+            .collect();
+
+        if user_ids.is_empty() {
+            return Ok(Response::new(ListPostsByUsersResponse {
+                posts: vec![],
+                next_cursor_timestamp: 0,
+                next_cursor_post_id: String::new(),
+                has_more: false,
+            }));
+        }
+
+        // Build query with timestamp-based pagination
+        let rows = if req.before_timestamp > 0 && !req.before_post_id.is_empty() {
+            // Cursor-based pagination: get posts older than the cursor
+            let cursor_post_id = Uuid::parse_str(&req.before_post_id)
+                .map_err(|_| Status::invalid_argument("invalid before_post_id"))?;
+            let cursor_ts =
+                chrono::DateTime::from_timestamp(req.before_timestamp, 0).unwrap_or_default();
+
+            sqlx::query(
+                r#"
+                SELECT id::text AS id, EXTRACT(EPOCH FROM created_at)::bigint AS created_at
+                FROM posts
+                WHERE user_id = ANY($1::uuid[])
+                  AND status = 'published'
+                  AND deleted_at IS NULL
+                  AND (created_at < $2 OR (created_at = $2 AND id < $3))
+                ORDER BY created_at DESC, id DESC
+                LIMIT $4
+                "#,
+            )
+            .bind(&user_ids)
+            .bind(cursor_ts)
+            .bind(cursor_post_id)
+            .bind(limit + 1) // Fetch one extra to check has_more
+            .fetch_all(&self.db_pool)
+            .await
+        } else if req.before_timestamp > 0 {
+            // Only timestamp provided (no post_id for tie-breaking)
+            let cursor_ts =
+                chrono::DateTime::from_timestamp(req.before_timestamp, 0).unwrap_or_default();
+
+            sqlx::query(
+                r#"
+                SELECT id::text AS id, EXTRACT(EPOCH FROM created_at)::bigint AS created_at
+                FROM posts
+                WHERE user_id = ANY($1::uuid[])
+                  AND status = 'published'
+                  AND deleted_at IS NULL
+                  AND created_at < $2
+                ORDER BY created_at DESC, id DESC
+                LIMIT $3
+                "#,
+            )
+            .bind(&user_ids)
+            .bind(cursor_ts)
+            .bind(limit + 1)
+            .fetch_all(&self.db_pool)
+            .await
+        } else {
+            // First page: no cursor
+            sqlx::query(
+                r#"
+                SELECT id::text AS id, EXTRACT(EPOCH FROM created_at)::bigint AS created_at
+                FROM posts
+                WHERE user_id = ANY($1::uuid[])
+                  AND status = 'published'
+                  AND deleted_at IS NULL
+                ORDER BY created_at DESC, id DESC
+                LIMIT $2
+                "#,
+            )
+            .bind(&user_ids)
+            .bind(limit + 1)
+            .fetch_all(&self.db_pool)
+            .await
+        }
+        .map_err(|e| {
+            tracing::error!("list_posts_by_users db error: {}", e);
+            Status::internal("failed to list posts by users")
+        })?;
+
+        let has_more = rows.len() as i64 > limit;
+        let posts: Vec<PostWithTimestamp> = rows
+            .into_iter()
+            .take(limit as usize)
+            .filter_map(|row| {
+                let id: String = row.try_get("id").ok()?;
+                let created_at: i64 = row.try_get("created_at").ok()?;
+                Some(PostWithTimestamp {
+                    post_id: id,
+                    created_at,
+                })
+            })
+            .collect();
+
+        // Build next cursor from last post
+        let (next_cursor_timestamp, next_cursor_post_id) = if has_more && !posts.is_empty() {
+            let last = posts.last().unwrap();
+            (last.created_at, last.post_id.clone())
+        } else {
+            (0, String::new())
+        };
+
+        tracing::info!(
+            "list_posts_by_users: {} users, {} posts returned, has_more={}",
+            user_ids.len(),
+            posts.len(),
+            has_more
+        );
+
+        Ok(Response::new(ListPostsByUsersResponse {
+            posts,
+            next_cursor_timestamp,
+            next_cursor_post_id,
+            has_more,
         }))
     }
 
