@@ -34,7 +34,7 @@ spec:
         fsGroup: 1000
       containers:
       - name: thumb-worker
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/media-service:latest
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/media-service:ed9a07a54b335134c492b5eed456a9f9a689886f
         imagePullPolicy: Always
         command: ["/app/thumb-worker"]
         env:
