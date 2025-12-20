@@ -425,8 +425,16 @@ struct NewChatView: View {
             // Navigate to the chat
             showChat = true
 
+        } catch MatrixBridgeError.sessionExpired {
+            // Session expired - the bridge has cleared session data
+            // User needs to navigate back and retry to get fresh credentials
+            #if DEBUG
+            print("[NewChatView] Session expired, user should retry")
+            #endif
+            errorMessage = "Your session has expired. Please go back and try again."
+
         } catch {
-            errorMessage = "Failed to create conversation"
+            errorMessage = "Failed to create conversation: \(error.localizedDescription)"
             #if DEBUG
             print("[NewChatView] Create conversation error: \(error)")
             #endif

@@ -16,7 +16,7 @@ packages:
     version: 4.5.0
   MatrixRustSDK:
     url: https://github.com/element-hq/matrix-rust-components-swift
-    exactVersion: 25.12.17
+    exactVersion: 25.12.19
 
 targets:
   ICERED:

@@ -1,8 +1,17 @@
 import SwiftUI
 
 // MARK: - Carousel Card Item
+// iOS 17+ 优化：使用 scrollTargetBehavior 实现更流畅的分页效果
 
-struct CarouselCardItem: View {
+struct CarouselCardItem: View, Equatable {
+    // 实现 Equatable 以减少不必要的重绘
+    static func == (lhs: CarouselCardItem, rhs: CarouselCardItem) -> Bool {
+        lhs.rankNumber == rhs.rankNumber &&
+        lhs.name == rhs.name &&
+        lhs.company == rhs.company &&
+        lhs.votes == rhs.votes &&
+        lhs.imageUrl == rhs.imageUrl
+    }
     let rankNumber: String
     let name: String
     let company: String

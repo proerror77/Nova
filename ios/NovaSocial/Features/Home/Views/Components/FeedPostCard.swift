@@ -1,6 +1,7 @@
 import SwiftUI
 
 // MARK: - Feed Post Card (Dynamic Data)
+// iOS 17+ 优化：使用 Symbol Effects 和更好的状态管理
 
 struct FeedPostCard: View {
     let post: FeedPost
@@ -12,6 +13,10 @@ struct FeedPostCard: View {
 
     @State private var scrollPosition = ScrollPosition(idType: Int.self)
     @State private var isVisible = false
+    
+    // iOS 17+ Symbol Effect 动画状态
+    @State private var likeAnimationTrigger = false
+    @State private var bookmarkAnimationTrigger = false
 
     // Target size for feed images (optimized for display)
     private let imageTargetSize = CGSize(width: 750, height: 1000)
@@ -79,19 +84,23 @@ struct FeedPostCard: View {
                         .foregroundColor(.black)
                 }
 
-                // Interaction Buttons
+                // Interaction Buttons with iOS 17+ Symbol Effects
                 HStack(spacing: 20) {
-                    // Like button
-                    Button(action: onLike) {
+                    // Like button - 使用 SF Symbol 和 bounce 动画
+                    Button {
+                        likeAnimationTrigger.toggle()
+                        onLike()
+                    } label: {
                         HStack(spacing: 6) {
-                            Image("card-heart-icon")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 20, height: 20)
+                            Image(systemName: post.isLiked ? "heart.fill" : "heart")
+                                .font(.system(size: 18))
+                                .foregroundColor(post.isLiked ? .red : Color(red: 0.38, green: 0.37, blue: 0.37))
+                                .symbolEffect(.bounce, value: likeAnimationTrigger)
                             Text("\(post.likeCount)")
                                 .font(Typography.regular10)
                                 .lineSpacing(20)
                                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                .contentTransition(.numericText())
                         }
                     }
                     .accessibilityLabel("Like, \(post.likeCount) likes")
@@ -99,25 +108,28 @@ struct FeedPostCard: View {
                     // Comment button
                     Button(action: onComment) {
                         HStack(spacing: 6) {
-                            Image("card-comment-icon")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 20, height: 20)
+                            Image(systemName: "bubble.right")
+                                .font(.system(size: 18))
+                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
                             Text("\(post.commentCount)")
                                 .font(Typography.regular10)
                                 .lineSpacing(20)
                                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                .contentTransition(.numericText())
                         }
                     }
                     .accessibilityLabel("Comments, \(post.commentCount)")
 
-                    // Bookmark/Star button
-                    Button(action: onBookmark) {
+                    // Bookmark/Star button - 使用 SF Symbol 和 bounce 动画
+                    Button {
+                        bookmarkAnimationTrigger.toggle()
+                        onBookmark()
+                    } label: {
                         HStack(spacing: 6) {
-                            Image("card-star-icon")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 20, height: 20)
+                            Image(systemName: post.isBookmarked ? "bookmark.fill" : "bookmark")
+                                .font(.system(size: 18))
+                                .foregroundColor(post.isBookmarked ? .orange : Color(red: 0.38, green: 0.37, blue: 0.37))
+                                .symbolEffect(.bounce, value: bookmarkAnimationTrigger)
                             Text("\(post.shareCount)")
                                 .font(Typography.regular10)
                                 .lineSpacing(20)

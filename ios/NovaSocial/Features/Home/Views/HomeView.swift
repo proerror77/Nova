@@ -50,7 +50,8 @@ struct HomeView: View {
     @Binding var currentPage: AppPage
     @EnvironmentObject private var authManager: AuthenticationManager
     @Environment(\.dismiss) var dismiss
-    @StateObject private var feedViewModel = FeedViewModel()
+    // iOS 17+ @Observable 使用 @State 替代 @StateObject
+    @State private var feedViewModel = FeedViewModel()
     @State private var showReportView = false
     @State private var showThankYouView = false
     @State private var showNewPost = false
@@ -272,7 +273,8 @@ struct HomeView: View {
                             .frame(maxWidth: .infinity)
 
                             // Feed 内容区域（白色背景，覆盖背景图）
-                            VStack(spacing: DesignTokens.spacing20) {
+                            // 使用 LazyVStack 优化长列表性能 - 只渲染可见区域
+                            LazyVStack(spacing: DesignTokens.spacing20) {
                                 // MARK: - Loading State
                                 if feedViewModel.isLoading && feedViewModel.posts.isEmpty {
                                     ProgressView("Loading feed...")
@@ -297,8 +299,9 @@ struct HomeView: View {
                                 // MARK: - Feed Posts + Carousel (Dynamic Layout)
                                 // 配置在 FeedLayoutConfig.swift 中修改
                                 // 当前设置：每 4 个帖子后显示一次轮播图
+                                // 使用 feedViewModel.feedItems 缓存，避免每次渲染重新计算
                                 if !feedViewModel.posts.isEmpty {
-                                    ForEach(FeedLayoutBuilder.buildFeedItems(from: feedViewModel.posts)) { item in
+                                    ForEach(feedViewModel.feedItems) { item in
                                         switch item {
                                         case .post(let index, let post):
                                             FeedPostCard(

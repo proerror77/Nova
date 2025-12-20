@@ -163,6 +163,20 @@ final class MatrixBridgeService {
                 return
             }
 
+            // Check if this is an expired token error
+            if retryOnMismatch && isUnknownTokenError(error) {
+                #if DEBUG
+                print("[MatrixBridge] ⚠️ Token expired error detected, clearing session and retrying...")
+                #endif
+
+                // Clear expired session data
+                clearSessionData()
+
+                // Retry initialization once without retry flag to prevent infinite loop
+                try await initialize(requireLogin: requireLogin, retryOnMismatch: false)
+                return
+            }
+
             initializationError = error
             #if DEBUG
             print("[MatrixBridge] Initialization failed: \(error)")
@@ -299,6 +313,27 @@ final class MatrixBridgeService {
         let errorString = String(describing: error)
         return errorString.contains("MismatchedAccount") ||
                errorString.contains("doesn't match the account")
+    }
+
+    /// Check if error is an unknown/expired token error
+    private func isUnknownTokenError(_ error: Error) -> Bool {
+        let errorString = String(describing: error)
+        return errorString.contains("unknownToken") ||
+               errorString.contains("M_UNKNOWN_TOKEN") ||
+               errorString.contains("Access token has expired")
+    }
+
+    /// Handle Matrix API errors - clears session for token errors
+    /// Returns true if the error was handled and the operation should be retried
+    func handleMatrixError(_ error: Error) -> Bool {
+        if isUnknownTokenError(error) {
+            #if DEBUG
+            print("[MatrixBridge] ⚠️ Token expired error detected, clearing session for re-authentication...")
+            #endif
+            clearSessionData()
+            return true
+        }
+        return false
     }
 
     // MARK: - Conversation Mapping
@@ -861,6 +896,7 @@ enum MatrixBridgeError: Error, LocalizedError {
     case roomMappingFailed(String)
     case messageSendFailed(String)
     case bridgeDisabled
+    case sessionExpired
 
     var errorDescription: String? {
         switch self {
@@ -874,6 +910,8 @@ enum MatrixBridgeError: Error, LocalizedError {
             return "Message send failed: \(reason)"
         case .bridgeDisabled:
             return "Matrix bridge is disabled"
+        case .sessionExpired:
+            return "Session expired. Please try again."
         }
     }
 }
@@ -1055,12 +1093,30 @@ extension MatrixBridgeService {
         #endif
 
         // Create a direct room in Matrix
-        let roomId = try await matrixService.createRoom(
-            name: nil,  // Direct rooms don't need names
-            isDirect: true,
-            inviteUserIds: [userId],
-            isEncrypted: true
-        )
+        let roomId: String
+        do {
+            roomId = try await matrixService.createRoom(
+                name: nil,  // Direct rooms don't need names
+                isDirect: true,
+                inviteUserIds: [userId],
+                isEncrypted: true
+            )
+        } catch {
+            // Handle token expiration by clearing session and throwing sessionExpired
+            // The UI should catch this and prompt user to retry (which will reinitialize)
+            if isUnknownTokenError(error) {
+                #if DEBUG
+                print("[MatrixBridge] ⚠️ Token expired during room creation, clearing session...")
+                #endif
+
+                // Clear session data so next initialization will get fresh credentials
+                clearSessionData()
+
+                // Throw sessionExpired to let UI handle retry
+                throw MatrixBridgeError.sessionExpired
+            }
+            throw error
+        }
 
         #if DEBUG
         print("[MatrixBridge] Created Matrix room: \(roomId)")
@@ -1089,12 +1145,29 @@ extension MatrixBridgeService {
         print("[MatrixBridge] Creating group conversation: \(name) with \(userIds.count) users")
         #endif
 
-        let roomId = try await matrixService.createRoom(
-            name: name,
-            isDirect: false,
-            inviteUserIds: userIds,
-            isEncrypted: true
-        )
+        let roomId: String
+        do {
+            roomId = try await matrixService.createRoom(
+                name: name,
+                isDirect: false,
+                inviteUserIds: userIds,
+                isEncrypted: true
+            )
+        } catch {
+            // Handle token expiration by clearing session and throwing sessionExpired
+            if isUnknownTokenError(error) {
+                #if DEBUG
+                print("[MatrixBridge] ⚠️ Token expired during group room creation, clearing session...")
+                #endif
+
+                // Clear session data so next initialization will get fresh credentials
+                clearSessionData()
+
+                // Throw sessionExpired to let UI handle retry
+                throw MatrixBridgeError.sessionExpired
+            }
+            throw error
+        }
 
         return MatrixConversationInfo(
             id: roomId,

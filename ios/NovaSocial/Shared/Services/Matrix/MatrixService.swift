@@ -48,12 +48,14 @@ class Client {
 class ClientBuilder {
     func homeserverUrl(url: String) -> ClientBuilder { self }
     func sessionPath(path: String) -> ClientBuilder { self }
+    func sessionPaths(dataPath: String, cachePath: String) -> ClientBuilder { self }
     func userAgent(userAgent: String) -> ClientBuilder { self }
+    func setSessionDelegate(sessionDelegate: ClientSessionDelegate) -> ClientBuilder { self }
     func build() async throws -> Client { Client() }
 }
 
 class SyncServiceBuilder {
-    func withCrossProcessLock(appIdentifier: String) -> SyncServiceBuilder { self }
+    func withCrossProcessLock() -> SyncServiceBuilder { self }
     func finish() async throws -> SyncService { SyncService() }
 }
 
@@ -305,6 +307,29 @@ protocol TimelineListener: AnyObject, Sendable {
 }
 
 func messageEventContentFromMarkdown(md: String) -> Any { md }
+
+// Stub for ClientSessionDelegate when SDK not available
+protocol ClientSessionDelegate: AnyObject, Sendable {
+    func saveSessionInKeychain(session: Session)
+    func retrieveSessionFromKeychain(userId: String) throws -> Session
+}
+
+// Stub for MatrixSessionDelegateImpl when SDK not available
+final class MatrixSessionDelegateImpl: ClientSessionDelegate, @unchecked Sendable {
+    private weak var matrixService: MatrixService?
+
+    init(matrixService: MatrixService) {
+        self.matrixService = matrixService
+    }
+
+    func saveSessionInKeychain(session: Session) {
+        // Stub - no-op when SDK not available
+    }
+
+    func retrieveSessionFromKeychain(userId: String) throws -> Session {
+        throw MatrixError.notInitialized
+    }
+}
 
 #endif
 // End of conditional SDK import - real types used when MATRIX_SDK_ENABLED is defined
@@ -678,13 +703,24 @@ final class MatrixService: MatrixServiceProtocol {
             let cacheURL = URL(fileURLWithPath: cachePath)
             try FileManager.default.createDirectory(at: cacheURL, withIntermediateDirectories: true)
 
-            // Build client using ClientBuilder (updated API: sessionPaths instead of sessionPath)
+            // Create session delegate for token refresh handling
+            let delegate = MatrixSessionDelegateImpl(matrixService: self)
+            self.sessionDelegate = delegate
+
+            // Build client using ClientBuilder
+            // - setSessionDelegate: enables automatic token refresh with persistence
+            // - Token refresh is enabled by default (don't call disableAutomaticTokenRefresh)
             let clientBuilder = ClientBuilder()
                 .homeserverUrl(url: homeserverURL)
                 .sessionPaths(dataPath: sessionPath, cachePath: cachePath)
                 .userAgent(userAgent: "NovaSocial-iOS/1.0")
+                .setSessionDelegate(sessionDelegate: delegate)
 
             self.client = try await clientBuilder.build()
+
+            #if DEBUG
+            print("[MatrixService] Client built with session delegate for token refresh")
+            #endif
 
             updateConnectionState(.disconnected)
 
@@ -807,12 +843,13 @@ final class MatrixService: MatrixServiceProtocol {
         }
 
         do {
+            // Include refresh token if available for automatic token refresh
             let session = Session(
                 accessToken: credentials.accessToken,
-                refreshToken: nil,
+                refreshToken: credentials.refreshToken,
                 userId: credentials.userId,
                 deviceId: credentials.deviceId,
-                homeserverUrl: homeserverURL ?? "",
+                homeserverUrl: credentials.homeserverUrl ?? homeserverURL ?? "",
                 oidcData: nil,
                 slidingSyncVersion: .native
             )
@@ -824,6 +861,7 @@ final class MatrixService: MatrixServiceProtocol {
 
             #if DEBUG
             print("[MatrixService] Session restored for: \(credentials.userId)")
+            print("[MatrixService] Refresh token available: \(credentials.refreshToken != nil)")
             #endif
 
             return true
@@ -841,7 +879,8 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService] Logging out")
         #endif
 
-        stopSync()
+        // Stop sync properly and wait for cleanup
+        await stopSyncAndWait()
 
         if let client = client {
             do {
@@ -857,13 +896,50 @@ final class MatrixService: MatrixServiceProtocol {
         self.userId = nil
         self.client = nil
         roomCache.removeAll()
-        timelineListeners.removeAll()
-        roomTimelines.removeAll()
-        seenTimelineEventIdsByRoom.removeAll()
         updateConnectionState(.disconnected)
 
         #if DEBUG
         print("[MatrixService] Logged out")
+        #endif
+    }
+
+    /// Stop sync and wait for cleanup to complete
+    /// Use this instead of stopSync() when you need to ensure cleanup is done before continuing
+    private func stopSyncAndWait() async {
+        #if DEBUG
+        print("[MatrixService] Stopping sync and waiting for cleanup")
+        #endif
+
+        // Cancel all timeline listeners first
+        for (_, handle) in timelineListeners {
+            handle.cancel()
+        }
+        timelineListeners.removeAll()
+        roomTimelines.removeAll()
+        seenTimelineEventIdsByRoom.removeAll()
+
+        // Cancel room list stream handle
+        roomListEntriesStreamHandle?.cancel()
+        roomListEntriesStreamHandle = nil
+
+        // Stop sync service
+        try? await syncService?.stop()
+
+        // Small delay to ensure Rust cleanup completes
+        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+
+        // Clear room list service (must be after sync is stopped)
+        roomListService = nil
+
+        // Clear sync service last
+        syncService = nil
+
+        if connectionState == .syncing {
+            updateConnectionState(.connected)
+        }
+
+        #if DEBUG
+        print("[MatrixService] Sync stopped and cleaned up")
         #endif
     }
 
@@ -876,6 +952,16 @@ final class MatrixService: MatrixServiceProtocol {
 
         guard let client = client, userId != nil else {
             throw MatrixError.notLoggedIn
+        }
+
+        // IMPORTANT: Stop existing sync service BEFORE creating new one
+        // This prevents Rust panic when RoomListService is deallocated
+        // while Tokio runtime still has active operations
+        if syncService != nil {
+            #if DEBUG
+            print("[MatrixService] Stopping existing sync service before starting new one")
+            #endif
+            await stopSyncAndWait()
         }
 
         updateConnectionState(.syncing)
@@ -910,20 +996,37 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService] Stopping sync")
         #endif
 
-        Task {
-            try? await syncService?.stop()
-        }
-
-        syncService = nil
-        roomListService = nil
-
-        // Cancel all timeline listeners
+        // Cancel all timeline listeners first
         for (_, handle) in timelineListeners {
             handle.cancel()
         }
         timelineListeners.removeAll()
         roomTimelines.removeAll()
         seenTimelineEventIdsByRoom.removeAll()
+
+        // Cancel room list stream handle
+        roomListEntriesStreamHandle?.cancel()
+        roomListEntriesStreamHandle = nil
+
+        // Stop sync service and clear references in correct order
+        // This is done in a Task but we ensure proper ordering within it
+        Task { @MainActor in
+            // 1. Stop sync service first
+            try? await syncService?.stop()
+
+            // 2. Small delay to ensure Rust cleanup completes
+            try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+
+            // 3. Clear room list service (must be after sync is stopped)
+            roomListService = nil
+
+            // 4. Clear sync service last
+            syncService = nil
+
+            #if DEBUG
+            print("[MatrixService] Sync stopped and cleaned up")
+            #endif
+        }
 
         if connectionState == .syncing {
             updateConnectionState(.connected)
@@ -1694,24 +1797,72 @@ final class MatrixService: MatrixServiceProtocol {
         let userId: String
         let accessToken: String
         let deviceId: String
+        let refreshToken: String?
+        let homeserverUrl: String?
+
+        init(userId: String, accessToken: String, deviceId: String, refreshToken: String? = nil, homeserverUrl: String? = nil) {
+            self.userId = userId
+            self.accessToken = accessToken
+            self.deviceId = deviceId
+            self.refreshToken = refreshToken
+            self.homeserverUrl = homeserverUrl
+        }
     }
+
+    /// Session delegate for handling token refresh callbacks from the SDK
+    private var sessionDelegate: MatrixSessionDelegateImpl?
 
     // Matrix session storage key for UserDefaults (not sensitive enough for Keychain)
     private static let matrixSessionKey = "matrix_session_data"
 
-    private func storeSessionCredentials(userId: String, accessToken: String, deviceId: String) {
+    private func storeSessionCredentials(userId: String, accessToken: String, deviceId: String, refreshToken: String? = nil, homeserverUrl: String? = nil) {
         let credentials = StoredCredentials(
             userId: userId,
             accessToken: accessToken,
-            deviceId: deviceId
+            deviceId: deviceId,
+            refreshToken: refreshToken,
+            homeserverUrl: homeserverUrl ?? homeserverURL
         )
 
         if let data = try? JSONEncoder().encode(credentials) {
             UserDefaults.standard.set(data, forKey: Self.matrixSessionKey)
+            #if DEBUG
+            print("[MatrixService] Session credentials stored (refreshToken: \(refreshToken != nil ? "yes" : "no"))")
+            #endif
         }
     }
 
-    private func loadSessionCredentials() -> StoredCredentials? {
+    /// Store a full Session object (called by SDK on token refresh)
+    func storeSession(_ session: Session) {
+        storeSessionCredentials(
+            userId: session.userId,
+            accessToken: session.accessToken,
+            deviceId: session.deviceId,
+            refreshToken: session.refreshToken,
+            homeserverUrl: session.homeserverUrl
+        )
+    }
+
+    /// Load a full Session object (called by SDK to restore session)
+    nonisolated func loadSession(userId: String) -> Session? {
+        guard let credentials = loadSessionCredentials(),
+              credentials.userId == userId,
+              let homeserver = credentials.homeserverUrl else {
+            return nil
+        }
+
+        return Session(
+            accessToken: credentials.accessToken,
+            refreshToken: credentials.refreshToken,
+            userId: credentials.userId,
+            deviceId: credentials.deviceId,
+            homeserverUrl: homeserver,
+            oidcData: nil,
+            slidingSyncVersion: .native
+        )
+    }
+
+    private nonisolated func loadSessionCredentials() -> StoredCredentials? {
         guard let data = UserDefaults.standard.data(forKey: Self.matrixSessionKey),
               let credentials = try? JSONDecoder().decode(StoredCredentials.self, from: data) else {
             return nil
@@ -1734,6 +1885,60 @@ final class MatrixService: MatrixServiceProtocol {
         return deviceId
     }
 }
+
+// MARK: - Matrix Session Delegate
+// Implements ClientSessionDelegate for automatic token refresh handling
+
+#if MATRIX_SDK_ENABLED
+/// Session delegate that handles token persistence for the Matrix SDK
+/// The SDK calls this delegate when:
+/// - Tokens are refreshed (saveSessionInKeychain)
+/// - Session needs to be restored (retrieveSessionFromKeychain)
+final class MatrixSessionDelegateImpl: ClientSessionDelegate, @unchecked Sendable {
+
+    private weak var matrixService: MatrixService?
+
+    init(matrixService: MatrixService) {
+        self.matrixService = matrixService
+    }
+
+    /// Called by the SDK when tokens are refreshed and need to be persisted
+    func saveSessionInKeychain(session: Session) {
+        #if DEBUG
+        print("[MatrixSessionDelegate] 🔄 Token refresh - saving new session")
+        print("[MatrixSessionDelegate] User: \(session.userId)")
+        print("[MatrixSessionDelegate] Has refresh token: \(session.refreshToken != nil)")
+        #endif
+
+        // Store the updated session with new tokens
+        Task { @MainActor in
+            matrixService?.storeSession(session)
+        }
+    }
+
+    /// Called by the SDK to retrieve a stored session for a user
+    func retrieveSessionFromKeychain(userId: String) throws -> Session {
+        #if DEBUG
+        print("[MatrixSessionDelegate] 📥 Retrieving session for user: \(userId)")
+        #endif
+
+        // Try to load the session from our storage
+        guard let session = matrixService?.loadSession(userId: userId) else {
+            #if DEBUG
+            print("[MatrixSessionDelegate] ❌ No stored session found for user: \(userId)")
+            #endif
+            // Throw an error that the SDK will handle
+            throw MatrixError.sessionRestoreFailed
+        }
+
+        #if DEBUG
+        print("[MatrixSessionDelegate] ✅ Session retrieved successfully")
+        #endif
+
+        return session
+    }
+}
+#endif
 
 // MARK: - Room List Entries Listener
 

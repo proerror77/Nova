@@ -22,25 +22,47 @@ enum FeedLogger {
 }
 
 // MARK: - Feed ViewModel
+// iOS 17+ 使用 @Observable macro 替代 ObservableObject
+// 优点：自动追踪属性变化，更细粒度的更新，减少不必要的视图重绘
 
 @MainActor
-class FeedViewModel: ObservableObject {
-    // MARK: - Published Properties
+@Observable
+class FeedViewModel {
+    // MARK: - Observable Properties (无需 @Published)
 
-    @Published var posts: [FeedPost] = []
-    @Published var postIds: [String] = []
-    @Published var isLoading = false
-    @Published var isLoadingMore = false
-    @Published var error: String?
-    @Published var toastError: String?  // Transient error for toast notifications
-    @Published var hasMore = true
-    @Published var isRefreshing = false  // Explicit refresh state for UI feedback
-    @Published var lastRefreshedAt: Date?  // Track last refresh time
+    var posts: [FeedPost] = [] {
+        didSet {
+            // 当 posts 变化时自动更新 feedItems 缓存
+            _cachedFeedItems = nil
+        }
+    }
+    var postIds: [String] = []
+    var isLoading = false
+    var isLoadingMore = false
+    var error: String?
+    var toastError: String?  // Transient error for toast notifications
+    var hasMore = true
+    var isRefreshing = false  // Explicit refresh state for UI feedback
+    var lastRefreshedAt: Date?  // Track last refresh time
 
     // MARK: - Channel State
-    @Published var channels: [FeedChannel] = []
-    @Published var selectedChannelId: String? = nil  // nil = "For You" / all content
-    @Published var isLoadingChannels = false
+    var channels: [FeedChannel] = []
+    var selectedChannelId: String? = nil  // nil = "For You" / all content
+    var isLoadingChannels = false
+    
+    // MARK: - Cached Feed Items (性能优化)
+    // 缓存 buildFeedItems 结果，避免每次渲染都重新计算
+    private var _cachedFeedItems: [FeedItemType]?
+    
+    /// 获取用于显示的 Feed 项目列表（带缓存）
+    var feedItems: [FeedItemType] {
+        if let cached = _cachedFeedItems {
+            return cached
+        }
+        let items = FeedLayoutBuilder.buildFeedItems(from: posts)
+        _cachedFeedItems = items
+        return items
+    }
 
     // MARK: - Private Properties
 

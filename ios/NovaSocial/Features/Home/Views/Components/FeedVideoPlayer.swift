@@ -108,17 +108,18 @@ struct FeedVideoPlayer: View {
     private var thumbnailView: some View {
         Group {
             if let thumbnailUrl = thumbnailUrl {
-                AsyncImage(url: thumbnailUrl) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure, .empty:
-                        placeholderView
-                    @unknown default:
-                        placeholderView
-                    }
+                // 使用 CachedAsyncImage 替代 AsyncImage 以获得缓存和更快加载
+                CachedAsyncImage(
+                    url: thumbnailUrl,
+                    targetSize: CGSize(width: UIScreen.main.bounds.width * 2, height: height * 2),
+                    enableProgressiveLoading: true,
+                    priority: .high
+                ) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    placeholderView
                 }
             } else {
                 placeholderView

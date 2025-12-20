@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Hottest Banker Section
 /// 独立的轮播图区域组件，包含标题和卡片轮播
 /// 可在 Feed 中按需插入
+/// iOS 17+ 优化：使用 scrollTargetBehavior 实现分页滚动
 
 struct HottestBankerSection: View {
     var onSeeAllTapped: () -> Void = {}
@@ -29,8 +30,9 @@ struct HottestBankerSection: View {
             .padding(.bottom, 5)
 
             // MARK: - 轮播卡片容器 (水平滚动)
+            // iOS 17+ 使用 scrollTargetBehavior 实现流畅分页
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 20) {
+                LazyHStack(spacing: 20) {
                     // 卡片 1
                     CarouselCardItem(
                         rankNumber: "1",
@@ -77,7 +79,9 @@ struct HottestBankerSection: View {
                     )
                 }
                 .padding(.horizontal, 16)
+                .scrollTargetLayout()  // iOS 17+ 标记滚动目标布局
             }
+            .scrollTargetBehavior(.viewAligned)  // iOS 17+ 视图对齐分页
             .frame(height: 360)
             .padding(.horizontal, -16)
         }

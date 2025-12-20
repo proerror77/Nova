@@ -39,19 +39,18 @@ struct AvatarView: View {
                     .frame(width: size, height: size)
                     .clipShape(Circle())
             } else if let urlString = url, !urlString.isEmpty, let url = URL(string: urlString) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        DefaultAvatarView(size: size, backgroundColor: backgroundColor)
-                    case .empty:
-                        ProgressView()
-                    @unknown default:
-                        DefaultAvatarView(size: size, backgroundColor: backgroundColor)
-                    }
+                // 使用 CachedAsyncImage 替代 AsyncImage 以获得磁盘缓存和更好的性能
+                CachedAsyncImage(
+                    url: url,
+                    targetSize: CGSize(width: size * 2, height: size * 2),  // 2x for Retina
+                    enableProgressiveLoading: false,  // 头像不需要渐进式加载
+                    priority: .high
+                ) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    DefaultAvatarView(size: size, backgroundColor: backgroundColor)
                 }
                 .frame(width: size, height: size)
                 .clipShape(Circle())
