@@ -397,6 +397,10 @@ class FeedViewModel: ObservableObject {
             // This allows the feed to display immediately while bookmarks load in background
             loadBookmarkStatusAsync(for: self.posts.map { $0.id })
 
+            // OPTIMIZATION: Fetch missing author profiles asynchronously
+            // This updates placeholder names with real author info from identity-service
+            fetchMissingAuthorProfilesAsync(for: self.posts)
+
             self.error = nil
 
             // Track successful load
@@ -544,6 +548,9 @@ class FeedViewModel: ObservableObject {
                 // OPTIMIZATION: Load bookmark status asynchronously for new posts
                 loadBookmarkStatusAsync(for: uniqueNewPosts.map { $0.id })
 
+                // OPTIMIZATION: Fetch missing author profiles asynchronously for new posts
+                fetchMissingAuthorProfilesAsync(for: uniqueNewPosts)
+
                 // Enforce memory limit after adding new posts
                 enforceMemoryLimit()
             }
@@ -608,6 +615,9 @@ class FeedViewModel: ObservableObject {
 
             // OPTIMIZATION: Load bookmark status asynchronously (non-blocking)
             loadBookmarkStatusAsync(for: self.posts.map { $0.id })
+
+            // OPTIMIZATION: Fetch missing author profiles asynchronously
+            fetchMissingAuthorProfilesAsync(for: self.posts)
 
             // 成功时清除错误并更新刷新时间
             self.error = nil
@@ -799,6 +809,70 @@ class FeedViewModel: ObservableObject {
                 print("[FeedVM] Async bookmark load failed: \(error)")
                 #endif
                 // Silently fail - bookmarks are non-critical for feed display
+            }
+        }
+    }
+
+    /// Fetch missing author profiles and update posts
+    /// Called when posts have placeholder author names (e.g., "User b19b767d")
+    private func fetchMissingAuthorProfilesAsync(for posts: [FeedPost]) {
+        // Find posts with missing author info (those showing "User xxxxx" placeholder)
+        let postsWithMissingProfiles = posts.filter { post in
+            post.authorName.hasPrefix("User ") && post.authorAvatar == nil
+        }
+
+        guard !postsWithMissingProfiles.isEmpty else { return }
+
+        let userIds = postsWithMissingProfiles.map { $0.authorId }
+
+        #if DEBUG
+        print("[FeedVM] Fetching \(userIds.count) missing author profiles")
+        #endif
+
+        Task(priority: .utility) { [weak self] in
+            guard let self = self else { return }
+
+            do {
+                let profiles = try await self.feedService.batchGetProfiles(userIds: userIds)
+
+                // Update posts with fetched author info
+                self.updateAuthorProfiles(profiles)
+
+                #if DEBUG
+                print("[FeedVM] Updated \(profiles.count) author profiles")
+                #endif
+            } catch {
+                #if DEBUG
+                print("[FeedVM] Failed to fetch author profiles: \(error)")
+                #endif
+                // Silently fail - placeholder names are acceptable fallback
+            }
+        }
+    }
+
+    /// Update posts with fetched author profiles
+    private func updateAuthorProfiles(_ profiles: [String: AuthorProfile]) {
+        guard !profiles.isEmpty else { return }
+
+        for i in posts.indices {
+            let post = posts[i]
+            if let profile = profiles[post.authorId] {
+                // Create updated post with new author info
+                posts[i] = FeedPost(
+                    id: post.id,
+                    authorId: post.authorId,
+                    authorName: profile.displayName,
+                    authorAvatar: profile.avatarUrl,
+                    content: post.content,
+                    mediaUrls: post.mediaUrls,
+                    mediaType: post.mediaType,
+                    createdAt: post.createdAt,
+                    likeCount: post.likeCount,
+                    commentCount: post.commentCount,
+                    shareCount: post.shareCount,
+                    isLiked: post.isLiked,
+                    isBookmarked: post.isBookmarked
+                )
             }
         }
     }

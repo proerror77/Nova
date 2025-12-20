@@ -272,6 +272,8 @@ struct APIConfig {
         static let uploadAvatar = "/api/v2/users/avatar"  // POST 上傳頭像
         /// GET /api/v2/users/{id} 獲取用戶資料
         static func getProfile(_ id: String) -> String { "/api/v2/users/\(id)" }
+        /// POST /api/v2/auth/users/profiles/batch 批量獲取用戶資料
+        static let batchGetProfiles = "/api/v2/auth/users/profiles/batch"
     }
 
     // MARK: - User Profile Data API (ranking-service via graphql-gateway)

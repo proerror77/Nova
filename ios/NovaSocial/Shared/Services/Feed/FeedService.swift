@@ -308,6 +308,65 @@ class FeedService {
             body: request
         )
     }
+
+    // MARK: - User Profiles
+
+    /// Batch fetch user profiles by IDs
+    /// Used to populate author information for feed posts when not included in feed response
+    func batchGetProfiles(userIds: [String]) async throws -> [String: AuthorProfile] {
+        guard !userIds.isEmpty else { return [:] }
+
+        struct Request: Codable {
+            let userIds: [String]
+
+            enum CodingKeys: String, CodingKey {
+                case userIds = "user_ids"
+            }
+        }
+
+        struct Response: Codable {
+            let profiles: [ProfileData]
+        }
+
+        struct ProfileData: Codable {
+            let userId: String
+            let username: String
+            let displayName: String?
+            let avatarUrl: String?
+
+            enum CodingKeys: String, CodingKey {
+                case userId = "user_id"
+                case username
+                case displayName = "display_name"
+                case avatarUrl = "avatar_url"
+            }
+        }
+
+        let request = Request(userIds: Array(Set(userIds)))  // Deduplicate
+
+        let response: Response = try await client.request(
+            endpoint: APIConfig.Profile.batchGetProfiles,
+            method: "POST",
+            body: request
+        )
+
+        var profileMap: [String: AuthorProfile] = [:]
+        for profile in response.profiles {
+            profileMap[profile.userId] = AuthorProfile(
+                username: profile.username,
+                displayName: profile.displayName ?? profile.username,
+                avatarUrl: profile.avatarUrl
+            )
+        }
+        return profileMap
+    }
+}
+
+/// Author profile information for feed posts
+struct AuthorProfile {
+    let username: String
+    let displayName: String
+    let avatarUrl: String?
 }
 
 // MARK: - Feed Algorithm
