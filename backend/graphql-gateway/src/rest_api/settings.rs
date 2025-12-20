@@ -6,10 +6,58 @@ use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
-use crate::clients::proto::auth::{GetUserSettingsRequest, UpdateUserSettingsRequest};
+use crate::clients::proto::auth::{
+    DmPermission, GetUserSettingsRequest, PrivacyLevel, UpdateUserSettingsRequest,
+};
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
 use crate::rest_api::models::ErrorResponse;
+
+// ============================================================================
+// Enum Conversion Helpers
+// ============================================================================
+
+/// Convert DmPermission enum (i32) to display string
+fn dm_permission_to_string(dm_permission: i32) -> String {
+    match DmPermission::try_from(dm_permission) {
+        Ok(DmPermission::Anyone) => "anyone".to_string(),
+        Ok(DmPermission::Followers) => "followers".to_string(),
+        Ok(DmPermission::Mutuals) => "mutuals".to_string(),
+        Ok(DmPermission::Nobody) => "nobody".to_string(),
+        Ok(DmPermission::Unspecified) | Err(_) => "mutuals".to_string(), // Default to mutuals
+    }
+}
+
+/// Convert string to DmPermission enum (i32)
+fn string_to_dm_permission(s: Option<&String>) -> Option<i32> {
+    s.map(|s| match s.to_lowercase().as_str() {
+        "anyone" => DmPermission::Anyone as i32,
+        "followers" => DmPermission::Followers as i32,
+        "mutuals" => DmPermission::Mutuals as i32,
+        "nobody" => DmPermission::Nobody as i32,
+        _ => DmPermission::Mutuals as i32, // Default to mutuals
+    })
+}
+
+/// Convert PrivacyLevel enum (i32) to display string
+fn privacy_level_to_string(privacy_level: i32) -> String {
+    match PrivacyLevel::try_from(privacy_level) {
+        Ok(PrivacyLevel::Public) => "public".to_string(),
+        Ok(PrivacyLevel::FriendsOnly) => "friends_only".to_string(),
+        Ok(PrivacyLevel::Private) => "private".to_string(),
+        Ok(PrivacyLevel::Unspecified) | Err(_) => "public".to_string(), // Default to public
+    }
+}
+
+/// Convert string to PrivacyLevel enum (i32)
+fn string_to_privacy_level(s: Option<&String>) -> Option<i32> {
+    s.map(|s| match s.to_lowercase().as_str() {
+        "public" => PrivacyLevel::Public as i32,
+        "friends_only" | "friends" => PrivacyLevel::FriendsOnly as i32,
+        "private" => PrivacyLevel::Private as i32,
+        _ => PrivacyLevel::Public as i32, // Default to public
+    })
+}
 
 // ============================================================================
 // Response Models
@@ -26,7 +74,6 @@ pub struct UserSettingsResponse {
     pub language: String,
     pub dark_mode: bool,
     pub privacy_level: String,
-    pub allow_messages: bool,
     pub show_online_status: bool,
 }
 
@@ -40,7 +87,6 @@ pub struct UpdateSettingsRequest {
     pub language: Option<String>,
     pub dark_mode: Option<bool>,
     pub privacy_level: Option<String>,
-    pub allow_messages: Option<bool>,
     pub show_online_status: Option<bool>,
 }
 
@@ -75,15 +121,14 @@ pub async fn get_settings(
             if let Some(settings) = inner.settings {
                 Ok(HttpResponse::Ok().json(UserSettingsResponse {
                     user_id: settings.user_id,
-                    dm_permission: settings.dm_permission,
+                    dm_permission: dm_permission_to_string(settings.dm_permission),
                     email_notifications: settings.email_notifications,
                     push_notifications: settings.push_notifications,
                     marketing_emails: settings.marketing_emails,
                     timezone: settings.timezone,
                     language: settings.language,
                     dark_mode: settings.dark_mode,
-                    privacy_level: settings.privacy_level,
-                    allow_messages: settings.allow_messages,
+                    privacy_level: privacy_level_to_string(settings.privacy_level),
                     show_online_status: settings.show_online_status,
                 }))
             } else if let Some(err) = inner.error {
@@ -107,7 +152,6 @@ pub async fn get_settings(
                     language: "en".to_string(),
                     dark_mode: false,
                     privacy_level: "public".to_string(),
-                    allow_messages: true,
                     show_online_status: true,
                 }))
             }
@@ -143,15 +187,14 @@ pub async fn update_settings(
 
     let grpc_request = tonic::Request::new(UpdateUserSettingsRequest {
         user_id: user_id.clone(),
-        dm_permission: body.dm_permission.clone(),
+        dm_permission: string_to_dm_permission(body.dm_permission.as_ref()),
         email_notifications: body.email_notifications,
         push_notifications: body.push_notifications,
         marketing_emails: body.marketing_emails,
         timezone: body.timezone.clone(),
         language: body.language.clone(),
         dark_mode: body.dark_mode,
-        privacy_level: body.privacy_level.clone(),
-        allow_messages: body.allow_messages,
+        privacy_level: string_to_privacy_level(body.privacy_level.as_ref()),
         show_online_status: body.show_online_status,
     });
 
@@ -163,15 +206,14 @@ pub async fn update_settings(
                 info!(user_id = %user_id, "User settings updated successfully");
                 Ok(HttpResponse::Ok().json(UserSettingsResponse {
                     user_id: settings.user_id,
-                    dm_permission: settings.dm_permission,
+                    dm_permission: dm_permission_to_string(settings.dm_permission),
                     email_notifications: settings.email_notifications,
                     push_notifications: settings.push_notifications,
                     marketing_emails: settings.marketing_emails,
                     timezone: settings.timezone,
                     language: settings.language,
                     dark_mode: settings.dark_mode,
-                    privacy_level: settings.privacy_level,
-                    allow_messages: settings.allow_messages,
+                    privacy_level: privacy_level_to_string(settings.privacy_level),
                     show_online_status: settings.show_online_status,
                 }))
             } else if let Some(err) = inner.error {

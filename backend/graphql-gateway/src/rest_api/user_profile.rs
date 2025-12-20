@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
 use crate::clients::proto::auth::{
-    auth_service_client::AuthServiceClient, GetUserByUsernameRequest, GetUserProfilesByIdsRequest,
-    UpdateUserProfileRequest,
+    auth_service_client::AuthServiceClient, Gender, GetUserByUsernameRequest,
+    GetUserProfilesByIdsRequest, UpdateUserProfileRequest,
 };
 use crate::clients::proto::media::{
     media_service_client::MediaServiceClient, InitiateUploadRequest, MediaType,
@@ -21,6 +21,28 @@ use crate::clients::proto::media::{
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
 use tonic::Status;
+
+/// Convert Gender enum (i32) to display string
+fn gender_to_string(gender: i32) -> Option<String> {
+    match Gender::try_from(gender) {
+        Ok(Gender::Male) => Some("male".to_string()),
+        Ok(Gender::Female) => Some("female".to_string()),
+        Ok(Gender::Other) => Some("other".to_string()),
+        Ok(Gender::PreferNotToSay) => Some("prefer_not_to_say".to_string()),
+        Ok(Gender::Unspecified) | Err(_) => None,
+    }
+}
+
+/// Convert string to Gender enum (i32)
+fn string_to_gender(s: Option<&String>) -> i32 {
+    match s.map(|s| s.to_lowercase()).as_deref() {
+        Some("male") => Gender::Male as i32,
+        Some("female") => Gender::Female as i32,
+        Some("other") => Gender::Other as i32,
+        Some("prefer_not_to_say") => Gender::PreferNotToSay as i32,
+        _ => Gender::Unspecified as i32,
+    }
+}
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateProfileRequest {
@@ -129,10 +151,10 @@ pub async fn get_profile(
             bio: p.bio,
             location: p.location,
             date_of_birth: p.date_of_birth,
-            gender: p.gender,
+            gender: gender_to_string(p.gender),
             website: None,
             is_verified: false,
-            is_private: p.private_account,
+            is_private: p.is_private,
             follower_count: 0,
             following_count: 0,
             post_count: 0,
@@ -235,10 +257,10 @@ pub async fn get_profile_by_username(
             bio: p.bio,
             location: p.location,
             date_of_birth: p.date_of_birth,
-            gender: p.gender,
+            gender: gender_to_string(p.gender),
             website: None,
             is_verified: false,
-            is_private: p.private_account,
+            is_private: p.is_private,
             follower_count: 0,
             following_count: 0,
             post_count: 0,
@@ -295,12 +317,12 @@ pub async fn update_profile(
         avatar_url: req.avatar_url.clone(),
         cover_photo_url: req.cover_url.clone(),
         location: req.location.clone(),
-        private_account: None,
+        is_private: None,
         // Extended profile fields
         first_name: req.first_name.clone(),
         last_name: req.last_name.clone(),
         date_of_birth: req.date_of_birth.clone(),
-        gender: req.gender.clone(),
+        gender: string_to_gender(req.gender.as_ref()),
     };
 
     let resp = auth_client
@@ -340,10 +362,10 @@ pub async fn update_profile(
                     bio: p.bio,
                     location: p.location,
                     date_of_birth: p.date_of_birth,
-                    gender: p.gender,
+                    gender: gender_to_string(p.gender),
                     website: None,
                     is_verified: false,
-                    is_private: p.private_account,
+                    is_private: p.is_private,
                     follower_count: 0,
                     following_count: 0,
                     post_count: 0,
@@ -387,11 +409,11 @@ pub async fn upload_avatar(
             avatar_url: Some(url.clone()),
             cover_photo_url: None,
             location: None,
-            private_account: None,
+            is_private: None,
             first_name: None,
             last_name: None,
             date_of_birth: None,
-            gender: None,
+            gender: Gender::Unspecified as i32,
         };
 
         return match auth_client

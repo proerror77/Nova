@@ -3,7 +3,10 @@ use crate::rest_api::graph::{
     get_user_following, unfollow_user,
 };
 use crate::rest_api::notifications::{
-    get_notifications, mark_all_notifications_read, mark_notification_read,
+    batch_create_notifications, create_notification, delete_notification, get_notification,
+    get_notification_preferences, get_notification_stats, get_notifications, get_unread_count,
+    mark_all_notifications_read, mark_notification_read, register_push_token,
+    unregister_push_token, update_notification_preferences,
 };
 use crate::rest_api::poll::{
     add_candidate, check_voted, close_poll, create_poll, delete_poll, get_active_polls, get_poll,
@@ -625,13 +628,52 @@ async fn main() -> std::io::Result<()> {
             )
             // ✅ Notifications API
             .route("/api/v2/notifications", web::get().to(get_notifications))
-            .route(
-                "/api/v2/notifications/read/{id}",
-                web::post().to(mark_notification_read),
-            )
+            .route("/api/v2/notifications", web::post().to(create_notification))
+            // Specific routes must come before parameterized routes
             .route(
                 "/api/v2/notifications/read-all",
                 web::post().to(mark_all_notifications_read),
+            )
+            .route(
+                "/api/v2/notifications/unread-count",
+                web::get().to(get_unread_count),
+            )
+            .route(
+                "/api/v2/notifications/stats",
+                web::get().to(get_notification_stats),
+            )
+            .route(
+                "/api/v2/notifications/preferences",
+                web::get().to(get_notification_preferences),
+            )
+            .route(
+                "/api/v2/notifications/preferences",
+                web::put().to(update_notification_preferences),
+            )
+            .route(
+                "/api/v2/notifications/push-token",
+                web::post().to(register_push_token),
+            )
+            .route(
+                "/api/v2/notifications/push-token/{token}",
+                web::delete().to(unregister_push_token),
+            )
+            .route(
+                "/api/v2/notifications/batch",
+                web::post().to(batch_create_notifications),
+            )
+            // Parameterized routes last
+            .route(
+                "/api/v2/notifications/{id}",
+                web::get().to(get_notification),
+            )
+            .route(
+                "/api/v2/notifications/{id}",
+                web::delete().to(delete_notification),
+            )
+            .route(
+                "/api/v2/notifications/{id}/read",
+                web::post().to(mark_notification_read),
             )
             // ✅ Search API (content, users, hashtags, trending)
             .route("/api/v2/search", web::get().to(search_all))
