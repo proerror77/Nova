@@ -33,6 +33,8 @@ class FeedViewModel: ObservableObject {
     @Published var error: String?
     @Published var toastError: String?  // Transient error for toast notifications
     @Published var hasMore = true
+    @Published var isRefreshing = false  // Explicit refresh state for UI feedback
+    @Published var lastRefreshedAt: Date?  // Track last refresh time
 
     // MARK: - Channel State
     @Published var channels: [FeedChannel] = []
@@ -139,6 +141,27 @@ class FeedViewModel: ObservableObject {
     /// Check if user is authenticated (has valid token and is not in guest mode)
     private var isAuthenticated: Bool {
         authManager.isAuthenticated && !authManager.isGuestMode
+    }
+
+    /// Formatted string showing when feed was last refreshed
+    var lastRefreshedText: String? {
+        guard let lastRefresh = lastRefreshedAt else { return nil }
+        let interval = Date().timeIntervalSince(lastRefresh)
+
+        if interval < 60 {
+            return "Just now"
+        } else if interval < 3600 {
+            let minutes = Int(interval / 60)
+            return "\(minutes)m ago"
+        } else if interval < 86400 {
+            let hours = Int(interval / 3600)
+            return "\(hours)h ago"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .short
+            formatter.timeStyle = .short
+            return formatter.string(from: lastRefresh)
+        }
     }
 
     /// Load initial feed - uses Guest Feed (trending) when not authenticated
@@ -420,9 +443,10 @@ class FeedViewModel: ObservableObject {
     /// Refresh feed (pull-to-refresh)
     /// 下拉刷新时静默忽略取消错误，只在真正的网络错误时显示提示
     func refresh() async {
-        guard !isLoading else { return }
+        guard !isLoading && !isRefreshing else { return }
 
         isLoading = true
+        isRefreshing = true
         // 刷新时不立即清除错误，只有在成功或真正的错误时才更新
 
         do {
@@ -462,8 +486,9 @@ class FeedViewModel: ObservableObject {
             // OPTIMIZATION: Load bookmark status asynchronously (non-blocking)
             loadBookmarkStatusAsync(for: self.posts.map { $0.id })
 
-            // 成功时清除错误
+            // 成功时清除错误并更新刷新时间
             self.error = nil
+            self.lastRefreshedAt = Date()
 
         } catch let apiError as APIError {
             // 检查是否是取消错误（用户快速滑动导致）
@@ -472,6 +497,7 @@ class FeedViewModel: ObservableObject {
                 if nsError.code == NSURLErrorCancelled {
                     // 静默忽略取消的请求，保持当前数据
                     isLoading = false
+                    isRefreshing = false
                     return
                 }
             }
@@ -485,6 +511,7 @@ class FeedViewModel: ObservableObject {
             if nsError.code == NSURLErrorCancelled || nsError.localizedDescription.lowercased().contains("cancelled") {
                 // 静默忽略取消的请求
                 isLoading = false
+                isRefreshing = false
                 return
             }
             // 非取消错误：只有当前没有数据时才显示错误
@@ -494,6 +521,7 @@ class FeedViewModel: ObservableObject {
         }
 
         isLoading = false
+        isRefreshing = false
     }
 
     // MARK: - Channel Management
