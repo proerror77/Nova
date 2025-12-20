@@ -149,7 +149,7 @@ impl Default for ServiceClients {
             "http://realtime-chat-service.nova-staging.svc.cluster.local:9086",
             "http://media-service.nova-staging.svc.cluster.local:9086",
             "http://search-service.nova-staging.svc.cluster.local:9087",
-            "http://notification-service.nova-staging.svc.cluster.local:50051",
+            "http://notification-service.nova-staging.svc.cluster.local:9080",
             "http://graph-service.nova-staging.svc.cluster.local:9080",
             "http://ranking-service.nova-staging.svc.cluster.local:9088",
         )
