@@ -261,10 +261,14 @@ final class FeedVideoPlayerViewModel: ObservableObject {
     private var statusObserver: NSKeyValueObservation?
     private var prefetchTask: Task<Void, Never>?
 
-    // Network monitoring for prefetch priority
+    // Network monitoring for prefetch priority (nonisolated for cross-actor access)
     private static let networkMonitor = NWPathMonitor()
-    private static var isOnWiFi: Bool = true
-    private static var networkMonitorStarted = false
+    private static let networkQueue = DispatchQueue(label: "com.icered.networkMonitor")
+    nonisolated(unsafe) private static var _isOnWiFi: Bool = true
+    nonisolated(unsafe) private static var networkMonitorStarted = false
+
+    /// Thread-safe access to WiFi status (used for prefetch priority optimization)
+    nonisolated static var isOnWiFi: Bool { _isOnWiFi }
 
     init(url: URL, autoPlay: Bool = true, isMuted: Bool = true) {
         self.url = url
@@ -275,15 +279,15 @@ final class FeedVideoPlayerViewModel: ObservableObject {
         Self.startNetworkMonitoringIfNeeded()
     }
 
-    private static func startNetworkMonitoringIfNeeded() {
+    nonisolated private static func startNetworkMonitoringIfNeeded() {
         guard !networkMonitorStarted else { return }
         networkMonitorStarted = true
 
         networkMonitor.pathUpdateHandler = { path in
             // Check if using WiFi (not cellular)
-            isOnWiFi = !path.usesInterfaceType(.cellular)
+            _isOnWiFi = !path.usesInterfaceType(.cellular)
         }
-        networkMonitor.start(queue: DispatchQueue.global(qos: .utility))
+        networkMonitor.start(queue: networkQueue)
     }
 
     func prepare() {
@@ -314,7 +318,7 @@ final class FeedVideoPlayerViewModel: ObservableObject {
             guard !Task.isCancelled else { return }
 
             // Use lower priority on cellular to save bandwidth/battery
-            let priority: VideoLoadPriority = Self.isOnWiFi ? .high : .low
+            let priority: VideoLoadPriority = FeedVideoPlayerViewModel.isOnWiFi ? .high : .low
             await VideoCacheService.shared.prefetchVideo(urlString: urlString, priority: priority)
         }
 

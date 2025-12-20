@@ -87,8 +87,8 @@ struct Draft: Codable {
 
 /// Actor-based manager for saving and loading post drafts to the file system
 /// Uses file system storage instead of UserDefaults for better memory efficiency
-actor DraftManager {
-    static let shared = DraftManager()
+actor PostDraftManager {
+    static let shared = PostDraftManager()
 
     // MARK: - Properties
 
