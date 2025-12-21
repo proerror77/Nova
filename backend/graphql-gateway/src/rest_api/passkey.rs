@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
 use super::models::ErrorResponse;
-use crate::clients::proto::identity::{
+use crate::clients::proto::auth::{
     CompletePasskeyAuthenticationRequest as GrpcCompletePasskeyAuthRequest,
     CompletePasskeyRegistrationRequest as GrpcCompletePasskeyRegRequest,
     ListPasskeysRequest as GrpcListPasskeysRequest,
