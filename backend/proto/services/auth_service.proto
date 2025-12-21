@@ -3,6 +3,8 @@ package nova.identity_service.v2;
 
 import "common.proto";
 import "google/protobuf/wrappers.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
 import "google/api/annotations.proto";
 
 // ============================================================================
@@ -1062,6 +1064,62 @@ service AuthService {
       delete: "/api/v2/accounts/alias/{account_id}"
     };
   }
+
+  // ========== Passkey/WebAuthn ==========
+
+  // Start passkey registration - returns WebAuthn challenge options
+  rpc StartPasskeyRegistration(StartPasskeyRegistrationRequest) returns (StartPasskeyRegistrationResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/passkey/register/start"
+      body: "*"
+    };
+  }
+
+  // Complete passkey registration - stores credential
+  rpc CompletePasskeyRegistration(CompletePasskeyRegistrationRequest) returns (CompletePasskeyRegistrationResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/passkey/register/complete"
+      body: "*"
+    };
+  }
+
+  // Start passkey authentication - returns WebAuthn challenge options
+  rpc StartPasskeyAuthentication(StartPasskeyAuthenticationRequest) returns (StartPasskeyAuthenticationResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/passkey/auth/start"
+      body: "*"
+    };
+  }
+
+  // Complete passkey authentication - validates assertion and returns tokens
+  rpc CompletePasskeyAuthentication(CompletePasskeyAuthenticationRequest) returns (CompletePasskeyAuthenticationResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/passkey/auth/complete"
+      body: "*"
+    };
+  }
+
+  // List all passkeys for a user
+  rpc ListPasskeys(ListPasskeysRequest) returns (ListPasskeysResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/passkey/list/{user_id}"
+    };
+  }
+
+  // Revoke a passkey credential
+  rpc RevokePasskey(RevokePasskeyRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/api/v2/passkey/{credential_id}"
+    };
+  }
+
+  // Rename a passkey credential
+  rpc RenamePasskey(RenamePasskeyRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      patch: "/api/v2/passkey/{credential_id}"
+      body: "*"
+    };
+  }
 }
 
 // ============================================================================
@@ -1185,4 +1243,90 @@ message DeleteAliasAccountRequest {
 
 message DeleteAliasAccountResponse {
   bool success = 1;
+}
+
+// ============================================================================
+// Passkey/WebAuthn Messages
+// ============================================================================
+
+message StartPasskeyRegistrationRequest {
+  string user_id = 1;
+  string credential_name = 2;
+  string device_type = 3;
+  string os_version = 4;
+}
+
+message StartPasskeyRegistrationResponse {
+  string challenge_id = 1;
+  string options_json = 2;
+}
+
+message CompletePasskeyRegistrationRequest {
+  string challenge_id = 1;
+  string attestation_json = 2;
+  string credential_name = 3;
+  string device_type = 4;
+  string os_version = 5;
+}
+
+message CompletePasskeyRegistrationResponse {
+  string credential_id = 1;
+  string credential_name = 2;
+}
+
+message StartPasskeyAuthenticationRequest {
+  string user_id = 1;
+}
+
+message StartPasskeyAuthenticationResponse {
+  string challenge_id = 1;
+  string options_json = 2;
+}
+
+message CompletePasskeyAuthenticationRequest {
+  string challenge_id = 1;
+  string assertion_json = 2;
+}
+
+message CompletePasskeyAuthenticationResponse {
+  string user_id = 1;
+  string credential_id = 2;
+  string access_token = 3;
+  string refresh_token = 4;
+  int64 expires_at = 5;
+  string username = 6;
+  string email = 7;
+}
+
+message ListPasskeysRequest {
+  string user_id = 1;
+}
+
+message PasskeyCredential {
+  string id = 1;
+  string credential_name = 2;
+  string device_type = 3;
+  string os_version = 4;
+  bool backup_eligible = 5;
+  bool backup_state = 6;
+  repeated string transports = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp last_used_at = 9;
+  bool is_active = 10;
+}
+
+message ListPasskeysResponse {
+  repeated PasskeyCredential passkeys = 1;
+}
+
+message RevokePasskeyRequest {
+  string user_id = 1;
+  string credential_id = 2;
+  string reason = 3;
+}
+
+message RenamePasskeyRequest {
+  string user_id = 1;
+  string credential_id = 2;
+  string new_name = 3;
 }

@@ -34,6 +34,8 @@ pub struct Settings {
     pub server: ServerSettings,
     pub email: EmailSettings,
     pub oauth: OAuthSettings,
+    pub passkey: PasskeySettings,
+    pub zitadel: ZitadelSettings,
 }
 
 impl Settings {
@@ -60,6 +62,8 @@ impl Settings {
             server: ServerSettings::from_env()?,
             email: EmailSettings::from_env()?,
             oauth: OAuthSettings::from_env()?,
+            passkey: PasskeySettings::from_env()?,
+            zitadel: ZitadelSettings::from_env(),
         })
     }
 }
@@ -384,6 +388,62 @@ impl OAuthSettings {
             default_scope: env::var("OAUTH_DEFAULT_SCOPE")
                 .unwrap_or_else(|_| "email profile".to_string()),
         })
+    }
+}
+
+/// Passkey (WebAuthn/FIDO2) configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PasskeySettings {
+    /// Relying Party ID (domain name, e.g., "icered.com")
+    pub rp_id: String,
+    /// Relying Party name displayed to users
+    pub rp_name: String,
+    /// Origin URL for WebAuthn validation (e.g., "https://icered.com")
+    pub origin: String,
+    /// Challenge TTL in seconds (default: 300 = 5 minutes)
+    pub challenge_ttl_secs: u64,
+}
+
+impl PasskeySettings {
+    fn from_env() -> Result<Self> {
+        Ok(Self {
+            rp_id: env::var("PASSKEY_RP_ID")
+                .unwrap_or_else(|_| "icered.com".to_string()),
+            rp_name: env::var("PASSKEY_RP_NAME")
+                .unwrap_or_else(|_| "ICERED".to_string()),
+            origin: env::var("PASSKEY_ORIGIN")
+                .unwrap_or_else(|_| "https://icered.com".to_string()),
+            challenge_ttl_secs: env::var("PASSKEY_CHALLENGE_TTL_SECS")
+                .unwrap_or_else(|_| "300".to_string())
+                .parse()
+                .context("Invalid PASSKEY_CHALLENGE_TTL_SECS")?,
+        })
+    }
+}
+
+/// Zitadel user sync configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZitadelSettings {
+    /// Zitadel API URL (e.g., "https://zitadel.example.com")
+    pub api_url: Option<String>,
+    /// Service user token for API access
+    pub service_token: Option<String>,
+    /// Organization ID in Zitadel
+    pub org_id: Option<String>,
+}
+
+impl ZitadelSettings {
+    fn from_env() -> Self {
+        Self {
+            api_url: env::var("ZITADEL_API_URL").ok(),
+            service_token: env::var("ZITADEL_SERVICE_TOKEN").ok(),
+            org_id: env::var("ZITADEL_ORG_ID").ok(),
+        }
+    }
+
+    /// Check if Zitadel integration is configured
+    pub fn is_configured(&self) -> bool {
+        self.api_url.is_some() && self.service_token.is_some() && self.org_id.is_some()
     }
 }
 

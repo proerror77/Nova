@@ -9,13 +9,13 @@
 /// - Profile: UpdateUserProfile
 /// - E2EE: UpsertUserPublicKey, GetUserPublicKey
 /// - OAuth/SSO: StartOAuthFlow, CompleteOAuthFlow, ListOAuthConnections, UnlinkOAuthProvider
-use crate::config::OAuthSettings;
+use crate::config::{OAuthSettings, PasskeySettings};
 use crate::db;
 use crate::error::IdentityError;
 use crate::security::{generate_token_pair, hash_password, validate_token, verify_password};
 use crate::services::{
     EmailService, InviteDeliveryConfig, InviteDeliveryService, KafkaEventProducer, OAuthService,
-    PhoneAuthService, TwoFaService,
+    PasskeyService, PhoneAuthService, TwoFaService, ZitadelService,
 };
 use chrono::{TimeZone, Utc};
 use redis_utils::SharedConnectionManager;
@@ -25,6 +25,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use std::collections::HashSet;
+use prost_types;
 
 // Import generated protobuf types
 pub mod nova {
@@ -58,6 +59,7 @@ pub struct IdentityServiceServer {
     invite_delivery: std::sync::Arc<InviteDeliveryService>,
     oauth: OAuthService,
     phone_auth: PhoneAuthService,
+    passkey: std::sync::Arc<PasskeyService>,
 }
 
 impl IdentityServiceServer {
@@ -68,7 +70,8 @@ impl IdentityServiceServer {
         kafka: Option<KafkaEventProducer>,
         sns_client: Option<aws_sdk_sns::Client>,
         oauth_settings: OAuthSettings,
-    ) -> Self {
+        passkey_settings: PasskeySettings,
+    ) -> Result<Self, IdentityError> {
         let two_fa = TwoFaService::new(db.clone(), redis.clone(), kafka.clone());
         let invite_delivery = std::sync::Arc::new(InviteDeliveryService::new(
             db.clone(),
@@ -78,7 +81,17 @@ impl IdentityServiceServer {
         ));
         let oauth = OAuthService::new(oauth_settings, db.clone(), redis.clone(), kafka.clone());
         let phone_auth = PhoneAuthService::new(db.clone(), redis.clone(), sns_client);
-        Self {
+
+        // Initialize PasskeyService
+        let passkey = PasskeyService::new(
+            db.clone(),
+            redis.clone(),
+            kafka.clone(),
+            passkey_settings,
+            None, // ZitadelService is optional
+        )?;
+
+        Ok(Self {
             db,
             redis,
             email,
@@ -87,7 +100,8 @@ impl IdentityServiceServer {
             invite_delivery,
             oauth,
             phone_auth,
-        }
+            passkey: std::sync::Arc::new(passkey),
+        })
     }
 }
 
@@ -2074,6 +2088,211 @@ impl AuthService for IdentityServiceServer {
 
         Ok(Response::new(DeleteAliasAccountResponse { success: true }))
     }
+
+    // ========== Passkey/WebAuthn Methods ==========
+
+    async fn start_passkey_registration(
+        &self,
+        request: Request<StartPasskeyRegistrationRequest>,
+    ) -> std::result::Result<Response<StartPasskeyRegistrationResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        // Get user
+        let user = db::users::find_by_id(&self.db, user_id)
+            .await
+            .map_err(to_status)?
+            .ok_or_else(|| Status::not_found("User not found"))?;
+
+        // Start registration
+        let (ccr, challenge_id) = self
+            .passkey
+            .start_registration(
+                &user,
+                if req.credential_name.is_empty() { None } else { Some(req.credential_name) },
+                if req.device_type.is_empty() { None } else { Some(req.device_type) },
+                if req.os_version.is_empty() { None } else { Some(req.os_version) },
+            )
+            .await
+            .map_err(to_status)?;
+
+        // Serialize options to JSON
+        let options_json = serde_json::to_string(&ccr)
+            .map_err(|e| Status::internal(format!("Failed to serialize options: {}", e)))?;
+
+        Ok(Response::new(StartPasskeyRegistrationResponse {
+            challenge_id,
+            options_json,
+        }))
+    }
+
+    async fn complete_passkey_registration(
+        &self,
+        request: Request<CompletePasskeyRegistrationRequest>,
+    ) -> std::result::Result<Response<CompletePasskeyRegistrationResponse>, Status> {
+        let req = request.into_inner();
+
+        // Parse attestation response
+        let attestation: webauthn_rs::prelude::RegisterPublicKeyCredential =
+            serde_json::from_str(&req.attestation_json)
+                .map_err(|e| Status::invalid_argument(format!("Invalid attestation JSON: {}", e)))?;
+
+        // Complete registration
+        let result = self
+            .passkey
+            .complete_registration(&req.challenge_id, attestation)
+            .await
+            .map_err(to_status)?;
+
+        Ok(Response::new(CompletePasskeyRegistrationResponse {
+            credential_id: result.credential_id.to_string(),
+            credential_name: result.credential_name.unwrap_or_default(),
+        }))
+    }
+
+    async fn start_passkey_authentication(
+        &self,
+        request: Request<StartPasskeyAuthenticationRequest>,
+    ) -> std::result::Result<Response<StartPasskeyAuthenticationResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = if req.user_id.is_empty() {
+            None
+        } else {
+            Some(
+                Uuid::parse_str(&req.user_id)
+                    .map_err(|_| Status::invalid_argument("Invalid user ID format"))?,
+            )
+        };
+
+        // Start authentication
+        let (rcr, challenge_id) = self
+            .passkey
+            .start_authentication(user_id)
+            .await
+            .map_err(to_status)?;
+
+        // Serialize options to JSON
+        let options_json = serde_json::to_string(&rcr)
+            .map_err(|e| Status::internal(format!("Failed to serialize options: {}", e)))?;
+
+        Ok(Response::new(StartPasskeyAuthenticationResponse {
+            challenge_id,
+            options_json,
+        }))
+    }
+
+    async fn complete_passkey_authentication(
+        &self,
+        request: Request<CompletePasskeyAuthenticationRequest>,
+    ) -> std::result::Result<Response<CompletePasskeyAuthenticationResponse>, Status> {
+        let req = request.into_inner();
+
+        // Parse assertion response
+        let assertion: webauthn_rs::prelude::PublicKeyCredential =
+            serde_json::from_str(&req.assertion_json)
+                .map_err(|e| Status::invalid_argument(format!("Invalid assertion JSON: {}", e)))?;
+
+        // Complete authentication
+        let result = self
+            .passkey
+            .complete_authentication(&req.challenge_id, assertion)
+            .await
+            .map_err(to_status)?;
+
+        // Generate tokens for the authenticated user
+        let tokens = generate_token_pair(result.user.id, &result.user.email, &result.user.username)
+            .map_err(anyhow_to_status)?;
+
+        Ok(Response::new(CompletePasskeyAuthenticationResponse {
+            user_id: result.user.id.to_string(),
+            credential_id: result.credential_id.to_string(),
+            access_token: tokens.access_token,
+            refresh_token: tokens.refresh_token,
+            expires_at: chrono::Utc::now().timestamp() + 3600, // 1 hour
+            username: result.user.username.clone(),
+            email: result.user.email.clone(),
+        }))
+    }
+
+    async fn list_passkeys(
+        &self,
+        request: Request<ListPasskeysRequest>,
+    ) -> std::result::Result<Response<ListPasskeysResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        let credentials = self
+            .passkey
+            .list_credentials(user_id)
+            .await
+            .map_err(to_status)?;
+
+        let passkeys: Vec<PasskeyCredential> = credentials
+            .into_iter()
+            .map(|c| PasskeyCredential {
+                id: c.id.to_string(),
+                credential_name: c.credential_name.unwrap_or_default(),
+                device_type: c.device_type.unwrap_or_default(),
+                os_version: c.os_version.unwrap_or_default(),
+                backup_eligible: c.backup_eligible,
+                backup_state: c.backup_state,
+                transports: c.transports,
+                created_at: Some(prost_types::Timestamp {
+                    seconds: c.created_at.timestamp(),
+                    nanos: 0,
+                }),
+                last_used_at: c.last_used_at.map(|t| prost_types::Timestamp {
+                    seconds: t.timestamp(),
+                    nanos: 0,
+                }),
+                is_active: c.is_active,
+            })
+            .collect();
+
+        Ok(Response::new(ListPasskeysResponse { passkeys }))
+    }
+
+    async fn revoke_passkey(
+        &self,
+        request: Request<RevokePasskeyRequest>,
+    ) -> std::result::Result<Response<()>, Status> {
+        let req = request.into_inner();
+        let credential_id = Uuid::parse_str(&req.credential_id)
+            .map_err(|_| Status::invalid_argument("Invalid credential ID format"))?;
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        self.passkey
+            .revoke_credential(
+                credential_id,
+                user_id,
+                if req.reason.is_empty() { None } else { Some(&req.reason) },
+            )
+            .await
+            .map_err(to_status)?;
+
+        Ok(Response::new(()))
+    }
+
+    async fn rename_passkey(
+        &self,
+        request: Request<RenamePasskeyRequest>,
+    ) -> std::result::Result<Response<()>, Status> {
+        let req = request.into_inner();
+        let credential_id = Uuid::parse_str(&req.credential_id)
+            .map_err(|_| Status::invalid_argument("Invalid credential ID format"))?;
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        self.passkey
+            .rename_credential(credential_id, user_id, &req.new_name)
+            .await
+            .map_err(to_status)?;
+
+        Ok(Response::new(()))
+    }
 }
 
 // ===== Helper Functions =====
@@ -2118,6 +2337,21 @@ fn to_status(err: IdentityError) -> Status {
         }
         IdentityError::NotFoundError(msg) => Status::not_found(msg),
         IdentityError::Internal(msg) => Status::internal(msg),
+        IdentityError::Configuration(msg) => Status::internal(format!("Configuration error: {}", msg)),
+        // Passkey errors
+        IdentityError::PasskeyRegistrationFailed(msg) => {
+            Status::internal(format!("Passkey registration failed: {}", msg))
+        }
+        IdentityError::PasskeyAuthenticationFailed(msg) => {
+            Status::unauthenticated(format!("Passkey authentication failed: {}", msg))
+        }
+        IdentityError::PasskeyChallengeExpired => Status::invalid_argument("Passkey challenge expired"),
+        IdentityError::InvalidPasskeyChallenge => Status::invalid_argument("Invalid passkey challenge"),
+        IdentityError::PasskeyAlreadyRegistered => Status::already_exists("Passkey already registered"),
+        IdentityError::NoPasskeyCredentials => Status::not_found("No passkey credentials found"),
+        IdentityError::PasskeyCredentialNotFound => Status::not_found("Passkey credential not found"),
+        // Zitadel errors
+        IdentityError::ZitadelError(msg) => Status::internal(format!("Zitadel error: {}", msg)),
     }
 }
 

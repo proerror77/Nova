@@ -9,7 +9,8 @@ fn main() {
     // Replaces archived auth-service as part of Phase G consolidation
     // Client code is also generated for integration tests
     tonic_build::configure()
-        .compile_well_known_types(true)
+        .compile_well_known_types(false)
+        .extern_path(".google.protobuf.Timestamp", "::prost_types::Timestamp")
         .build_server(true)
         .build_client(true) // Enable client code generation for integration tests
         .compile_protos(

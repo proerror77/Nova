@@ -24,6 +24,9 @@ jsonwebtoken = "9.3"
 argon2 = "0.5"
 crypto-core = { path = "../libs/crypto-core" }
 uuid = { version = "1.6", features = ["v4", "serde"] }
+webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation"] }
+url = "2.5"
+prost-types = "0.13"
 
 # Caching
 redis = { version = "0.25", features = ["aio", "tokio-comp", "connection-manager"] }

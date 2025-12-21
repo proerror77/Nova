@@ -182,7 +182,9 @@ async fn main() -> Result<()> {
         kafka_producer,
         sns_client,
         settings.oauth.clone(),
-    );
+        settings.passkey.clone(),
+    )
+    .context("Failed to initialize identity service")?;
 
     let grpc_addr = format!("{}:{}", settings.server.host, settings.server.port)
         .parse()

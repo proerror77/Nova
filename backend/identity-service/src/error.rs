@@ -85,6 +85,34 @@ pub enum IdentityError {
 
     #[error("Not found: {0}")]
     NotFoundError(String),
+
+    #[error("Configuration error: {0}")]
+    Configuration(String),
+
+    #[error("Zitadel error: {0}")]
+    ZitadelError(String),
+
+    // Passkey/WebAuthn errors
+    #[error("Passkey registration failed: {0}")]
+    PasskeyRegistrationFailed(String),
+
+    #[error("Passkey authentication failed: {0}")]
+    PasskeyAuthenticationFailed(String),
+
+    #[error("Passkey challenge expired")]
+    PasskeyChallengeExpired,
+
+    #[error("Invalid passkey challenge")]
+    InvalidPasskeyChallenge,
+
+    #[error("Passkey already registered")]
+    PasskeyAlreadyRegistered,
+
+    #[error("No passkey credentials found")]
+    NoPasskeyCredentials,
+
+    #[error("Passkey credential not found")]
+    PasskeyCredentialNotFound,
 }
 
 impl IdentityError {
@@ -149,6 +177,34 @@ impl IdentityError {
                 Status::new(Code::InvalidArgument, format!("Validation error: {}", msg))
             }
             IdentityError::NotFoundError(msg) => Status::new(Code::NotFound, msg.clone()),
+            IdentityError::Configuration(msg) => {
+                Status::new(Code::Internal, format!("Configuration error: {}", msg))
+            }
+            IdentityError::ZitadelError(msg) => {
+                Status::new(Code::Internal, format!("Zitadel error: {}", msg))
+            }
+            // Passkey errors
+            IdentityError::PasskeyRegistrationFailed(msg) => {
+                Status::new(Code::Internal, format!("Passkey registration failed: {}", msg))
+            }
+            IdentityError::PasskeyAuthenticationFailed(msg) => {
+                Status::new(Code::Unauthenticated, format!("Passkey authentication failed: {}", msg))
+            }
+            IdentityError::PasskeyChallengeExpired => {
+                Status::new(Code::InvalidArgument, "Passkey challenge expired")
+            }
+            IdentityError::InvalidPasskeyChallenge => {
+                Status::new(Code::InvalidArgument, "Invalid passkey challenge")
+            }
+            IdentityError::PasskeyAlreadyRegistered => {
+                Status::new(Code::AlreadyExists, "Passkey already registered")
+            }
+            IdentityError::NoPasskeyCredentials => {
+                Status::new(Code::NotFound, "No passkey credentials found")
+            }
+            IdentityError::PasskeyCredentialNotFound => {
+                Status::new(Code::NotFound, "Passkey credential not found")
+            }
             IdentityError::Database(_)
             | IdentityError::Redis(_)
             | IdentityError::JwtError(_)
