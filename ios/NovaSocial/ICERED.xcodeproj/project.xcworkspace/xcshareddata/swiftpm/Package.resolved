@@ -1,24 +1,6 @@
 {
-  "originHash" : "006df7b54610a9c2c4df881f44450c9e552a3e07e6f0168420254044fd3be10e",
+  "originHash" : "75b27d629a86c5628ee31e3eac8d277bca8fccdb2c9722b589afd493c24e1492",
   "pins" : [
-    {
-      "identity" : "agorainfra_ios",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/AgoraIO/AgoraInfra_iOS.git",
-      "state" : {
-        "revision" : "0071cecee99160f056c943ee6bfca06685ffa3d7",
-        "version" : "1.3.0"
-      }
-    },
-    {
-      "identity" : "agorartcengine_ios",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/AgoraIO/AgoraRtcEngine_iOS",
-      "state" : {
-        "revision" : "26ecb3247b017cd17412b5e0922a049a0ac98815",
-        "version" : "4.5.0"
-      }
-    },
     {
       "identity" : "matrix-rust-components-swift",
       "kind" : "remoteSourceControl",

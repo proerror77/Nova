@@ -417,7 +417,7 @@ protocol MatrixServiceProtocol: AnyObject {
     func initialize(homeserverURL: String, sessionPath: String) async throws
 
     /// Login with Nova credentials (bridges to Matrix)
-    func login(novaUserId: String, accessToken: String) async throws
+    func login(novaUserId: String, accessToken: String, deviceId: String?) async throws
 
     /// Login with username/password directly
     func loginWithPassword(username: String, password: String) async throws
@@ -733,23 +733,44 @@ final class MatrixService: MatrixServiceProtocol {
         }
     }
 
-    func login(novaUserId: String, accessToken: String) async throws {
+    func login(novaUserId: String, accessToken: String, deviceId providedDeviceId: String? = nil) async throws {
         #if DEBUG
-        print("[MatrixService] Logging in Nova user: \(novaUserId)")
+        print("[MatrixService] 🔐 login() called with:")
+        print("[MatrixService]   - novaUserId: \(novaUserId)")
+        print("[MatrixService]   - accessToken length: \(accessToken.count) chars")
+        print("[MatrixService]   - accessToken prefix: \(String(accessToken.prefix(20)))...")
+        print("[MatrixService]   - providedDeviceId: \(providedDeviceId ?? "nil")")
         #endif
 
         guard let client = client else {
+            #if DEBUG
+            print("[MatrixService] ❌ Client not initialized!")
+            #endif
             throw MatrixError.notInitialized
         }
 
         updateConnectionState(.connecting)
 
-        // Convert Nova user ID to Matrix user ID format
-        let matrixUserId = convertToMatrixUserId(novaUserId: novaUserId)
+        // Use provided Matrix user ID directly (if it's already in Matrix format @xxx:server)
+        // Otherwise convert from Nova user ID
+        let matrixUserId: String
+        if novaUserId.hasPrefix("@") && novaUserId.contains(":") {
+            matrixUserId = novaUserId  // Already in Matrix format
+        } else {
+            matrixUserId = convertToMatrixUserId(novaUserId: novaUserId)
+        }
 
         do {
-            // Extract device ID from stored session or generate new one
-            let deviceId = getOrCreateDeviceId()
+            // Use provided device ID or get/create one
+            let deviceId = providedDeviceId ?? getOrCreateDeviceId()
+
+            #if DEBUG
+            print("[MatrixService] Session parameters:")
+            print("[MatrixService]   - Matrix User ID: \(matrixUserId)")
+            print("[MatrixService]   - Device ID: \(deviceId)")
+            print("[MatrixService]   - Homeserver URL: \(homeserverURL ?? "NOT SET!")")
+            print("[MatrixService]   - Sliding Sync: native")
+            #endif
 
             // Restore session with access token
             let session = Session(
@@ -762,7 +783,15 @@ final class MatrixService: MatrixServiceProtocol {
                 slidingSyncVersion: .native
             )
 
+            #if DEBUG
+            print("[MatrixService] 🔄 Calling client.restoreSession()...")
+            #endif
+
             try await client.restoreSession(session: session)
+
+            #if DEBUG
+            print("[MatrixService] ✅ client.restoreSession() succeeded")
+            #endif
 
             self.userId = matrixUserId
 
@@ -776,9 +805,14 @@ final class MatrixService: MatrixServiceProtocol {
             updateConnectionState(.connected)
 
             #if DEBUG
-            print("[MatrixService] Logged in as: \(matrixUserId)")
+            print("[MatrixService] ✅ Logged in as: \(matrixUserId)")
             #endif
         } catch {
+            #if DEBUG
+            print("[MatrixService] ❌ login failed: \(error)")
+            print("[MatrixService]   Error type: \(type(of: error))")
+            print("[MatrixService]   Error description: \(error.localizedDescription)")
+            #endif
             updateConnectionState(.error(error.localizedDescription))
             throw MatrixError.loginFailed(error.localizedDescription)
         }
@@ -922,7 +956,7 @@ final class MatrixService: MatrixServiceProtocol {
         roomListEntriesStreamHandle?.cancel()
         roomListEntriesStreamHandle = nil
 
-        // Stop sync service
+        // Stop sync service (but DON'T set to nil - causes Rust SDK panic on dealloc)
         try? await syncService?.stop()
 
         // Small delay to ensure Rust cleanup completes
@@ -931,8 +965,10 @@ final class MatrixService: MatrixServiceProtocol {
         // Clear room list service (must be after sync is stopped)
         roomListService = nil
 
-        // Clear sync service last
-        syncService = nil
+        // NOTE: We intentionally do NOT set syncService = nil here
+        // The Matrix Rust SDK's SyncService destructor can panic if deallocated
+        // while tokio runtime still has active operations.
+        // The syncService will be reused on next startSync() call.
 
         if connectionState == .syncing {
             updateConnectionState(.connected)
@@ -954,14 +990,18 @@ final class MatrixService: MatrixServiceProtocol {
             throw MatrixError.notLoggedIn
         }
 
-        // IMPORTANT: Stop existing sync service BEFORE creating new one
-        // This prevents Rust panic when RoomListService is deallocated
-        // while Tokio runtime still has active operations
+        // If sync service already exists and is running, just return
+        // Avoid recreating sync service as it causes Rust SDK panic on dealloc
         if syncService != nil {
             #if DEBUG
-            print("[MatrixService] Stopping existing sync service before starting new one")
+            print("[MatrixService] Sync service already exists, reusing existing sync")
             #endif
-            await stopSyncAndWait()
+            // Make sure it's started
+            if connectionState != .syncing {
+                try? await syncService?.start()
+                updateConnectionState(.syncing)
+            }
+            return
         }
 
         updateConnectionState(.syncing)
@@ -1011,7 +1051,7 @@ final class MatrixService: MatrixServiceProtocol {
         // Stop sync service and clear references in correct order
         // This is done in a Task but we ensure proper ordering within it
         Task { @MainActor in
-            // 1. Stop sync service first
+            // 1. Stop sync service first (but DON'T set to nil - causes Rust SDK panic)
             try? await syncService?.stop()
 
             // 2. Small delay to ensure Rust cleanup completes
@@ -1020,8 +1060,9 @@ final class MatrixService: MatrixServiceProtocol {
             // 3. Clear room list service (must be after sync is stopped)
             roomListService = nil
 
-            // 4. Clear sync service last
-            syncService = nil
+            // NOTE: We intentionally do NOT set syncService = nil here
+            // The Matrix Rust SDK's SyncService destructor can panic if deallocated
+            // while tokio runtime still has active operations.
 
             #if DEBUG
             print("[MatrixService] Sync stopped and cleaned up")

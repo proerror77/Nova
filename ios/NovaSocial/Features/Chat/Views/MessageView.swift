@@ -363,7 +363,7 @@ struct MessageView: View {
         }
     }
 
-    private func startConversationWithUser(_ user: UserProfile) {
+    private func startConversationWithUser(_ user: UserProfile, retryCount: Int = 0) {
         Task {
             do {
                 if !matrixBridge.isInitialized {
@@ -388,6 +388,22 @@ struct MessageView: View {
                     searchResults = []
                     isSearchFocused = false
                     showChat = true
+                }
+            } catch MatrixBridgeError.sessionExpired {
+                // Session expired - auto-retry once with fresh credentials
+                if retryCount < 1 {
+                    #if DEBUG
+                    print("⚠️ [MessageView] Session expired, re-initializing and retrying...")
+                    #endif
+                    await MainActor.run { self.isMatrixInitializing = false }
+                    startConversationWithUser(user, retryCount: retryCount + 1)
+                    return
+                } else {
+                    await MainActor.run {
+                        self.isMatrixInitializing = false
+                        self.matrixInitError = "Session 已過期，請重新登入"
+                        self.errorMessage = "Session expired"
+                    }
                 }
             } catch {
                 await MainActor.run {

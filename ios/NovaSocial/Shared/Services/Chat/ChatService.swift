@@ -423,6 +423,7 @@ final class ChatService {
     ///   - type: Conversation type (direct/group)
     ///   - participantIds: User IDs to add to the conversation
     ///   - name: Conversation name (required for groups, null for direct)
+    ///   - isEncrypted: Whether to use E2EE (true = private chat, false = plain text)
     /// - Returns: Created conversation object
     /// - Note: For direct conversations, if one already exists between the same users,
     ///         the existing conversation is returned (idempotent)
@@ -430,12 +431,14 @@ final class ChatService {
     func createConversation(
         type: ConversationType,
         participantIds: [String],
-        name: String? = nil
+        name: String? = nil,
+        isEncrypted: Bool = false
     ) async throws -> Conversation {
         let request = CreateConversationRequest(
             type: type,
             participantIds: participantIds,
-            name: name
+            name: name,
+            isEncrypted: isEncrypted
         )
 
         // Use flexible response parser that handles multiple backend formats
@@ -585,9 +588,10 @@ final class ChatService {
     func createConversation(
         type: ConversationType,
         participants: [String],
-        name: String? = nil
+        name: String? = nil,
+        isEncrypted: Bool = false
     ) async throws -> Conversation {
-        try await createConversation(type: type, participantIds: participants, name: name)
+        try await createConversation(type: type, participantIds: participants, name: name, isEncrypted: isEncrypted)
     }
 
     /// Get all conversations for current user

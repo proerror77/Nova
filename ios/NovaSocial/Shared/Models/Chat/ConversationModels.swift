@@ -332,17 +332,20 @@ struct CreateConversationRequest: Codable, Sendable {
     let conversationType: Int  // 0 = direct, 1 = group
     let participantIds: [String]  // User IDs to add
     let name: String?  // Required for groups, null for direct
-    
-    init(type: ConversationType, participantIds: [String], name: String?) {
+    let isEncrypted: Bool  // true = E2EE private chat, false = plain text chat
+
+    init(type: ConversationType, participantIds: [String], name: String?, isEncrypted: Bool = false) {
         self.conversationType = type == .direct ? 0 : 1
         self.participantIds = participantIds
         self.name = name
+        self.isEncrypted = isEncrypted
     }
-    
+
     enum CodingKeys: String, CodingKey {
         case conversationType = "conversation_type"
         case participantIds = "participant_ids"
         case name
+        case isEncrypted = "is_encrypted"
     }
 }
 

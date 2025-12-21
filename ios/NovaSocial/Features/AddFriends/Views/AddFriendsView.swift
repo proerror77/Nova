@@ -154,7 +154,8 @@ class AddFriendsViewModel {
 
     /// 開始與用戶的 E2EE 對話
     /// 使用 Matrix Bridge 創建加密聊天室
-    func startChat(with user: UserProfile) async {
+    /// - Parameter retryCount: Internal retry counter for session expiry handling
+    func startChat(with user: UserProfile, retryCount: Int = 0) async {
         guard !isCreatingChat else { return }
 
         isCreatingChat = true
@@ -174,6 +175,23 @@ class AddFriendsViewModel {
             chatConversationId = room.id
             chatUserName = user.displayName ?? user.username
             showChat = true
+
+        } catch MatrixBridgeError.sessionExpired {
+            // Session expired - clearSessionData() has already been called
+            // Auto-retry once with fresh credentials
+            if retryCount < 1 {
+                #if DEBUG
+                print("⚠️ [AddFriends] Session expired, re-initializing and retrying...")
+                #endif
+                isCreatingChat = false
+                await startChat(with: user, retryCount: retryCount + 1)
+                return
+            } else {
+                errorMessage = "無法開始對話: 請重新登入後再試"
+                #if DEBUG
+                print("❌ Failed to start chat after retry: session still expired")
+                #endif
+            }
 
         } catch {
             errorMessage = "無法開始對話: \(error.localizedDescription)"

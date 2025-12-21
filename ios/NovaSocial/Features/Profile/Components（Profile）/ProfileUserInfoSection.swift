@@ -119,6 +119,8 @@ struct ProfileUserInfoSection: View {
 
     // 点击回调
     var onAvatarTapped: (() -> Void)?
+    var onLocationTapped: (() -> Void)?      // 点击 Add Location
+    var onProfessionTapped: (() -> Void)?    // 点击 Add Profession
     var onFollowingTapped: (() -> Void)?
     var onFollowersTapped: (() -> Void)?
 
@@ -191,11 +193,14 @@ struct ProfileUserInfoSection: View {
                     .lineSpacing(19)
                     .foregroundColor(layout.textColor)
 
-                // 位置信息（始终显示，未填写时显示占位符）
+                // 位置信息（始终显示，未填写时显示占位符）- 可点击编辑
                 Text(displayLocation)
                     .font(.system(size: layout.locationFontSize))
                     .lineSpacing(19)
                     .foregroundColor(hasLocation ? layout.textColor : layout.textColor.opacity(0.5))
+                    .onTapGesture {
+                        onLocationTapped?()
+                    }
             }
 
             // MARK: - 职业/身份信息 - 始终显示，未填写时显示占位符

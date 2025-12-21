@@ -14,6 +14,7 @@ class StartGroupChatViewModel {
     var isLoadingFriends: Bool = false
     var isCreating: Bool = false
     var errorMessage: String?
+    var isPrivateGroup: Bool = false  // E2EE encrypted private group toggle
 
     private let friendsService = FriendsService()
     private let matrixBridge = MatrixBridgeService.shared
@@ -80,7 +81,7 @@ class StartGroupChatViewModel {
         selectedUsers.removeAll { $0.id == user.id }
     }
 
-    func createGroupChat() async -> Bool {
+    func createGroupChat(retryCount: Int = 0) async -> Bool {
         guard canCreateGroup else {
             errorMessage = NSLocalizedString("group_chat.error.validation", comment: "")
             return false
@@ -97,14 +98,32 @@ class StartGroupChatViewModel {
 
             _ = try await matrixBridge.createGroupConversation(
                 name: groupName.trimmingCharacters(in: .whitespaces),
-                userIds: participantIds
+                userIds: participantIds,
+                isPrivate: isPrivateGroup
             )
 
             #if DEBUG
-            print("✅ [StartGroupChat] Group chat room created")
+            print("✅ [StartGroupChat] \(isPrivateGroup ? "Private (E2EE)" : "Regular") group chat room created")
             #endif
             isCreating = false
             return true
+
+        } catch MatrixBridgeError.sessionExpired {
+            // Session expired - auto-retry once with fresh credentials
+            if retryCount < 1 {
+                #if DEBUG
+                print("⚠️ [StartGroupChat] Session expired, re-initializing and retrying...")
+                #endif
+                isCreating = false
+                return await createGroupChat(retryCount: retryCount + 1)
+            } else {
+                errorMessage = "Session 已過期，請重新登入後再試"
+                #if DEBUG
+                print("❌ [StartGroupChat] Session still expired after retry")
+                #endif
+                isCreating = false
+                return false
+            }
 
         } catch {
             errorMessage = NSLocalizedString("group_chat.error.create_failed", comment: "")
@@ -193,6 +212,33 @@ struct StartGroupChatView: View {
                     .frame(maxWidth: .infinity, minHeight: 32)
                     .background(DesignTokens.tileBackground)
                     .cornerRadius(32)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+
+                // MARK: - Private Group Toggle
+                HStack {
+                    HStack(spacing: 8) {
+                        Image(systemName: viewModel.isPrivateGroup ? "lock.fill" : "lock.open")
+                            .font(.system(size: 16))
+                            .foregroundColor(viewModel.isPrivateGroup ? DesignTokens.accentColor : DesignTokens.textSecondary)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Private Group")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundColor(DesignTokens.textPrimary)
+
+                            Text(viewModel.isPrivateGroup ? "End-to-end encrypted" : "Standard group (searchable)")
+                                .font(.system(size: 12))
+                                .foregroundColor(DesignTokens.textSecondary)
+                        }
+                    }
+
+                    Spacer()
+
+                    Toggle("", isOn: $viewModel.isPrivateGroup)
+                        .labelsHidden()
+                        .tint(DesignTokens.accentColor)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)

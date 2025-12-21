@@ -307,6 +307,9 @@ class AuthenticationManager: ObservableObject {
         // Clear identity service auth
         try? await identityService.logout()
 
+        // Clear Matrix session (with credentials) to ensure fresh login next time
+        await MatrixBridgeService.shared.shutdown(clearCredentials: true)
+
         // Clear local state
         self.authToken = nil
         self.currentUser = nil
@@ -325,6 +328,9 @@ class AuthenticationManager: ObservableObject {
         #if DEBUG
         print("[Auth] ⚠️ Force logout due to session expiry")
         #endif
+
+        // Clear Matrix session (with credentials) to ensure fresh login next time
+        await MatrixBridgeService.shared.shutdown(clearCredentials: true)
 
         // Clear local state first
         self.authToken = nil

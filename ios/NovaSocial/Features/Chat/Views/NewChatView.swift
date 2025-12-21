@@ -15,6 +15,7 @@ struct NewChatView: View {
     @State private var showChat = false
     @State private var createdConversationId: String = ""
     @State private var createdConversationName: String = ""
+    @State private var isPrivateChat = false  // E2EE encrypted private chat toggle
 
     @State private var isPreviewMode = false  // 追踪预览模式状态
 
@@ -161,6 +162,33 @@ struct NewChatView: View {
                 .background(DesignTokens.tileBackground)
                 .cornerRadius(32)
                 .padding(EdgeInsets(top: 12, leading: 18, bottom: 16, trailing: 18))
+
+                // MARK: - Private Chat Toggle
+                HStack {
+                    HStack(spacing: 8) {
+                        Image(systemName: isPrivateChat ? "lock.fill" : "lock.open")
+                            .font(.system(size: 16))
+                            .foregroundColor(isPrivateChat ? DesignTokens.accentColor : DesignTokens.textSecondary)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Private Chat")
+                                .font(Font.custom("Helvetica Neue", size: 15).weight(.medium))
+                                .foregroundColor(DesignTokens.textPrimary)
+
+                            Text(isPrivateChat ? "End-to-end encrypted" : "Standard chat (searchable)")
+                                .font(Font.custom("Helvetica Neue", size: 12))
+                                .foregroundColor(DesignTokens.textSecondary)
+                        }
+                    }
+
+                    Spacer()
+
+                    Toggle("", isOn: $isPrivateChat)
+                        .labelsHidden()
+                        .tint(DesignTokens.accentColor)
+                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 12)
 
                 // MARK: - Selected Users (horizontal scroll)
                 if !selectedUsers.isEmpty {
@@ -383,7 +411,7 @@ struct NewChatView: View {
         ]
     }
 
-    private func createConversation() async {
+    private func createConversation(retryCount: Int = 0) async {
         guard !selectedUsers.isEmpty else { return }
 
         isCreating = true
@@ -408,14 +436,20 @@ struct NewChatView: View {
             if selectedUsers.count == 1 {
                 room = try await matrixBridge.createDirectConversation(
                     withUserId: participantUsernames[0],
-                    displayName: selectedUsers[0].displayName
+                    displayName: selectedUsers[0].displayName,
+                    isPrivate: isPrivateChat
                 )
             } else {
                 room = try await matrixBridge.createGroupConversation(
                     name: groupName ?? "Group Chat",
-                    userIds: participantUsernames
+                    userIds: participantUsernames,
+                    isPrivate: isPrivateChat
                 )
             }
+
+            #if DEBUG
+            print("[NewChatView] Created \(isPrivateChat ? "private (E2EE)" : "regular") conversation: \(room.id)")
+            #endif
 
             createdConversationId = room.id
             createdConversationName = selectedUsers.count == 1
@@ -426,12 +460,20 @@ struct NewChatView: View {
             showChat = true
 
         } catch MatrixBridgeError.sessionExpired {
-            // Session expired - the bridge has cleared session data
-            // User needs to navigate back and retry to get fresh credentials
-            #if DEBUG
-            print("[NewChatView] Session expired, user should retry")
-            #endif
-            errorMessage = "Your session has expired. Please go back and try again."
+            // Session expired - auto-retry once with fresh credentials
+            if retryCount < 1 {
+                #if DEBUG
+                print("⚠️ [NewChatView] Session expired, re-initializing and retrying...")
+                #endif
+                isCreating = false
+                await createConversation(retryCount: retryCount + 1)
+                return
+            } else {
+                errorMessage = "Session 已過期，請重新登入後再試"
+                #if DEBUG
+                print("[NewChatView] Session still expired after retry")
+                #endif
+            }
 
         } catch {
             errorMessage = "Failed to create conversation: \(error.localizedDescription)"

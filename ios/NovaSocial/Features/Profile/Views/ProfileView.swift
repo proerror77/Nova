@@ -240,18 +240,16 @@ struct ProfileView: View {
             DesignTokens.backgroundColor
                 .ignoresSafeArea()
 
-            VStack(spacing: -300) {
-                // MARK: - 区域1：用户信息头部（独立高度控制）
+            VStack(spacing: 0) {
+                // MARK: - 区域1：用户信息头部（自适应高度）
                 userHeaderSection
-                    .frame(height: 600)  // 可独立调整此高度
 
-                // MARK: - 区域2：内容区域（独立高度控制）
+                // MARK: - 区域2：内容区域
                 contentSection
             }
             .safeAreaInset(edge: .bottom) {
                 // MARK: - 底部导航栏
                 bottomNavigationBar
-                    .padding(.top, -80) // ← 调整底部导航栏向上移动
             }
 
             // MARK: - 照片选项弹窗
@@ -431,7 +429,7 @@ struct ProfileView: View {
     // MARK: - 用户信息头部区域
     private var userHeaderSection: some View {
         ZStack(alignment: .top) {
-            // 背景图片 - 可點擊更換
+            // 背景图片 - 只通过右上角按钮更换（移除整体点击）
             ZStack(alignment: .topTrailing) {
                 // 背景圖片內容
                 Group {
@@ -445,16 +443,14 @@ struct ProfileView: View {
                             .scaledToFill()
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: 600)  // 固定高度避免圖片撐開
+                .frame(maxWidth: .infinity, maxHeight: 380)  // 调整高度
                 .clipped()
                 .blur(radius: 20)
                 .overlay(Color.black.opacity(0.3))
                 .ignoresSafeArea(edges: .top)
-                .onTapGesture {
-                    activeSheet = .backgroundPicker
-                }
+                // 移除 onTapGesture - 避免误触跳转到照片选择器
 
-                // 背景編輯圖標
+                // 背景編輯圖標 - 唯一的背景更换入口
                 Button(action: { activeSheet = .backgroundPicker }) {
                     Circle()
                         .fill(Color.black.opacity(0.5))
@@ -468,7 +464,7 @@ struct ProfileView: View {
                 .padding(.top, 70)
                 .padding(.trailing, 16)
             }
-            .frame(height: 600)  // 固定背景區域高度
+            .frame(height: 380)  // 调整背景區域高度
 
             VStack(spacing: 0) {
                 // MARK: - 顶部导航栏（独立组件）

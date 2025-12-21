@@ -166,4 +166,5 @@ final class SettingsViewModel: ObservableObject {
     func logout() async {
         await authManager.logout()
     }
+
 }
