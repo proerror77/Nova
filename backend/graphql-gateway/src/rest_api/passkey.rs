@@ -186,7 +186,7 @@ pub async fn start_registration(
         "POST /api/v2/auth/passkey/register/start"
     );
 
-    let mut identity_client = clients.identity_client();
+    let mut auth_client = clients.auth_client();
 
     let grpc_request = tonic::Request::new(GrpcStartPasskeyRegRequest {
         user_id: user_id.clone(),
@@ -195,7 +195,7 @@ pub async fn start_registration(
         os_version: body.os_version.clone().unwrap_or_default(),
     });
 
-    match identity_client
+    match auth_client
         .start_passkey_registration(grpc_request)
         .await
     {
@@ -251,7 +251,7 @@ pub async fn complete_registration(
         "POST /api/v2/auth/passkey/register/complete"
     );
 
-    let mut identity_client = clients.identity_client();
+    let mut auth_client = clients.auth_client();
 
     let grpc_request = tonic::Request::new(GrpcCompletePasskeyRegRequest {
         challenge_id: body.challenge_id.clone(),
@@ -261,7 +261,7 @@ pub async fn complete_registration(
         os_version: body.os_version.clone().unwrap_or_default(),
     });
 
-    match identity_client
+    match auth_client
         .complete_passkey_registration(grpc_request)
         .await
     {
@@ -316,13 +316,13 @@ pub async fn start_authentication(
         "POST /api/v2/auth/passkey/authenticate/start"
     );
 
-    let mut identity_client = clients.identity_client();
+    let mut auth_client = clients.auth_client();
 
     let grpc_request = tonic::Request::new(GrpcStartPasskeyAuthRequest {
         user_id: body.user_id.clone().unwrap_or_default(),
     });
 
-    match identity_client
+    match auth_client
         .start_passkey_authentication(grpc_request)
         .await
     {
@@ -367,14 +367,14 @@ pub async fn complete_authentication(
         "POST /api/v2/auth/passkey/authenticate/complete"
     );
 
-    let mut identity_client = clients.identity_client();
+    let mut auth_client = clients.auth_client();
 
     let grpc_request = tonic::Request::new(GrpcCompletePasskeyAuthRequest {
         challenge_id: body.challenge_id.clone(),
         assertion_json: body.assertion_response.clone(),
     });
 
-    match identity_client
+    match auth_client
         .complete_passkey_authentication(grpc_request)
         .await
     {
@@ -450,13 +450,13 @@ pub async fn list_passkeys(
         "GET /api/v2/auth/passkey/list"
     );
 
-    let mut identity_client = clients.identity_client();
+    let mut auth_client = clients.auth_client();
 
     let grpc_request = tonic::Request::new(GrpcListPasskeysRequest {
         user_id: user_id.clone(),
     });
 
-    match identity_client.list_passkeys(grpc_request).await {
+    match auth_client.list_passkeys(grpc_request).await {
         Ok(response) => {
             let res = response.into_inner();
             let passkeys: Vec<PasskeyInfo> = res
@@ -546,7 +546,7 @@ pub async fn revoke_passkey(
         "DELETE /api/v2/auth/passkey/{credential_id}"
     );
 
-    let mut identity_client = clients.identity_client();
+    let mut auth_client = clients.auth_client();
 
     let grpc_request = tonic::Request::new(GrpcRevokePasskeyRequest {
         user_id: user_id.clone(),
@@ -554,7 +554,7 @@ pub async fn revoke_passkey(
         reason: "User requested revocation".to_string(),
     });
 
-    match identity_client.revoke_passkey(grpc_request).await {
+    match auth_client.revoke_passkey(grpc_request).await {
         Ok(_) => {
             info!(
                 user_id = %user_id,
@@ -608,7 +608,7 @@ pub async fn rename_passkey(
         "PUT /api/v2/auth/passkey/{credential_id}/rename"
     );
 
-    let mut identity_client = clients.identity_client();
+    let mut auth_client = clients.auth_client();
 
     let grpc_request = tonic::Request::new(GrpcRenamePasskeyRequest {
         user_id: user_id.clone(),
@@ -616,7 +616,7 @@ pub async fn rename_passkey(
         new_name: body.new_name.clone(),
     });
 
-    match identity_client.rename_passkey(grpc_request).await {
+    match auth_client.rename_passkey(grpc_request).await {
         Ok(_) => {
             info!(
                 user_id = %user_id,
