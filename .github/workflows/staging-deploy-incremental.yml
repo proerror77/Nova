@@ -85,7 +85,7 @@ jobs:
           # 强制全量构建
           if [ "${{ inputs.force_all }}" == "true" ]; then
             echo "🔄 Force all services rebuild"
-            ALL_SERVICES='["analytics-service","content-service","feed-service","graph-service","graphql-gateway","identity-service","media-service","notification-service","ranking-service","realtime-chat-service","search-service","social-service","trust-safety-service"]'
+            ALL_SERVICES='["analytics-service","content-service","feature-store","feed-service","graph-service","graphql-gateway","identity-service","media-service","notification-service","ranking-service","realtime-chat-service","search-service","social-service","streaming-service","trust-safety-service"]'
             echo "changed_services=$ALL_SERVICES" >> "$GITHUB_OUTPUT"
             echo "has_changes=true" >> "$GITHUB_OUTPUT"
             echo "shared_changed=true" >> "$GITHUB_OUTPUT"
@@ -111,7 +111,7 @@ jobs:
           if echo "$CHANGED_FILES" | grep -qE '^backend/(libs|common|proto)/'; then
             echo "⚠️  Shared libraries changed - rebuilding all services"
             SHARED_CHANGED="true"
-            ALL_SERVICES='["analytics-service","content-service","feed-service","graph-service","graphql-gateway","identity-service","media-service","notification-service","ranking-service","realtime-chat-service","search-service","social-service","trust-safety-service"]'
+            ALL_SERVICES='["analytics-service","content-service","feature-store","feed-service","graph-service","graphql-gateway","identity-service","media-service","notification-service","ranking-service","realtime-chat-service","search-service","social-service","streaming-service","trust-safety-service"]'
             echo "changed_services=$ALL_SERVICES" >> "$GITHUB_OUTPUT"
             echo "has_changes=true" >> "$GITHUB_OUTPUT"
             echo "shared_changed=true" >> "$GITHUB_OUTPUT"
@@ -123,7 +123,7 @@ jobs:
             grep '^backend/' | \
             cut -d'/' -f2 | \
             sort -u | \
-            grep -E '^(analytics|content|feed|graph|graphql|identity|media|notification|ranking|realtime-chat|search|social|trust-safety)-service$' || true)
+            grep -E '^(analytics|content|feature|feed|graph|graphql|identity|media|notification|ranking|realtime-chat|search|social|streaming|trust-safety)-service$|^feature-store$|^streaming-service$' || true)
 
           if [ -z "$CHANGED_SERVICES" ]; then
             echo "✅ No service changes detected"
@@ -150,8 +150,8 @@ jobs:
           # 定义服务层级
           LAYER0='["identity-service","graph-service"]'
           LAYER1='["content-service","social-service","media-service"]'
-          LAYER2='["feed-service","ranking-service","search-service","notification-service"]'
-          LAYER3='["analytics-service","trust-safety-service","realtime-chat-service"]'
+          LAYER2='["feature-store","feed-service","ranking-service","search-service","notification-service"]'
+          LAYER3='["analytics-service","streaming-service","trust-safety-service","realtime-chat-service"]'
           LAYER4='["graphql-gateway"]'
 
           # 过滤出变更的服务
