@@ -111,6 +111,15 @@ class ChatViewModel: ObservableObject {
         chatService.onMessageReceived = { [weak self] newMessage in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
+
+                // 跳過自己發送的訊息（避免與 optimistic update 重複）
+                if newMessage.senderId == self.currentUserId {
+                    #if DEBUG
+                    print("[ChatViewModel] Skipping own message from WebSocket: \(newMessage.id)")
+                    #endif
+                    return
+                }
+
                 // Avoid duplicates
                 guard !self.messages.contains(where: { $0.id == newMessage.id }) else { return }
                 self.messages.append(ChatMessage(from: newMessage, currentUserId: self.currentUserId))
@@ -165,7 +174,17 @@ class ChatViewModel: ObservableObject {
                 // 只處理當前會話的訊息
                 guard conversationId == self.conversationId else { return }
 
-                // 避免重複
+                // 跳過自己發送的訊息（避免與 optimistic update 重複）
+                // 自己發的訊息已經通過 sendMessage() 的 optimistic update 添加
+                if let myMatrixId = MatrixBridgeService.shared.matrixUserId,
+                   matrixMessage.senderId == myMatrixId {
+                    #if DEBUG
+                    print("[ChatViewModel] Skipping own message from Matrix sync: \(matrixMessage.id)")
+                    #endif
+                    return
+                }
+
+                // 避免重複（來自其他用戶的訊息）
                 guard !self.messages.contains(where: { $0.id == matrixMessage.id }) else { return }
 
                 // 轉換 Matrix 訊息為 Nova 訊息格式
