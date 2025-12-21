@@ -10,7 +10,7 @@
 # =============================================================================
 # Stage 1: Planner - Generate dependency manifest for caching
 # =============================================================================
-FROM rust:1.76-slim AS planner
+FROM rust:1.83-slim AS planner
 
 # Install cargo-chef for dependency caching
 RUN cargo install cargo-chef
@@ -26,7 +26,7 @@ RUN cargo chef prepare --recipe-path recipe.json
 # =============================================================================
 # Stage 2: Builder - Compile service with optimizations
 # =============================================================================
-FROM rust:1.76-slim AS builder
+FROM rust:1.83-slim AS builder
 
 # Build argument for service name (required)
 ARG SERVICE_NAME
