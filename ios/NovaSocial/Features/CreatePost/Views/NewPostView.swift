@@ -138,19 +138,13 @@ struct NewPostView: View {
         }
         .sheet(isPresented: $showEnhanceSuggestion) {
             if let suggestion = enhanceSuggestion {
-                // EnhanceSuggestionView - placeholder until file is added to project
-                VStack(spacing: 20) {
-                    Text("Alice's Suggestions")
-                        .font(.headline)
-                    Text(suggestion.description)
-                        .padding()
-                    Button("Apply") {
-                        postText = suggestion.description
-                        showEnhanceSuggestion = false
+                EnhanceSuggestionView(
+                    suggestion: suggestion,
+                    isPresented: $showEnhanceSuggestion,
+                    onApply: { selectedText in
+                        postText = selectedText
                     }
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding()
+                )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
             }
@@ -200,23 +194,9 @@ struct NewPostView: View {
                 }
             }) {
                 if isPosting {
-                    HStack(spacing: 4) {
-                        // Circular progress indicator with percentage
-                        ZStack {
-                            Circle()
-                                .stroke(Color.gray.opacity(0.2), lineWidth: 2)
-                            Circle()
-                                .trim(from: 0, to: uploadProgress)
-                                .stroke(Color(red: 0.87, green: 0.11, blue: 0.26), lineWidth: 2)
-                                .rotationEffect(.degrees(-90))
-                                .animation(.linear(duration: 0.2), value: uploadProgress)
-                        }
-                        .frame(width: 18, height: 18)
-                        
-                        Text("\(Int(uploadProgress * 100))%")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
-                    }
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .tint(Color(red: 0.87, green: 0.11, blue: 0.26))
                 } else {
                     Text("Post")
                         .font(.system(size: 14))
@@ -533,6 +513,7 @@ struct NewPostView: View {
                 )
 
                 await MainActor.run {
+                    // Use suggestion directly - it's already PostEnhancementSuggestion type
                     enhanceSuggestion = suggestion
                     showEnhanceSuggestion = true
                     isEnhancing = false

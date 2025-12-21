@@ -87,7 +87,7 @@ final class AliceService {
         image: UIImage,
         existingText: String? = nil,
         includeTrending: Bool = true
-    ) async throws -> PostEnhancementSuggestion {
+    ) async throws -> AlicePostEnhancementSuggestion {
         // Convert image to base64
         guard let imageData = image.jpegData(compressionQuality: 0.7) else {
             throw AliceError.apiError("Failed to process image")
@@ -117,7 +117,7 @@ final class AliceService {
             print("[AliceService] Received enhancement suggestions")
             #endif
 
-            return PostEnhancementSuggestion(
+            return AlicePostEnhancementSuggestion(
                 description: response.description,
                 hashtags: response.hashtags,
                 trendingTopics: response.trendingTopics,
@@ -130,6 +130,84 @@ final class AliceService {
             throw AliceError.from(error)
         }
     }
+
+    // MARK: - Convenience Methods for AIRouter
+
+    /// Simple text message to Alice (convenience wrapper)
+    /// - Parameter message: The message text
+    /// - Returns: Alice response
+    @MainActor
+    func sendMessage(_ message: String) async throws -> AliceSimpleResponse {
+        let response = try await sendMessage(
+            messages: [.user(message)],
+            model: "gpt-4o-all"
+        )
+        return AliceSimpleResponse(message: response)
+    }
+
+    /// Enhance post content without image (text-only)
+    /// - Parameter content: The post content to enhance
+    /// - Returns: Enhancement response
+    @MainActor
+    func enhancePost(content: String) async throws -> AliceTextEnhanceResponse {
+        let request = AliceRequest(
+            message: "Please enhance this social media post: \(content)",
+            mode: "text"
+        )
+
+        #if DEBUG
+        print("[AliceService] Sending text-only enhance request")
+        #endif
+
+        do {
+            let response: AliceResponse = try await apiClient.request(
+                endpoint: APIConfig.Alice.sendMessage,
+                method: "POST",
+                body: request
+            )
+
+            return AliceTextEnhanceResponse(enhanced_content: response.message)
+        } catch {
+            throw AliceError.from(error)
+        }
+    }
+
+    /// Enhance post with image data
+    /// - Parameters:
+    ///   - content: Post text content
+    ///   - imageData: Array of image data
+    /// - Returns: Enhancement response
+    @MainActor
+    func enhancePostWithImage(
+        content: String,
+        imageData: [Data]
+    ) async throws -> AliceTextEnhanceResponse {
+        guard let firstImage = imageData.first,
+              let image = UIImage(data: firstImage) else {
+            // Fall back to text-only enhancement
+            return try await enhancePost(content: content)
+        }
+
+        let suggestion = try await enhancePost(
+            image: image,
+            existingText: content,
+            includeTrending: true
+        )
+
+        return AliceTextEnhanceResponse(enhanced_content: suggestion.fullSuggestion)
+    }
+}
+
+// MARK: - Response Types for AIRouter
+
+/// Simple response wrapper for AIRouter
+struct AliceSimpleResponse {
+    let message: String
+}
+
+/// Text enhancement response for AIRouter
+struct AliceTextEnhanceResponse {
+    let enhanced_content: String?
 }
 
 // MARK: - Data Models
@@ -186,7 +264,8 @@ private struct AliceEnhanceResponse: Codable {
     }
 }
 
-/// Post enhancement suggestion result
+/// Post enhancement suggestion result from Alice API
+/// Used by EnhanceSuggestionView for displaying Alice's suggestions
 struct PostEnhancementSuggestion {
     let description: String
     let hashtags: [String]
@@ -202,6 +281,9 @@ struct PostEnhancementSuggestion {
         return result
     }
 }
+
+/// Alias for backward compatibility
+typealias AlicePostEnhancementSuggestion = PostEnhancementSuggestion
 
 /// Alice API response format
 private struct AliceResponse: Codable {
