@@ -39,6 +39,7 @@ targets:
           - "*.py"
           - "Tests"
           - "ICEREDUITests"
+          - "ICEREDWidgets"
           - "Scripts"
           - "Frameworks"
           - "fastlane"
@@ -49,13 +50,14 @@ targets:
           - "Features/Profile/Components（Profile）/ProfileData.swift"
           - "Features/Settings/Views/DeviceVerificationView.swift"
           - "Features/Settings/Views/KeyBackupSettingsView.swift"
-          - "Features/Settings/Views/PasskeySettingsView.swift"
           - "Features/Auth/Views/ResetPasswordView.swift"
           - "Features/Auth/Views/PhoneRegistrationView.swift"
           - "Features/Auth/Views/PhoneLoginView.swift"
           - "Features/Auth/Views/ForgotPasswordView.swift"
           - "Features/Auth/Views/EmailSentConfirmationView.swift"
     dependencies:
+      - target: ICEREDWidgets
+        embed: true
       # AgoraRtcEngine disabled for simulator - enable for real device builds
       # - package: AgoraRtcEngine
       #   product: RtcBasic
@@ -94,15 +96,109 @@ targets:
     entitlements:
       path: ICERED.entitlements
 
+  ICEREDTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Tests
+        excludes:
+          - "**/*.md"
+          - "**/Info.plist"
+    dependencies:
+      - target: ICERED
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.app.icered.tests
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ICERED.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ICERED"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS:
+            - DEBUG
+            - MATRIX_SDK_ENABLED
+        Release:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS:
+            - MATRIX_SDK_ENABLED
+
+  ICEREDUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: ICEREDUITests
+        excludes:
+          - "**/*.md"
+          - "**/Info.plist"
+    dependencies:
+      - target: ICERED
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.app.icered.uitests
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: ICERED
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS:
+            - DEBUG
+        Release:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: []
+
+  ICEREDWidgets:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ICEREDWidgets
+        excludes:
+          - "**/*.md"
+      - path: Shared/Services/WidgetDataStore.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.app.icered.widgets
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "Apple Development"
+        INFOPLIST_FILE: ICEREDWidgets/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.9"
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/Frameworks"
+          - "@executable_path/../../Frameworks"
+        PRODUCT_NAME: "$(TARGET_NAME)"
+        SWIFT_EMIT_LOC_STRINGS: YES
+      configs:
+        Debug:
+          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS:
+            - DEBUG
+        Release:
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
+    entitlements:
+      path: ICEREDWidgets/ICEREDWidgets.entitlements
+
 schemes:
   ICERED:
     build:
       targets:
         ICERED: all
+        ICEREDWidgets: all
+        ICEREDTests: [test]
+        ICEREDUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
+      targets:
+        - ICEREDTests
+        - ICEREDUITests
+      gatherCoverageData: true
     profile:
       config: Release
     analyze:
