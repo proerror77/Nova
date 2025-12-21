@@ -65,6 +65,11 @@ data:
   redis-timeout: "2s"
   kafka-timeout: "10s"
 
+  # Passkey/WebAuthn configuration
+  passkey-rp-id: "aasa.icered.com"
+  passkey-rp-name: "ICERED"
+  passkey-origin: "https://aasa.icered.com"
+
   # Security configuration
   max-login-attempts: "5"
   lockout-duration-minutes: "30"

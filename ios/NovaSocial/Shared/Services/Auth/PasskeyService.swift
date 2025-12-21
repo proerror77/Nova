@@ -13,13 +13,9 @@ class PasskeyService: NSObject {
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "NovaSocial", category: "PasskeyService")
 
-    // WebAuthn Relying Party ID - must match backend configuration
-    // Use "staging.gcp.icered.com" for staging, "aasa.icered.com" for production
-    #if DEBUG
-    private let relyingPartyIdentifier = "staging.gcp.icered.com"
-    #else
+    // WebAuthn Relying Party ID - must match backend configuration and AASA domain
+    // AASA file hosted at aasa.icered.com/.well-known/apple-app-site-association
     private let relyingPartyIdentifier = "aasa.icered.com"
-    #endif
 
     // Continuations for async/await bridge
     private var registrationContinuation: CheckedContinuation<ASAuthorizationPlatformPublicKeyCredentialRegistration, Error>?
@@ -150,6 +146,11 @@ class PasskeyService: NSObject {
 
     // MARK: - WebAuthn Options Parsing
 
+    // Wrapper for webauthn-rs response that wraps options in "publicKey"
+    private struct WebAuthnCreationOptionsWrapper: Codable {
+        let publicKey: WebAuthnCreationOptions
+    }
+
     private struct WebAuthnCreationOptions: Codable {
         let rp: RelyingParty
         let user: WebAuthnUser
@@ -185,6 +186,11 @@ class PasskeyService: NSObject {
             let residentKey: String?
             let userVerification: String?
         }
+    }
+
+    // Wrapper for webauthn-rs response that wraps options in "publicKey"
+    private struct WebAuthnRequestOptionsWrapper: Codable {
+        let publicKey: WebAuthnRequestOptions
     }
 
     private struct WebAuthnRequestOptions: Codable {
@@ -525,14 +531,18 @@ class PasskeyService: NSObject {
         guard let data = optionsJson.data(using: .utf8) else {
             throw PasskeyError.invalidResponse
         }
-        return try JSONDecoder().decode(WebAuthnCreationOptions.self, from: data)
+        // webauthn-rs wraps options in "publicKey" - unwrap it
+        let wrapper = try JSONDecoder().decode(WebAuthnCreationOptionsWrapper.self, from: data)
+        return wrapper.publicKey
     }
 
     private func parseRequestOptions(_ optionsJson: String) throws -> WebAuthnRequestOptions {
         guard let data = optionsJson.data(using: .utf8) else {
             throw PasskeyError.invalidResponse
         }
-        return try JSONDecoder().decode(WebAuthnRequestOptions.self, from: data)
+        // webauthn-rs wraps options in "publicKey" - unwrap it
+        let wrapper = try JSONDecoder().decode(WebAuthnRequestOptionsWrapper.self, from: data)
+        return wrapper.publicKey
     }
 
     // MARK: - Private Methods - Credential Building

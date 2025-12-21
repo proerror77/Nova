@@ -38,7 +38,7 @@ spec:
 
       containers:
       - name: identity-service
-        image: nova/identity-service
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/identity-service:d039772
         imagePullPolicy: IfNotPresent
 
         # Security context for the container
@@ -121,6 +121,21 @@ spec:
           value: "5"
         - name: LOCKOUT_DURATION_MINUTES
           value: "30"
+        - name: PASSKEY_RP_ID
+          valueFrom:
+            configMapKeyRef:
+              name: identity-service-configmap
+              key: passkey-rp-id
+        - name: PASSKEY_RP_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: identity-service-configmap
+              key: passkey-rp-name
+        - name: PASSKEY_ORIGIN
+          valueFrom:
+            configMapKeyRef:
+              name: identity-service-configmap
+              key: passkey-origin
         - name: GRPC_SERVER_CERT_PATH
           value: /etc/nova/certs/server.crt
         - name: GRPC_SERVER_KEY_PATH
