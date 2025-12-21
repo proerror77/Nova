@@ -428,6 +428,9 @@ protocol MatrixServiceProtocol: AnyObject {
     /// Logout and clear session
     func logout() async throws
 
+    /// Clear stored credentials without full logout (for session expiry recovery)
+    func clearCredentials()
+
     /// Start background sync
     func startSync() async throws
 
@@ -935,6 +938,13 @@ final class MatrixService: MatrixServiceProtocol {
         #if DEBUG
         print("[MatrixService] Logged out")
         #endif
+    }
+
+    func clearCredentials() {
+        #if DEBUG
+        print("[MatrixService] Clearing stored credentials for session recovery")
+        #endif
+        clearSessionCredentials()
     }
 
     /// Stop sync and wait for cleanup to complete
@@ -1642,12 +1652,12 @@ final class MatrixService: MatrixServiceProtocol {
 
     // MARK: - Helper Methods
 
-    /// Convert username or Nova user ID to Matrix user ID format
-    /// Username: "alice" -> Matrix: @alice:staging.gcp.icered.com
-    /// If already Matrix format (@...), returns as-is
+    /// Convert Nova user ID (UUID) to Matrix user ID format
+    /// Nova UUID: "b19b767d-59e5-4122-8388-a51670705ce6" -> Matrix: @nova-b19b767d-59e5-4122-8388-a51670705ce6:staging.gcp.icered.com
+    /// If already Matrix format (@nova-...), returns as-is
     private func convertToMatrixUserId(novaUserId: String) -> String {
         // If already in Matrix format, return as-is
-        if novaUserId.hasPrefix("@") {
+        if novaUserId.hasPrefix("@nova-") {
             return novaUserId
         }
 
@@ -1661,8 +1671,8 @@ final class MatrixService: MatrixServiceProtocol {
         // Extract just the domain name for Matrix server (remove "matrix." prefix if present)
         let serverName = domain.hasPrefix("matrix.") ? String(domain.dropFirst(7)) : domain
 
-        // Convert to Matrix format: @username:server
-        return "@\(novaUserId):\(serverName)"
+        // Convert to Matrix format: @nova-<uuid>:server (matches backend format)
+        return "@nova-\(novaUserId):\(serverName)"
     }
 
     /// Convert Matrix user ID back to Nova user ID

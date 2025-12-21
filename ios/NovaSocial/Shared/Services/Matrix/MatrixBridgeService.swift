@@ -419,6 +419,9 @@ final class MatrixBridgeService {
         // Also clear SSO credentials to force re-login
         matrixSSOManager.clearCredentials()
 
+        // Clear MatrixService stored credentials (UserDefaults) to force fresh token fetch
+        matrixService.clearCredentials()
+
         // Reset initialization state so next call to initialize() will re-authenticate
         isInitialized = false
 
