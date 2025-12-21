@@ -11,10 +11,20 @@ struct BottomTabBar: View {
     @ObservedObject private var avatarManager = AvatarManager.shared
     @EnvironmentObject private var authManager: AuthenticationManager
 
+    // App Coordinator for tab state management
+    @Environment(\.appCoordinator) private var coordinator
+
     private var isHome: Bool { currentPage == .home }
     private var isMessage: Bool { currentPage == .message }
     private var isAccount: Bool { currentPage == .account }
     private var isAlice: Bool { currentPage == .alice }
+
+    /// Helper to handle tab selection with coordinator sync
+    private func selectTab(_ page: AppPage, tab: MainTab) {
+        // Sync with coordinator (resets navigation path on tab change)
+        coordinator.selectTab(tab)
+        currentPage = page
+    }
 
     var body: some View {
         HStack(spacing: -20) {
@@ -31,7 +41,7 @@ struct BottomTabBar: View {
             }
             .frame(maxWidth: .infinity)
             .onTapGesture {
-                currentPage = .home
+                selectTab(.home, tab: .home)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Home")
@@ -50,7 +60,7 @@ struct BottomTabBar: View {
             }
             .frame(maxWidth: .infinity)
             .onTapGesture {
-                currentPage = .message
+                selectTab(.message, tab: .message)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Messages")
@@ -79,7 +89,7 @@ struct BottomTabBar: View {
             }
             .frame(maxWidth: .infinity)
             .onTapGesture {
-                currentPage = .alice
+                selectTab(.alice, tab: .alice)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Alice AI")
@@ -133,7 +143,7 @@ struct BottomTabBar: View {
             .frame(maxWidth: .infinity)
             .offset(y: 0)
             .onTapGesture {
-                currentPage = .account
+                selectTab(.account, tab: .account)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Account")

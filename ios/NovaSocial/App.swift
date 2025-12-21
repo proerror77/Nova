@@ -12,6 +12,12 @@ struct IceredApp: App {
     @StateObject private var uploadManager = BackgroundUploadManager.shared
     @State private var currentPage: AppPage
 
+    // State restoration - persist selected tab across app launches
+    @SceneStorage("selectedTab") private var selectedTabRaw: String = MainTab.home.rawValue
+
+    // App Coordinator for centralized navigation
+    private let coordinator = AppCoordinator.shared
+
     // 监听 App 生命周期状态
     @Environment(\.scenePhase) private var scenePhase
     // 记录进入后台的时间戳
@@ -115,6 +121,15 @@ struct IceredApp: App {
                     case .getVerified:
                         GetVerifiedView(currentPage: $currentPage)
                             .transition(.identity)
+                    case .passkeys:
+                        if #available(iOS 16.0, *) {
+                            PasskeySettingsView(currentPage: $currentPage)
+                                .transition(.identity)
+                        } else {
+                            // Fallback for older iOS versions
+                            Text("Passkeys require iOS 16 or later")
+                                .transition(.identity)
+                        }
                     default:
                         HomeView(currentPage: $currentPage)
                             .transition(.identity)
@@ -129,6 +144,7 @@ struct IceredApp: App {
             .environmentObject(themeManager)
             .environmentObject(pushManager)
             .environmentObject(uploadManager)
+            .environment(\.appCoordinator, coordinator)
             .preferredColorScheme(themeManager.colorScheme)
             .task {
                 // Check notification settings on app launch
@@ -138,8 +154,23 @@ struct IceredApp: App {
             .onChange(of: authManager.isAuthenticated) { _, isAuthenticated in
                 // Request push notification permission when user logs in
                 if isAuthenticated {
-                    // Navigate to home after login
-                    currentPage = .home
+                    // Sync coordinator state
+                    coordinator.isAuthenticated = true
+
+                    // Process any pending deep link first
+                    if coordinator.pendingDeepLink != nil {
+                        coordinator.processPendingDeepLink()
+                        currentPage = coordinator.currentPage
+                    } else {
+                        // Navigate to home after login
+                        currentPage = .home
+                    }
+
+                    // Restore selected tab from state
+                    if let tab = MainTab(rawValue: selectedTabRaw) {
+                        coordinator.selectTab(tab)
+                    }
+
                     Task {
                         await pushManager.requestAuthorization()
                         await initializeMatrixBridgeIfNeeded()
@@ -147,6 +178,7 @@ struct IceredApp: App {
                 } else {
                     // Navigate to login page on logout
                     currentPage = .login
+                    coordinator.onLogout()
                     // Unregister push token on logout
                     Task {
                         await pushManager.unregisterToken()
@@ -162,10 +194,17 @@ struct IceredApp: App {
                 // Handle session expiration - navigate to login immediately
                 handleSessionExpired(notification.userInfo)
             }
+            // MARK: - Deep Link Handling
+            .onOpenURL { url in
+                handleDeepLink(url)
+            }
             .onChange(of: scenePhase) { oldPhase, newPhase in
                 // 当 App 进入后台时，记录时间戳
                 if newPhase == .background {
                     backgroundEntryTime = Date()
+                    // Save coordinator state for restoration
+                    coordinator.saveState()
+                    selectedTabRaw = coordinator.selectedTab.rawValue
                     print("[App] 📱 App entered background")
                 }
                 // 当 App 从后台返回到活跃状态时
@@ -238,6 +277,36 @@ struct IceredApp: App {
     private func handleSessionExpired(_ userInfo: [AnyHashable: Any]?) {
         print("[App] SESSION EXPIRED - Navigating to login page")
         currentPage = .login
+        coordinator.onLogout()
+    }
+
+    // MARK: - Deep Link Handling
+
+    /// Handle deep link URL (custom scheme or universal link)
+    private func handleDeepLink(_ url: URL) {
+        print("[App] 🔗 Received deep link: \(url.absoluteString)")
+
+        // Parse the URL and navigate
+        guard let route = DeepLinkHandler.shared.parse(url: url) else {
+            print("[App] ❌ Failed to parse deep link URL")
+            return
+        }
+
+        // If not authenticated, store for later
+        if !authManager.isAuthenticated {
+            coordinator.pendingDeepLink = route
+            print("[App] 📝 Stored pending deep link for after login: \(route)")
+            return
+        }
+
+        // Navigate to the parsed route
+        coordinator.navigate(to: route)
+        currentPage = route.toAppPage
+
+        // Update tab if applicable
+        if let tab = route.mainTab {
+            selectedTabRaw = tab.rawValue
+        }
     }
 
     @MainActor
