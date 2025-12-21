@@ -949,8 +949,23 @@ struct ChatView: View {
                 // 只處理當前會話的訊息
                 guard conversationId == self.conversationId else { return }
 
+                // 跳過自己發送的訊息（避免與 optimistic update 重複）
+                // 自己發的訊息已經通過 sendMessage() 的 optimistic update 添加
+                if let myMatrixId = MatrixBridgeService.shared.matrixUserId,
+                   matrixMessage.senderId == myMatrixId {
+                    #if DEBUG
+                    print("[ChatView] ✅ Skipping own message from Matrix sync: \(matrixMessage.id)")
+                    #endif
+                    return
+                }
+
                 // 避免重複
-                guard !self.messages.contains(where: { $0.id == matrixMessage.id }) else { return }
+                guard !self.messages.contains(where: { $0.id == matrixMessage.id }) else {
+                    #if DEBUG
+                    print("[ChatView] ✅ Skipping duplicate message: \(matrixMessage.id)")
+                    #endif
+                    return
+                }
 
                 // 轉換 Matrix 訊息為 Nova 訊息格式
                 let novaMessage = MatrixBridgeService.shared.convertToNovaMessage(
