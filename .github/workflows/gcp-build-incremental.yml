@@ -158,9 +158,14 @@ jobs:
         run: |
           # Independent workspaces need their own directory as context
           INDEPENDENT_WORKSPACES="realtime-chat-service"
+          # graphql-gateway needs repo root as context (COPY backend ./backend)
+          REPO_ROOT_CONTEXT="graphql-gateway"
           if echo "$INDEPENDENT_WORKSPACES" | grep -qw "${{ matrix.service }}"; then
             echo "context=./backend/${{ matrix.service }}" >> "$GITHUB_OUTPUT"
             echo "🔧 Using service directory as build context (independent workspace)"
+          elif echo "$REPO_ROOT_CONTEXT" | grep -qw "${{ matrix.service }}"; then
+            echo "context=." >> "$GITHUB_OUTPUT"
+            echo "🔧 Using repo root as build context"
           else
             echo "context=./backend" >> "$GITHUB_OUTPUT"
           fi
