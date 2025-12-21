@@ -300,6 +300,72 @@ class AuthenticationManager: ObservableObject {
         return user
     }
 
+    /// Login with Passkey authentication
+    @available(iOS 16.0, *)
+    func handlePasskeyAuthentication(_ response: PasskeyService.CompleteAuthenticationResponse) async throws {
+        // Create user profile from response
+        let user: UserProfile
+        if let responseUser = response.user {
+            user = UserProfile(
+                id: responseUser.id,
+                username: responseUser.username,
+                email: responseUser.email,
+                displayName: nil,
+                bio: nil,
+                avatarUrl: nil,
+                coverUrl: nil,
+                website: nil,
+                location: nil,
+                isVerified: false,
+                isPrivate: false,
+                isBanned: false,
+                followerCount: 0,
+                followingCount: 0,
+                postCount: 0,
+                createdAt: nil,
+                updatedAt: nil,
+                deletedAt: nil,
+                firstName: nil,
+                lastName: nil,
+                dateOfBirth: nil,
+                gender: nil
+            )
+        } else {
+            // Minimal profile if not provided
+            user = UserProfile(
+                id: response.userId,
+                username: "user_\(response.userId.prefix(8))",
+                email: nil,
+                displayName: nil,
+                bio: nil,
+                avatarUrl: nil,
+                coverUrl: nil,
+                website: nil,
+                location: nil,
+                isVerified: false,
+                isPrivate: false,
+                isBanned: false,
+                followerCount: 0,
+                followingCount: 0,
+                postCount: 0,
+                createdAt: nil,
+                updatedAt: nil,
+                deletedAt: nil,
+                firstName: nil,
+                lastName: nil,
+                dateOfBirth: nil,
+                gender: nil
+            )
+        }
+
+        // Save authentication
+        await saveAuth(token: response.token, refreshToken: response.refreshToken, user: user)
+
+        #if DEBUG
+        print("[Auth] Passkey Sign-In successful for user: \(response.userId)")
+        #endif
+    }
+
     // MARK: - Logout
 
     /// Logout current user

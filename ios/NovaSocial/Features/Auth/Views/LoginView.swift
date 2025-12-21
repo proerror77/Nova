@@ -12,6 +12,7 @@ struct LoginView: View {
     @State private var isLoading = false
     @State private var isGoogleLoading = false
     @State private var isAppleLoading = false
+    @State private var isPasskeyLoading = false
     @State private var errorMessage: String?
     @State private var showPassword = false
     @State private var showErrorView = false
@@ -287,6 +288,43 @@ struct LoginView: View {
     // MARK: - Social Login Buttons
     private var socialLoginButtons: some View {
         VStack(spacing: 16) {
+            // Continue with Passkey
+            if #available(iOS 16.0, *) {
+                Button(action: {
+                    Task {
+                        await handlePasskeySignIn()
+                    }
+                }) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "person.badge.key.fill")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20)
+                            .foregroundColor(.white)
+
+                        if isPasskeyLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+                        }
+
+                        Text("Continue with Passkey")
+                            .font(Typography.heavy16)
+                            .tracking(LetterSpacing.heavy16)
+                            .foregroundColor(.white)
+                    }
+                    .frame(width: 300, height: 49)
+                    .background(Color.clear)
+                    .cornerRadius(65)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 65)
+                            .stroke(.white, lineWidth: 0.5)
+                    )
+                }
+                .disabled(isLoading || isGoogleLoading || isAppleLoading || isPasskeyLoading)
+                .accessibilityIdentifier("passkeySignInButton")
+            }
+
             // Continue with Google
             Button(action: {
                 Task {
@@ -319,7 +357,7 @@ struct LoginView: View {
                         .stroke(.white, lineWidth: 0.5)
                 )
             }
-            .disabled(isLoading || isGoogleLoading || isAppleLoading)
+            .disabled(isLoading || isGoogleLoading || isAppleLoading || isPasskeyLoading)
             .accessibilityIdentifier("googleSignInButton")
 
             // Continue with Apple
@@ -354,7 +392,7 @@ struct LoginView: View {
                         .stroke(.white, lineWidth: 0.5)
                 )
             }
-            .disabled(isLoading || isGoogleLoading || isAppleLoading)
+            .disabled(isLoading || isGoogleLoading || isAppleLoading || isPasskeyLoading)
             .accessibilityIdentifier("appleSignInButton")
         }
     }
@@ -478,6 +516,30 @@ struct LoginView: View {
         }
 
         isAppleLoading = false
+    }
+
+    @available(iOS 16.0, *)
+    private func handlePasskeySignIn() async {
+        isPasskeyLoading = true
+        errorMessage = nil
+
+        do {
+            let result = try await PasskeyService.shared.authenticateWithPasskey(userId: nil, anchor: nil)
+            // Handle successful passkey authentication
+            try await authManager.handlePasskeyAuthentication(result)
+        } catch {
+            let errorDesc = error.localizedDescription.lowercased()
+            if errorDesc.contains("cancel") {
+                // User cancelled, no error message needed
+            } else {
+                errorMessage = "Passkey authentication failed. Please try again."
+                #if DEBUG
+                print("[LoginView] Passkey error: \(error)")
+                #endif
+            }
+        }
+
+        isPasskeyLoading = false
     }
 
     // MARK: - Validation

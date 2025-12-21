@@ -4,6 +4,9 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: matrix-synapse-ingress
+  namespace: nova-backend
+  labels:
+    environment: staging
   annotations:
     kubernetes.io/ingress.class: gce
     networking.gke.io/managed-certificates: synapse-staging-cert,nova-staging-well-known-cert
@@ -30,12 +33,20 @@ spec:
                 name: matrix-well-known
                 port:
                   number: 80
+          - path: /.well-known/apple-app-site-association
+            pathType: Exact
+            backend:
+              service:
+                name: apple-well-known
+                port:
+                  number: 80
 ---
 # GKE Managed Certificate for Synapse
 apiVersion: networking.gke.io/v1
 kind: ManagedCertificate
 metadata:
   name: synapse-staging-cert
+  namespace: nova-backend
 spec:
   domains:
     - matrix.staging.gcp.icered.com
@@ -45,6 +56,7 @@ apiVersion: networking.gke.io/v1
 kind: ManagedCertificate
 metadata:
   name: nova-staging-well-known-cert
+  namespace: nova-backend
 spec:
   domains:
     - staging.gcp.icered.com

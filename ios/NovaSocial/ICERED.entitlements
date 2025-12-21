@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict/>
+<dict>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>webcredentials:staging.gcp.icered.com</string>
+		<string>webcredentials:aasa.icered.com</string>
+		<string>webcredentials:icered.com</string>
+		<string>applinks:staging.gcp.icered.com</string>
+		<string>applinks:aasa.icered.com</string>
+		<string>applinks:icered.com</string>
+	</array>
+</dict>
 </plist>

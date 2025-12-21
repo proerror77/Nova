@@ -1,16 +1,18 @@
 {
   "webcredentials": {
-    "apps": ["TEAM_ID.com.libruce.icered"]
+    "apps": ["2C77AZCA8W.com.libruce.icered"]
   },
   "applinks": {
     "apps": [],
     "details": [
       {
-        "appID": "TEAM_ID.com.libruce.icered",
+        "appID": "2C77AZCA8W.com.libruce.icered",
         "paths": [
           "/reset-password/*",
           "/verify/*",
-          "/invite/*"
+          "/invite/*",
+          "/callback/*",
+          "/auth/*"
         ]
       }
     ]

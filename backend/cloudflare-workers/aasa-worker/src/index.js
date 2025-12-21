@@ -7,13 +7,13 @@
 
 const AASA_CONTENT = {
   "webcredentials": {
-    "apps": ["ABC123XYZ0.com.libruce.icered"]
+    "apps": ["2C77AZCA8W.com.libruce.icered"]
   },
   "applinks": {
     "apps": [],
     "details": [
       {
-        "appID": "ABC123XYZ0.com.libruce.icered",
+        "appID": "2C77AZCA8W.com.libruce.icered",
         "paths": [
           "/reset-password/*",
           "/verify/*",
