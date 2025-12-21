@@ -504,8 +504,18 @@ impl MatrixAdminClient {
             mxid, user_id, device_id
         );
 
+        // Convert relative duration (ms) to absolute timestamp (epoch ms)
+        // Synapse expects valid_until_ms to be an absolute Unix timestamp in milliseconds
+        let valid_until_ms = valid_for_ms.map(|duration_ms| {
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as i64;
+            now_ms + duration_ms
+        });
+
         let request_body = LoginTokenRequest {
-            valid_until_ms: valid_for_ms,
+            valid_until_ms,
             device_id,
         };
 
