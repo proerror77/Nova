@@ -32,7 +32,11 @@ fn extract_user_id_from_header(req: &HttpRequest) -> Option<Uuid> {
 /// Request to get Matrix access token for a Nova user
 #[derive(Debug, Deserialize)]
 pub struct GetMatrixTokenRequest {
-    pub user_id: String,
+    #[allow(dead_code)]
+    pub user_id: Option<String>,
+    /// Device ID to bind the Matrix session to (for seamless iOS login)
+    /// If provided, the returned access_token will be bound to this device
+    pub device_id: Option<String>,
 }
 
 /// Response containing Matrix access token
@@ -115,10 +119,14 @@ pub struct RoomStatusResponse {
 /// Flow:
 /// 1. Verify Matrix is enabled
 /// 2. Create Matrix user if doesn't exist (via Synapse Admin API)
-/// 3. Generate a user-specific login token (via Synapse Admin API)
-/// 4. Return the login token for the iOS app to use
+/// 3. Generate a device-bound access token (via Synapse Admin API)
+/// 4. Return the access token for the iOS app to use with restoreSession
+///
+/// Request body (optional):
+/// - device_id: Device ID to bind the session to (for seamless iOS E2EE)
 pub async fn get_matrix_token(
     req: HttpRequest,
+    body: Option<web::Json<GetMatrixTokenRequest>>,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
     // Extract user ID from X-User-Id header (internal service call from graphql-gateway)
@@ -128,7 +136,20 @@ pub async fn get_matrix_token(
             AppError::Unauthorized
         })?;
 
-    tracing::info!(user_id = %nova_user_id, "Processing Matrix token request");
+    // Extract device_id from request body if provided
+    // This allows iOS to get a device-bound token for seamless E2EE
+    let requested_device_id = body.as_ref().and_then(|b| b.device_id.clone());
+
+    // Generate default device_id if not provided by client
+    let device_id = requested_device_id.unwrap_or_else(|| {
+        format!("NOVA_IOS_{}", &nova_user_id.to_string()[..8])
+    });
+
+    tracing::info!(
+        user_id = %nova_user_id,
+        device_id = %device_id,
+        "Processing Matrix token request with device binding"
+    );
 
     // Check if Matrix is enabled
     if state.matrix_client.is_none() {
@@ -147,38 +168,43 @@ pub async fn get_matrix_token(
             let access_token = matrix_config.access_token.clone()
                 .unwrap_or_else(|| "not_configured".to_string());
             let matrix_user_id = format!("@nova-{}:{}", nova_user_id, matrix_config.server_name);
-            let device_id = format!("NOVA_IOS_{}", &nova_user_id.to_string()[..8]);
+
+            // Use public_url for clients (falls back to homeserver_url if not set)
+            let client_url = matrix_config.public_url.clone()
+                .unwrap_or_else(|| matrix_config.homeserver_url.clone());
 
             return Ok(HttpResponse::Ok().json(MatrixTokenResponse {
                 access_token,
                 matrix_user_id,
                 device_id,
-                homeserver_url: Some(matrix_config.homeserver_url.clone()),
+                homeserver_url: Some(client_url),
             }));
         }
     };
 
     let matrix_config = &state.config.matrix;
 
-    // Provision user: create if doesn't exist, then generate login token
+    // Use public_url for clients (falls back to homeserver_url if not set)
+    let client_url = matrix_config.public_url.clone()
+        .unwrap_or_else(|| matrix_config.homeserver_url.clone());
+
+    // Provision user: create if doesn't exist, then generate device-bound token
     // The displayname could be fetched from identity service, but for now use user ID
     let displayname = format!("Nova User {}", &nova_user_id.to_string()[..8]);
 
-    match matrix_admin.provision_user(nova_user_id, Some(displayname)).await {
-        Ok((matrix_user_id, login_token)) => {
-            // Generate a device ID for this user/device combination
-            let device_id = format!("NOVA_IOS_{}", &nova_user_id.to_string()[..8]);
-
+    // Pass device_id to provision_user to get a device-bound access token
+    match matrix_admin.provision_user(nova_user_id, Some(displayname), Some(device_id.clone())).await {
+        Ok((matrix_user_id, access_token)) => {
             tracing::info!(
-                "Successfully provisioned Matrix user: nova_user_id={}, matrix_user_id={}",
-                nova_user_id, matrix_user_id
+                "Successfully provisioned Matrix user with device binding: nova_user_id={}, matrix_user_id={}, device_id={}",
+                nova_user_id, matrix_user_id, device_id
             );
 
             Ok(HttpResponse::Ok().json(MatrixTokenResponse {
-                access_token: login_token,
+                access_token,
                 matrix_user_id,
                 device_id,
-                homeserver_url: Some(matrix_config.homeserver_url.clone()),
+                homeserver_url: Some(client_url),
             }))
         }
         Err(e) => {
@@ -186,20 +212,19 @@ pub async fn get_matrix_token(
                 "Failed to provision Matrix user: nova_user_id={}, error={}",
                 nova_user_id, e
             );
-            
+
             // Fallback to service account token to avoid breaking the app
             // This is not ideal but prevents complete failure
             tracing::warn!("Falling back to service account token due to provisioning failure");
             let access_token = matrix_config.access_token.clone()
                 .unwrap_or_else(|| "not_configured".to_string());
             let matrix_user_id = format!("@nova-{}:{}", nova_user_id, matrix_config.server_name);
-            let device_id = format!("NOVA_IOS_{}", &nova_user_id.to_string()[..8]);
 
             Ok(HttpResponse::Ok().json(MatrixTokenResponse {
                 access_token,
                 matrix_user_id,
                 device_id,
-                homeserver_url: Some(matrix_config.homeserver_url.clone()),
+                homeserver_url: Some(client_url.clone()),
             }))
         }
     }

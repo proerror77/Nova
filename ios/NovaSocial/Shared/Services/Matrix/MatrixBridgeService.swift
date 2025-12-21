@@ -30,6 +30,10 @@ final class MatrixBridgeService {
     /// Feature flag to use SSO login instead of legacy token endpoint
     /// When false, uses the Nova access token to exchange for a Matrix token via backend
     /// When true, uses ASWebAuthenticationSession for SSO (requires user interaction)
+    ///
+    /// Now using legacy token endpoint because backend has been updated to generate
+    /// device-bound tokens via Synapse Admin API (device_id parameter added in Synapse 1.81+)
+    /// This provides seamless single sign-on: login once to Nova, Matrix works automatically
     private let useSSOLogin = false
 
     // MARK: - State
@@ -139,15 +143,14 @@ final class MatrixBridgeService {
                     #endif
                     // Choose login method based on feature flag
                     if useSSOLogin {
-                        // Use new SSO login flow
+                        // Use SSO login flow (requires user interaction)
                         try await loginWithSSO()
                     } else {
-                        // Legacy: Get Matrix access token from Nova backend
-                        // ⚠️ DEPRECATED: /api/v2/matrix/token returns a SERVICE ACCOUNT token,
-                        // not a user-specific token. This causes Matrix session failures!
-                        // Always use SSO login (useSSOLogin = true) for proper authentication.
+                        // Use backend token exchange (recommended)
+                        // Backend now generates device-bound tokens via Synapse Admin API
+                        // This provides seamless login without requiring a second SSO prompt
                         #if DEBUG
-                        print("[MatrixBridge] ⚠️ Using legacy token endpoint (DEPRECATED - will likely fail!)...")
+                        print("[MatrixBridge] 🔑 Using device-bound token from Nova backend...")
                         #endif
                         try await loginWithLegacyToken()
                     }
@@ -889,12 +892,15 @@ final class MatrixBridgeService {
 
     /// Get Matrix credentials from Nova backend
     /// Returns access token, Matrix user ID, device ID, and homeserver URL
+    ///
+    /// The backend generates a device-bound access token using Synapse Admin API.
+    /// This enables seamless single sign-on without requiring a second SSO prompt.
     private func getMatrixCredentials(novaUserId: String) async throws -> MatrixCredentials {
         struct MatrixTokenRequest: Codable {
-            let userId: String
+            let deviceId: String
 
             enum CodingKeys: String, CodingKey {
-                case userId = "user_id"
+                case deviceId = "device_id"
             }
         }
 
@@ -906,10 +912,18 @@ final class MatrixBridgeService {
             let homeserverUrl: String?
         }
 
+        // Generate a persistent device ID for this device
+        // This ensures E2EE keys are consistent across app sessions
+        let deviceId = getOrCreateDeviceId()
+
+        #if DEBUG
+        print("[MatrixBridge] Requesting device-bound token with device_id: \(deviceId)")
+        #endif
+
         let response: MatrixTokenResponse = try await apiClient.request(
             endpoint: APIConfig.Matrix.getToken,
             method: "POST",
-            body: MatrixTokenRequest(userId: novaUserId)
+            body: MatrixTokenRequest(deviceId: deviceId)
         )
 
         return MatrixCredentials(
@@ -918,6 +932,28 @@ final class MatrixBridgeService {
             deviceId: response.deviceId,
             homeserverUrl: response.homeserverUrl
         )
+    }
+
+    /// Get or create a persistent device ID for Matrix sessions
+    /// This ensures E2EE keys are consistent across app sessions on the same device
+    private func getOrCreateDeviceId() -> String {
+        // Check if we already have a device ID stored
+        if let existingDeviceId = keychain.get(.matrixDeviceId), !existingDeviceId.isEmpty {
+            return existingDeviceId
+        }
+
+        // Generate a new device ID
+        // Format: NOVA_IOS_{UUID} to identify Nova iOS clients
+        let newDeviceId = "NOVA_IOS_\(UUID().uuidString.prefix(8))"
+
+        // Store for future use
+        _ = keychain.save(newDeviceId, for: .matrixDeviceId)
+
+        #if DEBUG
+        print("[MatrixBridge] Generated new device ID: \(newDeviceId)")
+        #endif
+
+        return newDeviceId
     }
 
     private func queryRoomMapping(conversationId: String) async throws -> String? {

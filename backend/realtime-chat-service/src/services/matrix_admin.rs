@@ -87,6 +87,10 @@ struct LoginTokenRequest {
     /// Default is 2 minutes (120000ms), max is typically 1 hour
     #[serde(skip_serializing_if = "Option::is_none")]
     valid_until_ms: Option<i64>,
+    /// Device ID to bind the session to (Synapse 1.81+)
+    /// If provided, the returned access_token will be bound to this device
+    #[serde(skip_serializing_if = "Option::is_none")]
+    device_id: Option<String>,
 }
 
 /// Response containing the access token from Synapse Admin API
@@ -472,18 +476,21 @@ impl MatrixAdminClient {
     /// This calls POST /_synapse/admin/v1/users/{user_id}/login
     /// See: https://matrix-org.github.io/synapse/latest/admin_api/user_admin_api.html#login-as-a-user
     ///
-    /// The returned token can be used with the `m.login.token` login flow.
+    /// The returned access_token is bound to the specified device_id if provided.
+    /// This enables seamless Matrix login without requiring a second SSO flow.
     ///
     /// # Arguments
     /// * `user_id` - Nova user ID (will be converted to MXID)
     /// * `valid_for_ms` - How long the token should be valid (optional, default ~2 minutes)
+    /// * `device_id` - Device ID to bind the session to (required for iOS E2EE)
     ///
     /// # Returns
-    /// Ok(login_token) if successful, Err otherwise
+    /// Ok(access_token) if successful, Err otherwise
     pub async fn generate_user_login_token(
         &self,
         user_id: Uuid,
         valid_for_ms: Option<i64>,
+        device_id: Option<String>,
     ) -> Result<String, AppError> {
         let mxid = self.user_id_to_mxid(user_id);
         let url = format!(
@@ -493,12 +500,13 @@ impl MatrixAdminClient {
         );
 
         info!(
-            "Generating login token for Matrix user: mxid={}, nova_user_id={}",
-            mxid, user_id
+            "Generating login token for Matrix user: mxid={}, nova_user_id={}, device_id={:?}",
+            mxid, user_id, device_id
         );
 
         let request_body = LoginTokenRequest {
             valid_until_ms: valid_for_ms,
+            device_id,
         };
 
         let response = self
@@ -546,22 +554,25 @@ impl MatrixAdminClient {
     /// # Arguments
     /// * `user_id` - Nova user ID
     /// * `displayname` - User's display name
+    /// * `device_id` - Device ID to bind the session to (for seamless iOS login)
     ///
     /// # Returns
-    /// Ok((mxid, login_token)) if successful, Err otherwise
+    /// Ok((mxid, access_token)) if successful, Err otherwise
     pub async fn provision_user(
         &self,
         user_id: Uuid,
         displayname: Option<String>,
+        device_id: Option<String>,
     ) -> Result<(String, String), AppError> {
         // Step 1: Create or update the user
         let mxid = self.create_or_get_user(user_id, displayname).await?;
 
-        // Step 2: Generate a login token for the user
+        // Step 2: Generate a device-bound access token for the user
         // Token valid for 1 hour (3600000 ms)
-        let login_token = self.generate_user_login_token(user_id, Some(3600000)).await?;
+        // If device_id is provided, the token will be bound to that device
+        let access_token = self.generate_user_login_token(user_id, Some(3600000), device_id).await?;
 
-        Ok((mxid, login_token))
+        Ok((mxid, access_token))
     }
 }
 

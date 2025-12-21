@@ -22,7 +22,7 @@ enum APIEnvironment {
                !stagingURL.hasPrefix("$(") {  // Skip unresolved build variables
                 return stagingURL
             }
-            // Staging API via GKE Ingress IP (34.8.163.8)
+            // Staging API via GKE Ingress IP (nova-staging namespace)
             // Note: api.staging.gcp.icered.com DNS may resolve to VPN proxy IP which doesn't work in iOS Simulator
             return "http://34.8.163.8"
         case .production:
@@ -546,11 +546,10 @@ struct APIConfig {
 
     // MARK: - Matrix E2EE Integration API
     struct Matrix {
-        /// POST /api/v2/matrix/token - Get Matrix access token for current user
-        /// DEPRECATED: This endpoint returns a service account token, not a user-specific token.
-        /// Use MatrixSSOManager.startSSOLogin() for proper user authentication via Zitadel SSO.
-        /// This endpoint will be removed in a future version.
-        @available(*, deprecated, message: "Use MatrixSSOManager.startSSOLogin() instead. This endpoint returns a service account token.")
+        /// POST /api/v2/matrix/token - Get device-bound Matrix access token for current user
+        /// Request body: { "device_id": "NOVA_IOS_XXXX" }
+        /// Response: { "access_token", "matrix_user_id", "device_id", "homeserver_url" }
+        /// Backend generates device-bound tokens via Synapse Admin API (device_id param in Synapse 1.81+)
         static let getToken = "/api/v2/matrix/token"
         /// GET /api/v2/matrix/rooms - Get all conversation-to-room mappings for current user
         static let getRoomMappings = "/api/v2/matrix/rooms"
