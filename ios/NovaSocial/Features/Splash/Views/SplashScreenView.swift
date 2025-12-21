@@ -4,7 +4,6 @@ struct SplashScreenView: View {
     @Binding var currentPage: AppPage
     @EnvironmentObject private var authManager: AuthenticationManager
     @State private var isActive = false
-    @State private var statusMessage = "Loading..."
 
     var body: some View {
         ZStack {
@@ -12,22 +11,13 @@ struct SplashScreenView: View {
             DesignTokens.accentColor
                 .ignoresSafeArea()
 
-            VStack(spacing: 20) {
-                // Icered 图标
-                Image("Icered-icon")
-                    .renderingMode(.template)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 220, height: 220)
-                    .foregroundColor(.white)
-                
-                #if DEBUG
-                // Debug status message (only in debug builds)
-                Text(statusMessage)
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.7))
-                #endif
-            }
+            // ICERED 图标
+            Image("ICERED-icon")
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 220, height: 220)
+                .foregroundColor(.white)
         }
         .task {
             await validateAndNavigate()
@@ -46,7 +36,6 @@ struct SplashScreenView: View {
         
         // Check if user has saved auth credentials
         if authManager.isAuthenticated {
-            statusMessage = "Validating session..."
             print("[Splash] 📱 User appears authenticated, validating session...")
             
             // Proactively validate the session
@@ -60,18 +49,13 @@ struct SplashScreenView: View {
             
             if isValid && authManager.isAuthenticated {
                 print("[Splash] ✅ Session valid, navigating to home")
-                statusMessage = "Welcome back!"
                 currentPage = .home
             } else {
                 print("[Splash] ❌ Session invalid, navigating to login")
-                statusMessage = "Session expired"
-                // Small delay to show the message
-                try? await Task.sleep(for: .seconds(0.3))
                 currentPage = .login
             }
         } else {
             print("[Splash] ℹ️ Not authenticated, navigating to login")
-            statusMessage = "Please login"
             
             // Ensure minimum splash duration
             let elapsed = Date().timeIntervalSince(splashStartTime)
