@@ -94,11 +94,12 @@ jobs:
           fi
 
           # 检测变更的服务
+          # Note: Most services follow *-service pattern, except graphql-gateway
           CHANGED_SERVICES=$(echo "$CHANGED_FILES" | \
             grep '^backend/' | \
             cut -d'/' -f2 | \
             sort -u | \
-            grep -E '^(analytics|content|feed|graph|graphql|identity|media|notification|ranking|realtime-chat|search|social|trust-safety)-service$' || true)
+            grep -E '^((analytics|content|feed|graph|identity|media|notification|ranking|realtime-chat|search|social|trust-safety)-service|graphql-gateway)$' || true)
 
           if [ -z "$CHANGED_SERVICES" ]; then
             echo "✅ No service changes detected"
