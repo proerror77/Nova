@@ -113,6 +113,20 @@ struct SettingsView: View {
                                     .padding(.leading, 60)
 
                                 SettingsRow(
+                                    icon: "person.badge.key.fill",
+                                    title: "Passkeys",
+                                    showChevron: true,
+                                    action: {
+                                        currentPage = .passkeys
+                                    }
+                                )
+                                .accessibilityLabel("Passkeys")
+                                .accessibilityHint("Manage passkeys for passwordless sign-in")
+
+                                Divider()
+                                    .padding(.leading, 60)
+
+                                SettingsRow(
                                     icon: "person.badge.plus",
                                     title: "Invite Friends",
                                     showChevron: true,

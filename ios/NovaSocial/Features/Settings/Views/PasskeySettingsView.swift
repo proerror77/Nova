@@ -337,7 +337,7 @@ struct PasskeySettingsView: View {
         errorMessage = nil
 
         do {
-            passkeys = try await authManager.listPasskeys()
+            passkeys = try await PasskeyService.shared.listPasskeys()
         } catch {
             errorMessage = "載入失敗：\(error.localizedDescription)"
             print("[PasskeySettings] Failed to load passkeys: \(error)")
@@ -353,7 +353,7 @@ struct PasskeySettingsView: View {
             let deviceName = await MainActor.run {
                 UIDevice.current.name
             }
-            _ = try await authManager.registerPasskey(credentialName: deviceName)
+            _ = try await PasskeyService.shared.registerPasskey(credentialName: deviceName)
             await loadPasskeys()
 
             // 顯示成功提示
@@ -376,7 +376,7 @@ struct PasskeySettingsView: View {
 
     private func deletePasskey(_ passkey: PasskeyService.PasskeyInfo) async {
         do {
-            try await authManager.revokePasskey(credentialId: passkey.id)
+            try await PasskeyService.shared.revokePasskey(credentialId: passkey.id)
             passkeys.removeAll { $0.id == passkey.id }
         } catch {
             errorMessage = "刪除失敗：\(error.localizedDescription)"
@@ -388,7 +388,7 @@ struct PasskeySettingsView: View {
         guard !newName.isEmpty else { return }
 
         do {
-            try await authManager.renamePasskey(credentialId: passkey.id, newName: newName)
+            try await PasskeyService.shared.renamePasskey(credentialId: passkey.id, newName: newName)
             await loadPasskeys()
         } catch {
             errorMessage = "重新命名失敗：\(error.localizedDescription)"
