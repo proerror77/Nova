@@ -68,6 +68,25 @@ pub struct AvatarUploadRequest {
     pub content_type: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct BatchProfilesRequest {
+    pub user_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BatchProfilesResponse {
+    pub profiles: Vec<BatchProfile>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BatchProfile {
+    pub user_id: String,
+    pub username: String,
+    pub display_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_url: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct UserProfileResponse {
     pub id: String,
@@ -90,6 +109,58 @@ pub struct UserProfileResponse {
     pub post_count: i32,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+/// POST /api/v2/auth/users/profiles/batch
+/// Batch fetch basic profiles (username/display_name/avatar_url)
+pub async fn batch_get_profiles(
+    http_req: HttpRequest,
+    req: web::Json<BatchProfilesRequest>,
+    clients: web::Data<ServiceClients>,
+) -> Result<HttpResponse> {
+    let authed = http_req.extensions().get::<AuthenticatedUser>().copied();
+    if authed.is_none() {
+        return Ok(HttpResponse::Unauthorized().finish());
+    }
+
+    if req.user_ids.is_empty() {
+        return Ok(HttpResponse::Ok().json(BatchProfilesResponse { profiles: vec![] }));
+    }
+
+    let mut auth_client: AuthServiceClient<_> = clients.auth_client();
+    let batch_req = tonic::Request::new(GetUserProfilesByIdsRequest {
+        user_ids: req.user_ids.clone(),
+    });
+
+    let resp = match auth_client.get_user_profiles_by_ids(batch_req).await {
+        Ok(resp) => resp.into_inner(),
+        Err(e) => {
+            error!("get_user_profiles_by_ids failed: {}", e);
+            return Ok(HttpResponse::ServiceUnavailable().finish());
+        }
+    };
+
+    if let Some(err) = resp.error {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": err.message
+        })));
+    }
+
+    let profiles = resp
+        .profiles
+        .into_iter()
+        .map(|p| {
+            let display_name = p.display_name.clone().unwrap_or_else(|| p.username.clone());
+            BatchProfile {
+                user_id: p.user_id,
+                username: p.username,
+                display_name,
+                avatar_url: p.avatar_url,
+            }
+        })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(BatchProfilesResponse { profiles }))
 }
 
 /// GET /api/v2/users/{id}

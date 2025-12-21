@@ -298,7 +298,7 @@ class FeedViewModel {
                 performanceMonitor.recordCacheAccess(hit: true)
 
                 var cachedPosts = cachedResponse.posts.map { FeedPost(from: $0) }
-                cachedPosts = syncCurrentUserAvatar(cachedPosts)
+                cachedPosts = syncCurrentUserProfile(cachedPosts)
                 mergeRecentlyCreatedPosts(into: &cachedPosts)
 
                 var seenIds = Set<String>()
@@ -365,8 +365,8 @@ class FeedViewModel {
             }
             #endif
 
-            // Sync current user's avatar for their own posts (ensures latest avatar is shown)
-            allPosts = syncCurrentUserAvatar(allPosts)
+            // Sync current user's profile for their own posts (ensures latest name/avatar is shown)
+            allPosts = syncCurrentUserProfile(allPosts)
 
             // DEBUG: Log posts before merge
             #if DEBUG
@@ -459,8 +459,8 @@ class FeedViewModel {
 
                     var allPosts = fallbackResponse.posts.map { FeedPost(from: $0) }
 
-                    // Sync current user's avatar for their own posts
-                    allPosts = syncCurrentUserAvatar(allPosts)
+                    // Sync current user's profile for their own posts
+                    allPosts = syncCurrentUserProfile(allPosts)
 
                     // Merge recently created posts that may not be in server response yet
                     mergeRecentlyCreatedPosts(into: &allPosts)
@@ -542,8 +542,8 @@ class FeedViewModel {
             // Convert raw posts to FeedPost objects directly
             var newPosts = response.posts.map { FeedPost(from: $0) }
 
-            // Sync current user's avatar for their own posts
-            newPosts = syncCurrentUserAvatar(newPosts)
+            // Sync current user's profile for their own posts
+            newPosts = syncCurrentUserProfile(newPosts)
 
             // Client-side deduplication: Only add posts that aren't already in the feed
             let existingIds = Set(self.posts.map { $0.id })
@@ -625,8 +625,8 @@ class FeedViewModel {
 
             var allPosts = response.posts.map { FeedPost(from: $0) }
 
-            // Sync current user's avatar for their own posts
-            allPosts = syncCurrentUserAvatar(allPosts)
+            // Sync current user's profile for their own posts
+            allPosts = syncCurrentUserProfile(allPosts)
 
             var seenIds = Set<String>()
             self.posts = allPosts.filter { post in
@@ -836,11 +836,15 @@ class FeedViewModel {
     }
 
     /// Fetch missing author profiles and update posts
-    /// Called when posts have placeholder author names (e.g., "User b19b767d")
+    /// Called when posts have placeholder author names or missing avatars
     private func fetchMissingAuthorProfilesAsync(for posts: [FeedPost]) {
-        // Find posts with missing author info (those showing "User xxxxx" placeholder)
+        guard isAuthenticated else { return }
+
+        // Find posts with missing author info (placeholder name or missing avatar)
         let postsWithMissingProfiles = posts.filter { post in
-            post.authorName.hasPrefix("User ") && post.authorAvatar == nil
+            post.authorName.isEmpty ||
+            post.authorName.hasPrefix("User ") ||
+            post.authorAvatar == nil
         }
 
         guard !postsWithMissingProfiles.isEmpty else { return }
@@ -879,21 +883,9 @@ class FeedViewModel {
         for i in posts.indices {
             let post = posts[i]
             if let profile = profiles[post.authorId] {
-                // Create updated post with new author info
-                posts[i] = FeedPost(
-                    id: post.id,
-                    authorId: post.authorId,
+                posts[i] = post.copying(
                     authorName: profile.displayName,
-                    authorAvatar: profile.avatarUrl,
-                    content: post.content,
-                    mediaUrls: post.mediaUrls,
-                    mediaType: post.mediaType,
-                    createdAt: post.createdAt,
-                    likeCount: post.likeCount,
-                    commentCount: post.commentCount,
-                    shareCount: post.shareCount,
-                    isLiked: post.isLiked,
-                    isBookmarked: post.isBookmarked
+                    authorAvatar: .some(profile.avatarUrl)
                 )
             }
         }
@@ -1121,26 +1113,44 @@ class FeedViewModel {
 
     // MARK: - Private Methods
 
-    /// Process posts: sync current user avatar, enrich with bookmark status and deduplicate
+    /// Process posts: sync current user profile, enrich with bookmark status and deduplicate
     private func processAndDeduplicatePosts(_ posts: [FeedPost]) async -> [FeedPost] {
-        let syncedPosts = syncCurrentUserAvatar(posts)
+        let syncedPosts = syncCurrentUserProfile(posts)
         let enrichedPosts = await enrichWithBookmarkStatus(syncedPosts)
         return deduplicatePosts(enrichedPosts)
     }
 
-    /// Sync current user's avatar for their own posts
-    /// This ensures the Feed shows the latest avatar after user updates it locally
-    private func syncCurrentUserAvatar(_ posts: [FeedPost]) -> [FeedPost] {
-        guard let currentUserId = authManager.currentUser?.id,
-              let currentUserAvatar = authManager.currentUser?.avatarUrl else {
+    /// Sync current user's name/avatar for their own posts
+    /// This ensures the Feed shows the latest profile data after user updates it locally
+    private func syncCurrentUserProfile(_ posts: [FeedPost]) -> [FeedPost] {
+        guard let currentUser = authManager.currentUser else {
             return posts
         }
 
-        return posts.map { post in
-            if post.authorId == currentUserId {
-                return post.copying(authorAvatar: currentUserAvatar)
+        let resolvedName: String = {
+            let display = currentUser.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !display.isEmpty {
+                return display
             }
-            return post
+            return currentUser.username
+        }()
+
+        return posts.map { post in
+            guard post.authorId == currentUser.id else { return post }
+
+            let nameOverride: String? = resolvedName.isEmpty ? nil : resolvedName
+            let avatarOverride: String?? = {
+                if currentUser.avatarUrl != post.authorAvatar {
+                    return .some(currentUser.avatarUrl)
+                }
+                return nil
+            }()
+
+            if nameOverride == nil && avatarOverride == nil {
+                return post
+            }
+
+            return post.copying(authorName: nameOverride, authorAvatar: avatarOverride)
         }
     }
 

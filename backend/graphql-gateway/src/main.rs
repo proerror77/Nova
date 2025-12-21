@@ -317,6 +317,10 @@ async fn main() -> std::io::Result<()> {
                 web::post().to(rest_api::refresh_token),
             )
             .route("/api/v2/auth/logout", web::post().to(rest_api::logout))
+            .route(
+                "/api/v2/auth/users/profiles/batch",
+                web::post().to(rest_api::batch_get_profiles),
+            )
             // Invite code validation (public endpoint - no auth required)
             .route(
                 "/api/v2/auth/invites/validate",

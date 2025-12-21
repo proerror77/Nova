@@ -38,6 +38,10 @@ struct CreateAccountView: View {
     // Access AvatarManager
     @StateObject private var avatarManager = AvatarManager.shared
 
+    // Services
+    private let mediaService = MediaService()
+    private let identityService = IdentityService()
+
     var body: some View {
         ZStack {
             // Background Image - Fixed size to prevent scaling when keyboard appears
@@ -452,13 +456,15 @@ struct CreateAccountView: View {
         #endif
 
         do {
-            _ = try await authManager.register(
+            let user = try await authManager.register(
                 username: trimmedUsername,
                 email: trimmedEmail,
                 password: password,
                 displayName: displayName.isEmpty ? username : displayName,
                 inviteCode: finalInviteCode
             )
+
+            await uploadAvatarIfNeeded(userId: user.id)
             #if DEBUG
             print("[CreateAccountView] Registration successful!")
             #endif
@@ -490,6 +496,38 @@ struct CreateAccountView: View {
         }
 
         isLoading = false
+    }
+
+    private func uploadAvatarIfNeeded(userId: String) async {
+        guard let image = selectedAvatar ?? avatarManager.getPendingAvatar(),
+              let imageData = image.jpegData(compressionQuality: 0.8) else {
+            return
+        }
+
+        do {
+            let avatarUrl = try await mediaService.uploadImage(imageData: imageData, filename: "avatar.jpg")
+            let updates = UserProfileUpdate(
+                displayName: nil,
+                bio: nil,
+                avatarUrl: avatarUrl,
+                coverUrl: nil,
+                website: nil,
+                location: nil
+            )
+            let updatedUser = try await identityService.updateUser(userId: userId, updates: updates)
+            await MainActor.run {
+                authManager.updateCurrentUser(updatedUser)
+                avatarManager.clearPendingAvatar()
+            }
+            #if DEBUG
+            print("[CreateAccountView] Avatar uploaded after registration: \(avatarUrl)")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[CreateAccountView] Avatar upload failed after registration: \(error)")
+            #endif
+            // Non-blocking: registration success should not fail due to avatar upload
+        }
     }
 
     // MARK: - Validation
