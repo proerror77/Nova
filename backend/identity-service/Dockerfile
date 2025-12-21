@@ -1,5 +1,5 @@
 # Multi-stage build for identity-service
-FROM rust:1.88-slim-bookworm AS builder
+FROM rust:1.83-slim-bookworm AS builder
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
