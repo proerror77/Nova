@@ -312,26 +312,15 @@ final class ChatViewModelTests: XCTestCase {
             conversationId: conversationId,
             senderId: senderId,
             content: content,
-            messageType: "text",
-            createdAt: Int64(Date().timeIntervalSince1970),
-            updatedAt: Int64(Date().timeIntervalSince1970),
-            isRead: true,
-            isDeleted: false,
-            replyToId: nil,
-            replyToContent: nil,
-            replyToSenderId: nil,
-            mediaUrls: nil,
-            mediaType: nil,
-            encryptionVersion: nil,
-            senderUsername: nil,
-            senderDisplayName: nil,
-            senderAvatarUrl: nil
+            type: .text,
+            createdAt: Date(),
+            status: .sent
         )
 
         XCTAssertEqual(message.content, content)
         XCTAssertEqual(message.senderId, senderId)
         XCTAssertEqual(message.conversationId, conversationId)
-        XCTAssertTrue(message.isRead)
+        XCTAssertEqual(message.status, .sent)
     }
 
     /// 測試替換臨時消息
@@ -489,27 +478,15 @@ final class ChatViewModelTests: XCTestCase {
     private func createTestMessage(
         id: String,
         content: String,
-        createdAt: Int64 = Int64(Date().timeIntervalSince1970)
+        createdAt: TimeInterval = Date().timeIntervalSince1970
     ) -> Message {
         return Message(
             id: id,
             conversationId: "conv-test",
             senderId: "user-test",
             content: content,
-            messageType: "text",
-            createdAt: createdAt,
-            updatedAt: createdAt,
-            isRead: false,
-            isDeleted: false,
-            replyToId: nil,
-            replyToContent: nil,
-            replyToSenderId: nil,
-            mediaUrls: nil,
-            mediaType: nil,
-            encryptionVersion: nil,
-            senderUsername: nil,
-            senderDisplayName: nil,
-            senderAvatarUrl: nil
+            type: .text,
+            createdAt: Date(timeIntervalSince1970: createdAt)
         )
     }
 }
@@ -526,25 +503,13 @@ final class ReplyMessageTests: XCTestCase {
             conversationId: "conv-123",
             senderId: "user-1",
             content: "This is a reply",
-            messageType: "text",
-            createdAt: Int64(Date().timeIntervalSince1970),
-            updatedAt: Int64(Date().timeIntervalSince1970),
-            isRead: false,
-            isDeleted: false,
-            replyToId: "msg-original",
-            replyToContent: "Original message content",
-            replyToSenderId: "user-2",
-            mediaUrls: nil,
-            mediaType: nil,
-            encryptionVersion: nil,
-            senderUsername: nil,
-            senderDisplayName: nil,
-            senderAvatarUrl: nil
+            type: .text,
+            createdAt: Date(),
+            replyToId: "msg-original"
         )
 
         XCTAssertEqual(replyMessage.replyToId, "msg-original")
-        XCTAssertEqual(replyMessage.replyToContent, "Original message content")
-        XCTAssertEqual(replyMessage.replyToSenderId, "user-2")
+        XCTAssertEqual(replyMessage.content, "This is a reply")
     }
 
     /// 測試檢查是否為回覆消息
@@ -558,20 +523,8 @@ final class ReplyMessageTests: XCTestCase {
             conversationId: "conv-123",
             senderId: "user-1",
             content: "Normal message",
-            messageType: "text",
-            createdAt: 0,
-            updatedAt: 0,
-            isRead: false,
-            isDeleted: false,
-            replyToId: nil,
-            replyToContent: nil,
-            replyToSenderId: nil,
-            mediaUrls: nil,
-            mediaType: nil,
-            encryptionVersion: nil,
-            senderUsername: nil,
-            senderDisplayName: nil,
-            senderAvatarUrl: nil
+            type: .text,
+            createdAt: Date()
         )
 
         let replyMessage = Message(
@@ -579,20 +532,9 @@ final class ReplyMessageTests: XCTestCase {
             conversationId: "conv-123",
             senderId: "user-1",
             content: "Reply message",
-            messageType: "text",
-            createdAt: 0,
-            updatedAt: 0,
-            isRead: false,
-            isDeleted: false,
-            replyToId: "msg-original",
-            replyToContent: "Original",
-            replyToSenderId: "user-2",
-            mediaUrls: nil,
-            mediaType: nil,
-            encryptionVersion: nil,
-            senderUsername: nil,
-            senderDisplayName: nil,
-            senderAvatarUrl: nil
+            type: .text,
+            createdAt: Date(),
+            replyToId: "msg-original"
         )
 
         XCTAssertFalse(isReplyMessage(normalMessage))

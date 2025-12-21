@@ -153,10 +153,10 @@ final class FeedServiceTests: XCTestCase {
         XCTAssertEqual(feedPost.bookmarkCount, 0, "FeedPost should default bookmarkCount to 0 when nil")
     }
 
-    // MARK: - GetFeedResponse Parsing Tests
+    // MARK: - FeedResponse Parsing Tests
 
     /// Test parsing complete feed response with multiple posts
-    func testGetFeedResponseParsing() throws {
+    func testFeedResponseParsing() throws {
         let json = """
         {
             "posts": [
@@ -195,7 +195,7 @@ final class FeedServiceTests: XCTestCase {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
 
-        let response = try decoder.decode(GetFeedResponse.self, from: json)
+        let response = try decoder.decode(FeedResponse.self, from: json)
 
         XCTAssertEqual(response.posts.count, 2)
         XCTAssertEqual(response.posts[0].bookmarkCount, 20)
@@ -205,7 +205,7 @@ final class FeedServiceTests: XCTestCase {
     }
 
     /// Test parsing feed response with empty posts array
-    func testGetFeedResponseEmptyPosts() throws {
+    func testFeedResponseEmptyPosts() throws {
         let json = """
         {
             "posts": [],
@@ -217,7 +217,7 @@ final class FeedServiceTests: XCTestCase {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
 
-        let response = try decoder.decode(GetFeedResponse.self, from: json)
+        let response = try decoder.decode(FeedResponse.self, from: json)
 
         XCTAssertTrue(response.posts.isEmpty)
         XCTAssertNil(response.nextCursor)
@@ -283,8 +283,40 @@ final class FeedServiceTests: XCTestCase {
 
     // MARK: - Author Information Tests
 
-    /// Test that author information is correctly parsed
-    func testAuthorInformationParsing() throws {
+    /// Test that FeedPostRaw correctly parses author information
+    func testFeedPostRawAuthorInformationParsing() throws {
+        let json = """
+        {
+            "id": "post-123",
+            "user_id": "user-456",
+            "content": "Test post",
+            "created_at": 1703116800,
+            "ranking_score": 0.85,
+            "like_count": 10,
+            "comment_count": 5,
+            "share_count": 2,
+            "bookmark_count": 7,
+            "media_urls": [],
+            "media_type": null,
+            "author_username": "johndoe",
+            "author_display_name": "John Doe",
+            "author_avatar": "https://example.com/avatar.jpg"
+        }
+        """.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+        let feedPostRaw = try decoder.decode(FeedPostRaw.self, from: json)
+
+        // Test FeedPostRaw has all author fields
+        XCTAssertEqual(feedPostRaw.authorUsername, "johndoe")
+        XCTAssertEqual(feedPostRaw.authorDisplayName, "John Doe")
+        XCTAssertEqual(feedPostRaw.authorAvatar, "https://example.com/avatar.jpg")
+    }
+
+    /// Test that FeedPost derives authorName from display name (priority: displayName > username)
+    func testFeedPostAuthorNameFromDisplayName() throws {
         let json = """
         {
             "id": "post-123",
@@ -310,12 +342,42 @@ final class FeedServiceTests: XCTestCase {
         let feedPostRaw = try decoder.decode(FeedPostRaw.self, from: json)
         let feedPost = FeedPost(from: feedPostRaw)
 
-        XCTAssertEqual(feedPost.authorUsername, "johndoe")
-        XCTAssertEqual(feedPost.authorDisplayName, "John Doe")
+        // FeedPost should use authorDisplayName for authorName (priority: displayName > username)
+        XCTAssertEqual(feedPost.authorName, "John Doe", "authorName should use display name when available")
         XCTAssertEqual(feedPost.authorAvatar, "https://example.com/avatar.jpg")
     }
 
-    /// Test that missing author information defaults correctly
+    /// Test that FeedPost falls back to username when display name is missing
+    func testFeedPostAuthorNameFromUsername() throws {
+        let json = """
+        {
+            "id": "post-123",
+            "user_id": "user-456",
+            "content": "Test post",
+            "created_at": 1703116800,
+            "ranking_score": 0.85,
+            "like_count": 10,
+            "comment_count": 5,
+            "share_count": 2,
+            "bookmark_count": 7,
+            "media_urls": [],
+            "media_type": null,
+            "author_username": "johndoe",
+            "author_avatar": "https://example.com/avatar.jpg"
+        }
+        """.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+        let feedPostRaw = try decoder.decode(FeedPostRaw.self, from: json)
+        let feedPost = FeedPost(from: feedPostRaw)
+
+        // FeedPost should fall back to username when displayName is nil
+        XCTAssertEqual(feedPost.authorName, "johndoe", "authorName should fall back to username")
+    }
+
+    /// Test that missing author information defaults to placeholder
     func testMissingAuthorInformation() throws {
         let json = """
         {
@@ -339,8 +401,13 @@ final class FeedServiceTests: XCTestCase {
         let feedPostRaw = try decoder.decode(FeedPostRaw.self, from: json)
         let feedPost = FeedPost(from: feedPostRaw)
 
-        XCTAssertNil(feedPost.authorUsername)
-        XCTAssertNil(feedPost.authorDisplayName)
+        // FeedPostRaw should have nil author fields
+        XCTAssertNil(feedPostRaw.authorUsername)
+        XCTAssertNil(feedPostRaw.authorDisplayName)
+        XCTAssertNil(feedPostRaw.authorAvatar)
+
+        // FeedPost should use placeholder when all author info is missing
+        XCTAssertTrue(feedPost.authorName.hasPrefix("User "), "authorName should be placeholder when missing")
         XCTAssertNil(feedPost.authorAvatar)
     }
 }

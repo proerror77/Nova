@@ -393,7 +393,22 @@ final class APIClientTests: XCTestCase {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
-        let (data, response) = try await session.data(for: request)
+        let data: Data
+        let response: URLResponse
+
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let urlError as URLError {
+            // Map URLError to APIError
+            switch urlError.code {
+            case .timedOut:
+                throw APIError.timeout
+            case .notConnectedToInternet, .networkConnectionLost:
+                throw APIError.noConnection
+            default:
+                throw APIError.networkError(urlError)
+            }
+        }
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
@@ -403,7 +418,11 @@ final class APIClientTests: XCTestCase {
         case 200...299:
             let decoder = JSONDecoder()
             decoder.keyDecodingStrategy = .convertFromSnakeCase
-            return try decoder.decode(T.self, from: data)
+            do {
+                return try decoder.decode(T.self, from: data)
+            } catch {
+                throw APIError.decodingError(error)
+            }
         case 401:
             throw APIError.unauthorized
         case 404:

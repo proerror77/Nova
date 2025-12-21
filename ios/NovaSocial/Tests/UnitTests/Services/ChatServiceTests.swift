@@ -70,16 +70,14 @@ final class ChatServiceTests: XCTestCase {
             "conversation_id": "conv-456",
             "sender_id": "user-789",
             "content": "Hello World",
-            "message_type": "text",
+            "message_type": 0,
             "created_at": 1703116800,
-            "updated_at": 1703116800,
-            "is_read": false,
+            "is_edited": false,
             "is_deleted": false
         }
         """.data(using: .utf8)!
 
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
 
         let message = try decoder.decode(Message.self, from: json)
 
@@ -87,7 +85,7 @@ final class ChatServiceTests: XCTestCase {
         XCTAssertEqual(message.conversationId, "conv-456")
         XCTAssertEqual(message.senderId, "user-789")
         XCTAssertEqual(message.content, "Hello World")
-        XCTAssertEqual(message.messageType, "text")
+        XCTAssertEqual(message.type, .text)
     }
 
     /// 測試 Message 模型處理缺失字段
@@ -98,18 +96,20 @@ final class ChatServiceTests: XCTestCase {
             "conversation_id": "conv-456",
             "sender_id": "user-789",
             "content": "Hello",
-            "message_type": "text",
+            "type": "text",
             "created_at": 1703116800
         }
         """.data(using: .utf8)!
 
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
 
         let message = try decoder.decode(Message.self, from: json)
 
         XCTAssertEqual(message.id, "msg-123")
+        XCTAssertEqual(message.type, .text)
         // 可選字段應該有默認值或為 nil
+        XCTAssertNil(message.mediaUrl)
+        XCTAssertNil(message.replyToId)
     }
 
     // MARK: - Conversation Model Tests
@@ -120,19 +120,18 @@ final class ChatServiceTests: XCTestCase {
         {
             "id": "conv-123",
             "type": "direct",
-            "participants": ["user-1", "user-2"],
+            "members": [],
             "created_at": 1703116800,
             "updated_at": 1703116800
         }
         """.data(using: .utf8)!
 
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
 
         let conversation = try decoder.decode(Conversation.self, from: json)
 
         XCTAssertEqual(conversation.id, "conv-123")
-        XCTAssertEqual(conversation.type, "direct")
+        XCTAssertEqual(conversation.type, .direct)
     }
 
     /// 測試群組對話模型
@@ -142,19 +141,18 @@ final class ChatServiceTests: XCTestCase {
             "id": "conv-456",
             "type": "group",
             "name": "Test Group",
-            "participants": ["user-1", "user-2", "user-3"],
+            "members": [],
             "created_at": 1703116800,
             "updated_at": 1703116800
         }
         """.data(using: .utf8)!
 
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
 
         let conversation = try decoder.decode(Conversation.self, from: json)
 
         XCTAssertEqual(conversation.id, "conv-456")
-        XCTAssertEqual(conversation.type, "group")
+        XCTAssertEqual(conversation.type, .group)
         XCTAssertEqual(conversation.name, "Test Group")
     }
 
@@ -362,26 +360,14 @@ final class ChatServiceTests: XCTestCase {
     // MARK: - Helper Methods
 
     /// 創建測試用消息
-    private func createTestMessage(id: String, content: String, createdAt: Int64 = 1703116800) -> Message {
+    private func createTestMessage(id: String, content: String, createdAt: TimeInterval = 1703116800) -> Message {
         return Message(
             id: id,
             conversationId: "conv-test",
             senderId: "user-test",
             content: content,
-            messageType: "text",
-            createdAt: createdAt,
-            updatedAt: createdAt,
-            isRead: false,
-            isDeleted: false,
-            replyToId: nil,
-            replyToContent: nil,
-            replyToSenderId: nil,
-            mediaUrls: nil,
-            mediaType: nil,
-            encryptionVersion: nil,
-            senderUsername: nil,
-            senderDisplayName: nil,
-            senderAvatarUrl: nil
+            type: .text,
+            createdAt: Date(timeIntervalSince1970: createdAt)
         )
     }
 }
