@@ -4,16 +4,33 @@ import SwiftUI
 struct AliceModel: Identifiable {
     let id = UUID()
     let name: String
+    let displayName: String
     let description: String
-    let isSelected: Bool
+    let isOnDevice: Bool
+
+    init(name: String, displayName: String? = nil, description: String, isOnDevice: Bool = false) {
+        self.name = name
+        self.displayName = displayName ?? name
+        self.description = description
+        self.isOnDevice = isOnDevice
+    }
 }
 
 // MARK: - Alice Chat Message Data Structure
-struct AliceChatMessage: Identifiable {
+@Observable
+final class AliceChatMessage: Identifiable {
     let id = UUID()
-    let content: String
+    var content: String
     let isUser: Bool
-    let timestamp: Date = Date()
+    let timestamp: Date
+    var isStreaming: Bool
+
+    init(content: String, isUser: Bool, isStreaming: Bool = false) {
+        self.content = content
+        self.isUser = isUser
+        self.timestamp = Date()
+        self.isStreaming = isStreaming
+    }
 }
 
 struct AliceView: View {
@@ -39,14 +56,37 @@ struct AliceView: View {
 
     // MARK: - AI Service
     private let aliceService = AliceService.shared
+    private let aiRouter = AIRouter.shared
 
     // MARK: - Model Data
-    private let aliceModels: [AliceModel] = [
-        AliceModel(name: "gpt-4o-all", description: "Most capable model", isSelected: true),
-        AliceModel(name: "gpt-4o", description: "GPT-4 optimized", isSelected: false),
-        AliceModel(name: "gpt-4", description: "GPT-4 standard", isSelected: false),
-        AliceModel(name: "gpt-3.5-turbo", description: "Fast and efficient", isSelected: false)
-    ]
+    private var aliceModels: [AliceModel] {
+        var models: [AliceModel] = []
+
+        // 本地模型（如果可用）
+        if aiRouter.isOnDeviceAvailable {
+            models.append(AliceModel(
+                name: "on-device",
+                displayName: "On-Device AI",
+                description: "隱私優先・離線可用",
+                isOnDevice: true
+            ))
+        }
+
+        // 遠端模型
+        models.append(contentsOf: [
+            AliceModel(name: "gpt-4o-all", description: "Most capable model"),
+            AliceModel(name: "gpt-4o", description: "GPT-4 optimized"),
+            AliceModel(name: "gpt-4", description: "GPT-4 standard"),
+            AliceModel(name: "gpt-3.5-turbo", description: "Fast and efficient")
+        ])
+
+        return models
+    }
+
+    /// 是否使用本地模型
+    private var isUsingOnDevice: Bool {
+        selectedModel == "on-device"
+    }
 
     var body: some View {
         ZStack {
@@ -93,20 +133,47 @@ struct AliceView: View {
 
             VStack(spacing: 0) {
                 // MARK: - 顶部导航栏
-                HStack(spacing: 5) {
-                    Text(selectedModel)
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(DesignTokens.textPrimary)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(DesignTokens.textPrimary)
+                HStack {
+                    // 清除對話按鈕
+                    Button(action: clearChat) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 18))
+                            .foregroundColor(messages.isEmpty ? DesignTokens.textSecondary : DesignTokens.textPrimary)
+                    }
+                    .disabled(messages.isEmpty)
+                    .padding(.leading, 16)
+
+                    Spacer()
+
+                    // 模型選擇器
+                    HStack(spacing: 5) {
+                        // 本地模型顯示特殊圖標
+                        if isUsingOnDevice {
+                            Image(systemName: "cpu")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.green)
+                        }
+
+                        Text(aliceModels.first { $0.name == selectedModel }?.displayName ?? selectedModel)
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(DesignTokens.textPrimary)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(DesignTokens.textPrimary)
+                    }
+                    .onTapGesture {
+                        showModelSelector.toggle()
+                    }
+
+                    Spacer()
+
+                    // 佔位符保持對稱
+                    Color.clear
+                        .frame(width: 34, height: 18)
+                        .padding(.trailing, 16)
                 }
-                .frame(maxWidth: .infinity)
                 .frame(height: 56)
                 .background(DesignTokens.surface)
-                .onTapGesture {
-                    showModelSelector.toggle()
-                }
 
                 Divider()
 
@@ -305,10 +372,53 @@ struct AliceView: View {
         // 清除之前的错误
         errorMessage = nil
 
-        // 显示等待状态
+        // 根據模型選擇使用不同的處理方式
+        if isUsingOnDevice {
+            sendMessageWithStreaming(trimmedText)
+        } else {
+            sendMessageToRemote(trimmedText)
+        }
+    }
+
+    // MARK: - Streaming Message (On-Device)
+    private func sendMessageWithStreaming(_ text: String) {
+        // 創建空的 AI 回應訊息（用於流式更新）
+        let aiMessage = AliceChatMessage(content: "", isUser: false, isStreaming: true)
+        messages.append(aiMessage)
+
+        Task {
+            do {
+                let stream = aiRouter.streamChat(text)
+
+                for try await chunk in stream {
+                    await MainActor.run {
+                        aiMessage.content += chunk
+                    }
+                }
+
+                await MainActor.run {
+                    aiMessage.isStreaming = false
+                }
+            } catch {
+                await MainActor.run {
+                    aiMessage.isStreaming = false
+                    if aiMessage.content.isEmpty {
+                        aiMessage.content = "抱歉，發生錯誤：\(error.localizedDescription)"
+                    }
+                    errorMessage = error.localizedDescription
+
+                    #if DEBUG
+                    print("[AliceView] Streaming error: \(error)")
+                    #endif
+                }
+            }
+        }
+    }
+
+    // MARK: - Remote Message (Cloud API)
+    private func sendMessageToRemote(_ text: String) {
         isWaitingForResponse = true
 
-        // 调用真实的 AI API
         Task {
             do {
                 // 构建对话历史
@@ -350,6 +460,12 @@ struct AliceView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Clear Chat
+    private func clearChat() {
+        messages.removeAll()
+        aiRouter.resetChatSession()
     }
 
     // MARK: - 模型选择器弹窗
@@ -401,7 +517,7 @@ struct AliceView: View {
 
 // MARK: - Alice Chat Message View Component
 struct AliceChatMessageView: View {
-    let message: AliceChatMessage
+    @Bindable var message: AliceChatMessage
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -423,10 +539,33 @@ struct AliceChatMessageView: View {
             } else {
                 // AI响应消息
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(message.content)
-                        .font(.system(size: 14))
-                        .foregroundColor(DesignTokens.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if message.content.isEmpty && message.isStreaming {
+                        // 流式載入中
+                        HStack(spacing: 4) {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("思考中...")
+                                .font(.system(size: 12))
+                                .foregroundColor(DesignTokens.textSecondary)
+                        }
+                    } else {
+                        Text(message.content)
+                            .font(.system(size: 14))
+                            .foregroundColor(DesignTokens.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        // 流式指示器
+                        if message.isStreaming {
+                            HStack(spacing: 2) {
+                                ForEach(0..<3, id: \.self) { index in
+                                    Circle()
+                                        .fill(DesignTokens.accentColor)
+                                        .frame(width: 4, height: 4)
+                                        .opacity(0.6)
+                                }
+                            }
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Spacer()
@@ -444,8 +583,15 @@ struct ModelRowView: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 12) {
+                // 本地模型圖標
+                if model.isOnDevice {
+                    Image(systemName: "cpu")
+                        .font(.system(size: 16))
+                        .foregroundColor(.green)
+                }
+
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(model.name)
+                    Text(model.displayName)
                         .font(.system(size: 16))
                         .foregroundColor(DesignTokens.textPrimary)
 
