@@ -1,30 +1,14 @@
 # Nova Services - Unified Dockerfile Template
-# Version: 2.0
-# Last Updated: 2025-11-12
-# Optimizations: cargo-chef caching, LTO, minimal runtime image
+# Version: 2.1
+# Last Updated: 2025-12-21
+# Optimizations: LTO, minimal runtime image
 # Final image size target: <200MB
 #
 # This template builds all 15 Rust microservices with the same multi-stage build process
 # Usage: docker build --build-arg SERVICE_NAME=identity-service -f Dockerfile.template -t nova-identity-service:latest .
 
 # =============================================================================
-# Stage 1: Planner - Generate dependency manifest for caching
-# =============================================================================
-FROM rust:1.83-slim AS planner
-
-# Install cargo-chef for dependency caching
-RUN cargo install cargo-chef
-
-WORKDIR /app
-
-# Copy entire workspace to plan dependencies
-COPY . .
-
-# Generate recipe.json for dependency layer caching
-RUN cargo chef prepare --recipe-path recipe.json
-
-# =============================================================================
-# Stage 2: Builder - Compile service with optimizations
+# Stage 1: Builder - Compile service with optimizations
 # =============================================================================
 FROM rust:1.83-slim AS builder
 
@@ -44,17 +28,7 @@ RUN apt-get update && apt-get install -y \
     libsasl2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install cargo-chef
-RUN cargo install cargo-chef
-
 WORKDIR /app
-
-# Copy dependency manifest from planner
-COPY --from=planner /app/recipe.json recipe.json
-
-# Build dependencies (cached layer if Cargo.lock unchanged)
-# This is the slowest step but benefits most from caching
-RUN cargo chef cook --release --recipe-path recipe.json
 
 # Copy workspace source code
 COPY . .
@@ -73,7 +47,7 @@ RUN strip /app/target/release/${SERVICE_NAME} 2>/dev/null || true
 RUN ls -lh /app/target/release/${SERVICE_NAME}
 
 # =============================================================================
-# Stage 3: Runtime - Minimal Debian-based final image
+# Stage 2: Runtime - Minimal Debian-based final image
 # =============================================================================
 FROM debian:bookworm-slim AS runtime
 
