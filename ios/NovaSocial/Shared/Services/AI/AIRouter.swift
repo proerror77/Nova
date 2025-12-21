@@ -332,6 +332,62 @@ final class AIRouter {
 
 extension AIRouter {
 
+    // MARK: - Chat Methods
+
+    /// Chat with automatic routing (uses on-device with history when available)
+    /// - Parameter message: User's message
+    /// - Returns: AI response text
+    func chat(_ message: String) async throws -> String {
+        // Prefer on-device chat if available (maintains conversation history)
+        if #available(iOS 26.0, *), isOnDeviceAvailable && isOnDeviceReady {
+            return try await FoundationModelsService.shared.chat(message: message)
+        }
+
+        // Fallback to remote
+        guard isOnline else {
+            throw AIServiceError.networkUnavailable
+        }
+
+        let response = try await AliceService.shared.sendMessage(message)
+        return response.message
+    }
+
+    /// Stream chat response with automatic routing
+    /// - Parameter message: User's message
+    /// - Returns: Async stream of response chunks
+    func streamChat(_ message: String) -> AsyncThrowingStream<String, Error> {
+        // Prefer on-device streaming if available
+        if #available(iOS 26.0, *), isOnDeviceAvailable && isOnDeviceReady {
+            return FoundationModelsService.shared.streamChat(message: message)
+        }
+
+        // Fallback: single response as stream
+        return AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    guard self.isOnline else {
+                        continuation.finish(throwing: AIServiceError.networkUnavailable)
+                        return
+                    }
+                    let response = try await AliceService.shared.sendMessage(message)
+                    continuation.yield(response.message)
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// Reset the on-device chat session (clears conversation history)
+    func resetChatSession() {
+        if #available(iOS 26.0, *) {
+            FoundationModelsService.shared.resetChatSession()
+        }
+    }
+
+    // MARK: - Sentiment Analysis
+
     /// Quick sentiment analysis with automatic routing
     func analyzeSentiment(_ text: String) async throws -> SentimentResult {
         if #available(iOS 26.0, *), isOnDeviceAvailable && isOnDeviceReady {

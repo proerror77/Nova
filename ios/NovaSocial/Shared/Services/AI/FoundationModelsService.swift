@@ -21,11 +21,40 @@ final class FoundationModelsService {
 
     #if canImport(FoundationModels)
     private var session: LanguageModelSession?
+    private var chatSession: LanguageModelSession?  // Separate session for chat with history
     #endif
 
     private(set) var isAvailable: Bool = false
     private(set) var isReady: Bool = false
     private(set) var isProcessing: Bool = false
+
+    // MARK: - Configuration
+
+    /// Alice system instructions for chat context
+    private let aliceInstructions = """
+    You are Alice, the AI assistant for ICERED social app.
+
+    Personality:
+    - Friendly, helpful, and concise
+    - Respond in the user's language (detect from input)
+    - Use casual but professional tone
+    - Add relevant emoji sparingly when appropriate
+
+    Capabilities:
+    - Help users with the ICERED app features
+    - Answer general questions
+    - Provide creative suggestions for posts
+    - Assist with content ideas
+
+    Guidelines:
+    - Keep responses brief (under 150 words unless detail is needed)
+    - Be honest if you don't know something
+    - Never generate harmful or inappropriate content
+    """
+
+    /// Retry configuration
+    private let maxRetries = 3
+    private let retryDelay: TimeInterval = 0.5
 
     // MARK: - Initialization
 
@@ -44,7 +73,7 @@ final class FoundationModelsService {
         switch systemModel.availability {
         case .available:
             isAvailable = true
-            await initializeSession()
+            await initializeSessions()
         case .unavailable(let reason):
             isAvailable = false
             #if DEBUG
@@ -62,26 +91,104 @@ final class FoundationModelsService {
     }
 
     #if canImport(FoundationModels)
-    /// Initialize the language model session
-    private func initializeSession() async {
-        do {
-            session = LanguageModelSession()
-            isReady = true
-            #if DEBUG
-            print("[FoundationModelsService] Session initialized successfully")
-            #endif
-        } catch {
-            isReady = false
-            #if DEBUG
-            print("[FoundationModelsService] Failed to initialize session: \(error)")
-            #endif
-        }
+    /// Initialize the language model sessions
+    private func initializeSessions() async {
+        // Basic session for simple tasks (no instructions)
+        session = LanguageModelSession()
+
+        // Chat session with Alice instructions for conversational context
+        let instructions = Instructions(aliceInstructions)
+        chatSession = LanguageModelSession(instructions: instructions)
+
+        isReady = true
+        #if DEBUG
+        print("[FoundationModelsService] Sessions initialized successfully")
+        #endif
     }
     #endif
 
-    // MARK: - Text Generation
+    // MARK: - Chat (with context)
 
-    /// Generate text from a prompt
+    /// Send a chat message with conversation history maintained
+    /// - Parameter message: User's message
+    /// - Returns: AI response
+    func chat(message: String) async throws -> String {
+        guard isAvailable && isReady else {
+            throw AIServiceError.foundationModelsUnavailable
+        }
+
+        #if canImport(FoundationModels)
+        guard let chatSession = chatSession else {
+            throw AIServiceError.modelNotReady
+        }
+
+        isProcessing = true
+        defer { isProcessing = false }
+
+        return try await withRetry(maxAttempts: maxRetries) {
+            let response = try await chatSession.respond(to: message)
+            return response.content
+        }
+        #else
+        throw AIServiceError.foundationModelsUnavailable
+        #endif
+    }
+
+    /// Stream a chat response with conversation history
+    /// - Parameter message: User's message
+    /// - Returns: Async stream of response chunks
+    func streamChat(message: String) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            Task {
+                guard isAvailable && isReady else {
+                    continuation.finish(throwing: AIServiceError.foundationModelsUnavailable)
+                    return
+                }
+
+                #if canImport(FoundationModels)
+                guard let chatSession = chatSession else {
+                    continuation.finish(throwing: AIServiceError.modelNotReady)
+                    return
+                }
+
+                await MainActor.run { self.isProcessing = true }
+                defer {
+                    Task { @MainActor in self.isProcessing = false }
+                }
+
+                do {
+                    // Correct Foundation Models streaming API
+                    for try await partial in chatSession.streamResponse(to: message) {
+                        continuation.yield(partial.content)
+                    }
+                    continuation.finish()
+                } catch {
+                    #if DEBUG
+                    print("[FoundationModelsService] Stream chat failed: \(error)")
+                    #endif
+                    continuation.finish(throwing: error)
+                }
+                #else
+                continuation.finish(throwing: AIServiceError.foundationModelsUnavailable)
+                #endif
+            }
+        }
+    }
+
+    /// Reset chat session (clears conversation history)
+    func resetChatSession() {
+        #if canImport(FoundationModels)
+        let instructions = Instructions(aliceInstructions)
+        chatSession = LanguageModelSession(instructions: instructions)
+        #if DEBUG
+        print("[FoundationModelsService] Chat session reset")
+        #endif
+        #endif
+    }
+
+    // MARK: - Text Generation (stateless)
+
+    /// Generate text from a prompt (no conversation history)
     /// - Parameter prompt: The input prompt
     /// - Returns: Generated text response
     func generateText(prompt: String) async throws -> String {
@@ -97,14 +204,9 @@ final class FoundationModelsService {
         isProcessing = true
         defer { isProcessing = false }
 
-        do {
+        return try await withRetry(maxAttempts: maxRetries) {
             let response = try await session.respond(to: prompt)
             return response.content
-        } catch {
-            #if DEBUG
-            print("[FoundationModelsService] Generation failed: \(error)")
-            #endif
-            throw AIServiceError.generationFailed(error.localizedDescription)
         }
         #else
         throw AIServiceError.foundationModelsUnavailable
@@ -129,17 +231,12 @@ final class FoundationModelsService {
         isProcessing = true
         defer { isProcessing = false }
 
-        do {
+        return try await withRetry(maxAttempts: maxRetries) {
             let response = try await session.respond(
                 to: "Analyze the sentiment of this text: \"\(text)\"",
                 generating: SentimentResult.self
             )
             return response.content
-        } catch {
-            #if DEBUG
-            print("[FoundationModelsService] Sentiment analysis failed: \(error)")
-            #endif
-            throw AIServiceError.generationFailed(error.localizedDescription)
         }
         #else
         throw AIServiceError.foundationModelsUnavailable
@@ -166,18 +263,13 @@ final class FoundationModelsService {
         isProcessing = true
         defer { isProcessing = false }
 
-        do {
+        return try await withRetry(maxAttempts: maxRetries) {
             let prompt = "Summarize the following text in no more than \(maxLength) words. Extract key points: \"\(text)\""
             let response = try await session.respond(
                 to: prompt,
                 generating: SummaryResult.self
             )
             return response.content
-        } catch {
-            #if DEBUG
-            print("[FoundationModelsService] Summarization failed: \(error)")
-            #endif
-            throw AIServiceError.generationFailed(error.localizedDescription)
         }
         #else
         throw AIServiceError.foundationModelsUnavailable
@@ -202,7 +294,7 @@ final class FoundationModelsService {
         isProcessing = true
         defer { isProcessing = false }
 
-        do {
+        return try await withRetry(maxAttempts: maxRetries) {
             let prompt = """
             Analyze this social media post and extract:
             1. Main topics discussed
@@ -217,20 +309,15 @@ final class FoundationModelsService {
                 generating: LocalPostAnalysis.self
             )
             return response.content
-        } catch {
-            #if DEBUG
-            print("[FoundationModelsService] Post analysis failed: \(error)")
-            #endif
-            throw AIServiceError.generationFailed(error.localizedDescription)
         }
         #else
         throw AIServiceError.foundationModelsUnavailable
         #endif
     }
 
-    // MARK: - Streaming Response
+    // MARK: - Streaming Response (stateless)
 
-    /// Stream a response for longer generation tasks
+    /// Stream a response for longer generation tasks (no conversation history)
     /// - Parameter prompt: Input prompt
     /// - Returns: Async stream of response chunks
     func streamResponse(prompt: String) -> AsyncThrowingStream<String, Error> {
@@ -247,20 +334,21 @@ final class FoundationModelsService {
                     return
                 }
 
-                isProcessing = true
+                await MainActor.run { self.isProcessing = true }
                 defer {
-                    Task { @MainActor in
-                        self.isProcessing = false
-                    }
+                    Task { @MainActor in self.isProcessing = false }
                 }
 
                 do {
-                    let stream = session.streamResponse(to: prompt)
-                    for try await chunk in stream {
-                        continuation.yield(chunk.content)
+                    // Correct Foundation Models streaming API
+                    for try await partial in session.streamResponse(to: prompt) {
+                        continuation.yield(partial.content)
                     }
                     continuation.finish()
                 } catch {
+                    #if DEBUG
+                    print("[FoundationModelsService] Stream failed: \(error)")
+                    #endif
                     continuation.finish(throwing: error)
                 }
                 #else
@@ -288,11 +376,9 @@ final class FoundationModelsService {
         isProcessing = true
         defer { isProcessing = false }
 
-        do {
+        return try await withRetry(maxAttempts: maxRetries) {
             let response = try await session.respond(to: question)
             return response.content
-        } catch {
-            throw AIServiceError.generationFailed(error.localizedDescription)
         }
         #else
         throw AIServiceError.foundationModelsUnavailable
@@ -317,18 +403,48 @@ final class FoundationModelsService {
         isProcessing = true
         defer { isProcessing = false }
 
-        do {
+        return try await withRetry(maxAttempts: maxRetries) {
             let response = try await session.respond(
                 to: "Extract the main keywords from this text: \"\(text)\"",
                 generating: KeywordExtractionResult.self
             )
             return response.content.keywords
-        } catch {
-            throw AIServiceError.generationFailed(error.localizedDescription)
         }
         #else
         throw AIServiceError.foundationModelsUnavailable
         #endif
+    }
+
+    // MARK: - Retry Helper
+
+    /// Execute an async operation with retry logic
+    private func withRetry<T>(
+        maxAttempts: Int,
+        operation: () async throws -> T
+    ) async throws -> T {
+        var lastError: Error?
+
+        for attempt in 1...maxAttempts {
+            do {
+                return try await operation()
+            } catch {
+                lastError = error
+                #if DEBUG
+                print("[FoundationModelsService] Attempt \(attempt) failed: \(error)")
+                #endif
+
+                // Don't retry on certain errors
+                if case AIServiceError.foundationModelsUnavailable = error { throw error }
+                if case AIServiceError.modelNotReady = error { throw error }
+
+                // Wait before retrying
+                if attempt < maxAttempts {
+                    try await Task.sleep(for: .seconds(retryDelay * Double(attempt)))
+                }
+            }
+        }
+
+        throw lastError ?? AIServiceError.generationFailed("Unknown error after \(maxAttempts) attempts")
     }
 }
 
@@ -346,11 +462,19 @@ final class FoundationModelsFallback {
         throw AIServiceError.foundationModelsUnavailable
     }
 
+    func chat(message: String) async throws -> String {
+        throw AIServiceError.foundationModelsUnavailable
+    }
+
     func analyzeSentiment(text: String) async throws -> SentimentResult {
         throw AIServiceError.foundationModelsUnavailable
     }
 
     func summarize(text: String, maxLength: Int) async throws -> SummaryResult {
         throw AIServiceError.foundationModelsUnavailable
+    }
+
+    func resetChatSession() {
+        // No-op for fallback
     }
 }
