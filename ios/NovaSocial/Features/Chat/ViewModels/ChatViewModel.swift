@@ -176,16 +176,29 @@ class ChatViewModel: ObservableObject {
 
                 // 跳過自己發送的訊息（避免與 optimistic update 重複）
                 // 自己發的訊息已經通過 sendMessage() 的 optimistic update 添加
-                if let myMatrixId = MatrixBridgeService.shared.matrixUserId,
-                   matrixMessage.senderId == myMatrixId {
+                let myMatrixId = MatrixBridgeService.shared.matrixUserId
+                #if DEBUG
+                print("[ChatViewModel] Matrix message received - senderId: \(matrixMessage.senderId), myMatrixId: \(myMatrixId ?? "nil"), messageId: \(matrixMessage.id)")
+                #endif
+
+                if let myId = myMatrixId, matrixMessage.senderId == myId {
                     #if DEBUG
-                    print("[ChatViewModel] Skipping own message from Matrix sync: \(matrixMessage.id)")
+                    print("[ChatViewModel] ✅ Skipping own message from Matrix sync: \(matrixMessage.id)")
                     #endif
                     return
                 }
 
                 // 避免重複（來自其他用戶的訊息）
-                guard !self.messages.contains(where: { $0.id == matrixMessage.id }) else { return }
+                let existingIds = self.messages.map { $0.id }
+                #if DEBUG
+                print("[ChatViewModel] Existing message IDs: \(existingIds.suffix(5))")
+                #endif
+                guard !self.messages.contains(where: { $0.id == matrixMessage.id }) else {
+                    #if DEBUG
+                    print("[ChatViewModel] ✅ Skipping duplicate message (already exists): \(matrixMessage.id)")
+                    #endif
+                    return
+                }
 
                 // 轉換 Matrix 訊息為 Nova 訊息格式
                 let novaMessage = MatrixBridgeService.shared.convertToNovaMessage(
