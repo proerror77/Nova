@@ -40,6 +40,24 @@ spec:
                 name: apple-well-known
                 port:
                   number: 80
+    # AASA subdomain (proxied via Cloudflare for production passkey support)
+    - host: aasa.icered.com
+      http:
+        paths:
+          - path: /.well-known/apple-app-site-association
+            pathType: Exact
+            backend:
+              service:
+                name: apple-well-known
+                port:
+                  number: 80
+          - path: /apple-app-site-association
+            pathType: Exact
+            backend:
+              service:
+                name: apple-well-known
+                port:
+                  number: 80
 ---
 # GKE Managed Certificate for Synapse
 apiVersion: networking.gke.io/v1

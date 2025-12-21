@@ -14,7 +14,8 @@ main = "src/index.js"
 compatibility_date = "2024-01-01"
 account_id = "eebfbe9f7f871ef35ac1bcb563f6980f"
 
-# Production route
+# Production route (requires account-level worker permissions in Tim Lam account)
+# Currently served via GKE ingress + Cloudflare DNS CNAME
 routes = [
   { pattern = "aasa.icered.com/*", zone_name = "icered.com" }
 ]
