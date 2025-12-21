@@ -116,6 +116,8 @@ where
             "/api/v2/polls/active",
             // OAuth authentication (Google, Apple - public endpoints for initiating OAuth flow)
             "/api/v2/auth/oauth",
+            // Passkey (WebAuthn) authentication - public endpoints for passwordless login
+            "/api/v2/auth/passkey/authenticate",
         ];
 
         if public_prefixes.iter().any(|p| path.starts_with(p)) {
