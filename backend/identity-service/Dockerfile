@@ -21,7 +21,7 @@ COPY . .
 RUN cargo build --release -p identity-service --bin identity-service
 
 # Runtime stage
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
