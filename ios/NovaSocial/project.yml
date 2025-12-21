@@ -44,8 +44,6 @@ targets:
           - "fastlane"
           - "Gemfile"
           - "Gemfile.lock"
-          - "Assets.xcassets"
-          - "en.lproj"
           - "build_test"
           - "Docs"
           - "Features/Profile/Components（Profile）/ProfileData.swift"
@@ -57,9 +55,6 @@ targets:
           - "Features/Auth/Views/PhoneLoginView.swift"
           - "Features/Auth/Views/ForgotPasswordView.swift"
           - "Features/Auth/Views/EmailSentConfirmationView.swift"
-    resources:
-      - path: Assets.xcassets
-      - path: en.lproj
     dependencies:
       # AgoraRtcEngine disabled for simulator - enable for real device builds
       # - package: AgoraRtcEngine

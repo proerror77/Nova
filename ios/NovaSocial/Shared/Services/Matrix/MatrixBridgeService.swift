@@ -28,10 +28,9 @@ final class MatrixBridgeService {
     private let apiClient = APIClient.shared
 
     /// Feature flag to use SSO login instead of legacy token endpoint
-    /// Set to false to use automatic token-based login (no SSO dialog)
-    /// When true, shows ASWebAuthenticationSession dialog for Matrix SSO
-    /// User expectation: After Nova login (email/phone/Google/Apple), Matrix should auto-authorize
-    private let useSSOLogin = false  // Use automatic token-based login for seamless experience
+    /// When false, uses the Nova access token to exchange for a Matrix token via backend
+    /// When true, uses ASWebAuthenticationSession for SSO (requires user interaction)
+    private let useSSOLogin = false
 
     // MARK: - State
 
@@ -84,13 +83,18 @@ final class MatrixBridgeService {
     func initialize(requireLogin: Bool = true, retryOnMismatch: Bool = true) async throws {
         guard !isInitialized else {
             #if DEBUG
-            print("[MatrixBridge] Already initialized")
+            print("[MatrixBridge] ✅ Already initialized, skipping")
             #endif
             return
         }
 
         #if DEBUG
-        print("[MatrixBridge] Initializing bridge (requireLogin: \(requireLogin))...")
+        print("[MatrixBridge] ═══════════════════════════════════════════")
+        print("[MatrixBridge] 🚀 Initializing Matrix Bridge...")
+        print("[MatrixBridge]   requireLogin: \(requireLogin)")
+        print("[MatrixBridge]   retryOnMismatch: \(retryOnMismatch)")
+        print("[MatrixBridge]   useSSOLogin: \(useSSOLogin)")
+        print("[MatrixBridge]   homeserver: \(MatrixConfiguration.homeserverURL)")
         #endif
 
         do {
@@ -105,30 +109,51 @@ final class MatrixBridgeService {
             #endif
 
             // Initialize Matrix client
+            #if DEBUG
+            print("[MatrixBridge] 📱 Initializing Matrix client...")
+            #endif
             try await matrixService.initialize(
                 homeserverURL: MatrixConfiguration.homeserverURL,
                 sessionPath: MatrixConfiguration.sessionPath
             )
+            #if DEBUG
+            print("[MatrixBridge] ✅ Matrix client initialized")
+            #endif
 
             // Try to restore existing session first
+            #if DEBUG
+            print("[MatrixBridge] 🔄 Attempting to restore existing session...")
+            #endif
             let sessionRestored = try await matrixService.restoreSession()
+            #if DEBUG
+            print("[MatrixBridge]   Session restored: \(sessionRestored)")
+            #endif
 
             if !sessionRestored {
                 // Only trigger login if explicitly required (e.g., user navigated to chat)
                 // This prevents SSO dialog from appearing on app startup
                 if requireLogin {
+                    #if DEBUG
+                    print("[MatrixBridge] 🔑 No session found, need to login...")
+                    print("[MatrixBridge]   Using SSO: \(useSSOLogin)")
+                    #endif
                     // Choose login method based on feature flag
                     if useSSOLogin {
                         // Use new SSO login flow
                         try await loginWithSSO()
                     } else {
                         // Legacy: Get Matrix access token from Nova backend
-                        // DEPRECATED: This endpoint returns a service account token
+                        // ⚠️ DEPRECATED: /api/v2/matrix/token returns a SERVICE ACCOUNT token,
+                        // not a user-specific token. This causes Matrix session failures!
+                        // Always use SSO login (useSSOLogin = true) for proper authentication.
+                        #if DEBUG
+                        print("[MatrixBridge] ⚠️ Using legacy token endpoint (DEPRECATED - will likely fail!)...")
+                        #endif
                         try await loginWithLegacyToken()
                     }
                 } else {
                     #if DEBUG
-                    print("[MatrixBridge] Session not restored, but login not required - skipping SSO")
+                    print("[MatrixBridge] ⚠️ Session not restored, but login not required - skipping")
                     #endif
                     // Don't throw error, just don't mark as initialized
                     // User will be prompted to login when they actually use chat
@@ -137,7 +162,13 @@ final class MatrixBridgeService {
             }
 
             // Start sync to receive messages
+            #if DEBUG
+            print("[MatrixBridge] 🔄 Starting sync...")
+            #endif
             try await matrixService.startSync()
+            #if DEBUG
+            print("[MatrixBridge] ✅ Sync started")
+            #endif
 
             // Load existing conversation mappings
             try await loadConversationMappings()
@@ -146,7 +177,9 @@ final class MatrixBridgeService {
             initializationError = nil
 
             #if DEBUG
-            print("[MatrixBridge] Bridge initialized successfully")
+            print("[MatrixBridge] ═══════════════════════════════════════════")
+            print("[MatrixBridge] ✅ Bridge initialized successfully!")
+            print("[MatrixBridge] ═══════════════════════════════════════════")
             #endif
         } catch {
             // Check if this is a MismatchedAccount error (device ID mismatch)
@@ -179,7 +212,21 @@ final class MatrixBridgeService {
 
             initializationError = error
             #if DEBUG
-            print("[MatrixBridge] Initialization failed: \(error)")
+            print("[MatrixBridge] ═══════════════════════════════════════════")
+            print("[MatrixBridge] ❌ INITIALIZATION FAILED!")
+            print("[MatrixBridge]   Error: \(error)")
+            print("[MatrixBridge]   Error type: \(type(of: error))")
+            print("[MatrixBridge]   Localized: \(error.localizedDescription)")
+            if let matrixError = error as? MatrixError {
+                print("[MatrixBridge]   MatrixError: \(matrixError)")
+            }
+            if let bridgeError = error as? MatrixBridgeError {
+                print("[MatrixBridge]   BridgeError: \(bridgeError)")
+            }
+            if let apiError = error as? APIError {
+                print("[MatrixBridge]   APIError: \(apiError)")
+            }
+            print("[MatrixBridge] ═══════════════════════════════════════════")
             #endif
             throw error
         }
@@ -189,13 +236,16 @@ final class MatrixBridgeService {
     /// This is the preferred method - user authenticates via Zitadel
     private func loginWithSSO() async throws {
         #if DEBUG
-        print("[MatrixBridge] Starting SSO login flow...")
+        print("[MatrixBridge] 🔐 Starting SSO login flow...")
         #endif
 
         // Check if we have stored SSO credentials
         if let storedCredentials = matrixSSOManager.loadStoredCredentials() {
             #if DEBUG
-            print("[MatrixBridge] Found stored SSO credentials, attempting restore...")
+            print("[MatrixBridge] ✅ Found stored SSO credentials:")
+            print("[MatrixBridge]   - userId: \(storedCredentials.userId)")
+            print("[MatrixBridge]   - accessToken length: \(storedCredentials.accessToken.count)")
+            print("[MatrixBridge]   Attempting restore...")
             #endif
 
             // Try to use stored credentials
@@ -204,49 +254,109 @@ final class MatrixBridgeService {
                     novaUserId: storedCredentials.userId,
                     accessToken: storedCredentials.accessToken
                 )
+                #if DEBUG
+                print("[MatrixBridge] ✅ SSO credentials restore successful")
+                #endif
                 return
             } catch {
                 #if DEBUG
-                print("[MatrixBridge] Stored credentials invalid, initiating new SSO login: \(error)")
+                print("[MatrixBridge] ❌ Stored credentials invalid: \(error)")
+                print("[MatrixBridge]   Clearing credentials and initiating new SSO login...")
                 #endif
                 matrixSSOManager.clearCredentials()
             }
+        } else {
+            #if DEBUG
+            print("[MatrixBridge] ⚠️ No stored SSO credentials found")
+            print("[MatrixBridge]   Will initiate new SSO login flow...")
+            #endif
         }
 
         // Perform SSO login
-        let result = try await matrixSSOManager.startSSOLogin()
-
-        // Login to Matrix service with obtained credentials
-        try await matrixService.login(
-            novaUserId: result.userId,
-            accessToken: result.accessToken
-        )
-
         #if DEBUG
-        print("[MatrixBridge] SSO login completed successfully")
-        print("[MatrixBridge] Matrix user ID: \(result.userId)")
+        print("[MatrixBridge] 🌐 Starting SSO web authentication...")
         #endif
+
+        do {
+            let result = try await matrixSSOManager.startSSOLogin()
+
+            #if DEBUG
+            print("[MatrixBridge] ✅ SSO authentication successful:")
+            print("[MatrixBridge]   - userId: \(result.userId)")
+            print("[MatrixBridge]   - accessToken length: \(result.accessToken.count)")
+            #endif
+
+            // Login to Matrix service with obtained credentials
+            try await matrixService.login(
+                novaUserId: result.userId,
+                accessToken: result.accessToken
+            )
+
+            #if DEBUG
+            print("[MatrixBridge] ✅ SSO login completed successfully")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[MatrixBridge] ❌ SSO login failed: \(error)")
+            print("[MatrixBridge]   Error type: \(type(of: error))")
+            #endif
+            throw error
+        }
     }
 
     /// Login to Matrix using legacy token endpoint
-    /// DEPRECATED: This returns a service account token, not a user-specific token
-    @available(*, deprecated, message: "Use loginWithSSO() instead. Legacy token endpoint returns service account token.")
+    /// Gets fresh credentials from Nova backend for each login attempt
     private func loginWithLegacyToken() async throws {
         guard let currentUser = AuthenticationManager.shared.currentUser else {
+            #if DEBUG
+            print("[MatrixBridge] ❌ loginWithLegacyToken failed: No current user")
+            #endif
             throw MatrixBridgeError.notAuthenticated
         }
 
         #if DEBUG
-        print("[MatrixBridge] Using legacy token endpoint (DEPRECATED)")
+        print("[MatrixBridge] 🔐 loginWithLegacyToken starting...")
+        print("[MatrixBridge]   Nova User ID: \(currentUser.id)")
+        print("[MatrixBridge]   Getting Matrix credentials from Nova backend...")
         #endif
 
-        // Get Matrix access token from Nova backend
-        let matrixToken = try await getMatrixAccessToken(novaUserId: currentUser.id)
+        // Get Matrix credentials from Nova backend
+        let credentials: MatrixCredentials
+        do {
+            credentials = try await getMatrixCredentials(novaUserId: currentUser.id)
+        } catch {
+            #if DEBUG
+            print("[MatrixBridge] ❌ Failed to get Matrix credentials: \(error)")
+            if let apiError = error as? APIError {
+                print("[MatrixBridge]   API Error: \(apiError)")
+            }
+            #endif
+            throw error
+        }
 
-        try await matrixService.login(
-            novaUserId: currentUser.id,
-            accessToken: matrixToken
-        )
+        #if DEBUG
+        print("[MatrixBridge] ✅ Got Matrix credentials:")
+        print("[MatrixBridge]   - Matrix User ID: \(credentials.matrixUserId)")
+        print("[MatrixBridge]   - Device ID: \(credentials.deviceId)")
+        print("[MatrixBridge]   - Access Token length: \(credentials.accessToken.count) chars")
+        print("[MatrixBridge]   - Homeserver: \(credentials.homeserverUrl ?? "default (using \(MatrixConfiguration.homeserverURL))")")
+        #endif
+
+        do {
+            try await matrixService.login(
+                novaUserId: credentials.matrixUserId,
+                accessToken: credentials.accessToken,
+                deviceId: credentials.deviceId
+            )
+            #if DEBUG
+            print("[MatrixBridge] ✅ matrixService.login() succeeded")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[MatrixBridge] ❌ matrixService.login() failed: \(error)")
+            #endif
+            throw error
+        }
     }
 
     /// Shutdown the Matrix bridge
@@ -305,7 +415,13 @@ final class MatrixBridgeService {
 
         // Also clear SSO credentials to force re-login
         matrixSSOManager.clearCredentials()
+
+        // Reset initialization state so next call to initialize() will re-authenticate
         isInitialized = false
+
+        #if DEBUG
+        print("[MatrixBridge] Session data cleared, isInitialized reset to false")
+        #endif
     }
 
     /// Check if error is a MismatchedAccount error
@@ -578,7 +694,7 @@ final class MatrixBridgeService {
             name: isDirect ? nil : conversation.name,
             isDirect: isDirect,
             inviteUserIds: participantIds,
-            isEncrypted: true  // Always use E2EE
+            isEncrypted: conversation.isEncrypted  // Use E2EE only for private chats
         )
 
         #if DEBUG
@@ -594,7 +710,10 @@ final class MatrixBridgeService {
 
     /// Create a new conversation with a friend and setup Matrix room
     /// This is the main entry point for starting a chat with a friend
-    func startConversationWithFriend(friendUserId: String) async throws -> Conversation {
+    /// - Parameters:
+    ///   - friendUserId: The user ID of the friend to chat with
+    ///   - isPrivate: Whether this is a private (E2EE encrypted) chat. Default is false (plain text)
+    func startConversationWithFriend(friendUserId: String, isPrivate: Bool = false) async throws -> Conversation {
         guard isInitialized else {
             throw MatrixBridgeError.notInitialized
         }
@@ -604,22 +723,23 @@ final class MatrixBridgeService {
         }
 
         #if DEBUG
-        print("[MatrixBridge] Starting conversation with friend: \(friendUserId)")
+        print("[MatrixBridge] Starting \(isPrivate ? "private" : "regular") conversation with friend: \(friendUserId)")
         #endif
 
         // Create Nova conversation first
         let conversation = try await chatService.createConversation(
             type: .direct,
             participantIds: [currentUserId, friendUserId],
-            name: nil
+            name: nil,
+            isEncrypted: isPrivate
         )
 
-        // Create Matrix room for E2EE
+        // Create Matrix room - only use E2EE for private chats
         let roomId = try await matrixService.createRoom(
             name: nil,
             isDirect: true,
             inviteUserIds: [friendUserId],
-            isEncrypted: true
+            isEncrypted: isPrivate
         )
 
         // Save mapping
@@ -627,7 +747,7 @@ final class MatrixBridgeService {
         try await saveRoomMapping(conversationId: conversation.id, roomId: roomId)
 
         #if DEBUG
-        print("[MatrixBridge] Created conversation \(conversation.id) with Matrix room \(roomId)")
+        print("[MatrixBridge] Created \(isPrivate ? "private" : "regular") conversation \(conversation.id) with Matrix room \(roomId)")
         #endif
 
         return conversation
@@ -759,11 +879,17 @@ final class MatrixBridgeService {
         }
     }
 
-    /// Get Matrix access token from Nova backend (legacy endpoint)
-    /// DEPRECATED: This endpoint returns a service account token, not a user-specific token.
-    /// Use loginWithSSO() for proper user authentication via Zitadel SSO.
-    @available(*, deprecated, message: "Use loginWithSSO() instead. This endpoint returns a service account token.")
-    private func getMatrixAccessToken(novaUserId: String) async throws -> String {
+    /// Matrix credentials returned from Nova backend
+    struct MatrixCredentials {
+        let accessToken: String
+        let matrixUserId: String
+        let deviceId: String
+        let homeserverUrl: String?
+    }
+
+    /// Get Matrix credentials from Nova backend
+    /// Returns access token, Matrix user ID, device ID, and homeserver URL
+    private func getMatrixCredentials(novaUserId: String) async throws -> MatrixCredentials {
         struct MatrixTokenRequest: Codable {
             let userId: String
 
@@ -786,7 +912,12 @@ final class MatrixBridgeService {
             body: MatrixTokenRequest(userId: novaUserId)
         )
 
-        return response.accessToken
+        return MatrixCredentials(
+            accessToken: response.accessToken,
+            matrixUserId: response.matrixUserId,
+            deviceId: response.deviceId,
+            homeserverUrl: response.homeserverUrl
+        )
     }
 
     private func queryRoomMapping(conversationId: String) async throws -> String? {
@@ -1083,13 +1214,17 @@ extension MatrixBridgeService {
 
     /// Create a new direct conversation with a user via Matrix
     /// This creates a Matrix room and returns the conversation info
-    func createDirectConversation(withUserId userId: String, displayName: String?) async throws -> MatrixConversationInfo {
+    /// - Parameters:
+    ///   - userId: The user ID to chat with
+    ///   - displayName: Display name for the conversation
+    ///   - isPrivate: Whether this is a private (E2EE encrypted) chat. Default is false (plain text)
+    func createDirectConversation(withUserId userId: String, displayName: String?, isPrivate: Bool = false) async throws -> MatrixConversationInfo {
         guard isInitialized else {
             throw MatrixBridgeError.notInitialized
         }
 
         #if DEBUG
-        print("[MatrixBridge] Creating direct conversation with user: \(userId)")
+        print("[MatrixBridge] Creating \(isPrivate ? "private" : "regular") direct conversation with user: \(userId)")
         #endif
 
         // Create a direct room in Matrix
@@ -1099,7 +1234,7 @@ extension MatrixBridgeService {
                 name: nil,  // Direct rooms don't need names
                 isDirect: true,
                 inviteUserIds: [userId],
-                isEncrypted: true
+                isEncrypted: isPrivate  // Use E2EE only for private chats
             )
         } catch {
             // Handle token expiration by clearing session and throwing sessionExpired
@@ -1119,7 +1254,7 @@ extension MatrixBridgeService {
         }
 
         #if DEBUG
-        print("[MatrixBridge] Created Matrix room: \(roomId)")
+        print("[MatrixBridge] Created \(isPrivate ? "private" : "regular") Matrix room: \(roomId)")
         #endif
 
         return MatrixConversationInfo(
@@ -1128,7 +1263,7 @@ extension MatrixBridgeService {
             lastMessage: nil,
             lastMessageTime: Date(),
             unreadCount: 0,
-            isEncrypted: true,
+            isEncrypted: isPrivate,
             isDirect: true,
             avatarURL: nil,
             memberCount: 2
@@ -1136,13 +1271,17 @@ extension MatrixBridgeService {
     }
 
     /// Create a new group conversation via Matrix
-    func createGroupConversation(name: String, userIds: [String]) async throws -> MatrixConversationInfo {
+    /// - Parameters:
+    ///   - name: The group name
+    ///   - userIds: User IDs to invite to the group
+    ///   - isPrivate: Whether this is a private (E2EE encrypted) group. Default is false (plain text)
+    func createGroupConversation(name: String, userIds: [String], isPrivate: Bool = false) async throws -> MatrixConversationInfo {
         guard isInitialized else {
             throw MatrixBridgeError.notInitialized
         }
 
         #if DEBUG
-        print("[MatrixBridge] Creating group conversation: \(name) with \(userIds.count) users")
+        print("[MatrixBridge] Creating \(isPrivate ? "private" : "regular") group conversation: \(name) with \(userIds.count) users")
         #endif
 
         let roomId: String
@@ -1151,7 +1290,7 @@ extension MatrixBridgeService {
                 name: name,
                 isDirect: false,
                 inviteUserIds: userIds,
-                isEncrypted: true
+                isEncrypted: isPrivate  // Use E2EE only for private groups
             )
         } catch {
             // Handle token expiration by clearing session and throwing sessionExpired
@@ -1175,7 +1314,7 @@ extension MatrixBridgeService {
             lastMessage: nil,
             lastMessageTime: Date(),
             unreadCount: 0,
-            isEncrypted: true,
+            isEncrypted: isPrivate,
             isDirect: false,
             avatarURL: nil,
             memberCount: userIds.count + 1  // Including current user
