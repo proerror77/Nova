@@ -490,6 +490,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
         lhs.id == rhs.id &&
         lhs.likeCount == rhs.likeCount &&
         lhs.commentCount == rhs.commentCount &&
+        lhs.bookmarkCount == rhs.bookmarkCount &&
         lhs.isLiked == rhs.isLiked &&
         lhs.isBookmarked == rhs.isBookmarked
     }
@@ -505,6 +506,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
     let likeCount: Int
     let commentCount: Int
     let shareCount: Int
+    let bookmarkCount: Int
     let isLiked: Bool
     let isBookmarked: Bool
 
@@ -627,6 +629,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.likeCount = raw.likeCount ?? 0
         self.commentCount = raw.commentCount ?? 0
         self.shareCount = raw.shareCount ?? 0
+        self.bookmarkCount = 0  // Backend doesn't provide bookmark count yet
         self.isLiked = false
         self.isBookmarked = false
     }
@@ -634,7 +637,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
     // Keep existing init for Codable conformance and manual creation
     init(id: String, authorId: String, authorName: String, authorAvatar: String?,
         content: String, mediaUrls: [String], mediaType: FeedMediaType? = nil, createdAt: Date,
-         likeCount: Int, commentCount: Int, shareCount: Int,
+         likeCount: Int, commentCount: Int, shareCount: Int, bookmarkCount: Int = 0,
          isLiked: Bool, isBookmarked: Bool) {
         #if DEBUG
         print("[Feed] Created post via manual init: \(id.prefix(8)), mediaUrls=\(mediaUrls.count)")
@@ -652,6 +655,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.likeCount = likeCount
         self.commentCount = commentCount
         self.shareCount = shareCount
+        self.bookmarkCount = bookmarkCount
         self.isLiked = isLiked
         self.isBookmarked = isBookmarked
     }
@@ -663,6 +667,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
         likeCount: Int? = nil,
         commentCount: Int? = nil,
         shareCount: Int? = nil,
+        bookmarkCount: Int? = nil,
         isLiked: Bool? = nil,
         isBookmarked: Bool? = nil
     ) -> FeedPost {
@@ -678,6 +683,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
             likeCount: likeCount ?? self.likeCount,
             commentCount: commentCount ?? self.commentCount,
             shareCount: shareCount ?? self.shareCount,
+            bookmarkCount: bookmarkCount ?? self.bookmarkCount,
             isLiked: isLiked ?? self.isLiked,
             isBookmarked: isBookmarked ?? self.isBookmarked
         )
@@ -700,6 +706,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.likeCount = post.likeCount ?? 0
         self.commentCount = post.commentCount ?? 0
         self.shareCount = post.shareCount ?? 0
+        self.bookmarkCount = 0  // Backend doesn't provide bookmark count yet
         self.isLiked = false
         self.isBookmarked = false
     }

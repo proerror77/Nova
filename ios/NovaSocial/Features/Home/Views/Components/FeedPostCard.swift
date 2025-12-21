@@ -130,13 +130,13 @@ struct FeedPostCard: View {
                                 .font(.system(size: 18))
                                 .foregroundColor(post.isBookmarked ? .orange : Color(red: 0.38, green: 0.37, blue: 0.37))
                                 .symbolEffect(.bounce, value: bookmarkAnimationTrigger)
-                            Text("\(post.shareCount)")
+                            Text("\(post.bookmarkCount)")
                                 .font(Typography.regular10)
                                 .lineSpacing(20)
                                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
                         }
                     }
-                    .accessibilityLabel("Bookmark")
+                    .accessibilityLabel("Bookmark, \(post.bookmarkCount)")
 
                     Spacer()
                 }
