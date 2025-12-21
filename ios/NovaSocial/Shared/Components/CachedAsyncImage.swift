@@ -1,5 +1,17 @@
 import SwiftUI
 
+// MARK: - Video URL Detection Helper
+
+private func isVideoURL(_ url: URL?) -> Bool {
+    guard let url = url else { return false }
+    let lowercased = url.absoluteString.lowercased()
+    return lowercased.contains(".mp4") ||
+           lowercased.contains(".m4v") ||
+           lowercased.contains(".mov") ||
+           lowercased.contains(".webm") ||
+           lowercased.contains(".avi")
+}
+
 /// A replacement for AsyncImage that uses our ImageCacheService with progressive loading
 struct CachedAsyncImage<Content: View, Placeholder: View>: View {
     let url: URL?
@@ -78,6 +90,16 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
 
     private func loadImage() async {
         guard let url = url else {
+            loadPhase = .failed
+            isLoading = false
+            return
+        }
+
+        // Skip loading if URL is a video - videos should use FeedVideoPlayer instead
+        if isVideoURL(url) {
+            #if DEBUG
+            print("[CachedAsyncImage] ⚠️ Skipping video URL: \(url.absoluteString.suffix(50))")
+            #endif
             loadPhase = .failed
             isLoading = false
             return
@@ -184,18 +206,24 @@ struct OptimizedCachedImage<Content: View, Placeholder: View>: View {
     }
 
     private func loadImage() {
-        guard let url = url else { 
+        guard let url = url else {
             loadFailed = true
-            return 
+            return
         }
-        
+
+        // Skip loading if URL is a video
+        if isVideoURL(url) {
+            loadFailed = true
+            return
+        }
+
         Task {
             let loadedImage = await ImageCacheService.shared.loadImage(
                 from: url.absoluteString,
                 targetSize: targetSize,
                 priority: .high
             )
-            
+
             await MainActor.run {
                 if let loadedImage = loadedImage {
                     withAnimation(.easeInOut(duration: 0.15)) {
@@ -270,13 +298,19 @@ struct FeedCachedImage<Content: View, Placeholder: View>: View {
     }
 
     private func startLoading() {
-        guard let url = url, image == nil else { 
+        guard let url = url, image == nil else {
             if url == nil {
                 loadFailed = true
             }
-            return 
+            return
         }
-        
+
+        // Skip loading if URL is a video
+        if isVideoURL(url) {
+            loadFailed = true
+            return
+        }
+
         loadTask = Task {
             let loadedImage = await ImageCacheService.shared.loadImage(
                 from: url.absoluteString,

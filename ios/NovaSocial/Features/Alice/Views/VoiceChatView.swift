@@ -2,11 +2,13 @@ import SwiftUI
 import AVFoundation
 
 // MARK: - Voice Chat View
+/// 語音對話視圖 - 使用 xAI Grok Voice Agent API
 struct VoiceChatView: View {
     @Binding var isPresented: Bool
     
-    @State private var voiceChatService = VoiceChatService.shared
-    @State private var state: VoiceChatState = .disconnected
+    @State private var grokVoiceService = GrokVoiceService.shared
+    @State private var state: GrokVoiceChatState = .disconnected
+    @State private var selectedVoice: GrokVoiceConfig.Voice = .ara
     @State private var transcript: String = ""
     @State private var aiResponse: String = ""
     @State private var audioLevel: Float = 0
@@ -16,7 +18,7 @@ struct VoiceChatView: View {
     // 動畫相關
     @State private var pulseAnimation: Bool = false
     @State private var wavePhase: Double = 0
-    @State private var delegateHandler: VoiceChatDelegateHandler?
+    @State private var delegateHandler: GrokVoiceDelegateHandler?
     
     var body: some View {
         ZStack {
@@ -105,7 +107,7 @@ struct VoiceChatView: View {
         switch state {
         case .disconnected, .error: return .red
         case .connecting: return .yellow
-        case .connected, .speaking, .listening, .processing: return .green
+        case .connected, .listening, .processing, .responding: return .green
         }
     }
     
@@ -127,8 +129,8 @@ struct VoiceChatView: View {
     // MARK: - Alice Avatar with Waves
     private var aliceAvatarWithWaves: some View {
         ZStack {
-            // 波紋動畫 (當說話或聆聽時)
-            if state == .speaking || state == .listening {
+            // 波紋動畫 (當聆聽或回應時)
+            if state == .listening || state == .responding {
                 ForEach(0..<3, id: \.self) { index in
                     Circle()
                         .stroke(
@@ -151,8 +153,8 @@ struct VoiceChatView: View {
                 }
             }
             
-            // 音量波形 (當說話時)
-            if state == .speaking {
+            // 音量波形 (當聆聽或回應時)
+            if state == .listening || state == .responding {
                 audioWaveform
             }
             
@@ -231,8 +233,8 @@ struct VoiceChatView: View {
         case .disconnected: return "未連線"
         case .connecting: return "連線中..."
         case .connected: return "已連線"
-        case .speaking: return "正在聆聽你說話"
-        case .listening: return "Alice 正在回覆"
+        case .listening: return "正在聆聽你說話"
+        case .responding: return "Alice 正在回覆"
         case .processing: return "Alice 正在思考..."
         case .error: return "連線錯誤"
         }
@@ -241,10 +243,10 @@ struct VoiceChatView: View {
     private var stateSubtitle: String {
         switch state {
         case .disconnected: return "點擊下方按鈕開始對話"
-        case .connecting: return "正在連接到 Alice..."
-        case .connected: return "準備就緒"
-        case .speaking: return "說完後會自動處理"
-        case .listening: return "請聆聽回覆"
+        case .connecting: return "正在連接到 Grok Voice..."
+        case .connected: return "準備就緒，開始說話吧"
+        case .listening: return "說完後會自動處理"
+        case .responding: return "請聆聯回覆"
         case .processing: return "正在生成回覆..."
         case .error(let msg): return msg
         }
@@ -354,7 +356,7 @@ struct VoiceChatView: View {
     
     // MARK: - Actions
     private func startVoiceChat() {
-        let handler = VoiceChatDelegateHandler(
+        let handler = GrokVoiceDelegateHandler(
             onStateChange: { newState in
                 withAnimation(.easeInOut(duration: 0.3)) {
                     state = newState
@@ -372,34 +374,35 @@ struct VoiceChatView: View {
             }
         )
         delegateHandler = handler
-        voiceChatService.delegate = handler
+        grokVoiceService.delegate = handler
 
-        voiceChatService.startVoiceChat()
+        grokVoiceService.startVoiceChat(voice: selectedVoice)
     }
     
     private func endVoiceChat() {
-        voiceChatService.endVoiceChat()
+        grokVoiceService.endVoiceChat()
     }
     
     private func toggleMute() {
         isMuted.toggle()
-        voiceChatService.toggleMute()
+        grokVoiceService.toggleMute()
     }
     
     private func toggleSpeaker() {
-        voiceChatService.toggleSpeaker()
+        // Grok Voice 使用 AVAudioSession 管理揚聲器
+        // 切換由系統自動處理
     }
 }
 
-// MARK: - Delegate Handler
-private class VoiceChatDelegateHandler: VoiceChatServiceDelegate {
-    let onStateChange: (VoiceChatState) -> Void
+// MARK: - Grok Voice Delegate Handler
+private class GrokVoiceDelegateHandler: GrokVoiceServiceDelegate {
+    let onStateChange: (GrokVoiceChatState) -> Void
     let onTranscript: (String, Bool) -> Void
     let onAIResponse: (String) -> Void
     let onAudioLevel: (Float) -> Void
     
     init(
-        onStateChange: @escaping (VoiceChatState) -> Void,
+        onStateChange: @escaping (GrokVoiceChatState) -> Void,
         onTranscript: @escaping (String, Bool) -> Void,
         onAIResponse: @escaping (String) -> Void,
         onAudioLevel: @escaping (Float) -> Void
@@ -410,28 +413,32 @@ private class VoiceChatDelegateHandler: VoiceChatServiceDelegate {
         self.onAudioLevel = onAudioLevel
     }
     
-    func voiceChatStateDidChange(_ state: VoiceChatState) {
+    func grokVoiceStateDidChange(_ state: GrokVoiceChatState) {
         DispatchQueue.main.async {
             self.onStateChange(state)
         }
     }
     
-    func voiceChatDidReceiveTranscript(_ text: String, isFinal: Bool) {
+    func grokVoiceDidReceiveTranscript(_ text: String, isFinal: Bool) {
         DispatchQueue.main.async {
             self.onTranscript(text, isFinal)
         }
     }
     
-    func voiceChatDidReceiveAIResponse(_ text: String) {
+    func grokVoiceDidReceiveResponse(_ text: String) {
         DispatchQueue.main.async {
             self.onAIResponse(text)
         }
     }
     
-    func voiceChatAudioLevelDidChange(_ level: Float) {
+    func grokVoiceAudioLevelDidChange(_ level: Float) {
         DispatchQueue.main.async {
             self.onAudioLevel(level)
         }
+    }
+    
+    func grokVoiceDidReceiveAudio(_ audioData: Data) {
+        // 音訊播放由 GrokVoiceService 內部處理
     }
 }
 
