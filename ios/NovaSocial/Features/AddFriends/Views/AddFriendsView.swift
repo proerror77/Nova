@@ -181,9 +181,21 @@ class AddFriendsViewModel {
             // Auto-retry once with fresh credentials
             if retryCount < 1 {
                 #if DEBUG
-                print("⚠️ [AddFriends] Session expired, re-initializing and retrying...")
+                print("⚠️ [AddFriends] Session expired, forcing re-initialization and retrying...")
                 #endif
                 isCreatingChat = false
+
+                // Force re-initialization to get fresh credentials from backend
+                do {
+                    try await matrixBridge.initialize(requireLogin: true)
+                } catch {
+                    #if DEBUG
+                    print("❌ [AddFriends] Failed to re-initialize Matrix bridge: \(error)")
+                    #endif
+                    errorMessage = "無法重新連接: \(error.localizedDescription)"
+                    return
+                }
+
                 await startChat(with: user, retryCount: retryCount + 1)
                 return
             } else {

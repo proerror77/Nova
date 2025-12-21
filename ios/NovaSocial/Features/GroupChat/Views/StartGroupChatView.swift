@@ -109,12 +109,25 @@ class StartGroupChatViewModel {
             return true
 
         } catch MatrixBridgeError.sessionExpired {
-            // Session expired - auto-retry once with fresh credentials
+            // Session expired - clearSessionData() has already been called
+            // Auto-retry once with fresh credentials
             if retryCount < 1 {
                 #if DEBUG
-                print("⚠️ [StartGroupChat] Session expired, re-initializing and retrying...")
+                print("⚠️ [StartGroupChat] Session expired, forcing re-initialization and retrying...")
                 #endif
                 isCreating = false
+
+                // Force re-initialization to get fresh credentials from backend
+                do {
+                    try await matrixBridge.initialize(requireLogin: true)
+                } catch {
+                    #if DEBUG
+                    print("❌ [StartGroupChat] Failed to re-initialize Matrix bridge: \(error)")
+                    #endif
+                    errorMessage = "無法重新連接: \(error.localizedDescription)"
+                    return false
+                }
+
                 return await createGroupChat(retryCount: retryCount + 1)
             } else {
                 errorMessage = "Session 已過期，請重新登入後再試"

@@ -390,12 +390,29 @@ struct MessageView: View {
                     showChat = true
                 }
             } catch MatrixBridgeError.sessionExpired {
-                // Session expired - auto-retry once with fresh credentials
+                // Session expired - clearSessionData() has already been called
+                // Auto-retry once with fresh credentials
                 if retryCount < 1 {
                     #if DEBUG
-                    print("⚠️ [MessageView] Session expired, re-initializing and retrying...")
+                    print("⚠️ [MessageView] Session expired, forcing re-initialization and retrying...")
                     #endif
                     await MainActor.run { self.isMatrixInitializing = false }
+
+                    // Force re-initialization to get fresh credentials from backend
+                    do {
+                        try await matrixBridge.initialize(requireLogin: true)
+                    } catch {
+                        #if DEBUG
+                        print("❌ [MessageView] Failed to re-initialize Matrix bridge: \(error)")
+                        #endif
+                        await MainActor.run {
+                            self.isMatrixInitializing = false
+                            self.matrixInitError = "無法重新連接: \(error.localizedDescription)"
+                            self.errorMessage = "Re-initialization failed"
+                        }
+                        return
+                    }
+
                     startConversationWithUser(user, retryCount: retryCount + 1)
                     return
                 } else {
