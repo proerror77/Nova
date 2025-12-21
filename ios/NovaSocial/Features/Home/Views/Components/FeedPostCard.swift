@@ -2,6 +2,7 @@ import SwiftUI
 
 // MARK: - Feed Post Card (Dynamic Data)
 // iOS 17+ 优化：使用 Symbol Effects 和更好的状态管理
+// 手勢支援：滑動、長按、縮放
 
 struct FeedPostCard: View {
     let post: FeedPost
@@ -10,18 +11,85 @@ struct FeedPostCard: View {
     var onComment: () -> Void = {}
     var onShare: () -> Void = {}
     var onBookmark: () -> Void = {}
+    var onDelete: (() -> Void)? = nil
 
     @State private var scrollPosition = ScrollPosition(idType: Int.self)
     @State private var isVisible = false
-    
+
     // iOS 17+ Symbol Effect 动画状态
     @State private var likeAnimationTrigger = false
     @State private var bookmarkAnimationTrigger = false
 
+    // MARK: - Gesture States
+    /// 滑動偏移量
+    @State private var swipeOffset: CGFloat = 0
+    /// 是否顯示操作選單
+    @State private var showingActions = false
+    /// 長按選單
+    @State private var showingLongPressMenu = false
+    /// 圖片縮放比例
+    @State private var imageScale: CGFloat = 1.0
+    /// 縮放時的錨點
+    @State private var imageAnchor: UnitPoint = .center
+    /// 是否正在縮放
+    @State private var isZooming = false
+    /// 縮放預覽的圖片 URL
+    @State private var zoomingImageUrl: String? = nil
+    /// 觸覺回饋生成器
+    private let hapticFeedback = UIImpactFeedbackGenerator(style: .medium)
+    private let hapticLight = UIImpactFeedbackGenerator(style: .light)
+
     // Target size for feed images (optimized for display)
     private let imageTargetSize = CGSize(width: 750, height: 1000)
 
+    // 滑動閾值
+    private let swipeThreshold: CGFloat = 80
+    private let maxSwipeOffset: CGFloat = 120
+
     var body: some View {
+        ZStack {
+            // MARK: - Swipe Action Background
+            swipeActionBackground
+
+            // MARK: - Main Content with Swipe Gesture
+            mainContent
+                .offset(x: swipeOffset)
+                .gesture(swipeGesture)
+                .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.8), value: swipeOffset)
+        }
+        .clipped()
+        // MARK: - Long Press Menu
+        .confirmationDialog("貼文選項", isPresented: $showingLongPressMenu, titleVisibility: .visible) {
+            Button("分享", action: onShare)
+            Button("收藏") {
+                bookmarkAnimationTrigger.toggle()
+                onBookmark()
+            }
+            Button("複製連結") {
+                UIPasteboard.general.string = "https://nova.social/post/\(post.id)"
+                hapticLight.impactOccurred()
+            }
+            Button("舉報", role: .destructive) {
+                showReportView = true
+            }
+            if onDelete != nil {
+                Button("刪除", role: .destructive) {
+                    onDelete?()
+                }
+            }
+            Button("取消", role: .cancel) { }
+        }
+        // MARK: - Fullscreen Image Zoom Overlay
+        .fullScreenCover(item: $zoomingImageUrl) { imageUrl in
+            ZoomableImageView(
+                imageUrl: imageUrl,
+                onDismiss: { zoomingImageUrl = nil }
+            )
+        }
+    }
+
+    // MARK: - Main Content View
+    private var mainContent: some View {
         VStack(spacing: 8) {
             // MARK: - User Info Header
             HStack {
@@ -69,9 +137,10 @@ struct FeedPostCard: View {
             }
             .padding(.horizontal, 16)
 
-            // MARK: - Post Media (Images/Video/Live Photo)
+            // MARK: - Post Media (Images/Video/Live Photo) with Long Press & Pinch
             if !post.displayMediaUrls.isEmpty {
                 mediaContent
+                    .gesture(longPressGesture)
             }
 
             // MARK: - Post Content & Interaction
@@ -82,6 +151,7 @@ struct FeedPostCard: View {
                         .font(Typography.semibold16)
                         .lineSpacing(20)
                         .foregroundColor(.black)
+                        .gesture(longPressGesture)
                 }
 
                 // Interaction Buttons with iOS 17+ Symbol Effects
@@ -155,6 +225,127 @@ struct FeedPostCard: View {
             isVisible = false
             // Clean up off-screen resources
             cleanupOffScreenResources()
+        }
+    }
+
+    // MARK: - Swipe Action Background View
+    private var swipeActionBackground: some View {
+        HStack(spacing: 0) {
+            // 右滑顯示：快速點讚 (綠色背景)
+            if swipeOffset > 0 {
+                HStack {
+                    Image(systemName: post.isLiked ? "heart.fill" : "heart")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.leading, 24)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(post.isLiked ? Color.gray : Color.red.opacity(0.9))
+            }
+
+            Spacer()
+
+            // 左滑顯示：舉報/更多選項 (紅色背景)
+            if swipeOffset < 0 {
+                HStack {
+                    Spacer()
+                    VStack(spacing: 8) {
+                        Button {
+                            resetSwipe()
+                            showReportView = true
+                        } label: {
+                            VStack(spacing: 4) {
+                                Image(systemName: "flag.fill")
+                                    .font(.system(size: 20))
+                                Text("舉報")
+                                    .font(.system(size: 10, weight: .medium))
+                            }
+                            .foregroundColor(.white)
+                        }
+
+                        if onDelete != nil {
+                            Button {
+                                resetSwipe()
+                                onDelete?()
+                            } label: {
+                                VStack(spacing: 4) {
+                                    Image(systemName: "trash.fill")
+                                        .font(.system(size: 20))
+                                    Text("刪除")
+                                        .font(.system(size: 10, weight: .medium))
+                                }
+                                .foregroundColor(.white)
+                            }
+                        }
+                    }
+                    .padding(.trailing, 24)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.red.opacity(0.9))
+            }
+        }
+    }
+
+    // MARK: - Swipe Gesture
+    private var swipeGesture: some Gesture {
+        DragGesture(minimumDistance: 20, coordinateSpace: .local)
+            .onChanged { value in
+                // 只處理水平滑動
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+
+                let translation = value.translation.width
+
+                // 限制最大滑動距離
+                if translation > 0 {
+                    swipeOffset = min(translation, maxSwipeOffset)
+                } else {
+                    swipeOffset = max(translation, -maxSwipeOffset)
+                }
+
+                // 達到閾值時觸發觸覺回饋
+                if abs(swipeOffset) >= swipeThreshold && !showingActions {
+                    hapticLight.impactOccurred()
+                    showingActions = true
+                } else if abs(swipeOffset) < swipeThreshold {
+                    showingActions = false
+                }
+            }
+            .onEnded { value in
+                let translation = value.translation.width
+
+                if translation > swipeThreshold {
+                    // 右滑完成 - 點讚
+                    hapticFeedback.impactOccurred()
+                    likeAnimationTrigger.toggle()
+                    onLike()
+                    resetSwipe()
+                } else if translation < -swipeThreshold {
+                    // 左滑完成 - 保持顯示操作按鈕
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        swipeOffset = -maxSwipeOffset
+                    }
+                } else {
+                    // 未達閾值 - 重置
+                    resetSwipe()
+                }
+            }
+    }
+
+    // MARK: - Long Press Gesture
+    private var longPressGesture: some Gesture {
+        LongPressGesture(minimumDuration: 0.5)
+            .onEnded { _ in
+                hapticFeedback.impactOccurred()
+                showingLongPressMenu = true
+            }
+    }
+
+    /// 重置滑動狀態
+    private func resetSwipe() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            swipeOffset = 0
+            showingActions = false
         }
     }
 
@@ -345,7 +536,7 @@ struct FeedPostCard: View {
                 height: 500
             )
         } else {
-            // Image - use cached image loading
+            // Image - use cached image loading with tap to zoom
             FeedCachedImage(
                 url: URL(string: urlString),
                 targetSize: imageTargetSize
@@ -363,6 +554,12 @@ struct FeedPostCard: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) {
+                // 雙擊放大圖片
+                hapticLight.impactOccurred()
+                zoomingImageUrl = urlString
+            }
         }
     }
 
@@ -477,6 +674,128 @@ extension FeedPost {
             shareCount: 3,
             isLiked: false,
             isBookmarked: true
+        )
+    }
+}
+
+// MARK: - String Identifiable Extension (for fullScreenCover)
+extension String: @retroactive Identifiable {
+    public var id: String { self }
+}
+
+// MARK: - Zoomable Image View (Pinch to Zoom)
+/// 全螢幕可縮放圖片檢視器
+struct ZoomableImageView: View {
+    let imageUrl: String
+    let onDismiss: () -> Void
+
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+
+    private let minScale: CGFloat = 1.0
+    private let maxScale: CGFloat = 5.0
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // 背景
+                Color.black.ignoresSafeArea()
+
+                // 可縮放圖片
+                FeedCachedImage(
+                    url: URL(string: imageUrl),
+                    targetSize: CGSize(width: 1500, height: 2000)
+                ) { image in
+                    image
+                        .resizable()
+                        .scaledToFit()
+                } placeholder: {
+                    ProgressView()
+                        .tint(.white)
+                }
+                .scaleEffect(scale)
+                .offset(offset)
+                .gesture(
+                    // 縮放手勢
+                    MagnifyGesture()
+                        .onChanged { value in
+                            let delta = value.magnification / lastScale
+                            lastScale = value.magnification
+                            scale = min(max(scale * delta, minScale), maxScale)
+                        }
+                        .onEnded { _ in
+                            lastScale = 1.0
+                            // 如果縮放小於 1，重置
+                            if scale < minScale {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    scale = minScale
+                                    offset = .zero
+                                }
+                            }
+                        }
+                )
+                .simultaneousGesture(
+                    // 拖曳手勢 (縮放時移動)
+                    DragGesture()
+                        .onChanged { value in
+                            if scale > 1 {
+                                offset = CGSize(
+                                    width: lastOffset.width + value.translation.width,
+                                    height: lastOffset.height + value.translation.height
+                                )
+                            }
+                        }
+                        .onEnded { _ in
+                            lastOffset = offset
+                            // 如果縮放回到 1，重置位置
+                            if scale <= 1 {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    offset = .zero
+                                    lastOffset = .zero
+                                }
+                            }
+                        }
+                )
+                .onTapGesture(count: 2) {
+                    // 雙擊切換縮放
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        if scale > 1 {
+                            scale = 1
+                            offset = .zero
+                            lastOffset = .zero
+                        } else {
+                            scale = 2.5
+                        }
+                    }
+                }
+
+                // 關閉按鈕
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button {
+                            onDismiss()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 30))
+                                .foregroundStyle(.white.opacity(0.8), .black.opacity(0.3))
+                        }
+                        .padding()
+                    }
+                    Spacer()
+                }
+            }
+        }
+        .gesture(
+            // 下滑關閉
+            DragGesture(minimumDistance: 50)
+                .onEnded { value in
+                    if value.translation.height > 100 && scale <= 1 {
+                        onDismiss()
+                    }
+                }
         )
     }
 }
