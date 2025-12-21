@@ -10,7 +10,7 @@
 # =============================================================================
 # Stage 1: Builder - Compile service with optimizations
 # =============================================================================
-FROM rust:1.83-slim AS builder
+FROM rustlang/rust:nightly-slim AS builder
 
 # Build argument for service name (required)
 ARG SERVICE_NAME
