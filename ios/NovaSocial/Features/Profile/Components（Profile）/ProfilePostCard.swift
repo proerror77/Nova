@@ -200,6 +200,7 @@ struct ProfilePostCard: View, Equatable {
             likeCount: 2234,
             commentCount: 5,
             shareCount: 2,
+            bookmarkCount: nil,
             authorUsername: "simone_carter",
             authorDisplayName: "Simone Carter",
             authorAvatarUrl: nil
@@ -225,6 +226,7 @@ struct ProfilePostCard: View, Equatable {
             likeCount: 2234,
             commentCount: 5,
             shareCount: 2,
+            bookmarkCount: nil,
             authorUsername: "simone_carter",
             authorDisplayName: "Simone Carter",
             authorAvatarUrl: nil
@@ -254,6 +256,7 @@ struct ProfilePostCard: View, Equatable {
                         likeCount: 2234,
                         commentCount: 5,
                         shareCount: 2,
+                        bookmarkCount: nil,
                         authorUsername: "simone_carter",
                         authorDisplayName: "Simone Carter",
                         authorAvatarUrl: nil
@@ -285,6 +288,7 @@ struct ProfilePostCard: View, Equatable {
                         likeCount: 2234,
                         commentCount: 5,
                         shareCount: 2,
+                        bookmarkCount: nil,
                         authorUsername: "simone_carter",
                         authorDisplayName: "Simone Carter",
                         authorAvatarUrl: nil

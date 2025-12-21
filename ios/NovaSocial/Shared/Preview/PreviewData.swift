@@ -129,6 +129,7 @@ enum PreviewData {
             likeCount: 156,
             commentCount: 23,
             shareCount: 8,
+            bookmarkCount: nil,
             authorUsername: Users.currentUser.username,
             authorDisplayName: Users.currentUser.displayName,
             authorAvatarUrl: Users.currentUser.avatarUrl
@@ -151,6 +152,7 @@ enum PreviewData {
             likeCount: 342,
             commentCount: 56,
             shareCount: 21,
+            bookmarkCount: nil,
             authorUsername: Users.regularUser.username,
             authorDisplayName: Users.regularUser.displayName,
             authorAvatarUrl: Users.regularUser.avatarUrl
@@ -169,6 +171,7 @@ enum PreviewData {
             likeCount: 78,
             commentCount: 12,
             shareCount: 3,
+            bookmarkCount: nil,
             authorUsername: Users.currentUser.username,
             authorDisplayName: Users.currentUser.displayName,
             authorAvatarUrl: Users.currentUser.avatarUrl
@@ -179,9 +182,9 @@ enum PreviewData {
             imagePost,
             multiImagePost,
             textPost,
-            Post(id: "preview-post-004", authorId: "preview-user-004", content: "Working on something exciting! Stay tuned 🚀", createdAt: Int64(Date().timeIntervalSince1970 - 3600 * 5), updatedAt: Int64(Date().timeIntervalSince1970 - 3600 * 5), status: "published", mediaUrls: ["https://picsum.photos/604/400"], mediaType: "image", likeCount: 234, commentCount: 45, shareCount: 12, authorUsername: "alice_wonder", authorDisplayName: "Alice Wonder", authorAvatarUrl: "https://picsum.photos/203"),
-            Post(id: "preview-post-005", authorId: "preview-user-005", content: "Morning coffee ☕️", createdAt: Int64(Date().timeIntervalSince1970 - 3600 * 8), updatedAt: Int64(Date().timeIntervalSince1970 - 3600 * 8), status: "published", mediaUrls: ["https://picsum.photos/605/400"], mediaType: "image", likeCount: 89, commentCount: 7, shareCount: 2, authorUsername: "bob_builder", authorDisplayName: "Bob Builder", authorAvatarUrl: "https://picsum.photos/204"),
-            Post(id: "preview-post-006", authorId: "preview-user-006", content: "Just hit a new personal record at the gym! 💪", createdAt: Int64(Date().timeIntervalSince1970 - 86400 * 2), updatedAt: Int64(Date().timeIntervalSince1970 - 86400 * 2), status: "published", mediaUrls: nil, mediaType: nil, likeCount: 156, commentCount: 34, shareCount: 5, authorUsername: "carol_smith", authorDisplayName: "Carol Smith", authorAvatarUrl: "https://picsum.photos/205"),
+            Post(id: "preview-post-004", authorId: "preview-user-004", content: "Working on something exciting! Stay tuned 🚀", createdAt: Int64(Date().timeIntervalSince1970 - 3600 * 5), updatedAt: Int64(Date().timeIntervalSince1970 - 3600 * 5), status: "published", mediaUrls: ["https://picsum.photos/604/400"], mediaType: "image", likeCount: 234, commentCount: 45, shareCount: 12, bookmarkCount: nil, authorUsername: "alice_wonder", authorDisplayName: "Alice Wonder", authorAvatarUrl: "https://picsum.photos/203"),
+            Post(id: "preview-post-005", authorId: "preview-user-005", content: "Morning coffee ☕️", createdAt: Int64(Date().timeIntervalSince1970 - 3600 * 8), updatedAt: Int64(Date().timeIntervalSince1970 - 3600 * 8), status: "published", mediaUrls: ["https://picsum.photos/605/400"], mediaType: "image", likeCount: 89, commentCount: 7, shareCount: 2, bookmarkCount: nil, authorUsername: "bob_builder", authorDisplayName: "Bob Builder", authorAvatarUrl: "https://picsum.photos/204"),
+            Post(id: "preview-post-006", authorId: "preview-user-006", content: "Just hit a new personal record at the gym! 💪", createdAt: Int64(Date().timeIntervalSince1970 - 86400 * 2), updatedAt: Int64(Date().timeIntervalSince1970 - 86400 * 2), status: "published", mediaUrls: nil, mediaType: nil, likeCount: 156, commentCount: 34, shareCount: 5, bookmarkCount: nil, authorUsername: "carol_smith", authorDisplayName: "Carol Smith", authorAvatarUrl: "https://picsum.photos/205"),
         ]
     }
 
