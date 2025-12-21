@@ -7,9 +7,9 @@ struct BottomTabBar: View {
     @Binding var showPhotoOptions: Bool
     @Binding var showNewPost: Bool  // 新增：直接打开 NewPost 页面
 
-    // 头像管理
-    @State private var avatarManager = AvatarManager.shared
-    @State private var authManager = AuthenticationManager.shared
+    // 头像管理 - 性能優化：使用 @ObservedObject 替代 @State 用於單例
+    @ObservedObject private var avatarManager = AvatarManager.shared
+    @EnvironmentObject private var authManager: AuthenticationManager
 
     private var isHome: Bool { currentPage == .home }
     private var isMessage: Bool { currentPage == .message }

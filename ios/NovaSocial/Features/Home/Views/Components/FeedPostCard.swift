@@ -255,28 +255,27 @@ struct FeedPostCard: View {
     }
 
     // MARK: - Image Carousel
-
+    // 性能優化：移除 GeometryReader，使用 containerRelativeFrame 替代
     @ViewBuilder
     private var imageCarousel: some View {
-        GeometryReader { geometry in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 0) {
-                    ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
-                        mediaItemView(for: imageUrl, at: index)
-                            .frame(width: geometry.size.width, height: 500)
-                            .clipped()
-                            .id(index)
-                            .onAppear {
-                                prefetchAdjacentImages(around: index)
-                            }
-                    }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 0) {
+                ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
+                    mediaItemView(for: imageUrl, at: index)
+                        .containerRelativeFrame(.horizontal)
+                        .frame(height: 500)
+                        .clipped()
+                        .id(index)
+                        .onAppear {
+                            prefetchAdjacentImages(around: index)
+                        }
                 }
-                .scrollTargetLayout()
             }
-            .scrollTargetBehavior(.paging)
-            .scrollPosition($scrollPosition)
-            .scrollClipDisabled(false)
+            .scrollTargetLayout()
         }
+        .scrollTargetBehavior(.paging)
+        .scrollPosition($scrollPosition)
+        .scrollClipDisabled(false)
         .frame(height: 500)
     }
     

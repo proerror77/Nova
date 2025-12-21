@@ -68,6 +68,7 @@ struct ProfileView: View {
     @State private var showDeleteConfirmation = false       // 显示删除确认
     @State private var postToDelete: Post? = nil            // 待删除的帖子
     @State private var isDeleting = false                   // 正在删除中
+    @State private var searchDebounceTask: Task<Void, Never>?  // 搜索防抖任務
 
     // MARK: - 頭像/背景圖更換狀態
     @State private var avatarPhotoItem: PhotosPickerItem?   // 頭像選擇
@@ -444,7 +445,7 @@ struct ProfileView: View {
                             .scaledToFill()
                     }
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: 600)  // 固定高度避免圖片撐開
                 .clipped()
                 .blur(radius: 20)
                 .overlay(Color.black.opacity(0.3))
@@ -467,6 +468,7 @@ struct ProfileView: View {
                 .padding(.top, 70)
                 .padding(.trailing, 16)
             }
+            .frame(height: 600)  // 固定背景區域高度
 
             VStack(spacing: 0) {
                 // MARK: - 顶部导航栏（独立组件）
@@ -614,7 +616,11 @@ struct ProfileView: View {
                                 .foregroundColor(.black)
                                 .textFieldStyle(.plain)
                                 .onChange(of: searchText) { _, newValue in
-                                    Task {
+                                    // 性能優化：添加 300ms 防抖動避免每次按鍵都觸發搜索
+                                    searchDebounceTask?.cancel()
+                                    searchDebounceTask = Task {
+                                        try? await Task.sleep(for: .milliseconds(300))
+                                        guard !Task.isCancelled else { return }
                                         await profileData.searchInProfile(query: newValue)
                                     }
                                 }

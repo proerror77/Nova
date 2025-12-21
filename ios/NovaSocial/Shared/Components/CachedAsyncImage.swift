@@ -336,28 +336,33 @@ struct FeedCachedImage<Content: View, Placeholder: View>: View {
 // MARK: - Shimmer Loading Placeholder
 
 /// Animated shimmer placeholder for loading states
+/// 性能優化：移除 GeometryReader，使用固定漸變動畫減少 GPU 負載
 struct ShimmerPlaceholder: View {
-    @State private var phase: CGFloat = 0
-    
+    @State private var isAnimating = false
+
     var body: some View {
-        GeometryReader { geometry in
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.gray.opacity(0.2),
-                            Color.gray.opacity(0.3),
-                            Color.gray.opacity(0.2)
-                        ]),
-                        startPoint: .init(x: phase - 0.5, y: 0.5),
-                        endPoint: .init(x: phase + 0.5, y: 0.5)
+        Rectangle()
+            .fill(Color.gray.opacity(0.2))
+            .overlay(
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.clear,
+                                Color.white.opacity(0.4),
+                                Color.clear
+                            ]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
                     )
-                )
-                .onAppear {
-                    withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
-                        phase = 1.5
-                    }
+                    .offset(x: isAnimating ? 400 : -400)
+            )
+            .clipped()
+            .onAppear {
+                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                    isAnimating = true
                 }
-        }
+            }
     }
 }

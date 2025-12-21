@@ -73,6 +73,7 @@ struct HomeView: View {
     @State private var showChannelBar = true
     @State private var lastScrollOffset: CGFloat = 0
     @State private var selectedTab: FeedTab = .forYou
+    @State private var scrollDebounceTask: Task<Void, Never>?  // 滾動防抖任務
 
     // Interest channels (after For You and Following)
     private let interestChannels = ["Fashion", "Travel", "Fitness", "Pets", "Study", "Career", "Tech", "Art"]
@@ -315,6 +316,8 @@ struct HomeView: View {
                                                 onShare: { Task { await feedViewModel.sharePost(postId: post.id) } },
                                                 onBookmark: { Task { await feedViewModel.toggleBookmark(postId: post.id) } }
                                             )
+                                            // 性能優化：只有當 post 數據變化時才重繪
+                                            .id(post.id + "_\(post.likeCount)_\(post.isLiked)_\(post.isBookmarked)")
                                             .onTapGesture {
                                                 selectedPostForDetail = post
                                                 showPostDetail = true
@@ -368,18 +371,25 @@ struct HomeView: View {
                     }
                     .coordinateSpace(name: "scroll")
                     .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
-                        let delta = offset - lastScrollOffset
-                        // 向上滚动 (offset 变小，delta < 0) 隐藏 Channel 栏
-                        // 向下滚动/下拉 (offset 变大，delta > 0) 显示 Channel 栏
-                        if abs(delta) > 10 {
-                            withAnimation(.easeInOut(duration: 0.25)) {
-                                if delta < -10 {
-                                    showChannelBar = false
-                                } else if delta > 10 || offset > -50 {
-                                    showChannelBar = true
+                        // 性能優化：添加防抖避免每幀都觸發動畫計算
+                        scrollDebounceTask?.cancel()
+                        scrollDebounceTask = Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(16)) // ~1 frame
+                            guard !Task.isCancelled else { return }
+
+                            let delta = offset - lastScrollOffset
+                            // 向上滚动 (offset 变小，delta < 0) 隐藏 Channel 栏
+                            // 向下滚动/下拉 (offset 变大，delta > 0) 显示 Channel 栏
+                            if abs(delta) > 10 {
+                                withAnimation(.easeInOut(duration: 0.25)) {
+                                    if delta < -10 {
+                                        showChannelBar = false
+                                    } else if delta > 10 || offset > -50 {
+                                        showChannelBar = true
+                                    }
                                 }
+                                lastScrollOffset = offset
                             }
-                            lastScrollOffset = offset
                         }
                     }
                 }
