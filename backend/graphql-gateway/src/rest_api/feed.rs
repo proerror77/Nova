@@ -84,6 +84,7 @@ async fn enrich_posts_with_authors(
                 like_count: post.like_count,
                 comment_count: post.comment_count,
                 share_count: post.share_count,
+                bookmark_count: post.bookmark_count,
                 media_urls: post.media_urls,
                 media_type: post.media_type,
                 // Author information
