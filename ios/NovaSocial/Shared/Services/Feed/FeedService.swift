@@ -385,6 +385,7 @@ struct FeedPostRaw: Codable {
     let likeCount: Int?
     let commentCount: Int?
     let shareCount: Int?
+    let bookmarkCount: Int?
     let mediaUrls: [String]?
     let thumbnailUrls: [String]?
     let mediaType: String?
@@ -629,7 +630,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.likeCount = raw.likeCount ?? 0
         self.commentCount = raw.commentCount ?? 0
         self.shareCount = raw.shareCount ?? 0
-        self.bookmarkCount = 0  // Backend doesn't provide bookmark count yet
+        self.bookmarkCount = raw.bookmarkCount ?? 0
         self.isLiked = false
         self.isBookmarked = false
     }
@@ -706,7 +707,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.likeCount = post.likeCount ?? 0
         self.commentCount = post.commentCount ?? 0
         self.shareCount = post.shareCount ?? 0
-        self.bookmarkCount = 0  // Backend doesn't provide bookmark count yet
+        self.bookmarkCount = post.bookmarkCount ?? 0
         self.isLiked = false
         self.isBookmarked = false
     }

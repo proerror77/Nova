@@ -15,6 +15,7 @@ struct Post: Codable, Identifiable {
     let likeCount: Int?
     let commentCount: Int?
     let shareCount: Int?
+    let bookmarkCount: Int?
 
     // Optional author enrichment fields (populated by graphql-gateway when available)
     let authorUsername: String?
