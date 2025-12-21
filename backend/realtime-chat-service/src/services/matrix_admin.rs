@@ -569,8 +569,16 @@ impl MatrixAdminClient {
 
         // Step 2: Generate a device-bound access token for the user
         // Token valid for 1 hour (3600000 ms)
-        // If device_id is provided, the token will be bound to that device
-        let access_token = self.generate_user_login_token(user_id, Some(3600000), device_id).await?;
+        // Make device_id unique by appending timestamp to avoid Synapse duplicate key errors
+        // when the same device requests a new token (e.g., after token expiry)
+        let unique_device_id = device_id.map(|id| {
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis();
+            format!("{}_{}", id, timestamp)
+        });
+        let access_token = self.generate_user_login_token(user_id, Some(3600000), unique_device_id).await?;
 
         Ok((mxid, access_token))
     }
