@@ -333,13 +333,7 @@ class FeedService {
             let username: String
             let displayName: String?
             let avatarUrl: String?
-
-            enum CodingKeys: String, CodingKey {
-                case userId = "user_id"
-                case username
-                case displayName = "display_name"
-                case avatarUrl = "avatar_url"
-            }
+            // Note: No CodingKeys needed - APIClient uses .convertFromSnakeCase
         }
 
         let request = Request(userIds: Array(Set(userIds)))  // Deduplicate
