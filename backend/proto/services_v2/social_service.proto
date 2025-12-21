@@ -544,4 +544,5 @@ message PostCounts {
   int64 like_count = 1;
   int64 comment_count = 2;
   int64 share_count = 3;
+  int64 bookmark_count = 4;
 }

@@ -380,6 +380,7 @@ pub struct CachedFeedPost {
     pub like_count: u32,
     pub comment_count: u32,
     pub share_count: u32,
+    pub bookmark_count: u32,
     #[serde(default)]
     pub media_urls: Vec<String>,
     #[serde(default)]

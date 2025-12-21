@@ -21,8 +21,8 @@ pub struct DmSettings {
 impl Default for DmSettings {
     fn default() -> Self {
         Self {
-            // Default to 'mutuals' for safety (most restrictive reasonable default)
-            dm_permission: "mutuals".to_string(),
+            // Default to 'everyone' to allow open messaging
+            dm_permission: "everyone".to_string(),
             allow_messages: true,
         }
     }
@@ -37,7 +37,7 @@ impl From<UserSettings> for DmSettings {
             1 => "mutuals",
             2 => "verified",
             3 => "everyone",
-            _ => "mutuals", // Default to mutuals for unknown values
+            _ => "everyone", // Default to everyone for unknown values
         };
         // allow_messages is derived from dm_permission: 0 (none) means no messages allowed
         let allow_messages = settings.dm_permission != 0;
@@ -166,7 +166,7 @@ mod tests {
     #[test]
     fn test_dm_settings_default() {
         let settings = DmSettings::default();
-        assert_eq!(settings.dm_permission, "mutuals");
+        assert_eq!(settings.dm_permission, "everyone");
         assert!(settings.allow_messages);
     }
 }

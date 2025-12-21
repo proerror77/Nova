@@ -65,6 +65,7 @@ message FeedPost {
   repeated string media_urls = 9;  // URLs of attached media (images/videos)
   string media_type = 10;  // Type of media: "image", "video", "none"
   repeated string thumbnail_urls = 11; // URLs of thumbnails (if available)
+  uint32 bookmark_count = 12;
 }
 
 // GetFeedResponse contains the personalized feed

@@ -239,7 +239,7 @@ impl CounterService {
             keys.push(format!("post:{}:shares", post_id));
         }
 
-        // Execute MGET
+        // Execute MGET for likes, comments, shares
         let values: Vec<Option<i64>> = self
             .redis
             .clone()
@@ -247,12 +247,16 @@ impl CounterService {
             .await
             .context("Failed to batch get counts from Redis")?;
 
+        // Fetch bookmark counts from PostgreSQL (saved_posts table)
+        let bookmark_counts = self.batch_get_bookmark_counts_from_pg(post_ids).await?;
+
         // Parse results
         let mut result = HashMap::new();
         for (i, post_id) in post_ids.iter().enumerate() {
             let like_count = values[i * 3].unwrap_or(0);
             let comment_count = values[i * 3 + 1].unwrap_or(0);
             let share_count = values[i * 3 + 2].unwrap_or(0);
+            let bookmark_count = bookmark_counts.get(post_id).copied().unwrap_or(0);
 
             result.insert(
                 *post_id,
@@ -260,6 +264,7 @@ impl CounterService {
                     like_count,
                     comment_count,
                     share_count,
+                    bookmark_count,
                 },
             );
         }
@@ -272,6 +277,33 @@ impl CounterService {
                 post_count = post_ids.len(),
                 "Failed to warm missing counters"
             );
+        }
+
+        Ok(result)
+    }
+
+    /// Batch get bookmark counts from PostgreSQL
+    async fn batch_get_bookmark_counts_from_pg(&self, post_ids: &[Uuid]) -> Result<HashMap<Uuid, i64>> {
+        if post_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let rows: Vec<(Uuid, i64)> = sqlx::query_as(
+            r#"
+            SELECT post_id, COUNT(*) as count
+            FROM saved_posts
+            WHERE post_id = ANY($1)
+            GROUP BY post_id
+            "#,
+        )
+        .bind(post_ids)
+        .fetch_all(&self.pg_pool)
+        .await
+        .context("Failed to fetch bookmark counts from PostgreSQL")?;
+
+        let mut result: HashMap<Uuid, i64> = HashMap::new();
+        for (post_id, count) in rows {
+            result.insert(post_id, count);
         }
 
         Ok(result)
@@ -390,6 +422,7 @@ impl CounterService {
                     like_count,
                     comment_count,
                     share_count,
+                    bookmark_count: 0, // Bookmark counts fetched separately
                 },
             );
         }
@@ -512,4 +545,5 @@ pub struct PostCounts {
     pub like_count: i64,
     pub comment_count: i64,
     pub share_count: i64,
+    pub bookmark_count: i64,
 }

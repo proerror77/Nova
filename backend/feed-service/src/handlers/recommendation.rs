@@ -249,6 +249,7 @@ async fn fetch_posts_with_metadata(user_id: Uuid, limit: usize) -> Result<Vec<Ca
                 like_count: counts.map(|c| c.like_count as u32).unwrap_or(0),
                 comment_count: counts.map(|c| c.comment_count as u32).unwrap_or(0),
                 share_count: counts.map(|c| c.share_count as u32).unwrap_or(0),
+                bookmark_count: counts.map(|c| c.bookmark_count as u32).unwrap_or(0),
                 media_urls: post.media_urls,
                 media_type: post.media_type,
                 thumbnail_urls: post.thumbnail_urls,

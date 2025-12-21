@@ -1197,7 +1197,7 @@ impl AuthService for IdentityServiceServer {
             2 => "followers".to_string(), // DM_PERMISSION_FOLLOWERS
             3 => "mutuals".to_string(),   // DM_PERMISSION_MUTUALS
             4 => "nobody".to_string(),    // DM_PERMISSION_NOBODY
-            _ => "mutuals".to_string(),   // Default
+            _ => "anyone".to_string(),    // Default to open messaging
         });
 
         // Convert privacy_level from proto enum (i32) to database string
@@ -2155,7 +2155,7 @@ fn settings_to_proto(settings: &db::user_settings::UserSettingsRecord) -> UserSe
         "followers" => 2,    // DM_PERMISSION_FOLLOWERS
         "mutuals" => 3,      // DM_PERMISSION_MUTUALS
         "nobody" => 4,       // DM_PERMISSION_NOBODY
-        _ => 3,              // Default to mutuals
+        _ => 1,              // Default to anyone (open messaging)
     };
 
     // Convert privacy_level from database string to proto enum (i32)

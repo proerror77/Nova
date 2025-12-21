@@ -415,7 +415,7 @@ impl RelationshipService {
         .map(|row| row.get(0));
 
         Ok(DmSettings {
-            dm_permission: result.unwrap_or_else(|| "mutuals".to_string()),
+            dm_permission: result.unwrap_or_else(|| "everyone".to_string()),
         })
     }
 

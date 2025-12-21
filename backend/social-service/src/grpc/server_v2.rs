@@ -1029,6 +1029,7 @@ impl SocialService for SocialServiceImpl {
                         like_count: counts.like_count,
                         comment_count: counts.comment_count,
                         share_count: counts.share_count,
+                        bookmark_count: counts.bookmark_count,
                     },
                 )
             })

@@ -83,6 +83,34 @@ impl BookmarkRepository {
         Ok(count)
     }
 
+    /// Batch get bookmark counts for multiple posts
+    pub async fn batch_get_bookmark_counts(&self, post_ids: &[Uuid]) -> Result<std::collections::HashMap<Uuid, i64>> {
+        use std::collections::HashMap;
+
+        if post_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let rows: Vec<(Uuid, i64)> = sqlx::query_as(
+            r#"
+            SELECT post_id, COUNT(*) as count
+            FROM saved_posts
+            WHERE post_id = ANY($1)
+            GROUP BY post_id
+            "#,
+        )
+        .bind(post_ids)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut result: HashMap<Uuid, i64> = post_ids.iter().map(|id| (*id, 0)).collect();
+        for (post_id, count) in rows {
+            result.insert(post_id, count);
+        }
+
+        Ok(result)
+    }
+
     /// Get paginated bookmarks for a user
     pub async fn get_user_bookmarks(
         &self,
