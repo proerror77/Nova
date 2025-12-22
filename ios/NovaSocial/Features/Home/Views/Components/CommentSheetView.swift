@@ -66,9 +66,6 @@ struct CommentSheetView: View {
                                 SocialCommentRow(
                                     comment: comment,
                                     onAvatarTapped: { userId in
-                                        #if DEBUG
-                                        print("[CommentSheet] 🔍 Avatar tapped - userId: \(userId), displayName: \(comment.displayAuthorName)")
-                                        #endif
                                         // 关闭评论弹窗，触发头像点击回调
                                         isPresented = false
                                         onAvatarTapped?(userId)
@@ -206,33 +203,17 @@ struct SocialCommentRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: DesignTokens.spacing12) {
             // Avatar (点击跳转用户主页)
-            if let avatarUrl = comment.authorAvatarUrl, let url = URL(string: avatarUrl) {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
-                    Circle()
-                        .fill(DesignTokens.avatarPlaceholder)
-                }
+            Circle()
+                .fill(DesignTokens.avatarPlaceholder)
                 .frame(width: DesignTokens.avatarSmall, height: DesignTokens.avatarSmall)
-                .clipShape(Circle())
                 .onTapGesture {
                     onAvatarTapped?(comment.userId)
                 }
-            } else {
-                Circle()
-                    .fill(DesignTokens.avatarPlaceholder)
-                    .frame(width: DesignTokens.avatarSmall, height: DesignTokens.avatarSmall)
-                    .onTapGesture {
-                        onAvatarTapped?(comment.userId)
-                    }
-            }
 
             VStack(alignment: .leading, spacing: DesignTokens.spacing4) {
                 HStack {
                     // 用户名 (点击跳转用户主页)
-                    Text(comment.displayAuthorName)
+                    Text("User \(comment.userId.prefix(8))")
                         .font(.system(size: DesignTokens.fontMedium, weight: .semibold))
                         .foregroundColor(.black)
                         .onTapGesture {

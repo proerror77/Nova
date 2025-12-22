@@ -74,8 +74,6 @@ struct HomeView: View {
     @State private var lastScrollOffset: CGFloat = 0
     @State private var selectedTab: FeedTab = .forYou
     @State private var scrollDebounceTask: Task<Void, Never>?  // 滾動防抖任務
-    @State private var showUserProfile = false  // 用户主页跳转
-    @State private var selectedUserId: String?  // 选中的用户ID
 
     // Interest channels (after For You and Following)
     private let interestChannels = ["Fashion", "Travel", "Fitness", "Pets", "Study", "Career", "Tech", "Art"]
@@ -157,19 +155,7 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showComments) {
             if let post = selectedPostForComment {
-                CommentSheetView(
-                    post: post,
-                    isPresented: $showComments,
-                    onAvatarTapped: { userId in
-                        selectedUserId = userId
-                        showUserProfile = true
-                    }
-                )
-            }
-        }
-        .fullScreenCover(isPresented: $showUserProfile) {
-            if let userId = selectedUserId {
-                UserProfileView(showUserProfile: $showUserProfile, userId: userId)
+                CommentSheetView(post: post, isPresented: $showComments)
             }
         }
         // System PhotosPicker - user selects 1-5 photos, taps blue checkmark to confirm
