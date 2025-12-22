@@ -22,9 +22,9 @@ enum APIEnvironment {
                !stagingURL.hasPrefix("$(") {  // Skip unresolved build variables
                 return stagingURL
             }
-            // Staging API via GKE Ingress IP (nova-staging namespace)
-            // Note: api.staging.gcp.icered.com DNS may resolve to VPN proxy IP which doesn't work in iOS Simulator
-            return "http://34.8.163.8"
+            // Staging API via GKE Ingress domain
+            // Note: Real devices (TestFlight) need domain access, not internal IP
+            return "https://api.staging.gcp.icered.com"
         case .production:
             return "http://api.icered.com:8000"
         }
