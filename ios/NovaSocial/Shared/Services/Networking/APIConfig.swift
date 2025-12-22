@@ -22,8 +22,8 @@ enum APIEnvironment {
                !stagingURL.hasPrefix("$(") {  // Skip unresolved build variables
                 return stagingURL
             }
-            // Staging API via GKE Ingress domain
-            // Note: Real devices (TestFlight) need domain access, not internal IP
+            // Staging API via Cloudflare Proxy (SSL handled by Cloudflare)
+            // DNS: api.staging.gcp.icered.com → Cloudflare → 34.8.163.8
             return "https://api.staging.gcp.icered.com"
         case .production:
             return "http://api.icered.com:8000"

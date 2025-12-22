@@ -40,3 +40,4 @@ fastlane/AuthKey*.p8
 *.ipa
 *.dSYM.zip
 *.app.dSYM.zip
+fastlane/api_key.json
