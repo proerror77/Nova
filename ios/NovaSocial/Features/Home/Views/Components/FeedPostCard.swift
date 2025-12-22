@@ -21,24 +21,13 @@ struct FeedPostCard: View {
     @State private var bookmarkAnimationTrigger = false
 
     // MARK: - Gesture States
-    /// 滑動偏移量
-    @State private var swipeOffset: CGFloat = 0
-    /// 是否顯示操作選單
-    @State private var showingActions = false
     /// 長按選單
     @State private var showingLongPressMenu = false
-    /// 圖片縮放比例
-    @State private var imageScale: CGFloat = 1.0
-    /// 縮放時的錨點
-    @State private var imageAnchor: UnitPoint = .center
-    /// 是否正在縮放
-    @State private var isZooming = false
     /// 縮放預覽的圖片 URL
     @State private var zoomingImageUrl: String? = nil
-    /// 是否在進行水平滑動 (圖片輪播)
-    @State private var isHorizontalScrolling = false
-    /// 圖片輪播的初始滑動位置
-    @State private var carouselDragStart: CGFloat = 0
+    /// 雙擊點讚動畫 (Instagram 風格愛心動畫)
+    @State private var showDoubleTapHeart = false
+    @State private var doubleTapHeartPosition: CGPoint = .zero
     /// 觸覺回饋生成器
     private let hapticFeedback = UIImpactFeedbackGenerator(style: .medium)
     private let hapticLight = UIImpactFeedbackGenerator(style: .light)
@@ -46,22 +35,9 @@ struct FeedPostCard: View {
     // Target size for feed images (optimized for display)
     private let imageTargetSize = CGSize(width: 750, height: 1000)
 
-    // 滑動閾值
-    private let swipeThreshold: CGFloat = 80
-    private let maxSwipeOffset: CGFloat = 120
-
     var body: some View {
-        ZStack {
-            // MARK: - Swipe Action Background
-            swipeActionBackground
-
-            // MARK: - Main Content with Swipe Gesture
-            mainContent
-                .offset(x: swipeOffset)
-                .gesture(swipeGesture)
-                .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.8), value: swipeOffset)
-        }
-        .clipped()
+        // MARK: - Main Content (Instagram Style - No Swipe Gestures)
+        mainContent
         // MARK: - Long Press Menu
         .confirmationDialog("貼文選項", isPresented: $showingLongPressMenu, titleVisibility: .visible) {
             Button("分享", action: onShare)
@@ -82,13 +58,6 @@ struct FeedPostCard: View {
                 }
             }
             Button("取消", role: .cancel) { }
-        }
-        // MARK: - Fullscreen Image Zoom Overlay
-        .fullScreenCover(item: $zoomingImageUrl) { imageUrl in
-            ZoomableImageView(
-                imageUrl: imageUrl,
-                onDismiss: { zoomingImageUrl = nil }
-            )
         }
     }
 
@@ -141,10 +110,9 @@ struct FeedPostCard: View {
             }
             .padding(.horizontal, 16)
 
-            // MARK: - Post Media (Images/Video/Live Photo) with Long Press & Pinch
+            // MARK: - Post Media (Images/Video/Live Photo) - Instagram Style
             if !post.displayMediaUrls.isEmpty {
                 mediaContent
-                    .gesture(longPressGesture)
             }
 
             // MARK: - Post Content & Interaction
@@ -155,7 +123,6 @@ struct FeedPostCard: View {
                         .font(Typography.semibold16)
                         .lineSpacing(20)
                         .foregroundColor(.black)
-                        .gesture(longPressGesture)
                 }
 
                 // Interaction Buttons with iOS 17+ Symbol Effects
@@ -232,169 +199,44 @@ struct FeedPostCard: View {
         }
     }
 
-    // MARK: - Swipe Action Background View
-    private var swipeActionBackground: some View {
-        HStack(spacing: 0) {
-            // 右滑顯示：快速點讚 (綠色背景)
-            if swipeOffset > 0 {
-                HStack {
-                    Image(systemName: post.isLiked ? "heart.fill" : "heart")
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding(.leading, 24)
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(post.isLiked ? Color.gray : Color.red.opacity(0.9))
-            }
 
-            Spacer()
-
-            // 左滑顯示：舉報/更多選項 (紅色背景)
-            if swipeOffset < 0 {
-                HStack {
-                    Spacer()
-                    VStack(spacing: 8) {
-                        Button {
-                            resetSwipe()
-                            showReportView = true
-                        } label: {
-                            VStack(spacing: 4) {
-                                Image(systemName: "flag.fill")
-                                    .font(.system(size: 20))
-                                Text("舉報")
-                                    .font(.system(size: 10, weight: .medium))
-                            }
-                            .foregroundColor(.white)
-                        }
-
-                        if onDelete != nil {
-                            Button {
-                                resetSwipe()
-                                onDelete?()
-                            } label: {
-                                VStack(spacing: 4) {
-                                    Image(systemName: "trash.fill")
-                                        .font(.system(size: 20))
-                                    Text("刪除")
-                                        .font(.system(size: 10, weight: .medium))
-                                }
-                                .foregroundColor(.white)
-                            }
-                        }
-                    }
-                    .padding(.trailing, 24)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.red.opacity(0.9))
-            }
-        }
-    }
-
-    // MARK: - Swipe Gesture
-    private var swipeGesture: some Gesture {
-        DragGesture(minimumDistance: 20, coordinateSpace: .local)
-            .onChanged { value in
-                // 只處理水平滑動
-                guard abs(value.translation.width) > abs(value.translation.height) else { return }
-
-                let translation = value.translation.width
-
-                // 限制最大滑動距離
-                if translation > 0 {
-                    swipeOffset = min(translation, maxSwipeOffset)
-                } else {
-                    swipeOffset = max(translation, -maxSwipeOffset)
-                }
-
-                // 達到閾值時觸發觸覺回饋
-                if abs(swipeOffset) >= swipeThreshold && !showingActions {
-                    hapticLight.impactOccurred()
-                    showingActions = true
-                } else if abs(swipeOffset) < swipeThreshold {
-                    showingActions = false
-                }
-            }
-            .onEnded { value in
-                let translation = value.translation.width
-
-                if translation > swipeThreshold {
-                    // 右滑完成 - 點讚
-                    hapticFeedback.impactOccurred()
-                    likeAnimationTrigger.toggle()
-                    onLike()
-                    resetSwipe()
-                } else if translation < -swipeThreshold {
-                    // 左滑完成 - 保持顯示操作按鈕
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        swipeOffset = -maxSwipeOffset
-                    }
-                } else {
-                    // 未達閾值 - 重置
-                    resetSwipe()
-                }
-            }
-    }
-
-    // MARK: - Long Press Gesture
-    private var longPressGesture: some Gesture {
-        LongPressGesture(minimumDuration: 0.5)
-            .onEnded { _ in
-                hapticFeedback.impactOccurred()
-                showingLongPressMenu = true
-            }
-    }
-
-    /// 重置滑動狀態
-    private func resetSwipe() {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            swipeOffset = 0
-            showingActions = false
-        }
-    }
-
-    // MARK: - Media Content View
+    // MARK: - Media Content View (Instagram Style - Native Scroll)
 
     @ViewBuilder
     private var mediaContent: some View {
-        VStack(spacing: 8) {
-            switch post.mediaType {
-            case .video:
-                // Video post - show video player
-                videoContent
+        ZStack {
+            VStack(spacing: 8) {
+                switch post.mediaType {
+                case .video:
+                    // Video post - show video player
+                    videoContent
 
-            case .livePhoto:
-                // Live Photo - show with indicator
-                livePhotoContent
+                case .livePhoto:
+                    // Live Photo - show with indicator
+                    livePhotoContent
 
-            case .image, .mixed, .none:
-                // Image carousel (default)
-                imageCarousel
+                case .image, .mixed, .none:
+                    // Image carousel (default) - Native SwiftUI scroll, no gesture interference
+                    imageCarousel
+                }
+
+                // Page indicator for multiple media items
+                if mediaItemCount > 1 {
+                    pageIndicator
+                }
             }
 
-            // Page indicator for multiple media items
-            if mediaItemCount > 1 {
-                pageIndicator
+            // Instagram style double-tap heart animation
+            if showDoubleTapHeart {
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 80))
+                    .foregroundColor(.white)
+                    .shadow(color: .black.opacity(0.3), radius: 10)
+                    .scaleEffect(showDoubleTapHeart ? 1.0 : 0.5)
+                    .opacity(showDoubleTapHeart ? 1.0 : 0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showDoubleTapHeart)
             }
         }
-        // 快速反應的方向檢測：在拖曳開始時立即判斷方向
-        // 使用簡單的DragGesture（不使用highPriorityGesture）
-        .gesture(
-            DragGesture(minimumDistance: 3, coordinateSpace: .local)
-                .onChanged { value in
-                    let horizontalDistance = abs(value.translation.width)
-                    let verticalDistance = abs(value.translation.height)
-                    
-                    // 快速判斷：竪直優先
-                    if verticalDistance > horizontalDistance {
-                        isHorizontalScrolling = false
-                    }
-                    // 明確的水平滑動
-                    else if horizontalDistance > verticalDistance * 1.3 && horizontalDistance > 15 {
-                        isHorizontalScrolling = true
-                    }
-                }
-        )
     }
 
     // MARK: - Video Content
@@ -467,10 +309,9 @@ struct FeedPostCard: View {
         }
     }
 
-    // MARK: - Image Carousel
-    // 性能優化：移除 GeometryReader，使用 containerRelativeFrame 替代
-    // 手勢優化：禁用圖片輪播ScrollView，只有明確水平滑動時才啟用
-    // 這樣Feed的ScrollView永遠獲得最高優先級，滾動最流暢
+    // MARK: - Image Carousel (Instagram Style - Native Paging)
+    // Instagram 風格：完全使用原生 ScrollView，不干擾手勢
+    // SwiftUI 會自動處理嵌套滾動，無需任何自定義手勢檢測
     @ViewBuilder
     private var imageCarousel: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -492,9 +333,6 @@ struct FeedPostCard: View {
         .scrollPosition($scrollPosition)
         .scrollClipDisabled(false)
         .frame(height: 500)
-        // 關鍵優化：禁用ScrollView滾動，除非明確檢測到水平滑動
-        // 這樣Feed的ScrollView永遠不會被干擾，獲得絕對優先級
-        .scrollDisabled(!isHorizontalScrolling)
     }
     
     /// Current visible image index based on scroll position
@@ -533,8 +371,7 @@ struct FeedPostCard: View {
         }
     }
 
-    // MARK: - Single Media Item View
-
+    // MARK: - Single Media Item View (Instagram Style)
     @ViewBuilder
     private func mediaItemView(for urlString: String, at index: Int) -> some View {
         // Check if this URL is a video (for mixed content posts)
@@ -562,8 +399,12 @@ struct FeedPostCard: View {
                 isMuted: true,
                 height: 500
             )
+            // Instagram style: double-tap to like on video
+            .onTapGesture(count: 2) {
+                triggerDoubleTapLike()
+            }
         } else {
-            // Image - use cached image loading with tap to zoom
+            // Image - Instagram style: double-tap to like
             FeedCachedImage(
                 url: URL(string: urlString),
                 targetSize: imageTargetSize
@@ -582,35 +423,43 @@ struct FeedPostCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
             .contentShape(Rectangle())
-            // 輕量級方向檢測：快速判斷是否是水平滑動
-            // 這個手勢不會阻止任何東西，只是用來檢測方向
-            .gesture(
-                DragGesture(minimumDistance: 8, coordinateSpace: .local)
-                    .onChanged { value in
-                        let horizontalDistance = abs(value.translation.width)
-                        let verticalDistance = abs(value.translation.height)
-                        
-                        // 快速檢測方向：如果水平 > 竪直 1.3 倍 && > 20pt，啟用圖片輪播
-                        if horizontalDistance > verticalDistance * 1.3 && horizontalDistance > 20 {
-                            isHorizontalScrolling = true
-                        }
-                        // 竪直滑動優先，禁用圖片輪播
-                        else if verticalDistance > horizontalDistance && verticalDistance > 8 {
-                            isHorizontalScrolling = false
-                        }
-                    }
-                    .onEnded { _ in
-                        // 重置狀態（延遲100ms以確保ScrollView已接管）
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            isHorizontalScrolling = false
-                            carouselDragStart = 0
-                        }
-                    }
-            )
+            // Instagram style: double-tap to like
             .onTapGesture(count: 2) {
-                // 雙擊放大圖片
-                hapticLight.impactOccurred()
-                zoomingImageUrl = urlString
+                triggerDoubleTapLike()
+            }
+            // Single tap to view full screen (optional, like Instagram)
+            .onTapGesture(count: 1) {
+                // Single tap does nothing for now (Instagram behavior)
+                // Can be used to pause/play video or show/hide UI
+            }
+            // Long press for menu
+            .onLongPressGesture(minimumDuration: 0.5) {
+                hapticFeedback.impactOccurred()
+                showingLongPressMenu = true
+            }
+        }
+    }
+
+    // MARK: - Instagram Style Double-Tap Like
+    /// 觸發 Instagram 風格的雙擊點讚動畫
+    private func triggerDoubleTapLike() {
+        hapticFeedback.impactOccurred()
+
+        // 顯示愛心動畫
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            showDoubleTapHeart = true
+        }
+
+        // 如果還沒點讚，執行點讚
+        if !post.isLiked {
+            likeAnimationTrigger.toggle()
+            onLike()
+        }
+
+        // 延遲隱藏愛心
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            withAnimation(.easeOut(duration: 0.2)) {
+                showDoubleTapHeart = false
             }
         }
     }
