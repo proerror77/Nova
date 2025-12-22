@@ -13,33 +13,36 @@ struct WelcomeView: View {
     private var isInviteCodeValid: Bool { inviteCode.count == 8 }
 
     var body: some View {
-        ZStack {
-            // Background
-            Image("Registration-background")
-                .resizable()
-                .scaledToFill()
-                .clipped()
-                .ignoresSafeArea()
+        GeometryReader { geometry in
+            ZStack {
+                // Background
+                Image("Registration-background")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+                    .ignoresSafeArea()
 
-            Color.black.opacity(0.4).ignoresSafeArea()
+                Color.black.opacity(0.4).ignoresSafeArea()
 
-            // Content
-            VStack(spacing: 0) {
-                logoSection
-                Spacer().frame(height: 40)
-                titleSection
-                Spacer().frame(height: 28)
-                inviteCodeInput.padding(.horizontal, 16)
-                errorMessageView
-                Spacer().frame(height: 24)
-                doneButton.padding(.horizontal, 16)
-                Spacer().frame(height: 20)
-                goBackButton
+                // Content
+                VStack(spacing: 0) {
+                    logoSection
+                    Spacer().frame(height: 40)
+                    titleSection
+                    Spacer().frame(height: 28)
+                    inviteCodeInput.padding(.horizontal, 16)
+                    errorMessageView
+                    Spacer().frame(height: 24)
+                    doneButton.padding(.horizontal, 16)
+                    Spacer().frame(height: 20)
+                    goBackButton
+                }
+                .offset(y: contentVerticalOffset)
             }
-            .offset(y: contentVerticalOffset)
+            .contentShape(Rectangle())
+            .onTapGesture { isInputFocused = false }
         }
-        .contentShape(Rectangle())
-        .onTapGesture { isInputFocused = false }
         .ignoresSafeArea(.keyboard)
     }
 
