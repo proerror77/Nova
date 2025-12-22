@@ -39,6 +39,14 @@ Sync development certificates
 
 Sync App Store certificates
 
+### ios regenerate_profiles
+
+```sh
+[bundle exec] fastlane ios regenerate_profiles
+```
+
+Force regenerate App Store provisioning profiles
+
 ### ios add_device
 
 ```sh
@@ -61,7 +69,7 @@ Build the app for testing
 [bundle exec] fastlane ios build_release
 ```
 
-Build for App Store / TestFlight
+Build for App Store / TestFlight (without widgets)
 
 ### ios testflight_upload
 
@@ -126,6 +134,22 @@ Get the latest TestFlight build number
 ```
 
 Run unit tests
+
+### ios beta_pro
+
+```sh
+[bundle exec] fastlane ios beta_pro
+```
+
+Build and upload to IceredTest TestFlight
+
+### ios beta_pro_widgets
+
+```sh
+[bundle exec] fastlane ios beta_pro_widgets
+```
+
+Build and upload to IceredTest TestFlight WITH widgets
 
 ----
 

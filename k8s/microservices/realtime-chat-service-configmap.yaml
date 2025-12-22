@@ -25,8 +25,11 @@ data:
   RTC_STUN_URLS: "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302"
   # Matrix E2EE Integration
   MATRIX_ENABLED: "true"
-  MATRIX_HOMESERVER_URL: "https://matrix.nova-staging.svc.cluster.local:8448"
-  MATRIX_SERVER_NAME: "nova.chat"
+  MATRIX_HOMESERVER_URL: "http://matrix-synapse.nova-staging.svc.cluster.local:8008"
+  MATRIX_PUBLIC_URL: "https://matrix.staging.gcp.icered.com"
+  MATRIX_SERVER_NAME: "staging.gcp.icered.com"
+  MATRIX_SERVICE_USER: "@nova-service:staging.gcp.icered.com"
+  MATRIX_DEVICE_NAME: "nova-realtime-chat-service"
   # Kafka for identity event sync
   KAFKA_ENABLED: "true"
   KAFKA_BROKERS: "kafka-broker-0.kafka-headless.nova-staging:9092"

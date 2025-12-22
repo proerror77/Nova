@@ -7,7 +7,7 @@ default_platform(:ios)
 
 # Constants
 APP_IDENTIFIER = "com.app.icered"
-SCHEME = "ICERED"
+SCHEME = "ICERED-NoWidgets"
 PROJECT_PATH = "ICERED.xcodeproj"
 
 # Helper method to get App Store Connect API Key
@@ -44,6 +44,17 @@ platform :ios do
     match(type: "appstore", readonly: is_ci, api_key: api_key)
   end
 
+  desc "Force regenerate App Store provisioning profiles"
+  lane :regenerate_profiles do
+    match(
+      type: "appstore",
+      force: true,
+      api_key: api_key,
+      readonly: false
+    )
+    UI.success("Successfully regenerated provisioning profiles!")
+  end
+
   desc "Register new devices and refresh profiles"
   lane :add_device do |options|
     device_name = options[:name] || UI.input("Device name: ")
@@ -70,22 +81,29 @@ platform :ios do
     )
   end
 
-  desc "Build for App Store / TestFlight"
+  desc "Build for App Store / TestFlight (without widgets)"
   lane :build_release do
-    sync_appstore_certs
+    # Sync appstore certs for main app only
+    match(
+      type: "appstore",
+      app_identifier: APP_IDENTIFIER,
+      api_key: api_key,
+      force: true
+    )
 
     # Increment build number
     increment_build_number(
       build_number: ENV["BUILD_NUMBER"] || (latest_testflight_build_number(api_key: api_key) + 1).to_s
     )
 
-    # Update code signing settings to use manual signing with match profile
+    # Update code signing only for the main app target
     update_code_signing_settings(
       use_automatic_signing: false,
+      path: PROJECT_PATH,
+      targets: ["ICERED"],
       team_id: "2C77AZCA8W",
       profile_name: "match AppStore #{APP_IDENTIFIER}",
-      code_sign_identity: "Apple Distribution",
-      path: PROJECT_PATH
+      code_sign_identity: "Apple Distribution"
     )
 
     build_app(
@@ -93,7 +111,8 @@ platform :ios do
       project: PROJECT_PATH,
       configuration: "Release",
       export_method: "app-store",
-      xcargs: "-allowProvisioningUpdates",
+      skip_build_archive: false,
+      include_bitcode: false,
       export_options: {
         provisioningProfiles: {
           APP_IDENTIFIER => "match AppStore #{APP_IDENTIFIER}"
@@ -196,6 +215,137 @@ platform :ios do
       device: "iPhone 16 Pro",
       clean: true
     )
+  end
+
+  # ==================== IceredTest (Pro) ====================
+
+  desc "Build and upload to IceredTest TestFlight"
+  lane :beta_pro do |options|
+    pro_identifier = "com.app.icered.pro"
+
+    # Sync appstore certs for pro app
+    match(
+      type: "appstore",
+      app_identifier: pro_identifier,
+      api_key: api_key,
+      force: true
+    )
+
+    # Get latest build number for pro app
+    build_num = latest_testflight_build_number(
+      api_key: api_key,
+      app_identifier: pro_identifier
+    ) + 1
+
+    # Increment build number
+    increment_build_number(build_number: build_num.to_s)
+
+    # Update code signing for the main app target with pro identifier
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: PROJECT_PATH,
+      targets: ["ICERED"],
+      team_id: "2C77AZCA8W",
+      profile_name: "match AppStore #{pro_identifier}",
+      code_sign_identity: "Apple Distribution",
+      bundle_identifier: pro_identifier
+    )
+
+    build_app(
+      scheme: SCHEME,
+      project: PROJECT_PATH,
+      configuration: "Release",
+      export_method: "app-store",
+      skip_build_archive: false,
+      include_bitcode: false,
+      export_options: {
+        provisioningProfiles: {
+          pro_identifier => "match AppStore #{pro_identifier}"
+        }
+      }
+    )
+
+    # Upload to TestFlight
+    upload_to_testflight(
+      api_key: api_key,
+      app_identifier: pro_identifier,
+      skip_waiting_for_build_processing: true,
+      changelog: options[:changelog] || "New beta build"
+    )
+
+    UI.success("Successfully uploaded to IceredTest TestFlight!")
+  end
+
+  # ==================== IceredTest with Widgets ====================
+
+  desc "Build and upload to IceredTest TestFlight WITH widgets"
+  lane :beta_pro_widgets do |options|
+    pro_identifier = "com.app.icered.pro"
+    widget_identifier = "com.app.icered.pro.widgets"
+
+    # Sync appstore certs for both main app and widget
+    match(
+      type: "appstore",
+      app_identifier: [pro_identifier, widget_identifier],
+      api_key: api_key,
+      force: true
+    )
+
+    # Get latest build number for pro app
+    build_num = latest_testflight_build_number(
+      api_key: api_key,
+      app_identifier: pro_identifier
+    ) + 1
+
+    # Increment build number
+    increment_build_number(build_number: build_num.to_s)
+
+    # Update code signing for the main app target
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: PROJECT_PATH,
+      targets: ["ICERED"],
+      team_id: "2C77AZCA8W",
+      profile_name: "match AppStore #{pro_identifier}",
+      code_sign_identity: "Apple Distribution",
+      bundle_identifier: pro_identifier
+    )
+
+    # Update code signing for the widget target
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: PROJECT_PATH,
+      targets: ["ICEREDWidgets"],
+      team_id: "2C77AZCA8W",
+      profile_name: "match AppStore #{widget_identifier}",
+      code_sign_identity: "Apple Distribution",
+      bundle_identifier: widget_identifier
+    )
+
+    build_app(
+      scheme: "ICERED",  # Use full scheme with widgets
+      project: PROJECT_PATH,
+      configuration: "Release",
+      export_method: "app-store",
+      skip_build_archive: false,
+      include_bitcode: false,
+      export_options: {
+        provisioningProfiles: {
+          pro_identifier => "match AppStore #{pro_identifier}",
+          widget_identifier => "match AppStore #{widget_identifier}"
+        }
+      }
+    )
+
+    # Upload to TestFlight
+    upload_to_testflight(
+      api_key: api_key,
+      app_identifier: pro_identifier,
+      skip_waiting_for_build_processing: true,
+      changelog: options[:changelog] || "New beta build with widgets"
+    )
+
+    UI.success("Successfully uploaded to IceredTest TestFlight with widgets!")
   end
 
   # ==================== Error Handling ====================
