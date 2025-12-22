@@ -219,7 +219,14 @@ struct HomeView: View {
                     ),
                     onAvatarTapped: { userId in
                         activeSheet = nil
-                        fullScreenDestination = .userProfile(userId)
+                        // 方案B: 判断是否点击自己的头像
+                        if userId == authManager.currentUser?.id {
+                            // 点击自己的头像 → 进入我的主页 (Profile tab)
+                            currentPage = .account
+                        } else {
+                            // 点击他人头像 → 进入他人主页 (UserProfileView)
+                            fullScreenDestination = .userProfile(userId)
+                        }
                     }
                 )
             case .camera:
