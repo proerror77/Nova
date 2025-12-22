@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>app-store</string>
+    <key>teamID</key>
+    <string>2C77AZCA8W</string>
+    <key>uploadSymbols</key>
+    <true/>
+    <key>signingStyle</key>
+    <string>manual</string>
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>com.app.icered.pro</key>
+        <string>match AppStore com.app.icered.pro</string>
+        <key>com.app.icered.pro.ICEREDWidgets</key>
+        <string>match AppStore com.app.icered.pro.ICEREDWidgets</string>
+    </dict>
+</dict>
+</plist>

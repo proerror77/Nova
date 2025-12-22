@@ -22,9 +22,9 @@ enum APIEnvironment {
                !stagingURL.hasPrefix("$(") {  // Skip unresolved build variables
                 return stagingURL
             }
-            // Staging API via Cloudflare Proxy (SSL handled by Cloudflare)
-            // DNS: api.staging.gcp.icered.com → Cloudflare → 34.8.163.8
-            return "https://api.staging.gcp.icered.com"
+            // Staging API via Cloudflare proxy with valid SSL
+            // DNS: staging-api.icered.com -> Cloudflare (SSL termination) -> 34.8.163.8
+            return "https://staging-api.icered.com"
         case .production:
             return "http://api.icered.com:8000"
         }
