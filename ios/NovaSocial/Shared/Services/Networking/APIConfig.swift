@@ -50,7 +50,9 @@ struct APIConfig {
         #if DEBUG
         return .staging  // Changed from .development for Feed API testing
         #else
-        return .production
+        // TEMP: Using staging for TestFlight testing (production API not ready)
+        // TODO: Change back to .production when production environment is ready
+        return .staging
         #endif
     }()
 
