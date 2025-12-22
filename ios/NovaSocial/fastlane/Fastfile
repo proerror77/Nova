@@ -6,8 +6,8 @@
 default_platform(:ios)
 
 # Constants
-APP_IDENTIFIER = "com.app.icered"
-SCHEME = "ICERED-NoWidgets"
+APP_IDENTIFIER = "com.app.icered.pro"
+SCHEME = "ICERED"
 PROJECT_PATH = "ICERED.xcodeproj"
 
 # Helper method to get App Store Connect API Key
@@ -81,12 +81,14 @@ platform :ios do
     )
   end
 
-  desc "Build for App Store / TestFlight (without widgets)"
+  desc "Build for App Store / TestFlight (with widgets)"
   lane :build_release do
-    # Sync appstore certs for main app only
+    widget_identifier = "#{APP_IDENTIFIER}.widgets"
+
+    # Sync appstore certs for main app and widget extension
     match(
       type: "appstore",
-      app_identifier: APP_IDENTIFIER,
+      app_identifier: [APP_IDENTIFIER, widget_identifier],
       api_key: api_key,
       force: true
     )
@@ -96,13 +98,23 @@ platform :ios do
       build_number: ENV["BUILD_NUMBER"] || (latest_testflight_build_number(api_key: api_key) + 1).to_s
     )
 
-    # Update code signing only for the main app target
+    # Update code signing for main app target
     update_code_signing_settings(
       use_automatic_signing: false,
       path: PROJECT_PATH,
       targets: ["ICERED"],
       team_id: "2C77AZCA8W",
       profile_name: "match AppStore #{APP_IDENTIFIER}",
+      code_sign_identity: "Apple Distribution"
+    )
+
+    # Update code signing for widget extension target
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: PROJECT_PATH,
+      targets: ["ICEREDWidgets"],
+      team_id: "2C77AZCA8W",
+      profile_name: "match AppStore #{widget_identifier}",
       code_sign_identity: "Apple Distribution"
     )
 
@@ -115,7 +127,8 @@ platform :ios do
       include_bitcode: false,
       export_options: {
         provisioningProfiles: {
-          APP_IDENTIFIER => "match AppStore #{APP_IDENTIFIER}"
+          APP_IDENTIFIER => "match AppStore #{APP_IDENTIFIER}",
+          widget_identifier => "match AppStore #{widget_identifier}"
         }
       }
     )

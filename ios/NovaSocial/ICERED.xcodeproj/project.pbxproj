@@ -20,7 +20,6 @@
 		0A96B08A3CE594DA58842B9B /* VideoCompressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C73FD45286EFDA3DC3C27C34 /* VideoCompressor.swift */; };
 		0CE35545BE0426ACFD947E22 /* CryptoCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBBFF77645A4CF02AAB9B2E4 /* CryptoCore.swift */; };
 		0E255AAE8F1562704602EDE8 /* DefaultAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803F96C26D9E8C040F88BC22 /* DefaultAvatarView.swift */; };
-		0FF6CDC342ADFEFE2C859DE7 /* QUICK_START.md in Resources */ = {isa = PBXBuildFile; fileRef = 681F9A1696FC9FE9E2B7D50A /* QUICK_START.md */; };
 		124E367C3D6397C95405BDAF /* PostAsSelectionPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24CEFEAC014290526A9CD69E /* PostAsSelectionPanel.swift */; };
 		162EEE7D84A7DE23589C45F0 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D34F87E7DE783C7F956B76F /* ChatView.swift */; };
 		1648C8ED60D353785E217E14 /* WriteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF7C3F1FF4F4ED65A51E66E2 /* WriteView.swift */; };
@@ -52,7 +51,6 @@
 		30B8FED56BD2FC15EA847F3C /* MatrixServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB2AAE37D1FD1B67346E7E8E /* MatrixServiceTests.swift */; };
 		3553BB6E62A9D150C65FA109 /* GenerateImage01View.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F361F5818CDB8EEB87330CB /* GenerateImage01View.swift */; };
 		36197AA754ED191DC4253E52 /* FeedPostCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CF9EE837EC3996A27E70749 /* FeedPostCard.swift */; };
-		36C8F0814D8325B15798C3C0 /* project.yml in Resources */ = {isa = PBXBuildFile; fileRef = F17E22FD89284D78C7FE808A /* project.yml */; };
 		389668DBBA1E8F73CFC86A09 /* DeviceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F5C35AAB0D88AE0B2AB108 /* DeviceModels.swift */; };
 		38B3B3D97C6F186BAAB0286E /* AccountSwitcherSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6425CFA20477B3C4908E3A44 /* AccountSwitcherSheet.swift */; };
 		395113E5360AAA3CF258875A /* OAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18618EED114C808B5657EFBD /* OAuthService.swift */; };
@@ -66,7 +64,6 @@
 		424E9016838E6F81E091A92F /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA6D2E536652EEB5F08CB53D /* SettingsView.swift */; };
 		42E9CA3EF110B66F38467879 /* ProfileSettingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76856E465B25C89F2D6954C1 /* ProfileSettingViewModel.swift */; };
 		44135CB1C50867467D212A7B /* DateOfBirthPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCD4CC5045F5A5B1C3BD50BC /* DateOfBirthPickerView.swift */; };
-		4679E194ED83C34FB4DCCDAE /* INTEGRATION_GUIDE.md in Resources */ = {isa = PBXBuildFile; fileRef = 79CD728AAD8F73549C311B73 /* INTEGRATION_GUIDE.md */; };
 		46C169B49CD9E53AB2048574 /* SocialService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EB3A1844A28ADE400B2CB8B /* SocialService.swift */; };
 		487679CAADFC71FB11F48B16 /* E2EEModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1643FCCAD5E970693182E5B1 /* E2EEModels.swift */; };
 		48FDB68683D9B25F4D9DA0B1 /* EnhanceSuggestionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49FAE63859459C79E671AED6 /* EnhanceSuggestionView.swift */; };
@@ -83,7 +80,6 @@
 		5D3CEE9D7C0E99FCE63E6D0D /* APIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C4BE13F136F4EEE21D1B806 /* APIConfig.swift */; };
 		5DB814F4E478DF10AEE57471 /* BlockReportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A60BC5B4602B06F08DD53A8 /* BlockReportSheet.swift */; };
 		5E54D27239A279092B34A1FA /* WidgetEntries.swift in Sources */ = {isa = PBXBuildFile; fileRef = 511A3A7C4772B05DB4B9E441 /* WidgetEntries.swift */; };
-		602A5D4FC89DF00CBFFDE425 /* document_symbols.pkl in Resources */ = {isa = PBXBuildFile; fileRef = 6FE503B433803D526D38998A /* document_symbols.pkl */; };
 		61D284A4B659E880982BAF8E /* SettingsRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66B36D2C99940153852FD4AA /* SettingsRow.swift */; };
 		63099AE47BCCD487186734FC /* CallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B19989936B1CFD98F9E77720 /* CallCoordinator.swift */; };
 		65464D47ED07233203082A57 /* ProfileFollowingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB01B9922C10E2E33C2A6A99 /* ProfileFollowingView.swift */; };
@@ -117,7 +113,6 @@
 		851FD1539C0DD29ABA2D0DED /* AliceQuickView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9183603F29D8D5FF802BBF04 /* AliceQuickView.swift */; };
 		85CB3A698803E99EA7E73D14 /* FeedCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A210FAEED8AB436394766519 /* FeedCacheService.swift */; };
 		872EE38FD80234144C2CC601 /* PhotoOptionsModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21C58A10ECD63A9AD9BEB6D5 /* PhotoOptionsModal.swift */; };
-		88FBDAC60D5FDB0E4E72E386 /* project_overview.md in Resources */ = {isa = PBXBuildFile; fileRef = 8170935CEEE4E15895B8D129 /* project_overview.md */; };
 		89565569D6BA728940FA5494 /* IdentityServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8986D3064056CEDB3FE2B380 /* IdentityServiceTests.swift */; };
 		8A00C127A0411ABC8AE1BFF8 /* FoundationModelsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DE6005F56461CCE6C34EE43 /* FoundationModelsService.swift */; };
 		8B98C3C6CCDB91F0F81F70B4 /* AliceQuickProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D40F7AD31119B8A139662C4 /* AliceQuickProvider.swift */; };
@@ -152,9 +147,7 @@
 		ACF209A76A3C5E01292691FB /* APIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ADE31A2BE4914B0F21C29A9 /* APIError.swift */; };
 		AD625704C8BD7018F9A0E19F /* RelationshipsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEC81AD21C3D779062FDEEFD /* RelationshipsService.swift */; };
 		ADCA1CA875E340CD04D2237A /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE44BE89D96953ABCAA2E34E /* ProfileView.swift */; };
-		AE9AC4576C432771F4E87BC8 /* ICERED.ipa in Resources */ = {isa = PBXBuildFile; fileRef = TEMP_5933CD48-42EA-4530-80C7-F2A853689BE5 /* ICERED.ipa */; };
 		B0EE8CAD1973B1C29CB02702 /* MyQRCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B24BB2EE3F0021E5343878D /* MyQRCodeView.swift */; };
-		B1AC0310BD8E2B5010916DA5 /* ICERED.app.dSYM.zip in Resources */ = {isa = PBXBuildFile; fileRef = TEMP_FCBB019C-0AB0-4DE6-A147-0D296C12BD99 /* ICERED.app.dSYM.zip */; };
 		B1D7184D4B2131AC5C5FC6B6 /* UserProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 893193464D16DA57F8243351 /* UserProfileView.swift */; };
 		B3156902D37DCD78DCA3AE24 /* ImageCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BAA081BD695A0ADA562F9F /* ImageCacheService.swift */; };
 		B6DC080940008AD123E9BCB1 /* VoiceRecordButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = E41413B297CCF9C221A61D53 /* VoiceRecordButton.swift */; };
@@ -162,7 +155,6 @@
 		B89382820C004AFA0B61E86B /* KeyboardExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D7E3C38730CAA90EB8DF00 /* KeyboardExtension.swift */; };
 		B8D76B18B9718D4B1A5EDCBE /* AddFriendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24173BE45B1DC7AA94F7016A /* AddFriendsView.swift */; };
 		BB583AD9A1ADAABE29C5636C /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEMP_8EB156CE-7966-49ED-8A42-1F5FF6FD0DFB /* App.swift */; };
-		BB79B10B3BE7445C0AF5E3A8 /* MATRIX_INTEGRATION_COMPLETE.md in Resources */ = {isa = PBXBuildFile; fileRef = 83E1B5C604B9D207FEE0FA63 /* MATRIX_INTEGRATION_COMPLETE.md */; };
 		BD10D463F04D5CDB7670D4A3 /* AliceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 612ACD95D18565FB20AF7B5E /* AliceView.swift */; };
 		BE7006D3DC8E8F7CF8FA6B81 /* AccountsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B450DD625F8A6F43E5E1376 /* AccountsService.swift */; };
 		BF54EE8FD98BCDC0172188CD /* FeedErrorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8E479E517FAEE1DD67A4149 /* FeedErrorView.swift */; };
@@ -176,11 +168,9 @@
 		C6D562180DEC83593F48A910 /* NameSelectorModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = E26FCF7308D047749F56999C /* NameSelectorModal.swift */; };
 		C7656F0B6780081D00E6AF0F /* E2EEService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5F979ECFA4B86BB5CF751BB /* E2EEService.swift */; };
 		C901182C3EA35FC3A8CF8D42 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4E1512D8F281EA42CED7AB6 /* AppCoordinator.swift */; };
-		C9D3803D75E55FA08FB7C5B5 /* fastlane.sh in Resources */ = {isa = PBXBuildFile; fileRef = TEMP_6607FC13-935E-4380-84AC-82DF58362F81 /* fastlane.sh */; };
 		CB360020F8D6E08D8135AB1F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = TEMP_3E4BAB76-6567-4018-A000-60156A7B045D /* Assets.xcassets */; };
 		CB9061143A686567A786CA6D /* AliceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 892AD2BE29C380E52980F7E2 /* AliceService.swift */; };
 		CC700C91BF81E53E632C64A3 /* ReportModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEE69E5CD9B931C1CE6C4C48 /* ReportModal.swift */; };
-		CE0FD9EBE13306CB35913130 /* raw_document_symbols.pkl in Resources */ = {isa = PBXBuildFile; fileRef = 333022523C822B72F1B62A65 /* raw_document_symbols.pkl */; };
 		CE39E9AD6F44890A7271015E /* SettingsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7FD051EDABC662F2BFE55D0 /* SettingsService.swift */; };
 		CEF622E0D705BAA70D0C2009 /* MatrixRustSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 89B16F3BD122ECA55FE121C5 /* MatrixRustSDK */; };
 		D15D6C5AC17ABAFD91D12590 /* ChannelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 189A7894363ACD129D84BF46 /* ChannelPickerView.swift */; };
@@ -200,7 +190,6 @@
 		E3C3EA86F619CE1A0DDF83AF /* AuthenticationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69B449484719B1691927E1D6 /* AuthenticationManager.swift */; };
 		E554EFD2A94C43A8F074917B /* FormRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD70ACA67B0E1699EDB5099B /* FormRow.swift */; };
 		E55D5AB554D9A74CBC3D8ABF /* ActiveCallBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A6CB6016575653E2EF6BB87 /* ActiveCallBanner.swift */; };
-		E5AC7D43B45BB9F070DD2F2E /* suggested_commands.md in Resources */ = {isa = PBXBuildFile; fileRef = F9F33F7937D2502F9B2AB076 /* suggested_commands.md */; };
 		E703C7313E17C9B58A056F35 /* UserService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5E70390640C08938059D9CF /* UserService.swift */; };
 		E85B3506BF8E7E8ECD60AE0B /* ChatServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B6A9BF3CE781260994385B7 /* ChatServiceTests.swift */; };
 		E98D6D140719E6AA29780E96 /* UserProfileTopNavigationBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18CD2B250FC8236095F2B43B /* UserProfileTopNavigationBar.swift */; };
@@ -208,15 +197,12 @@
 		EB19EDA9D356D4E627C1F597 /* PasskeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4D1D77C525B03021C70AE0D /* PasskeyService.swift */; };
 		EB34418FAB25322C97951C65 /* DraftManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4064B6162320BA2946731EC5 /* DraftManager.swift */; };
 		EEBF79C69078D7BD5A9E44DB /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BA9A27686FBAD37E301363D /* ShareSheet.swift */; };
-		EED93F21E48D6F32F5E2EABD /* code_style.md in Resources */ = {isa = PBXBuildFile; fileRef = 26417BF2F6F8AAC78621DCD9 /* code_style.md */; };
 		F0EAAD979FE6C4CF5333E288 /* ICEREDWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4D39F35A0F59326A1235BEF7 /* ICEREDWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		F213E5619BF6A2E4B0A7E098 /* MessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8742228C1E84193BD2624ACE /* MessageView.swift */; };
 		F22A5C8434F377FA8D710A16 /* WatchTimeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2CB1217EA3D3BCDB64E1C0 /* WatchTimeService.swift */; };
 		F22C78793E4AE7D3AC1019A4 /* ContentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52426426C95CA38E013274CD /* ContentService.swift */; };
 		F24EDB14A7336417FD9AFCC0 /* GrokVoiceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC84545BBB79C645B395D4A /* GrokVoiceModels.swift */; };
 		F3875421DC867115D4BF2E4E /* FeedService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF8996770D45106B3D2C34DF /* FeedService.swift */; };
-		F573A16EBB5F33CFDC196FC0 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 391055A01BC7ADD0944EE229 /* README.md */; };
-		F6151D248324A22F0512D0A5 /* .swiftlint.yml in Resources */ = {isa = PBXBuildFile; fileRef = TEMP_AFED8FEC-952E-46D1-94B6-2248E8112330 /* .swiftlint.yml */; };
 		F75E052484D71A2D63F7EF8B /* PreviewData.swift in Sources */ = {isa = PBXBuildFile; fileRef = A96A6C60524215585A54A50F /* PreviewData.swift */; };
 		F87C58656F5FD03A8C3345EB /* NotificationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97F7FCDB6FA0CE2782E24A74 /* NotificationViewModel.swift */; };
 		F992BBA74E2D16A5D14D0A7B /* BackgroundUploadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8AA260CA9BDB4316FCF7B20 /* BackgroundUploadManager.swift */; };
@@ -264,6 +250,16 @@
 				F0EAAD979FE6C4CF5333E288 /* ICEREDWidgets.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EMBEDFWK1234567890ABCD01 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -487,13 +483,9 @@
 		TEMP_17C84B2D-A3C3-4C66-A747-F968F1CC6577 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		TEMP_3E4BAB76-6567-4018-A000-60156A7B045D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		TEMP_4A8E9788-8C7E-43E2-B652-AF294BB586AC /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
-		TEMP_5933CD48-42EA-4530-80C7-F2A853689BE5 /* ICERED.ipa */ = {isa = PBXFileReference; path = ICERED.ipa; sourceTree = "<group>"; };
-		TEMP_6607FC13-935E-4380-84AC-82DF58362F81 /* fastlane.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = fastlane.sh; sourceTree = "<group>"; };
 		TEMP_6E14358D-A668-411D-AB68-52227A14A80C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		TEMP_70357777-DFE0-4AF0-ACDE-FC8F0D739E32 /* AppPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPage.swift; sourceTree = "<group>"; };
 		TEMP_8EB156CE-7966-49ED-8A42-1F5FF6FD0DFB /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
-		TEMP_AFED8FEC-952E-46D1-94B6-2248E8112330 /* .swiftlint.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = .swiftlint.yml; sourceTree = "<group>"; };
-		TEMP_FCBB019C-0AB0-4DE6-A147-0D296C12BD99 /* ICERED.app.dSYM.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = ICERED.app.dSYM.zip; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1587,6 +1579,8 @@
 				4596E0ED4605F38758AEE173 /* Sources */,
 				F3358EDED8BB0EA4BB7DC824 /* Resources */,
 				9AD301B5E184293F220D88B9 /* Frameworks */,
+				COPYMATRIXSDK123456789AB /* Copy MatrixRustSDK Framework */,
+				EMBEDFWK1234567890ABCD01 /* Embed Frameworks */,
 				964DAE8E9C23F4949A45561E /* Embed Foundation Extensions */,
 			);
 			buildRules = (
@@ -1692,27 +1686,31 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F6151D248324A22F0512D0A5 /* .swiftlint.yml in Resources */,
 				CB360020F8D6E08D8135AB1F /* Assets.xcassets in Resources */,
-				B1AC0310BD8E2B5010916DA5 /* ICERED.app.dSYM.zip in Resources */,
-				AE9AC4576C432771F4E87BC8 /* ICERED.ipa in Resources */,
-				4679E194ED83C34FB4DCCDAE /* INTEGRATION_GUIDE.md in Resources */,
 				D4CADB35896CC9C007FF370D /* Localizable.strings in Resources */,
-				BB79B10B3BE7445C0AF5E3A8 /* MATRIX_INTEGRATION_COMPLETE.md in Resources */,
 				0092CEF668C0E54B5862D10B /* PrivacyInfo.xcprivacy in Resources */,
-				0FF6CDC342ADFEFE2C859DE7 /* QUICK_START.md in Resources */,
-				F573A16EBB5F33CFDC196FC0 /* README.md in Resources */,
-				EED93F21E48D6F32F5E2EABD /* code_style.md in Resources */,
-				602A5D4FC89DF00CBFFDE425 /* document_symbols.pkl in Resources */,
-				C9D3803D75E55FA08FB7C5B5 /* fastlane.sh in Resources */,
-				36C8F0814D8325B15798C3C0 /* project.yml in Resources */,
-				88FBDAC60D5FDB0E4E72E386 /* project_overview.md in Resources */,
-				CE0FD9EBE13306CB35913130 /* raw_document_symbols.pkl in Resources */,
-				E5AC7D43B45BB9F070DD2F2E /* suggested_commands.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		COPYMATRIXSDK123456789AB /* Copy MatrixRustSDK Framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Copy MatrixRustSDK Framework";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Copy and sign MatrixRustSDK.framework\nset -e\n\nFRAMEWORK_NAME=\"MatrixRustSDK.framework\"\n\n# Try multiple paths for the framework (build vs archive)\n# Build paths with PackageFrameworks\nPATH1=\"${BUILD_DIR}/${CONFIGURATION}${EFFECTIVE_PLATFORM_NAME}/PackageFrameworks/${FRAMEWORK_NAME}\"\nPATH2=\"${BUILT_PRODUCTS_DIR}/PackageFrameworks/${FRAMEWORK_NAME}\"\n# Archive paths - UninstalledProducts directly contains the framework\nPATH3=\"${OBJROOT}/UninstalledProducts/iphoneos/${FRAMEWORK_NAME}\"\nPATH4=\"${OBJROOT}/UninstalledProducts/${PLATFORM_NAME}/${FRAMEWORK_NAME}\"\nPATH5=\"${OBJROOT}/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/${FRAMEWORK_NAME}\"\n\nFRAMEWORK_SOURCE=\"\"\nfor P in \"$PATH1\" \"$PATH2\" \"$PATH3\" \"$PATH4\" \"$PATH5\"; do\n    echo \"Checking: $P\"\n    if [ -d \"$P\" ]; then\n        FRAMEWORK_SOURCE=\"$P\"\n        echo \"Found framework at: $P\"\n        break\n    fi\ndone\n\n# Destination - use TARGET_BUILD_DIR for archive, BUILT_PRODUCTS_DIR for regular builds\nif [ -n \"${TARGET_BUILD_DIR}\" ]; then\n    FRAMEWORK_DEST=\"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Frameworks\"\nelse\n    FRAMEWORK_DEST=\"${BUILT_PRODUCTS_DIR}/${WRAPPER_NAME}/Frameworks\"\nfi\n\necho \"Final destination: $FRAMEWORK_DEST\"\n\nif [ -n \"$FRAMEWORK_SOURCE\" ] && [ -d \"$FRAMEWORK_SOURCE\" ]; then\n    mkdir -p \"$FRAMEWORK_DEST\"\n    rm -rf \"${FRAMEWORK_DEST}/${FRAMEWORK_NAME}\"\n    cp -R \"$FRAMEWORK_SOURCE\" \"$FRAMEWORK_DEST/\"\n    echo \"SUCCESS: Copied ${FRAMEWORK_NAME} to $FRAMEWORK_DEST\"\n    \n    # Code sign the framework\n    if [ -n \"${EXPANDED_CODE_SIGN_IDENTITY}\" ] && [ \"${CODE_SIGNING_REQUIRED}\" != \"NO\" ]; then\n        /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --preserve-metadata=identifier,entitlements \"${FRAMEWORK_DEST}/${FRAMEWORK_NAME}\"\n        echo \"Signed ${FRAMEWORK_NAME}\"\n    fi\nelse\n    echo \"ERROR: ${FRAMEWORK_NAME} not found in any expected path\"\n    echo \"Searched paths:\"\n    echo \"  $PATH1\"\n    echo \"  $PATH2\"\n    echo \"  $PATH3\"\n    echo \"  $PATH4\"\n    echo \"  $PATH5\"\n    exit 1\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		305EA5F557E6BF8C0DE2734D /* Sources */ = {
@@ -2038,7 +2036,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 15;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 2C77AZCA8W;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -2174,7 +2172,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 15;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 2C77AZCA8W;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

@@ -336,6 +336,7 @@ extension View {
     }
 
     /// Inject feature flags into environment
+    @MainActor
     func withFeatureFlags(_ flags: FeatureFlags = .shared) -> some View {
         environment(\.featureFlags, flags)
     }

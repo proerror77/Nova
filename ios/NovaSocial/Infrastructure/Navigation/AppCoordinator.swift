@@ -34,7 +34,7 @@ final class AppCoordinator {
     private let pendingDeepLinkKey = "AppCoordinator.pendingDeepLink"
 
     private init() {
-        restoreState()
+        // Note: State restoration is deferred to first access on main actor
     }
 
     // MARK: - Navigation Methods

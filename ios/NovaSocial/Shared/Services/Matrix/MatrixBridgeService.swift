@@ -445,7 +445,17 @@ final class MatrixBridgeService {
                errorString.contains("Access token has expired")
     }
 
-    /// Handle Matrix API errors - clears session for token errors
+    /// Check if error is a database corruption error (SQLite constraint violations)
+    private func isDatabaseCorruptionError(_ error: Error) -> Bool {
+        let errorString = String(describing: error)
+        return errorString.contains("FOREIGN KEY constraint failed") ||
+               errorString.contains("EventCacheError") ||
+               errorString.contains("SqliteFailure") ||
+               errorString.contains("ConstraintViolation") ||
+               errorString.contains("database disk image is malformed")
+    }
+
+    /// Handle Matrix API errors - clears session for recoverable errors
     /// Returns true if the error was handled and the operation should be retried
     func handleMatrixError(_ error: Error) -> Bool {
         if isUnknownTokenError(error) {
@@ -455,6 +465,15 @@ final class MatrixBridgeService {
             clearSessionData()
             return true
         }
+
+        if isDatabaseCorruptionError(error) {
+            #if DEBUG
+            print("[MatrixBridge] ⚠️ Database corruption detected, clearing session data to recover...")
+            #endif
+            clearSessionData()
+            return true
+        }
+
         return false
     }
 

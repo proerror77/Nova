@@ -74,9 +74,11 @@ struct ActiveCallBanner: View {
     // MARK: - Timer
 
     private func startDurationTimer() {
-        durationTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            if let call = callCoordinator.currentCall {
-                callDuration = call.duration
+        durationTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak callCoordinator] _ in
+            Task { @MainActor in
+                if let call = callCoordinator?.currentCall {
+                    self.callDuration = call.duration
+                }
             }
         }
     }
@@ -145,7 +147,7 @@ struct MinimizedCallView: View {
 
     // MARK: - State
 
-    @State private var position: CGPoint = CGPoint(x: UIScreen.main.bounds.width - 80, y: 100)
+    @State private var position: CGPoint?  // Changed to optional, will be set in onAppear
     @State private var isDragging = false
     @State private var callDuration: TimeInterval = 0
 
@@ -157,87 +159,105 @@ struct MinimizedCallView: View {
 
     var body: some View {
         if let call = callCoordinator.currentCall, !callCoordinator.showCallView {
-            ZStack {
-                // Background
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.black.opacity(0.9))
-                    .frame(width: 120, height: 160)
-                    .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
+            GeometryReader { geometry in
+                content(for: call, in: geometry)
+            }
+        }
+    }
 
-                VStack(spacing: 8) {
-                    // Video preview placeholder or avatar
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: 100, height: 80)
+    @ViewBuilder
+    private func content(for call: CurrentCallInfo, in geometry: GeometryProxy) -> some View {
+        let screenWidth = geometry.size.width
+        let screenHeight = geometry.size.height
 
-                        if call.isVideoCall {
-                            Image(systemName: "video.fill")
-                                .font(.title2)
-                                .foregroundColor(.white.opacity(0.5))
-                        } else {
-                            Image(systemName: "phone.fill")
-                                .font(.title2)
-                                .foregroundColor(.green)
-                        }
-                    }
+        // Initialize position if not set
+        let currentPosition = position ?? CGPoint(x: screenWidth - 80, y: 100)
 
-                    // Room name
-                    Text(call.roomName)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                        .frame(width: 100)
+        ZStack {
+            // Background
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.black.opacity(0.9))
+                .frame(width: 120, height: 160)
+                .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
 
-                    // Duration
-                    Text(formatDuration(callDuration))
-                        .font(.caption2)
-                        .foregroundColor(.gray)
+            VStack(spacing: 8) {
+                // Video preview placeholder or avatar
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 100, height: 80)
 
-                    // End call button
-                    Button(action: endCall) {
-                        Image(systemName: "phone.down.fill")
-                            .font(.caption)
-                            .foregroundColor(.white)
-                            .padding(6)
-                            .background(Color.red)
-                            .clipShape(Circle())
+                    if call.isVideoCall {
+                        Image(systemName: "video.fill")
+                            .font(.title2)
+                            .foregroundColor(.white.opacity(0.5))
+                    } else {
+                        Image(systemName: "phone.fill")
+                            .font(.title2)
+                            .foregroundColor(.green)
                     }
                 }
+
+                // Room name
+                Text(call.roomName)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .frame(width: 100)
+
+                // Duration
+                Text(formatDuration(callDuration))
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+
+                // End call button
+                Button(action: endCall) {
+                    Image(systemName: "phone.down.fill")
+                        .font(.caption)
+                        .foregroundColor(.white)
+                        .padding(6)
+                        .background(Color.red)
+                        .clipShape(Circle())
+                }
             }
-            .position(position)
-            .gesture(
-                DragGesture()
-                    .onChanged { value in
-                        isDragging = true
-                        position = value.location
-                    }
-                    .onEnded { value in
-                        isDragging = false
-                        // Snap to edges
-                        withAnimation(.spring()) {
-                            let screenWidth = UIScreen.main.bounds.width
-                            let screenHeight = UIScreen.main.bounds.height
+        }
+        .position(currentPosition)
+        .gesture(
+            DragGesture()
+                .onChanged { value in
+                    isDragging = true
+                    position = value.location
+                }
+                .onEnded { value in
+                    isDragging = false
+                    // Snap to edges
+                    withAnimation(.spring()) {
+                        var newPosition = value.location
 
-                            // Snap to nearest horizontal edge
-                            if value.location.x < screenWidth / 2 {
-                                position.x = 70
-                            } else {
-                                position.x = screenWidth - 70
-                            }
-
-                            // Keep within vertical bounds
-                            position.y = min(max(100, value.location.y), screenHeight - 200)
+                        // Snap to nearest horizontal edge
+                        if value.location.x < screenWidth / 2 {
+                            newPosition.x = 70
+                        } else {
+                            newPosition.x = screenWidth - 70
                         }
+
+                        // Keep within vertical bounds
+                        newPosition.y = min(max(100, value.location.y), screenHeight - 200)
+
+                        position = newPosition
                     }
-            )
-            .onTapGesture {
-                onTap()
+                }
+        )
+        .onTapGesture {
+            onTap()
+        }
+        .onAppear {
+            // Set initial position if not already set
+            if position == nil {
+                position = CGPoint(x: screenWidth - 80, y: 100)
             }
-            .onAppear {
-                startDurationTimer()
-            }
+            startDurationTimer()
         }
     }
 
@@ -254,9 +274,11 @@ struct MinimizedCallView: View {
     @State private var durationTimer: Timer?
 
     private func startDurationTimer() {
-        durationTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            if let call = callCoordinator.currentCall {
-                callDuration = call.duration
+        durationTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak callCoordinator] _ in
+            Task { @MainActor in
+                if let call = callCoordinator?.currentCall {
+                    self.callDuration = call.duration
+                }
             }
         }
     }

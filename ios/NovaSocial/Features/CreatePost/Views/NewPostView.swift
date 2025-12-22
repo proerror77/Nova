@@ -1223,7 +1223,7 @@ struct NewPostView: View {
                 #endif
 
                 var livePhotoResult: LivePhotoUploadResult?
-                var lastError: Error?
+                var lastError: Error? = nil
 
                 for attempt in 1...3 {
                     do {

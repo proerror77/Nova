@@ -12,7 +12,7 @@ storage_mode("git")
 type("appstore")
 
 # App identifier(s)
-app_identifier(["com.app.icered"])
+app_identifier(["com.app.icered.pro", "com.app.icered.pro.widgets"])
 
 # Your Apple Developer Portal username
 username(ENV["APPLE_ID"] || "sonic@icered.com")

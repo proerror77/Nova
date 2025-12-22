@@ -69,7 +69,7 @@ Build the app for testing
 [bundle exec] fastlane ios build_release
 ```
 
-Build for App Store / TestFlight (without widgets)
+Build for App Store / TestFlight (with widgets)
 
 ### ios testflight_upload
 

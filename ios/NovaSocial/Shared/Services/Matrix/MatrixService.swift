@@ -1637,7 +1637,7 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService] Getting reactions for message \(eventId)")
         #endif
 
-        guard let client = client, userId != nil else {
+        guard client != nil, userId != nil else {
             throw MatrixError.notLoggedIn
         }
 
@@ -1758,7 +1758,7 @@ final class MatrixService: MatrixServiceProtocol {
             return nil
         }
 
-        let displayName = (try? await room.displayName()) ?? roomId
+        let displayName = (await room.displayName()) ?? roomId
 
         return MatrixRoom(
             id: roomId,
@@ -1864,7 +1864,7 @@ final class MatrixService: MatrixServiceProtocol {
     private var sessionDelegate: MatrixSessionDelegateImpl?
 
     // Matrix session storage key for UserDefaults (not sensitive enough for Keychain)
-    private static let matrixSessionKey = "matrix_session_data"
+    private nonisolated(unsafe) static let matrixSessionKey = "matrix_session_data"
 
     private func storeSessionCredentials(userId: String, accessToken: String, deviceId: String, refreshToken: String? = nil, homeserverUrl: String? = nil) {
         let credentials = StoredCredentials(

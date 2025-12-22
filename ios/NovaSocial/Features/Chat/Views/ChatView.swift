@@ -264,7 +264,7 @@ struct ChatView: View {
     private static var mockMessages: [ChatMessage] {
         let calendar = Calendar.current
         let now = Date()
-        let baseDate = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: now) ?? now
+        _ = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: now) ?? now
 
         return [
             ChatMessage(localText: "Hello, how are you bro~", isFromMe: false),
@@ -887,7 +887,8 @@ struct ChatView: View {
     // MARK: - API Calls
 
     /// Load chat data via Matrix timeline/sync (Matrix-first)
-    private func loadChatData() async {
+    /// - Parameter retryCount: Number of retry attempts made (for automatic recovery)
+    private func loadChatData(retryCount: Int = 0) async {
         // 🎨 预览模式：使用模拟数据进行UI调试
         if Self.useChatPreviewMode {
             print("🎨 [ChatView] Preview Mode enabled - using mock data")
@@ -933,6 +934,17 @@ struct ChatView: View {
             print("[ChatView] Loaded \(messages.count) Matrix messages for room \(conversationId)")
             #endif
         } catch {
+            // Check if this is a recoverable database corruption error
+            if matrixBridge.handleMatrixError(error) && retryCount < 1 {
+                #if DEBUG
+                print("[ChatView] Database corruption detected, retrying with fresh session...")
+                #endif
+                // Re-initialize Matrix bridge after clearing session
+                try? await matrixBridge.initialize()
+                await loadChatData(retryCount: retryCount + 1)
+                return
+            }
+
             self.error = "Failed to load messages: \(error.localizedDescription)"
             #if DEBUG
             print("[ChatView] Load error: \(error)")
