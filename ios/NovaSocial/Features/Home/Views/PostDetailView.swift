@@ -302,42 +302,44 @@ struct PostDetailView: View {
     private var imageCarouselSection: some View {
         VStack(spacing: 8) {
             if !post.displayMediaUrls.isEmpty {
-                // Image/Video Carousel with caching for better performance
-                TabView(selection: $currentImageIndex) {
-                    ForEach(Array(post.displayMediaUrls.enumerated()), id: \.element) { index, mediaUrl in
-                        Group {
-                            if isVideoUrl(mediaUrl) {
-                                // Video content - use FeedVideoPlayer
-                                FeedVideoPlayer(
-                                    url: URL(string: mediaUrl)!,
-                                    autoPlay: true,
-                                    isMuted: true,
-                                    height: UIScreen.main.bounds.width * 4 / 3 - 40
-                                )
-                            } else {
-                                // Image content - use CachedAsyncImage
-                                CachedAsyncImage(
-                                    url: URL(string: mediaUrl),
-                                    targetSize: CGSize(width: 750, height: 1000)  // 2x for Retina
-                                ) { image in
-                                    image
-                                        .resizable()
-                                        .scaledToFill()
-                                } placeholder: {
-                                    Rectangle()
-                                        .fill(DesignTokens.placeholderColor)
-                                        .overlay(ProgressView().tint(.white))
+                GeometryReader { geometry in
+                    // Image/Video Carousel with caching for better performance
+                    TabView(selection: $currentImageIndex) {
+                        ForEach(Array(post.displayMediaUrls.enumerated()), id: \.element) { index, mediaUrl in
+                            Group {
+                                if isVideoUrl(mediaUrl) {
+                                    // Video content - use FeedVideoPlayer
+                                    FeedVideoPlayer(
+                                        url: URL(string: mediaUrl)!,
+                                        autoPlay: true,
+                                        isMuted: true,
+                                        height: geometry.size.width * 4 / 3 - 40
+                                    )
+                                } else {
+                                    // Image content - use CachedAsyncImage
+                                    CachedAsyncImage(
+                                        url: URL(string: mediaUrl),
+                                        targetSize: CGSize(width: 750, height: 1000)  // 2x for Retina
+                                    ) { image in
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                    } placeholder: {
+                                        Rectangle()
+                                            .fill(DesignTokens.placeholderColor)
+                                            .overlay(ProgressView().tint(.white))
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .aspectRatio(3/4, contentMode: .fill)
+                                    .clipped()
                                 }
-                                .frame(maxWidth: .infinity)
-                                .aspectRatio(3/4, contentMode: .fill)
-                                .clipped()
                             }
+                            .tag(index)
                         }
-                        .tag(index)
                     }
+                    .tabViewStyle(.page(indexDisplayMode: .never))
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .frame(height: UIScreen.main.bounds.width * 4 / 3 - 40)
+                .aspectRatio(3/4, contentMode: .fit)  // Provide aspect ratio instead of fixed height
 
                 // Page Indicators
                 if post.displayMediaUrls.count > 1 {

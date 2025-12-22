@@ -760,7 +760,7 @@ extension PasskeyService: ASAuthorizationControllerPresentationContextProviding 
         // Return the key window
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let window = windowScene.windows.first(where: { $0.isKeyWindow }) else {
-            return UIWindow()
+            return ASPresentationAnchor()
         }
         return window
     }

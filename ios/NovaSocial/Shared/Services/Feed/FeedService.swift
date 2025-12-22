@@ -43,7 +43,7 @@ class FeedService {
     ///   - limit: Maximum number of channels to return (default: 50)
     /// - Returns: Array of FeedChannel sorted by display order
     func getChannels(enabledOnly: Bool = true, limit: Int = 50) async throws -> [FeedChannel] {
-        var queryParams: [String: String] = [
+        let queryParams: [String: String] = [
             "limit": String(limit),
             "enabled_only": String(enabledOnly)
         ]

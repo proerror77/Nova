@@ -124,7 +124,6 @@ struct ResetPasswordView: View {
             Image("Registration-background")
                 .resizable()
                 .scaledToFill()
-                .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
                 .clipped()
                 .ignoresSafeArea(.all)
 

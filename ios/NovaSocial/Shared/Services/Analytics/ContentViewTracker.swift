@@ -144,7 +144,7 @@ class VideoWatchTracker: ObservableObject {
         stopTracking()
 
         // Start new tracking session
-        if let player = player {
+        if player != nil {
             watchTimeService.startWatching(
                 contentId: contentId,
                 contentDuration: contentDuration,

@@ -106,28 +106,30 @@ struct FeedVideoPlayer: View {
     // MARK: - Subviews
     
     private var thumbnailView: some View {
-        Group {
-            if let thumbnailUrl = thumbnailUrl {
-                // 使用 CachedAsyncImage 替代 AsyncImage 以获得缓存和更快加载
-                CachedAsyncImage(
-                    url: thumbnailUrl,
-                    targetSize: CGSize(width: UIScreen.main.bounds.width * 2, height: height * 2),
-                    enableProgressiveLoading: true,
-                    priority: .high
-                ) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
+        GeometryReader { geometry in
+            Group {
+                if let thumbnailUrl = thumbnailUrl {
+                    // 使用 CachedAsyncImage 替代 AsyncImage 以获得缓存和更快加载
+                    CachedAsyncImage(
+                        url: thumbnailUrl,
+                        targetSize: CGSize(width: geometry.size.width * 2, height: height * 2),
+                        enableProgressiveLoading: true,
+                        priority: .high
+                    ) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        placeholderView
+                    }
+                } else {
                     placeholderView
                 }
-            } else {
-                placeholderView
             }
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .clipped()
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: height)
-        .clipped()
     }
     
     private var placeholderView: some View {
@@ -275,14 +277,14 @@ final class FeedVideoPlayerViewModel: ObservableObject {
     }
 
     nonisolated private static func startNetworkMonitoringIfNeeded() {
-        guard !networkMonitorStarted else { return }
-        networkMonitorStarted = true
+        guard !Self.networkMonitorStarted else { return }
+        Self.networkMonitorStarted = true
 
-        networkMonitor.pathUpdateHandler = { path in
+        Self.networkMonitor.pathUpdateHandler = { path in
             // Check if using WiFi (not cellular)
-            _isOnWiFi = !path.usesInterfaceType(.cellular)
+            Self._isOnWiFi = !path.usesInterfaceType(.cellular)
         }
-        networkMonitor.start(queue: networkQueue)
+        Self.networkMonitor.start(queue: Self.networkQueue)
     }
 
     func prepare() {

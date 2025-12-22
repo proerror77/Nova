@@ -210,27 +210,26 @@ final class GrokVoiceService: NSObject {
     private func receiveMessage() {
         webSocketTask?.receive { [weak self] result in
             guard let self = self else { return }
-            
+
             switch result {
             case .success(let message):
-                Task { @MainActor in
-                    self.handleMessage(message)
+                Task { @MainActor [weak self] in
+                    await self?.handleMessage(message)
+                    await self?.receiveMessage()
                 }
-                // 繼續接收
-                self.receiveMessage()
-                
+
             case .failure(let error):
                 #if DEBUG
                 print("[GrokVoice] WebSocket error: \(error)")
                 #endif
-                Task { @MainActor in
-                    self.handleDisconnection(error: error)
+                Task { @MainActor [weak self] in
+                    await self?.handleDisconnection(error: error)
                 }
             }
         }
     }
     
-    private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
+    private func handleMessage(_ message: URLSessionWebSocketTask.Message) async {
         switch message {
         case .string(let text):
             parseServerMessage(text)
@@ -378,11 +377,13 @@ final class GrokVoiceService: NSObject {
     private func startPingTimer() {
         pingTimer?.invalidate()
         pingTimer = Timer.scheduledTimer(withTimeInterval: GrokVoiceConfig.heartbeatInterval, repeats: true) { [weak self] _ in
-            self?.webSocketTask?.sendPing { error in
-                if let error = error {
-                    #if DEBUG
-                    print("[GrokVoice] Ping error: \(error)")
-                    #endif
+            Task { @MainActor [weak self] in
+                self?.webSocketTask?.sendPing { error in
+                    if let error = error {
+                        #if DEBUG
+                        print("[GrokVoice] Ping error: \(error)")
+                        #endif
+                    }
                 }
             }
         }
@@ -392,7 +393,7 @@ final class GrokVoiceService: NSObject {
     
     private func setupAudioSession() async {
         do {
-            try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
+            try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetoothHFP])
             try audioSession.setActive(true)
             
             #if DEBUG

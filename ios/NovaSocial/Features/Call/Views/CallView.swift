@@ -224,9 +224,11 @@ struct CallView: View {
     }
 
     private func startDurationTimer() {
-        durationTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            if let startTime = callService.activeCall?.startTime {
-                callDuration = Date().timeIntervalSince(startTime)
+        durationTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak callService] _ in
+            Task { @MainActor in
+                if let startTime = callService?.activeCall?.startTime {
+                    self.callDuration = Date().timeIntervalSince(startTime)
+                }
             }
         }
     }
@@ -247,7 +249,7 @@ struct CallView: View {
 
     private func requestMicrophonePermission() async -> Bool {
         await withCheckedContinuation { continuation in
-            AVAudioSession.sharedInstance().requestRecordPermission { granted in
+            AVAudioSession.sharedInstance().requestRecordPermissionWithCompletionHandler { granted in
                 continuation.resume(returning: granted)
             }
         }

@@ -81,8 +81,7 @@ class APIClient {
         config.requestCachePolicy = .useProtocolCachePolicy
 
         // HTTP/2 connection pooling optimization
-        // Enable HTTP pipelining for better connection reuse
-        config.httpShouldUsePipelining = true
+        // Modern iOS uses HTTP/2 and HTTP/3 which handle connection multiplexing automatically
         // Max concurrent connections per host (default is 6, but explicit for clarity)
         config.httpMaximumConnectionsPerHost = 6
         // Enable connection reuse (keep-alive)

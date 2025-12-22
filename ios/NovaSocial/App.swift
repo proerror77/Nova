@@ -172,7 +172,10 @@ struct IceredApp: App {
                     }
 
                     Task {
-                        await pushManager.requestAuthorization()
+                        let pushGranted = await pushManager.requestAuthorization()
+                        #if DEBUG
+                        print("[App] Push notification authorization: \(pushGranted ? "granted" : "denied")")
+                        #endif
                         await initializeMatrixBridgeIfNeeded()
                     }
                 } else {

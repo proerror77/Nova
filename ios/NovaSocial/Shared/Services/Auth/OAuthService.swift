@@ -397,7 +397,7 @@ extension OAuthService: ASAuthorizationControllerPresentationContextProviding {
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let window = scene.windows.first else {
-            return UIWindow()
+            return ASPresentationAnchor()
         }
         return window
     }

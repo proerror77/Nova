@@ -130,25 +130,8 @@ class FeedViewModel {
             var successCount = 0
             var failCount = 0
 
-            do {
-                await ImageCacheService.shared.prefetch(urls: urls, targetSize: prefetchTargetSize, priority: .low)
-                successCount = urls.count
-            } catch {
-                // Log prefetch errors in debug mode, mark URLs as failed
-                FeedLogger.debug("Prefetch failed for \(urls.count) URLs: \(error.localizedDescription)")
-                failCount = urls.count
-
-                // Already on MainActor, can safely access failedPrefetchUrls
-                guard let self = self else { return }
-                // Mark failed URLs to avoid repeated attempts
-                for url in urls {
-                    self.failedPrefetchUrls.insert(url)
-                }
-                // Limit failed URL cache size
-                if self.failedPrefetchUrls.count > 100 {
-                    self.failedPrefetchUrls.removeFirst()
-                }
-            }
+            await ImageCacheService.shared.prefetch(urls: urls, targetSize: prefetchTargetSize, priority: .low)
+            successCount = urls.count
 
             // Track prefetch completion
             self?.performanceMonitor.endImagePrefetch(signpostID: signpostID, successCount: successCount, failCount: failCount)
@@ -193,21 +176,11 @@ class FeedViewModel {
         // Use smart prefetch for optimal loading with error handling
         // Use Task instead of Task.detached to maintain MainActor context for failedPrefetchUrls access
         Task(priority: .utility) { [visibleUrls, upcomingUrls, prefetchTargetSize, weak self] in
-            do {
-                await ImageCacheService.shared.smartPrefetch(
-                    visibleUrls: visibleUrls,
-                    upcomingUrls: upcomingUrls,
-                    targetSize: prefetchTargetSize
-                )
-            } catch {
-                FeedLogger.debug("Smart prefetch failed: \(error.localizedDescription)")
-                // Already on MainActor, can safely access failedPrefetchUrls
-                guard let self = self else { return }
-                // Mark failed URLs
-                for url in visibleUrls + upcomingUrls {
-                    self.failedPrefetchUrls.insert(url)
-                }
-            }
+            await ImageCacheService.shared.smartPrefetch(
+                visibleUrls: visibleUrls,
+                upcomingUrls: upcomingUrls,
+                targetSize: prefetchTargetSize
+            )
         }
     }
 
@@ -734,7 +707,7 @@ class FeedViewModel {
 
         // Reload feed with new channel filter (track as channel switch)
         let loadStartTime = Date()
-        let signpostID = performanceMonitor.beginFeedLoad(source: .channelSwitch, fromCache: false)
+        _ = performanceMonitor.beginFeedLoad(source: .channelSwitch, fromCache: false)
 
         await loadFeed(algorithm: currentAlgorithm)
 

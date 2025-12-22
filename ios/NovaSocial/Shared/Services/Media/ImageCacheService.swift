@@ -22,7 +22,8 @@ actor ImageCacheService {
     static let shared = ImageCacheService()
 
     // MARK: - Cache Configuration
-    private let memoryCache = NSCache<NSString, UIImage>()
+    // NSCache is thread-safe, so we can use nonisolated(unsafe) to bypass Sendable checking
+    nonisolated(unsafe) private let memoryCache = NSCache<NSString, UIImage>()
     private let fileManager = FileManager.default
     private var cacheDirectory: URL?
     private let session: URLSession
@@ -42,7 +43,7 @@ actor ImageCacheService {
     private var memoryWarningObserver: NSObjectProtocol?
 
     // Thumbnail cache for quick preview
-    private let thumbnailCache = NSCache<NSString, UIImage>()
+    nonisolated(unsafe) private let thumbnailCache = NSCache<NSString, UIImage>()
     private let thumbnailSize = CGSize(width: 100, height: 100)
 
     // MARK: - Dynamic Cache Sizing
@@ -87,7 +88,7 @@ actor ImageCacheService {
         config.timeoutIntervalForResource = 300
         config.urlCache = nil
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
-        config.httpShouldUsePipelining = true
+        // Modern iOS uses HTTP/2 and HTTP/3 which handle connection multiplexing automatically
         config.httpMaximumConnectionsPerHost = 6
         config.allowsCellularAccess = true
         self.session = URLSession(configuration: config)

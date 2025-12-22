@@ -48,7 +48,7 @@ final class CallCoordinator: ObservableObject {
 
         elementCallService.$callState
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] state in
+            .sink { state in
                 switch state {
                 case .connected:
                     CallKitManager.shared.reportOutgoingCallConnected()

@@ -48,7 +48,6 @@ struct CreateAccountView: View {
             Image("Registration-background")
                 .resizable()
                 .scaledToFill()
-                .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
                 .clipped()
                 .ignoresSafeArea(.all)
 
@@ -73,12 +72,15 @@ struct CreateAccountView: View {
                         Spacer()
                     }
                 } else {
-                    // 使用固定高度替代Spacer，防止键盘推动布局
-                    Color.clear
-                        .frame(height: max(0, (UIScreen.main.bounds.height - 812) / 2))
+                    // Main Content - wrapped in GeometryReader for dynamic sizing
+                    GeometryReader { geometry in
+                        VStack(spacing: 0) {
+                            // 使用动态高度替代Spacer，防止键盘推动布局
+                            Color.clear
+                                .frame(height: max(0, (geometry.size.height - 812) / 2))
 
-                    // Main Content
-                    ZStack {
+                            // Main Content
+                            ZStack {
                     Group {
                         // Profile Picture Circle - 显示选择的头像或默认头像
                         AvatarView(image: selectedAvatar, url: nil, size: 136)
@@ -405,9 +407,11 @@ struct CreateAccountView: View {
                     }
                     .frame(width: 375, height: 812)
 
-                    // 使用固定高度替代Spacer，防止键盘推动布局
-                    Color.clear
-                        .frame(height: max(0, (UIScreen.main.bounds.height - 812) / 2))
+                            // 使用动态高度替代Spacer，防止键盘推动布局
+                            Color.clear
+                                .frame(height: max(0, (geometry.size.height - 812) / 2))
+                        }
+                    }
                 }
             }
             .contentShape(Rectangle())

@@ -12,11 +12,31 @@ struct ScreenScale {
     static let baseHeight: CGFloat = 812
 
     // MARK: - 缓存的屏幕尺寸 (性能优化)
+    // Note: Using UIScreen.main for static initialization is acceptable here as these are
+    // cached constants computed once at app launch. For iOS 18+, consider migrating to
+    // a view-based approach using GeometryReader if dynamic screen changes become necessary.
+
     /// 当前设备屏幕宽度 (缓存值，启动时计算一次)
-    static let screenWidth: CGFloat = UIScreen.main.bounds.width
+    static let screenWidth: CGFloat = {
+        // Fallback to a safe default if UIScreen is unavailable
+        guard let screen = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first?.screen else {
+            return UIScreen.main.bounds.width
+        }
+        return screen.bounds.width
+    }()
 
     /// 当前设备屏幕高度 (缓存值，启动时计算一次)
-    static let screenHeight: CGFloat = UIScreen.main.bounds.height
+    static let screenHeight: CGFloat = {
+        // Fallback to a safe default if UIScreen is unavailable
+        guard let screen = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first?.screen else {
+            return UIScreen.main.bounds.height
+        }
+        return screen.bounds.height
+    }()
 
     /// 宽度缩放比例 (缓存值)
     static let widthScale: CGFloat = screenWidth / baseWidth

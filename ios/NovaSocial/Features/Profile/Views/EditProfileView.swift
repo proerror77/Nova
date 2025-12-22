@@ -136,6 +136,7 @@ struct EditProfileView: View {
     private var avatarSection: some View {
         VStack(spacing: 12) {
             // Avatar Image with PhotosPicker
+            let currentAvatarUrl = authManager.currentUser?.avatarUrl
             PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                 ZStack {
                     // Show selected image, or current avatar, or default
@@ -145,7 +146,7 @@ struct EditProfileView: View {
                             .scaledToFill()
                             .frame(width: 100, height: 100)
                             .clipShape(Circle())
-                    } else if let avatarUrl = authManager.currentUser?.avatarUrl,
+                    } else if let avatarUrl = currentAvatarUrl,
                               let url = URL(string: avatarUrl) {
                         CachedAsyncImage(
                             url: url,

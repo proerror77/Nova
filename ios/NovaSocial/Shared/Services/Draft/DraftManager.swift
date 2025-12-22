@@ -99,10 +99,12 @@ actor PostDraftManager {
     // MARK: - Initialization
 
     private init() {
-        setupDraftDirectory()
+        Task {
+            await setupDraftDirectory()
+        }
     }
 
-    private func setupDraftDirectory() {
+    private func setupDraftDirectory() async {
         if let cachesDir = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first {
             draftDirectory = cachesDir.appendingPathComponent("Drafts", isDirectory: true)
             if let dir = draftDirectory {
