@@ -377,6 +377,24 @@ struct FeedPostCard: View {
                 pageIndicator
             }
         }
+        // 快速反應的方向檢測：在拖曳開始時立即判斷方向
+        // 使用簡單的DragGesture（不使用highPriorityGesture）
+        .gesture(
+            DragGesture(minimumDistance: 3, coordinateSpace: .local)
+                .onChanged { value in
+                    let horizontalDistance = abs(value.translation.width)
+                    let verticalDistance = abs(value.translation.height)
+                    
+                    // 快速判斷：竪直優先
+                    if verticalDistance > horizontalDistance {
+                        isHorizontalScrolling = false
+                    }
+                    // 明確的水平滑動
+                    else if horizontalDistance > verticalDistance * 1.3 && horizontalDistance > 15 {
+                        isHorizontalScrolling = true
+                    }
+                }
+        )
     }
 
     // MARK: - Video Content
@@ -451,10 +469,10 @@ struct FeedPostCard: View {
 
     // MARK: - Image Carousel
     // 性能優化：移除 GeometryReader，使用 containerRelativeFrame 替代
-    // 手勢優化：只有在明確的水平滑動時才響應，Feed 竖直滾動優先
+    // 手勢優化：禁用圖片輪播ScrollView，只有明確水平滑動時才啟用
+    // 這樣Feed的ScrollView永遠獲得最高優先級，滾動最流暢
     @ViewBuilder
     private var imageCarousel: some View {
-        // 使用 stricter minimum distance 避免在 Feed 竪直滑動時誤觸圖片輪播
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 0) {
                 ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
@@ -474,6 +492,9 @@ struct FeedPostCard: View {
         .scrollPosition($scrollPosition)
         .scrollClipDisabled(false)
         .frame(height: 500)
+        // 關鍵優化：禁用ScrollView滾動，除非明確檢測到水平滑動
+        // 這樣Feed的ScrollView永遠不會被干擾，獲得絕對優先級
+        .scrollDisabled(!isHorizontalScrolling)
     }
     
     /// Current visible image index based on scroll position
@@ -561,26 +582,29 @@ struct FeedPostCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
             .contentShape(Rectangle())
-            // 關鍵優化：高優先級手勢來檢測竪直 vs 水平滑動
-            // 確保 Feed 的竪直滾動優先於圖片輪播
-            .highPriorityGesture(
-                DragGesture(minimumDistance: 5, coordinateSpace: .local)
+            // 輕量級方向檢測：快速判斷是否是水平滑動
+            // 這個手勢不會阻止任何東西，只是用來檢測方向
+            .gesture(
+                DragGesture(minimumDistance: 8, coordinateSpace: .local)
                     .onChanged { value in
                         let horizontalDistance = abs(value.translation.width)
                         let verticalDistance = abs(value.translation.height)
                         
-                        // 如果竪直滑動 > 水平滑動，優先 Feed 滾動
-                        if verticalDistance > horizontalDistance {
-                            isHorizontalScrolling = false
-                        }
-                        // 如果水平滑動 > 竪直滑動 1.2 倍，啟用圖片輪播
-                        else if horizontalDistance > verticalDistance * 1.2 && horizontalDistance > 15 {
+                        // 快速檢測方向：如果水平 > 竪直 1.3 倍 && > 20pt，啟用圖片輪播
+                        if horizontalDistance > verticalDistance * 1.3 && horizontalDistance > 20 {
                             isHorizontalScrolling = true
+                        }
+                        // 竪直滑動優先，禁用圖片輪播
+                        else if verticalDistance > horizontalDistance && verticalDistance > 8 {
+                            isHorizontalScrolling = false
                         }
                     }
                     .onEnded { _ in
-                        // 重置狀態
-                        carouselDragStart = 0
+                        // 重置狀態（延遲100ms以確保ScrollView已接管）
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            isHorizontalScrolling = false
+                            carouselDragStart = 0
+                        }
                     }
             )
             .onTapGesture(count: 2) {
