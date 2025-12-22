@@ -264,6 +264,16 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		EMBEDFWK1234567890ABCD01 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -1599,6 +1609,8 @@
 				4596E0ED4605F38758AEE173 /* Sources */,
 				F3358EDED8BB0EA4BB7DC824 /* Resources */,
 				9AD301B5E184293F220D88B9 /* Frameworks */,
+				COPYMATRIXSDK123456789AB /* Copy MatrixRustSDK Framework */,
+				EMBEDFWK1234567890ABCD01 /* Embed Frameworks */,
 				964DAE8E9C23F4949A45561E /* Embed Foundation Extensions */,
 			);
 			buildRules = (
@@ -1722,6 +1734,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		COPYMATRIXSDK123456789AB /* Copy MatrixRustSDK Framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Copy MatrixRustSDK Framework";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Copy and sign MatrixRustSDK.framework\nset -e\n\nFRAMEWORK_NAME=\"MatrixRustSDK.framework\"\n\n# Try multiple paths for the framework (build vs archive)\n# Build paths with PackageFrameworks\nPATH1=\"${BUILD_DIR}/${CONFIGURATION}${EFFECTIVE_PLATFORM_NAME}/PackageFrameworks/${FRAMEWORK_NAME}\"\nPATH2=\"${BUILT_PRODUCTS_DIR}/PackageFrameworks/${FRAMEWORK_NAME}\"\n# Archive paths - UninstalledProducts directly contains the framework\nPATH3=\"${OBJROOT}/UninstalledProducts/iphoneos/${FRAMEWORK_NAME}\"\nPATH4=\"${OBJROOT}/UninstalledProducts/${PLATFORM_NAME}/${FRAMEWORK_NAME}\"\nPATH5=\"${OBJROOT}/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/${FRAMEWORK_NAME}\"\n\nFRAMEWORK_SOURCE=\"\"\nfor P in \"$PATH1\" \"$PATH2\" \"$PATH3\" \"$PATH4\" \"$PATH5\"; do\n    echo \"Checking: $P\"\n    if [ -d \"$P\" ]; then\n        FRAMEWORK_SOURCE=\"$P\"\n        echo \"Found framework at: $P\"\n        break\n    fi\ndone\n\n# Destination - use TARGET_BUILD_DIR for archive, BUILT_PRODUCTS_DIR for regular builds\nif [ -n \"${TARGET_BUILD_DIR}\" ]; then\n    FRAMEWORK_DEST=\"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Frameworks\"\nelse\n    FRAMEWORK_DEST=\"${BUILT_PRODUCTS_DIR}/${WRAPPER_NAME}/Frameworks\"\nfi\n\necho \"Final destination: $FRAMEWORK_DEST\"\n\nif [ -n \"$FRAMEWORK_SOURCE\" ] && [ -d \"$FRAMEWORK_SOURCE\" ]; then\n    mkdir -p \"$FRAMEWORK_DEST\"\n    rm -rf \"${FRAMEWORK_DEST}/${FRAMEWORK_NAME}\"\n    cp -R \"$FRAMEWORK_SOURCE\" \"$FRAMEWORK_DEST/\"\n    echo \"SUCCESS: Copied ${FRAMEWORK_NAME} to $FRAMEWORK_DEST\"\n    \n    # Code sign the framework\n    if [ -n \"${EXPANDED_CODE_SIGN_IDENTITY}\" ] && [ \"${CODE_SIGNING_REQUIRED}\" != \"NO\" ]; then\n        /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --preserve-metadata=identifier,entitlements \"${FRAMEWORK_DEST}/${FRAMEWORK_NAME}\"\n        echo \"Signed ${FRAMEWORK_NAME}\"\n    fi\nelse\n    echo \"ERROR: ${FRAMEWORK_NAME} not found in any expected path\"\n    echo \"Searched paths:\"\n    echo \"  $PATH1\"\n    echo \"  $PATH2\"\n    echo \"  $PATH3\"\n    echo \"  $PATH4\"\n    echo \"  $PATH5\"\n    exit 1\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		305EA5F557E6BF8C0DE2734D /* Sources */ = {
