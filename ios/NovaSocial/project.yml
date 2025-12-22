@@ -65,7 +65,7 @@ targets:
         product: MatrixRustSDK
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.app.icered
+        PRODUCT_BUNDLE_IDENTIFIER: com.app.icered.pro
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "Apple Development"
         INFOPLIST_FILE: Info.plist
@@ -109,7 +109,7 @@ targets:
       - target: ICERED
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.app.icered.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.app.icered.pro.tests
         CODE_SIGN_STYLE: Automatic
         SWIFT_VERSION: "5.9"
         GENERATE_INFOPLIST_FILE: YES
@@ -137,7 +137,7 @@ targets:
       - target: ICERED
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.app.icered.uitests
+        PRODUCT_BUNDLE_IDENTIFIER: com.app.icered.pro.uitests
         CODE_SIGN_STYLE: Automatic
         SWIFT_VERSION: "5.9"
         GENERATE_INFOPLIST_FILE: YES
@@ -160,7 +160,7 @@ targets:
       - path: Shared/Services/WidgetDataStore.swift
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.app.icered.widgets
+        PRODUCT_BUNDLE_IDENTIFIER: com.app.icered.pro.widgets
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "Apple Development"
         INFOPLIST_FILE: ICEREDWidgets/Info.plist

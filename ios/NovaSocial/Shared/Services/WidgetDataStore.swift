@@ -2,7 +2,7 @@ import Foundation
 import WidgetKit
 
 /// App Group suite name for sharing data between main app and widgets
-let appGroupSuiteName = "group.com.app.icered"
+let appGroupSuiteName = "group.com.app.icered.pro"
 
 /// Data store for sharing widget data via App Groups
 final class WidgetDataStore {
