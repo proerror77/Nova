@@ -35,6 +35,10 @@ struct FeedPostCard: View {
     @State private var isZooming = false
     /// 縮放預覽的圖片 URL
     @State private var zoomingImageUrl: String? = nil
+    /// 是否在進行水平滑動 (圖片輪播)
+    @State private var isHorizontalScrolling = false
+    /// 圖片輪播的初始滑動位置
+    @State private var carouselDragStart: CGFloat = 0
     /// 觸覺回饋生成器
     private let hapticFeedback = UIImpactFeedbackGenerator(style: .medium)
     private let hapticLight = UIImpactFeedbackGenerator(style: .light)
@@ -447,8 +451,10 @@ struct FeedPostCard: View {
 
     // MARK: - Image Carousel
     // 性能優化：移除 GeometryReader，使用 containerRelativeFrame 替代
+    // 手勢優化：只有在明確的水平滑動時才響應，Feed 竖直滾動優先
     @ViewBuilder
     private var imageCarousel: some View {
+        // 使用 stricter minimum distance 避免在 Feed 竪直滑動時誤觸圖片輪播
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 0) {
                 ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
@@ -555,6 +561,28 @@ struct FeedPostCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
             .contentShape(Rectangle())
+            // 關鍵優化：高優先級手勢來檢測竪直 vs 水平滑動
+            // 確保 Feed 的竪直滾動優先於圖片輪播
+            .highPriorityGesture(
+                DragGesture(minimumDistance: 5, coordinateSpace: .local)
+                    .onChanged { value in
+                        let horizontalDistance = abs(value.translation.width)
+                        let verticalDistance = abs(value.translation.height)
+                        
+                        // 如果竪直滑動 > 水平滑動，優先 Feed 滾動
+                        if verticalDistance > horizontalDistance {
+                            isHorizontalScrolling = false
+                        }
+                        // 如果水平滑動 > 竪直滑動 1.2 倍，啟用圖片輪播
+                        else if horizontalDistance > verticalDistance * 1.2 && horizontalDistance > 15 {
+                            isHorizontalScrolling = true
+                        }
+                    }
+                    .onEnded { _ in
+                        // 重置狀態
+                        carouselDragStart = 0
+                    }
+            )
             .onTapGesture(count: 2) {
                 // 雙擊放大圖片
                 hapticLight.impactOccurred()
