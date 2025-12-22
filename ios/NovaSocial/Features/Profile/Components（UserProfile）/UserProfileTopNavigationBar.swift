@@ -63,7 +63,7 @@ struct UserProfileTopNavigationBar: View {
                 Button(action: onBackTapped) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: layout.backButtonSize, weight: layout.backButtonWeight))
-                        .foregroundColor(layout.iconColor)
+                        .foregroundColor(.black)
                         .frame(width: layout.backButtonTapAreaSize, height: layout.backButtonTapAreaSize)
                 }
 
@@ -86,6 +86,7 @@ struct UserProfileTopNavigationBar: View {
             }
         }
         .padding(.horizontal, layout.horizontalPadding)
+        .padding(.top, layout.topPadding)
         .padding(.bottom, layout.bottomPadding)
     }
 }

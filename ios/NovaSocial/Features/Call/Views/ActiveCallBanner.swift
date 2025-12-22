@@ -77,7 +77,7 @@ struct ActiveCallBanner: View {
         durationTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak callCoordinator] _ in
             Task { @MainActor in
                 if let call = callCoordinator?.currentCall {
-                    self.callDuration = call.duration
+                    callDuration = call.duration
                 }
             }
         }
@@ -147,7 +147,8 @@ struct MinimizedCallView: View {
 
     // MARK: - State
 
-    @State private var position: CGPoint?  // Changed to optional, will be set in onAppear
+    @State private var position: CGPoint = .zero
+    @State private var hasSetInitialPosition = false
     @State private var isDragging = false
     @State private var callDuration: TimeInterval = 0
 
@@ -167,12 +168,6 @@ struct MinimizedCallView: View {
 
     @ViewBuilder
     private func content(for call: CurrentCallInfo, in geometry: GeometryProxy) -> some View {
-        let screenWidth = geometry.size.width
-        let screenHeight = geometry.size.height
-
-        // Initialize position if not set
-        let currentPosition = position ?? CGPoint(x: screenWidth - 80, y: 100)
-
         ZStack {
             // Background
             RoundedRectangle(cornerRadius: 16)
@@ -222,7 +217,7 @@ struct MinimizedCallView: View {
                 }
             }
         }
-        .position(currentPosition)
+        .position(position)
         .gesture(
             DragGesture()
                 .onChanged { value in
@@ -233,6 +228,8 @@ struct MinimizedCallView: View {
                     isDragging = false
                     // Snap to edges
                     withAnimation(.spring()) {
+                        let screenWidth = geometry.size.width
+                        let screenHeight = geometry.size.height
                         var newPosition = value.location
 
                         // Snap to nearest horizontal edge
@@ -253,9 +250,9 @@ struct MinimizedCallView: View {
             onTap()
         }
         .onAppear {
-            // Set initial position if not already set
-            if position == nil {
-                position = CGPoint(x: screenWidth - 80, y: 100)
+            if !hasSetInitialPosition {
+                position = CGPoint(x: geometry.size.width - 80, y: 100)
+                hasSetInitialPosition = true
             }
             startDurationTimer()
         }
@@ -277,7 +274,7 @@ struct MinimizedCallView: View {
         durationTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak callCoordinator] _ in
             Task { @MainActor in
                 if let call = callCoordinator?.currentCall {
-                    self.callDuration = call.duration
+                    callDuration = call.duration
                 }
             }
         }

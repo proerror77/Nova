@@ -43,11 +43,13 @@ struct CreateAccountView: View {
     private let identityService = IdentityService()
 
     var body: some View {
+        GeometryReader { geometry in
         ZStack {
             // Background Image - Fixed size to prevent scaling when keyboard appears
             Image("Registration-background")
                 .resizable()
                 .scaledToFill()
+                .frame(width: geometry.size.width, height: geometry.size.height)
                 .clipped()
                 .ignoresSafeArea(.all)
 
@@ -72,14 +74,11 @@ struct CreateAccountView: View {
                         Spacer()
                     }
                 } else {
-                    // Main Content - wrapped in GeometryReader for dynamic sizing
-                    GeometryReader { geometry in
-                        VStack(spacing: 0) {
-                            // 使用动态高度替代Spacer，防止键盘推动布局
-                            Color.clear
-                                .frame(height: max(0, (geometry.size.height - 812) / 2))
+                    // 使用固定高度替代Spacer，防止键盘推动布局
+                    Color.clear
+                        .frame(height: max(0, (geometry.size.height - 812) / 2))
 
-                            // Main Content
+                    // Main Content
                             ZStack {
                     Group {
                         // Profile Picture Circle - 显示选择的头像或默认头像
@@ -407,11 +406,9 @@ struct CreateAccountView: View {
                     }
                     .frame(width: ScreenScale.screenWidth, height: ScreenScale.screenHeight)
 
-                            // 使用动态高度替代Spacer，防止键盘推动布局
-                            Color.clear
-                                .frame(height: max(0, (geometry.size.height - 812) / 2))
-                        }
-                    }
+                    // 使用固定高度替代Spacer，防止键盘推动布局
+                    Color.clear
+                        .frame(height: max(0, (geometry.size.height - 812) / 2))
                 }
             }
             .contentShape(Rectangle())
@@ -437,6 +434,7 @@ struct CreateAccountView: View {
                 }
             }
         }
+        } // GeometryReader
     }
 
     // MARK: - Actions

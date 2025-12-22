@@ -993,8 +993,8 @@ struct PostGridCard: View {
         .environmentObject(AuthenticationManager.shared)
 }
 
-#Preview("Profile - Dark Mode") {
+#Preview("Profile - Light Mode") {
     ProfileView(currentPage: .constant(.account))
         .environmentObject(AuthenticationManager.shared)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(.light)
 }

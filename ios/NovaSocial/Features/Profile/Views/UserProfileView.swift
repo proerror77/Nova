@@ -217,6 +217,19 @@ struct UserProfileView: View {
             .frame(maxWidth: .infinity)  // 整体居中
             .ignoresSafeArea(edges: .bottom)  // 内容层延伸到底部
         }
+        .overlay(alignment: .topLeading) {
+            // MARK: - 返回按钮（左上角，与分享图标水平对齐）
+            Button(action: {
+                showUserProfile = false
+            }) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.black)
+                    .frame(width: 44, height: 44)
+            }
+            .padding(.leading, 20)
+            .padding(.top, 60)
+        }
         .task {
             await loadUserData()
         }
