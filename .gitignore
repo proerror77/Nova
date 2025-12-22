@@ -16,8 +16,18 @@
 .claude/
 .serena/
 .specify/
+.cursor/
+.aider*
+.copilot/
+.continue/
+.codeium/
+.mcp/
 AGENTS.md
 CLAUDE.md
+
+# Local binary builds (should not be committed)
+.docker-bin/
+**/.docker-bin/
 
 # Temporary files in root directory
 /*.txt
