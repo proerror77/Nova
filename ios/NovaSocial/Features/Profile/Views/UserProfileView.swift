@@ -124,100 +124,98 @@ struct UserProfileView: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .top) {
-                // MARK: - 背景层（贴紧屏幕边缘）
-                VStack(spacing: 0) {
-                    // 头部背景 - 完全贴边
-                    Image("UserProfile-background")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(height: 520)
-                        .frame(maxWidth: .infinity)
-                        .clipped()
-                        .blur(radius: 15)
-                        .overlay(Color.black.opacity(0.2))
+        ZStack(alignment: .top) {
+            // MARK: - 背景层（贴紧屏幕边缘）
+            VStack(spacing: 0) {
+                // 头部背景 - 完全贴边
+                Image("UserProfile-background")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(height: 520)
+                    .frame(maxWidth: .infinity)
+                    .clipped()
+                    .blur(radius: 15)
+                    .overlay(Color.black.opacity(0.2))
 
-                    // 内容区域背景 - 填充剩余空间
-                    contentBackgroundColor
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .ignoresSafeArea()
-
-                // MARK: - 内容层（居中对齐）
-                VStack(spacing: 0) {
-                    // 顶部导航栏（使用组件）
-                    UserProfileTopNavigationBar(
-                        isVerified: userData.isVerified,
-                        layout: navBarLayout,
-                        onBackTapped: {
-                            showUserProfile = false
-                        },
-                        onShareTapped: {
-                            // 分享操作
-                        },
-                        onMoreTapped: {
-                            showBlockReportSheet = true
-                        }
-                    )
-
-                    // 用户信息区域（使用组件）- 居中
-                    UserProfileUserInfoSection(
-                        avatarUrl: userData.avatarUrl,
-                        username: userData.username,
-                        location: userData.location,
-                        profession: userData.profession,
-                        followingCount: userData.followingCount,
-                        followersCount: userData.followersCount,
-                        likesCount: userData.likesCount,
-                        isAlias: userData.isAlias,
-                        aliasName: userData.aliasName,
-                        layout: userInfoLayout,
-                        onFollowingTapped: {
-                            // 点击 Following
-                        },
-                        onFollowersTapped: {
-                            // 点击 Followers
-                        },
-                        onLikesTapped: {
-                            // 点击 Likes
-                        }
-                    )
-                    .frame(maxWidth: .infinity)  // 确保居中
-                    .offset(y: userInfoBlockVerticalOffset)  // 应用垂直偏移（与 Profile 一致）
-
-                    // 操作按钮（使用组件）- 居中
-                    UserProfileActionButtons(
-                        isFollowing: $isFollowing,
-                        onFollowTapped: {
-                            // 关注操作
-                        },
-                        onAddFriendsTapped: {
-                            // 添加好友操作
-                        },
-                        onMessageTapped: {
-                            // 消息操作
-                        }
-                    )
-                    .frame(maxWidth: .infinity)  // 确保居中
-                    .offset(y: actionButtonsVerticalOffset)  // 第 36 行调整
-
-                    // 内容区域（使用组件）
-                    UserProfileContentSection(
-                        posts: userData.posts,
-                        onSearchTapped: {
-                            // 搜索操作
-                        },
-                        onPostTapped: { postId in
-                            // 点击帖子
-                        }
-                    )
-                    .padding(.top, contentSectionVerticalOffset)  // 使用 padding 代替 offset，不会产生布局空白
-                }
-                .frame(maxWidth: .infinity)  // 整体居中
-                .ignoresSafeArea(edges: .bottom)  // 内容层延伸到底部
+                // 内容区域背景 - 填充剩余空间
+                contentBackgroundColor
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea()
+
+            // MARK: - 内容层（居中对齐）
+            VStack(spacing: 0) {
+                // 顶部导航栏（使用组件）
+                UserProfileTopNavigationBar(
+                    isVerified: userData.isVerified,
+                    layout: navBarLayout,
+                    onBackTapped: {
+                        showUserProfile = false
+                    },
+                    onShareTapped: {
+                        // 分享操作
+                    },
+                    onMoreTapped: {
+                        showBlockReportSheet = true
+                    }
+                )
+
+                // 用户信息区域（使用组件）- 居中
+                UserProfileUserInfoSection(
+                    avatarUrl: userData.avatarUrl,
+                    username: userData.username,
+                    location: userData.location,
+                    profession: userData.profession,
+                    followingCount: userData.followingCount,
+                    followersCount: userData.followersCount,
+                    likesCount: userData.likesCount,
+                    isAlias: userData.isAlias,
+                    aliasName: userData.aliasName,
+                    layout: userInfoLayout,
+                    onFollowingTapped: {
+                        // 点击 Following
+                    },
+                    onFollowersTapped: {
+                        // 点击 Followers
+                    },
+                    onLikesTapped: {
+                        // 点击 Likes
+                    }
+                )
+                .frame(maxWidth: .infinity)  // 确保居中
+                .offset(y: userInfoBlockVerticalOffset)  // 应用垂直偏移（与 Profile 一致）
+
+                // 操作按钮（使用组件）- 居中
+                UserProfileActionButtons(
+                    isFollowing: $isFollowing,
+                    onFollowTapped: {
+                        // 关注操作
+                    },
+                    onAddFriendsTapped: {
+                        // 添加好友操作
+                    },
+                    onMessageTapped: {
+                        // 消息操作
+                    }
+                )
+                .frame(maxWidth: .infinity)  // 确保居中
+                .offset(y: actionButtonsVerticalOffset)  // 第 36 行调整
+
+                // 内容区域（使用组件）
+                UserProfileContentSection(
+                    posts: userData.posts,
+                    onSearchTapped: {
+                        // 搜索操作
+                    },
+                    onPostTapped: { postId in
+                        // 点击帖子
+                    }
+                )
+                .padding(.top, contentSectionVerticalOffset)  // 使用 padding 代替 offset，不会产生布局空白
+            }
+            .frame(maxWidth: .infinity)  // 整体居中
+            .ignoresSafeArea(edges: .bottom)  // 内容层延伸到底部
         }
         .task {
             await loadUserData()
@@ -241,9 +239,17 @@ struct UserProfileView: View {
     private func loadUserData() async {
         isLoading = true
 
+        #if DEBUG
+        print("[UserProfile] 🔍 Loading profile for userId: \(userId)")
+        #endif
+
         do {
             // 1. 加载用户资料
             let userProfile = try await userService.getUser(userId: userId)
+
+            #if DEBUG
+            print("[UserProfile] ✅ API returned user: id=\(userProfile.id), username=\(userProfile.username), displayName=\(userProfile.displayName ?? "nil")")
+            #endif
 
             // 2. 加载用户发布的帖子
             let postsResponse = try await contentService.getPostsByAuthor(authorId: userId, limit: 50, offset: 0)
