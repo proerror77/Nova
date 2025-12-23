@@ -2,7 +2,7 @@
 ///
 /// This module provides APNs support for iOS/macOS push notifications
 /// using the consolidated nova-apns-shared library
-use nova_apns_shared::{ApnsAuthMode, ApnsConfig as NovaApnsConfig, ApnsPush as NovaApnsPush, PushProvider};
+use nova_apns_shared::{ApnsConfig as NovaApnsConfig, ApnsPush as NovaApnsPush, PushProvider};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
