@@ -17,7 +17,7 @@ pub use kafka::{
     topics, PostCreatedForVLM, SharedVLMProducer, VLMConsumer, VLMConsumerConfig, VLMPostAnalyzed,
     VLMProducer,
 };
-pub use providers::{GoogleVisionClient, ImageAnalysisResult, Label};
+pub use providers::{AuthMode, GoogleVisionClient, ImageAnalysisResult, Label};
 pub use services::{
     generate_tags, match_channels, Channel, ChannelMatch, GeneratedTag, KeywordWeight, TagSource,
 };
