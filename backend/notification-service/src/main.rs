@@ -96,38 +96,53 @@ async fn main() -> io::Result<()> {
     };
 
     // Initialize APNs client from environment
-    let apns_client: Option<Arc<APNsClient>> =
-        if let Ok(cert_path) = std::env::var("APNS_CERTIFICATE_PATH") {
+    // Supports both APNS_KEY_PATH (modern .p8 JWT authentication) and APNS_CERTIFICATE_PATH (legacy .p12)
+    let apns_client: Option<Arc<APNsClient>> = {
+        let cert_or_key_path = std::env::var("APNS_KEY_PATH")
+            .or_else(|_| std::env::var("APNS_CERTIFICATE_PATH"))
+            .ok();
+
+        if let Some(path) = cert_or_key_path {
             let key_id = std::env::var("APNS_KEY_ID").unwrap_or_default();
             let team_id = std::env::var("APNS_TEAM_ID").unwrap_or_default();
+            let bundle_id = std::env::var("APNS_BUNDLE_ID").unwrap_or_default();
             let is_production = std::env::var("APNS_PRODUCTION")
                 .map(|v| v.to_lowercase() == "true" || v == "1")
                 .unwrap_or(false);
 
-            if key_id.is_empty() || team_id.is_empty() {
+            if key_id.is_empty() || team_id.is_empty() || bundle_id.is_empty() {
                 tracing::warn!(
-                    "APNS_KEY_ID or APNS_TEAM_ID not set - APNs push notifications disabled"
+                    "APNs configuration incomplete - missing APNS_KEY_ID, APNS_TEAM_ID, or APNS_BUNDLE_ID. APNs push notifications disabled."
                 );
                 None
             } else {
                 let client = APNsClient::new(
-                    cert_path.clone(),
-                    String::new(), // key_path - not used in wrapper
-                    team_id,
-                    key_id,
+                    path.clone(),
+                    String::new(), // key_path - reserved for future use
+                    team_id.clone(),
+                    key_id.clone(),
                     is_production,
                 );
                 tracing::info!(
-                    "APNs client initialized (production={}) from {}",
+                    "✅ APNs push notifications enabled (production={}) from {}",
                     is_production,
-                    cert_path
+                    path
+                );
+                tracing::debug!(
+                    "APNs Configuration: key_id={}, team_id={}, bundle_id={}",
+                    key_id,
+                    team_id,
+                    bundle_id
                 );
                 Some(Arc::new(client))
             }
         } else {
-            tracing::warn!("APNS_CERTIFICATE_PATH not set - APNs push notifications disabled");
+            tracing::warn!(
+                "APNs configuration missing - neither APNS_KEY_PATH (modern .p8 JWT) nor APNS_CERTIFICATE_PATH (legacy .p12) set. APNs push notifications disabled."
+            );
             None
-        };
+        }
+    };
 
     // Initialize Redis pool for distributed deduplication
     let redis_url = std::env::var("REDIS_URL")
