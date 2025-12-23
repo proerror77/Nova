@@ -465,7 +465,7 @@ dependencies = [
  "tokio-test",
  "tonic 0.12.3",
  "tonic-build",
- "tonic-health 0.12.3",
+ "tonic-health",
  "tracing",
  "tracing-subscriber",
  "uuid",
@@ -2112,7 +2112,7 @@ dependencies = [
  "tokio-test",
  "tonic 0.12.3",
  "tonic-build",
- "tonic-health 0.12.3",
+ "tonic-health",
  "tracing",
  "tracing-actix-web",
  "tracing-subscriber",
@@ -2947,7 +2947,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3111,7 +3111,7 @@ dependencies = [
  "tokio",
  "tonic 0.12.3",
  "tonic-build",
- "tonic-health 0.12.3",
+ "tonic-health",
  "tonic-reflection",
  "tracing",
  "tracing-subscriber",
@@ -3165,7 +3165,7 @@ dependencies = [
  "tokio-test",
  "tonic 0.12.3",
  "tonic-build",
- "tonic-health 0.12.3",
+ "tonic-health",
  "tracing",
  "tracing-subscriber",
  "tract-core",
@@ -3556,7 +3556,7 @@ dependencies = [
  "tokio-test",
  "tonic 0.12.3",
  "tonic-build",
- "tonic-health 0.12.3",
+ "tonic-health",
  "tracing",
  "tracing-actix-web",
  "tracing-subscriber",
@@ -3673,7 +3673,7 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tonic 0.12.3",
- "tonic-health 0.12.3",
+ "tonic-health",
  "tracing",
  "tracing-subscriber",
 ]
@@ -4166,7 +4166,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.1",
+ "socket2 0.5.10",
  "system-configuration 0.6.1",
  "tokio",
  "tower-service",
@@ -4373,7 +4373,7 @@ dependencies = [
  "tokio-test",
  "tonic 0.12.3",
  "tonic-build",
- "tonic-health 0.12.3",
+ "tonic-health",
  "tonic-reflection",
  "totp-lite",
  "tower 0.5.2",
@@ -4554,7 +4554,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5058,7 +5058,7 @@ dependencies = [
  "tokio-test",
  "tonic 0.12.3",
  "tonic-build",
- "tonic-health 0.10.2",
+ "tonic-health",
  "tower 0.5.2",
  "tracing",
  "tracing-subscriber",
@@ -5405,7 +5405,7 @@ dependencies = [
  "tokio-test",
  "tonic 0.12.3",
  "tonic-build",
- "tonic-health 0.12.3",
+ "tonic-health",
  "tracing",
  "tracing-subscriber",
  "uuid",
@@ -5465,7 +5465,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6516,7 +6516,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn 2.0.111",
@@ -6631,7 +6631,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls 0.23.35",
- "socket2 0.6.1",
+ "socket2 0.5.10",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
@@ -6668,9 +6668,9 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.1",
+ "socket2 0.5.10",
  "tracing",
- "windows-sys 0.60.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6794,7 +6794,7 @@ dependencies = [
  "tokio-test",
  "tonic 0.12.3",
  "tonic-build",
- "tonic-health 0.12.3",
+ "tonic-health",
  "tower 0.4.13",
  "tracing",
  "tracing-subscriber",
@@ -7350,7 +7350,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7628,7 +7628,7 @@ dependencies = [
  "tokio",
  "tonic 0.12.3",
  "tonic-build",
- "tonic-health 0.12.3",
+ "tonic-health",
  "tracing",
  "tracing-subscriber",
  "url",
@@ -8042,7 +8042,7 @@ dependencies = [
  "tokio",
  "tonic 0.12.3",
  "tonic-build",
- "tonic-health 0.12.3",
+ "tonic-health",
  "tracing",
  "tracing-subscriber",
  "transactional-outbox",
@@ -8585,7 +8585,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.2",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -8991,27 +8991,6 @@ checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
 
 [[package]]
 name = "tonic"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d560933a0de61cf715926b9cac824d4c883c2c43142f787595e48280c40a1d0e"
-dependencies = [
- "async-trait",
- "base64 0.21.7",
- "bytes",
- "http 0.2.12",
- "http-body 0.4.6",
- "percent-encoding",
- "pin-project",
- "prost 0.12.6",
- "tokio",
- "tokio-stream",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
-name = "tonic"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76c4eb7a4e9ef9d4763600161f12f5070b92a578e1b634db88a6887844c91a13"
@@ -9083,19 +9062,6 @@ dependencies = [
  "prost-types 0.13.5",
  "quote",
  "syn 2.0.111",
-]
-
-[[package]]
-name = "tonic-health"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f80db390246dfb46553481f6024f0082ba00178ea495dbb99e70ba9a4fafb5e1"
-dependencies = [
- "async-stream",
- "prost 0.12.6",
- "tokio",
- "tokio-stream",
- "tonic 0.10.2",
 ]
 
 [[package]]
@@ -9526,7 +9492,7 @@ dependencies = [
  "tokio-test",
  "tonic 0.12.3",
  "tonic-build",
- "tonic-health 0.12.3",
+ "tonic-health",
  "tracing",
  "tracing-subscriber",
  "unicode-segmentation",
@@ -9820,7 +9786,7 @@ dependencies = [
  "tokio-test",
  "tonic 0.12.3",
  "tonic-build",
- "tonic-health 0.12.3",
+ "tonic-health",
  "tower 0.4.13",
  "tracing",
  "tracing-subscriber",
@@ -10096,7 +10062,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
