@@ -539,21 +539,32 @@ pub async fn get_voice_token(_clients: web::Data<ServiceClients>) -> Result<Http
 
     let api_url = format!("{}/realtime/client_secrets", base_url);
 
+    // Request body with token expiration (5 minutes = 300 seconds)
+    let request_body = serde_json::json!({
+        "expires_after": {
+            "seconds": 300
+        }
+    });
+
     match client
         .post(&api_url)
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
-        .json(&serde_json::json!({}))
+        .json(&request_body)
         .send()
         .await
     {
         Ok(response) => {
             let status = response.status();
 
+            // Get response body as text first for debugging
+            let response_text = response.text().await.unwrap_or_default();
+            info!("xAI voice token response status: {}, body: {}", status, &response_text);
+
             if status.is_success() {
-                match response.json::<XAIClientSecretResponse>().await {
+                match serde_json::from_str::<XAIClientSecretResponse>(&response_text) {
                     Ok(xai_response) => {
-                        info!("Voice token generated successfully");
+                        info!("Voice token generated successfully, expires_at: {}", xai_response.client_secret.expires_at);
                         Ok(HttpResponse::Ok().json(VoiceTokenResponse {
                             client_secret: ClientSecret {
                                 value: xai_response.client_secret.value,
@@ -563,20 +574,20 @@ pub async fn get_voice_token(_clients: web::Data<ServiceClients>) -> Result<Http
                         }))
                     }
                     Err(e) => {
-                        error!("Failed to parse xAI token response: {}", e);
+                        error!("Failed to parse xAI token response: {} - Raw response: {}", e, &response_text);
                         Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                             "status": "error",
                             "message": format!("Failed to parse token response: {}", e),
+                            "raw_response": &response_text,
                         })))
                     }
                 }
             } else {
-                let error_text = response.text().await.unwrap_or_default();
-                error!("xAI API error: {} - {}", status, error_text);
+                error!("xAI API error: {} - {}", status, &response_text);
                 Ok(HttpResponse::BadGateway().json(serde_json::json!({
                     "status": "error",
                     "message": format!("Failed to get voice token: {}", status),
-                    "details": error_text,
+                    "details": &response_text,
                 })))
             }
         }
