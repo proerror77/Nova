@@ -136,7 +136,7 @@ final class XAIService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         // Add auth token if available
-        if let token = AuthManager.shared.currentToken {
+        if let token = AuthenticationManager.shared.authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
