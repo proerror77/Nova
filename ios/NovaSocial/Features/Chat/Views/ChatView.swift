@@ -339,6 +339,9 @@ struct ChatView: View {
     private var currentUserId: String {
         KeychainService.shared.get(.userId) ?? "unknown"
     }
+    
+    // Matrix 消息处理器状态（防止重复设置）
+    @State private var matrixMessageHandlerSetup = false
 
 
     var body: some View {
@@ -433,9 +436,10 @@ struct ChatView: View {
             await loadChatData()
         }
         .onDisappear {
-            // Clear Matrix callbacks
+            // Clear Matrix callbacks and reset handler setup flag
             MatrixBridgeService.shared.onMatrixMessage = nil
             MatrixBridgeService.shared.onTypingIndicator = nil
+            matrixMessageHandlerSetup = false
 
             Task {
                 await matrixBridge.stopListening(conversationId: conversationId)
@@ -956,6 +960,16 @@ struct ChatView: View {
 
     /// Setup Matrix Bridge message handler for E2EE messages
     private func setupMatrixMessageHandler() {
+        // 防止重复设置处理器 - 只设置一次
+        guard !matrixMessageHandlerSetup else {
+            #if DEBUG
+            print("[ChatView] ⚠️ Matrix message handler already setup, skipping duplicate setup\")")
+            #endif
+            return
+        }
+        
+        matrixMessageHandlerSetup = true
+        
         MatrixBridgeService.shared.onMatrixMessage = { [self] conversationId, matrixMessage in
             Task { @MainActor in
                 // 只處理當前會話的訊息
@@ -972,9 +986,9 @@ struct ChatView: View {
                 }
 
                 // 避免重複
-                guard !self.messages.contains(where: { $0.id == matrixMessage.id }) else {
+                if self.messages.contains(where: { $0.id == matrixMessage.id }) {
                     #if DEBUG
-                    print("[ChatView] ✅ Skipping duplicate message: \(matrixMessage.id)")
+                    print("[ChatView] ⚠️ Skipping duplicate message: \\(matrixMessage.id) (already exists)")
                     #endif
                     return
                 }
@@ -984,21 +998,34 @@ struct ChatView: View {
                     matrixMessage,
                     conversationId: conversationId
                 )
+                
+                let newChatMessage = ChatMessage(from: novaMessage, currentUserId: self.currentUserId)
+                
+                // 再次檢查 - 防止競態條件（消息可能在轉換期間被添加）
+                if self.messages.contains(where: { $0.id == newChatMessage.id }) {
+                    #if DEBUG
+                    print("[ChatView] ⚠️ Skipping duplicate message: \\(newChatMessage.id) (added during conversion)")
+                    #endif
+                    return
+                }
 
                 // 添加到 UI
-                self.messages.append(ChatMessage(from: novaMessage, currentUserId: self.currentUserId))
+                self.messages.append(newChatMessage)
+                
+                #if DEBUG
+                print("[ChatView] ✅ Message added to UI - ID: \\(newChatMessage.id), Sender: \\(newChatMessage.isFromMe ? \"me\" : \"other\"), Total: \\(self.messages.count)")
+                #endif
 
                 // 清除打字指示器
                 self.isOtherUserTyping = false
 
                 // Mark as read (Matrix read receipt)
                 if novaMessage.senderId != self.currentUserId {
+                    #if DEBUG
+                    print("[ChatView] 📖 Marking message as read - ID: \\(matrixMessage.id)")
+                    #endif
                     try? await self.matrixBridge.markAsRead(conversationId: self.conversationId)
                 }
-
-                #if DEBUG
-                print("[ChatView] Matrix E2EE message received: \(matrixMessage.id)")
-                #endif
             }
         }
 
