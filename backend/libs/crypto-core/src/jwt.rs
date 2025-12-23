@@ -43,7 +43,12 @@ use uuid::Uuid;
 // Constants
 // ============================================================================
 
-const ACCESS_TOKEN_EXPIRY_HOURS: i64 = 1;
+/// Access token validity: 24 hours for better user experience
+/// This reduces token refresh frequency while maintaining security
+const ACCESS_TOKEN_EXPIRY_HOURS: i64 = 24;
+
+/// Refresh token validity: 90 days for long-term session persistence
+/// Users won't need to re-login unless they're inactive for 90+ days
 const REFRESH_TOKEN_EXPIRY_DAYS: i64 = 90;
 const MAX_IAT_FUTURE_SKEW_SECS: i64 = 300;
 const DEFAULT_VALIDATION_LEEWAY: u64 = 30;

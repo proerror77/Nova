@@ -30,6 +30,14 @@ class AuthenticationManager: ObservableObject {
     private let maxRefreshRetries = 3
     private let refreshRetryDelaySeconds: UInt64 = 2
 
+    // Proactive token refresh configuration
+    // Refresh token when it will expire within this time window (6 hours)
+    private let proactiveRefreshThreshold: TimeInterval = 6 * 60 * 60
+
+    // Track consecutive refresh failures for graceful degradation
+    private var consecutiveRefreshFailures = 0
+    private let maxConsecutiveFailuresBeforeLogout = 5
+
     private init() {
         migrateFromUserDefaults()
         loadSavedAuth()
@@ -87,15 +95,70 @@ class AuthenticationManager: ObservableObject {
             print("[Auth]   - Has refresh token: \(hasRefreshToken)")
             #endif
 
-            // Load user profile in background
+            // Load user profile and proactively refresh token if needed
             Task {
                 try? await loadCurrentUser(userId: userId)
+                // Proactively refresh token if it's about to expire
+                await proactivelyRefreshTokenIfNeeded()
             }
         } else {
             #if DEBUG
             print("[Auth]   ℹ️ No saved auth found in Keychain")
             #endif
         }
+    }
+
+    // MARK: - Proactive Token Refresh
+
+    /// Proactively refresh token if it will expire soon
+    /// This prevents token expiration while the user is actively using the app
+    func proactivelyRefreshTokenIfNeeded() async {
+        guard isAuthenticated else { return }
+        guard let token = authToken else { return }
+
+        // Check if token will expire within the threshold
+        if let expirationDate = getTokenExpirationDate(token: token) {
+            let timeUntilExpiry = expirationDate.timeIntervalSinceNow
+
+            #if DEBUG
+            print("[Auth] 🕐 Token expires in \(String(format: "%.1f", timeUntilExpiry / 3600)) hours")
+            #endif
+
+            // If token expires within threshold, refresh proactively
+            if timeUntilExpiry < proactiveRefreshThreshold && timeUntilExpiry > 0 {
+                #if DEBUG
+                print("[Auth] 🔄 Proactively refreshing token (expires in < 6 hours)")
+                #endif
+                let success = await attemptTokenRefresh()
+                if success {
+                    consecutiveRefreshFailures = 0
+                    #if DEBUG
+                    print("[Auth] ✅ Proactive token refresh successful")
+                    #endif
+                }
+            }
+        }
+    }
+
+    /// Extract expiration date from JWT token (without validation)
+    private func getTokenExpirationDate(token: String) -> Date? {
+        let parts = token.split(separator: ".")
+        guard parts.count == 3 else { return nil }
+
+        // Decode the payload (second part)
+        var payload = String(parts[1])
+        // Add padding if needed for base64 decoding
+        while payload.count % 4 != 0 {
+            payload += "="
+        }
+
+        guard let data = Data(base64Encoded: payload),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let exp = json["exp"] as? TimeInterval else {
+            return nil
+        }
+
+        return Date(timeIntervalSince1970: exp)
     }
 
     /// Load current user profile
@@ -390,10 +453,30 @@ class AuthenticationManager: ObservableObject {
 
     /// Force logout due to session expiration - posts notification to navigate to login
     /// Use this when token refresh fails and user needs to re-authenticate
+    /// Now includes graceful degradation: only logs out after multiple consecutive failures
     func forceLogoutDueToSessionExpiry() async {
+        consecutiveRefreshFailures += 1
+
         #if DEBUG
-        print("[Auth] ⚠️ Force logout due to session expiry")
+        print("[Auth] ⚠️ Session expiry detected (failure #\(consecutiveRefreshFailures)/\(maxConsecutiveFailuresBeforeLogout))")
         #endif
+
+        // Graceful degradation: only force logout after multiple consecutive failures
+        // This prevents accidental logouts due to temporary network issues
+        guard consecutiveRefreshFailures >= maxConsecutiveFailuresBeforeLogout else {
+            #if DEBUG
+            print("[Auth] 🔄 Not logging out yet - giving user more chances to recover")
+            print("[Auth]    Will logout after \(maxConsecutiveFailuresBeforeLogout - consecutiveRefreshFailures) more failures")
+            #endif
+            return
+        }
+
+        #if DEBUG
+        print("[Auth] 🚪 Maximum refresh failures reached - forcing logout")
+        #endif
+
+        // Reset failure counter
+        consecutiveRefreshFailures = 0
 
         // Clear Matrix session (with credentials) to ensure fresh login next time
         await MatrixBridgeService.shared.shutdown(clearCredentials: true)
@@ -414,8 +497,18 @@ class AuthenticationManager: ObservableObject {
         NotificationCenter.default.post(
             name: NSNotification.Name("SessionExpired"),
             object: nil,
-            userInfo: ["reason": "token_refresh_failed"]
+            userInfo: ["reason": "token_refresh_failed_after_retries"]
         )
+    }
+
+    /// Reset the consecutive failure counter (call this after successful API calls)
+    func resetRefreshFailureCounter() {
+        if consecutiveRefreshFailures > 0 {
+            #if DEBUG
+            print("[Auth] ✅ Resetting refresh failure counter (was \(consecutiveRefreshFailures))")
+            #endif
+            consecutiveRefreshFailures = 0
+        }
     }
 
     // MARK: - Update Tokens (for account switching)
@@ -607,7 +700,10 @@ class AuthenticationManager: ObservableObject {
 
     // MARK: - Session Validation
 
-    /// Validate the current session by checking if we have valid credentials
+    /// Validate the current session with smart token management
+    /// - Checks if we have valid credentials
+    /// - Proactively refreshes token if needed
+    /// - Returns true as long as we have a valid session (even if token is expired but refreshable)
     func validateSession() async -> Bool {
         // Check if we have a stored token
         guard let token = keychain.get(.authToken), !token.isEmpty else {
@@ -621,8 +717,58 @@ class AuthenticationManager: ObservableObject {
             APIClient.shared.setAuthToken(token)
         }
 
-        // For now, just return true if we have a token
-        // In a full implementation, this would call the server to validate
+        // Check token expiration
+        if let expirationDate = getTokenExpirationDate(token: token) {
+            let timeUntilExpiry = expirationDate.timeIntervalSinceNow
+
+            #if DEBUG
+            print("[Auth] 🔍 Validating session:")
+            print("[Auth]   - Token expires in: \(String(format: "%.1f", timeUntilExpiry / 3600)) hours")
+            #endif
+
+            // Token already expired
+            if timeUntilExpiry <= 0 {
+                #if DEBUG
+                print("[Auth]   ⚠️ Token expired, attempting refresh...")
+                #endif
+
+                // Try to refresh
+                if keychain.exists(.refreshToken) {
+                    let success = await attemptTokenRefresh()
+                    if success {
+                        consecutiveRefreshFailures = 0
+                        #if DEBUG
+                        print("[Auth]   ✅ Token refreshed successfully")
+                        #endif
+                        return true
+                    } else {
+                        #if DEBUG
+                        print("[Auth]   ❌ Token refresh failed, but keeping session")
+                        print("[Auth]      User can try again on next API call")
+                        #endif
+                        // Don't immediately return false - give user more chances
+                        // The next API call will trigger another refresh attempt
+                        return isAuthenticated
+                    }
+                } else {
+                    #if DEBUG
+                    print("[Auth]   ❌ No refresh token available")
+                    #endif
+                    // No refresh token, but don't logout immediately
+                    // Let the API layer handle it
+                    return isAuthenticated
+                }
+            }
+
+            // Token still valid but will expire soon - proactively refresh
+            if timeUntilExpiry < proactiveRefreshThreshold {
+                #if DEBUG
+                print("[Auth]   🔄 Token expires soon, proactively refreshing...")
+                #endif
+                await proactivelyRefreshTokenIfNeeded()
+            }
+        }
+
         return isAuthenticated
     }
 

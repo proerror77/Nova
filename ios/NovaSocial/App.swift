@@ -22,8 +22,9 @@ struct IceredApp: App {
     @Environment(\.scenePhase) private var scenePhase
     // 记录进入后台的时间戳
     @State private var backgroundEntryTime: Date?
-    // 后台超时时间（2分钟）
-    private let backgroundTimeout: TimeInterval = 120
+    // 后台超时时间（30分钟）- 更友好的用户体验
+    // 只有超过30分钟才会显示 splash screen 重新验证
+    private let backgroundTimeout: TimeInterval = 1800
 
     // Check if running in UI testing mode
     private var isUITesting: Bool {
@@ -214,23 +215,17 @@ struct IceredApp: App {
                 if newPhase == .active, let entryTime = backgroundEntryTime {
                     let timeInBackground = Date().timeIntervalSince(entryTime)
                     print("[App] 📱 App returned to foreground after \(String(format: "%.1f", timeInBackground))s")
-                    
-                    // 只有超过2分钟才显示 Splash Screen (with full re-validation)
+
+                    // 持久化登录策略：只有超过 30 分钟才显示 Splash Screen
+                    // 短时间后台返回不做任何验证，依赖 API 层面的 401 处理
+                    // 这样可以避免不必要的登出，提供更好的用户体验
                     if timeInBackground >= backgroundTimeout {
-                        print("[App] ⏰ Background timeout exceeded, showing splash screen")
+                        print("[App] ⏰ Background timeout (30min) exceeded, showing splash screen")
                         currentPage = .splash
-                    } else if authManager.isAuthenticated && timeInBackground >= 30 {
-                        // For shorter background periods (30s+), silently validate session
-                        // This catches token expiration without showing splash
-                        print("[App] 🔍 Validating session after \(String(format: "%.0f", timeInBackground))s in background")
-                        Task {
-                            let isValid = await authManager.validateSession()
-                            if !isValid {
-                                print("[App] ❌ Session invalid after background, navigating to login")
-                                currentPage = .login
-                            }
-                        }
                     }
+                    // 移除了过于激进的 30 秒验证逻辑
+                    // Token 过期时会在 API 请求时自动刷新 (401 -> refresh token)
+
                     // 重置时间戳
                     backgroundEntryTime = nil
                 }
