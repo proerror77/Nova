@@ -169,7 +169,7 @@ impl BackfillJob {
             r#"
             SELECT id, user_id, media_urls, media_type
             FROM posts
-            WHERE deleted_at IS NULL
+            WHERE soft_delete IS NULL
               AND (vlm_status IS NULL OR vlm_status = 'pending')
               AND media_type IS NOT NULL
               AND media_type <> 'none'
@@ -193,7 +193,7 @@ impl BackfillJob {
             r#"
             SELECT id, name, slug, vlm_keywords
             FROM channels
-            WHERE deleted_at IS NULL
+            WHERE is_enabled = true
             "#,
         )
         .fetch_all(&self.pool)
