@@ -32,7 +32,7 @@ dotenvy.workspace = true
 envy.workspace = true
 
 # HTTP client for Vision API
-reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 
 # GCP Authentication (Application Default Credentials)
 gcp_auth = "0.12"

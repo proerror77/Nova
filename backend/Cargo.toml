@@ -102,7 +102,7 @@ sha1 = "0.10"
 hex = "0.4"
 base64 = "0.22"
 mime = "0.3"
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.12", features = ["json"] }
 urlencoding = "2.1"
 validator = "0.20"
 utoipa = "5.4"
