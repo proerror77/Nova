@@ -258,7 +258,7 @@ impl VLMConsumer {
             sqlx::query(
                 r#"
                 INSERT INTO post_tags (post_id, tag, confidence, source, vlm_provider)
-                VALUES ($1, $2, $3, $4, 'google_vision')
+                VALUES ($1, $2, $3, 'vlm', 'google_vision')
                 ON CONFLICT (post_id, tag) DO UPDATE SET
                     confidence = EXCLUDED.confidence,
                     source = EXCLUDED.source
@@ -267,7 +267,6 @@ impl VLMConsumer {
             .bind(post_id)
             .bind(&tag.tag)
             .bind(tag.confidence)
-            .bind(&tag.source)
             .execute(pool)
             .await
             .map_err(|e| VLMConsumerError::Database(e.to_string()))?;
