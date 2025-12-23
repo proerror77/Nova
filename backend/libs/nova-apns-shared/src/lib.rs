@@ -13,4 +13,4 @@ pub mod client;
 pub mod config;
 
 pub use client::{ApnsPush, PushProvider};
-pub use config::ApnsConfig;
+pub use config::{ApnsAuthMode, ApnsConfig};

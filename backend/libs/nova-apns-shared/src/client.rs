@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::io::Read;
 use std::sync::Arc;
 
 use a2::{
@@ -8,7 +9,7 @@ use a2::{
 use tokio::sync::Mutex;
 use tracing::{error, info};
 
-use crate::config::ApnsConfig;
+use crate::config::{ApnsAuthMode, ApnsConfig};
 
 /// Error type for APNs operations
 #[derive(Debug)]
@@ -67,16 +68,11 @@ impl ApnsPush {
     /// Creates a new APNs push provider
     ///
     /// # Arguments
-    /// * `cfg` - APNs configuration containing certificate path, bundle ID, etc.
+    /// * `cfg` - APNs configuration containing authentication credentials, bundle ID, etc.
     ///
     /// # Returns
-    /// `Ok(ApnsPush)` if initialization succeeds, `Err(ApnsError)` if certificate loading fails
+    /// `Ok(ApnsPush)` if initialization succeeds, `Err(ApnsError)` if credentials loading fails
     pub fn new(cfg: &ApnsConfig) -> Result<Self, ApnsError> {
-        let mut file = File::open(&cfg.certificate_path)
-            .map_err(|e| ApnsError::StartServer(format!("failed to open certificate file: {e}")))?;
-
-        let password = cfg.certificate_passphrase.as_deref().unwrap_or("");
-
         let endpoint = if cfg.is_production {
             Endpoint::Production
         } else {
@@ -85,13 +81,37 @@ impl ApnsPush {
 
         let client_config = ClientConfig::new(endpoint);
 
-        let client = Client::certificate(&mut file, password, client_config).map_err(|e| {
-            ApnsError::StartServer(format!("failed to initialize APNs client: {e}"))
-        })?;
+        let client = match &cfg.auth_mode {
+            ApnsAuthMode::Certificate { path, passphrase } => {
+                let mut file = File::open(path)
+                    .map_err(|e| ApnsError::StartServer(format!("failed to open certificate file: {e}")))?;
+                let password = passphrase.as_deref().unwrap_or("");
+
+                Client::certificate(&mut file, password, client_config).map_err(|e| {
+                    ApnsError::StartServer(format!("failed to initialize APNs client with certificate: {e}"))
+                })?
+            }
+            ApnsAuthMode::Token { key_path, key_id, team_id } => {
+                let mut file = File::open(key_path)
+                    .map_err(|e| ApnsError::StartServer(format!("failed to open .p8 key file: {e}")))?;
+                let mut key_pem = Vec::new();
+                file.read_to_end(&mut key_pem)
+                    .map_err(|e| ApnsError::StartServer(format!("failed to read .p8 key file: {e}")))?;
+
+                Client::token(&key_pem, key_id, team_id, client_config).map_err(|e| {
+                    ApnsError::StartServer(format!("failed to initialize APNs client with JWT token: {e}"))
+                })?
+            }
+        };
+
+        let auth_type = match &cfg.auth_mode {
+            ApnsAuthMode::Certificate { .. } => "certificate (.p12)",
+            ApnsAuthMode::Token { .. } => "token (.p8 JWT)",
+        };
 
         info!(
-            "Initialized APNs client for bundle_id={}, production={}",
-            cfg.bundle_id, cfg.is_production
+            "Initialized APNs client for bundle_id={}, production={}, auth={}",
+            cfg.bundle_id, cfg.is_production, auth_type
         );
 
         Ok(Self {
@@ -165,33 +185,51 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_apns_config_production_flag() {
-        let cfg = ApnsConfig {
-            certificate_path: "/path/to/cert.p12".to_string(),
-            certificate_passphrase: Some("password".to_string()),
-            bundle_id: "com.example.app".to_string(),
-            is_production: true,
-        };
+    fn test_apns_config_certificate_production_flag() {
+        let cfg = ApnsConfig::new(
+            "/path/to/cert.p12".to_string(),
+            "com.example.app".to_string(),
+            true,
+        );
 
         assert_eq!(cfg.is_production, true);
         assert_eq!(cfg.bundle_id, "com.example.app");
     }
 
     #[test]
-    fn test_apns_config_endpoint() {
-        let prod_cfg = ApnsConfig {
-            certificate_path: "/path/to/cert.p12".to_string(),
-            certificate_passphrase: None,
-            bundle_id: "com.example.app".to_string(),
-            is_production: true,
-        };
+    fn test_apns_config_token_auth() {
+        let cfg = ApnsConfig::with_token(
+            "/path/to/key.p8".to_string(),
+            "KEY123".to_string(),
+            "TEAM456".to_string(),
+            "com.example.app".to_string(),
+            false,
+        );
 
-        let dev_cfg = ApnsConfig {
-            certificate_path: "/path/to/cert.p12".to_string(),
-            certificate_passphrase: None,
-            bundle_id: "com.example.app".to_string(),
-            is_production: false,
-        };
+        assert_eq!(cfg.is_production, false);
+        assert_eq!(cfg.bundle_id, "com.example.app");
+        match cfg.auth_mode {
+            ApnsAuthMode::Token { key_id, team_id, .. } => {
+                assert_eq!(key_id, "KEY123");
+                assert_eq!(team_id, "TEAM456");
+            }
+            _ => panic!("Expected Token auth mode"),
+        }
+    }
+
+    #[test]
+    fn test_apns_config_endpoint() {
+        let prod_cfg = ApnsConfig::new(
+            "/path/to/cert.p12".to_string(),
+            "com.example.app".to_string(),
+            true,
+        );
+
+        let dev_cfg = ApnsConfig::new(
+            "/path/to/cert.p12".to_string(),
+            "com.example.app".to_string(),
+            false,
+        );
 
         assert_eq!(prod_cfg.endpoint(), "api.push.apple.com");
         assert_eq!(dev_cfg.endpoint(), "api.sandbox.push.apple.com");

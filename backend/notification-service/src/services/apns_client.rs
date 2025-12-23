@@ -2,7 +2,7 @@
 ///
 /// This module provides APNs support for iOS/macOS push notifications
 /// using the consolidated nova-apns-shared library
-use nova_apns_shared::{ApnsConfig as NovaApnsConfig, ApnsPush as NovaApnsPush, PushProvider};
+use nova_apns_shared::{ApnsAuthMode, ApnsConfig as NovaApnsConfig, ApnsPush as NovaApnsPush, PushProvider};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -41,19 +41,35 @@ pub struct APNsClient {
 
 impl APNsClient {
     /// Create new APNs client from configuration
+    ///
+    /// Supports both authentication modes:
+    /// - Token-based JWT authentication (.p8 key file) when key_id and team_id are provided
+    /// - Certificate-based authentication (.p12 file) when key_id/team_id are empty
     pub fn new(
-        certificate_path: String,
+        key_or_cert_path: String,
         _key_path: String,
-        _team_id: String,
-        _key_id: String,
+        team_id: String,
+        key_id: String,
         is_production: bool,
     ) -> Self {
-        // Extract bundle_id from certificate path or use a default
-        // In production, you would get this from environment config
         let bundle_id =
             std::env::var("APNS_BUNDLE_ID").unwrap_or_else(|_| "com.example.app".to_string());
 
-        let cfg = NovaApnsConfig::new(certificate_path, bundle_id, is_production);
+        // Determine authentication mode based on provided parameters
+        let cfg = if !key_id.is_empty() && !team_id.is_empty() {
+            // Use token-based JWT authentication (.p8 key file)
+            NovaApnsConfig::with_token(
+                key_or_cert_path,
+                key_id,
+                team_id,
+                bundle_id,
+                is_production,
+            )
+        } else {
+            // Fall back to certificate-based authentication (.p12 file)
+            NovaApnsConfig::new(key_or_cert_path, bundle_id, is_production)
+        };
+
         let inner = NovaApnsPush::new(&cfg).expect("Failed to initialize APNs client");
 
         Self {

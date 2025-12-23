@@ -1,26 +1,64 @@
+/// APNs Authentication Mode
+#[derive(Debug, Clone)]
+pub enum ApnsAuthMode {
+    /// Certificate-based authentication (.p12 file)
+    Certificate {
+        path: String,
+        passphrase: Option<String>,
+    },
+    /// Token-based (JWT) authentication (.p8 key file)
+    Token {
+        key_path: String,
+        key_id: String,
+        team_id: String,
+    },
+}
+
 /// APNs Configuration
 #[derive(Debug, Clone)]
 pub struct ApnsConfig {
-    pub certificate_path: String,
-    pub certificate_passphrase: Option<String>,
+    pub auth_mode: ApnsAuthMode,
     pub bundle_id: String,
     pub is_production: bool,
 }
 
 impl ApnsConfig {
-    /// Create new APNs configuration
+    /// Create new APNs configuration with certificate authentication (legacy .p12)
     pub fn new(certificate_path: String, bundle_id: String, is_production: bool) -> Self {
         Self {
-            certificate_path,
-            certificate_passphrase: None,
+            auth_mode: ApnsAuthMode::Certificate {
+                path: certificate_path,
+                passphrase: None,
+            },
             bundle_id,
             is_production,
         }
     }
 
-    /// Set certificate passphrase
+    /// Create new APNs configuration with token-based JWT authentication (.p8 key)
+    pub fn with_token(
+        key_path: String,
+        key_id: String,
+        team_id: String,
+        bundle_id: String,
+        is_production: bool,
+    ) -> Self {
+        Self {
+            auth_mode: ApnsAuthMode::Token {
+                key_path,
+                key_id,
+                team_id,
+            },
+            bundle_id,
+            is_production,
+        }
+    }
+
+    /// Set certificate passphrase (only applies to Certificate auth mode)
     pub fn with_passphrase(mut self, passphrase: String) -> Self {
-        self.certificate_passphrase = Some(passphrase);
+        if let ApnsAuthMode::Certificate { ref mut passphrase: ref mut p, .. } = self.auth_mode {
+            *p = Some(passphrase);
+        }
         self
     }
 
