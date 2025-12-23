@@ -502,13 +502,10 @@ pub struct ClientSecret {
     pub expires_at: i64,
 }
 
+// xAI API returns the token directly at top level (not nested)
+// Response format: {"value": "xai-realtime-client-secret-...", "expires_at": 1234567890}
 #[derive(Debug, Deserialize)]
 struct XAIClientSecretResponse {
-    client_secret: XAIClientSecret,
-}
-
-#[derive(Debug, Deserialize)]
-struct XAIClientSecret {
     value: String,
     expires_at: i64,
 }
@@ -564,11 +561,11 @@ pub async fn get_voice_token(_clients: web::Data<ServiceClients>) -> Result<Http
             if status.is_success() {
                 match serde_json::from_str::<XAIClientSecretResponse>(&response_text) {
                     Ok(xai_response) => {
-                        info!("Voice token generated successfully, expires_at: {}", xai_response.client_secret.expires_at);
+                        info!("Voice token generated successfully, expires_at: {}", xai_response.expires_at);
                         Ok(HttpResponse::Ok().json(VoiceTokenResponse {
                             client_secret: ClientSecret {
-                                value: xai_response.client_secret.value,
-                                expires_at: xai_response.client_secret.expires_at,
+                                value: xai_response.value,
+                                expires_at: xai_response.expires_at,
                             },
                             websocket_url: "wss://api.x.ai/v1/realtime".to_string(),
                         }))
