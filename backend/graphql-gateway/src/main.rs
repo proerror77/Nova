@@ -492,6 +492,10 @@ async fn main() -> std::io::Result<()> {
             .route("/api/v2/alice/chat", web::post().to(rest_api::send_message))
             .route("/api/v2/alice/voice", web::post().to(rest_api::voice_mode))
             .route("/api/v2/alice/enhance", web::post().to(rest_api::enhance_post))
+            // ✅ X.AI (Grok) API Proxy
+            .route("/api/v2/xai/status", web::get().to(rest_api::xai::get_status))
+            .route("/api/v2/xai/chat", web::post().to(rest_api::xai::chat))
+            .route("/api/v2/xai/chat/stream", web::post().to(rest_api::xai::chat_stream))
             // ✅ Photo Analysis API (iOS Vision → ranking-service)
             .route(
                 "/api/v2/photo-analysis/upload",

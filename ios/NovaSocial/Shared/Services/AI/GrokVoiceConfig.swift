@@ -17,8 +17,9 @@ enum GrokVoiceConfig {
         if let key = ProcessInfo.processInfo.environment["XAI_API_KEY"], !key.isEmpty {
             return key
         }
-        // 開發用 API Key (Grok 4)
-        return "xai-z3V0rtZ6DAQSVBaRgEnvdrTK19r9xbSC4wbwwOKbv4Ku7tfG5nP2SfqJ4fizgrZbwoUpPevvjLNf9AOX"
+        // Voice Agent 需要在此配置 API Key
+        // 注意: Text Chat 現在使用後端代理，不需要客戶端 API Key
+        return ""
     }
     
     /// WebSocket 端點

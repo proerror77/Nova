@@ -224,6 +224,27 @@ struct APIConfig {
         static let enhancePost = "/api/v2/alice/enhance"  // POST 圖片分析與內容建議
     }
 
+    // MARK: - VLM (Vision Language Model) API
+    struct VLM {
+        /// POST /api/v2/vlm/analyze - 分析圖片並獲取標籤和頻道建議
+        static let analyze = "/api/v2/vlm/analyze"
+        /// GET /api/v2/posts/{id}/tags - 獲取帖子的標籤
+        static func getPostTags(_ postId: String) -> String { "/api/v2/posts/\(postId)/tags" }
+        /// PUT /api/v2/posts/{id}/tags - 更新帖子標籤和頻道
+        static func updatePostTags(_ postId: String) -> String { "/api/v2/posts/\(postId)/tags" }
+    }
+
+    // MARK: - X.AI (Grok) API Proxy
+    /// Grok chat requests are proxied through our backend to protect API keys
+    struct XAI {
+        /// GET /api/v2/xai/status - 獲取 X.AI 服務狀態
+        static let status = "/api/v2/xai/status"
+        /// POST /api/v2/xai/chat - 發送聊天消息到 Grok
+        static let chat = "/api/v2/xai/chat"
+        /// POST /api/v2/xai/chat/stream - 串流聊天 (SSE)
+        static let chatStream = "/api/v2/xai/chat/stream"
+    }
+
     // MARK: - Alice Voice Service API (TEN Agent)
     struct AliceVoice {
         /// TEN Agent 服務器基礎 URL
