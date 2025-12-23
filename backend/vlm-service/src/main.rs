@@ -47,6 +47,11 @@ impl RunMode {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Initialize rustls crypto provider (required for rustls 0.23+)
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     // Initialize tracing
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
