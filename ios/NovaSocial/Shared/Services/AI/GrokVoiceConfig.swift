@@ -17,8 +17,8 @@ enum GrokVoiceConfig {
         if let key = ProcessInfo.processInfo.environment["XAI_API_KEY"], !key.isEmpty {
             return key
         }
-        // 開發用臨時 key（請替換）
-        return "YOUR_XAI_API_KEY"
+        // 開發用 API Key (Grok 4)
+        return "xai-z3V0rtZ6DAQSVBaRgEnvdrTK19r9xbSC4wbwwOKbv4Ku7tfG5nP2SfqJ4fizgrZbwoUpPevvjLNf9AOX"
     }
     
     /// WebSocket 端點
@@ -142,7 +142,7 @@ enum GrokVoiceConfig {
         buildSessionConfig(
             voice: voice,
             instructions: """
-            你是 Alice，Nova 社交平台的 AI 助理。
+            你是 Alice，ICERED 社交平台的 AI 助理。
             你友善、有幫助，並且能夠用自然的方式與用戶對話。
             你可以幫助用戶了解平台功能、回答問題、提供建議。
             請用繁體中文回應，除非用戶使用其他語言。
