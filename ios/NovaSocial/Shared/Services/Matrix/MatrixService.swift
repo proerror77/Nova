@@ -90,6 +90,19 @@ class Room {
     func timeline() async throws -> Timeline { Timeline() }
 }
 
+enum Membership {
+    case invited
+    case joined
+    case left
+    case banned
+    case knocked
+}
+
+enum EncryptionState {
+    case encrypted
+    case notEncrypted
+}
+
 struct RoomInfo {
     var topic: String?
     var avatarUrl: String?
@@ -97,6 +110,8 @@ struct RoomInfo {
     var isEncrypted: Bool = false
     var activeMembersCount: UInt = 0
     var numUnreadMessages: UInt = 0
+    var membership: Membership = .joined
+    var encryptionState: EncryptionState = .notEncrypted
 }
 
 class Timeline {
@@ -270,7 +285,11 @@ protocol RoomListDynamicEntriesControllerProtocol: AnyObject {
 }
 
 enum RoomListEntriesDynamicFilterKind {
-    case all
+    case all(filters: [RoomListEntriesDynamicFilterKind])
+    case any(filters: [RoomListEntriesDynamicFilterKind])
+    case joined
+    case invite
+    case nonLeft
     case none
 }
 
@@ -1035,10 +1054,78 @@ final class MatrixService: MatrixServiceProtocol {
             #if DEBUG
             print("[MatrixService] Sync started successfully")
             #endif
+
+            // Scan and accept pending DM invites after sync starts
+            Task {
+                // Wait a bit for initial sync to complete
+                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+                await self.acceptPendingDMInvites()
+            }
         } catch {
             updateConnectionState(.error(error.localizedDescription))
             throw MatrixError.syncFailed(error.localizedDescription)
         }
+    }
+
+    /// Scan all rooms and auto-accept any pending DM invites
+    @MainActor
+    func acceptPendingDMInvites() async {
+        guard let client = client else { return }
+
+        #if DEBUG
+        print("[MatrixService] Scanning for pending DM invites...")
+        #endif
+
+        let rooms = client.rooms()
+        var acceptedCount = 0
+
+        #if DEBUG
+        print("[MatrixService] Total rooms from client: \(rooms.count)")
+        #endif
+
+        for room in rooms {
+            do {
+                let info = try await room.roomInfo()
+                let roomId = room.id()
+
+                #if DEBUG
+                // Debug: print room state info
+                print("[MatrixService] Room \(roomId): membership=\(info.membership), isDirect=\(info.isDirect)")
+                #endif
+
+                // Check if this is an invited DM room
+                if info.membership == .invited && info.isDirect {
+                    #if DEBUG
+                    print("[MatrixService] Found pending DM invite: \(roomId)")
+                    #endif
+
+                    do {
+                        _ = try await joinRoom(roomIdOrAlias: roomId)
+                        acceptedCount += 1
+                        #if DEBUG
+                        print("[MatrixService] ✅ Accepted pending DM invite: \(roomId)")
+                        #endif
+                    } catch {
+                        #if DEBUG
+                        print("[MatrixService] ❌ Failed to accept invite for \(roomId): \(error)")
+                        #endif
+                    }
+                } else if info.membership == .invited {
+                    #if DEBUG
+                    print("[MatrixService] ⏸️ Non-DM invite found: \(roomId), skipping auto-accept")
+                    #endif
+                }
+            } catch {
+                #if DEBUG
+                print("[MatrixService] Error getting room info: \(error)")
+                #endif
+                continue
+            }
+        }
+
+        #if DEBUG
+        print("[MatrixService] Pending DM invite scan complete. Accepted: \(acceptedCount)")
+        #endif
     }
 
     func stopSync() {
@@ -1703,25 +1790,58 @@ final class MatrixService: MatrixServiceProtocol {
         guard let roomListService = roomListService else { return }
 
         Task {
-            do {
-                let roomList = try await roomListService.allRooms()
+            // Add a small delay to ensure sync service has fully initialized
+            // This prevents crashes in rooms_stream when called too early
+            try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
 
-                // Subscribe to room list updates using new API
-                let listener = RoomListEntriesListenerImpl { [weak self] updates in
-                    Task { @MainActor in
-                        await self?.handleRoomListUpdates(updates)
-                    }
+            await setupRoomListObserverWithRetry(roomListService: roomListService, attempt: 1)
+        }
+    }
+
+    private func setupRoomListObserverWithRetry(roomListService: RoomListService, attempt: Int) async {
+        let maxAttempts = 3
+
+        do {
+            #if DEBUG
+            print("[MatrixService] Setting up room list observer (attempt \(attempt)/\(maxAttempts))")
+            #endif
+
+            let roomList = try await roomListService.allRooms()
+
+            // Subscribe to room list updates using new API
+            let listener = RoomListEntriesListenerImpl { [weak self] updates in
+                Task { @MainActor in
+                    await self?.handleRoomListUpdates(updates)
                 }
+            }
 
-                // Use new entriesWithDynamicAdapters method
-                let result = roomList.entriesWithDynamicAdapters(pageSize: 100, listener: listener)
+            // Use new entriesWithDynamicAdapters method
+            let result = roomList.entriesWithDynamicAdapters(pageSize: 100, listener: listener)
 
-                // Store controller for future filter operations if needed
-                _ = result.controller()
-            } catch {
+            // Store the entries stream handle to keep the subscription alive
+            // Without this, the subscription is cancelled when result goes out of scope
+            self.roomListEntriesStreamHandle = result.entriesStream()
+
+            // Set filter to include both joined rooms AND invited rooms
+            // This is critical for auto-accepting DM invites
+            let controller = result.controller()
+            let filterSet = controller.setFilter(kind: .any(filters: [.joined, .invite]))
+            #if DEBUG
+            print("[MatrixService] ✅ Room list filter set (joined + invite): \(filterSet)")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[MatrixService] ❌ Room list observer error (attempt \(attempt)): \(error)")
+            #endif
+
+            // Retry with exponential backoff if we haven't exceeded max attempts
+            if attempt < maxAttempts {
+                let delayMs = UInt64(pow(2.0, Double(attempt))) * 500_000_000 // 1s, 2s
                 #if DEBUG
-                print("[MatrixService] Room list observer error: \(error)")
+                print("[MatrixService] Retrying room list observer setup in \(delayMs / 1_000_000)ms...")
                 #endif
+                try? await Task.sleep(nanoseconds: delayMs)
+                await setupRoomListObserverWithRetry(roomListService: roomListService, attempt: attempt + 1)
             }
         }
     }
@@ -1731,12 +1851,18 @@ final class MatrixService: MatrixServiceProtocol {
             switch update {
             case .append(let rooms), .reset(let rooms):
                 for room in rooms {
+                    // Check for invited DM rooms and auto-accept
+                    await autoAcceptInviteIfNeeded(room)
+
                     if let matrixRoom = await convertSDKRoomToMatrixRoom(room) {
                         roomCache[room.id()] = matrixRoom
                         onRoomUpdated?(matrixRoom)
                     }
                 }
             case .pushFront(let room), .pushBack(let room), .insert(_, let room), .set(_, let room):
+                // Check for invited DM rooms and auto-accept
+                await autoAcceptInviteIfNeeded(room)
+
                 if let matrixRoom = await convertSDKRoomToMatrixRoom(room) {
                     roomCache[room.id()] = matrixRoom
                     onRoomUpdated?(matrixRoom)
@@ -1749,6 +1875,49 @@ final class MatrixService: MatrixServiceProtocol {
             case .clear, .popFront, .popBack, .truncate:
                 break
             }
+        }
+    }
+
+    /// Auto-accept room invitations for DM rooms
+    private func autoAcceptInviteIfNeeded(_ room: Room) async {
+        do {
+            let info = try await room.roomInfo()
+
+            // Check if this is an invited room (we haven't joined yet)
+            guard info.membership == .invited else { return }
+
+            let roomId = room.id()
+
+            #if DEBUG
+            print("[MatrixService] 🔔 Received room invite: \(roomId), isDirect: \(info.isDirect)")
+            #endif
+
+            // Auto-accept DM invites (direct messages)
+            // For group rooms, we might want user confirmation, but for DMs we auto-accept
+            if info.isDirect {
+                #if DEBUG
+                print("[MatrixService] ✅ Auto-accepting DM invite for room: \(roomId)")
+                #endif
+
+                do {
+                    _ = try await joinRoom(roomIdOrAlias: roomId)
+                    #if DEBUG
+                    print("[MatrixService] ✅ Successfully joined DM room: \(roomId)")
+                    #endif
+                } catch {
+                    #if DEBUG
+                    print("[MatrixService] ❌ Failed to auto-accept DM invite: \(error)")
+                    #endif
+                }
+            } else {
+                #if DEBUG
+                print("[MatrixService] ⏸️ Non-DM room invite, not auto-accepting: \(roomId)")
+                #endif
+            }
+        } catch {
+            #if DEBUG
+            print("[MatrixService] Error checking room invite: \(error)")
+            #endif
         }
     }
 
