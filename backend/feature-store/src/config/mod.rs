@@ -20,6 +20,8 @@ pub struct Config {
 
     // ClickHouse (near-line features)
     pub clickhouse_url: String,
+    pub clickhouse_user: String,
+    pub clickhouse_password: String,
     pub clickhouse_database: String,
     pub clickhouse_sync_interval_seconds: u64,
 
@@ -42,6 +44,8 @@ impl Config {
             .set_default("grpc_host", "0.0.0.0")?
             .set_default("grpc_port", 9010)?
             .set_default("redis_default_ttl_seconds", 3600)? // 1 hour
+            .set_default("clickhouse_user", "default")?
+            .set_default("clickhouse_password", "")?
             .set_default("clickhouse_database", "feature_store")?
             .set_default("clickhouse_sync_interval_seconds", 300)? // 5 minutes
             .set_default("feature_cache_size", 10000)?
@@ -98,6 +102,8 @@ mod tests {
             redis_url: "redis://localhost".to_string(),
             redis_default_ttl_seconds: 3600,
             clickhouse_url: "http://localhost:8123".to_string(),
+            clickhouse_user: "default".to_string(),
+            clickhouse_password: "".to_string(),
             clickhouse_database: "feature_store".to_string(),
             clickhouse_sync_interval_seconds: 300,
             feature_cache_size: 10000,
@@ -120,6 +126,8 @@ mod tests {
             redis_url: "redis://localhost".to_string(),
             redis_default_ttl_seconds: 3600,
             clickhouse_url: "http://localhost:8123".to_string(),
+            clickhouse_user: "default".to_string(),
+            clickhouse_password: "".to_string(),
             clickhouse_database: "feature_store".to_string(),
             clickhouse_sync_interval_seconds: 300,
             feature_cache_size: 10000,
