@@ -496,6 +496,7 @@ async fn main() -> std::io::Result<()> {
             .route("/api/v2/xai/status", web::get().to(rest_api::xai::get_status))
             .route("/api/v2/xai/chat", web::post().to(rest_api::xai::chat))
             .route("/api/v2/xai/chat/stream", web::post().to(rest_api::xai::chat_stream))
+            .route("/api/v2/xai/voice/token", web::post().to(rest_api::xai::get_voice_token))
             // ✅ Photo Analysis API (iOS Vision → ranking-service)
             .route(
                 "/api/v2/photo-analysis/upload",

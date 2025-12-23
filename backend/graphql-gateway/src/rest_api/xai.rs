@@ -3,6 +3,7 @@
 //! POST /api/v2/xai/chat - Send chat message to Grok
 //! POST /api/v2/xai/chat/stream - Streaming chat with Grok (SSE)
 //! GET /api/v2/xai/status - Get X.AI service status
+//! POST /api/v2/xai/voice/token - Get ephemeral token for Voice Agent WebSocket
 //!
 //! Proxies requests to X.AI API, keeping the API key secure on the server
 
@@ -37,6 +38,18 @@ pub struct XAIChatRequest {
     pub temperature: f64,
     #[serde(default)]
     pub conversation_history: Option<Vec<ChatMessage>>,
+    /// Enable live search for real-time data from X, web, and news
+    #[serde(default)]
+    pub enable_search: Option<bool>,
+    /// Search sources: "web", "news", "x", "rss"
+    #[serde(default)]
+    pub search_sources: Option<Vec<String>>,
+    /// Search date range start (YYYY-MM-DD)
+    #[serde(default)]
+    pub search_from_date: Option<String>,
+    /// Search date range end (YYYY-MM-DD)
+    #[serde(default)]
+    pub search_to_date: Option<String>,
 }
 
 fn default_model() -> String {
@@ -77,12 +90,35 @@ pub struct XAIStatusResponse {
 
 // MARK: - X.AI API Models
 
+// MARK: - Live Search Configuration
+
+#[derive(Debug, Serialize)]
+struct SearchConfig {
+    mode: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    return_citations: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    from_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    to_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sources: Option<Vec<SearchSource>>,
+}
+
+#[derive(Debug, Serialize)]
+struct SearchSource {
+    #[serde(rename = "type")]
+    source_type: String,
+}
+
 #[derive(Debug, Serialize)]
 struct XAICompletionRequest {
     model: String,
     messages: Vec<ChatMessage>,
     temperature: f64,
     stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    search: Option<SearchConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -131,16 +167,16 @@ struct XAIStreamDelta {
 
 // MARK: - Default System Prompt
 
-const ALICE_SYSTEM_PROMPT: &str = r#"你是 Alice，ICERED 社交平台的 AI 助理。
+const ALICE_SYSTEM_PROMPT: &str = r#"You are Alice, the AI assistant for ICERED social platform.
 
-你的特點：
-- 友善、有幫助、專業
-- 能夠用自然流暢的方式與用戶對話
-- 擅長提供社交媒體相關的建議
-- 可以幫助用戶創作貼文、回覆留言、分析趨勢
+Your characteristics:
+- Friendly, helpful, and professional
+- Communicate naturally and fluently with users
+- Expert at providing social media related advice
+- Help users create posts, reply to comments, and analyze trends
 
-請用繁體中文回應，除非用戶使用其他語言。
-保持回應簡潔有力，避免過於冗長。"#;
+Respond in the same language the user uses.
+Keep responses concise and impactful, avoid being overly verbose."#;
 
 // MARK: - API Handlers
 
@@ -211,12 +247,32 @@ pub async fn chat(
         content: req.message.clone(),
     });
 
+    // Build search config if enabled
+    let search_config = if req.enable_search.unwrap_or(false) {
+        let sources = req.search_sources.as_ref().map(|sources| {
+            sources.iter().map(|s| SearchSource {
+                source_type: s.clone(),
+            }).collect()
+        });
+
+        Some(SearchConfig {
+            mode: "on".to_string(),
+            return_citations: Some(true),
+            from_date: req.search_from_date.clone(),
+            to_date: req.search_to_date.clone(),
+            sources,
+        })
+    } else {
+        None
+    };
+
     // Build X.AI request
     let xai_request = XAICompletionRequest {
         model: req.model.clone(),
         messages,
         temperature: req.temperature,
         stream: false,
+        search: search_config,
     };
 
     // Call X.AI API
@@ -335,12 +391,32 @@ pub async fn chat_stream(
         content: req.message.clone(),
     });
 
+    // Build search config if enabled
+    let search_config = if req.enable_search.unwrap_or(false) {
+        let sources = req.search_sources.as_ref().map(|sources| {
+            sources.iter().map(|s| SearchSource {
+                source_type: s.clone(),
+            }).collect()
+        });
+
+        Some(SearchConfig {
+            mode: "on".to_string(),
+            return_citations: Some(true),
+            from_date: req.search_from_date.clone(),
+            to_date: req.search_to_date.clone(),
+            sources,
+        })
+    } else {
+        None
+    };
+
     // Build X.AI streaming request
     let xai_request = XAICompletionRequest {
         model: req.model.clone(),
         messages,
         temperature: req.temperature,
         stream: true,
+        search: search_config,
     };
 
     // Call X.AI API with streaming
@@ -407,6 +483,108 @@ pub async fn chat_stream(
             Ok(HttpResponse::BadGateway().json(serde_json::json!({
                 "status": "error",
                 "message": format!("Failed to connect to AI service: {}", e),
+            })))
+        }
+    }
+}
+
+// MARK: - Voice Agent Token
+
+#[derive(Debug, Serialize)]
+pub struct VoiceTokenResponse {
+    pub client_secret: ClientSecret,
+    pub websocket_url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ClientSecret {
+    pub value: String,
+    pub expires_at: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct XAIClientSecretResponse {
+    client_secret: XAIClientSecret,
+}
+
+#[derive(Debug, Deserialize)]
+struct XAIClientSecret {
+    value: String,
+    expires_at: i64,
+}
+
+/// POST /api/v2/xai/voice/token
+/// Get ephemeral token for Voice Agent WebSocket connection
+///
+/// This endpoint fetches a short-lived token from xAI that the client
+/// can use to authenticate WebSocket connections without exposing the API key.
+pub async fn get_voice_token(_clients: web::Data<ServiceClients>) -> Result<HttpResponse> {
+    info!("POST /api/v2/xai/voice/token");
+
+    let (base_url, api_key) = get_xai_config();
+
+    if api_key.is_empty() {
+        warn!("X.AI API key not configured");
+        return Ok(HttpResponse::ServiceUnavailable().json(serde_json::json!({
+            "status": "unavailable",
+            "message": "X.AI API key not configured",
+        })));
+    }
+
+    // Request ephemeral token from xAI
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    let api_url = format!("{}/realtime/client_secrets", base_url);
+
+    match client
+        .post(&api_url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+    {
+        Ok(response) => {
+            let status = response.status();
+
+            if status.is_success() {
+                match response.json::<XAIClientSecretResponse>().await {
+                    Ok(xai_response) => {
+                        info!("Voice token generated successfully");
+                        Ok(HttpResponse::Ok().json(VoiceTokenResponse {
+                            client_secret: ClientSecret {
+                                value: xai_response.client_secret.value,
+                                expires_at: xai_response.client_secret.expires_at,
+                            },
+                            websocket_url: "wss://api.x.ai/v1/realtime".to_string(),
+                        }))
+                    }
+                    Err(e) => {
+                        error!("Failed to parse xAI token response: {}", e);
+                        Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                            "status": "error",
+                            "message": format!("Failed to parse token response: {}", e),
+                        })))
+                    }
+                }
+            } else {
+                let error_text = response.text().await.unwrap_or_default();
+                error!("xAI API error: {} - {}", status, error_text);
+                Ok(HttpResponse::BadGateway().json(serde_json::json!({
+                    "status": "error",
+                    "message": format!("Failed to get voice token: {}", status),
+                    "details": error_text,
+                })))
+            }
+        }
+        Err(e) => {
+            error!("Failed to call xAI API: {}", e);
+            Ok(HttpResponse::BadGateway().json(serde_json::json!({
+                "status": "error",
+                "message": format!("Failed to connect to xAI service: {}", e),
             })))
         }
     }
