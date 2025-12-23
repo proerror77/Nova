@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::Read;
+use std::io::{Cursor, Read};
 use std::sync::Arc;
 
 use a2::{
@@ -98,7 +98,8 @@ impl ApnsPush {
                 file.read_to_end(&mut key_pem)
                     .map_err(|e| ApnsError::StartServer(format!("failed to read .p8 key file: {e}")))?;
 
-                Client::token(&key_pem, key_id, team_id, client_config).map_err(|e| {
+                let mut key_reader = Cursor::new(key_pem);
+                Client::token(&mut key_reader, key_id, team_id, client_config).map_err(|e| {
                     ApnsError::StartServer(format!("failed to initialize APNs client with JWT token: {e}"))
                 })?
             }
