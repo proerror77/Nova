@@ -1059,22 +1059,34 @@ struct ChatView: View {
         messageText = ""
         showAttachmentOptions = false
 
+        // 立即添加到本地 UI（樂觀更新）
+        let localMessage = ChatMessage(localText: trimmedText, isFromMe: true)
+        messages.append(localMessage)
+
         Task {
             isSending = true
             do {
                 try? await matrixBridge.setTyping(conversationId: conversationId, isTyping: false)
-                _ = try await matrixBridge.sendMessage(conversationId: conversationId, content: trimmedText)
+                let eventId = try await matrixBridge.sendMessage(conversationId: conversationId, content: trimmedText)
                 try? await matrixBridge.markAsRead(conversationId: conversationId)
 
+                // 用服务器返回的消息ID更新本地消息
+                if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
+                    var updatedMessage = messages[index]
+                    updatedMessage.id = eventId
+                    messages[index] = updatedMessage
+                }
+
                 #if DEBUG
-                print("[ChatView] ✅ Message sent via Matrix: room=\(conversationId)")
+                print("[ChatView] ✅ Message sent via Matrix: room=\(conversationId), eventId=\(eventId)")
                 #endif
             } catch {
-                // Send failed - mark message as failed (TODO: add retry UI)
+                // Send failed - remove the local message and show error
+                messages.removeAll { $0.id == localMessage.id }
+                self.error = "Failed to send message: \(error.localizedDescription)"
                 #if DEBUG
-                print("[ChatView] Failed to send message: \(error)")
+                print("[ChatView] ❌ Failed to send message: \(error)")
                 #endif
-                // Could remove failed message or add retry button here
             }
             isSending = false
         }

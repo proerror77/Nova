@@ -864,7 +864,7 @@ enum ChatError: LocalizedError {
 
 /// UI層的消息模型，包含後端Message + UI特定字段（圖片、位置、語音）
 struct ChatMessage: Identifiable, Equatable {
-    let id: String
+    var id: String
     let backendMessage: Message?
     let text: String
     let isFromMe: Bool
