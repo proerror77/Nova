@@ -134,7 +134,7 @@ struct MyChannelsView: View {
                     Text("Confirm")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.white)
-                        .frame(width: 343, height: 46)
+                        .frame(width: 343.w, height: 46.h)
                         .background(Color(red: 0.87, green: 0.11, blue: 0.26))
                         .cornerRadius(31.50)
                 }
