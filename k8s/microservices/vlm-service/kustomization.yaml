@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: nova-staging
+
+resources:
+  - deployment.yaml
+  - vlm-backfill-cronjob.yaml
+
+commonLabels:
+  app.kubernetes.io/name: vlm-service
+  app.kubernetes.io/component: vlm
+  app.kubernetes.io/part-of: nova

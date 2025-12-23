@@ -29,6 +29,7 @@ pub mod passkey;
 pub mod phone_auth;
 pub mod photo_analysis; // iOS Vision photo analysis for ranking
 pub mod poll;
+pub mod vlm; // VLM (Vision Language Model) for image tagging
 pub mod search;
 pub mod settings;
 pub mod social;

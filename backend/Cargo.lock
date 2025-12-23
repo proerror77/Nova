@@ -5667,6 +5667,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d05e27ee213611ffe7d6348b942e8f942b37114c00cc03cec254295a4a17852e"
 
 [[package]]
+name = "openssl-src"
+version = "300.5.4+3.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a507b3792995dae9b0df8a1c1e3771e8418b7c2d9f0baeba32e6fe8b06c7cb72"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "openssl-sys"
 version = "0.9.111"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5674,6 +5683,7 @@ checksum = "82cab2d520aa75e3c58898289429321eb788c3106963d0dc886ec7a5f4adc321"
 dependencies = [
  "cc",
  "libc",
+ "openssl-src",
  "pkg-config",
  "vcpkg",
 ]
@@ -6918,6 +6928,7 @@ dependencies = [
  "libc",
  "libz-sys",
  "num_enum",
+ "openssl-sys",
  "pkg-config",
 ]
 
@@ -9774,6 +9785,45 @@ dependencies = [
  "serde_json",
  "sqlx",
  "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "vlm-service"
+version = "2.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.21.7",
+ "chrono",
+ "dashmap 6.1.0",
+ "dotenvy",
+ "envy",
+ "futures",
+ "futures-util",
+ "grpc-clients",
+ "grpc-health",
+ "grpc-metrics",
+ "grpc-tls",
+ "mockall 0.12.1",
+ "prost 0.13.5",
+ "rdkafka",
+ "redis 0.25.4",
+ "reqwest 0.11.27",
+ "resilience",
+ "rustls 0.23.35",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tonic 0.12.3",
+ "tonic-build",
+ "tonic-health 0.12.3",
+ "tower 0.4.13",
+ "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 

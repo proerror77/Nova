@@ -72,3 +72,35 @@ pub async fn publish_post_deleted(
         })
     )
 }
+
+/// Publish an event to trigger VLM analysis for a post with images.
+/// This event is consumed by the vlm-service for automatic image tagging.
+pub async fn publish_post_created_for_vlm(
+    tx: &mut Transaction<'_, Postgres>,
+    outbox: &SqlxOutboxRepository,
+    post: &Post,
+    image_urls: &[String],
+    auto_assign_channels: bool,
+) -> OutboxResult<()> {
+    // Only publish if there are images to analyze
+    if image_urls.is_empty() {
+        return Ok(());
+    }
+
+    publish_event!(
+        tx,
+        outbox,
+        "vlm",  // aggregate type for vlm events
+        post.id,
+        "vlm.post.created",  // Topic: vlm.post.created
+        json!({
+            "event_id": Uuid::new_v4().to_string(),
+            "post_id": post.id.to_string(),
+            "creator_id": post.user_id.to_string(),
+            "image_urls": image_urls,
+            "auto_assign_channels": auto_assign_channels,
+            "max_tags": 15,
+            "timestamp": chrono::Utc::now().timestamp_millis(),
+        })
+    )
+}

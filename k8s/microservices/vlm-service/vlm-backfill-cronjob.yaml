@@ -1,0 +1,153 @@
+# ============================================
+# VLM Backfill Batch Job CronJob
+# ============================================
+#
+# Periodically processes existing posts that haven't been analyzed by VLM yet.
+# This job:
+# 1. Fetches posts with vlm_status = 'pending' or NULL
+# 2. Analyzes images using Google Cloud Vision API
+# 3. Generates normalized tags
+# 4. Matches and assigns channels based on tags
+# 5. Updates vlm_status to 'completed'
+#
+# Schedule: Daily at 3 AM (UTC+8 → 19:00 UTC previous day)
+# Rate limiting: 10 RPS to protect Vision API quota
+# Estimated cost: ~$15/month for 10,000 images
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vlm-backfill-batch
+  namespace: nova-staging
+  labels:
+    app: vlm-backfill
+    component: vlm
+spec:
+  schedule: "0 19 * * *"  # 3 AM UTC+8 = 19:00 UTC previous day
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  successfulJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 7200  # 2 hours max runtime
+      template:
+        metadata:
+          labels:
+            app: vlm-backfill
+            component: vlm
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: vlm-service
+          containers:
+          - name: vlm-backfill
+            image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/vlm-service:latest
+            imagePullPolicy: Always
+            command: ["/app/vlm-service"]
+            args: ["--mode", "backfill"]
+            env:
+            # ============================================
+            # 應用配置
+            # ============================================
+            - name: RUST_LOG
+              value: "info,vlm_service=debug,vlm_service::jobs=debug"
+            - name: SERVICE_NAME
+              value: "vlm-backfill-batch"
+
+            # ============================================
+            # 批量任務配置
+            # ============================================
+            - name: BACKFILL_BATCH_SIZE
+              value: "100"
+            - name: BACKFILL_MAX_POSTS
+              value: "10000"
+            - name: BACKFILL_BATCH_DELAY_MS
+              value: "100"
+            - name: BACKFILL_RUN_ONCE
+              value: "true"
+
+            # ============================================
+            # VLM 配置
+            # ============================================
+            - name: MAX_TAGS
+              value: "15"
+            - name: MIN_TAG_CONFIDENCE
+              value: "0.3"
+            - name: CHANNEL_MIN_CONFIDENCE
+              value: "0.25"
+            - name: MAX_CHANNELS
+              value: "3"
+            - name: RATE_LIMIT_RPS
+              value: "10"
+
+            # ============================================
+            # Google Cloud Vision API
+            # ============================================
+            - name: GOOGLE_VISION_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vlm-api-credentials
+                  key: GOOGLE_VISION_API_KEY
+
+            # ============================================
+            # PostgreSQL 配置
+            # ============================================
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nova-db-credentials
+                  key: DATABASE_URL
+
+            # ============================================
+            # Redis 配置 (可選)
+            # ============================================
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nova-redis-credentials
+                  key: REDIS_URL
+
+            # ============================================
+            # Kafka 配置 (backfill 模式不需要，但保留以備用)
+            # ============================================
+            - name: KAFKA_BROKERS
+              value: "nova-kafka-kafka-bootstrap.kafka.svc.cluster.local:9092"
+
+            resources:
+              requests:
+                cpu: "200m"
+                memory: "256Mi"
+              limits:
+                cpu: "1000m"
+                memory: "1Gi"
+
+---
+# ============================================
+# VLM API Credentials Secret (模板)
+# ============================================
+# 注意：實際部署時需要手動創建此 Secret
+# kubectl create secret generic vlm-api-credentials \
+#   --from-literal=GOOGLE_VISION_API_KEY=your-api-key \
+#   -n nova-staging
+
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: vlm-api-credentials
+#   namespace: nova-staging
+# type: Opaque
+# stringData:
+#   GOOGLE_VISION_API_KEY: "your-google-vision-api-key"
+
+---
+# ============================================
+# ServiceAccount (如果需要)
+# ============================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vlm-service
+  namespace: nova-staging
+  labels:
+    app: vlm-service
+    component: vlm

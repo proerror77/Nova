@@ -153,3 +153,64 @@ spec:
   config:
     cleanup.policy: delete
     retention.ms: 2592000000
+---
+# VLM (Vision Language Model) Topics
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: vlm-post-created
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: nova-kafka
+spec:
+  topicName: vlm.post.created
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 604800000  # 7 days
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: vlm-post-analyzed
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: nova-kafka
+spec:
+  topicName: vlm.post.analyzed
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 604800000  # 7 days
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: vlm-channels-assigned
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: nova-kafka
+spec:
+  topicName: vlm.channels.assigned
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 604800000  # 7 days
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: vlm-events-dlq
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: nova-kafka
+spec:
+  topicName: vlm.events.dlq
+  partitions: 1
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 2592000000  # 30 days for DLQ

@@ -37,12 +37,19 @@ struct NewPostView: View {
     @State private var suggestedChannels: [ChannelSuggestion] = []
     @State private var isLoadingSuggestions: Bool = false
 
+    // VLM (Vision Language Model) states - TODO: Add VLMService.swift to project
+    // @State private var vlmTags: [TagSuggestion] = []
+    // @State private var selectedVLMTags: Set<String> = []
+    @State private var isAnalyzingImage: Bool = false
+    // @State private var vlmChannelSuggestions: [ChannelSuggestion] = []
+
     // Services
     private let mediaService = MediaService()
     private let contentService = ContentService()
     private let livePhotoManager = LivePhotoManager.shared
     private let aliceService = AliceService.shared
     private let feedService = FeedService()
+    // private let vlmService = VLMService.shared  // TODO: Add to project
     // WebP image compression (25-35% smaller than JPEG)
     private let imageCompressor = ImageCompressor.shared
     // Background upload manager for non-blocking uploads
@@ -95,10 +102,14 @@ struct NewPostView: View {
             // 如果有初始媒体项目（来自 PhotosPicker），添加到 selectedMediaItems
             if let mediaItems = initialMediaItems, !mediaItems.isEmpty, selectedMediaItems.isEmpty {
                 selectedMediaItems = mediaItems
+                // Trigger VLM analysis for initial media - TODO: re-enable
+                // analyzeImageWithVLM()
             }
             // 如果有初始图片，添加到 selectedMediaItems
             else if let image = initialImage, selectedMediaItems.isEmpty {
                 selectedMediaItems = [.image(image)]
+                // Trigger VLM analysis for initial image - TODO: re-enable
+                // analyzeImageWithVLM()
             } else if initialMediaItems == nil && initialImage == nil {
                 // 没有初始媒体时，尝试加载草稿
                 loadDraft()
@@ -217,6 +228,7 @@ struct NewPostView: View {
         VStack(spacing: 0) {
             postAsSection
             imagePreviewSection
+            // vlmTagsSection  // VLM-generated tags - TODO: re-enable
             textInputSection
             channelsAndEnhanceSection
 
@@ -458,7 +470,13 @@ struct NewPostView: View {
         }
         .padding(.top, 16)
     }
-    
+
+    // MARK: - VLM Tags Section (disabled - TODO: Add VLMService.swift to project)
+    @ViewBuilder
+    private var vlmTagsSection: some View {
+        EmptyView()
+    }
+
     // MARK: - Total media count
     private var totalMediaCount: Int {
         selectedMediaItems.count
@@ -570,6 +588,27 @@ struct NewPostView: View {
         selectedMediaItems.first?.displayImage
     }
 
+    // MARK: - VLM Image Analysis (disabled - TODO: Add VLMService.swift to project)
+    /*
+    private func analyzeImageWithVLM() {
+        guard let firstImage = getFirstImage() else { return }
+        guard !isAnalyzingImage else { return }
+        isAnalyzingImage = true
+        // ... VLM analysis code disabled
+    }
+    */
+
+    // MARK: - Toggle VLM Tag Selection (disabled)
+    /*
+    private func toggleVLMTag(_ tag: String) {
+        if selectedVLMTags.contains(tag) {
+            selectedVLMTags.remove(tag)
+        } else {
+            selectedVLMTags.insert(tag)
+        }
+    }
+    */
+
     // MARK: - Process Selected Photos (with Live Photo support)
     private func processSelectedPhotos(_ items: [PhotosPickerItem]) async {
         guard !items.isEmpty else { return }
@@ -591,6 +630,10 @@ struct NewPostView: View {
             
             await MainActor.run {
                 selectedMediaItems.append(contentsOf: newMedia)
+                // Trigger VLM analysis when first image is added - TODO: re-enable
+                // if !newMedia.isEmpty {
+                //     analyzeImageWithVLM()
+                // }
             }
         } catch {
             #if DEBUG
@@ -1018,6 +1061,10 @@ struct NewPostView: View {
             print("[NewPost] Starting background upload for \(itemsToUpload.count) media item(s)")
             #endif
 
+            // VLM tags disabled - TODO: re-enable
+            // let tagsToSave = Array(selectedVLMTags)
+            let channelsToSave = selectedChannelIds
+
             // Start background upload
             uploadManager.startUpload(
                 mediaItems: itemsToUpload,
@@ -1026,6 +1073,7 @@ struct NewPostView: View {
                 nameType: selectedNameType,
                 userId: userId,
                 onSuccess: { [onPostSuccess] post in
+                    // VLM tags update disabled - TODO: re-enable
                     onPostSuccess?(post)
                 }
             )
@@ -1447,6 +1495,43 @@ struct NoAutoFillTextView: UIViewRepresentable {
         }
     }
 }
+
+// MARK: - VLM Tag Chip
+struct VLMTagChip: View {
+    let tag: String
+    let confidence: Float
+    let isSelected: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 4) {
+                Text(tag)
+                    .font(.system(size: 12))
+                    .foregroundColor(isSelected ? .white : Color(red: 0.27, green: 0.27, blue: 0.27))
+
+                // Confidence indicator (only show for high confidence)
+                if confidence >= 0.8 {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(isSelected ? .white.opacity(0.8) : Color(red: 0.82, green: 0.13, blue: 0.25).opacity(0.6))
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(isSelected
+                        ? Color(red: 0.82, green: 0.13, blue: 0.25)
+                        : Color(red: 0.91, green: 0.91, blue: 0.91))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Flow Layout for Tags (disabled - duplicate with EnhanceSuggestionView)
+// FlowLayout removed to avoid redeclaration - use shared version from EnhanceSuggestionView
 
 #Preview {
     @Previewable @State var showNewPost = true

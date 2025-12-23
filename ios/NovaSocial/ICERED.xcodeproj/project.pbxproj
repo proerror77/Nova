@@ -137,6 +137,7 @@
 		94AF7CC1036A21C29F465707 /* AuthenticationManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6FE19396563C133B8B33094 /* AuthenticationManagerTests.swift */; };
 		9618F12F74A70D9629855613 /* ProfileData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5F063A093BCAB41B793415F /* ProfileData.swift */; };
 		96275277CE13088070909F3E /* GrokVoiceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E64D8CE635DABDB1071AC90 /* GrokVoiceConfig.swift */; };
+		A0C000E28A2542668A9AB96E /* XAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B588EE15C54D8A9750CC1E /* XAIService.swift */; };
 		97F6C657D7E2048352947CDA /* CommentSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00D95AE492E1F1BD615BB08A /* CommentSheetView.swift */; };
 		9804D3A5848B6B6B39935CF0 /* GrokVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4FE222AADC0282302AC0298 /* GrokVoiceService.swift */; };
 		9824FCB8B180ACFF53DAEB49 /* AppRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80ABF01F830247D554367509 /* AppRoute.swift */; };
@@ -403,6 +404,7 @@
 		9C7716AC8A2A67A629B5AA6D /* MyChannelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyChannelsView.swift; sourceTree = "<group>"; };
 		9DB971D0D914AD2BF041C7C0 /* ThankYouModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThankYouModal.swift; sourceTree = "<group>"; };
 		9E64D8CE635DABDB1071AC90 /* GrokVoiceConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokVoiceConfig.swift; sourceTree = "<group>"; };
+		B9B588EE15C54D8A9750CC1E /* XAIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XAIService.swift; sourceTree = "<group>"; };
 		9EB3A1844A28ADE400B2CB8B /* SocialService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialService.swift; sourceTree = "<group>"; };
 		9F361F5818CDB8EEB87330CB /* GenerateImage01View.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerateImage01View.swift; sourceTree = "<group>"; };
 		A13C2F556B5E9015D7B85A24 /* FeedVideoPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedVideoPlayer.swift; sourceTree = "<group>"; };
@@ -825,6 +827,7 @@
 				892AD2BE29C380E52980F7E2 /* AliceService.swift */,
 				5DE6005F56461CCE6C34EE43 /* FoundationModelsService.swift */,
 				9E64D8CE635DABDB1071AC90 /* GrokVoiceConfig.swift */,
+				B9B588EE15C54D8A9750CC1E /* XAIService.swift */,
 				B4FE222AADC0282302AC0298 /* GrokVoiceService.swift */,
 				E3737976AD8AA33408751C99 /* PhotoAnalysisService.swift */,
 			);
@@ -1856,6 +1859,7 @@
 				E1E08EAE40CCE72F24509180 /* GetVerifiedView.swift in Sources */,
 				7E83F8E47D13BC77F1E43BF5 /* GraphService.swift in Sources */,
 				96275277CE13088070909F3E /* GrokVoiceConfig.swift in Sources */,
+				A0C000E28A2542668A9AB96E /* XAIService.swift in Sources */,
 				F24EDB14A7336417FD9AFCC0 /* GrokVoiceModels.swift in Sources */,
 				9804D3A5848B6B6B39935CF0 /* GrokVoiceService.swift in Sources */,
 				8F9D3E8DE6E5D6EF2AD58793 /* GroupChatView.swift in Sources */,

@@ -14,6 +14,7 @@ members = [
     "feed-service",           # Recommendation & Feed Generation (Phase A: using graph-service gRPC)
     "feature-store",          # Feature Store Service (Phase D: Ranking + Feature Store)
     "ranking-service",        # Ranking Service (Phase D: Ranking + Feature Store)
+    "vlm-service",            # Vision Language Model Service (VLM) - Image analysis & tagging
     # realtime-chat-service - SEPARATED INTO INDEPENDENT WORKSPACE (2025-12-09)
     # Reason: Matrix SDK 0.16 requires libsqlite3-sys 0.35, conflicts with sqlx 0.8's 0.28
     # Location: backend/realtime-chat-service/ (independent Cargo.toml)

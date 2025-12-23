@@ -1,0 +1,70 @@
+[package]
+name = "vlm-service"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Vision Language Model service for image analysis and tagging"
+
+[[bin]]
+name = "vlm-service"
+path = "src/main.rs"
+
+[lib]
+name = "vlm_service"
+path = "src/lib.rs"
+
+[dependencies]
+# Workspace dependencies
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+redis.workspace = true
+async-trait.workspace = true
+dotenvy.workspace = true
+envy.workspace = true
+
+# HTTP client for Vision API
+reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+
+# gRPC
+tonic.workspace = true
+prost.workspace = true
+tonic-health.workspace = true
+tower.workspace = true
+
+# TLS
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", "logging", "std", "tls12"] }
+
+# Shared libraries
+resilience = { path = "../libs/resilience" }
+grpc-tls = { path = "../libs/grpc-tls" }
+grpc-clients = { path = "../libs/grpc-clients" }
+grpc-metrics = { path = "../libs/grpc-metrics" }
+grpc-health = { path = "../libs/grpc-health" }
+
+# Kafka
+rdkafka = { version = "0.36", features = ["cmake-build", "ssl-vendored"] }
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono"] }
+
+# Service-specific
+futures = "0.3"
+futures-util = "0.3"
+dashmap.workspace = true
+base64 = "0.21"
+
+[build-dependencies]
+tonic-build = "0.12"
+
+[dev-dependencies]
+tokio-test = "0.4"
+mockall = "0.12"

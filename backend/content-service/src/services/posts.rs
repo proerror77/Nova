@@ -2,7 +2,8 @@
 use crate::cache::ContentCache;
 use crate::error::Result;
 use crate::kafka::events::{
-    publish_post_created, publish_post_deleted, publish_post_status_updated,
+    publish_post_created, publish_post_created_for_vlm, publish_post_deleted,
+    publish_post_status_updated,
 };
 use crate::models::Post;
 use chrono::Utc;
@@ -159,6 +160,17 @@ impl PostService {
         // Publish event to outbox (same transaction)
         if let Some(outbox) = &self.outbox_repo {
             publish_post_created(&mut tx, outbox.as_ref(), &post).await?;
+
+            // Publish VLM event for posts with images (async processing)
+            if media_type != "none" && !media_urls.is_empty() {
+                publish_post_created_for_vlm(&mut tx, outbox.as_ref(), &post, media_urls, true)
+                    .await?;
+                tracing::debug!(
+                    post_id = %post.id,
+                    image_count = media_urls.len(),
+                    "Published VLM event for post"
+                );
+            }
         }
 
         // Commit transaction (both post and event committed atomically)
@@ -246,6 +258,21 @@ impl PostService {
         // 3. Publish event to outbox (same transaction)
         if let Some(outbox) = &self.outbox_repo {
             publish_post_created(&mut tx, outbox.as_ref(), &post).await?;
+
+            // 3a. Publish VLM event for posts with images (async processing)
+            // Only if media_type indicates actual media (not 'none' for text-only posts)
+            if media_type != "none" && !media_urls.is_empty() {
+                // Determine if channels should be auto-assigned (if none were manually specified)
+                let auto_assign = channel_ids.is_empty();
+                publish_post_created_for_vlm(&mut tx, outbox.as_ref(), &post, media_urls, auto_assign)
+                    .await?;
+                tracing::debug!(
+                    post_id = %post.id,
+                    image_count = media_urls.len(),
+                    auto_assign = auto_assign,
+                    "Published VLM event for post"
+                );
+            }
         }
 
         // 4. Commit transaction (post, channel associations, and event committed atomically)
