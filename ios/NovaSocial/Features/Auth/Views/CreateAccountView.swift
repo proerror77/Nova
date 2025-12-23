@@ -150,7 +150,7 @@ struct CreateAccountView: View {
                         // Email Input Field
                         Rectangle()
                             .foregroundColor(.clear)
-                            .frame(width: 343, height: 49)
+                            .frame(width: 343.w, height: 49.h)
                             .cornerRadius(6)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6)
@@ -162,7 +162,7 @@ struct CreateAccountView: View {
                         // Username Input Field
                         Rectangle()
                             .foregroundColor(.clear)
-                            .frame(width: 343, height: 49)
+                            .frame(width: 343.w, height: 49.h)
                             .cornerRadius(6)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6)
@@ -174,7 +174,7 @@ struct CreateAccountView: View {
                         // Password Input Field
                         Rectangle()
                             .foregroundColor(.clear)
-                            .frame(width: 343, height: 49)
+                            .frame(width: 343.w, height: 49.h)
                             .cornerRadius(6)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6)
@@ -186,7 +186,7 @@ struct CreateAccountView: View {
                         // Confirm Password Input Field
                         Rectangle()
                             .foregroundColor(.clear)
-                            .frame(width: 343, height: 49)
+                            .frame(width: 343.w, height: 49.h)
                             .cornerRadius(6)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6)
@@ -202,7 +202,7 @@ struct CreateAccountView: View {
                             .foregroundColor(.white)
                             .font(Typography.regular14)
                             .padding(.horizontal, 16)
-                            .frame(width: 343, height: 49)
+                            .frame(width: 343.w, height: 49.h)
                             .autocapitalization(.none)
                             .keyboardType(.emailAddress)
                             .autocorrectionDisabled()
@@ -213,7 +213,7 @@ struct CreateAccountView: View {
                             .foregroundColor(.white)
                             .font(Typography.regular14)
                             .padding(.horizontal, 16)
-                            .frame(width: 343, height: 49)
+                            .frame(width: 343.w, height: 49.h)
                             .autocapitalization(.none)
                             .autocorrectionDisabled()
                             .offset(x: 0, y: -88.50)
@@ -226,7 +226,7 @@ struct CreateAccountView: View {
                                     .foregroundColor(.white)
                                     .font(Typography.regular14)
                                     .padding(.horizontal, 16)
-                                    .frame(width: 343, height: 49)
+                                    .frame(width: 343.w, height: 49.h)
                                     .autocapitalization(.none)
                                     .autocorrectionDisabled()
                                     .textContentType(.password)
@@ -237,7 +237,7 @@ struct CreateAccountView: View {
                                     .foregroundColor(.white)
                                     .font(Typography.regular14)
                                     .padding(.horizontal, 16)
-                                    .frame(width: 343, height: 49)
+                                    .frame(width: 343.w, height: 49.h)
                                     .textContentType(.password)
                                     .accessibilityIdentifier("passwordTextField")
                                     .focused($focusedField, equals: .password)
@@ -252,7 +252,7 @@ struct CreateAccountView: View {
                                     .foregroundColor(.white)
                                     .font(Typography.regular14)
                                     .padding(.horizontal, 16)
-                                    .frame(width: 343, height: 49)
+                                    .frame(width: 343.w, height: 49.h)
                                     .autocapitalization(.none)
                                     .autocorrectionDisabled()
                                     .textContentType(.password)
@@ -263,7 +263,7 @@ struct CreateAccountView: View {
                                     .foregroundColor(.white)
                                     .font(Typography.regular14)
                                     .padding(.horizontal, 16)
-                                    .frame(width: 343, height: 49)
+                                    .frame(width: 343.w, height: 49.h)
                                     .textContentType(.password)
                                     .accessibilityIdentifier("confirmPasswordTextField")
                                     .focused($focusedField, equals: .confirmPassword)
@@ -287,7 +287,7 @@ struct CreateAccountView: View {
                                     .lineSpacing(20)
                                     .foregroundColor(.white)
                             }
-                            .frame(width: 343, height: 46)
+                            .frame(width: 343.w, height: 46.h)
                             .background(Color(red: 0.87, green: 0.11, blue: 0.26))
                             .cornerRadius(31.50)
                         }
@@ -305,14 +305,14 @@ struct CreateAccountView: View {
                         // Decorative lines
                         Rectangle()
                             .foregroundColor(.clear)
-                            .frame(width: 120, height: 0)
+                            .frame(width: 120.w, height: 0)
                             .overlay(Rectangle()
                                 .stroke(.white, lineWidth: 0.20))
                             .offset(x: -111.50, y: 202)
 
                         Rectangle()
                             .foregroundColor(.clear)
-                            .frame(width: 120, height: 0)
+                            .frame(width: 120.w, height: 0)
                             .overlay(Rectangle()
                                 .stroke(.white, lineWidth: 0.20))
                             .offset(x: 111.50, y: 202)
@@ -328,7 +328,7 @@ struct CreateAccountView: View {
                                         .font(Typography.regular20)
                                         .foregroundColor(.white)
                                 }
-                                .frame(width: 46, height: 46)
+                                .frame(width: 46.s, height: 46.s)
                                 .cornerRadius(23)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 23)
@@ -346,7 +346,7 @@ struct CreateAccountView: View {
                                         .font(Typography.regular20)
                                         .foregroundColor(.white)
                                 }
-                                .frame(width: 46, height: 46)
+                                .frame(width: 46.s, height: 46.s)
                                 .cornerRadius(23)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 23)
@@ -364,7 +364,7 @@ struct CreateAccountView: View {
                                         .font(Typography.bold20)
                                         .foregroundColor(.white)
                                 }
-                                .frame(width: 46, height: 46)
+                                .frame(width: 46.s, height: 46.s)
                                 .cornerRadius(23)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 23)
@@ -405,7 +405,7 @@ struct CreateAccountView: View {
                         }
                     }
                     }
-                    .frame(width: 375, height: 812)
+                    .frame(width: ScreenScale.screenWidth, height: ScreenScale.screenHeight)
 
                             // 使用动态高度替代Spacer，防止键盘推动布局
                             Color.clear

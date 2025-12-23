@@ -151,13 +151,13 @@ struct BottomTabBar: View {
             .accessibilityAddTraits(isAccount ? [.isButton, .isSelected] : .isButton)
         }
         .frame(height: DesignTokens.bottomBarHeight)
-        .padding(.bottom, 30) // ← 调整底部留白
+        .padding(.bottom, 30.h) // ← 调整底部留白（响应式）
         .background(
             DesignTokens.cardBackground
                 .ignoresSafeArea(edges: .bottom)
         )
         .border(DesignTokens.borderColor, width: 0.5)
-        .offset(y: 40) // ← 调整整体垂直位置：负值向上，正值向下
+        .offset(y: 40.h) // ← 调整整体垂直位置（响应式）
     }
 }
 

@@ -352,7 +352,7 @@ struct ProfileView: View {
                         .tint(.white)
                         .scaleEffect(1.2)
                     Text(isUploadingAvatar ? "上傳頭像中..." : "處理背景圖...")
-                        .font(.system(size: 14))
+                        .font(.system(size: 14.f))
                         .foregroundColor(.white)
                 }
             }
@@ -386,38 +386,38 @@ struct ProfileView: View {
     // 顶部导航栏布局
     private var navBarLayout: ProfileNavBarLayout {
         ProfileNavBarLayout(
-            horizontalPadding: 20,      // 左右边距
-            topPadding: 60,             // 顶部边距
-            bottomPadding: 40,          // 底部边距
-            usernameFontSize: 20,       // 用户名字体大小
-            chevronSize: 12,            // 下拉箭头大小
-            usernameChevronSpacing: 6,  // 用户名和箭头间距
-            iconSize: 24,               // 图标大小
-            iconSpacing: 18             // 图标间距
+            horizontalPadding: 20.s,      // 左右边距
+            topPadding: 60.h,             // 顶部边距
+            bottomPadding: 40.h,          // 底部边距
+            usernameFontSize: 20.f,       // 用户名字体大小
+            chevronSize: 12.s,            // 下拉箭头大小
+            usernameChevronSpacing: 6.s,  // 用户名和箭头间距
+            iconSize: 24.s,               // 图标大小
+            iconSpacing: 18.s             // 图标间距
         )
     }
 
     // 用户信息区域布局
     private var userInfoLayout: ProfileUserInfoLayout {
         ProfileUserInfoLayout(
-            containerWidth: 365,        // 容器宽度
-            verticalSpacing: 7,         // 垂直间距
-            bottomPadding: 10,          // 底部边距
-            avatarOuterSize: 108,       // 头像外圈大小
-            avatarInnerSize: 100,       // 头像内圈大小
-            avatarBorderWidth: 1,       // 边框宽度
-            usernameFontSize: 20,       // 用户名字体大小
-            usernameSpacingFromAvatar: 9,  // 与头像间距
-            locationFontSize: 12,       // 位置字体大小
-            professionFontSize: 12,     // 职业字体大小
-            blueVIconSize: 20,          // 蓝标大小
-            professionIconSpacing: 10,  // 蓝标与文字间距
-            statsTopPadding: 8,        // 统计区顶部间距
-            statsLabelFontSize: 16,     // 统计标签字体
-            statsValueFontSize: 16,     // 统计数值字体
-            statsItemWidth: 132,        // 统计项宽度
-            statsItemSpacing: -16,      // 统计项间距
-            statsDividerHeight: 24      // 分隔线高度
+            containerWidth: 365.w,        // 容器宽度
+            verticalSpacing: 7.h,         // 垂直间距
+            bottomPadding: 10.h,          // 底部边距
+            avatarOuterSize: 108.s,       // 头像外圈大小
+            avatarInnerSize: 100.s,       // 头像内圈大小
+            avatarBorderWidth: 1,         // 边框宽度（保持1像素）
+            usernameFontSize: 20.f,       // 用户名字体大小
+            usernameSpacingFromAvatar: 9.h,  // 与头像间距
+            locationFontSize: 12.f,       // 位置字体大小
+            professionFontSize: 12.f,     // 职业字体大小
+            blueVIconSize: 20.s,          // 蓝标大小
+            professionIconSpacing: 10.s,  // 蓝标与文字间距
+            statsTopPadding: 8.h,         // 统计区顶部间距
+            statsLabelFontSize: 16.f,     // 统计标签字体
+            statsValueFontSize: 16.f,     // 统计数值字体
+            statsItemWidth: 132.w,        // 统计项宽度
+            statsItemSpacing: -16.w,      // 统计项间距
+            statsDividerHeight: 24.h      // 分隔线高度
         )
     }
 
@@ -443,9 +443,9 @@ struct ProfileView: View {
                             .scaledToFill()
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: 380)  // 调整高度
+                .frame(maxWidth: .infinity, maxHeight: 380.h)  // 调整高度
                 .clipped()
-                .blur(radius: 20)
+                .blur(radius: 20.s)
                 .overlay(Color.black.opacity(0.3))
                 .ignoresSafeArea(edges: .top)
                 // 移除 onTapGesture - 避免误触跳转到照片选择器
@@ -454,17 +454,17 @@ struct ProfileView: View {
                 Button(action: { activeSheet = .backgroundPicker }) {
                     Circle()
                         .fill(Color.black.opacity(0.5))
-                        .frame(width: 36, height: 36)
+                        .frame(width: 36.s, height: 36.s)
                         .overlay(
                             Image(systemName: "photo.fill")
-                                .font(.system(size: 16))
+                                .font(.system(size: 16.f))
                                 .foregroundColor(.white)
                         )
                 }
-                .padding(.top, 70)
-                .padding(.trailing, 16)
+                .padding(.top, 70.h)
+                .padding(.trailing, 16.w)
             }
-            .frame(height: 380)  // 调整背景區域高度
+            .frame(height: 380.h)  // 调整背景區域高度
 
             VStack(spacing: 0) {
                 // MARK: - 顶部导航栏（独立组件）
@@ -509,15 +509,15 @@ struct ProfileView: View {
                 Button(action: {
                     activeSheet = .editProfile
                 }) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 6.s) {
                         Image(systemName: "pencil")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.system(size: 14.f, weight: .medium))
                         Text("編輯個人資料")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.system(size: 14.f, weight: .medium))
                     }
                     .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 20.w)
+                    .padding(.vertical, 10.h)
                     .background(
                         Capsule()
                             .fill(Color.white.opacity(0.2))
@@ -527,7 +527,7 @@ struct ProfileView: View {
                             )
                     )
                 }
-                .offset(y: userInfoBlockVerticalOffset + 10)
+                .offset(y: userInfoBlockVerticalOffset + 10.h)
             }
         }
     }
@@ -539,7 +539,7 @@ struct ProfileView: View {
             VStack(spacing: 0) {
                     ZStack {
                         // 标签按钮 - 完全居中
-                        HStack(spacing: 40) {
+                        HStack(spacing: 40.s) {
                             Button(action: {
                                 profileData.selectedTab = .posts
                                 Task {
@@ -547,7 +547,7 @@ struct ProfileView: View {
                                 }
                             }) {
                                 Text(LocalizedStringKey("Posts_tab"))
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(.system(size: 16.f, weight: .bold))
                                     .foregroundColor(profileData.selectedTab == .posts ? DesignTokens.accentColor : DesignTokens.textPrimary)
                             }
 
@@ -558,7 +558,7 @@ struct ProfileView: View {
                                 }
                             }) {
                                 Text(LocalizedStringKey("Saved_tab"))
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(.system(size: 16.f, weight: .bold))
                                     .foregroundColor(profileData.selectedTab == .saved ? DesignTokens.accentColor : DesignTokens.textPrimary)
                             }
 
@@ -569,7 +569,7 @@ struct ProfileView: View {
                                 }
                             }) {
                                 Text(LocalizedStringKey("Liked_tab"))
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(.system(size: 16.f, weight: .bold))
                                     .foregroundColor(profileData.selectedTab == .liked ? DesignTokens.accentColor : DesignTokens.textPrimary)
                             }
                         }
@@ -590,25 +590,25 @@ struct ProfileView: View {
                                 }
                             }) {
                                 Image(systemName: showSearchBar ? "xmark.circle.fill" : "magnifyingglass")
-                                    .font(.system(size: 20))
+                                    .font(.system(size: 20.f))
                                     .foregroundColor(DesignTokens.textPrimary)
                                     .contentTransition(.symbolEffect(.replace))
                             }
-                            .padding(.trailing, 20)
+                            .padding(.trailing, 20.w)
                         }
                     }
-                    .padding(.vertical, 16)
+                    .padding(.vertical, 16.h)
                     .background(.white)
                     
                     // MARK: - 搜索框
                     if showSearchBar {
-                        HStack(spacing: 10) {
+                        HStack(spacing: 10.s) {
                             Image(systemName: "magnifyingglass")
-                                .font(.system(size: 14))
+                                .font(.system(size: 14.f))
                                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
-                            
+
                             TextField("搜索帖子內容...", text: $searchText)
-                                .font(.system(size: 14))
+                                .font(.system(size: 14.f))
                                 .foregroundColor(.black)
                                 .textFieldStyle(.plain)
                                 .onChange(of: searchText) { _, newValue in
@@ -620,7 +620,7 @@ struct ProfileView: View {
                                         await profileData.searchInProfile(query: newValue)
                                     }
                                 }
-                            
+
                             if !searchText.isEmpty {
                                 Button(action: {
                                     searchText = ""
@@ -628,16 +628,16 @@ struct ProfileView: View {
                                     profileData.isSearching = false
                                 }) {
                                     Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 14))
+                                        .font(.system(size: 14.f))
                                         .foregroundColor(.gray)
                                 }
                             }
                         }
-                        .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                        .padding(EdgeInsets(top: 8.h, leading: 12.w, bottom: 8.h, trailing: 12.w))
                         .background(Color(red: 0.95, green: 0.95, blue: 0.95))
-                        .cornerRadius(10)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 8)
+                        .cornerRadius(10.s)
+                        .padding(.horizontal, 16.w)
+                        .padding(.bottom, 8.h)
                         .transition(.move(edge: .top).combined(with: .opacity))
                     }
 
@@ -655,7 +655,7 @@ struct ProfileView: View {
                             ProgressView()
                                 .padding(.top, 40)
                         } else if userPostsManager.hasPosts {
-                            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8.s), GridItem(.flexible(), spacing: 8.s)], spacing: 8.s) {
                                 ForEach(filteredUserPosts) { post in
                                     ProfilePostCard(
                                         post: post,
@@ -683,13 +683,13 @@ struct ProfileView: View {
                                     }
                                 }
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.top, 8)
+                            .padding(.horizontal, 8.w)
+                            .padding(.top, 8.h)
                             
                             // 加载更多指示器
                             if userPostsManager.isLoadingMore {
                                 ProgressView()
-                                    .padding(.vertical, 16)
+                                    .padding(.vertical, 16.h)
                             }
                         } else if !searchText.isEmpty && userPostsManager.hasPosts {
                             // 搜索无结果
@@ -703,7 +703,7 @@ struct ProfileView: View {
                             ProgressView()
                                 .padding(.top, 40)
                         } else if profileData.hasContent {
-                            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8.s), GridItem(.flexible(), spacing: 8.s)], spacing: 8.s) {
                                 ForEach(filteredProfilePosts) { post in
                                     ProfilePostCard(
                                         post: post,
@@ -720,8 +720,8 @@ struct ProfileView: View {
                                     )
                                 }
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.top, 8)
+                            .padding(.horizontal, 8.w)
+                            .padding(.top, 8.h)
                         } else if !searchText.isEmpty && profileData.hasContent {
                             // 搜索无结果
                             searchEmptyStateView
@@ -731,7 +731,7 @@ struct ProfileView: View {
                     }
 
                     Color.clear
-                        .frame(height: 100)
+                        .frame(height: 100.h)
                 }
                 .background(DesignTokens.backgroundColor)
         }
@@ -739,32 +739,32 @@ struct ProfileView: View {
 
     // MARK: - 空状态视图
     private var emptyStateView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 12.h) {
             Image(systemName: "tray")
-                .font(.system(size: 48))
+                .font(.system(size: 48.f))
                 .foregroundColor(.gray)
             Text("No posts yet")
-                .font(.system(size: 16))
+                .font(.system(size: 16.f))
                 .foregroundColor(.gray)
         }
-        .padding(.top, 60)
+        .padding(.top, 60.h)
     }
 
     // MARK: - 搜索无结果视图
     private var searchEmptyStateView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 12.h) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 48))
+                .font(.system(size: 48.f))
                 .foregroundColor(.gray)
                 .symbolEffect(.pulse, options: .repeating)
             Text("找不到相關帖子")
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: 16.f, weight: .medium))
                 .foregroundColor(.gray)
             Text("試試其他關鍵詞")
-                .font(.system(size: 14))
+                .font(.system(size: 14.f))
                 .foregroundColor(.gray.opacity(0.7))
         }
-        .padding(.top, 60)
+        .padding(.top, 60.h)
     }
 
     // MARK: - 删除帖子
@@ -943,46 +943,46 @@ struct PostGridCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // 顶部用户信息
-            HStack(spacing: 8) {
+            HStack(spacing: 8.s) {
                 Circle()
                     .fill(DesignTokens.avatarPlaceholder)
-                    .frame(width: 24, height: 24)
+                    .frame(width: 24.s, height: 24.s)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 2.h) {
                     Text(displayUsername)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 12.f, weight: .semibold))
                         .foregroundColor(.black)
 
                     Text(formattedDate)
-                        .font(.system(size: 10))
+                        .font(.system(size: 10.f))
                         .foregroundColor(.gray)
                 }
 
                 Spacer()
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 12)
+            .padding(.horizontal, 12.w)
+            .padding(.top, 12.h)
 
             // 图片占位符 - TODO: 当 Post 模型支持 mediaUrls 后加载真实图片
             Rectangle()
                 .fill(DesignTokens.avatarPlaceholder)
-                .frame(height: 200)
-                .cornerRadius(8)
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
+                .frame(height: 200.h)
+                .cornerRadius(8.s)
+                .padding(.horizontal, 12.w)
+                .padding(.top, 8.h)
 
             // 实际帖子内容
             Text(post.content.isEmpty ? "No content" : post.content)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 13.f, weight: .medium))
                 .foregroundColor(.black)
                 .lineLimit(2)
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-                .padding(.bottom, 12)
+                .padding(.horizontal, 12.w)
+                .padding(.top, 8.h)
+                .padding(.bottom, 12.h)
         }
         .background(.white)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.05), radius: 3, y: 1)
+        .cornerRadius(12.s)
+        .shadow(color: .black.opacity(0.05), radius: 3.s, y: 1)
     }
 }
 

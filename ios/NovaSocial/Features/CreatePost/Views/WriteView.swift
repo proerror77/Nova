@@ -25,7 +25,7 @@ struct WriteView: View {
                     // 边框容器
                     Rectangle()
                         .foregroundColor(.clear)
-                        .frame(width: 323, height: 564)
+                        .frame(width: 323.w, height: 564.h)
                         .cornerRadius(14)
                         .overlay(
                             RoundedRectangle(cornerRadius: 14)
@@ -46,7 +46,7 @@ struct WriteView: View {
                     .foregroundColor(.black)
                     .multilineTextAlignment(.leading)
                     .focused($isTextFieldFocused)
-                    .frame(width: 260)
+                    .frame(width: 260.w)
                     .lineLimit(1...20)
                 }
 
@@ -63,7 +63,7 @@ struct WriteView: View {
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.white)
                 }
-                .frame(width: 343, height: 46)
+                .frame(width: 343.w, height: 46.h)
                 .background(Color(red: 0.87, green: 0.11, blue: 0.26))
                 .cornerRadius(31.50)
                 .padding(.bottom, 40)

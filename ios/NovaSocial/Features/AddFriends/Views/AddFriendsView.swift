@@ -516,7 +516,7 @@ struct AddFriendsView: View {
                                 Spacer()
                             }
                             .padding(EdgeInsets(top: 7, leading: 37, bottom: 7, trailing: 37))
-                            .frame(width: 351, height: 35)
+                            .frame(maxWidth: .infinity, minHeight: 35.h)
                         }
                         .background(Color.white)
                         .cornerRadius(23)

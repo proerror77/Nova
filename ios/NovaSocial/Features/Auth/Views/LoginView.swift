@@ -60,13 +60,11 @@ struct LoginView: View {
                             Spacer()
                         }
                     } else {
-                        Spacer()
-
                         // Logo Section
                         logoSection
 
                         Spacer()
-                            .frame(height: 50)
+                            .frame(height: 77.h)
 
                         // Input Fields Section
                         inputFieldsSection
@@ -76,21 +74,22 @@ struct LoginView: View {
 
                         // Login Button
                         loginButton
+                            .padding(.horizontal, 38.w)
 
                         Spacer()
                             .frame(height: 24)
 
                         // "or" separator
                         Text("or")
-                            .font(Typography.regular14)
-                            .tracking(LetterSpacing.regular14)
+                            .font(Font.custom("SF Pro Display", size: 16.f))
                             .foregroundColor(.white)
 
                         Spacer()
-                            .frame(height: 24)
+                            .frame(height: 12.s)
 
                         // Social Login Buttons
                         socialLoginButtons
+                            .padding(.horizontal, 38.w)
 
                         Spacer()
                             .frame(height: 40)
@@ -102,9 +101,7 @@ struct LoginView: View {
 
                         // Terms and Privacy Links
                         termsAndPrivacyLinks
-
-                        Spacer()
-                            .frame(height: 20)
+                            .padding(.bottom, 28.h)
                     }
                 }
             }
@@ -118,29 +115,36 @@ struct LoginView: View {
 
     // MARK: - Logo Section
     private var logoSection: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 8.s) {
             Image("Logo-R")
                 .resizable()
                 .scaledToFit()
-                .frame(height: 60)
+                .frame(width: 84.s, height: 52.s)
                 .colorInvert()
                 .brightness(1)
 
             Text("For the masters of the universe")
-                .font(Typography.bold12)
-                .tracking(LetterSpacing.bold12)
+                .font(Font.custom("SF Pro Display", size: 12.f).weight(.medium))
+                .tracking(0.24)
                 .foregroundColor(Color(red: 0.90, green: 0.90, blue: 0.90))
         }
+        .padding(.top, 104.h)
     }
 
     // MARK: - Input Fields Section
     private var inputFieldsSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 0) {
             // Email Field
             emailTextField
 
+            Spacer()
+                .frame(height: 16.s)
+
             // Password Field
             passwordTextField
+
+            Spacer()
+                .frame(height: 11.h)
 
             // Forgot Password + Error Message (fixed height container)
             ZStack {
@@ -151,9 +155,9 @@ struct LoginView: View {
                         // TODO: Handle forgot password
                     }) {
                         Text("Forgot password?")
-                            .font(Typography.regular12)
-                            .tracking(LetterSpacing.regular12)
-                            .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64))
+                            .font(Font.custom("SF Pro Display", size: 14.f))
+                            .tracking(0.28)
+                            .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
                     }
                 }
 
@@ -164,31 +168,33 @@ struct LoginView: View {
                         .foregroundColor(.red)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
-                        .offset(y: 28)
+                        .offset(y: 28.h)
                 }
             }
-            .frame(height: 20)
+            .frame(height: 20.h)
         }
-        .padding(.horizontal, 38)
+        .padding(.horizontal, 38.w)
     }
 
     // MARK: - Email TextField
     private var emailTextField: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 4.s) {
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: 6.s)
                     .fill(Color(red: 0.85, green: 0.85, blue: 0.85).opacity(0.25))
-                    .frame(height: 49)
+                    .frame(height: 48.h)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6)
+                        RoundedRectangle(cornerRadius: 6.s)
                             .stroke(emailError != nil ? Color.red : Color.white, lineWidth: 0.5)
                     )
 
-                TextField("", text: $email, prompt: Text("Email or phone number").foregroundColor(.white.opacity(0.7)))
+                TextField("", text: $email, prompt: Text("Email or phone number")
+                    .font(Font.custom("SF Pro Display", size: 14.f))
+                    .foregroundColor(.white))
                     .foregroundColor(.white)
-                    .font(Typography.regular14)
-                    .tracking(LetterSpacing.regular14)
-                    .padding(.horizontal, 16)
+                    .font(Font.custom("SF Pro Display", size: 14.f))
+                    .tracking(0.28)
+                    .padding(.horizontal, 16.w)
                     .autocapitalization(.none)
                     .keyboardType(.emailAddress)
                     .autocorrectionDisabled()
@@ -203,38 +209,42 @@ struct LoginView: View {
                 Text(LocalizedStringKey(error))
                     .font(Typography.thin11)
                     .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
-                    .padding(.leading, 4)
+                    .padding(.leading, 4.w)
             }
         }
     }
 
     // MARK: - Password TextField
     private var passwordTextField: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 4.s) {
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: 6.s)
                     .fill(Color(red: 0.85, green: 0.85, blue: 0.85).opacity(0.25))
-                    .frame(height: 49)
+                    .frame(height: 48.h)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6)
+                        RoundedRectangle(cornerRadius: 6.s)
                             .stroke(passwordError != nil ? Color.red : Color.white, lineWidth: 0.5)
                     )
 
                 HStack {
                     if showPassword {
-                        TextField("", text: $password, prompt: Text("Password").foregroundColor(.white.opacity(0.7)))
+                        TextField("", text: $password, prompt: Text("Password")
+                            .font(Font.custom("SF Pro Display", size: 14.f))
+                            .foregroundColor(.white))
                             .foregroundColor(.white)
-                            .font(Typography.regular14)
-                            .tracking(LetterSpacing.regular14)
+                            .font(Font.custom("SF Pro Display", size: 14.f))
+                            .tracking(0.28)
                             .autocapitalization(.none)
                             .autocorrectionDisabled()
                             .accessibilityIdentifier("loginPasswordTextField")
                             .focused($focusedField, equals: .password)
                     } else {
-                        SecureField("", text: $password, prompt: Text("Password").foregroundColor(.white.opacity(0.7)))
+                        SecureField("", text: $password, prompt: Text("Password")
+                            .font(Font.custom("SF Pro Display", size: 14.f))
+                            .foregroundColor(.white))
                             .foregroundColor(.white)
-                            .font(Typography.regular14)
-                            .tracking(LetterSpacing.regular14)
+                            .font(Font.custom("SF Pro Display", size: 14.f))
+                            .tracking(0.28)
                             .accessibilityIdentifier("loginPasswordTextField")
                             .focused($focusedField, equals: .password)
                     }
@@ -244,17 +254,17 @@ struct LoginView: View {
                     }) {
                         Image(systemName: showPassword ? "eye" : "eye.slash")
                             .foregroundColor(.white.opacity(0.7))
-                            .frame(width: 24, height: 24)
+                            .frame(width: 24.s, height: 24.s)
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 16.w)
             }
 
             if let error = passwordError {
                 Text(LocalizedStringKey(error))
                     .font(Typography.thin11)
                     .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
-                    .padding(.leading, 4)
+                    .padding(.leading, 4.w)
             }
         }
     }
@@ -266,7 +276,7 @@ struct LoginView: View {
                 await handleLogin()
             }
         }) {
-            HStack(spacing: 8) {
+            HStack(spacing: 8.s) {
                 if isLoading {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .black))
@@ -277,9 +287,10 @@ struct LoginView: View {
                     .tracking(LetterSpacing.heavy16)
                     .foregroundColor(.black)
             }
-            .frame(width: 300, height: 49)
+            .frame(maxWidth: .infinity)
+            .frame(height: 48.h)
             .background(.white)
-            .cornerRadius(31.50)
+            .cornerRadius(31.5.s)
         }
         .disabled(isLoading || isGoogleLoading || isAppleLoading)
         .accessibilityIdentifier("signInButton")
@@ -287,7 +298,7 @@ struct LoginView: View {
 
     // MARK: - Social Login Buttons
     private var socialLoginButtons: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 10.s) {
             // Continue with Passkey
             if #available(iOS 16.0, *) {
                 Button(action: {
@@ -295,29 +306,39 @@ struct LoginView: View {
                         await handlePasskeySignIn()
                     }
                 }) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "person.badge.key.fill")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
-                            .foregroundColor(.white)
-
-                        if isPasskeyLoading {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .scaleEffect(0.8)
+                    ZStack {
+                        // 文字居中
+                        HStack(spacing: 8.s) {
+                            if isPasskeyLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.8)
+                            }
+                            Text("Continue with Passkey")
+                                .font(.system(size: 16.f, weight: .heavy, design: .default))
+                                .tracking(0.32)
+                                .foregroundColor(.white)
                         }
-
-                        Text("Continue with Passkey")
-                            .font(Typography.heavy16)
-                            .tracking(LetterSpacing.heavy16)
-                            .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        
+                        // 图标固定在左侧
+                        HStack {
+                            ZStack {
+                                Image("Passkey-icon")
+                                    .resizable()
+                                    .scaledToFit()
+                            }
+                            .frame(width: 24.s, height: 24.s)
+                            Spacer()
+                        }
+                        .padding(.leading, 22.w)
                     }
-                    .frame(width: 300, height: 49)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48.h)
                     .background(Color.clear)
-                    .cornerRadius(65)
+                    .cornerRadius(31.5.s)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 65)
+                        RoundedRectangle(cornerRadius: 31.5.s)
                             .stroke(.white, lineWidth: 0.5)
                     )
                 }
@@ -331,29 +352,39 @@ struct LoginView: View {
                     await handleGoogleSignIn()
                 }
             }) {
-                HStack(spacing: 12) {
-                    // Google "G" logo
-                    Text("G")
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                        .frame(width: 20, height: 20)
-
-                    if isGoogleLoading {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(0.8)
+                ZStack {
+                    // 文字居中
+                    HStack(spacing: 8.s) {
+                        if isGoogleLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+                        }
+                        Text("Continue with Google")
+                            .font(.system(size: 16.f, weight: .heavy, design: .default))
+                            .tracking(0.32)
+                            .foregroundColor(.white)
                     }
-
-                    Text("Continue with Google")
-                        .font(Typography.heavy16)
-                        .tracking(LetterSpacing.heavy16)
-                        .foregroundColor(.white)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    
+                    // 图标固定在左侧
+                    HStack {
+                        ZStack {
+                            Image("Google-logo")
+                                .resizable()
+                                .scaledToFit()
+                        }
+                        .frame(width: 24.s, height: 24.s)
+                        Spacer()
+                    }
+                    .padding(.leading, 22.w)
                 }
-                .frame(width: 300, height: 49)
+                .frame(maxWidth: .infinity)
+                .frame(height: 48.h)
                 .background(Color.clear)
-                .cornerRadius(65)
+                .cornerRadius(31.5.s)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 65)
+                    RoundedRectangle(cornerRadius: 31.5.s)
                         .stroke(.white, lineWidth: 0.5)
                 )
             }
@@ -366,29 +397,40 @@ struct LoginView: View {
                     await handleAppleSignIn()
                 }
             }) {
-                HStack(spacing: 12) {
-                    Image(systemName: "apple.logo")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 20, height: 20)
-                        .foregroundColor(.white)
-
-                    if isAppleLoading {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(0.8)
+                ZStack {
+                    // 文字居中
+                    HStack(spacing: 8.s) {
+                        if isAppleLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+                        }
+                        Text("Continue with Apple")
+                            .font(.system(size: 16.f, weight: .heavy, design: .default))
+                            .tracking(0.32)
+                            .foregroundColor(.white)
                     }
-
-                    Text("Continue with Apple")
-                        .font(Typography.heavy16)
-                        .tracking(LetterSpacing.heavy16)
-                        .foregroundColor(.white)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    
+                    // 图标固定在左侧
+                    HStack {
+                        ZStack {
+                            Image(systemName: "apple.logo")
+                                .resizable()
+                                .scaledToFit()
+                                .foregroundColor(.white)
+                        }
+                        .frame(width: 24.s, height: 24.s)
+                        Spacer()
+                    }
+                    .padding(.leading, 22.w)
                 }
-                .frame(width: 300, height: 49)
+                .frame(maxWidth: .infinity)
+                .frame(height: 48.h)
                 .background(Color.clear)
-                .cornerRadius(65)
+                .cornerRadius(31.5.s)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 65)
+                    RoundedRectangle(cornerRadius: 31.5.s)
                         .stroke(.white, lineWidth: 0.5)
                 )
             }
@@ -420,7 +462,7 @@ struct LoginView: View {
 
     // MARK: - Terms and Privacy Links
     private var termsAndPrivacyLinks: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 5.w) {
             Button(action: {
                 // TODO: Show Terms and Conditions
             }) {
@@ -441,6 +483,8 @@ struct LoginView: View {
                     .foregroundColor(.white)
             }
         }
+        .padding(.leading, 94.w)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Actions
