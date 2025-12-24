@@ -159,27 +159,29 @@ async def get_icered_info(topic: str) -> str:
 server = AgentServer()
 
 
-@server.rtc_session(agent_name="alice")
+@server.rtc_session()  # Auto dispatch mode - join any room
 async def entrypoint(ctx: JobContext):
     """Agent 入口點"""
     logger.info(f"Connecting to room: {ctx.room.name}")
 
-    # 配置 xAI Realtime Model 與工具
+    # 配置 xAI Realtime Model
     llm = xai.realtime.RealtimeModel(
         voice="Ara",  # 使用 Ara 女聲
-        # 啟用內建搜索工具
-        tools=[
-            {"type": "web_search"},  # 網頁搜索
-            {"type": "x_search"},    # X/Twitter 搜索
-        ],
     )
 
-    # 自定義函數工具
-    custom_tools = [get_current_time, get_icered_info]
+    # 配置工具列表
+    tools = [
+        # xAI 內建搜尋工具
+        xai.realtime.WebSearch(),   # 網頁搜尋
+        xai.realtime.XSearch(),     # X/Twitter 搜尋
+        # 自定義函數工具
+        get_current_time,
+        get_icered_info,
+    ]
 
     session = AgentSession(
         llm=llm,
-        tools=custom_tools,  # 添加自定義函數
+        tools=tools,
     )
 
     await session.start(
@@ -197,7 +199,7 @@ async def entrypoint(ctx: JobContext):
         ),
     )
 
-    logger.info("Alice agent started successfully with web_search, x_search, and custom functions")
+    logger.info("Alice agent started with WebSearch, XSearch, get_current_time, get_icered_info tools")
 
 
 if __name__ == "__main__":

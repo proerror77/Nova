@@ -7,7 +7,7 @@ metadata:
     version: v1
     tier: ai
   annotations:
-    description: "TEN Agent for Alice Voice Chat - STT/LLM/TTS pipeline"
+    description: "LiveKit Agent for Alice Voice Chat - xAI Grok Voice with WebSearch and XSearch"
 spec:
   replicas: 1
   strategy:
@@ -21,10 +21,6 @@ spec:
         app: alice-voice-service
         version: v1
         tier: ai
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
-        prometheus.io/path: "/metrics"
     spec:
       serviceAccountName: alice-voice-service
       securityContext:
@@ -33,38 +29,6 @@ spec:
         fsGroup: 1000
 
       containers:
-      # Nginx sidecar for path rewriting (/alice-voice/* -> /*)
-      - name: nginx-proxy
-        image: nginx:1.25-alpine
-        ports:
-        - name: http
-          containerPort: 8080
-          protocol: TCP
-        volumeMounts:
-        - name: nginx-config
-          mountPath: /etc/nginx/nginx.conf
-          subPath: nginx.conf
-        resources:
-          requests:
-            memory: "32Mi"
-            cpu: "10m"
-          limits:
-            memory: "64Mi"
-            cpu: "50m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 5
-
-      # TEN Agent main container (listens on 8081)
       - name: alice-voice-service
         image: asia-northeast1-docker.pkg.dev/PROJECT_ID/nova/alice-voice-service:latest
         imagePullPolicy: Always
@@ -77,59 +41,38 @@ spec:
               - ALL
 
         ports:
-        - name: ten-agent
-          containerPort: 8081
-          protocol: TCP
-        - name: rtc
-          containerPort: 3000
+        - name: http
+          containerPort: 8080
           protocol: TCP
 
-        # Environment variables from ConfigMap
-        envFrom:
-        - configMapRef:
-            name: alice-voice-service-config
-
-        # Environment variables from Secrets + Port override
+        # Environment variables from Secrets
         env:
-        - name: SERVER_PORT
-          value: "8081"
-        - name: AGORA_APP_ID
+        - name: LIVEKIT_URL
           valueFrom:
             secretKeyRef:
               name: alice-voice-service-secret
-              key: agora-app-id
-        - name: AGORA_APP_CERTIFICATE
+              key: livekit-url
+        - name: LIVEKIT_API_KEY
           valueFrom:
             secretKeyRef:
               name: alice-voice-service-secret
-              key: agora-app-certificate
-              optional: true
-        - name: DEEPGRAM_API_KEY
+              key: livekit-api-key
+        - name: LIVEKIT_API_SECRET
           valueFrom:
             secretKeyRef:
               name: alice-voice-service-secret
-              key: deepgram-api-key
-        - name: OPENAI_API_KEY
+              key: livekit-api-secret
+        - name: XAI_API_KEY
           valueFrom:
             secretKeyRef:
               name: alice-voice-service-secret
-              key: openai-api-key
-        - name: OPENAI_API_BASE
-          valueFrom:
-            configMapKeyRef:
-              name: alice-voice-service-config
-              key: openai-api-base
-        - name: OPENAI_MODEL
-          valueFrom:
-            configMapKeyRef:
-              name: alice-voice-service-config
-              key: openai-model
+              key: xai-api-key
 
-        # Health checks (internal port 8081)
+        # Health checks (LiveKit Agents SDK auto-starts HTTP server)
         livenessProbe:
           httpGet:
-            path: /health
-            port: 8081
+            path: /
+            port: 8080
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
@@ -137,14 +80,14 @@ spec:
 
         readinessProbe:
           httpGet:
-            path: /health
-            port: 8081
+            path: /
+            port: 8080
           initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 3
           failureThreshold: 3
 
-        # Resources - Reduced for staging environment
+        # Resources
         resources:
           requests:
             memory: "256Mi"
@@ -157,17 +100,10 @@ spec:
         volumeMounts:
         - name: tmp
           mountPath: /tmp
-        - name: logs
-          mountPath: /tmp/ten_agent
 
       volumes:
       - name: tmp
         emptyDir: {}
-      - name: logs
-        emptyDir: {}
-      - name: nginx-config
-        configMap:
-          name: alice-voice-nginx-config
 
       # Spread across nodes
       affinity:
