@@ -159,7 +159,7 @@ async def get_icered_info(topic: str) -> str:
 server = AgentServer()
 
 
-@server.rtc_session()  # Auto dispatch mode - join any room
+@server.rtc_session(agent_name="alice")  # Explicit dispatch with agent name
 async def entrypoint(ctx: JobContext):
     """Agent 入口點"""
     logger.info(f"Connecting to room: {ctx.room.name}")
@@ -203,7 +203,4 @@ async def entrypoint(ctx: JobContext):
 
 
 if __name__ == "__main__":
-    cli.run_app(
-        server,
-        agent_name="alice",  # 設置 agent name 以支援 explicit dispatch
-    )
+    cli.run_app(server)
