@@ -129,6 +129,30 @@ enum Typography {
     private static let fontLight = "SFProDisplay-Light"
     private static let fontThin = "SFProDisplay-Thin"
     
+    // MARK: - Font Validation (Debug)
+    #if DEBUG
+    /// 在 App 启动时调用此方法验证字体是否正确加载
+    /// 使用方法：在 AppDelegate 或 App.swift 中调用 Typography.validateFonts()
+    static func validateFonts() {
+        print("🔤 === Font Validation ===")
+        let fontNames = [fontRegular, fontMedium, fontSemibold, fontBold, fontHeavy, fontLight, fontThin]
+        for name in fontNames {
+            if UIFont(name: name, size: 14) != nil {
+                print("✅ \(name) - loaded successfully")
+            } else {
+                print("❌ \(name) - FAILED to load!")
+            }
+        }
+        print("🔤 === Available SF Pro Display fonts ===")
+        for family in UIFont.familyNames.sorted() where family.contains("SF") || family.contains("Pro") {
+            print("Family: \(family)")
+            for fontName in UIFont.fontNames(forFamilyName: family) {
+                print("  - \(fontName)")
+            }
+        }
+    }
+    #endif
+    
     // MARK: - Regular weights
     static let regular10: Font = .custom(fontRegular, size: 10.f)
     static let regular12: Font = .custom(fontRegular, size: 12.f)

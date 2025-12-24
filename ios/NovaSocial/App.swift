@@ -32,6 +32,11 @@ struct IceredApp: App {
     }
 
     init() {
+        // Validate custom fonts are loaded correctly (Debug only)
+        #if DEBUG
+        Typography.validateFonts()
+        #endif
+        
         // Reset auth state and skip to login when running UI tests
         if ProcessInfo.processInfo.arguments.contains("--uitesting") {
             // CRITICAL: Clear isAuthenticated synchronously to prevent race condition
