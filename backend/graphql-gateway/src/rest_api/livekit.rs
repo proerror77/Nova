@@ -100,12 +100,10 @@ struct VideoGrant {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct RoomAgentDispatch {
-    /// Agent name to dispatch (field name is "name" per LiveKit spec)
-    name: String,
-    /// Optional metadata for the agent
-    #[serde(skip_serializing_if = "Option::is_none")]
-    metadata: Option<String>,
+    /// Agent name to dispatch (serializes to "agentName")
+    agent_name: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -132,8 +130,7 @@ fn generate_livekit_token(
     // Create room_config with agent dispatch if agent_name is provided
     let room_config = agent_name.map(|agent| RoomConfig {
         agents: vec![RoomAgentDispatch {
-            name: agent,
-            metadata: metadata.clone(),
+            agent_name: agent,
         }],
     });
 
