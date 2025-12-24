@@ -42,7 +42,7 @@ spec:
 
         ports:
         - name: http
-          containerPort: 8080
+          containerPort: 8081
           protocol: TCP
 
         # Environment variables from Secrets
@@ -68,11 +68,11 @@ spec:
               name: alice-voice-service-secret
               key: xai-api-key
 
-        # Health checks (LiveKit Agents SDK auto-starts HTTP server)
+        # Health checks (LiveKit Agents SDK auto-starts HTTP server on 8081)
         livenessProbe:
           httpGet:
             path: /
-            port: 8080
+            port: 8081
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
@@ -81,7 +81,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /
-            port: 8080
+            port: 8081
           initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 3

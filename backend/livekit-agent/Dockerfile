@@ -16,8 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY agent.py .
 COPY livekit.toml .
 
-# Expose HTTP health check port (LiveKit Agents SDK auto-starts HTTP server)
-EXPOSE 8080
+# Expose HTTP health check port (LiveKit Agents SDK auto-starts HTTP server on 8081)
+EXPOSE 8081
 
 # Run the agent in production mode
 CMD ["python", "agent.py", "start"]
