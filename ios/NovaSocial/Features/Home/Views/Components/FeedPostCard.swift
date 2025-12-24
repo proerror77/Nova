@@ -13,7 +13,7 @@ struct FeedPostCard: View {
     var onBookmark: () -> Void = {}
     var onDelete: (() -> Void)? = nil
 
-    @State private var scrollPosition = ScrollPosition(idType: Int.self)
+    @State private var currentPage: Int = 0
     @State private var isVisible = false
 
     // iOS 17+ Symbol Effect 动画状态
@@ -309,35 +309,34 @@ struct FeedPostCard: View {
         }
     }
 
-    // MARK: - Image Carousel (Instagram Style - Native Paging)
-    // Instagram 風格：完全使用原生 ScrollView，不干擾手勢
-    // SwiftUI 會自動處理嵌套滾動，無需任何自定義手勢檢測
+    // MARK: - Image Carousel (TabView for smooth paging)
+    // 🚀 使用 TabView 替代 ScrollView 解決手勢衝突問題
+    // TabView 的 page style 專門為分頁設計，手勢處理更流暢
     @ViewBuilder
     private var imageCarousel: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 0) {
-                ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
-                    mediaItemView(for: imageUrl, at: index)
-                        .containerRelativeFrame(.horizontal)
-                        .frame(height: 500)
-                        .clipped()
-                        .id(index)
-                        .onAppear {
-                            prefetchAdjacentImages(around: index)
-                        }
-                }
+        TabView(selection: $currentPage) {
+            ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
+                mediaItemView(for: imageUrl, at: index)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+                    .tag(index)
             }
-            .scrollTargetLayout()
         }
-        .scrollTargetBehavior(.paging)
-        .scrollPosition($scrollPosition)
-        .scrollClipDisabled(false)
+        .tabViewStyle(.page(indexDisplayMode: .never))
         .frame(height: 500)
+        .onChange(of: currentPage) { _, newPage in
+            // Prefetch adjacent images when page changes
+            prefetchAdjacentImages(around: newPage)
+        }
+        .onAppear {
+            // Prefetch first page's adjacent images
+            prefetchAdjacentImages(around: 0)
+        }
     }
     
-    /// Current visible image index based on scroll position
+    /// Current visible image index
     private var currentImageIndex: Int {
-        scrollPosition.viewID(type: Int.self) ?? 0
+        currentPage
     }
 
     /// Prefetch images adjacent to the given index

@@ -330,8 +330,10 @@ struct HomeView: View {
                                                 onShare: { Task { await feedViewModel.sharePost(postId: post.id) } },
                                                 onBookmark: { Task { await feedViewModel.toggleBookmark(postId: post.id) } }
                                             )
-                                            // 性能優化：只有當 post 數據變化時才重繪
-                                            .id(post.id + "_\(post.likeCount)_\(post.isLiked)_\(post.isBookmarked)")
+                                            // 🚀 性能優化：使用穩定的 ID 避免不必要的視圖重建
+                                            // 之前用 likeCount/isLiked 等組合 ID 會導致每次狀態變化時整個卡片重建
+                                            // 現在用穩定的 post.id，SwiftUI 會智能更新變化的部分
+                                            .id(post.id)
                                             .onTapGesture {
                                                 selectedPostForDetail = post
                                                 showPostDetail = true
