@@ -31,6 +31,7 @@ pub mod photo_analysis; // iOS Vision photo analysis for ranking
 pub mod poll;
 // pub mod vlm; // VLM (Vision Language Model) for image tagging - WIP
 pub mod xai; // X.AI (Grok) API proxy
+pub mod livekit; // LiveKit voice agent token generation
 pub mod search;
 pub mod settings;
 pub mod social;

@@ -1,0 +1,7 @@
+# LiveKit Agents with xAI plugin
+livekit-agents[xai]~=1.3
+livekit-plugins-silero~=1.0
+livekit-plugins-noise-cancellation~=0.2
+
+# For running the agent
+python-dotenv~=1.0
