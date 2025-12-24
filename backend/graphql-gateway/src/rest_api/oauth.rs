@@ -98,10 +98,10 @@ pub async fn start_google_oauth(
     let grpc_request = tonic::Request::new(GrpcStartOAuthFlowRequest {
         provider: OAuthProvider::OauthProviderGoogle as i32,
         redirect_uri: req.redirect_uri.clone(),
-        invite_code: req.invite_code.clone().unwrap_or_default(),
+        invite_code: req.invite_code.clone(),
     });
 
-    match auth_client.start_oauth_flow(grpc_request).await {
+    match auth_client.start_o_auth_flow(grpc_request).await {
         Ok(response) => {
             let inner = response.into_inner();
             info!(state = %inner.state, "Google OAuth flow started");
@@ -133,10 +133,10 @@ pub async fn complete_google_oauth(
         state: req.state.clone(),
         code: req.code.clone(),
         redirect_uri: req.redirect_uri.clone(),
-        invite_code: req.invite_code.clone().unwrap_or_default(),
+        invite_code: req.invite_code.clone(),
     });
 
-    match auth_client.complete_oauth_flow(grpc_request).await {
+    match auth_client.complete_o_auth_flow(grpc_request).await {
         Ok(response) => {
             let inner = response.into_inner();
             info!(
@@ -198,10 +198,10 @@ pub async fn start_apple_oauth(
     let grpc_request = tonic::Request::new(GrpcStartOAuthFlowRequest {
         provider: OAuthProvider::OauthProviderApple as i32,
         redirect_uri: req.redirect_uri.clone(),
-        invite_code: req.invite_code.clone().unwrap_or_default(),
+        invite_code: req.invite_code.clone(),
     });
 
-    match auth_client.start_oauth_flow(grpc_request).await {
+    match auth_client.start_o_auth_flow(grpc_request).await {
         Ok(response) => {
             let inner = response.into_inner();
             info!(state = %inner.state, "Apple OAuth flow started");
@@ -233,10 +233,10 @@ pub async fn complete_apple_oauth(
         state: req.state.clone(),
         code: req.code.clone(),
         redirect_uri: req.redirect_uri.clone(),
-        invite_code: req.invite_code.clone().unwrap_or_default(),
+        invite_code: req.invite_code.clone(),
     });
 
-    match auth_client.complete_oauth_flow(grpc_request).await {
+    match auth_client.complete_o_auth_flow(grpc_request).await {
         Ok(response) => {
             let inner = response.into_inner();
             info!(
