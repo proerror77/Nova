@@ -7,6 +7,7 @@ ICERED Voice Agent - Alice
   python agent.py start    # 生產模式
 """
 
+import asyncio
 import json
 import logging
 from datetime import datetime
@@ -185,24 +186,28 @@ async def entrypoint(ctx: JobContext):
     )
 
     # 發送數據消息到客戶端的輔助函數
-    async def send_data_to_client(data: dict):
+    import asyncio
+
+    def send_data_to_client(data: dict):
         """通過 data channel 發送消息到 iOS 客戶端"""
-        try:
-            await ctx.room.local_participant.publish_data(
-                json.dumps(data).encode("utf-8"),
-                topic="transcription"
-            )
-        except Exception as e:
-            logger.error(f"Failed to send data: {e}")
+        async def _send():
+            try:
+                await ctx.room.local_participant.publish_data(
+                    json.dumps(data).encode("utf-8"),
+                    topic="transcription"
+                )
+            except Exception as e:
+                logger.error(f"Failed to send data: {e}")
+        asyncio.create_task(_send())
 
     # 監聽用戶語音轉文字事件
     @session.on("user_input_transcribed")
-    async def on_user_transcript(event):
+    def on_user_transcript(event):
         """當用戶說話被轉錄時"""
         transcript = event.transcript if hasattr(event, 'transcript') else str(event)
         is_final = event.is_final if hasattr(event, 'is_final') else True
         logger.info(f"User said: {transcript} (final: {is_final})")
-        await send_data_to_client({
+        send_data_to_client({
             "type": "transcript",
             "text": transcript,
             "is_final": is_final
@@ -210,28 +215,28 @@ async def entrypoint(ctx: JobContext):
 
     # 監聯 AI 回覆事件
     @session.on("agent_speech_started")
-    async def on_agent_speech_started(event):
+    def on_agent_speech_started(event):
         """當 AI 開始說話"""
-        await send_data_to_client({
+        send_data_to_client({
             "type": "agent_speaking",
             "speaking": True
         })
 
     @session.on("agent_speech_stopped")
-    async def on_agent_speech_stopped(event):
+    def on_agent_speech_stopped(event):
         """當 AI 停止說話"""
-        await send_data_to_client({
+        send_data_to_client({
             "type": "agent_speaking",
             "speaking": False
         })
 
     # 監聽 AI 回覆轉錄
     @session.on("agent_speech_transcribed")
-    async def on_agent_transcript(event):
+    def on_agent_transcript(event):
         """當 AI 說話被轉錄"""
         transcript = event.transcript if hasattr(event, 'transcript') else str(event)
         logger.info(f"Alice said: {transcript}")
-        await send_data_to_client({
+        send_data_to_client({
             "type": "response",
             "text": transcript
         })
