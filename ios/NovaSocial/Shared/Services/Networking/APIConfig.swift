@@ -48,7 +48,7 @@ enum APIEnvironment {
 struct APIConfig {
     static var current: APIEnvironment = {
         #if DEBUG
-        return .staging  // Changed from .development for Feed API testing
+        return .staging  // Using staging API
         #else
         // TEMP: Using staging for TestFlight testing (production API not ready)
         // TODO: Change back to .production when production environment is ready
@@ -245,6 +245,13 @@ struct APIConfig {
         static let chatStream = "/api/v2/xai/chat/stream"
         /// POST /api/v2/xai/voice/token - 獲取語音 WebSocket 臨時 token
         static let voiceToken = "/api/v2/xai/voice/token"
+    }
+
+    // MARK: - LiveKit Voice Agent API
+    /// LiveKit-based voice agent for reliable barge-in support
+    struct LiveKit {
+        /// POST /api/v2/livekit/token - 獲取 LiveKit access token
+        static let token = "/api/v2/livekit/token"
     }
 
     // MARK: - Alice Voice Service API (TEN Agent)

@@ -26,6 +26,7 @@ enum LiveKitVoiceChatState: Equatable {
     case connecting
     case connected
     case listening
+    case userSpeaking    // 用戶正在說話
     case aiSpeaking
     case error(String)
 
@@ -35,6 +36,7 @@ enum LiveKitVoiceChatState: Equatable {
         case .connecting: return "連接中..."
         case .connected: return "已連接"
         case .listening: return "聆聽中..."
+        case .userSpeaking: return "你正在說話"
         case .aiSpeaking: return "Alice 正在說話"
         case .error(let msg): return "錯誤: \(msg)"
         }
@@ -363,10 +365,16 @@ extension LiveKitVoiceService: RoomDelegate {
             if participant is RemoteParticipant {
                 // Agent speaking state
                 updateState(isSpeaking ? .aiSpeaking : .listening)
+                delegate?.liveKitVoiceAudioLevelDidChange(isSpeaking ? 0.8 : 0.0)
             } else {
-                // Local participant (user) speaking - update audio level
-                let level: Float = isSpeaking ? 0.7 : 0.0
-                delegate?.liveKitVoiceAudioLevelDidChange(level)
+                // Local participant (user) speaking
+                if isSpeaking {
+                    updateState(.userSpeaking)
+                } else if state == .userSpeaking {
+                    // 用戶停止說話，切回聆聽狀態
+                    updateState(.listening)
+                }
+                delegate?.liveKitVoiceAudioLevelDidChange(isSpeaking ? 0.7 : 0.0)
             }
         }
     }
@@ -397,6 +405,7 @@ extension LiveKitVoiceChatState {
         case .connecting: return .connecting
         case .connected: return .connected
         case .listening: return .listening
+        case .userSpeaking: return .listening  // 用戶說話時也算聆聽中
         case .aiSpeaking: return .responding
         case .error(let msg): return .error(msg)
         }

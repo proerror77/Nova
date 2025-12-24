@@ -106,7 +106,9 @@ struct LiveKitVoiceChatView: View {
         switch state {
         case .disconnected, .error: return .red
         case .connecting: return .yellow
-        case .connected, .listening, .aiSpeaking: return .green
+        case .connected, .listening: return .green
+        case .userSpeaking: return .cyan  // 用戶說話時顯示青色
+        case .aiSpeaking: return .purple  // AI 說話時顯示紫色
         }
     }
 
@@ -123,23 +125,25 @@ struct LiveKitVoiceChatView: View {
     // MARK: - Alice Avatar
     private var aliceAvatarWithWaves: some View {
         ZStack {
-            // 波紋動畫
-            if state == .listening || state == .aiSpeaking {
+            // 波紋動畫 - 用戶說話時用青色，AI 說話時用紫色
+            if state == .userSpeaking || state == .listening || state == .aiSpeaking {
                 ForEach(0..<3, id: \.self) { index in
                     Circle()
                         .stroke(
                             LinearGradient(
-                                colors: [.purple.opacity(0.6), .blue.opacity(0.3)],
+                                colors: state == .userSpeaking
+                                    ? [.cyan.opacity(0.8), .blue.opacity(0.4)]
+                                    : [.purple.opacity(0.6), .blue.opacity(0.3)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
-                            lineWidth: 2
+                            lineWidth: state == .userSpeaking ? 3 : 2
                         )
                         .frame(width: 160 + CGFloat(index * 40), height: 160 + CGFloat(index * 40))
                         .scaleEffect(pulseAnimation ? 1.2 : 1.0)
-                        .opacity(pulseAnimation ? 0 : 0.6)
+                        .opacity(pulseAnimation ? 0 : (state == .userSpeaking ? 0.8 : 0.6))
                         .animation(
-                            .easeOut(duration: 1.5)
+                            .easeOut(duration: state == .userSpeaking ? 0.8 : 1.5)
                             .repeatForever(autoreverses: false)
                             .delay(Double(index) * 0.3),
                             value: pulseAnimation
@@ -148,7 +152,7 @@ struct LiveKitVoiceChatView: View {
             }
 
             // 音量波形
-            if state == .listening || state == .aiSpeaking {
+            if state == .userSpeaking || state == .listening || state == .aiSpeaking {
                 audioWaveform
             }
 
@@ -227,7 +231,8 @@ struct LiveKitVoiceChatView: View {
         case .disconnected: return "未連線"
         case .connecting: return "連線中..."
         case .connected: return "已連線"
-        case .listening: return "正在聆聽你說話"
+        case .listening: return "正在聆聽..."
+        case .userSpeaking: return "你正在說話"
         case .aiSpeaking: return "Alice 正在回覆"
         case .error: return "連線錯誤"
         }
@@ -239,6 +244,7 @@ struct LiveKitVoiceChatView: View {
         case .connecting: return "正在連接到 LiveKit..."
         case .connected: return "準備就緒，開始說話吧"
         case .listening: return "說完後會自動處理 • 支援打斷"
+        case .userSpeaking: return "正在識別你的語音..."
         case .aiSpeaking: return "你可以隨時打斷 Alice"
         case .error(let msg): return msg
         }
