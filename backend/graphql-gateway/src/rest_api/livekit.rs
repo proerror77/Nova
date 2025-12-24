@@ -77,7 +77,7 @@ struct LiveKitClaims {
     /// LiveKit video grants
     video: VideoGrant,
     /// Room configuration (for agent dispatch)
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "roomConfig", skip_serializing_if = "Option::is_none")]
     room_config: Option<RoomConfig>,
     /// Participant metadata
     #[serde(skip_serializing_if = "Option::is_none")]
