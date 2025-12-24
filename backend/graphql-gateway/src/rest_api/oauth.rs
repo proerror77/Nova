@@ -9,7 +9,7 @@ use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
-use crate::clients::proto::identity::{
+use crate::clients::proto::auth::{
     CompleteOAuthFlowRequest as GrpcCompleteOAuthFlowRequest, OAuthProvider,
     StartOAuthFlowRequest as GrpcStartOAuthFlowRequest,
 };
@@ -93,7 +93,7 @@ pub async fn start_google_oauth(
 ) -> Result<HttpResponse> {
     info!(redirect_uri = %req.redirect_uri, "POST /api/v2/auth/oauth/google/start");
 
-    let mut identity_client = clients.identity_client();
+    let mut auth_client = clients.auth_client();
 
     let grpc_request = tonic::Request::new(GrpcStartOAuthFlowRequest {
         provider: OAuthProvider::OauthProviderGoogle as i32,
@@ -101,7 +101,7 @@ pub async fn start_google_oauth(
         invite_code: req.invite_code.clone().unwrap_or_default(),
     });
 
-    match identity_client.start_o_auth_flow(grpc_request).await {
+    match auth_client.start_oauth_flow(grpc_request).await {
         Ok(response) => {
             let inner = response.into_inner();
             info!(state = %inner.state, "Google OAuth flow started");
@@ -127,7 +127,7 @@ pub async fn complete_google_oauth(
 ) -> Result<HttpResponse> {
     info!(state = %req.state, "POST /api/v2/auth/oauth/google/callback");
 
-    let mut identity_client = clients.identity_client();
+    let mut auth_client = clients.auth_client();
 
     let grpc_request = tonic::Request::new(GrpcCompleteOAuthFlowRequest {
         state: req.state.clone(),
@@ -136,7 +136,7 @@ pub async fn complete_google_oauth(
         invite_code: req.invite_code.clone().unwrap_or_default(),
     });
 
-    match identity_client.complete_o_auth_flow(grpc_request).await {
+    match auth_client.complete_oauth_flow(grpc_request).await {
         Ok(response) => {
             let inner = response.into_inner();
             info!(
@@ -147,13 +147,13 @@ pub async fn complete_google_oauth(
 
             Ok(HttpResponse::Ok().json(OAuthCallbackResponse {
                 user_id: inner.user_id.clone(),
-                token: inner.access_token,
+                token: inner.token,
                 refresh_token: if inner.refresh_token.is_empty() {
                     None
                 } else {
                     Some(inner.refresh_token)
                 },
-                expires_in: inner.expires_at,
+                expires_in: inner.expires_in,
                 is_new_user: inner.is_new_user,
                 user: Some(OAuthUserProfile {
                     id: inner.user_id,
@@ -193,7 +193,7 @@ pub async fn start_apple_oauth(
 ) -> Result<HttpResponse> {
     info!(redirect_uri = %req.redirect_uri, "POST /api/v2/auth/oauth/apple/start");
 
-    let mut identity_client = clients.identity_client();
+    let mut auth_client = clients.auth_client();
 
     let grpc_request = tonic::Request::new(GrpcStartOAuthFlowRequest {
         provider: OAuthProvider::OauthProviderApple as i32,
@@ -201,7 +201,7 @@ pub async fn start_apple_oauth(
         invite_code: req.invite_code.clone().unwrap_or_default(),
     });
 
-    match identity_client.start_o_auth_flow(grpc_request).await {
+    match auth_client.start_oauth_flow(grpc_request).await {
         Ok(response) => {
             let inner = response.into_inner();
             info!(state = %inner.state, "Apple OAuth flow started");
@@ -227,7 +227,7 @@ pub async fn complete_apple_oauth(
 ) -> Result<HttpResponse> {
     info!(state = %req.state, "POST /api/v2/auth/oauth/apple/callback");
 
-    let mut identity_client = clients.identity_client();
+    let mut auth_client = clients.auth_client();
 
     let grpc_request = tonic::Request::new(GrpcCompleteOAuthFlowRequest {
         state: req.state.clone(),
@@ -236,7 +236,7 @@ pub async fn complete_apple_oauth(
         invite_code: req.invite_code.clone().unwrap_or_default(),
     });
 
-    match identity_client.complete_o_auth_flow(grpc_request).await {
+    match auth_client.complete_oauth_flow(grpc_request).await {
         Ok(response) => {
             let inner = response.into_inner();
             info!(
@@ -247,13 +247,13 @@ pub async fn complete_apple_oauth(
 
             Ok(HttpResponse::Ok().json(OAuthCallbackResponse {
                 user_id: inner.user_id.clone(),
-                token: inner.access_token,
+                token: inner.token,
                 refresh_token: if inner.refresh_token.is_empty() {
                     None
                 } else {
                     Some(inner.refresh_token)
                 },
-                expires_in: inner.expires_at,
+                expires_in: inner.expires_in,
                 is_new_user: inner.is_new_user,
                 user: Some(OAuthUserProfile {
                     id: inner.user_id,
