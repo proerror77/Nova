@@ -147,13 +147,13 @@ pub async fn complete_google_oauth(
 
             Ok(HttpResponse::Ok().json(OAuthCallbackResponse {
                 user_id: inner.user_id.clone(),
-                token: inner.token,
+                token: inner.access_token,
                 refresh_token: if inner.refresh_token.is_empty() {
                     None
                 } else {
                     Some(inner.refresh_token)
                 },
-                expires_in: inner.expires_in,
+                expires_in: inner.expires_at,
                 is_new_user: inner.is_new_user,
                 user: Some(OAuthUserProfile {
                     id: inner.user_id,
@@ -247,13 +247,13 @@ pub async fn complete_apple_oauth(
 
             Ok(HttpResponse::Ok().json(OAuthCallbackResponse {
                 user_id: inner.user_id.clone(),
-                token: inner.token,
+                token: inner.access_token,
                 refresh_token: if inner.refresh_token.is_empty() {
                     None
                 } else {
                     Some(inner.refresh_token)
                 },
-                expires_in: inner.expires_in,
+                expires_in: inner.expires_at,
                 is_new_user: inner.is_new_user,
                 user: Some(OAuthUserProfile {
                     id: inner.user_id,
