@@ -6,7 +6,7 @@
 //! iOS App → This endpoint → LiveKit Cloud → Python Agent → xAI Grok Voice API
 
 use actix_web::{web, HttpResponse, Result};
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD as BASE64_URL, Engine};
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -161,8 +161,8 @@ fn generate_livekit_token(
         "typ": "JWT"
     });
 
-    let header_b64 = BASE64.encode(serde_json::to_string(&header).map_err(|e| e.to_string())?);
-    let claims_b64 = BASE64.encode(serde_json::to_string(&claims).map_err(|e| e.to_string())?);
+    let header_b64 = BASE64_URL.encode(serde_json::to_string(&header).map_err(|e| e.to_string())?);
+    let claims_b64 = BASE64_URL.encode(serde_json::to_string(&claims).map_err(|e| e.to_string())?);
 
     let message = format!("{}.{}", header_b64, claims_b64);
 
@@ -171,7 +171,7 @@ fn generate_livekit_token(
         .map_err(|e| e.to_string())?;
     mac.update(message.as_bytes());
     let signature = mac.finalize().into_bytes();
-    let signature_b64 = BASE64.encode(signature);
+    let signature_b64 = BASE64_URL.encode(signature);
 
     Ok(format!("{}.{}", message, signature_b64))
 }
