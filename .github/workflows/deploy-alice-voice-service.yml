@@ -129,6 +129,8 @@ jobs:
           echo "Applying K8s manifests for LiveKit Agent..."
           kubectl apply -f k8s/microservices/alice-voice-service-serviceaccount.yaml -n ${{ env.NAMESPACE }}
           kubectl apply -f k8s/microservices/alice-voice-service-externalsecret.yaml
+          kubectl apply -f k8s/microservices/alice-voice-service-backendconfig.yaml -n ${{ env.NAMESPACE }}
+          kubectl apply -f k8s/microservices/alice-voice-service-service.yaml -n ${{ env.NAMESPACE }}
           kubectl apply -f k8s/microservices/alice-voice-service-deployment.yaml -n ${{ env.NAMESPACE }}
 
       - name: Update deployment image
