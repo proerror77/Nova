@@ -92,8 +92,20 @@ struct LocationMessageView: View {
 struct VoiceMessageView: View {
     let message: ChatMessage
     let isFromMe: Bool
-    let audioPlayer: AudioPlayerService
+    var audioPlayer: AudioPlayerService  // @Observable 不需要 @ObservedObject
     @State private var isPlaying = false
+    
+    // 預設波形高度 (基於消息 ID 生成確定性波形)
+    private var waveformHeights: [CGFloat] {
+        let seed = message.id.hashValue
+        var heights: [CGFloat] = []
+        for i in 0..<16 {
+            // 使用 sin 函數生成平滑波形
+            let value = abs(sin(Double(seed + i * 7) * 0.5)) * 0.7 + 0.3
+            heights.append(CGFloat(value) * 18 + 6)
+        }
+        return heights
+    }
 
     private var duration: TimeInterval { message.audioDuration ?? 0 }
     private var formattedDuration: String {
@@ -101,9 +113,19 @@ struct VoiceMessageView: View {
         let seconds = Int(duration) % 60
         return String(format: "%d:%02d", minutes, seconds)
     }
+    
+    private var isCurrentlyPlaying: Bool { 
+        audioPlayer.playingMessageId == message.id && audioPlayer.isPlaying 
+    }
+    
+    private var playbackProgress: Double {
+        guard audioPlayer.playingMessageId == message.id, duration > 0 else { return 0 }
+        return min(audioPlayer.currentTime / duration, 1.0)
+    }
 
     var body: some View {
         HStack(spacing: 10) {
+            // 播放/暫停按鈕
             Button(action: { togglePlayback() }) {
                 Circle()
                     .fill(isFromMe ? Color.white.opacity(0.3) : Color(red: 0.91, green: 0.18, blue: 0.30))
@@ -114,32 +136,62 @@ struct VoiceMessageView: View {
                             .foregroundColor(.white)
                     )
             }
-            HStack(spacing: 2) {
-                ForEach(0..<12, id: \.self) { _ in
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(isFromMe ? Color.white.opacity(0.7) : DesignTokens.textMuted)
-                        .frame(width: 3, height: CGFloat.random(in: 8...20))
+            
+            // 波形可視化（帶進度指示）
+            GeometryReader { geometry in
+                HStack(spacing: 2) {
+                    ForEach(0..<16, id: \.self) { index in
+                        let barProgress = Double(index) / 16.0
+                        let isPlayed = playbackProgress > barProgress
+                        
+                        RoundedRectangle(cornerRadius: 1.5)
+                            .fill(barColor(isPlayed: isPlayed))
+                            .frame(width: 3, height: waveformHeights[index])
+                    }
                 }
-            }.frame(height: 24)
+                .frame(height: 24, alignment: .center)
+            }
+            .frame(width: 80, height: 24)
+            
+            // 時間顯示
             Text(isCurrentlyPlaying ? formatCurrentTime() : formattedDuration)
                 .font(Font.custom("Helvetica Neue", size: 12).monospacedDigit())
                 .foregroundColor(isFromMe ? Color.white.opacity(0.8) : DesignTokens.textMuted)
+                .frame(width: 36, alignment: .trailing)
         }
-        .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 16))
+        .padding(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 14))
         .background(isFromMe ? Color(red: 0.91, green: 0.18, blue: 0.30) : DesignTokens.chatBubbleOther)
         .cornerRadius(20)
+        .animation(.easeInOut(duration: 0.1), value: playbackProgress)
     }
-
-    private var isCurrentlyPlaying: Bool { audioPlayer.playingMessageId == message.id && audioPlayer.isPlaying }
+    
+    // 根據播放進度決定波形條顏色
+    private func barColor(isPlayed: Bool) -> Color {
+        if isFromMe {
+            return isPlayed ? Color.white : Color.white.opacity(0.4)
+        } else {
+            return isPlayed ? Color(red: 0.91, green: 0.18, blue: 0.30) : DesignTokens.textMuted.opacity(0.5)
+        }
+    }
+    
     private func formatCurrentTime() -> String {
         let time = audioPlayer.currentTime
         return String(format: "%d:%02d", Int(time) / 60, Int(time) % 60)
     }
+    
     private func togglePlayback() {
-        if isCurrentlyPlaying { audioPlayer.pause() }
-        else if audioPlayer.playingMessageId == message.id { audioPlayer.resume() }
-        else if let url = message.audioUrl { audioPlayer.play(url: url, messageId: message.id) }
-        else if let data = message.audioData { audioPlayer.play(data: data, messageId: message.id) }
+        if isCurrentlyPlaying { 
+            audioPlayer.pause() 
+        } else if audioPlayer.playingMessageId == message.id { 
+            audioPlayer.resume() 
+        } else if let url = message.audioUrl { 
+            audioPlayer.play(url: url, messageId: message.id) 
+        } else if let data = message.audioData { 
+            audioPlayer.play(data: data, messageId: message.id) 
+        } else if let urlString = message.mediaUrl, let url = URL(string: urlString) {
+            // 支援遠程語音消息 URL
+            audioPlayer.play(url: url, messageId: message.id)
+        }
     }
 }
 
@@ -164,60 +216,325 @@ struct TypingDotsView: View {
 struct MessageBubbleView: View {
     let message: ChatMessage
     var audioPlayer: AudioPlayerService? = nil
+    var senderAvatarUrl: String? = nil  // 發送者頭像URL
+    var myAvatarUrl: String? = nil  // 當前用戶頭像URL
+    var onLongPress: ((ChatMessage) -> Void)? = nil  // 長按回調
+    
     private let myBubbleColor = Color(red: 0.91, green: 0.20, blue: 0.34)
     private let otherBubbleColor = Color(red: 0.92, green: 0.92, blue: 0.92)
     private let otherTextColor = Color(red: 0.34, green: 0.34, blue: 0.34)
+    
+    // 時間格式化器
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+    
+    private var formattedTime: String {
+        Self.timeFormatter.string(from: message.timestamp)
+    }
 
     var body: some View {
         if message.isFromMe { myMessageView } else { otherMessageView }
     }
 
     private var myMessageView: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .bottom, spacing: 10) {
             Spacer()
-            messageContent
-            DefaultAvatarView(size: 40)
+            VStack(alignment: .trailing, spacing: 4) {
+                messageContent
+                    .contextMenu { contextMenuItems }
+                // 時間和狀態
+                HStack(spacing: 4) {
+                    Text(formattedTime)
+                        .font(.system(size: 11))
+                        .foregroundColor(DesignTokens.textMuted)
+                    statusIcon
+                }
+            }
+            AvatarView(image: nil, url: myAvatarUrl, size: 40)
         }.padding(.horizontal, 16)
     }
 
     private var otherMessageView: some View {
-        HStack(alignment: .top, spacing: 10) {
-            DefaultAvatarView(size: 40)
-            otherMessageContent
+        HStack(alignment: .bottom, spacing: 10) {
+            AvatarView(image: nil, url: senderAvatarUrl, size: 40)
+            VStack(alignment: .leading, spacing: 4) {
+                otherMessageContent
+                    .contextMenu { contextMenuItems }
+                // 時間
+                Text(formattedTime)
+                    .font(.system(size: 11))
+                    .foregroundColor(DesignTokens.textMuted)
+            }
             Spacer()
         }.padding(.horizontal, 16)
     }
+    
+    // MARK: - 狀態圖標
+    @ViewBuilder
+    private var statusIcon: some View {
+        switch message.status {
+        case .sending:
+            ProgressView()
+                .scaleEffect(0.6)
+                .frame(width: 14, height: 14)
+        case .sent:
+            Image(systemName: "checkmark")
+                .font(.system(size: 10))
+                .foregroundColor(DesignTokens.textMuted)
+        case .delivered:
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: 10))
+                .foregroundColor(DesignTokens.textMuted)
+        case .read:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 10))
+                .foregroundColor(.blue)
+        case .failed:
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 10))
+                .foregroundColor(.red)
+        }
+    }
+    
+    // MARK: - 長按菜單
+    @ViewBuilder
+    private var contextMenuItems: some View {
+        Button {
+            UIPasteboard.general.string = message.text
+        } label: {
+            Label("複製", systemImage: "doc.on.doc")
+        }
+        
+        if message.isFromMe {
+            Button(role: .destructive) {
+                onLongPress?(message)
+            } label: {
+                Label("刪除", systemImage: "trash")
+            }
+        }
+    }
 
     @ViewBuilder private var messageContent: some View {
+        // 1. 本地圖片
         if let image = message.image {
-            Image(uiImage: image).resizable().scaledToFit().frame(maxWidth: 200, maxHeight: 200).cornerRadius(14)
-        } else if let location = message.location {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: 200, maxHeight: 200)
+                .cornerRadius(14)
+        }
+        // 2. 遠程圖片 URL
+        else if message.messageType == .image, let urlString = message.mediaUrl, let url = URL(string: urlString) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .empty:
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(width: 150, height: 150)
+                        ProgressView()
+                    }
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 200, maxHeight: 200)
+                        .cornerRadius(14)
+                case .failure:
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(width: 150, height: 100)
+                        VStack(spacing: 4) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 24))
+                                .foregroundColor(.gray)
+                            Text("載入失敗")
+                                .font(.system(size: 12))
+                                .foregroundColor(.gray)
+                        }
+                    }
+                @unknown default:
+                    EmptyView()
+                }
+            }
+        }
+        // 3. 位置消息
+        else if let location = message.location {
             LocationMessageView(location: location)
-        } else if message.audioData != nil || message.audioUrl != nil, let player = audioPlayer {
-            VoiceMessageView(message: message, isFromMe: true, audioPlayer: player)
-        } else {
+        }
+        // 4. 語音消息
+        else if message.messageType == .audio || message.audioData != nil || message.audioUrl != nil {
+            if let player = audioPlayer {
+                VoiceMessageView(message: message, isFromMe: true, audioPlayer: player)
+            } else {
+                // 無播放器時顯示佔位符
+                HStack(spacing: 8) {
+                    Image(systemName: "waveform")
+                        .foregroundColor(.white)
+                    Text(formatDuration(message.audioDuration ?? 0))
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.8))
+                }
+                .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 16))
+                .background(myBubbleColor)
+                .cornerRadius(20)
+            }
+        }
+        // 5. 文件消息
+        else if message.messageType == .file {
+            fileMessageView(isFromMe: true)
+        }
+        // 6. 視頻消息
+        else if message.messageType == .video, let urlString = message.mediaUrl {
+            videoThumbnailView(urlString: urlString, isFromMe: true)
+        }
+        // 7. 文字消息
+        else {
             Text(message.text)
-                .font(Font.custom("Helvetica Neue", size: 16)).lineSpacing(4).foregroundColor(.white)
-                .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                .font(Font.custom("Helvetica Neue", size: 16))
+                .lineSpacing(4)
+                .foregroundColor(.white)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
-                .background(myBubbleColor).cornerRadius(14).frame(maxWidth: 260, alignment: .trailing)
+                .background(myBubbleColor)
+                .cornerRadius(14)
+                .frame(maxWidth: 260, alignment: .trailing)
         }
     }
 
     @ViewBuilder private var otherMessageContent: some View {
+        // 1. 本地圖片
         if let image = message.image {
-            Image(uiImage: image).resizable().scaledToFit().frame(maxWidth: 200, maxHeight: 200).cornerRadius(14)
-        } else if let location = message.location {
-            LocationMessageView(location: location)
-        } else if message.audioData != nil || message.audioUrl != nil, let player = audioPlayer {
-            VoiceMessageView(message: message, isFromMe: false, audioPlayer: player)
-        } else {
-            Text(message.text)
-                .font(Font.custom("Helvetica Neue", size: 16)).lineSpacing(4).foregroundColor(otherTextColor)
-                .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
-                .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
-                .background(otherBubbleColor).cornerRadius(14).frame(maxWidth: 260, alignment: .leading)
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: 200, maxHeight: 200)
+                .cornerRadius(14)
         }
+        // 2. 遠程圖片 URL
+        else if message.messageType == .image, let urlString = message.mediaUrl, let url = URL(string: urlString) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .empty:
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(width: 150, height: 150)
+                        ProgressView()
+                    }
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 200, maxHeight: 200)
+                        .cornerRadius(14)
+                case .failure:
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(width: 150, height: 100)
+                        VStack(spacing: 4) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 24))
+                                .foregroundColor(.gray)
+                            Text("載入失敗")
+                                .font(.system(size: 12))
+                                .foregroundColor(.gray)
+                        }
+                    }
+                @unknown default:
+                    EmptyView()
+                }
+            }
+        }
+        // 3. 位置消息
+        else if let location = message.location {
+            LocationMessageView(location: location)
+        }
+        // 4. 語音消息
+        else if message.messageType == .audio || message.audioData != nil || message.audioUrl != nil {
+            if let player = audioPlayer {
+                VoiceMessageView(message: message, isFromMe: false, audioPlayer: player)
+            } else {
+                HStack(spacing: 8) {
+                    Image(systemName: "waveform")
+                        .foregroundColor(otherTextColor)
+                    Text(formatDuration(message.audioDuration ?? 0))
+                        .font(.system(size: 12))
+                        .foregroundColor(otherTextColor.opacity(0.8))
+                }
+                .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 16))
+                .background(otherBubbleColor)
+                .cornerRadius(20)
+            }
+        }
+        // 5. 文件消息
+        else if message.messageType == .file {
+            fileMessageView(isFromMe: false)
+        }
+        // 6. 視頻消息
+        else if message.messageType == .video, let urlString = message.mediaUrl {
+            videoThumbnailView(urlString: urlString, isFromMe: false)
+        }
+        // 7. 文字消息
+        else {
+            Text(message.text)
+                .font(Font.custom("Helvetica Neue", size: 16))
+                .lineSpacing(4)
+                .foregroundColor(otherTextColor)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
+                .background(otherBubbleColor)
+                .cornerRadius(14)
+                .frame(maxWidth: 260, alignment: .leading)
+        }
+    }
+    
+    // MARK: - 文件消息視圖
+    private func fileMessageView(isFromMe: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "doc.fill")
+                .font(.system(size: 24))
+                .foregroundColor(isFromMe ? .white : myBubbleColor)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(message.text.isEmpty ? "文件" : message.text)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(isFromMe ? .white : otherTextColor)
+                    .lineLimit(1)
+                Text("點擊下載")
+                    .font(.system(size: 11))
+                    .foregroundColor(isFromMe ? .white.opacity(0.7) : DesignTokens.textMuted)
+            }
+        }
+        .padding(EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 14))
+        .background(isFromMe ? myBubbleColor : otherBubbleColor)
+        .cornerRadius(14)
+    }
+    
+    // MARK: - 視頻縮略圖視圖
+    private func videoThumbnailView(urlString: String, isFromMe: Bool) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color.black.opacity(0.8))
+                .frame(width: 200, height: 150)
+            
+            Image(systemName: "play.circle.fill")
+                .font(.system(size: 44))
+                .foregroundColor(.white.opacity(0.9))
+        }
+    }
+    
+    // MARK: - 格式化時長
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
     }
 }
 
@@ -281,6 +598,7 @@ struct ChatView: View {
     @Binding var showChat: Bool
     let conversationId: String  // ← 从上级View传入，标识当前聊天对象
     var userName: String = "User"
+    var otherUserAvatarUrl: String? = nil  // 對方用戶頭像URL（從父視圖傳入）
 
     // MARK: - State
     @State private var messageText = ""
@@ -338,6 +656,11 @@ struct ChatView: View {
     // 当前用户ID（从Keychain获取）
     private var currentUserId: String {
         KeychainService.shared.get(.userId) ?? "unknown"
+    }
+
+    // 當前用戶頭像URL（從AuthenticationManager獲取）
+    private var currentUserAvatarUrl: String? {
+        AuthenticationManager.shared.currentUser?.avatarUrl
     }
     
     // Matrix 消息处理器状态（防止重复设置）
@@ -516,7 +839,23 @@ struct ChatView: View {
     private var messageListView: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(spacing: 16) {
+                LazyVStack(spacing: 16) {
+                    // MARK: - 加載更多歷史消息按鈕
+                    if hasMoreMessages && !isLoadingHistory {
+                        Button(action: {
+                            Task { await loadMoreMessages() }
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "arrow.up.circle")
+                                    .font(.system(size: 14))
+                                Text("載入更多歷史消息")
+                                    .font(.system(size: 13))
+                            }
+                            .foregroundColor(DesignTokens.accentColor)
+                            .padding(.vertical, 10)
+                        }
+                    }
+                    
                     // MARK: - 预览模式提示（仅在DEBUG模式显示）
                     #if DEBUG
                     if isPreviewMode {
@@ -558,15 +897,31 @@ struct ChatView: View {
                         .padding()
                     }
 
+                    // 日期分隔符
                     Text(currentDateString())
                         .font(Font.custom("Helvetica Neue", size: 12))
                         .lineSpacing(20)
                         .foregroundColor(Color(red: 0.59, green: 0.59, blue: 0.59))
                         .padding(.top, 16)
 
+                    // 消息列表
                     ForEach(messages) { message in
-                        MessageBubbleView(message: message, audioPlayer: audioPlayer)
-                            .id(message.id)
+                        MessageBubbleView(
+                            message: message,
+                            audioPlayer: audioPlayer,
+                            senderAvatarUrl: otherUserAvatarUrl,
+                            myAvatarUrl: currentUserAvatarUrl,
+                            onLongPress: { msg in
+                                handleMessageLongPress(msg)
+                            }
+                        )
+                        .id(message.id)
+                        // 首條消息出現時嘗試加載更多
+                        .onAppear {
+                            if message.id == messages.first?.id && hasMoreMessages && !isLoadingHistory {
+                                Task { await loadMoreMessages() }
+                            }
+                        }
                     }
 
                     // Sending indicator
@@ -586,7 +941,7 @@ struct ChatView: View {
                     // Typing indicator
                     if isOtherUserTyping {
                         HStack(spacing: 6) {
-                            DefaultAvatarView(size: 30)
+                            AvatarView(image: nil, url: otherUserAvatarUrl, size: 30)
                             
                             HStack(spacing: 4) {
                                 Text("\(typingUserName.isEmpty ? userName : typingUserName) is typing")
@@ -610,8 +965,12 @@ struct ChatView: View {
                 }
                 .padding(.bottom, 16)
             }
-            .onChange(of: messages.count) { _, _ in
-                if let lastMessage = messages.last {
+            .refreshable {
+                await loadMoreMessages()
+            }
+            .onChange(of: messages.count) { oldCount, newCount in
+                // 只有新消息添加時才滾動到底部（不是加載歷史）
+                if newCount > oldCount, let lastMessage = messages.last {
                     withAnimation {
                         proxy.scrollTo(lastMessage.id, anchor: .bottom)
                     }
@@ -928,8 +1287,8 @@ struct ChatView: View {
                 return ChatMessage(from: novaMessage, currentUserId: currentUserId)
             }
 
-            // MatrixService.getRoomMessages doesn't expose a paging cursor yet
-            hasMoreMessages = false
+            // 如果返回了請求的消息數量，可能還有更多歷史消息
+            hasMoreMessages = matrixMessages.count >= 50
             nextCursor = nil
 
             try? await matrixBridge.markAsRead(conversationId: conversationId)
@@ -1056,18 +1415,31 @@ struct ChatView: View {
     
     /// Load more messages (pagination)
     private func loadMoreMessages() async {
-        guard !isLoadingHistory else { return }
+        guard !isLoadingHistory, hasMoreMessages else { return }
 
         isLoadingHistory = true
+        let previousCount = messages.count
 
         do {
-            let desiredLimit = max(messages.count + 50, 50)
+            // 請求比當前更多的消息來實現分頁
+            let desiredLimit = messages.count + 50
             let matrixMessages = try await matrixBridge.getMessages(conversationId: conversationId, limit: desiredLimit)
             let sorted = matrixMessages.sorted { $0.timestamp < $1.timestamp }
+            
+            // 記錄第一條消息 ID 以保持滾動位置
+            let firstMessageId = messages.first?.id
+            
             messages = sorted.map { matrixMessage in
                 let novaMessage = matrixBridge.convertToNovaMessage(matrixMessage, conversationId: conversationId)
                 return ChatMessage(from: novaMessage, currentUserId: currentUserId)
             }
+            
+            // 檢查是否還有更多消息
+            hasMoreMessages = messages.count > previousCount && matrixMessages.count >= desiredLimit
+            
+            #if DEBUG
+            print("[ChatView] Loaded more messages: \(previousCount) -> \(messages.count), hasMore: \(hasMoreMessages)")
+            #endif
         } catch {
             #if DEBUG
             print("[ChatView] Load more error: \(error)")
@@ -1075,6 +1447,32 @@ struct ChatView: View {
         }
 
         isLoadingHistory = false
+    }
+    
+    /// 處理消息長按操作
+    private func handleMessageLongPress(_ message: ChatMessage) {
+        // 刪除消息
+        Task {
+            do {
+                try await matrixBridge.deleteMessage(
+                    conversationId: conversationId,
+                    messageId: message.id,
+                    reason: nil
+                )
+                // 從本地列表移除
+                await MainActor.run {
+                    messages.removeAll { $0.id == message.id }
+                }
+                #if DEBUG
+                print("[ChatView] Message deleted: \(message.id)")
+                #endif
+            } catch {
+                #if DEBUG
+                print("[ChatView] Failed to delete message: \(error)")
+                #endif
+                self.error = "無法刪除消息"
+            }
+        }
     }
 
     // MARK: - Send Text Message

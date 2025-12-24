@@ -874,6 +874,11 @@ struct ChatMessage: Identifiable, Equatable {
     var audioData: Data?
     var audioDuration: TimeInterval?
     var audioUrl: URL?
+    
+    // 新增：遠程媒體 URL 和消息元數據
+    var mediaUrl: String?
+    var messageType: ChatMessageType
+    var status: MessageStatus
 
     static func == (lhs: ChatMessage, rhs: ChatMessage) -> Bool {
         lhs.id == rhs.id
@@ -887,10 +892,26 @@ struct ChatMessage: Identifiable, Equatable {
         self.isFromMe = message.senderId == currentUserId
         self.timestamp = message.createdAt
         self.image = nil
-        self.location = nil
         self.audioData = nil
         self.audioDuration = nil
         self.audioUrl = nil
+        
+        // 傳遞媒體 URL 和消息類型
+        self.mediaUrl = message.mediaUrl
+        self.messageType = message.type
+        self.status = message.status
+        
+        // 解析位置消息
+        if message.type == .location {
+            self.location = Self.parseLocationFromContent(message.content)
+        } else {
+            self.location = nil
+        }
+        
+        // 解析語音消息時長
+        if message.type == .audio, let duration = Double(message.content) {
+            self.audioDuration = duration
+        }
     }
 
     /// 創建本地消息（發送前）
@@ -913,6 +934,34 @@ struct ChatMessage: Identifiable, Equatable {
         self.audioData = audioData
         self.audioDuration = audioDuration
         self.audioUrl = audioUrl
+        self.mediaUrl = nil
+        self.status = .sending
+        
+        // 根據內容推斷消息類型
+        if image != nil {
+            self.messageType = .image
+        } else if location != nil {
+            self.messageType = .location
+        } else if audioData != nil || audioUrl != nil {
+            self.messageType = .audio
+        } else {
+            self.messageType = .text
+        }
+    }
+    
+    /// 從內容解析位置坐標 (格式: "geo:lat,lng" 或 "lat,lng")
+    private static func parseLocationFromContent(_ content: String) -> CLLocationCoordinate2D? {
+        var coordString = content
+        if content.hasPrefix("geo:") {
+            coordString = String(content.dropFirst(4))
+        }
+        let parts = coordString.split(separator: ",")
+        guard parts.count >= 2,
+              let lat = Double(parts[0].trimmingCharacters(in: .whitespaces)),
+              let lng = Double(parts[1].trimmingCharacters(in: .whitespaces)) else {
+            return nil
+        }
+        return CLLocationCoordinate2D(latitude: lat, longitude: lng)
     }
 }
 
