@@ -2,4 +2,4 @@
 
 pub mod google_vision;
 
-pub use google_vision::{GoogleVisionClient, ImageAnalysisResult, Label};
+pub use google_vision::{AuthMode, GoogleVisionClient, ImageAnalysisResult, Label};

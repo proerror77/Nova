@@ -47,6 +47,11 @@ impl RunMode {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Initialize rustls crypto provider (required for rustls 0.23+)
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     // Initialize tracing
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
@@ -72,14 +77,19 @@ async fn main() -> Result<()> {
     );
 
     // Initialize Google Vision client
-    let vision_client = Arc::new(GoogleVisionClient::new(config.google_vision_api_key.clone()));
+    let vision_client = if config.use_adc {
+        info!("Using Application Default Credentials for Vision API");
+        Arc::new(GoogleVisionClient::with_adc())
+    } else if !config.google_vision_api_key.is_empty() {
+        info!("Using API key for Vision API");
+        Arc::new(GoogleVisionClient::new(config.google_vision_api_key.clone()))
+    } else {
+        // Default to ADC if no API key is provided
+        info!("No API key provided, using Application Default Credentials");
+        Arc::new(GoogleVisionClient::with_adc())
+    };
 
-    if !vision_client.is_configured() {
-        error!("Google Vision API key not configured!");
-        anyhow::bail!("GOOGLE_VISION_API_KEY environment variable is required");
-    }
-
-    info!("Google Vision client initialized");
+    info!("Google Vision client initialized (auth: {:?})", vision_client.auth_mode());
 
     // Run based on mode
     match mode {

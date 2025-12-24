@@ -1,16 +1,31 @@
 //! Google Cloud Vision API integration for image labeling
 use anyhow::{Context, Result};
+use gcp_auth::TokenProvider;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 
 const VISION_API_URL: &str = "https://vision.googleapis.com/v1/images:annotate";
+const VISION_API_SCOPES: &[&str] = &["https://www.googleapis.com/auth/cloud-vision"];
+
+/// Authentication mode for Vision API
+#[derive(Debug, Clone)]
+pub enum AuthMode {
+    /// Use API key authentication
+    ApiKey(String),
+    /// Use Application Default Credentials (Workload Identity)
+    Adc,
+}
 
 /// Google Cloud Vision API client
 pub struct GoogleVisionClient {
     client: Client,
-    api_key: String,
+    auth_mode: AuthMode,
+    /// Cached token provider for ADC
+    token_provider: Arc<RwLock<Option<Arc<dyn TokenProvider>>>>,
 }
 
 // ============================================
@@ -139,14 +154,48 @@ pub struct Label {
 }
 
 impl GoogleVisionClient {
-    /// Create a new Google Vision API client
+    /// Create a new Google Vision API client with API key
     pub fn new(api_key: String) -> Self {
+        Self::with_auth_mode(AuthMode::ApiKey(api_key))
+    }
+
+    /// Create a new Google Vision API client with specified auth mode
+    pub fn with_auth_mode(auth_mode: AuthMode) -> Self {
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
             .expect("Failed to create HTTP client");
 
-        Self { client, api_key }
+        Self {
+            client,
+            auth_mode,
+            token_provider: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    /// Create a client using Application Default Credentials
+    pub fn with_adc() -> Self {
+        Self::with_auth_mode(AuthMode::Adc)
+    }
+
+    /// Get an access token for ADC authentication
+    async fn get_access_token(&self) -> Result<String> {
+        let mut provider_guard = self.token_provider.write().await;
+
+        // Initialize token provider if not already done
+        if provider_guard.is_none() {
+            let provider = gcp_auth::provider().await
+                .context("Failed to initialize GCP authentication")?;
+            *provider_guard = Some(provider);
+        }
+
+        let provider = provider_guard.as_ref().unwrap();
+        let token = provider
+            .token(VISION_API_SCOPES)
+            .await
+            .context("Failed to get access token")?;
+
+        Ok(token.as_str().to_string())
     }
 
     /// Analyze an image from a URL (GCS or HTTPS)
@@ -183,16 +232,30 @@ impl GoogleVisionClient {
             }],
         };
 
-        let url = format!("{}?key={}", VISION_API_URL, self.api_key);
         let start = std::time::Instant::now();
 
-        let response = self
-            .client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await
-            .context("Failed to call Vision API")?;
+        // Build request based on auth mode
+        let response = match &self.auth_mode {
+            AuthMode::ApiKey(api_key) => {
+                let url = format!("{}?key={}", VISION_API_URL, api_key);
+                self.client
+                    .post(&url)
+                    .json(&request)
+                    .send()
+                    .await
+                    .context("Failed to call Vision API")?
+            }
+            AuthMode::Adc => {
+                let token = self.get_access_token().await?;
+                self.client
+                    .post(VISION_API_URL)
+                    .bearer_auth(&token)
+                    .json(&request)
+                    .send()
+                    .await
+                    .context("Failed to call Vision API")?
+            }
+        };
 
         let status = response.status();
         if !status.is_success() {
@@ -288,9 +351,17 @@ impl GoogleVisionClient {
         })
     }
 
-    /// Check if the API key is configured
+    /// Check if authentication is configured
     pub fn is_configured(&self) -> bool {
-        !self.api_key.is_empty()
+        match &self.auth_mode {
+            AuthMode::ApiKey(key) => !key.is_empty(),
+            AuthMode::Adc => true, // ADC is always available in GCP environment
+        }
+    }
+
+    /// Get the current auth mode
+    pub fn auth_mode(&self) -> &AuthMode {
+        &self.auth_mode
     }
 }
 

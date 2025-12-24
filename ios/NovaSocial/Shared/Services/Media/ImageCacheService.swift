@@ -297,12 +297,23 @@ actor ImageCacheService {
             }
 
             if let image = image {
+                // 🚀 性能優化：預解碼圖片避免主線程解碼造成卡頓
+                // UIImage 是惰性解碼的，首次渲染時會在主線程解碼導致掉幀
+                // prepareForDisplay() 會在背景線程完成解碼
+                let decodedImage: UIImage
+                if #available(iOS 15.0, *) {
+                    decodedImage = await image.byPreparingForDisplay() ?? image
+                } else {
+                    // iOS 14 fallback: 手動強制解碼
+                    decodedImage = await forceDecodeImage(image) ?? image
+                }
+                
                 // Cache to memory with actual memory cost (not compressed data size)
-                let memoryCost = calculateActualMemoryCost(for: image)
-                memoryCache.setObject(image, forKey: cacheKey as NSString, cost: memoryCost)
+                let memoryCost = calculateActualMemoryCost(for: decodedImage)
+                memoryCache.setObject(decodedImage, forKey: cacheKey as NSString, cost: memoryCost)
                 // Cache to disk asynchronously (don't block return)
                 Task.detached(priority: .background) { [weak self] in
-                    await self?.saveToDisk(image: image, key: cacheKey)
+                    await self?.saveToDisk(image: decodedImage, key: cacheKey)
                 }
                 
                 // Also create and cache thumbnail for quick previews
@@ -311,6 +322,8 @@ actor ImageCacheService {
                         await self?.createAndCacheThumbnail(from: data, urlString: urlString, scale: displayScale)
                     }
                 }
+                
+                return decodedImage
             }
 
             return image
@@ -549,9 +562,44 @@ actor ImageCacheService {
         let fileURL = cacheDir.appendingPathComponent(key.sha256Hash)
 
         guard fileManager.fileExists(atPath: fileURL.path),
-              let data = try? Data(contentsOf: fileURL) else { return nil }
+              let data = try? Data(contentsOf: fileURL),
+              let image = UIImage(data: data) else { return nil }
 
-        return UIImage(data: data)
+        // 🚀 性能優化：從磁盤載入後也要預解碼
+        if #available(iOS 15.0, *) {
+            return await image.byPreparingForDisplay() ?? image
+        } else {
+            return await forceDecodeImage(image) ?? image
+        }
+    }
+    
+    /// iOS 14 fallback: 手動強制解碼圖片
+    private func forceDecodeImage(_ image: UIImage) async -> UIImage? {
+        guard let cgImage = image.cgImage else { return image }
+        
+        let width = cgImage.width
+        let height = cgImage.height
+        
+        // 創建位圖上下文強制解碼
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        ) else {
+            return image
+        }
+        
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        
+        guard let decodedCGImage = context.makeImage() else {
+            return image
+        }
+        
+        return UIImage(cgImage: decodedCGImage, scale: image.scale, orientation: image.imageOrientation)
     }
 
     private func saveToDisk(image: UIImage, key: String) async {

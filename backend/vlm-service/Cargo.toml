@@ -34,6 +34,9 @@ envy.workspace = true
 # HTTP client for Vision API
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
 
+# GCP Authentication (Application Default Credentials)
+gcp_auth = "0.12"
+
 # gRPC
 tonic.workspace = true
 prost.workspace = true

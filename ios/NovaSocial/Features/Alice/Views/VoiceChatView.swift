@@ -356,6 +356,7 @@ struct VoiceChatView: View {
     
     // MARK: - Actions
     private func startVoiceChat() {
+        print("[VoiceChatView] 🚀 startVoiceChat called!")
         let handler = GrokVoiceDelegateHandler(
             onStateChange: { newState in
                 withAnimation(.easeInOut(duration: 0.3)) {
@@ -439,6 +440,50 @@ private class GrokVoiceDelegateHandler: GrokVoiceServiceDelegate {
     
     func grokVoiceDidReceiveAudio(_ audioData: Data) {
         // 音訊播放由 GrokVoiceService 內部處理
+    }
+
+    func grokVoiceDidReceiveFunctionCall(_ call: GrokFunctionCall) async -> String? {
+        // 處理函數調用
+        #if DEBUG
+        print("[VoiceChat] Function call received: \(call.name)")
+        print("[VoiceChat] Arguments: \(call.arguments)")
+        #endif
+
+        // TODO: 實現 ICERED 平台函數
+        switch call.name {
+        case "get_user_profile":
+            if let username = call.arguments["username"] as? String {
+                // TODO: 調用 API 獲取用戶資料
+                return """
+                {"status": "success", "message": "User profile lookup for '\(username)' - feature coming soon"}
+                """
+            }
+        case "create_post":
+            if let content = call.arguments["content"] as? String {
+                // TODO: 調用 API 創建貼文
+                return """
+                {"status": "success", "message": "Post creation with content - feature coming soon", "content_preview": "\(content.prefix(50))..."}
+                """
+            }
+        case "search_posts":
+            if let query = call.arguments["query"] as? String {
+                // TODO: 調用搜索 API
+                return """
+                {"status": "success", "message": "Search for '\(query)' - feature coming soon", "results": []}
+                """
+            }
+        case "get_trending_topics":
+            // TODO: 調用熱門話題 API
+            return """
+            {"status": "success", "topics": ["Technology", "Fashion", "Travel", "Fitness", "Entertainment"]}
+            """
+        default:
+            return """
+            {"status": "error", "message": "Unknown function: \(call.name)"}
+            """
+        }
+
+        return nil
     }
 }
 

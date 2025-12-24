@@ -63,21 +63,20 @@ spec:
           value: "3600"
 
         # ============================================
-        # Google Cloud Vision API
+        # Google Cloud Vision API (using Service Account Key)
         # ============================================
-        - name: GOOGLE_VISION_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: vlm-api-credentials
-              key: GOOGLE_VISION_API_KEY
+        - name: USE_ADC
+          value: "true"
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: "/var/secrets/google/credentials.json"
 
         # ============================================
-        # PostgreSQL 配置
+        # PostgreSQL 配置 (nova_content database)
         # ============================================
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
-              name: nova-db-credentials
+              name: vlm-db-credentials
               key: DATABASE_URL
 
         # ============================================
@@ -93,29 +92,48 @@ spec:
         # Kafka 配置
         # ============================================
         - name: KAFKA_BROKERS
-          value: "nova-kafka-kafka-bootstrap.kafka.svc.cluster.local:9092"
+          value: "kafka.nova-staging.svc.cluster.local:9092"
         - name: KAFKA_EVENTS_TOPIC
           value: "vlm.post.created"
 
         resources:
           requests:
-            cpu: "100m"
-            memory: "128Mi"
+            cpu: "50m"
+            memory: "64Mi"
           limits:
             cpu: "500m"
-            memory: "512Mi"
+            memory: "256Mi"
 
+        # Kafka consumer doesn't expose a server, use exec probe
         livenessProbe:
-          grpc:
-            port: 50060
-          initialDelaySeconds: 30
-          periodSeconds: 10
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - test -f /proc/1/status
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          failureThreshold: 3
 
         readinessProbe:
-          grpc:
-            port: 50060
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - test -f /proc/1/status
           initialDelaySeconds: 5
-          periodSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+
+        volumeMounts:
+        - name: gcp-credentials
+          mountPath: /var/secrets/google
+          readOnly: true
+
+      volumes:
+      - name: gcp-credentials
+        secret:
+          secretName: vlm-gcp-credentials
 
 ---
 apiVersion: v1

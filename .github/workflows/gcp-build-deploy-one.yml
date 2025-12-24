@@ -21,6 +21,7 @@ on:
           - search-service
           - social-service
           - trust-safety-service
+          - vlm-service
       deploy:
         description: Deploy after build
         type: boolean

@@ -249,6 +249,8 @@ struct FeedCachedImage<Content: View, Placeholder: View>: View {
     @State private var image: UIImage?
     @State private var loadTask: Task<Void, Never>?
     @State private var loadFailed = false
+    @State private var isVisible = true
+    @State private var cancelDebounceTask: Task<Void, Never>?
 
     init(
         url: URL?,
@@ -291,14 +293,35 @@ struct FeedCachedImage<Content: View, Placeholder: View>: View {
                     }
             }
         }
+        .onAppear {
+            isVisible = true
+            // 🚀 取消延遲取消任務
+            cancelDebounceTask?.cancel()
+            cancelDebounceTask = nil
+            // 如果之前載入失敗，重試
+            if image == nil && loadTask == nil && !loadFailed {
+                startLoading()
+            }
+        }
         .onDisappear {
-            // Cancel loading if view scrolls out of view
-            loadTask?.cancel()
+            isVisible = false
+            // 🚀 性能優化：延遲取消載入，避免快速滾動時反覆取消重試
+            // 給 200ms 緩衝時間，如果用戶快速滾動回來，不需要重新載入
+            cancelDebounceTask?.cancel()
+            cancelDebounceTask = Task {
+                try? await Task.sleep(nanoseconds: 200_000_000) // 200ms
+                guard !Task.isCancelled else { return }
+                // 只有圖片還沒載入完成時才取消
+                if image == nil {
+                    loadTask?.cancel()
+                    loadTask = nil
+                }
+            }
         }
     }
 
     private func startLoading() {
-        guard let url = url, image == nil else {
+        guard let url = url, image == nil, loadTask == nil else {
             if url == nil {
                 loadFailed = true
             }
@@ -317,12 +340,20 @@ struct FeedCachedImage<Content: View, Placeholder: View>: View {
                 targetSize: targetSize,
                 priority: .high
             )
-            
-            guard !Task.isCancelled else { return }
-            
+
             await MainActor.run {
+                // 無論是否被取消，都要清理 loadTask，否則下次無法重新載入
+                defer { loadTask = nil }
+
+                guard !Task.isCancelled else { return }
+
                 if let loadedImage = loadedImage {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    // 🚀 只有視圖可見時才播放動畫，否則直接設置避免 GPU 開銷
+                    if isVisible {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            image = loadedImage
+                        }
+                    } else {
                         image = loadedImage
                     }
                 } else {

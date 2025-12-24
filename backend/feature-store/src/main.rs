@@ -94,6 +94,8 @@ async fn main() -> Result<()> {
     // Initialize ClickHouse client
     let clickhouse_client = clickhouse::Client::default()
         .with_url(&config.clickhouse_url)
+        .with_user(&config.clickhouse_user)
+        .with_password(&config.clickhouse_password)
         .with_database(&config.clickhouse_database);
     info!("ClickHouse client initialized");
 

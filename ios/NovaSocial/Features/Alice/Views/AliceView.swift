@@ -7,12 +7,14 @@ struct AliceModel: Identifiable {
     let displayName: String
     let description: String
     let isOnDevice: Bool
+    let isGrok: Bool
 
-    init(name: String, displayName: String? = nil, description: String, isOnDevice: Bool = false) {
+    init(name: String, displayName: String? = nil, description: String, isOnDevice: Bool = false, isGrok: Bool = false) {
         self.name = name
         self.displayName = displayName ?? name
         self.description = description
         self.isOnDevice = isOnDevice
+        self.isGrok = name.hasPrefix("grok") || isGrok
     }
 }
 
@@ -43,7 +45,7 @@ struct AliceView: View {
     @State private var showGenerateImage = false
     @State private var showNewPost = false
     @State private var showWrite = false
-    @State private var selectedModel = "gpt-4o-all"
+    @State private var selectedModel = "grok-4"  // 預設使用 Grok 4
     
     // MARK: - Voice Chat States
     @State private var showVoiceChat = false
@@ -57,10 +59,18 @@ struct AliceView: View {
     // MARK: - AI Service
     private let aliceService = AliceService.shared
     private let aiRouter = AIRouter.shared
+    private let xaiService = XAIService.shared
 
     // MARK: - Model Data
     private var aliceModels: [AliceModel] {
         var models: [AliceModel] = []
+
+        // Grok 4 - X.AI 最新模型（推薦）
+        models.append(AliceModel(
+            name: "grok-4",
+            displayName: "Grok 4",
+            description: "X.AI 最新模型 ⭐️ 推薦"
+        ))
 
         // 本地模型（如果可用）
         if aiRouter.isOnDeviceAvailable {
@@ -72,7 +82,7 @@ struct AliceView: View {
             ))
         }
 
-        // 遠端模型
+        // 遠端模型（Nova 後端）
         models.append(contentsOf: [
             AliceModel(name: "gpt-4o-all", description: "Most capable model"),
             AliceModel(name: "gpt-4o", description: "GPT-4 optimized"),
@@ -81,6 +91,11 @@ struct AliceView: View {
         ])
 
         return models
+    }
+
+    /// 是否使用 Grok (X.AI) 模型
+    private var isUsingGrok: Bool {
+        selectedModel.hasPrefix("grok")
     }
 
     /// 是否使用本地模型
@@ -147,8 +162,18 @@ struct AliceView: View {
 
                     // 模型選擇器
                     HStack(spacing: 5) {
-                        // 本地模型顯示特殊圖標
-                        if isUsingOnDevice {
+                        // 模型圖標
+                        if isUsingGrok {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [.purple, .blue],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                        } else if isUsingOnDevice {
                             Image(systemName: "cpu")
                                 .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(.green)
@@ -375,6 +400,8 @@ struct AliceView: View {
         // 根據模型選擇使用不同的處理方式
         if isUsingOnDevice {
             sendMessageWithStreaming(trimmedText)
+        } else if isUsingGrok {
+            sendMessageToGrok(trimmedText)
         } else {
             sendMessageToRemote(trimmedText)
         }
@@ -409,6 +436,41 @@ struct AliceView: View {
 
                     #if DEBUG
                     print("[AliceView] Streaming error: \(error)")
+                    #endif
+                }
+            }
+        }
+    }
+
+    // MARK: - Grok Message (X.AI API)
+    private func sendMessageToGrok(_ text: String) {
+        // 創建空的 AI 回應訊息（用於流式更新）
+        let aiMessage = AliceChatMessage(content: "", isUser: false, isStreaming: true)
+        messages.append(aiMessage)
+
+        Task {
+            do {
+                let stream = xaiService.streamChat(text)
+
+                for try await chunk in stream {
+                    await MainActor.run {
+                        aiMessage.content += chunk
+                    }
+                }
+
+                await MainActor.run {
+                    aiMessage.isStreaming = false
+                }
+            } catch {
+                await MainActor.run {
+                    aiMessage.isStreaming = false
+                    if aiMessage.content.isEmpty {
+                        aiMessage.content = "抱歉，發生錯誤：\(error.localizedDescription)"
+                    }
+                    errorMessage = error.localizedDescription
+
+                    #if DEBUG
+                    print("[AliceView] Grok streaming error: \(error)")
                     #endif
                 }
             }
@@ -466,6 +528,7 @@ struct AliceView: View {
     private func clearChat() {
         messages.removeAll()
         aiRouter.resetChatSession()
+        xaiService.resetConversation()
     }
 
     // MARK: - 模型选择器弹窗
@@ -583,8 +646,19 @@ struct ModelRowView: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 12) {
-                // 本地模型圖標
-                if model.isOnDevice {
+                // 模型圖標
+                if model.isGrok {
+                    // X.AI Grok 圖標
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 16))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.purple, .blue],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                } else if model.isOnDevice {
                     Image(systemName: "cpu")
                         .font(.system(size: 16))
                         .foregroundColor(.green)

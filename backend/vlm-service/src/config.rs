@@ -4,9 +4,13 @@ use serde::Deserialize;
 /// Main configuration struct, loaded from environment variables
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
-    /// Google Cloud Vision API key
+    /// Google Cloud Vision API key (optional, uses ADC if not set)
     #[serde(default = "default_vision_api_key")]
     pub google_vision_api_key: String,
+
+    /// Use Application Default Credentials instead of API key
+    #[serde(default)]
+    pub use_adc: bool,
 
     /// Database connection URL
     pub database_url: String,
