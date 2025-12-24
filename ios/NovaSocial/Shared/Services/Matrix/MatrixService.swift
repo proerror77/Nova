@@ -668,8 +668,11 @@ final class MatrixService: MatrixServiceProtocol {
     /// Room list service for efficient room updates
     private var roomListService: RoomListService?
 
-    /// Keep the room list stream alive
+    /// Keep room list objects alive to prevent crash (Issue #4774)
+    /// These must be stored as properties, not local variables
     private var roomListEntriesStreamHandle: TaskHandle?
+    private var roomList: RoomList?
+    private var roomListController: RoomListDynamicEntriesControllerProtocol?
 
     /// Session storage path
     private var sessionPath: String?
@@ -981,9 +984,11 @@ final class MatrixService: MatrixServiceProtocol {
         roomTimelines.removeAll()
         seenTimelineEventIdsByRoom.removeAll()
 
-        // Cancel room list stream handle
+        // Cancel room list stream handle and clear references (Issue #4774)
         roomListEntriesStreamHandle?.cancel()
         roomListEntriesStreamHandle = nil
+        roomListController = nil
+        roomList = nil
 
         // Stop sync service (but DON'T set to nil - causes Rust SDK panic on dealloc)
         try? await syncService?.stop()
@@ -1045,22 +1050,28 @@ final class MatrixService: MatrixServiceProtocol {
             // Start sync
             try await syncService?.start()
 
-            // Setup room list service
-            self.roomListService = syncService?.roomListService()
-
-            // Subscribe to room list updates
-            setupRoomListObserver()
+            // DISABLED: Room list service and observer causes crash in MatrixRustSDK
+            // The SDK's internal rooms_stream method crashes with EXC_BAD_ACCESS (null pointer)
+            // in imbl::vector::GenericVector::from_iter even with delays
+            //
+            // Impact: No real-time room updates. Users must manually refresh room list.
+            // TODO: Re-enable after MatrixRustSDK fixes the internal crash
+            //
+            // self.roomListService = syncService?.roomListService()
+            // setupRoomListObserver()
 
             #if DEBUG
-            print("[MatrixService] Sync started successfully")
+            print("[MatrixService] Sync started successfully (room list observer disabled)")
             #endif
 
-            // Scan and accept pending DM invites after sync starts
-            Task {
-                // Wait a bit for initial sync to complete
-                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
-                await self.acceptPendingDMInvites()
-            }
+            // DISABLED: acceptPendingDMInvites may trigger rooms_stream internally
+            // when iterating client.rooms() during SDK initialization
+            // TODO: Re-enable after MatrixRustSDK fix
+            //
+            // Task {
+            //     try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+            //     await self.acceptPendingDMInvites()
+            // }
         } catch {
             updateConnectionState(.error(error.localizedDescription))
             throw MatrixError.syncFailed(error.localizedDescription)
@@ -1141,9 +1152,11 @@ final class MatrixService: MatrixServiceProtocol {
         roomTimelines.removeAll()
         seenTimelineEventIdsByRoom.removeAll()
 
-        // Cancel room list stream handle
+        // Cancel room list stream handle and clear references (Issue #4774)
         roomListEntriesStreamHandle?.cancel()
         roomListEntriesStreamHandle = nil
+        roomListController = nil
+        roomList = nil
 
         // Stop sync service and clear references in correct order
         // This is done in a Task but we ensure proper ordering within it
@@ -1790,23 +1803,50 @@ final class MatrixService: MatrixServiceProtocol {
         guard let roomListService = roomListService else { return }
 
         Task {
-            // Add a small delay to ensure sync service has fully initialized
-            // This prevents crashes in rooms_stream when called too early
-            try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
+            // WORKAROUND: Significantly increased delay to prevent crash in MatrixRustSDK rooms_stream
+            // The SDK's internal rooms_stream can crash with EXC_BAD_ACCESS if called too early
+            // before the client state is fully initialized. Using 3 second delay as safer buffer.
+            // TODO: Investigate proper "ready" signal from SDK or update SDK version
+            try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
+
+            // Double-check that sync service is still active after the delay
+            guard self.syncService != nil, self.roomListService != nil else {
+                #if DEBUG
+                print("[MatrixService] Room list observer setup skipped - sync service no longer active")
+                #endif
+                return
+            }
 
             await setupRoomListObserverWithRetry(roomListService: roomListService, attempt: 1)
         }
     }
 
     private func setupRoomListObserverWithRetry(roomListService: RoomListService, attempt: Int) async {
-        let maxAttempts = 3
+        let maxAttempts = 5  // Increased from 3 to 5 attempts
+
+        // Safety check: verify we're still in a valid state
+        guard self.client != nil, self.syncService != nil else {
+            #if DEBUG
+            print("[MatrixService] Room list observer setup aborted - client or sync service is nil")
+            #endif
+            return
+        }
 
         do {
             #if DEBUG
             print("[MatrixService] Setting up room list observer (attempt \(attempt)/\(maxAttempts))")
             #endif
 
-            let roomList = try await roomListService.allRooms()
+            // CRITICAL: Store roomList as property to prevent deallocation (Issue #4774)
+            // If stored as local variable, SDK crashes with EXC_BAD_ACCESS
+            self.roomList = try await roomListService.allRooms()
+
+            guard let roomList = self.roomList else {
+                #if DEBUG
+                print("[MatrixService] ❌ Failed to get room list")
+                #endif
+                return
+            }
 
             // Subscribe to room list updates using new API
             let listener = RoomListEntriesListenerImpl { [weak self] updates in
@@ -1818,14 +1858,14 @@ final class MatrixService: MatrixServiceProtocol {
             // Use new entriesWithDynamicAdapters method
             let result = roomList.entriesWithDynamicAdapters(pageSize: 100, listener: listener)
 
-            // Store the entries stream handle to keep the subscription alive
-            // Without this, the subscription is cancelled when result goes out of scope
+            // CRITICAL: Store handles as properties to prevent deallocation (Issue #4774)
+            // The SDK crashes if these objects go out of scope while streams are active
             self.roomListEntriesStreamHandle = result.entriesStream()
+            self.roomListController = result.controller()
 
             // Set filter to include both joined rooms AND invited rooms
             // This is critical for auto-accepting DM invites
-            let controller = result.controller()
-            let filterSet = controller.setFilter(kind: .any(filters: [.joined, .invite]))
+            let filterSet = self.roomListController?.setFilter(kind: .any(filters: [.joined, .invite])) ?? false
             #if DEBUG
             print("[MatrixService] ✅ Room list filter set (joined + invite): \(filterSet)")
             #endif
@@ -1836,12 +1876,29 @@ final class MatrixService: MatrixServiceProtocol {
 
             // Retry with exponential backoff if we haven't exceeded max attempts
             if attempt < maxAttempts {
-                let delayMs = UInt64(pow(2.0, Double(attempt))) * 500_000_000 // 1s, 2s
+                // Longer delays: 2s, 4s, 8s, 16s
+                let delaySeconds = UInt64(pow(2.0, Double(attempt)))
+                let delayNs = delaySeconds * 1_000_000_000
                 #if DEBUG
-                print("[MatrixService] Retrying room list observer setup in \(delayMs / 1_000_000)ms...")
+                print("[MatrixService] Retrying room list observer setup in \(delaySeconds)s...")
                 #endif
-                try? await Task.sleep(nanoseconds: delayMs)
+                try? await Task.sleep(nanoseconds: delayNs)
+
+                // Re-check state before retry
+                guard self.syncService != nil, self.roomListService != nil else {
+                    #if DEBUG
+                    print("[MatrixService] Room list retry skipped - services no longer active")
+                    #endif
+                    return
+                }
+
                 await setupRoomListObserverWithRetry(roomListService: roomListService, attempt: attempt + 1)
+            } else {
+                #if DEBUG
+                print("[MatrixService] ⚠️ Room list observer setup failed after \(maxAttempts) attempts. Room updates may be delayed.")
+                #endif
+                // Don't crash - just log and continue without real-time room updates
+                // Users can still manually refresh room list
             }
         }
     }

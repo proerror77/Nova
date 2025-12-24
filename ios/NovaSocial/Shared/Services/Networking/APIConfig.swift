@@ -243,6 +243,8 @@ struct APIConfig {
         static let chat = "/api/v2/xai/chat"
         /// POST /api/v2/xai/chat/stream - 串流聊天 (SSE)
         static let chatStream = "/api/v2/xai/chat/stream"
+        /// POST /api/v2/xai/voice/token - 獲取語音 WebSocket 臨時 token
+        static let voiceToken = "/api/v2/xai/voice/token"
     }
 
     // MARK: - Alice Voice Service API (TEN Agent)

@@ -137,13 +137,13 @@
 		94AF7CC1036A21C29F465707 /* AuthenticationManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6FE19396563C133B8B33094 /* AuthenticationManagerTests.swift */; };
 		9618F12F74A70D9629855613 /* ProfileData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5F063A093BCAB41B793415F /* ProfileData.swift */; };
 		96275277CE13088070909F3E /* GrokVoiceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E64D8CE635DABDB1071AC90 /* GrokVoiceConfig.swift */; };
-		A0C000E28A2542668A9AB96E /* XAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B588EE15C54D8A9750CC1E /* XAIService.swift */; };
 		97F6C657D7E2048352947CDA /* CommentSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00D95AE492E1F1BD615BB08A /* CommentSheetView.swift */; };
 		9804D3A5848B6B6B39935CF0 /* GrokVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4FE222AADC0282302AC0298 /* GrokVoiceService.swift */; };
 		9824FCB8B180ACFF53DAEB49 /* AppRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80ABF01F830247D554367509 /* AppRoute.swift */; };
 		9D7F9AEE30BE973B332063C6 /* AIRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F1DC3CB50728D0BCC6036BE /* AIRouter.swift */; };
 		9EB7CA6CFE1E6DD184294B59 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BBEC927960F534FBD87D8F6 /* SearchView.swift */; };
 		9F4007BE87A9E709B48DF9B9 /* UserModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA8A23427CDC24E3C754293 /* UserModels.swift */; };
+		A0C000E28A2542668A9AB96E /* XAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B588EE15C54D8A9750CC1E /* XAIService.swift */; };
 		A0E98C8402F42826C6B27C70 /* ThankYouModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DB971D0D914AD2BF041C7C0 /* ThankYouModal.swift */; };
 		A35ABFA321D24C60DB3F1AE2 /* DeviceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C3AD3B56FD470BDD566CA47 /* DeviceService.swift */; };
 		A5765D85DB1A71345EAC21CF /* UnreadMessagesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CFAEF2BEA59A56A0916439F /* UnreadMessagesView.swift */; };
@@ -404,7 +404,6 @@
 		9C7716AC8A2A67A629B5AA6D /* MyChannelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyChannelsView.swift; sourceTree = "<group>"; };
 		9DB971D0D914AD2BF041C7C0 /* ThankYouModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThankYouModal.swift; sourceTree = "<group>"; };
 		9E64D8CE635DABDB1071AC90 /* GrokVoiceConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokVoiceConfig.swift; sourceTree = "<group>"; };
-		B9B588EE15C54D8A9750CC1E /* XAIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XAIService.swift; sourceTree = "<group>"; };
 		9EB3A1844A28ADE400B2CB8B /* SocialService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialService.swift; sourceTree = "<group>"; };
 		9F361F5818CDB8EEB87330CB /* GenerateImage01View.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerateImage01View.swift; sourceTree = "<group>"; };
 		A13C2F556B5E9015D7B85A24 /* FeedVideoPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedVideoPlayer.swift; sourceTree = "<group>"; };
@@ -427,6 +426,7 @@
 		B5F979ECFA4B86BB5CF751BB /* E2EEService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2EEService.swift; sourceTree = "<group>"; };
 		B636E8F19835AB90842B8EFB /* FeedServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedServiceTests.swift; sourceTree = "<group>"; };
 		B7A8319641A0A3FB8B05B59A /* ICEREDWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICEREDWidgets.swift; sourceTree = "<group>"; };
+		B9B588EE15C54D8A9750CC1E /* XAIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XAIService.swift; sourceTree = "<group>"; };
 		BB25950EC2AA7F54430283FD /* UserProfileActionButtons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileActionButtons.swift; sourceTree = "<group>"; };
 		BBC84545BBB79C645B395D4A /* GrokVoiceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokVoiceModels.swift; sourceTree = "<group>"; };
 		BD70ACA67B0E1699EDB5099B /* FormRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormRow.swift; sourceTree = "<group>"; };
@@ -2081,7 +2081,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 32;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 2C77AZCA8W;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -2217,7 +2217,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 32;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 2C77AZCA8W;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

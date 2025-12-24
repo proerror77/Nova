@@ -33,17 +33,38 @@ final class XAIService {
         let content: String
     }
 
+    /// Live Search configuration
+    struct SearchConfig {
+        var enabled: Bool = false
+        var sources: [String]? = nil  // "web", "news", "x", "rss"
+        var fromDate: String? = nil   // "YYYY-MM-DD"
+        var toDate: String? = nil     // "YYYY-MM-DD"
+
+        static let `default` = SearchConfig()
+        static let webSearch = SearchConfig(enabled: true, sources: ["web", "news"])
+        static let xSearch = SearchConfig(enabled: true, sources: ["x"])
+        static let allSources = SearchConfig(enabled: true, sources: ["web", "news", "x"])
+    }
+
     struct ChatRequest: Codable {
         let message: String
         let model: String
         let systemPrompt: String?
         let temperature: Double
         let conversationHistory: [ChatMessage]?
+        let enableSearch: Bool?
+        let searchSources: [String]?
+        let searchFromDate: String?
+        let searchToDate: String?
 
         enum CodingKeys: String, CodingKey {
             case message, model, temperature
             case systemPrompt = "system_prompt"
             case conversationHistory = "conversation_history"
+            case enableSearch = "enable_search"
+            case searchSources = "search_sources"
+            case searchFromDate = "search_from_date"
+            case searchToDate = "search_to_date"
         }
     }
 
@@ -89,7 +110,13 @@ final class XAIService {
     /// Check if X.AI service is available on backend
     func checkAvailability() async {
         do {
-            let url = URL(string: baseURL + APIConfig.XAI.status)!
+            guard let url = URL(string: baseURL + APIConfig.XAI.status) else {
+                #if DEBUG
+                print("[XAIService] Invalid URL: \(baseURL + APIConfig.XAI.status)")
+                #endif
+                isAvailable = false
+                return
+            }
             let (data, response) = try await URLSession.shared.data(from: url)
 
             guard let httpResponse = response as? HTTPURLResponse,
@@ -121,15 +148,19 @@ final class XAIService {
     ///   - model: Which Grok model to use
     ///   - temperature: Randomness (0-2, default 0.7)
     ///   - maintainHistory: Whether to include conversation history
+    ///   - search: Live Search configuration for real-time data from web/news/X
     /// - Returns: AI response text
     func chat(
         _ message: String,
         systemPrompt: String? = nil,
         model: Model = .default,
         temperature: Double = 0.7,
-        maintainHistory: Bool = true
+        maintainHistory: Bool = true,
+        search: SearchConfig = .default
     ) async throws -> String {
-        let url = URL(string: baseURL + APIConfig.XAI.chat)!
+        guard let url = URL(string: baseURL + APIConfig.XAI.chat) else {
+            throw XAIError.invalidURL
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -146,7 +177,11 @@ final class XAIService {
             model: model.rawValue,
             systemPrompt: systemPrompt,
             temperature: temperature,
-            conversationHistory: maintainHistory ? conversationHistory : nil
+            conversationHistory: maintainHistory ? conversationHistory : nil,
+            enableSearch: search.enabled ? true : nil,
+            searchSources: search.enabled ? search.sources : nil,
+            searchFromDate: search.enabled ? search.fromDate : nil,
+            searchToDate: search.enabled ? search.toDate : nil
         )
 
         request.httpBody = try JSONEncoder().encode(chatRequest)
@@ -245,17 +280,17 @@ enum XAIError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .serviceUnavailable:
-            return "X.AI 服務目前無法使用"
+            return "X.AI service is currently unavailable"
         case .invalidURL:
-            return "無效的 API URL"
+            return "Invalid API URL"
         case .invalidResponse:
-            return "無效的 API 回應"
+            return "Invalid API response"
         case .httpError(let code):
-            return "HTTP 錯誤: \(code)"
+            return "HTTP error: \(code)"
         case .apiError(_, let message):
-            return "API 錯誤: \(message)"
+            return "API error: \(message)"
         case .emptyResponse:
-            return "API 回應為空"
+            return "Empty API response"
         }
     }
 }
