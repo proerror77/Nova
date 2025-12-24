@@ -200,7 +200,46 @@ async def entrypoint(ctx: JobContext):
                 logger.error(f"Failed to send data: {e}")
         asyncio.create_task(_send())
 
-    # 監聽用戶語音轉文字事件
+    # 監聽對話項目添加事件 - 這是最即時的文字來源
+    @session.on("conversation_item_added")
+    def on_conversation_item(event):
+        """當對話項目被添加到歷史記錄時（最即時）"""
+        try:
+            item = event.item if hasattr(event, 'item') else event
+
+            # 檢查是用戶輸入還是 AI 回應
+            role = getattr(item, 'role', None)
+            content = getattr(item, 'content', None)
+
+            if content:
+                # 嘗試獲取文字內容
+                text = None
+                if isinstance(content, str):
+                    text = content
+                elif isinstance(content, list) and len(content) > 0:
+                    first_item = content[0]
+                    text = getattr(first_item, 'text', None) or str(first_item)
+                elif hasattr(content, 'text'):
+                    text = content.text
+
+                if text:
+                    if role == 'user':
+                        logger.info(f"[conversation] User: {text}")
+                        send_data_to_client({
+                            "type": "transcript",
+                            "text": text,
+                            "is_final": True
+                        })
+                    elif role == 'assistant':
+                        logger.info(f"[conversation] Alice: {text}")
+                        send_data_to_client({
+                            "type": "response",
+                            "text": text
+                        })
+        except Exception as e:
+            logger.error(f"Error processing conversation item: {e}")
+
+    # 監聽用戶語音轉文字事件（備用）
     @session.on("user_input_transcribed")
     def on_user_transcript(event):
         """當用戶說話被轉錄時"""
@@ -230,7 +269,7 @@ async def entrypoint(ctx: JobContext):
             "speaking": False
         })
 
-    # 監聽 AI 回覆轉錄
+    # 監聽 AI 回覆轉錄（備用）
     @session.on("agent_speech_transcribed")
     def on_agent_transcript(event):
         """當 AI 說話被轉錄"""
