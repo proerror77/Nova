@@ -246,6 +246,7 @@ struct ProfileView: View {
 
                 // MARK: - 区域2：内容区域
                 contentSection
+                    .offset(y: contentSectionVerticalOffset)  // 应用垂直偏移
             }
             .safeAreaInset(edge: .bottom) {
                 // MARK: - 底部导航栏
@@ -422,9 +423,14 @@ struct ProfileView: View {
     }
 
     // ==================== 用户信息区块垂直位置调整 ====================
-    // 第 196 行：调整此值可单独控制头像、用户名、位置、职业、粉丝统计区块的垂直位置
+    // 调整此值可单独控制头像、用户名、位置、职业、粉丝统计区块的垂直位置
     // 正值向下移动，负值向上移动
-    private let userInfoBlockVerticalOffset: CGFloat = -30  // ← 在此调整垂直偏移量
+    private let userInfoBlockVerticalOffset: CGFloat = -60  // ← 在此调整垂直偏移量
+
+    // ==================== 内容区域（标签栏+帖子）垂直位置调整 ====================
+    // 调整此值可控制 Posts/Saved/Liked 标签栏及下方内容的垂直位置
+    // 正值向下移动，负值向上移动
+    private let contentSectionVerticalOffset: CGFloat = -60  // ← 在此调整垂直偏移量
 
     // MARK: - 用户信息头部区域
     private var userHeaderSection: some View {
@@ -443,7 +449,7 @@ struct ProfileView: View {
                             .scaledToFill()
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: 380.h)  // 调整高度
+                .frame(maxWidth: .infinity, maxHeight: 980)  // 调整高度
                 .clipped()
                 .blur(radius: 20.s)
                 .overlay(Color.black.opacity(0.3))
@@ -504,30 +510,6 @@ struct ProfileView: View {
                     }
                 )
                 .offset(y: userInfoBlockVerticalOffset)  // 应用垂直偏移
-
-                // MARK: - 編輯個人資料按鈕
-                Button(action: {
-                    activeSheet = .editProfile
-                }) {
-                    HStack(spacing: 6.s) {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 14.f, weight: .medium))
-                        Text("編輯個人資料")
-                            .font(.system(size: 14.f, weight: .medium))
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20.w)
-                    .padding(.vertical, 10.h)
-                    .background(
-                        Capsule()
-                            .fill(Color.white.opacity(0.2))
-                            .overlay(
-                                Capsule()
-                                    .stroke(Color.white.opacity(0.4), lineWidth: 1)
-                            )
-                    )
-                }
-                .offset(y: userInfoBlockVerticalOffset + 10.h)
             }
         }
     }
