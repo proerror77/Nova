@@ -67,7 +67,7 @@ fn default_max_connections() -> u32 {
 }
 
 fn default_min_connections() -> u32 {
-    5
+    0 // Set to 0 for PgBouncer compatibility - connections created on-demand
 }
 
 impl Config {
@@ -133,7 +133,7 @@ mod tests {
         assert_eq!(config.app.host, "0.0.0.0");
         assert_eq!(config.app.http_port, 8006);
         assert_eq!(config.database.max_connections, 20);
-        assert_eq!(config.database.min_connections, 5);
+        assert_eq!(config.database.min_connections, 0);
         assert_eq!(config.grpc.port, 50053);
     }
 }
