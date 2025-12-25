@@ -270,6 +270,8 @@
 		FD4C5DDD8A3C9BA4399AA522 /* PhotoAnalysisService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3737976AD8AA33408751C99 /* PhotoAnalysisService.swift */; };
 		FD818F27CF9C6EEC3142F5E2 /* UserProfileFollowingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0170221498A2E6B8DF35A25 /* UserProfileFollowingView.swift */; };
 		FE5A7851F73E4DAE93743284 /* MyChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7716AC8A2A67A629B5AA6D /* MyChannelsView.swift */; };
+		3120D36E8F74A9B428F53B60 /* GroupChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 186D64E6CCEC74771541DF0A /* GroupChatViewModel.swift */; };
+		CBEDEEA956ADFCEA9D4CA4DB /* GroupChatMessageSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94BD4C24E55CB8DB67374164 /* GroupChatMessageSender.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -581,6 +583,8 @@
 		"TEMP_E98185E5-7ADD-4769-BB93-1B4CAF67CDDE" /* ICERED.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ICERED.entitlements; sourceTree = "<group>"; };
 		"TEMP_FEC42276-4107-4B61-9751-98C14B453FB3" /* AppPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPage.swift; sourceTree = "<group>"; };
 		"TEMP_FF26A0BA-4153-4366-B662-1527BD29EE65" /* ExportOptions.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = ExportOptions.plist; sourceTree = "<group>"; };
+		186D64E6CCEC74771541DF0A /* GroupChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatViewModel.swift; sourceTree = "<group>"; };
+		94BD4C24E55CB8DB67374164 /* GroupChatMessageSender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatMessageSender.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1617,6 +1621,7 @@
 		E2BB85C6A4838537AC0A6DA7 /* GroupChat */ = {
 			isa = PBXGroup;
 			children = (
+				CB2176BCBD0A37727E2FCE7E /* ViewModels */,
 				2B344FE31446BAA9B4B85DE8 /* Views */,
 			);
 			path = GroupChat;
@@ -1752,6 +1757,23 @@
 				"TEMP_C2345199-2628-4FF0-AA2D-886E98F9D571" /* Localizable.strings */,
 			);
 			path = NovaSocial;
+			sourceTree = "<group>";
+		};
+		54CE17CA90F75EE69C1E1CD6 /* Handlers */ = {
+			isa = PBXGroup;
+			children = (
+				94BD4C24E55CB8DB67374164 /* GroupChatMessageSender.swift */,
+			);
+			path = Handlers;
+			sourceTree = "<group>";
+		};
+		CB2176BCBD0A37727E2FCE7E /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				186D64E6CCEC74771541DF0A /* GroupChatViewModel.swift */,
+				54CE17CA90F75EE69C1E1CD6 /* Handlers */,
+			);
+			path = ViewModels;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -2038,6 +2060,8 @@
 				F24EDB14A7336417FD9AFCC0 /* GrokVoiceModels.swift in Sources */,
 				9804D3A5848B6B6B39935CF0 /* GrokVoiceService.swift in Sources */,
 				8F9D3E8DE6E5D6EF2AD58793 /* GroupChatView.swift in Sources */,
+				CBEDEEA956ADFCEA9D4CA4DB /* GroupChatMessageSender.swift in Sources */,
+				3120D36E8F74A9B428F53B60 /* GroupChatViewModel.swift in Sources */,
 				29510E46949E636C6C54D4B1 /* HomeView.swift in Sources */,
 				7352CA226A8DA46D21339FB3 /* HottestBankerSection.swift in Sources */,
 				395C493B4D5D56E70D9296BA /* IdentityService.swift in Sources */,
