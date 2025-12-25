@@ -162,7 +162,152 @@ class FriendsService {
 
         return response.is_friend
     }
+
+    // MARK: - Friend Request Management
+
+    /// Send a friend request to a user
+    /// - Parameter userId: ID of the user to send request to
+    /// - Returns: The created friend request
+    func sendFriendRequest(userId: String) async throws -> FriendRequest {
+        struct Request: Codable {
+            let user_id: String
+        }
+
+        struct Response: Codable {
+            let request: FriendRequest
+        }
+
+        let request = Request(user_id: userId)
+        let response: Response = try await client.request(
+            endpoint: APIConfig.Friends.sendRequest,
+            method: "POST",
+            body: request
+        )
+
+        return response.request
+    }
+
+    /// Get pending friend requests (received or sent)
+    /// - Parameters:
+    ///   - type: "received" for requests received, "sent" for requests sent
+    ///   - limit: Maximum number of requests to return
+    ///   - offset: Pagination offset
+    /// - Returns: Tuple containing array of friend requests with user info and total count
+    func getPendingRequests(
+        type: FriendRequestType = .received,
+        limit: Int = 20,
+        offset: Int = 0
+    ) async throws -> (requests: [FriendRequestWithUser], total: Int) {
+        struct Response: Codable {
+            let requests: [FriendRequestWithUser]
+            let total: Int
+        }
+
+        let response: Response = try await client.get(
+            endpoint: APIConfig.Friends.getPendingRequests,
+            queryParams: [
+                "type": type.rawValue,
+                "limit": String(limit),
+                "offset": String(offset)
+            ]
+        )
+
+        return (response.requests, response.total)
+    }
+
+    /// Accept a friend request
+    /// - Parameter requestId: ID of the friend request to accept
+    func acceptFriendRequest(requestId: String) async throws {
+        struct Request: Codable {
+            let request_id: String
+        }
+
+        struct Response: Codable {
+            let success: Bool
+            let message: String?
+        }
+
+        let request = Request(request_id: requestId)
+        let response: Response = try await client.request(
+            endpoint: APIConfig.Friends.acceptRequest,
+            method: "POST",
+            body: request
+        )
+
+        guard response.success else {
+            throw APIError.serverError(
+                statusCode: 400,
+                message: response.message ?? "Failed to accept friend request"
+            )
+        }
+    }
+
+    /// Reject a friend request
+    /// - Parameter requestId: ID of the friend request to reject
+    func rejectFriendRequest(requestId: String) async throws {
+        struct Request: Codable {
+            let request_id: String
+        }
+
+        struct Response: Codable {
+            let success: Bool
+            let message: String?
+        }
+
+        let request = Request(request_id: requestId)
+        let response: Response = try await client.request(
+            endpoint: APIConfig.Friends.rejectRequest,
+            method: "POST",
+            body: request
+        )
+
+        guard response.success else {
+            throw APIError.serverError(
+                statusCode: 400,
+                message: response.message ?? "Failed to reject friend request"
+            )
+        }
+    }
+
+    /// Cancel a sent friend request
+    /// - Parameter requestId: ID of the friend request to cancel
+    func cancelFriendRequest(requestId: String) async throws {
+        struct Response: Codable {
+            let success: Bool
+            let message: String?
+        }
+
+        let response: Response = try await client.request(
+            endpoint: APIConfig.Friends.cancelRequest(requestId),
+            method: "DELETE",
+            body: EmptyBody()
+        )
+
+        guard response.success else {
+            throw APIError.serverError(
+                statusCode: 400,
+                message: response.message ?? "Failed to cancel friend request"
+            )
+        }
+    }
+
+    /// Get the count of pending friend requests (received)
+    /// - Returns: Number of pending requests
+    func getPendingRequestCount() async throws -> Int {
+        struct Response: Codable {
+            let count: Int
+        }
+
+        let response: Response = try await client.get(
+            endpoint: APIConfig.Friends.pendingCount
+        )
+
+        return response.count
+    }
 }
+
+// MARK: - Empty Body Helper
+private struct EmptyBody: Codable {}
 
 // MARK: - Supporting Models
 
@@ -191,6 +336,27 @@ enum FriendRequestStatus: String, Codable {
     case accepted = "accepted"
     case rejected = "rejected"
     case cancelled = "cancelled"
+}
+
+/// Friend request type for filtering (received or sent)
+enum FriendRequestType: String, Codable {
+    case received
+    case sent
+}
+
+/// Friend request with associated user profile for display
+struct FriendRequestWithUser: Codable, Identifiable {
+    let id: String
+    let request: FriendRequest
+    let user: UserProfile  // The other user (sender for received requests, receiver for sent requests)
+    let createdAt: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case request
+        case user
+        case createdAt = "created_at"
+    }
 }
 
 /// Friend recommendation model

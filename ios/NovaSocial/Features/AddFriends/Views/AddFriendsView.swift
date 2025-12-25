@@ -437,6 +437,39 @@ struct AddFriendsView: View {
                                 .background(Color.white)
                                 .cornerRadius(12)
                             }
+
+                            // Friend Requests Button
+                            Button(action: {
+                                currentPage = .friendRequests
+                            }) {
+                                HStack(spacing: 16) {
+                                    Image(systemName: "person.badge.clock")
+                                        .font(.system(size: 20))
+                                        .foregroundColor(.orange)
+                                        .frame(width: 40, height: 40)
+                                        .background(Color.orange.opacity(0.1))
+                                        .clipShape(Circle())
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(String(localized: "friend_requests", defaultValue: "Friend Requests"))
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundColor(.black)
+
+                                        Text(String(localized: "friend_requests_hint", defaultValue: "View and manage friend requests"))
+                                            .font(.system(size: 12))
+                                            .foregroundColor(.gray)
+                                    }
+
+                                    Spacer()
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.gray)
+                                }
+                                .padding(16)
+                                .background(Color.white)
+                                .cornerRadius(12)
+                            }
                         }
                         .padding(.horizontal, 16)
                         .padding(.top, 16)

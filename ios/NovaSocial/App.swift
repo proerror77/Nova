@@ -121,6 +121,9 @@ struct IceredApp: App {
                     case .addFriends:
                         AddFriendsView(currentPage: $currentPage)
                             .transition(.identity)
+                    case .friendRequests:
+                        FriendRequestsView(currentPage: $currentPage)
+                            .transition(.identity)
                     case .newChat:
                         NewChatView(currentPage: $currentPage)
                             .transition(.identity)

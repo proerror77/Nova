@@ -293,6 +293,7 @@ extension AppCoordinator {
         case .inviteFriends: return .inviteFriends
         case .myChannels: return .myChannels
         case .addFriends: return .addFriends
+        case .friendRequests: return .friendRequests
         case .newChat: return .newChat
         case .write: return .write
         case .getVerified: return .getVerified

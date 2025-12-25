@@ -26,6 +26,7 @@ enum AppPage: Equatable {
     case inviteFriends
     case myChannels
     case addFriends
+    case friendRequests
     case newChat
     case write
     case getVerified

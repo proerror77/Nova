@@ -30,6 +30,8 @@ enum NotificationType: String, Codable {
     case share
     case reply
     case system
+    case friendRequest = "friend_request"      // 收到好友請求
+    case friendAccepted = "friend_accepted"    // 好友請求被接受
 
     /// Display icon name for the notification type
     var iconName: String {
@@ -41,6 +43,8 @@ enum NotificationType: String, Codable {
         case .share: return "square.and.arrow.up.fill"
         case .reply: return "arrowshape.turn.up.left.fill"
         case .system: return "bell.fill"
+        case .friendRequest: return "person.badge.clock.fill"
+        case .friendAccepted: return "person.fill.checkmark"
         }
     }
 
@@ -54,6 +58,8 @@ enum NotificationType: String, Codable {
         case .share: return "orange"
         case .reply: return "blue"
         case .system: return "gray"
+        case .friendRequest: return "orange"
+        case .friendAccepted: return "green"
         }
     }
 }
