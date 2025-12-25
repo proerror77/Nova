@@ -1144,8 +1144,8 @@ struct NewPostView: View {
             print("[NewPost] Starting background upload for \(itemsToUpload.count) media item(s)")
             #endif
 
-            // VLM tags disabled - TODO: re-enable
-            // let tagsToSave = Array(selectedVLMTags)
+            // VLM tags to save after post creation
+            let tagsToSave = Array(selectedVLMTags)
             let channelsToSave = selectedChannelIds
 
             // Start background upload
@@ -1155,8 +1155,26 @@ struct NewPostView: View {
                 channelIds: selectedChannelIds,
                 nameType: selectedNameType,
                 userId: userId,
-                onSuccess: { [onPostSuccess] post in
-                    // VLM tags update disabled - TODO: re-enable
+                onSuccess: { [onPostSuccess, vlmService] post in
+                    // Update VLM tags after post is created
+                    if !tagsToSave.isEmpty {
+                        Task {
+                            do {
+                                _ = try await vlmService.updatePostTags(
+                                    postId: post.id,
+                                    tags: tagsToSave,
+                                    channelIds: channelsToSave
+                                )
+                                #if DEBUG
+                                print("[NewPost] VLM tags saved: \(tagsToSave)")
+                                #endif
+                            } catch {
+                                #if DEBUG
+                                print("[NewPost] Failed to save VLM tags: \(error)")
+                                #endif
+                            }
+                        }
+                    }
                     onPostSuccess?(post)
                 }
             )
