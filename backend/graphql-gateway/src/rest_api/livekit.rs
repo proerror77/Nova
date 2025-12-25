@@ -6,7 +6,7 @@
 //! iOS App → This endpoint → LiveKit Cloud → Python Agent → xAI Grok Voice API
 
 use actix_web::{web, HttpResponse, Result};
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD as BASE64_URL, Engine};
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -77,7 +77,7 @@ struct LiveKitClaims {
     /// LiveKit video grants
     video: VideoGrant,
     /// Room configuration (for agent dispatch)
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "roomConfig", skip_serializing_if = "Option::is_none")]
     room_config: Option<RoomConfig>,
     /// Participant metadata
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -102,11 +102,8 @@ struct VideoGrant {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RoomAgentDispatch {
-    /// Agent name to dispatch
+    /// Agent name to dispatch (serializes to "agentName")
     agent_name: String,
-    /// Optional metadata for the agent
-    #[serde(skip_serializing_if = "Option::is_none")]
-    metadata: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -131,10 +128,9 @@ fn generate_livekit_token(
         .as_secs();
 
     // Create room_config with agent dispatch if agent_name is provided
-    let room_config = agent_name.map(|name| RoomConfig {
+    let room_config = agent_name.map(|agent| RoomConfig {
         agents: vec![RoomAgentDispatch {
-            agent_name: name,
-            metadata: metadata.clone(),
+            agent_name: agent,
         }],
     });
 
@@ -161,8 +157,8 @@ fn generate_livekit_token(
         "typ": "JWT"
     });
 
-    let header_b64 = BASE64.encode(serde_json::to_string(&header).map_err(|e| e.to_string())?);
-    let claims_b64 = BASE64.encode(serde_json::to_string(&claims).map_err(|e| e.to_string())?);
+    let header_b64 = BASE64_URL.encode(serde_json::to_string(&header).map_err(|e| e.to_string())?);
+    let claims_b64 = BASE64_URL.encode(serde_json::to_string(&claims).map_err(|e| e.to_string())?);
 
     let message = format!("{}.{}", header_b64, claims_b64);
 
@@ -171,7 +167,7 @@ fn generate_livekit_token(
         .map_err(|e| e.to_string())?;
     mac.update(message.as_bytes());
     let signature = mac.finalize().into_bytes();
-    let signature_b64 = BASE64.encode(signature);
+    let signature_b64 = BASE64_URL.encode(signature);
 
     Ok(format!("{}.{}", message, signature_b64))
 }

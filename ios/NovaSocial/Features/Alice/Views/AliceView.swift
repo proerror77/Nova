@@ -129,7 +129,8 @@ struct AliceView: View {
             ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
         }
         .fullScreenCover(isPresented: $showVoiceChat) {
-            VoiceChatView(isPresented: $showVoiceChat)
+            // 使用 LiveKit 語音對話（支援 barge-in 打斷）
+            LiveKitVoiceChatView(isPresented: $showVoiceChat)
         }
         .onChange(of: selectedImage) { oldValue, newValue in
             // 选择/拍摄照片后，自动跳转到NewPostView

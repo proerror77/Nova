@@ -7,6 +7,7 @@ ICERED Voice Agent - Alice
   python agent.py start    # 生產模式
 """
 
+import asyncio
 import json
 import logging
 from datetime import datetime
@@ -159,28 +160,125 @@ async def get_icered_info(topic: str) -> str:
 server = AgentServer()
 
 
-@server.rtc_session(agent_name="alice")
+@server.rtc_session(agent_name="alice")  # Explicit dispatch with agent name
 async def entrypoint(ctx: JobContext):
     """Agent 入口點"""
     logger.info(f"Connecting to room: {ctx.room.name}")
 
-    # 配置 xAI Realtime Model 與工具
+    # 配置 xAI Realtime Model
     llm = xai.realtime.RealtimeModel(
         voice="Ara",  # 使用 Ara 女聲
-        # 啟用內建搜索工具
-        tools=[
-            {"type": "web_search"},  # 網頁搜索
-            {"type": "x_search"},    # X/Twitter 搜索
-        ],
     )
 
-    # 自定義函數工具
-    custom_tools = [get_current_time, get_icered_info]
+    # 配置工具列表
+    tools = [
+        # xAI 內建搜尋工具
+        xai.realtime.WebSearch(),   # 網頁搜尋
+        xai.realtime.XSearch(),     # X/Twitter 搜尋
+        # 自定義函數工具
+        get_current_time,
+        get_icered_info,
+    ]
 
     session = AgentSession(
         llm=llm,
-        tools=custom_tools,  # 添加自定義函數
+        tools=tools,
     )
+
+    # 發送數據消息到客戶端的輔助函數
+    import asyncio
+
+    def send_data_to_client(data: dict):
+        """通過 data channel 發送消息到 iOS 客戶端"""
+        async def _send():
+            try:
+                await ctx.room.local_participant.publish_data(
+                    json.dumps(data).encode("utf-8"),
+                    topic="transcription"
+                )
+            except Exception as e:
+                logger.error(f"Failed to send data: {e}")
+        asyncio.create_task(_send())
+
+    # 監聽對話項目添加事件 - 這是最即時的文字來源
+    @session.on("conversation_item_added")
+    def on_conversation_item(event):
+        """當對話項目被添加到歷史記錄時（最即時）"""
+        try:
+            item = event.item if hasattr(event, 'item') else event
+
+            # 檢查是用戶輸入還是 AI 回應
+            role = getattr(item, 'role', None)
+            content = getattr(item, 'content', None)
+
+            if content:
+                # 嘗試獲取文字內容
+                text = None
+                if isinstance(content, str):
+                    text = content
+                elif isinstance(content, list) and len(content) > 0:
+                    first_item = content[0]
+                    text = getattr(first_item, 'text', None) or str(first_item)
+                elif hasattr(content, 'text'):
+                    text = content.text
+
+                if text:
+                    if role == 'user':
+                        logger.info(f"[conversation] User: {text}")
+                        send_data_to_client({
+                            "type": "transcript",
+                            "text": text,
+                            "is_final": True
+                        })
+                    elif role == 'assistant':
+                        logger.info(f"[conversation] Alice: {text}")
+                        send_data_to_client({
+                            "type": "response",
+                            "text": text
+                        })
+        except Exception as e:
+            logger.error(f"Error processing conversation item: {e}")
+
+    # 監聽用戶語音轉文字事件（備用）
+    @session.on("user_input_transcribed")
+    def on_user_transcript(event):
+        """當用戶說話被轉錄時"""
+        transcript = event.transcript if hasattr(event, 'transcript') else str(event)
+        is_final = event.is_final if hasattr(event, 'is_final') else True
+        logger.info(f"User said: {transcript} (final: {is_final})")
+        send_data_to_client({
+            "type": "transcript",
+            "text": transcript,
+            "is_final": is_final
+        })
+
+    # 監聯 AI 回覆事件
+    @session.on("agent_speech_started")
+    def on_agent_speech_started(event):
+        """當 AI 開始說話"""
+        send_data_to_client({
+            "type": "agent_speaking",
+            "speaking": True
+        })
+
+    @session.on("agent_speech_stopped")
+    def on_agent_speech_stopped(event):
+        """當 AI 停止說話"""
+        send_data_to_client({
+            "type": "agent_speaking",
+            "speaking": False
+        })
+
+    # 監聽 AI 回覆轉錄（備用）
+    @session.on("agent_speech_transcribed")
+    def on_agent_transcript(event):
+        """當 AI 說話被轉錄"""
+        transcript = event.transcript if hasattr(event, 'transcript') else str(event)
+        logger.info(f"Alice said: {transcript}")
+        send_data_to_client({
+            "type": "response",
+            "text": transcript
+        })
 
     await session.start(
         agent=AliceAgent(),
@@ -197,7 +295,7 @@ async def entrypoint(ctx: JobContext):
         ),
     )
 
-    logger.info("Alice agent started successfully with web_search, x_search, and custom functions")
+    logger.info("Alice agent started with transcription forwarding enabled")
 
 
 if __name__ == "__main__":

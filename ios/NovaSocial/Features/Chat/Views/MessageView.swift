@@ -114,6 +114,7 @@ struct MessageView: View {
     @State private var showQRScanner = false
     @State private var selectedUserName = "User"
     @State private var selectedConversationId = ""
+    @State private var selectedAvatarUrl: String? = nil  // 選中對話的頭像URL
     @State private var showImagePicker = false
     @State private var showCamera = false
     @State private var showCameraPermissionAlert = false
@@ -461,7 +462,8 @@ struct MessageView: View {
                 ChatView(
                     showChat: $showChat,
                     conversationId: selectedConversationId,
-                    userName: selectedUserName
+                    userName: selectedUserName,
+                    otherUserAvatarUrl: selectedAvatarUrl
                 )
                 .transition(.identity)
             } else if showNewPost {
@@ -747,6 +749,7 @@ struct MessageView: View {
                                     showTimeAndBadge: convo.hasUnread,
                                     isEncrypted: convo.isEncrypted,
                                     userId: convo.id,  // 使用会话ID（实际项目中应传入对方用户ID）
+                                    avatarUrl: convo.avatarUrl,  // 传入头像URL
                                     onAvatarTapped: { userId in
                                         // 点击头像跳转用户主页（排除 Alice）
                                         if convo.userName.lowercased() != "alice" {
@@ -763,6 +766,7 @@ struct MessageView: View {
                                     } else {
                                         selectedConversationId = convo.id
                                         selectedUserName = convo.userName
+                                        selectedAvatarUrl = convo.avatarUrl  // 保存頭像URL
                                         showChat = true
                                     }
                                 }
@@ -901,11 +905,12 @@ struct MessageListItem: View {
     var showTimeAndBadge: Bool = true
     var isEncrypted: Bool = false  // E2EE status indicator
     var userId: String = ""  // 用户ID（用于跳转用户主页）
+    var avatarUrl: String? = nil  // 头像URL（用于显示真实头像）
     var onAvatarTapped: ((String) -> Void)?  // 点击头像回调
 
     var body: some View {
         HStack(spacing: 12) {
-            // 头像 - alice 使用自定义图片，其他用户使用默认头像（可点击跳转用户主页）
+            // 头像 - alice 使用自定义图片，其他用户使用 AvatarView 加载真实头像
             Group {
                 if name.lowercased() == "alice" {
                     Image("alice-avatar")
@@ -914,7 +919,7 @@ struct MessageListItem: View {
                         .frame(width: 50, height: 50)
                         .clipShape(Circle())
                 } else {
-                    DefaultAvatarView(size: 50)
+                    AvatarView(image: nil, url: avatarUrl, size: 50)
                 }
             }
             .onTapGesture {

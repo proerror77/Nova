@@ -10,12 +10,8 @@ spec:
   type: ClusterIP
   ports:
   - name: http
-    port: 8080
-    targetPort: 8080
-    protocol: TCP
-  - name: rtc
-    port: 3000
-    targetPort: 3000
+    port: 8081
+    targetPort: 8081
     protocol: TCP
   selector:
     app: alice-voice-service

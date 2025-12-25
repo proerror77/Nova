@@ -1128,9 +1128,19 @@ extension MatrixBridgeService {
             chatType = .location
         }
 
-        // Convert sender ID
-        let senderId = matrixService.convertToNovaUserId(matrixUserId: matrixMessage.senderId)
-            ?? matrixMessage.senderId
+        // Convert sender ID from Matrix format (@nova-uuid:server) to Nova format (uuid)
+        let convertedId = matrixService.convertToNovaUserId(matrixUserId: matrixMessage.senderId)
+        let senderId = convertedId ?? matrixMessage.senderId
+
+        #if DEBUG
+        let currentUserId = keychain.get(.userId) ?? "unknown"
+        print("[MatrixBridge] 📧 Message sender conversion:")
+        print("  - Matrix sender: \(matrixMessage.senderId)")
+        print("  - Converted ID: \(convertedId ?? "nil")")
+        print("  - Final senderId: \(senderId)")
+        print("  - Current user: \(currentUserId)")
+        print("  - isFromMe: \(senderId == currentUserId)")
+        #endif
 
         return Message(
             id: matrixMessage.id,
@@ -1217,28 +1227,70 @@ extension MatrixBridgeService {
             var displayName: String
             var avatarURL: String?
 
+            // Helper function to check if a string looks like a Matrix room ID
+            func looksLikeRoomId(_ name: String) -> Bool {
+                return name.hasPrefix("!") && name.contains(":")
+            }
+
             if room.isDirect {
-                displayName = room.name ?? "Direct Message"
+                let initialName = room.name ?? ""
+                displayName = initialName.isEmpty ? "Direct Message" : initialName
                 avatarURL = room.avatarURL
+
+                // Check if we need to enrich the display name (either empty or looks like a room ID)
+                let needsEnrichment = displayName == "Direct Message" || looksLikeRoomId(displayName)
 
                 // Try to enrich from Nova conversation + identity profiles.
                 // This fixes cases where Matrix room display names/avatars are not yet configured.
-                if let novaConversationId = try? await queryConversationMapping(roomId: room.id),
-                   let conversation = try? await chatService.getConversation(conversationId: novaConversationId) {
-                    if let name = conversation.name, !name.isEmpty {
-                        displayName = name
-                    } else if let other = conversation.members.first(where: { $0.userId != currentUserId }),
-                              !other.username.isEmpty {
-                        displayName = other.username
+                if needsEnrichment {
+                    if let novaConversationId = try? await queryConversationMapping(roomId: room.id),
+                       let conversation = try? await chatService.getConversation(conversationId: novaConversationId) {
+                        // Try conversation name first
+                        if let name = conversation.name, !name.isEmpty, !looksLikeRoomId(name) {
+                            displayName = name
+                        }
+                        // Fall back to other user's username
+                        else if let other = conversation.members.first(where: { $0.userId != currentUserId }),
+                                  !other.username.isEmpty {
+                            displayName = other.username
+                        }
+
+                        // Get avatar from conversation
+                        if let convAvatar = conversation.avatarUrl, !convAvatar.isEmpty {
+                            avatarURL = convAvatar
+                        }
                     }
 
-                    if let convAvatar = conversation.avatarUrl, !convAvatar.isEmpty {
-                        avatarURL = convAvatar
+                    // If still showing room ID, try to extract other user from Matrix ID
+                    if looksLikeRoomId(displayName) {
+                        // Last resort: try to look up the user directly via UserService
+                        // Extract potential user ID from last message sender
+                        if let lastSenderId = room.lastMessage?.senderId {
+                            if let novaUserId = matrixService.convertToNovaUserId(matrixUserId: lastSenderId),
+                               novaUserId != currentUserId {
+                                if let userProfile = try? await UserService.shared.getUser(userId: novaUserId) {
+                                    displayName = userProfile.displayName ?? userProfile.username
+                                    if avatarURL == nil || avatarURL?.isEmpty == true {
+                                        avatarURL = userProfile.avatarUrl
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Final fallback - just show "Chat" instead of ugly room ID
+                    if looksLikeRoomId(displayName) {
+                        displayName = "Chat"
                     }
                 }
             } else {
                 displayName = room.name ?? "Group Chat"
                 avatarURL = room.avatarURL
+
+                // For group chats, also check if name looks like room ID
+                if looksLikeRoomId(displayName) {
+                    displayName = "Group Chat"
+                }
             }
 
             conversations.append(
