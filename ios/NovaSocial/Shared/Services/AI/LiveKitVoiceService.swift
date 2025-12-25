@@ -49,6 +49,7 @@ protocol LiveKitVoiceServiceDelegate: AnyObject {
     func liveKitVoiceDidReceiveTranscript(_ text: String, isFinal: Bool)
     func liveKitVoiceDidReceiveResponse(_ text: String)
     func liveKitVoiceAudioLevelDidChange(_ level: Float)
+    func liveKitVoiceDidReceiveError(_ code: String, message: String)
 }
 
 // MARK: - Token Response
@@ -307,6 +308,19 @@ final class LiveKitVoiceService: NSObject {
             if let speaking = json["speaking"] as? Bool {
                 updateState(speaking ? .aiSpeaking : .listening)
             }
+
+        case "error":
+            let code = json["code"] as? String ?? "unknown"
+            let message = json["message"] as? String ?? "發生錯誤"
+            liveKitLog("Received error: \(code) - \(message)")
+            delegate?.liveKitVoiceDidReceiveError(code, message: message)
+            // 更新狀態為錯誤
+            updateState(.error(message))
+
+        case "session_closed":
+            let reason = json["reason"] as? String ?? "Session ended"
+            liveKitLog("Session closed: \(reason)")
+            updateState(.disconnected)
 
         default:
             liveKitLog("Unknown message type: \(type)")

@@ -280,6 +280,43 @@ async def entrypoint(ctx: JobContext):
             "text": transcript
         })
 
+    # 監聽錯誤事件
+    @session.on("error")
+    def on_error(event):
+        """當發生錯誤時通知客戶端"""
+        error_msg = str(event) if event else "Unknown error"
+        logger.error(f"Session error: {error_msg}")
+
+        # 判斷錯誤類型
+        if "429" in error_msg or "rate" in error_msg.lower():
+            send_data_to_client({
+                "type": "error",
+                "code": "rate_limit",
+                "message": "服務繁忙，請稍後再試"
+            })
+        elif "connection" in error_msg.lower() or "timeout" in error_msg.lower():
+            send_data_to_client({
+                "type": "error",
+                "code": "connection_error",
+                "message": "連線失敗，請檢查網路後重試"
+            })
+        else:
+            send_data_to_client({
+                "type": "error",
+                "code": "unknown",
+                "message": "發生錯誤，請重試"
+            })
+
+    # 監聽關閉事件
+    @session.on("close")
+    def on_close(event):
+        """當 session 關閉時"""
+        logger.info("Session closed")
+        send_data_to_client({
+            "type": "session_closed",
+            "reason": str(event) if event else "Session ended"
+        })
+
     await session.start(
         agent=AliceAgent(),
         room=ctx.room,

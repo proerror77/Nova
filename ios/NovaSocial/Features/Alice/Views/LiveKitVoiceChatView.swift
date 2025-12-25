@@ -14,6 +14,8 @@ struct LiveKitVoiceChatView: View {
     @State private var audioLevel: Float = 0
     @State private var isMuted: Bool = false
     @State private var showEndConfirmation: Bool = false
+    @State private var showErrorAlert: Bool = false
+    @State private var errorMessage: String = ""
 
     // 動畫
     @State private var pulseAnimation: Bool = false
@@ -46,6 +48,20 @@ struct LiveKitVoiceChatView: View {
             }
         } message: {
             Text("確定要結束與 Alice 的語音對話嗎？")
+        }
+        .alert("連線錯誤", isPresented: $showErrorAlert) {
+            Button("重試") {
+                endVoiceChat()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    startVoiceChat()
+                }
+            }
+            Button("關閉", role: .cancel) {
+                endVoiceChat()
+                isPresented = false
+            }
+        } message: {
+            Text(errorMessage)
         }
     }
 
@@ -367,6 +383,11 @@ struct LiveKitVoiceChatView: View {
             onAudioLevel: { level in
                 audioLevel = level
                 wavePhase += 0.1
+            },
+            onError: { code, message in
+                print("[LiveKitVoiceChatView] ❌ Error: \(code) - \(message)")
+                errorMessage = message
+                showErrorAlert = true
             }
         )
         delegateHandler = handler
@@ -391,17 +412,20 @@ private class LiveKitVoiceDelegateHandler: LiveKitVoiceServiceDelegate {
     let onTranscript: (String, Bool) -> Void
     let onAIResponse: (String) -> Void
     let onAudioLevel: (Float) -> Void
+    let onError: (String, String) -> Void
 
     init(
         onStateChange: @escaping (LiveKitVoiceChatState) -> Void,
         onTranscript: @escaping (String, Bool) -> Void,
         onAIResponse: @escaping (String) -> Void,
-        onAudioLevel: @escaping (Float) -> Void
+        onAudioLevel: @escaping (Float) -> Void,
+        onError: @escaping (String, String) -> Void
     ) {
         self.onStateChange = onStateChange
         self.onTranscript = onTranscript
         self.onAIResponse = onAIResponse
         self.onAudioLevel = onAudioLevel
+        self.onError = onError
     }
 
     func liveKitVoiceStateDidChange(_ state: LiveKitVoiceChatState) {
@@ -425,6 +449,12 @@ private class LiveKitVoiceDelegateHandler: LiveKitVoiceServiceDelegate {
     func liveKitVoiceAudioLevelDidChange(_ level: Float) {
         DispatchQueue.main.async {
             self.onAudioLevel(level)
+        }
+    }
+
+    func liveKitVoiceDidReceiveError(_ code: String, message: String) {
+        DispatchQueue.main.async {
+            self.onError(code, message)
         }
     }
 }
