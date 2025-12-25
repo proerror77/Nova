@@ -827,6 +827,7 @@ mod tests {
             limit: 20,
             cursor: "".to_string(),
             algorithm: "ch".to_string(),
+            channel_id: "".to_string(),
         };
 
         // Verify request fields are properly set
@@ -844,6 +845,7 @@ mod tests {
             limit: 0,
             cursor: "".to_string(),
             algorithm: "ch".to_string(),
+            channel_id: "".to_string(),
         };
 
         let req_large = GetFeedRequest {
@@ -851,6 +853,7 @@ mod tests {
             limit: 500,
             cursor: "".to_string(),
             algorithm: "v2".to_string(),
+            channel_id: "".to_string(),
         };
 
         // In get_feed(), limit 0 becomes 20, limit 500 becomes 100
@@ -1133,6 +1136,7 @@ mod tests {
             limit: 20,
             cursor: "".to_string(),
             algorithm: "ch".to_string(),
+            channel_id: "".to_string(),
         };
 
         // Simulate first page cursor in response
@@ -1148,6 +1152,7 @@ mod tests {
             limit: 20,
             cursor: response1.next_cursor.clone(),
             algorithm: "ch".to_string(),
+            channel_id: "".to_string(),
         };
 
         assert_eq!(req2.cursor, "base64-encoded-cursor-1");
@@ -1332,6 +1337,7 @@ mod tests {
                 limit: posts_per_page as u32,
                 cursor: cursor.clone(),
                 algorithm: "ch".to_string(),
+                channel_id: "".to_string(),
             };
 
             // Simulate response with next cursor
@@ -1391,6 +1397,7 @@ mod tests {
                         limit: 20,
                         cursor: "".to_string(),
                         algorithm: algorithms[algo_idx % algorithms.len()].to_string(),
+                        channel_id: "".to_string(),
                     };
 
                     // Cache key generation (happens in get_feed)

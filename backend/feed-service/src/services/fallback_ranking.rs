@@ -96,6 +96,7 @@ mod tests {
             like_count,
             comment_count,
             share_count: 0,
+            bookmark_count: 0,
             media_urls: vec![],
             media_type: String::new(),
             thumbnail_urls: vec![],
