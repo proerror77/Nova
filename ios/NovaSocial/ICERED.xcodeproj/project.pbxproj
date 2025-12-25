@@ -241,6 +241,7 @@
 		EB34418FAB25322C97951C65 /* DraftManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4064B6162320BA2946731EC5 /* DraftManager.swift */; };
 		ECA8CBB517521C7D54D64336 /* SF-Pro-Display-BlackItalic.otf in Resources */ = {isa = PBXBuildFile; fileRef = 328091BB0EC974DD013EA182 /* SF-Pro-Display-BlackItalic.otf */; };
 		EEBF79C69078D7BD5A9E44DB /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BA9A27686FBAD37E301363D /* ShareSheet.swift */; };
+		EMBED_LIVEKIT_001 /* LiveKit in Embed Frameworks */ = {isa = PBXBuildFile; productRef = LIVEKIT_PROD_DEP_001 /* LiveKit */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		EMBED_MATRIXRUSTSDK_001 /* MatrixRustSDK in Embed Frameworks */ = {isa = PBXBuildFile; productRef = 89B16F3BD122ECA55FE121C5 /* MatrixRustSDK */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		F0EAAD979FE6C4CF5333E288 /* ICEREDWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4D39F35A0F59326A1235BEF7 /* ICEREDWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		F213E5619BF6A2E4B0A7E098 /* MessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8742228C1E84193BD2624ACE /* MessageView.swift */; };
@@ -262,6 +263,7 @@
 		FD4C5DDD8A3C9BA4399AA522 /* PhotoAnalysisService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3737976AD8AA33408751C99 /* PhotoAnalysisService.swift */; };
 		FD818F27CF9C6EEC3142F5E2 /* UserProfileFollowingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0170221498A2E6B8DF35A25 /* UserProfileFollowingView.swift */; };
 		FE5A7851F73E4DAE93743284 /* MyChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7716AC8A2A67A629B5AA6D /* MyChannelsView.swift */; };
+		LIVEKIT_BUILD_FILE_001 /* LiveKit in Frameworks */ = {isa = PBXBuildFile; productRef = LIVEKIT_PROD_DEP_001 /* LiveKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -307,6 +309,7 @@
 			dstSubfolderSpec = 10;
 			files = (
 				EMBED_MATRIXRUSTSDK_001 /* MatrixRustSDK in Embed Frameworks */,
+				EMBED_LIVEKIT_001 /* LiveKit in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -580,6 +583,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CEF622E0D705BAA70D0C2009 /* MatrixRustSDK in Frameworks */,
+				LIVEKIT_BUILD_FILE_001 /* LiveKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1753,6 +1757,7 @@
 			name = ICERED;
 			packageProductDependencies = (
 				89B16F3BD122ECA55FE121C5 /* MatrixRustSDK */,
+				LIVEKIT_PROD_DEP_001 /* LiveKit */,
 			);
 			productName = ICERED;
 			productReference = C6B7EF0FCF06C5477C18E6F9 /* ICERED.app */;
@@ -1829,6 +1834,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				51265FCDDB4D71991880F8D2 /* XCRemoteSwiftPackageReference "matrix-rust-components-swift" */,
+				LIVEKIT_PKG_REF_001 /* XCRemoteSwiftPackageReference "client-sdk-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A8928B707E71735FE0470B84 /* Products */;
@@ -2227,7 +2233,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 39;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 2C77AZCA8W;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -2363,7 +2369,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 39;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 2C77AZCA8W;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -2545,6 +2551,14 @@
 				version = 25.12.19;
 			};
 		};
+		LIVEKIT_PKG_REF_001 /* XCRemoteSwiftPackageReference "client-sdk-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/livekit/client-sdk-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -2552,6 +2566,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 51265FCDDB4D71991880F8D2 /* XCRemoteSwiftPackageReference "matrix-rust-components-swift" */;
 			productName = MatrixRustSDK;
+		};
+		LIVEKIT_PROD_DEP_001 /* LiveKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = LIVEKIT_PKG_REF_001 /* XCRemoteSwiftPackageReference "client-sdk-swift" */;
+			productName = LiveKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
