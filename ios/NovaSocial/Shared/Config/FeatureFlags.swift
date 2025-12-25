@@ -7,7 +7,7 @@ import SwiftUI
 /// Controls feature availability across different environments and for A/B testing
 @Observable
 @MainActor
-final class FeatureFlags {
+final class FeatureFlags: @unchecked Sendable {
     static let shared = FeatureFlags()
 
     // MARK: - Environment Detection

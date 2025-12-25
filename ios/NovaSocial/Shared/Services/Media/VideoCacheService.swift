@@ -285,16 +285,20 @@ actor VideoCacheService {
 
         let cutoffDate = Date().addingTimeInterval(-maxCacheAge)
 
-        if let enumerator = fileManager.enumerator(
-            at: cacheDir,
-            includingPropertiesForKeys: [.contentAccessDateKey, .creationDateKey]
-        ) {
-            for case let fileURL as URL in enumerator {
-                if let accessDate = try? fileURL.resourceValues(forKeys: [.contentAccessDateKey]).contentAccessDate,
-                   accessDate < cutoffDate {
-                    try? fileManager.removeItem(at: fileURL)
-                    videoLogger.info("🗑️ Removed old cached video: \(fileURL.lastPathComponent)")
-                }
+        // Collect files synchronously to avoid Swift 6 makeIterator() issue in async context
+        let fileURLs: [URL] = {
+            guard let enumerator = fileManager.enumerator(
+                at: cacheDir,
+                includingPropertiesForKeys: [.contentAccessDateKey, .creationDateKey]
+            ) else { return [] }
+            return enumerator.compactMap { $0 as? URL }
+        }()
+
+        for fileURL in fileURLs {
+            if let accessDate = try? fileURL.resourceValues(forKeys: [.contentAccessDateKey]).contentAccessDate,
+               accessDate < cutoffDate {
+                try? fileManager.removeItem(at: fileURL)
+                videoLogger.info("🗑️ Removed old cached video: \(fileURL.lastPathComponent)")
             }
         }
     }
@@ -304,16 +308,20 @@ actor VideoCacheService {
 
         var files: [(url: URL, date: Date, size: Int64)] = []
 
-        if let enumerator = fileManager.enumerator(
-            at: cacheDir,
-            includingPropertiesForKeys: [.contentAccessDateKey, .fileSizeKey]
-        ) {
-            for case let fileURL as URL in enumerator {
-                let values = try? fileURL.resourceValues(forKeys: [.contentAccessDateKey, .fileSizeKey])
-                let date = values?.contentAccessDate ?? Date.distantPast
-                let size = Int64(values?.fileSize ?? 0)
-                files.append((url: fileURL, date: date, size: size))
-            }
+        // Collect files synchronously to avoid Swift 6 makeIterator() issue in async context
+        let fileURLs: [URL] = {
+            guard let enumerator = fileManager.enumerator(
+                at: cacheDir,
+                includingPropertiesForKeys: [.contentAccessDateKey, .fileSizeKey]
+            ) else { return [] }
+            return enumerator.compactMap { $0 as? URL }
+        }()
+
+        for fileURL in fileURLs {
+            let values = try? fileURL.resourceValues(forKeys: [.contentAccessDateKey, .fileSizeKey])
+            let date = values?.contentAccessDate ?? Date.distantPast
+            let size = Int64(values?.fileSize ?? 0)
+            files.append((url: fileURL, date: date, size: size))
         }
 
         // Calculate total size

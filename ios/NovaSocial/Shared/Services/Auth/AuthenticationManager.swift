@@ -6,7 +6,7 @@ import SwiftUI
 /// Manages user authentication state and token persistence
 /// Coordinates with identity-service for login/register operations
 @MainActor
-class AuthenticationManager: ObservableObject {
+class AuthenticationManager: ObservableObject, @unchecked Sendable {
     static let shared = AuthenticationManager()
 
     @Published var isAuthenticated = false

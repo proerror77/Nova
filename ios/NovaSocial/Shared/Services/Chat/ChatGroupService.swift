@@ -7,6 +7,7 @@ import Foundation
 /// - 添加/移除群组成员
 /// - 更新群组成员角色
 /// - Matrix SDK 与 REST API 双协议支持
+@MainActor
 final class ChatGroupService {
     // MARK: - Properties
 

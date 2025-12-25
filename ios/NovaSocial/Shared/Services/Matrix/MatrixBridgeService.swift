@@ -13,7 +13,7 @@ import Combine
 
 @MainActor
 @Observable
-final class MatrixBridgeService {
+final class MatrixBridgeService: @unchecked Sendable {
 
     // MARK: - Singleton
 

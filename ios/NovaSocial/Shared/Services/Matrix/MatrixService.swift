@@ -2090,7 +2090,7 @@ final class MatrixService: MatrixServiceProtocol {
     private var sessionDelegate: MatrixSessionDelegateImpl?
 
     // Matrix session storage key for UserDefaults (not sensitive enough for Keychain)
-    private nonisolated(unsafe) static let matrixSessionKey = "matrix_session_data"
+    private static let matrixSessionKey = "matrix_session_data"
 
     private func storeSessionCredentials(userId: String, accessToken: String, deviceId: String, refreshToken: String? = nil, homeserverUrl: String? = nil) {
         let credentials = StoredCredentials(

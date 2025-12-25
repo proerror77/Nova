@@ -86,7 +86,7 @@ class MediaService {
         var errors: [Int: Error] = [:]
         var completedCount = 0
         let totalCount = images.count
-        let lock = NSLock()
+        // Note: Lock removed - for await loop processes results sequentially, no concurrent access
         
         await withTaskGroup(of: (Int, Result<String, Error>).self) { group in
             var activeCount = 0
@@ -138,10 +138,9 @@ class MediaService {
             
             // Process results and add more tasks
             for await (index, result) in group {
-                lock.lock()
                 activeCount -= 1
                 completedCount += 1
-                
+
                 switch result {
                 case .success(let url):
                     urlsByIndex[index] = url
@@ -149,10 +148,9 @@ class MediaService {
                     failedIndices.append(index)
                     errors[index] = error
                 }
-                
+
                 // Report progress
                 let progress = Double(completedCount) / Double(totalCount)
-                lock.unlock()
                 
                 await MainActor.run {
                     progressCallback?(progress)

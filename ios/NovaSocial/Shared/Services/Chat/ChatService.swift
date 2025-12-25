@@ -31,6 +31,7 @@ enum ChatServiceError: LocalizedError {
 /// - 消息历史管理
 /// - 会话管理
 /// - Matrix E2EE integration (when enabled)
+@MainActor
 @Observable
 final class ChatService {
     // MARK: - Singleton
