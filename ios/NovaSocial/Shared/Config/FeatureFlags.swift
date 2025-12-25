@@ -124,13 +124,13 @@ final class FeatureFlags {
     var enableGroupChats: Bool = true
 
     /// Enable voice messages
-    var enableVoiceMessages: Bool = false
+    var enableVoiceMessages: Bool = true
 
     /// Enable video calls
-    var enableVideoCalls: Bool = false
+    var enableVideoCalls: Bool = true
 
     /// Enable voice calls
-    var enableVoiceCalls: Bool = false
+    var enableVoiceCalls: Bool = true
 
     // MARK: - Profile Features
 
