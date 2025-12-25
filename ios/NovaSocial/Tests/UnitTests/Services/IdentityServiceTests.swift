@@ -20,6 +20,8 @@ final class IdentityServiceTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
+        // Configure APIClient to use MockURLProtocol for testing
+        APIClient.shared.configureForTesting(protocolClasses: [MockURLProtocol.self])
         session = MockURLProtocol.createMockSession()
         identityService = IdentityService()
         MockURLProtocol.reset()
@@ -28,6 +30,7 @@ final class IdentityServiceTests: XCTestCase {
 
     override func tearDown() {
         MockURLProtocol.reset()
+        APIClient.shared.resetSessionToDefault()
         APIClient.shared.setAuthToken("")
         super.tearDown()
     }

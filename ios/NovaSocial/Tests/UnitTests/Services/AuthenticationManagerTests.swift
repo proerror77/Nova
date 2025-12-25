@@ -20,8 +20,12 @@ final class AuthenticationManagerTests: XCTestCase {
 
     override func setUp() async throws {
         try await super.setUp()
+        // Configure APIClient to use MockURLProtocol for testing
+        APIClient.shared.configureForTesting(protocolClasses: [MockURLProtocol.self])
         session = MockURLProtocol.createMockSession()
-        MockURLProtocol.reset()
+
+        // Set up default mock response BEFORE any network calls
+        MockURLProtocol.mockSuccess(statusCode: 200, data: nil)
 
         // Clear any existing auth state - with defensive error handling
         do {
@@ -29,6 +33,9 @@ final class AuthenticationManagerTests: XCTestCase {
         } catch {
             // Ignore logout errors in setup
         }
+
+        // Reset mock after logout to clear recorded requests
+        MockURLProtocol.reset()
 
         // Clear keychain with error handling (may fail in simulator)
         do {
@@ -39,7 +46,8 @@ final class AuthenticationManagerTests: XCTestCase {
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.reset()
+        // Set up default mock response BEFORE logout network call
+        MockURLProtocol.mockSuccess(statusCode: 200, data: nil)
 
         // Clean up with defensive error handling
         do {
@@ -47,6 +55,9 @@ final class AuthenticationManagerTests: XCTestCase {
         } catch {
             // Ignore logout errors in teardown
         }
+
+        MockURLProtocol.reset()
+        APIClient.shared.resetSessionToDefault()
 
         do {
             KeychainService.shared.clearAll()
