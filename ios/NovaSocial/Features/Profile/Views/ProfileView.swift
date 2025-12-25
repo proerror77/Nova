@@ -236,24 +236,24 @@ struct ProfileView: View {
 
     // MARK: - Profile 主内容
     private var profileContent: some View {
-        ZStack {
-            DesignTokens.backgroundColor
-                .ignoresSafeArea()
-
+        ZStack(alignment: .bottom) {
+            // 主内容区域
             VStack(spacing: 0) {
                 // MARK: - 区域1：用户信息头部（自适应高度）
                 userHeaderSection
 
                 // MARK: - 区域2：内容区域
                 contentSection
+                    .frame(maxHeight: .infinity)  // 填满剩余空间
                     .offset(y: contentSectionVerticalOffset)  // 应用垂直偏移
             }
-            .safeAreaInset(edge: .bottom) {
-                // MARK: - 底部导航栏
-                bottomNavigationBar
-            }
 
-            // MARK: - 照片选项弹窗
+            // MARK: - 底部导航栏（覆盖在内容上方，忽略安全区域）
+            bottomNavigationBar
+        }
+        .ignoresSafeArea(edges: [.top, .bottom])
+        // MARK: - 照片选项弹窗
+        .overlay {
             if activeSheet == .photoOptions {
                 PhotoOptionsModal(
                     isPresented: Binding(
@@ -274,8 +274,9 @@ struct ProfileView: View {
                     }
                 )
             }
-
-            // MARK: - 账户切换弹窗
+        }
+        // MARK: - 账户切换弹窗
+        .overlay {
             if activeSheet == .accountSwitcher {
                 AccountSwitcherSheet(
                     isPresented: Binding(
@@ -383,45 +384,6 @@ struct ProfileView: View {
         }
     }
 
-    // ==================== 布局配置（可在此调整） ====================
-    // 顶部导航栏布局
-    private var navBarLayout: ProfileNavBarLayout {
-        ProfileNavBarLayout(
-            horizontalPadding: 20.s,      // 左右边距
-            topPadding: 60.h,             // 顶部边距
-            bottomPadding: 40.h,          // 底部边距
-            usernameFontSize: 20.f,       // 用户名字体大小
-            chevronSize: 12.s,            // 下拉箭头大小
-            usernameChevronSpacing: 6.s,  // 用户名和箭头间距
-            iconSize: 24.s,               // 图标大小
-            iconSpacing: 18.s             // 图标间距
-        )
-    }
-
-    // 用户信息区域布局
-    private var userInfoLayout: ProfileUserInfoLayout {
-        ProfileUserInfoLayout(
-            containerWidth: 365.w,        // 容器宽度
-            verticalSpacing: 7.h,         // 垂直间距
-            bottomPadding: 10.h,          // 底部边距
-            avatarOuterSize: 108.s,       // 头像外圈大小
-            avatarInnerSize: 100.s,       // 头像内圈大小
-            avatarBorderWidth: 1,         // 边框宽度（保持1像素）
-            usernameFontSize: 20.f,       // 用户名字体大小
-            usernameSpacingFromAvatar: 9.h,  // 与头像间距
-            locationFontSize: 12.f,       // 位置字体大小
-            professionFontSize: 12.f,     // 职业字体大小
-            blueVIconSize: 20.s,          // 蓝标大小
-            professionIconSpacing: 10.s,  // 蓝标与文字间距
-            statsTopPadding: 8.h,         // 统计区顶部间距
-            statsLabelFontSize: 16.f,     // 统计标签字体
-            statsValueFontSize: 16.f,     // 统计数值字体
-            statsItemWidth: 132.w,        // 统计项宽度
-            statsItemSpacing: -16.w,      // 统计项间距
-            statsDividerHeight: 24.h      // 分隔线高度
-        )
-    }
-
     // ==================== 用户信息区块垂直位置调整 ====================
     // 调整此值可单独控制头像、用户名、位置、职业、粉丝统计区块的垂直位置
     // 正值向下移动，负值向上移动
@@ -430,7 +392,7 @@ struct ProfileView: View {
     // ==================== 内容区域（标签栏+帖子）垂直位置调整 ====================
     // 调整此值可控制 Posts/Saved/Liked 标签栏及下方内容的垂直位置
     // 正值向下移动，负值向上移动
-    private let contentSectionVerticalOffset: CGFloat = -8  // ← 在此调整垂直偏移量（间距8px）
+    private let contentSectionVerticalOffset: CGFloat = 20  // ← 向下偏移 8pt，与用户信息区域保持 8pt 间距
 
     // MARK: - 用户信息头部区域
     private var userHeaderSection: some View {
@@ -505,7 +467,7 @@ struct ProfileView: View {
                     }
                 }
                 .padding(.horizontal, 17.w)
-                .padding(.top, 30.h)
+                .padding(.top, 64.h)  // 距离手机顶部 64pt（忽略安全区域后）
 
                 // MARK: - 用户信息区域
                 VStack(spacing: 8.h) {
@@ -541,7 +503,7 @@ struct ProfileView: View {
                             .overlay(
                                 Circle()
                                     .inset(by: 1)
-                                    .stroke(.white, lineWidth: 1)
+                                    .stroke(.white, lineWidth: 2)
                             )
                             .overlay(
                                 // 添加头像图标 - 在白线前层
@@ -558,16 +520,16 @@ struct ProfileView: View {
                             .font(.system(size: 16.f, weight: .semibold))
                             .foregroundColor(.white)
 
-                        // 位置
-                        Text(displayUser?.location?.isEmpty == false ? displayUser!.location! : "Add Location")
+                        // 位置（未填写时显示空白，保留位置）
+                        Text(displayUser?.location?.isEmpty == false ? displayUser!.location! : " ")
                             .font(Font.custom("SF Pro Display", size: 14.f).weight(.light))
                             .foregroundColor(.white)
                     }
                     .frame(width: 130.w)
 
-                    // 职业 + 认证图标
+                    // 职业 + 认证图标（未填写时显示空白，保留位置）
                     HStack(spacing: 10.s) {
-                        Text(displayUser?.bio?.isEmpty == false ? displayUser!.bio! : "Add Profession")
+                        Text(displayUser?.bio?.isEmpty == false ? displayUser!.bio! : " ")
                             .font(Font.custom("SF Pro Display", size: 14.f).weight(.light))
                             .foregroundColor(.white)
                         if displayUser?.safeIsVerified == true {
@@ -579,7 +541,7 @@ struct ProfileView: View {
                     }
 
                     // Following / Followers / Halo
-                    HStack(spacing: 0) {
+                    HStack(spacing: -2) {
                         // Following
                         Button(action: { activeSheet = .following }) {
                             VStack(spacing: 1.h) {
@@ -639,160 +601,149 @@ struct ProfileView: View {
 
     // MARK: - 内容区域
     private var contentSection: some View {
-        ZStack(alignment: .top) {
-            // 背景
-            Rectangle()
-                .foregroundColor(.clear)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(red: 0.96, green: 0.96, blue: 0.96))
-
+        VStack(spacing: 0) {
             // 顶部分隔线
             Rectangle()
                 .fill(Color(red: 0.74, green: 0.74, blue: 0.74))
                 .frame(height: 0.5)
-                .frame(maxWidth: .infinity)
 
-            VStack(spacing: 0) {
-                // MARK: - 标签栏
-                VStack(spacing: 0) {
-                    HStack(spacing: 42.s) {
-                        // 标签按钮
-                        HStack(spacing: 40.s) {
-                            Button(action: {
-                                profileData.selectedTab = .posts
-                                Task {
-                                    await profileData.loadContent(for: .posts)
-                                }
-                            }) {
-                                Text("Posts")
-                                    .font(.system(size: 16.f, weight: .semibold))
-                                    .foregroundColor(profileData.selectedTab == .posts ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
-                            }
-
-                            Button(action: {
-                                profileData.selectedTab = .saved
-                                Task {
-                                    await profileData.loadContent(for: .saved)
-                                }
-                            }) {
-                                Text("Saved")
-                                    .font(.system(size: 16.f, weight: .semibold))
-                                    .foregroundColor(profileData.selectedTab == .saved ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
-                            }
-
-                            Button(action: {
-                                profileData.selectedTab = .liked
-                                Task {
-                                    await profileData.loadContent(for: .liked)
-                                }
-                            }) {
-                                Text("Liked")
-                                    .font(.system(size: 16.f, weight: .semibold))
-                                    .foregroundColor(profileData.selectedTab == .liked ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
-                            }
+            // MARK: - 标签栏
+            HStack(spacing: 42.s) {
+                // 标签按钮
+                HStack(spacing: 40.s) {
+                    Button(action: {
+                        profileData.selectedTab = .posts
+                        Task {
+                            await profileData.loadContent(for: .posts)
                         }
-                        .frame(width: 211.w, height: 24.h)
-
-                        // 搜索图标
-                        Button(action: {
-                            let wasShowingSearch = showSearchBar
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                showSearchBar.toggle()
-                            }
-                            if wasShowingSearch {
-                                searchText = ""
-                                profileData.searchQuery = ""
-                                profileData.isSearching = false
-                            }
-                        }) {
-                            if showSearchBar {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 20.f))
-                                    .foregroundColor(.black)
-                            } else {
-                                Image("search(gray)")
-                                    .resizable()
-                                    .scaledToFit()
-                            }
-                        }
-                        .frame(width: 24.s, height: 24.s)
+                    }) {
+                        Text("Posts")
+                            .font(.system(size: 16.f, weight: .semibold))
+                            .foregroundColor(profileData.selectedTab == .posts ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
                     }
-                    .padding(.top, 12.h)
-                    .padding(.bottom, 16.h)
-                    .padding(.leading, 82.w)
-                    .padding(.trailing, 16.w)
-                    .frame(maxWidth: .infinity)
-                    
-                    // MARK: - 搜索框
+
+                    Button(action: {
+                        profileData.selectedTab = .saved
+                        Task {
+                            await profileData.loadContent(for: .saved)
+                        }
+                    }) {
+                        Text("Saved")
+                            .font(.system(size: 16.f, weight: .semibold))
+                            .foregroundColor(profileData.selectedTab == .saved ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                    }
+
+                    Button(action: {
+                        profileData.selectedTab = .liked
+                        Task {
+                            await profileData.loadContent(for: .liked)
+                        }
+                    }) {
+                        Text("Liked")
+                            .font(.system(size: 16.f, weight: .semibold))
+                            .foregroundColor(profileData.selectedTab == .liked ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                    }
+                }
+                .frame(width: 211.w, height: 24.h)
+
+                // 搜索图标
+                Button(action: {
+                    let wasShowingSearch = showSearchBar
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showSearchBar.toggle()
+                    }
+                    if wasShowingSearch {
+                        searchText = ""
+                        profileData.searchQuery = ""
+                        profileData.isSearching = false
+                    }
+                }) {
                     if showSearchBar {
-                        HStack(spacing: 10.s) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 14.f))
-                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 20.f))
+                            .foregroundColor(.black)
+                    } else {
+                        Image("search(gray)")
+                            .resizable()
+                            .scaledToFit()
+                    }
+                }
+                .frame(width: 24.s, height: 24.s)
+            }
+            .padding(.top, 12.h)
+            .padding(.bottom, 16.h)
+            .padding(.leading, 82.w)
+            .padding(.trailing, 16.w)
+            .frame(maxWidth: .infinity)
 
-                            TextField("搜索帖子內容...", text: $searchText)
-                                .font(.system(size: 14.f))
-                                .foregroundColor(.black)
-                                .textFieldStyle(.plain)
-                                .onChange(of: searchText) { _, newValue in
-                                    // 性能優化：添加 300ms 防抖動避免每次按鍵都觸發搜索
-                                    searchDebounceTask?.cancel()
-                                    searchDebounceTask = Task {
-                                        try? await Task.sleep(for: .milliseconds(300))
-                                        guard !Task.isCancelled else { return }
-                                        await profileData.searchInProfile(query: newValue)
-                                    }
-                                }
+            // MARK: - 搜索框
+            if showSearchBar {
+                HStack(spacing: 10.s) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 14.f))
+                        .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
-                            if !searchText.isEmpty {
-                                Button(action: {
-                                    searchText = ""
-                                    profileData.searchQuery = ""
-                                    profileData.isSearching = false
-                                }) {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 14.f))
-                                        .foregroundColor(.gray)
-                                }
+                    TextField("搜索帖子內容...", text: $searchText)
+                        .font(.system(size: 14.f))
+                        .foregroundColor(.black)
+                        .textFieldStyle(.plain)
+                        .onChange(of: searchText) { _, newValue in
+                            searchDebounceTask?.cancel()
+                            searchDebounceTask = Task {
+                                try? await Task.sleep(for: .milliseconds(300))
+                                guard !Task.isCancelled else { return }
+                                await profileData.searchInProfile(query: newValue)
                             }
                         }
-                        .padding(EdgeInsets(top: 8.h, leading: 12.w, bottom: 8.h, trailing: 12.w))
-                        .background(Color(red: 0.95, green: 0.95, blue: 0.95))
-                        .cornerRadius(10.s)
-                        .padding(.horizontal, 16.w)
-                        .padding(.bottom, 8.h)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                    }
 
-                    // 分隔线
-                    Rectangle()
-                        .fill(DesignTokens.borderColor)
-                        .frame(height: 0.5)
-                }
-
-                // MARK: - 帖子网格 (纯UI展示)
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 5.s), GridItem(.flexible(), spacing: 5.s)], spacing: 5.s) {
-                        ForEach(0..<4, id: \.self) { _ in
-                            PostCard(
-                                imageUrl: nil,
-                                imageName: "PostCardImage",
-                                title: "kyleegigstead Cyborg dreams...",
-                                authorName: "Simone Carter",
-                                authorAvatarUrl: nil,
-                                likeCount: 2234,
-                                onTap: nil
-                            )
+                    if !searchText.isEmpty {
+                        Button(action: {
+                            searchText = ""
+                            profileData.searchQuery = ""
+                            profileData.isSearching = false
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 14.f))
+                                .foregroundColor(.gray)
                         }
                     }
-                    .padding(.horizontal, 5.w)
-                    .padding(.top, 5.h)
-                    .padding(.bottom, 50)  // 底部边距
                 }
+                .padding(EdgeInsets(top: 8.h, leading: 12.w, bottom: 8.h, trailing: 12.w))
+                .background(Color(red: 0.95, green: 0.95, blue: 0.95))
+                .cornerRadius(10.s)
+                .padding(.horizontal, 16.w)
+                .padding(.bottom, 8.h)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
-            .frame(maxHeight: .infinity)
+
+            // 分隔线
+            Rectangle()
+                .fill(DesignTokens.borderColor)
+                .frame(height: 0.5)
+
+            // MARK: - 帖子网格 (纯UI展示)
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 5.s), GridItem(.flexible(), spacing: 5.s)], spacing: 5.s) {
+                    ForEach(0..<6, id: \.self) { _ in
+                        PostCard(
+                            imageUrl: nil,
+                            imageName: "PostCardImage",
+                            title: "kyleegigstead Cyborg dreams...",
+                            authorName: "Bruce Li",
+                            authorAvatarUrl: nil,
+                            likeCount: 2234,
+                            onTap: nil
+                        )
+                    }
+                }
+                .padding(.horizontal, 5.w)
+                .padding(.top, 5.h)
+                .padding(.bottom, 100.h)  // 底部留出足够空间给导航栏
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()  // 裁剪超出内容
         }
-        .frame(maxHeight: .infinity)
+        .background(Color(red: 0.96, green: 0.96, blue: 0.96))  // 整个内容区域灰色背景
     }
 
     // MARK: - 空状态视图
@@ -1046,13 +997,7 @@ struct PostGridCard: View {
 
 // MARK: - Previews
 
-#Preview("Profile - Default") {
+#Preview("Profile") {
     ProfileView(currentPage: .constant(.account))
         .environmentObject(AuthenticationManager.shared)
-}
-
-#Preview("Profile - Light Mode") {
-    ProfileView(currentPage: .constant(.account))
-        .environmentObject(AuthenticationManager.shared)
-        .preferredColorScheme(.light)
 }
