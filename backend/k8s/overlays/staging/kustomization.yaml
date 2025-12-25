@@ -123,6 +123,16 @@ patches:
       - op: replace
         path: /data/ZITADEL_API_URL
         value: "http://zitadel.nova-backend.svc.cluster.local:8080"
+      # LiveKit Voice Agent configuration
+      - op: add
+        path: /data/LIVEKIT_URL
+        value: "wss://kok-fjbuamt4.livekit.cloud"
+      - op: add
+        path: /data/LIVEKIT_API_KEY
+        value: "APIJj42q2LnvpbD"
+      - op: add
+        path: /data/LIVEKIT_API_SECRET
+        value: "kxHgmEKkvbNDzWTFJoFgHlVfgbeaSAFV5fburhMwKccA"
 
 # Staging image tags - use full GAR registry path
 images:

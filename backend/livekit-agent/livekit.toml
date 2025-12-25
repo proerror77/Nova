@@ -1,0 +1,6 @@
+[project]
+  subdomain = "kok-fjbuamt4"
+
+[agent]
+  id = "CA_Sq3t9AevDUkk"
+  name = "alice"

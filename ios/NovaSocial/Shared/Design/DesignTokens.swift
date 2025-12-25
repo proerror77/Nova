@@ -208,7 +208,7 @@ struct DesignTokens {
 
     /// Background Colors
     static let backgroundColor = Color.dynamic(
-        light: UIColor(red: 0.97, green: 0.96, blue: 0.96, alpha: 1.0),
+        light: UIColor(red: 0.96, green: 0.96, blue: 0.96, alpha: 1.0),
         dark: UIColor(red: 0.08, green: 0.08, blue: 0.09, alpha: 1.0)
     )
     static let surface = Color.dynamic(

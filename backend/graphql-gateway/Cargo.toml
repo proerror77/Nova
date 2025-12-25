@@ -87,8 +87,9 @@ rdkafka = { version = "0.36", features = ["cmake-build"] }  # ✅ P0-5: For subs
 prometheus = { workspace = true }  # ✅ Quick Win #5: Cache performance metrics
 lazy_static = "1.5"  # ✅ Quick Win #5: For static metric registry
 
-# Persisted Queries
+# Persisted Queries & JWT
 sha2 = "0.10"  # ✅ P1: SHA-256 hashing for Automatic Persisted Queries (APQ)
+hmac = "0.12"  # LiveKit JWT token signing
 once_cell = "1.19"  # For lazy static initialization (Alice enhance cache)
 
 [build-dependencies]

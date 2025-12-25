@@ -10,8 +10,8 @@ spec:
     healthyThreshold: 1
     unhealthyThreshold: 3
     type: HTTP
-    requestPath: /health
-    port: 8080
+    requestPath: /
+    port: 8081
   timeoutSec: 300
   connectionDraining:
     drainingTimeoutSec: 60
