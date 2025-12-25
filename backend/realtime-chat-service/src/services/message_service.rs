@@ -148,7 +148,7 @@ impl MessageService {
     }
 
     /// Send an audio message to a conversation
-    /// Stores audio URL in content field (metadata columns removed in schema simplification)
+    /// Stores audio metadata as JSON in content field for client parsing
     /// Returns: (message_id, sequence_number)
     #[allow(clippy::too_many_arguments)]
     pub async fn send_audio_message_db(
@@ -157,15 +157,20 @@ impl MessageService {
         conversation_id: Uuid,
         sender_id: Uuid,
         audio_url: &str,
-        _duration_ms: u32,  // Metadata stored in content JSON if needed
-        _audio_codec: &str, // Metadata stored in content JSON if needed
+        duration_ms: u32,
+        audio_codec: &str,
         idempotency_key: Option<&str>,
     ) -> Result<(Uuid, i64), crate::error::AppError> {
         let id = Uuid::new_v4();
 
-        // Note: message_type, duration_ms, audio_codec columns don't exist in current schema
-        // Store audio URL in content field; client can parse metadata from URL or store as JSON
-        let content = audio_url.to_string();
+        // Store audio metadata as JSON for client parsing
+        // Schema note: Using content field for structured audio data
+        let content = serde_json::json!({
+            "type": "audio",
+            "url": audio_url,
+            "duration_ms": duration_ms,
+            "codec": audio_codec
+        }).to_string();
 
         let client = db.get().await.map_err(|e| {
             crate::error::AppError::StartServer(format!("get client: {e}"))

@@ -465,8 +465,17 @@ struct AliceView: View {
             } catch {
                 await MainActor.run {
                     aiMessage.isStreaming = false
+
+                    // Check for quota error and provide helpful message
+                    let displayMessage: String
+                    if let xaiError = error as? XAIError, xaiError.isQuotaError {
+                        displayMessage = "AI 服務配額已用完，請稍後再試。\n\n此錯誤通常是暫時的，請稍等幾分鐘後重試。"
+                    } else {
+                        displayMessage = "抱歉，發生錯誤：\(error.localizedDescription)"
+                    }
+
                     if aiMessage.content.isEmpty {
-                        aiMessage.content = "抱歉，發生錯誤：\(error.localizedDescription)"
+                        aiMessage.content = displayMessage
                     }
                     errorMessage = error.localizedDescription
 

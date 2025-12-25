@@ -812,13 +812,3 @@ struct FeedChannel: Codable, Identifiable, Hashable {
     ]
 }
 
-/// AI-powered channel suggestion for post classification
-struct ChannelSuggestion: Codable, Identifiable {
-    let id: String
-    let name: String
-    let slug: String
-    /// Confidence score (0.0 - 1.0)
-    let confidence: Float
-    /// Keywords that matched the post content
-    let matchedKeywords: [String]
-}

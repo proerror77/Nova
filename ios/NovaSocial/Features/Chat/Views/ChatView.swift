@@ -317,7 +317,13 @@ struct MessageBubbleView: View {
         }
     }
 
-    @ViewBuilder private var messageContent: some View {
+    // MARK: - 統一消息內容渲染（消除重複代碼）
+    @ViewBuilder 
+    private func renderMessageContent(isFromMe: Bool) -> some View {
+        let bubbleColor = isFromMe ? myBubbleColor : otherBubbleColor
+        let textColor = isFromMe ? Color.white : otherTextColor
+        let alignment: Alignment = isFromMe ? .trailing : .leading
+        
         // 1. 本地圖片
         if let image = message.image {
             Image(uiImage: image)
@@ -337,8 +343,8 @@ struct MessageBubbleView: View {
                             .frame(width: 150, height: 150)
                         ProgressView()
                     }
-                case .success(let image):
-                    image
+                case .success(let loadedImage):
+                    loadedImage
                         .resizable()
                         .scaledToFit()
                         .frame(maxWidth: 200, maxHeight: 200)
@@ -369,131 +375,51 @@ struct MessageBubbleView: View {
         // 4. 語音消息
         else if message.messageType == .audio || message.audioData != nil || message.audioUrl != nil {
             if let player = audioPlayer {
-                VoiceMessageView(message: message, isFromMe: true, audioPlayer: player)
+                VoiceMessageView(message: message, isFromMe: isFromMe, audioPlayer: player)
             } else {
                 // 無播放器時顯示佔位符
                 HStack(spacing: 8) {
                     Image(systemName: "waveform")
-                        .foregroundColor(.white)
+                        .foregroundColor(textColor)
                     Text(formatDuration(message.audioDuration ?? 0))
                         .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.8))
+                        .foregroundColor(textColor.opacity(0.8))
                 }
                 .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 16))
-                .background(myBubbleColor)
+                .background(bubbleColor)
                 .cornerRadius(20)
             }
         }
         // 5. 文件消息
         else if message.messageType == .file {
-            fileMessageView(isFromMe: true)
+            fileMessageView(isFromMe: isFromMe)
         }
         // 6. 視頻消息
         else if message.messageType == .video, let urlString = message.mediaUrl {
-            videoThumbnailView(urlString: urlString, isFromMe: true)
+            videoThumbnailView(urlString: urlString, isFromMe: isFromMe)
         }
         // 7. 文字消息
         else {
             Text(message.text)
                 .font(Font.custom("Helvetica Neue", size: 16))
                 .lineSpacing(4)
-                .foregroundColor(.white)
+                .foregroundColor(textColor)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
-                .background(myBubbleColor)
+                .background(bubbleColor)
                 .cornerRadius(14)
-                .frame(maxWidth: 260, alignment: .trailing)
+                .frame(maxWidth: 260, alignment: alignment)
         }
+    }
+    
+    // MARK: - 向後兼容的包裝屬性
+    @ViewBuilder private var messageContent: some View {
+        renderMessageContent(isFromMe: true)
     }
 
     @ViewBuilder private var otherMessageContent: some View {
-        // 1. 本地圖片
-        if let image = message.image {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: 200, maxHeight: 200)
-                .cornerRadius(14)
-        }
-        // 2. 遠程圖片 URL
-        else if message.messageType == .image, let urlString = message.mediaUrl, let url = URL(string: urlString) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(Color.gray.opacity(0.2))
-                            .frame(width: 150, height: 150)
-                        ProgressView()
-                    }
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: 200, maxHeight: 200)
-                        .cornerRadius(14)
-                case .failure:
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(Color.gray.opacity(0.2))
-                            .frame(width: 150, height: 100)
-                        VStack(spacing: 4) {
-                            Image(systemName: "photo")
-                                .font(.system(size: 24))
-                                .foregroundColor(.gray)
-                            Text("載入失敗")
-                                .font(.system(size: 12))
-                                .foregroundColor(.gray)
-                        }
-                    }
-                @unknown default:
-                    EmptyView()
-                }
-            }
-        }
-        // 3. 位置消息
-        else if let location = message.location {
-            LocationMessageView(location: location)
-        }
-        // 4. 語音消息
-        else if message.messageType == .audio || message.audioData != nil || message.audioUrl != nil {
-            if let player = audioPlayer {
-                VoiceMessageView(message: message, isFromMe: false, audioPlayer: player)
-            } else {
-                HStack(spacing: 8) {
-                    Image(systemName: "waveform")
-                        .foregroundColor(otherTextColor)
-                    Text(formatDuration(message.audioDuration ?? 0))
-                        .font(.system(size: 12))
-                        .foregroundColor(otherTextColor.opacity(0.8))
-                }
-                .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 16))
-                .background(otherBubbleColor)
-                .cornerRadius(20)
-            }
-        }
-        // 5. 文件消息
-        else if message.messageType == .file {
-            fileMessageView(isFromMe: false)
-        }
-        // 6. 視頻消息
-        else if message.messageType == .video, let urlString = message.mediaUrl {
-            videoThumbnailView(urlString: urlString, isFromMe: false)
-        }
-        // 7. 文字消息
-        else {
-            Text(message.text)
-                .font(Font.custom("Helvetica Neue", size: 16))
-                .lineSpacing(4)
-                .foregroundColor(otherTextColor)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
-                .background(otherBubbleColor)
-                .cornerRadius(14)
-                .frame(maxWidth: 260, alignment: .leading)
-        }
+        renderMessageContent(isFromMe: false)
     }
     
     // MARK: - 文件消息視圖
@@ -1322,7 +1248,7 @@ struct ChatView: View {
         // 防止重复设置处理器 - 只设置一次
         guard !matrixMessageHandlerSetup else {
             #if DEBUG
-            print("[ChatView] ⚠️ Matrix message handler already setup, skipping duplicate setup\")")
+            print("[ChatView] ⚠️ Matrix message handler already setup, skipping duplicate setup")
             #endif
             return
         }
@@ -1347,7 +1273,7 @@ struct ChatView: View {
                 // 避免重複
                 if self.messages.contains(where: { $0.id == matrixMessage.id }) {
                     #if DEBUG
-                    print("[ChatView] ⚠️ Skipping duplicate message: \\(matrixMessage.id) (already exists)")
+                    print("[ChatView] ⚠️ Skipping duplicate message: \(matrixMessage.id) (already exists)")
                     #endif
                     return
                 }
@@ -1363,7 +1289,7 @@ struct ChatView: View {
                 // 再次檢查 - 防止競態條件（消息可能在轉換期間被添加）
                 if self.messages.contains(where: { $0.id == newChatMessage.id }) {
                     #if DEBUG
-                    print("[ChatView] ⚠️ Skipping duplicate message: \\(newChatMessage.id) (added during conversion)")
+                    print("[ChatView] ⚠️ Skipping duplicate message: \(newChatMessage.id) (added during conversion)")
                     #endif
                     return
                 }
@@ -1372,7 +1298,7 @@ struct ChatView: View {
                 self.messages.append(newChatMessage)
                 
                 #if DEBUG
-                print("[ChatView] ✅ Message added to UI - ID: \\(newChatMessage.id), Sender: \\(newChatMessage.isFromMe ? \"me\" : \"other\"), Total: \\(self.messages.count)")
+                print("[ChatView] ✅ Message added to UI - ID: \(newChatMessage.id), Sender: \(newChatMessage.isFromMe ? "me" : "other"), Total: \(self.messages.count)")
                 #endif
 
                 // 清除打字指示器
@@ -1381,7 +1307,7 @@ struct ChatView: View {
                 // Mark as read (Matrix read receipt)
                 if novaMessage.senderId != self.currentUserId {
                     #if DEBUG
-                    print("[ChatView] 📖 Marking message as read - ID: \\(matrixMessage.id)")
+                    print("[ChatView] 📖 Marking message as read - ID: \(matrixMessage.id)")
                     #endif
                     try? await self.matrixBridge.markAsRead(conversationId: self.conversationId)
                 }

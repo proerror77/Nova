@@ -289,25 +289,38 @@ struct MessageView: View {
         }
     }
 
+    // MARK: - Static DateFormatters (性能優化：避免重複創建)
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter
+    }()
+    
+    private static let weekdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE"
+        return formatter
+    }()
+    
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MM/dd"
+        return formatter
+    }()
+    
     // 格式化时间显示
     private func formatTime(_ date: Date) -> String {
         let calendar = Calendar.current
         let now = Date()
 
         if calendar.isDateInToday(date) {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "h:mm a"
-            return formatter.string(from: date)
+            return Self.timeFormatter.string(from: date)
         } else if calendar.isDateInYesterday(date) {
             return "Yesterday"
         } else if calendar.isDate(date, equalTo: now, toGranularity: .weekOfYear) {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "EEEE"
-            return formatter.string(from: date)
+            return Self.weekdayFormatter.string(from: date)
         } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "MM/dd"
-            return formatter.string(from: date)
+            return Self.dateFormatter.string(from: date)
         }
     }
 
@@ -452,6 +465,29 @@ struct MessageView: View {
             showCameraPermissionAlert = true
         @unknown default:
             showCameraPermissionAlert = true
+        }
+    }
+
+    // MARK: - Delete Conversation (滑動刪除)
+    private func deleteConversation(_ conversation: ConversationPreview) {
+        Task {
+            do {
+                // Leave the Matrix room
+                try await matrixBridge.leaveConversation(conversationId: conversation.id)
+
+                // Remove from local list
+                await MainActor.run {
+                    conversations.removeAll { $0.id == conversation.id }
+                }
+
+                #if DEBUG
+                print("[MessageView] Successfully deleted conversation: \(conversation.userName)")
+                #endif
+            } catch {
+                #if DEBUG
+                print("[MessageView] Failed to delete conversation: \(error.localizedDescription)")
+                #endif
+            }
         }
     }
 
@@ -680,105 +716,103 @@ struct MessageView: View {
                     }
                 } else {
                 // MARK: - 消息列表
-                ScrollView {
-                    VStack(spacing: 2) {
-                        // 加载状态
-                        if isLoading {
-                            VStack(spacing: 16) {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle())
-                                    .scaleEffect(1.2)
-                                Text(LocalizedStringKey("Loading messages..."))
-                                    .font(.system(size: 14))
-                                    .foregroundColor(DesignTokens.textSecondary)
+                if isLoading {
+                    // 加载状态
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle())
+                            .scaleEffect(1.2)
+                        Text(LocalizedStringKey("Loading messages..."))
+                            .font(.system(size: 14))
+                            .foregroundColor(DesignTokens.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.top, 60)
+                } else if let error = errorMessage {
+                    // 错误状态
+                    VStack(spacing: 16) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 40))
+                            .foregroundColor(DesignTokens.accentColor)
+                        Text(error)
+                            .font(.system(size: 14))
+                            .foregroundColor(DesignTokens.textSecondary)
+                        Button(action: {
+                            Task {
+                                await initializeMatrixAndLoadConversations()
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 60)
-                        }
-                        // 错误状态
-                        else if let error = errorMessage {
-                            VStack(spacing: 16) {
-                                Image(systemName: "exclamationmark.triangle")
-                                    .font(.system(size: 40))
-                                    .foregroundColor(DesignTokens.accentColor)
-                                Text(error)
-                                    .font(.system(size: 14))
-                                    .foregroundColor(DesignTokens.textSecondary)
-                                Button(action: {
-                                    Task {
-                                        await initializeMatrixAndLoadConversations()
-                                    }
-                                }) {
-                                Text(LocalizedStringKey("Retry"))
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(DesignTokens.textOnAccent)
-                                        .padding(.horizontal, 24)
-                                        .padding(.vertical, 8)
-                                        .background(DesignTokens.accentColor)
-                                        .cornerRadius(20)
-                                }
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 60)
-                        }
-                        // 空状态
-                        else if conversations.isEmpty {
-                            VStack(spacing: 16) {
-                                Image(systemName: "message")
-                                    .font(.system(size: 40))
-                                    .foregroundColor(DesignTokens.textSecondary)
-                                Text(LocalizedStringKey("No messages yet"))
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(DesignTokens.textSecondary)
-                                Text(LocalizedStringKey("Start a conversation with friends"))
-                                    .font(.system(size: 14))
-                                    .foregroundColor(DesignTokens.textSecondary)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 60)
-                        }
-                        // 会话列表
-                        else {
-                            ForEach(conversations) { convo in
-                                MessageListItem(
-                                    name: convo.userName,
-                                    messagePreview: convo.lastMessage,
-                                    time: convo.time,
-                                    unreadCount: convo.unreadCount,
-                                    showMessagePreview: true,
-                                    showTimeAndBadge: convo.hasUnread,
-                                    isEncrypted: convo.isEncrypted,
-                                    userId: convo.id,  // 使用会话ID（实际项目中应传入对方用户ID）
-                                    avatarUrl: convo.avatarUrl,  // 传入头像URL
-                                    onAvatarTapped: { userId in
-                                        // 点击头像跳转用户主页（排除 Alice）
-                                        if convo.userName.lowercased() != "alice" {
-                                            selectedUserId = userId
-                                            showUserProfile = true
-                                        }
-                                    }
-                                )
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    // alice 跳转到 Alice 页面，其他用户跳转到 Chat 页面
-                                    if convo.userName.lowercased() == "alice" {
-                                        currentPage = .alice
-                                    } else {
-                                        selectedConversationId = convo.id
-                                        selectedUserName = convo.userName
-                                        selectedAvatarUrl = convo.avatarUrl  // 保存頭像URL
-                                        showChat = true
-                                    }
-                                }
-
-                                if convo.id != conversations.last?.id {
-                                    Divider()
-                                        .frame(height: 0.25)
-                                        .background(DesignTokens.borderColor)
-                                }
-                            }
+                        }) {
+                            Text(LocalizedStringKey("Retry"))
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(DesignTokens.textOnAccent)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 8)
+                                .background(DesignTokens.accentColor)
+                                .cornerRadius(20)
                         }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.top, 60)
+                } else if conversations.isEmpty {
+                    // 空状态
+                    VStack(spacing: 16) {
+                        Image(systemName: "message")
+                            .font(.system(size: 40))
+                            .foregroundColor(DesignTokens.textSecondary)
+                        Text(LocalizedStringKey("No messages yet"))
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(DesignTokens.textSecondary)
+                        Text(LocalizedStringKey("Start a conversation with friends"))
+                            .font(.system(size: 14))
+                            .foregroundColor(DesignTokens.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.top, 60)
+                } else {
+                    // 会话列表 (支持滑動刪除)
+                    List {
+                        ForEach(conversations) { convo in
+                            MessageListItem(
+                                name: convo.userName,
+                                messagePreview: convo.lastMessage,
+                                time: convo.time,
+                                unreadCount: convo.unreadCount,
+                                showMessagePreview: true,
+                                showTimeAndBadge: convo.hasUnread,
+                                isEncrypted: convo.isEncrypted,
+                                userId: convo.id,
+                                avatarUrl: convo.avatarUrl,
+                                onAvatarTapped: { userId in
+                                    if convo.userName.lowercased() != "alice" {
+                                        selectedUserId = userId
+                                        showUserProfile = true
+                                    }
+                                }
+                            )
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if convo.userName.lowercased() == "alice" {
+                                    currentPage = .alice
+                                } else {
+                                    selectedConversationId = convo.id
+                                    selectedUserName = convo.userName
+                                    selectedAvatarUrl = convo.avatarUrl
+                                    showChat = true
+                                }
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    deleteConversation(convo)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                            .listRowSeparator(.hidden)
+                        }
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                     .padding(.bottom, DesignTokens.bottomBarHeight + DesignTokens.spacing12 + 40)
                 }
                 } // End of else (non-searching state)
