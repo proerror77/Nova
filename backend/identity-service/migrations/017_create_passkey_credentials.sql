@@ -39,14 +39,15 @@ CREATE TABLE IF NOT EXISTS passkey_credentials (
     last_used_at TIMESTAMPTZ
 );
 
--- Create indexes for performance
-CREATE INDEX idx_passkey_user_id ON passkey_credentials(user_id);
-CREATE INDEX idx_passkey_credential_id_base64 ON passkey_credentials(credential_id_base64);
-CREATE INDEX idx_passkey_active ON passkey_credentials(user_id, is_active) WHERE is_active = TRUE;
-CREATE INDEX idx_passkey_aaguid ON passkey_credentials(aaguid) WHERE aaguid IS NOT NULL;
-CREATE INDEX idx_passkey_last_used ON passkey_credentials(last_used_at DESC NULLS LAST);
+-- Create indexes for performance (IF NOT EXISTS for idempotency)
+CREATE INDEX IF NOT EXISTS idx_passkey_user_id ON passkey_credentials(user_id);
+CREATE INDEX IF NOT EXISTS idx_passkey_credential_id_base64 ON passkey_credentials(credential_id_base64);
+CREATE INDEX IF NOT EXISTS idx_passkey_active ON passkey_credentials(user_id, is_active) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_passkey_aaguid ON passkey_credentials(aaguid) WHERE aaguid IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_passkey_last_used ON passkey_credentials(last_used_at DESC NULLS LAST);
 
--- Add trigger for updated_at
+-- Add trigger for updated_at (drop first for idempotency)
+DROP TRIGGER IF EXISTS update_passkey_credentials_updated_at ON passkey_credentials;
 CREATE TRIGGER update_passkey_credentials_updated_at
     BEFORE UPDATE ON passkey_credentials
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
