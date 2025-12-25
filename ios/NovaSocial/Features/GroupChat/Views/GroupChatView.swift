@@ -19,6 +19,9 @@ struct GroupChatView: View {
     // 圖片選擇
     @State private var selectedPhotoItem: PhotosPickerItem?
 
+    // 群組設定
+    @State private var showGroupSettings = false
+
     init(showGroupChat: Binding<Bool>, conversationId: String, groupName: String, memberCount: Int) {
         self._showGroupChat = showGroupChat
         self.conversationId = conversationId
@@ -79,6 +82,14 @@ struct GroupChatView: View {
                 }
             )
         }
+        .sheet(isPresented: $showGroupSettings) {
+            GroupSettingsView(
+                isPresented: $showGroupSettings,
+                conversationId: conversationId,
+                groupName: groupName,
+                memberCount: memberCount
+            )
+        }
         .onChange(of: selectedPhotoItem) { _, newItem in
             handlePhotoSelection(newItem)
         }
@@ -118,7 +129,7 @@ struct GroupChatView: View {
             Spacer()
 
             Button(action: {
-                // TODO: Group settings
+                showGroupSettings = true
             }) {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 20))

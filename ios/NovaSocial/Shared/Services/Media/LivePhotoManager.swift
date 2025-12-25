@@ -148,14 +148,14 @@ class LivePhotoManager: ObservableObject {
 
         let url = movie.url
 
-        // Generate thumbnail
+        // Generate thumbnail using async API (iOS 18+ compatible)
         let asset = AVURLAsset(url: url)
         let imageGenerator = AVAssetImageGenerator(asset: asset)
         imageGenerator.appliesPreferredTrackTransform = true
 
         let thumbnail: UIImage
         do {
-            let cgImage = try imageGenerator.copyCGImage(at: .zero, actualTime: nil)
+            let (cgImage, _) = try await imageGenerator.image(at: .zero)
             thumbnail = UIImage(cgImage: cgImage)
         } catch {
             thumbnail = UIImage(systemName: "video.fill") ?? UIImage()

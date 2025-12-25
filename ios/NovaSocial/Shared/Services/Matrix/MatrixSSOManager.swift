@@ -453,7 +453,11 @@ private class MatrixSSOPresentationProvider: NSObject, ASWebAuthenticationPresen
            let window = windowScene.windows.first {
             return window
         }
-        return ASPresentationAnchor()
+        // iOS 26+: Create window with window scene instead of empty init
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            return UIWindow(windowScene: windowScene)
+        }
+        return UIWindow(frame: UIScreen.main.bounds)
         #else
         return ASPresentationAnchor()
         #endif

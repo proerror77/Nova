@@ -152,7 +152,7 @@ struct LoginView: View {
                 HStack {
                     Spacer()
                     Button(action: {
-                        // TODO: Handle forgot password
+                        currentPage = .forgotPassword
                     }) {
                         Text("Forgot password?")
                             .font(Font.custom("SF Pro Display", size: 14.f))

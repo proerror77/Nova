@@ -238,7 +238,12 @@ actor ImageCacheService {
         if let scale = scale {
             displayScale = scale
         } else {
-            displayScale = await MainActor.run { UIScreen.main.scale }
+            // Get scale from connected window scene (iOS 26+ compatible)
+            displayScale = await MainActor.run {
+                UIApplication.shared.connectedScenes
+                    .compactMap { $0 as? UIWindowScene }
+                    .first?.screen.scale ?? 3.0
+            }
         }
         let cacheKey = cacheKey(for: urlString, targetSize: targetSize)
 
@@ -529,7 +534,12 @@ actor ImageCacheService {
     }
     
     private func createThumbnail(from image: UIImage) async -> UIImage? {
-        let scale = await MainActor.run { UIScreen.main.scale }
+        // Get scale from connected window scene (iOS 26+ compatible)
+        let scale = await MainActor.run {
+            UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .first?.screen.scale ?? 3.0
+        }
         let size = CGSize(
             width: thumbnailSize.width * scale,
             height: thumbnailSize.height * scale

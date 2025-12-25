@@ -157,6 +157,9 @@ struct MessageView: View {
     private let friendsService = FriendsService()
     private let matrixBridge = MatrixBridgeService.shared
 
+    // Deep link navigation support
+    private let coordinator = AppCoordinator.shared
+
     // MARK: - Matrix State
     @State private var isMatrixInitializing = false
     @State private var matrixInitError: String?
@@ -577,12 +580,62 @@ struct MessageView: View {
             }
         }
         .onAppear {
-            // 設置 Matrix 房間列表更新監聽
+            // 設置 Matrix 房間列表更新監聯
             setupMatrixRoomListObserver()
             // 初始化 Matrix 並載入對話列表
             Task {
                 await initializeMatrixAndLoadConversations()
             }
+            // Check for pending deep link navigation
+            handlePendingChatNavigation()
+        }
+        .onChange(of: coordinator.messagePath) { _, _ in
+            handlePendingChatNavigation()
+        }
+    }
+
+    // MARK: - Deep Link Navigation
+
+    /// Handle pending chat navigation from AppCoordinator
+    private func handlePendingChatNavigation() {
+        guard let route = coordinator.messagePath.last else { return }
+
+        switch route {
+        case .chat(let roomId):
+            // Navigate to chat room
+            navigateToChat(roomId: roomId)
+            // Remove the route after handling
+            coordinator.messagePath.removeAll {
+                if case .chat = $0 { return true }
+                return false
+            }
+        case .profile(let userId):
+            // Navigate to user profile from message context
+            selectedUserId = userId
+            showUserProfile = true
+            coordinator.messagePath.removeAll { $0 == route }
+        default:
+            break
+        }
+    }
+
+    /// Navigate to a specific chat room
+    private func navigateToChat(roomId: String) {
+        // Find the conversation in the list
+        if let conversation = conversations.first(where: { $0.id == roomId }) {
+            selectedConversationId = conversation.id
+            selectedUserName = conversation.userName
+            selectedAvatarUrl = conversation.avatarUrl
+            showChat = true
+        } else {
+            // If conversation not in list, try to open it directly
+            selectedConversationId = roomId
+            selectedUserName = "Chat"
+            selectedAvatarUrl = nil
+            showChat = true
+            #if DEBUG
+            print("[MessageView] Opening chat room directly: \(roomId)")
+            #endif
         }
     }
 

@@ -397,7 +397,12 @@ extension OAuthService: ASAuthorizationControllerPresentationContextProviding {
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let window = scene.windows.first else {
-            return ASPresentationAnchor()
+            // iOS 26+: Create window with window scene instead of empty init
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                return UIWindow(windowScene: windowScene)
+            }
+            // Last resort fallback - should never reach here in a running app
+            return UIWindow(frame: UIScreen.main.bounds)
         }
         return window
     }
@@ -450,7 +455,11 @@ class WebAuthPresentationContext: NSObject, ASWebAuthenticationPresentationConte
         // Get the key window for presentation
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let window = scene.windows.first else {
-            return UIWindow()
+            // iOS 26+: Create window with window scene instead of empty init
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                return UIWindow(windowScene: windowScene)
+            }
+            return UIWindow(frame: UIScreen.main.bounds)
         }
         return window
     }

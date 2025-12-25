@@ -700,6 +700,8 @@ final class ChatViewModel {
                 return "Failed to send: \(reason)"
             case .bridgeDisabled:
                 return "Messaging is temporarily unavailable."
+            case .roomNotFound:
+                return "Chat room not found."
             }
         }
 
@@ -733,6 +735,8 @@ final class ChatViewModel {
                 return "Failed to send: \(reason)"
             case .bridgeDisabled:
                 return "Messaging is temporarily unavailable."
+            case .roomNotFound:
+                return "Chat room not found. Please reopen the chat."
             }
         }
 
@@ -787,6 +791,8 @@ final class ChatViewModel {
                 return "Failed to send \(filename): \(reason)"
             case .bridgeDisabled:
                 return "Messaging is temporarily unavailable."
+            case .roomNotFound:
+                return "Chat room not found. Please reopen the chat."
             }
         }
 

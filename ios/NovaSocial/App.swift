@@ -273,20 +273,25 @@ struct IceredApp: App {
         switch type {
         case "like", "comment", "mention", "share", "reply":
             // Navigate to the related post if available
-            if userInfo["post_id"] != nil {
-                // TODO: Navigate to post detail view
-                // For now, just go to home
+            if let postId = userInfo["post_id"] as? String {
+                coordinator.navigate(to: .post(id: postId))
+            } else {
                 currentPage = .home
             }
         case "follow":
             // Navigate to the follower's profile
-            if userInfo["user_id"] != nil {
-                // TODO: Navigate to user profile view
+            if let userId = userInfo["user_id"] as? String {
+                coordinator.navigate(to: .profile(userId: userId))
+            } else {
                 currentPage = .home
             }
         case "message":
             // Navigate to messages
-            currentPage = .message
+            if let roomId = userInfo["room_id"] as? String {
+                coordinator.navigate(to: .chat(roomId: roomId))
+            } else {
+                currentPage = .message
+            }
         default:
             // Default to home
             currentPage = .home

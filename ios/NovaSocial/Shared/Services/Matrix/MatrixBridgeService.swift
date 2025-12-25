@@ -678,6 +678,7 @@ enum MatrixBridgeError: Error, LocalizedError {
     case messageSendFailed(String)
     case bridgeDisabled
     case sessionExpired
+    case roomNotFound
 
     var errorDescription: String? {
         switch self {
@@ -693,6 +694,8 @@ enum MatrixBridgeError: Error, LocalizedError {
             return "Matrix bridge is disabled"
         case .sessionExpired:
             return "Session expired. Please try again."
+        case .roomNotFound:
+            return "Room not found"
         }
     }
 }

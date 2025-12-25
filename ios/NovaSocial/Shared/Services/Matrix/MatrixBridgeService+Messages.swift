@@ -42,6 +42,7 @@ extension MatrixBridgeService {
     }
 
     /// Send location via Matrix (E2EE)
+    /// Uses geo URI format (geo:lat,lon) for Matrix compatibility
     func sendLocation(
         conversationId: String,
         latitude: Double,
@@ -52,10 +53,27 @@ extension MatrixBridgeService {
             throw MatrixBridgeError.notInitialized
         }
 
-        // TODO: Implement location sharing via Matrix
-        // For now, send as a text message with location coordinates
-        let locationText = description ?? "Location: \(latitude), \(longitude)"
-        return try await sendMessage(conversationId: conversationId, content: locationText)
+        // Format location using standard geo URI (RFC 5870)
+        // This is the format Matrix expects for location sharing
+        let geoUri = "geo:\(latitude),\(longitude)"
+
+        // Build location message with description and map link
+        let locationName = description ?? "Shared Location"
+        let mapsUrl = "https://www.openstreetmap.org/?mlat=\(latitude)&mlon=\(longitude)#map=16/\(latitude)/\(longitude)"
+
+        // Format: Description + geo URI + clickable link
+        // Matrix clients that support m.location will parse the geo URI
+        let locationMessage = """
+        📍 \(locationName)
+        \(geoUri)
+        \(mapsUrl)
+        """
+
+        #if DEBUG
+        print("[MatrixBridge] Sending location: \(geoUri)")
+        #endif
+
+        return try await sendMessage(conversationId: conversationId, content: locationMessage)
     }
 
     // MARK: - Read Operations

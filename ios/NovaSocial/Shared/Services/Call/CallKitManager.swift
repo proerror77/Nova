@@ -42,7 +42,8 @@ final class CallKitManager: NSObject, ObservableObject {
     // MARK: - Configuration
 
     private func configureProvider() {
-        let configuration = CXProviderConfiguration(localizedName: "Nova")
+        // iOS 14+: Use CXProviderConfiguration() - localizedName is derived from app display name
+        let configuration = CXProviderConfiguration()
         configuration.supportsVideo = true
         configuration.maximumCallsPerCallGroup = 1
         configuration.maximumCallGroups = 1

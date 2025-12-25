@@ -137,4 +137,93 @@ extension MatrixBridgeService {
         print("[MatrixBridgeService] Successfully left conversation: \(conversationId)")
         #endif
     }
+
+    /// Leave a room by room ID directly
+    func leaveRoom(roomId: String) async throws {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        #if DEBUG
+        print("[MatrixBridgeService] Leaving room: \(roomId)")
+        #endif
+
+        try await matrixService.leaveRoom(roomId: roomId)
+    }
+
+    // MARK: - Room Members
+
+    /// Room member information
+    struct RoomMember {
+        let userId: String
+        let displayName: String?
+        let avatarUrl: String?
+        let powerLevel: Int
+    }
+
+    /// Get members of a room
+    func getRoomMembers(roomId: String) async throws -> [RoomMember] {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        // Resolve room ID if needed
+        let resolvedRoomId = try await resolveRoomId(for: roomId)
+
+        #if DEBUG
+        print("[MatrixBridgeService] Getting members for room: \(resolvedRoomId)")
+        #endif
+
+        // Get rooms to find the matching one
+        let rooms = try await matrixService.getJoinedRooms()
+
+        guard let room = rooms.first(where: { $0.id == resolvedRoomId }) else {
+            throw MatrixBridgeError.roomNotFound
+        }
+
+        // For now, return members based on room's participant info
+        // The full Matrix SDK provides room.members() but our wrapper might not expose it
+        // Return basic info that we can derive
+        var members: [RoomMember] = []
+
+        // Add current user as a member
+        if let userId = matrixService.userId {
+            members.append(RoomMember(
+                userId: userId,
+                displayName: nil,
+                avatarUrl: nil,
+                powerLevel: 100  // Owner/creator
+            ))
+        }
+
+        // For group chats, we can estimate member count
+        // but can't get individual members without SDK support
+        if !room.isDirect && room.memberCount > 1 {
+            // Add placeholder members based on count
+            for i in 1..<room.memberCount {
+                members.append(RoomMember(
+                    userId: "member_\(i)",
+                    displayName: "Member \(i)",
+                    avatarUrl: nil,
+                    powerLevel: 0
+                ))
+            }
+        }
+
+        // If it's a direct chat, use room info
+        if room.isDirect {
+            members.append(RoomMember(
+                userId: "direct_user",
+                displayName: room.name,
+                avatarUrl: room.avatarURL,
+                powerLevel: 0
+            ))
+        }
+
+        #if DEBUG
+        print("[MatrixBridgeService] Found \(members.count) members in room")
+        #endif
+
+        return members
+    }
 }

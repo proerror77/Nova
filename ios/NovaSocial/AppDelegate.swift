@@ -1,10 +1,15 @@
 import UIKit
 import UserNotifications
+import BackgroundTasks
 
 // MARK: - App Delegate
 
 /// AppDelegate handles system-level events including push notifications
 class AppDelegate: NSObject, UIApplicationDelegate {
+
+    // MARK: - Background Task Identifiers
+
+    static let backgroundRefreshTaskIdentifier = "com.icered.app.refresh"
 
     // MARK: - Application Lifecycle
 
@@ -15,13 +20,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Set up notification center delegate
         UNUserNotificationCenter.current().delegate = PushNotificationManager.shared
 
-        // Enable background fetch for offline message sync
-        // iOS will periodically wake the app to fetch new messages
-        application.setMinimumBackgroundFetchInterval(UIApplication.backgroundFetchIntervalMinimum)
+        // Register background tasks using modern BackgroundTasks framework
+        registerBackgroundTasks()
 
         #if DEBUG
         print("[AppDelegate] Application did finish launching")
-        print("[AppDelegate] Background fetch enabled")
+        print("[AppDelegate] Background refresh task registered")
         #endif
 
         // Check if app was launched from a notification
@@ -36,32 +40,66 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         return true
     }
 
-    // MARK: - Background Fetch
+    // MARK: - Background Tasks (Modern API)
 
-    /// Called by iOS when it's time to perform a background fetch
-    /// This is used to sync Matrix messages while the app is in the background
-    func application(
-        _ application: UIApplication,
-        performFetchWithCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
-    ) {
+    /// Register background tasks with the system
+    private func registerBackgroundTasks() {
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: Self.backgroundRefreshTaskIdentifier,
+            using: nil
+        ) { task in
+            guard let refreshTask = task as? BGAppRefreshTask else { return }
+            self.handleAppRefresh(task: refreshTask)
+        }
+    }
+
+    /// Schedule the next background app refresh
+    func scheduleAppRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: Self.backgroundRefreshTaskIdentifier)
+        // Fetch no earlier than 15 minutes from now
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            #if DEBUG
+            print("[AppDelegate] 📅 Background refresh scheduled")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[AppDelegate] ❌ Failed to schedule background refresh: \(error)")
+            #endif
+        }
+    }
+
+    /// Handle the background app refresh task
+    private func handleAppRefresh(task: BGAppRefreshTask) {
         #if DEBUG
-        print("[AppDelegate] 🔄 Performing background fetch...")
+        print("[AppDelegate] 🔄 Performing background refresh...")
         #endif
 
-        Task {
+        // Schedule the next refresh
+        scheduleAppRefresh()
+
+        // Create a task to sync Matrix messages
+        let syncTask = Task {
             do {
-                // Attempt to sync Matrix messages
                 try await MatrixBridgeService.shared.resumeSync()
                 #if DEBUG
-                print("[AppDelegate] ✅ Background fetch completed - new data")
+                print("[AppDelegate] ✅ Background refresh completed - new data")
                 #endif
-                completionHandler(.newData)
+                task.setTaskCompleted(success: true)
             } catch {
                 #if DEBUG
-                print("[AppDelegate] ❌ Background fetch failed: \(error)")
+                print("[AppDelegate] ❌ Background refresh failed: \(error)")
                 #endif
-                completionHandler(.failed)
+                task.setTaskCompleted(success: false)
             }
+        }
+
+        // Handle task expiration
+        task.expirationHandler = {
+            syncTask.cancel()
+            task.setTaskCompleted(success: false)
         }
     }
 
