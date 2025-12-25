@@ -33,6 +33,10 @@ enum ChatServiceError: LocalizedError {
 /// - Matrix E2EE integration (when enabled)
 @Observable
 final class ChatService {
+    // MARK: - Singleton
+
+    static let shared = ChatService()
+
     // MARK: - Properties
 
     private let client = APIClient.shared

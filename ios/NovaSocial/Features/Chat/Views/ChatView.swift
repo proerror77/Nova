@@ -50,12 +50,16 @@ struct ChatView: View {
 
     // MARK: - Services
     private let matrixBridge = MatrixBridgeService.shared
+    private let messageSender: ChatMessageSender
 
     /// 必需参数
     @Binding var showChat: Bool
     let conversationId: String  // ← 从上级View传入，标识当前聊天对象
     var userName: String = "User"
     var otherUserAvatarUrl: String? = nil  // 對方用戶頭像URL（從父視圖傳入）
+
+    // MARK: - View Models & Handlers
+    @StateObject private var typingHandler: ChatTypingHandler
 
     // MARK: - State
     @State private var messageText = ""
@@ -73,12 +77,7 @@ struct ChatView: View {
 
     // Matrix E2EE status
     @State private var isMatrixE2EEEnabled = false
-    
-    // Typing indicator state
-    @State private var isOtherUserTyping = false
-    @State private var typingUserName: String = ""
-    @State private var typingTimer: Timer?
-    
+
     // Pagination
     @State private var hasMoreMessages = true
     @State private var nextCursor: String?
@@ -123,6 +122,27 @@ struct ChatView: View {
     // Matrix 消息处理器状态（防止重复设置）
     @State private var matrixMessageHandlerSetup = false
 
+    // MARK: - Initializer
+    init(showChat: Binding<Bool>, conversationId: String, userName: String = "User", otherUserAvatarUrl: String? = nil) {
+        self._showChat = showChat
+        self.conversationId = conversationId
+        self.userName = userName
+        self.otherUserAvatarUrl = otherUserAvatarUrl
+
+        // Initialize message sender
+        self.messageSender = ChatMessageSender(
+            chatService: ChatService.shared,
+            conversationId: conversationId
+        )
+
+        // Initialize typing handler
+        let currentUserId = KeychainService.shared.get(.userId) ?? "unknown"
+        self._typingHandler = StateObject(wrappedValue: ChatTypingHandler(
+            chatService: ChatService.shared,
+            conversationId: conversationId,
+            currentUserId: currentUserId
+        ))
+    }
 
     var body: some View {
         ZStack {
@@ -219,6 +239,9 @@ struct ChatView: View {
             transaction.disablesAnimations = true
         }
         .task {
+            // Set up message sender callbacks
+            setupMessageSenderCallbacks()
+
             // ✅ 使用.task而非.onAppear - 自动处理取消
             await loadChatData()
         }
@@ -232,10 +255,10 @@ struct ChatView: View {
                 await matrixBridge.stopListening(conversationId: conversationId)
                 try? await matrixBridge.setTyping(conversationId: conversationId, isTyping: false)
             }
-            
-            // Clean up timer
-            typingTimer?.invalidate()
-            
+
+            // Clean up typing handler
+            typingHandler.cleanup()
+
             #if DEBUG
             print("[ChatView] Cleanup completed for conversation \(conversationId)")
             #endif
@@ -406,28 +429,28 @@ struct ChatView: View {
                     }
                     
                     // Typing indicator
-                    if isOtherUserTyping {
+                    if typingHandler.isOtherUserTyping {
                         HStack(spacing: 6) {
                             AvatarView(image: nil, url: otherUserAvatarUrl, size: 30)
-                            
+
                             HStack(spacing: 4) {
-                                Text("\(typingUserName.isEmpty ? userName : typingUserName) is typing")
+                                Text("\(typingHandler.typingUserName.isEmpty ? userName : typingHandler.typingUserName) is typing")
                                     .font(Font.custom("Helvetica Neue", size: 14))
                                     .foregroundColor(DesignTokens.textMuted)
                                     .italic()
-                                
+
                                 // Animated dots
                                 TypingDotsView()
                             }
                             .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
                             .background(DesignTokens.chatBubbleOther.opacity(0.5))
                             .cornerRadius(16)
-                            
+
                             Spacer()
                         }
                         .padding(.horizontal, 16)
                         .transition(.opacity)
-                        .animation(.easeInOut(duration: 0.2), value: isOtherUserTyping)
+                        .animation(.easeInOut(duration: 0.2), value: typingHandler.isOtherUserTyping)
                     }
                 }
                 .padding(.bottom, 16)
@@ -716,6 +739,51 @@ struct ChatView: View {
 
     // MARK: - API Calls
 
+    /// Set up message sender callbacks
+    private func setupMessageSenderCallbacks() {
+        messageSender.onMessageAdded = { [self] message in
+            Task { @MainActor in
+                self.messages.append(message)
+            }
+        }
+
+        messageSender.onMessageUpdated = { [self] localId, updatedMessage in
+            Task { @MainActor in
+                if let index = self.messages.firstIndex(where: { $0.id == localId }) {
+                    self.messages[index] = updatedMessage
+                }
+            }
+        }
+
+        messageSender.onMessageRemoved = { [self] messageId in
+            Task { @MainActor in
+                self.messages.removeAll { $0.id == messageId }
+            }
+        }
+
+        messageSender.onSendingStateChanged = { [self] isSending in
+            Task { @MainActor in
+                self.isSending = isSending
+            }
+        }
+
+        messageSender.onUploadingStateChanged = { [self] isUploading in
+            Task { @MainActor in
+                self.isUploadingImage = isUploading
+            }
+        }
+
+        messageSender.onError = { [self] errorMessage in
+            Task { @MainActor in
+                self.error = errorMessage
+            }
+        }
+
+        messageSender.currentUserId = { [self] in
+            self.currentUserId
+        }
+    }
+
     /// Load chat data via Matrix timeline/sync (Matrix-first)
     /// - Parameter retryCount: Number of retry attempts made (for automatic recovery)
     private func loadChatData(retryCount: Int = 0) async {
@@ -837,13 +905,13 @@ struct ChatView: View {
 
                 // 添加到 UI
                 self.messages.append(newChatMessage)
-                
+
                 #if DEBUG
                 print("[ChatView] ✅ Message added to UI - ID: \(newChatMessage.id), Sender: \(newChatMessage.isFromMe ? "me" : "other"), Total: \(self.messages.count)")
                 #endif
 
                 // 清除打字指示器
-                self.isOtherUserTyping = false
+                self.typingHandler.stopTypingIndicator()
 
                 // Mark as read (Matrix read receipt)
                 if novaMessage.senderId != self.currentUserId {
@@ -855,23 +923,13 @@ struct ChatView: View {
             }
         }
 
-        // Matrix 打字指示器
+        // Matrix 打字指示器 - delegate to typing handler
         MatrixBridgeService.shared.onTypingIndicator = { [self] conversationId, userIds in
             Task { @MainActor in
                 guard conversationId == self.conversationId else { return }
-                guard !userIds.contains(self.currentUserId) else { return }
 
-                self.isOtherUserTyping = !userIds.isEmpty
-
-                // 3 秒後自動隱藏
-                if !userIds.isEmpty {
-                    self.typingTimer?.invalidate()
-                    self.typingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
-                        Task { @MainActor in
-                            self.isOtherUserTyping = false
-                        }
-                    }
-                }
+                // Delegate to typing handler
+                self.typingHandler.handleMatrixTypingIndicator(userIds: userIds)
             }
         }
 
@@ -946,54 +1004,13 @@ struct ChatView: View {
     /// 發送文字訊息 - 使用 Matrix E2EE（端到端加密）
     private func sendMessage() {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty, !isSending else { return }
+        guard !trimmedText.isEmpty else { return }
 
         messageText = ""
         showAttachmentOptions = false
 
-        // 立即添加到本地 UI（樂觀更新）
-        var localMessage = ChatMessage(localText: trimmedText, isFromMe: true)
-        messages.append(localMessage)
-        let localMessageId = localMessage.id
-
         Task {
-            isSending = true
-            do {
-                try? await matrixBridge.setTyping(conversationId: conversationId, isTyping: false)
-
-                // 使用超時機制發送訊息（30秒）
-                let eventId = try await withTimeout(seconds: 30) {
-                    try await matrixBridge.sendMessage(conversationId: conversationId, content: trimmedText)
-                }
-
-                try? await matrixBridge.markAsRead(conversationId: conversationId)
-
-                // 更新本地消息：ID 和狀態
-                await MainActor.run {
-                    if let index = messages.firstIndex(where: { $0.id == localMessageId }) {
-                        messages[index].id = eventId
-                        messages[index].status = .sent
-                    }
-                }
-
-                #if DEBUG
-                print("[ChatView] ✅ Message sent via Matrix: room=\(conversationId), eventId=\(eventId)")
-                #endif
-            } catch {
-                // 發送失敗 - 更新狀態為 failed（保留訊息以便重試）
-                await MainActor.run {
-                    if let index = messages.firstIndex(where: { $0.id == localMessageId }) {
-                        messages[index].status = .failed
-                    }
-                    self.error = getMessageSendErrorMessage(for: error)
-                }
-                #if DEBUG
-                print("[ChatView] ❌ Failed to send message: \(error)")
-                #endif
-            }
-            await MainActor.run {
-                isSending = false
-            }
+            await messageSender.sendTextMessage(trimmedText)
         }
     }
 
@@ -1104,152 +1121,20 @@ struct ChatView: View {
     // MARK: - 發送圖片訊息
     /// 使用 Matrix SDK 發送圖片訊息
     private func sendImageMessage(image: UIImage) {
-        // 壓縮圖片
-        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
-            #if DEBUG
-            print("[ChatView] ❌ Failed to compress image")
-            #endif
-            error = "Failed to compress image"
-            return
-        }
-
-        // 立即添加到本地 UI（樂觀更新）
-        let localMessage = ChatMessage(localText: "", isFromMe: true, image: image)
-        messages.append(localMessage)
         showAttachmentOptions = false
 
         Task {
-            isUploadingImage = true
-
-            do {
-                // 確保 Matrix 已初始化
-                guard MatrixBridgeService.shared.isInitialized else {
-                    throw NSError(domain: "ChatView", code: -1, userInfo: [
-                        NSLocalizedDescriptionKey: "Matrix service not initialized"
-                    ])
-                }
-
-                #if DEBUG
-                print("[ChatView] 📤 Sending image via Matrix SDK")
-                #endif
-
-                // 將圖片數據保存到臨時文件
-                let tempDir = FileManager.default.temporaryDirectory
-                let filename = "chat_image_\(UUID().uuidString).jpg"
-                let tempFileURL = tempDir.appendingPathComponent(filename)
-                try imageData.write(to: tempFileURL)
-
-                // 使用 Matrix SDK 發送圖片
-                let eventId = try await MatrixBridgeService.shared.sendMessage(
-                    conversationId: conversationId,
-                    content: "",
-                    mediaURL: tempFileURL,
-                    mimeType: "image/jpeg"
-                )
-
-                // 清理臨時文件
-                try? FileManager.default.removeItem(at: tempFileURL)
-
-                let senderId = KeychainService.shared.get(.userId) ?? ""
-                let sentMessage = Message(
-                    id: eventId,
-                    conversationId: conversationId,
-                    senderId: senderId,
-                    content: "",
-                    type: .image,
-                    createdAt: Date(),
-                    status: .sent,
-                    encryptionVersion: 3  // Matrix E2EE
-                )
-
-                #if DEBUG
-                print("[ChatView] ✅ Image sent via Matrix: \(eventId)")
-                #endif
-
-                // 替換本地訊息為伺服器返回的訊息
-                if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
-                    var updatedMessage = ChatMessage(from: sentMessage, currentUserId: currentUserId)
-                    updatedMessage.image = image  // 保留本地圖片用於顯示
-                    messages[index] = updatedMessage
-                }
-
-            } catch {
-                #if DEBUG
-                print("[ChatView] ❌ Failed to send image: \(error)")
-                #endif
-                // 提供更具體的錯誤訊息
-                self.error = getImageSendErrorMessage(for: error)
-                // 移除失敗的本地訊息
-                messages.removeAll { $0.id == localMessage.id }
-            }
-
-            isUploadingImage = false
+            await messageSender.sendImageMessage(image)
         }
     }
 
     // MARK: - 發送位置訊息
     /// 發送位置訊息 - 使用 Matrix SDK
     private func sendLocationMessage(location: CLLocationCoordinate2D) {
-        // 立即添加到本地 UI（樂觀更新）
-        let localMessage = ChatMessage(localText: "", isFromMe: true, location: location)
-        messages.append(localMessage)
         showAttachmentOptions = false
 
         Task {
-            isSending = true
-
-            do {
-                // 確保 Matrix 已初始化
-                guard MatrixBridgeService.shared.isInitialized else {
-                    throw NSError(domain: "ChatView", code: -1, userInfo: [
-                        NSLocalizedDescriptionKey: "Matrix service not initialized"
-                    ])
-                }
-
-                #if DEBUG
-                print("[ChatView] 📍 Sending location via Matrix SDK")
-                #endif
-
-                // 使用 Matrix SDK 發送位置訊息
-                let eventId = try await MatrixBridgeService.shared.sendLocation(
-                    conversationId: conversationId,
-                    latitude: location.latitude,
-                    longitude: location.longitude
-                )
-
-                let senderId = KeychainService.shared.get(.userId) ?? ""
-                let sentMessage = Message(
-                    id: eventId,
-                    conversationId: conversationId,
-                    senderId: senderId,
-                    content: "geo:\(location.latitude),\(location.longitude)",
-                    type: .location,
-                    createdAt: Date(),
-                    status: .sent,
-                    encryptionVersion: 3  // Matrix E2EE
-                )
-
-                #if DEBUG
-                print("[ChatView] ✅ Location sent via Matrix: \(eventId)")
-                #endif
-
-                // 替換本地訊息為伺服器返回的訊息
-                if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
-                    var updatedMessage = ChatMessage(from: sentMessage, currentUserId: currentUserId)
-                    updatedMessage.location = location
-                    messages[index] = updatedMessage
-                }
-
-            } catch {
-                #if DEBUG
-                print("[ChatView] ❌ Failed to send location: \(error)")
-                #endif
-                self.error = "Failed to share location"
-                // 移除失敗的本地訊息
-                messages.removeAll { $0.id == localMessage.id }
-            }
-
-            isSending = false
+            await messageSender.sendLocationMessage(location)
         }
     }
 
@@ -1339,75 +1224,10 @@ struct ChatView: View {
 
     /// 發送語音訊息 - 使用 Matrix SDK
     private func sendVoiceMessage(audioData: Data, duration: TimeInterval, url: URL) {
-        // 立即添加到本地 UI（樂觀更新）
-        let localMessage = ChatMessage(
-            localText: "",
-            isFromMe: true,
-            audioData: audioData,
-            audioDuration: duration,
-            audioUrl: url
-        )
-        messages.append(localMessage)
         showAttachmentOptions = false
 
         Task {
-            isSending = true
-
-            do {
-                // 確保 Matrix 已初始化
-                guard MatrixBridgeService.shared.isInitialized else {
-                    throw NSError(domain: "ChatView", code: -1, userInfo: [
-                        NSLocalizedDescriptionKey: "Matrix service not initialized"
-                    ])
-                }
-
-                #if DEBUG
-                print("[ChatView] 📤 Sending voice via Matrix SDK: \(url)")
-                #endif
-
-                // 使用 Matrix SDK 發送語音訊息
-                let eventId = try await MatrixBridgeService.shared.sendMessage(
-                    conversationId: conversationId,
-                    content: String(format: "%.1f", duration),
-                    mediaURL: url,
-                    mimeType: "audio/mp4"
-                )
-
-                let senderId = KeychainService.shared.get(.userId) ?? ""
-                let sentMessage = Message(
-                    id: eventId,
-                    conversationId: conversationId,
-                    senderId: senderId,
-                    content: String(format: "%.1f", duration),
-                    type: .audio,
-                    createdAt: Date(),
-                    status: .sent,
-                    encryptionVersion: 3  // Matrix E2EE
-                )
-
-                #if DEBUG
-                print("[ChatView] ✅ Voice sent via Matrix: \(eventId)")
-                #endif
-
-                // 替換本地訊息為伺服器返回的訊息
-                if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
-                    var updatedMessage = ChatMessage(from: sentMessage, currentUserId: currentUserId)
-                    updatedMessage.audioData = audioData
-                    updatedMessage.audioDuration = duration
-                    updatedMessage.audioUrl = url
-                    messages[index] = updatedMessage
-                }
-
-            } catch {
-                #if DEBUG
-                print("[ChatView] ❌ Failed to send voice: \(error)")
-                #endif
-                self.error = "Failed to send voice message"
-                // 移除失敗的本地訊息
-                messages.removeAll { $0.id == localMessage.id }
-            }
-
-            isSending = false
+            await messageSender.sendVoiceMessage(audioData: audioData, duration: duration, url: url)
             audioRecorder.cleanupTempFiles()
         }
     }

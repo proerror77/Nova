@@ -1,16 +1,22 @@
 import Foundation
+import Combine
 
 /// Handles typing indicator management for chat
 /// Extracted from ChatViewModel to follow Single Responsibility Principle
 @MainActor
-final class ChatTypingHandler {
+final class ChatTypingHandler: ObservableObject {
     // MARK: - Observable State
 
     /// Whether the other user is currently typing
-    private(set) var isOtherUserTyping = false
+    @Published var isOtherUserTyping = false
 
     /// Name of the user who is typing
-    private(set) var typingUserName = ""
+    @Published var typingUserName = ""
+
+    // MARK: - Callback (for non-SwiftUI consumers like ChatViewModel)
+
+    /// Callback when typing state changes (for backward compatibility)
+    var onTypingStateChanged: ((Bool, String) -> Void)?
 
     // MARK: - Dependencies
 
@@ -22,11 +28,6 @@ final class ChatTypingHandler {
 
     // Use nonisolated(unsafe) for timer to allow invalidation in deinit
     nonisolated(unsafe) private var typingTimer: Timer?
-
-    // MARK: - Callbacks
-
-    /// Called when typing state changes
-    var onTypingStateChanged: ((Bool, String) -> Void)?
 
     // MARK: - Init
 
@@ -85,8 +86,7 @@ final class ChatTypingHandler {
         if let userName = userName {
             typingUserName = userName
         }
-
-        onTypingStateChanged?(true, typingUserName)
+        onTypingStateChanged?(isOtherUserTyping, typingUserName)
 
         // Cancel existing timer and start new one
         typingTimer?.invalidate()
@@ -101,10 +101,10 @@ final class ChatTypingHandler {
     /// Stop typing indicator and cancel timer
     func stopTypingIndicator() {
         isOtherUserTyping = false
+        typingUserName = ""
+        onTypingStateChanged?(isOtherUserTyping, typingUserName)
         typingTimer?.invalidate()
         typingTimer = nil
-
-        onTypingStateChanged?(false, "")
     }
 
     // MARK: - Cleanup
