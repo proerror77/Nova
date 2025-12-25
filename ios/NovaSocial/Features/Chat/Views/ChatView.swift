@@ -636,7 +636,14 @@ struct ChatView: View {
             )
         }
         .sheet(isPresented: $showFilePicker) {
-            DocumentPickerView(onDocumentPicked: handleDocumentPicked)
+            DocumentPickerView(
+                onDocumentPicked: { data, filename, mimeType in
+                    handleDocumentPicked(data: data, filename: filename, mimeType: mimeType)
+                },
+                onError: { error in
+                    self.error = "Cannot access file: \(error.localizedDescription)"
+                }
+            )
         }
         .onChange(of: selectedPhotoItem) { _, newItem in
             handlePhotoSelection(newItem)
@@ -1762,41 +1769,26 @@ struct ChatView: View {
 
     // MARK: - 檔案處理
 
-    /// 處理選擇的檔案
-    private func handleDocumentPicked(_ url: URL) {
-        // 開始存取安全範圍的資源
-        guard url.startAccessingSecurityScopedResource() else {
-            error = "Cannot access file"
-            return
-        }
-
-        defer {
-            url.stopAccessingSecurityScopedResource()
-        }
-
+    /// 處理選擇的檔案（數據已在 DocumentPicker 回調中讀取）
+    private func handleDocumentPicked(data: Data, filename: String, mimeType: String) {
         Task {
             isUploadingFile = true
             isSending = true
 
             do {
-                // 讀取檔案數據
-                let fileData = try Data(contentsOf: url)
-                let fileName = url.lastPathComponent
-                let mimeType = getMimeType(for: url)
-
-                // 將檔案複製到臨時目錄
+                // 將檔案數據複製到臨時目錄
                 let tempDir = FileManager.default.temporaryDirectory
-                let tempFileURL = tempDir.appendingPathComponent(fileName)
-                try fileData.write(to: tempFileURL)
+                let tempFileURL = tempDir.appendingPathComponent(filename)
+                try data.write(to: tempFileURL)
 
                 #if DEBUG
-                print("[ChatView] 📎 Sending file: \(fileName) (\(fileData.count) bytes)")
+                print("[ChatView] 📎 Sending file: \(filename) (\(data.count) bytes)")
                 #endif
 
                 // 使用 Matrix SDK 發送檔案
                 let eventId = try await MatrixBridgeService.shared.sendMessage(
                     conversationId: conversationId,
-                    content: fileName,
+                    content: filename,
                     mediaURL: tempFileURL,
                     mimeType: mimeType
                 )
@@ -1862,9 +1854,10 @@ struct ChatView: View {
 
 // MARK: - Document Picker View
 
-/// 檔案選擇器視圖
+/// 檔案選擇器視圖 - 在回調中立即讀取檔案數據以避免權限問題
 struct DocumentPickerView: UIViewControllerRepresentable {
-    let onDocumentPicked: (URL) -> Void
+    let onDocumentPicked: (Data, String, String) -> Void  // (data, filename, mimeType)
+    var onError: ((Error) -> Void)?
 
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: [
@@ -1898,11 +1891,80 @@ struct DocumentPickerView: UIViewControllerRepresentable {
 
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
             guard let url = urls.first else { return }
-            parent.onDocumentPicked(url)
+
+            // 立即開始安全範圍訪問（在回調中我們仍有隱式權限）
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer {
+                if accessing {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            let filename = url.lastPathComponent
+            let mimeType = getMimeType(for: url)
+
+            do {
+                let data = try Data(contentsOf: url)
+                parent.onDocumentPicked(data, filename, mimeType)
+            } catch {
+                // 如果是圖片類型，嘗試使用 UIImage 載入（處理編輯過的照片）
+                if let image = UIImage(contentsOfFile: url.path),
+                   let imageData = image.jpegData(compressionQuality: 0.8) {
+                    let imageFilename = filename.hasSuffix(".jpg") || filename.hasSuffix(".jpeg")
+                        ? filename
+                        : "\(UUID().uuidString).jpg"
+                    parent.onDocumentPicked(imageData, imageFilename, "image/jpeg")
+                } else {
+                    parent.onError?(error)
+                }
+            }
         }
 
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
             // User cancelled - no action needed
+        }
+
+        /// 獲取檔案的 MIME 類型
+        private func getMimeType(for url: URL) -> String {
+            let pathExtension = url.pathExtension.lowercased()
+            switch pathExtension {
+            case "pdf":
+                return "application/pdf"
+            case "jpg", "jpeg":
+                return "image/jpeg"
+            case "png":
+                return "image/png"
+            case "gif":
+                return "image/gif"
+            case "heic", "heif":
+                return "image/heic"
+            case "mp4", "m4v":
+                return "video/mp4"
+            case "mov":
+                return "video/quicktime"
+            case "mp3":
+                return "audio/mpeg"
+            case "m4a":
+                return "audio/mp4"
+            case "wav":
+                return "audio/wav"
+            case "txt":
+                return "text/plain"
+            case "doc":
+                return "application/msword"
+            case "docx":
+                return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            case "xls":
+                return "application/vnd.ms-excel"
+            case "xlsx":
+                return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            case "ppt":
+                return "application/vnd.ms-powerpoint"
+            case "pptx":
+                return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            default:
+                return "application/octet-stream"
+            }
         }
     }
 }

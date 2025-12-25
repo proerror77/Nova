@@ -109,7 +109,16 @@ struct GroupChatView: View {
             )
         }
         .sheet(isPresented: $showFilePicker) {
-            GroupDocumentPickerView(onDocumentPicked: handleDocumentPicked)
+            GroupDocumentPickerView(
+                onDocumentPicked: { data, filename, mimeType in
+                    handleDocumentPicked(data: data, filename: filename, mimeType: mimeType)
+                },
+                onError: { error in
+                    #if DEBUG
+                    print("[GroupChatView] ❌ Cannot access file: \(error)")
+                    #endif
+                }
+            )
         }
         .onChange(of: selectedPhotoItem) { _, newItem in
             handlePhotoSelection(newItem)
@@ -626,35 +635,25 @@ struct GroupChatView: View {
     }
 
     // MARK: - Document Handling
-    private func handleDocumentPicked(_ url: URL) {
-        guard url.startAccessingSecurityScopedResource() else {
-            return
-        }
-
-        defer {
-            url.stopAccessingSecurityScopedResource()
-        }
-
+    /// 處理選擇的檔案（數據已在 DocumentPicker 回調中讀取）
+    private func handleDocumentPicked(data: Data, filename: String, mimeType: String) {
         Task {
             do {
-                let fileData = try Data(contentsOf: url)
-                let fileName = url.lastPathComponent
-
                 let tempDir = FileManager.default.temporaryDirectory
-                let tempFileURL = tempDir.appendingPathComponent(fileName)
-                try fileData.write(to: tempFileURL)
+                let tempFileURL = tempDir.appendingPathComponent(filename)
+                try data.write(to: tempFileURL)
 
                 _ = try await matrixBridge.sendMessage(
                     conversationId: conversationId,
-                    content: fileName,
+                    content: filename,
                     mediaURL: tempFileURL,
-                    mimeType: getMimeType(for: url)
+                    mimeType: mimeType
                 )
 
                 try? FileManager.default.removeItem(at: tempFileURL)
 
                 #if DEBUG
-                print("[GroupChatView] ✅ File sent via Matrix: \(fileName)")
+                print("[GroupChatView] ✅ File sent via Matrix: \(filename)")
                 #endif
             } catch {
                 #if DEBUG
@@ -683,8 +682,10 @@ struct GroupChatView: View {
 }
 
 // MARK: - Group Document Picker View
+/// 群組聊天檔案選擇器 - 在回調中立即讀取檔案數據以避免權限問題
 struct GroupDocumentPickerView: UIViewControllerRepresentable {
-    let onDocumentPicked: (URL) -> Void
+    let onDocumentPicked: (Data, String, String) -> Void  // (data, filename, mimeType)
+    var onError: ((Error) -> Void)?
 
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: [
@@ -710,7 +711,56 @@ struct GroupDocumentPickerView: UIViewControllerRepresentable {
 
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
             guard let url = urls.first else { return }
-            parent.onDocumentPicked(url)
+
+            // 立即開始安全範圍訪問（在回調中我們仍有隱式權限）
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer {
+                if accessing {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            let filename = url.lastPathComponent
+            let mimeType = getMimeType(for: url)
+
+            do {
+                let data = try Data(contentsOf: url)
+                parent.onDocumentPicked(data, filename, mimeType)
+            } catch {
+                // 如果是圖片類型，嘗試使用 UIImage 載入（處理編輯過的照片）
+                if let image = UIImage(contentsOfFile: url.path),
+                   let imageData = image.jpegData(compressionQuality: 0.8) {
+                    let imageFilename = filename.hasSuffix(".jpg") || filename.hasSuffix(".jpeg")
+                        ? filename
+                        : "\(UUID().uuidString).jpg"
+                    parent.onDocumentPicked(imageData, imageFilename, "image/jpeg")
+                } else {
+                    parent.onError?(error)
+                }
+            }
+        }
+
+        /// 獲取檔案的 MIME 類型
+        private func getMimeType(for url: URL) -> String {
+            let pathExtension = url.pathExtension.lowercased()
+            switch pathExtension {
+            case "pdf": return "application/pdf"
+            case "jpg", "jpeg": return "image/jpeg"
+            case "png": return "image/png"
+            case "gif": return "image/gif"
+            case "heic", "heif": return "image/heic"
+            case "mp4", "m4v": return "video/mp4"
+            case "mov": return "video/quicktime"
+            case "mp3": return "audio/mpeg"
+            case "m4a": return "audio/mp4"
+            case "wav": return "audio/wav"
+            case "txt": return "text/plain"
+            case "doc": return "application/msword"
+            case "docx": return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            case "xls": return "application/vnd.ms-excel"
+            case "xlsx": return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            default: return "application/octet-stream"
+            }
         }
     }
 }
