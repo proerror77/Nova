@@ -79,17 +79,16 @@ struct SettingsView: View {
                                 .accessibilityAddTraits(.isButton)
 
                                 // 展开的选择面板 - 使用高度动画
+                                // 优化：只有在完全没有数据时才显示 loading
+                                // 否则立即显示 authManager.currentUser 数据
                                 PostAsSelectionPanel(
-                                    selectedType: $selectedPostAsType,
-                                    realName: authManager.currentUser?.displayName ?? authManager.currentUser?.username ?? "User",
-                                    username: authManager.currentUser?.username ?? "username",
-                                    avatarUrl: authManager.currentUser?.avatarUrl,
-                                    onRealNameTap: {
-                                        currentPage = .profileSetting
+                                    accounts: buildAccountDisplayData(),
+                                    selectedAccountId: viewModel.currentAccountId ?? authManager.currentUser?.id,
+                                    onAccountTap: { account in
+                                        handleAccountTap(account)
                                     },
-                                    onAliasTap: {
-                                        currentPage = .aliasName
-                                    }
+                                    pendingPrimaryAvatar: AvatarManager.shared.pendingAvatar,
+                                    isLoading: viewModel.isLoadingAccounts && authManager.currentUser == nil
                                 )
                                 .frame(height: isPostAsExpanded ? nil : 0, alignment: .top)
                                 .clipped()
@@ -320,6 +319,60 @@ struct SettingsView: View {
         }
         .onAppear {
             viewModel.onAppear()
+        }
+    }
+
+    // MARK: - Account Display Helpers
+
+    /// Build account display data from viewModel accounts
+    /// 使用乐观 UI 策略：优先显示本地数据，避免不必要的 loading 状态
+    private func buildAccountDisplayData() -> [AccountDisplayData] {
+        var displayAccounts: [AccountDisplayData] = []
+
+        // Primary account: 优先使用 API 返回的第一个非 alias 账户
+        // 不依赖 isPrimary 字段（API 可能不返回），而是用 !isAlias 判断
+        if let primary = viewModel.accounts.first(where: { !$0.isAlias }) {
+            displayAccounts.append(AccountDisplayData(from: primary))
+        } else if let user = authManager.currentUser {
+            // Fallback: 使用 @EnvironmentObject 中的当前用户
+            displayAccounts.append(AccountDisplayData(fromUser: user))
+        }
+
+        // Alias account: 根据加载状态显示不同内容
+        if let alias = viewModel.aliasAccounts.first {
+            // API 返回了别名账户
+            displayAccounts.append(AccountDisplayData(from: alias))
+        } else if viewModel.hasLoadedAccounts {
+            // API 已完成，确认没有别名 → 显示 "Create Alias"
+            displayAccounts.append(.placeholderAlias)
+        } else {
+            // API 还在加载中 → 显示 "Loading..."
+            displayAccounts.append(.loadingAlias)
+        }
+
+        return displayAccounts
+    }
+
+    /// Handle account tap action
+    private func handleAccountTap(_ account: AccountDisplayData) {
+        if account.isAlias {
+            if account.id == "loading-alias" {
+                // 加载中，忽略点击
+                return
+            } else if account.id == "placeholder-alias" {
+                // Navigate to create alias
+                viewModel.createNewAliasAccount()
+                currentPage = .aliasName
+            } else {
+                // Navigate to edit alias
+                if let aliasAccount = viewModel.aliasAccounts.first(where: { $0.id == account.id }) {
+                    viewModel.editAliasAccount(aliasAccount)
+                }
+                currentPage = .aliasName
+            }
+        } else {
+            // Navigate to profile settings
+            currentPage = .profileSetting
         }
     }
 }

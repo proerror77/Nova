@@ -109,6 +109,9 @@ struct IceredApp: App {
                     case .profileSetting:
                         ProfileSettingView(currentPage: $currentPage)
                             .transition(.identity)
+                    case .aliasName:
+                        AliasNameView(currentPage: $currentPage)
+                            .transition(.identity)
                     case .devices:
                         DevicesView(currentPage: $currentPage)
                             .transition(.identity)
