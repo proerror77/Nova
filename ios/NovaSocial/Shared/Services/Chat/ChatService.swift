@@ -58,6 +58,9 @@ final class ChatService {
     /// When enabled, messages are routed through Matrix Rust SDK for true E2EE
     private var useMatrixE2EE: Bool = false
 
+    // MARK: - Delegated Services
+    @ObservationIgnored private lazy var reactionsService = ChatReactionsService()
+
     // MARK: - Initialization
 
     init() {
@@ -1211,214 +1214,46 @@ final class ChatService {
         }
     }
 
-    // MARK: - Message Reactions
+    // MARK: - Message Reactions (delegated to ChatReactionsService)
 
-    /// 添加表情回应到消息 - 優先使用 Matrix SDK
-    /// - Parameters:
-    ///   - conversationId: 會話 ID
-    ///   - messageId: 消息ID
-    ///   - emoji: 表情符号（如 "👍", "❤️", "😂"）
     @MainActor
     func addReaction(conversationId: String, messageId: String, emoji: String) async throws {
-        // 優先使用 Matrix SDK
-        if MatrixBridgeService.shared.isInitialized {
-            do {
-                try await MatrixBridgeService.shared.addReaction(
-                    conversationId: conversationId,
-                    messageId: messageId,
-                    emoji: emoji
-                )
-                #if DEBUG
-                print("[ChatService] ✅ Reaction added via Matrix SDK: \(emoji) to message \(messageId)")
-                #endif
-                return
-            } catch {
-                #if DEBUG
-                print("[ChatService] Matrix addReaction failed, falling back to REST API: \(error)")
-                #endif
-            }
-        }
-
-        // Fallback: REST API
-        let request = AddReactionRequest(emoji: emoji)
-        let _: MessageReaction = try await client.request(
-            endpoint: APIConfig.Chat.addReaction(messageId),
-            method: "POST",
-            body: request
-        )
-
-        #if DEBUG
-        print("[ChatService] Reaction added via REST API: \(emoji) to message \(messageId)")
-        #endif
+        try await reactionsService.addReaction(conversationId: conversationId, messageId: messageId, emoji: emoji)
     }
 
-    /// 切換表情回應（如果已存在則移除，否則添加）- 優先使用 Matrix SDK
-    /// - Parameters:
-    ///   - conversationId: 會話 ID
-    ///   - messageId: 消息ID
-    ///   - emoji: 表情符号
     @MainActor
     func toggleReaction(conversationId: String, messageId: String, emoji: String) async throws {
-        // 優先使用 Matrix SDK
-        if MatrixBridgeService.shared.isInitialized {
-            do {
-                try await MatrixBridgeService.shared.toggleReaction(
-                    conversationId: conversationId,
-                    messageId: messageId,
-                    emoji: emoji
-                )
-                #if DEBUG
-                print("[ChatService] ✅ Reaction toggled via Matrix SDK: \(emoji) for message \(messageId)")
-                #endif
-                return
-            } catch {
-                #if DEBUG
-                print("[ChatService] Matrix toggleReaction failed, falling back to REST API: \(error)")
-                #endif
-            }
-        }
-
-        // Fallback: REST API - 先獲取現有 reactions，判斷是否已存在
-        let existingReactions = try await getReactions(conversationId: conversationId, messageId: messageId)
-        let userId = KeychainService.shared.get(.userId) ?? ""
-
-        if let existingReaction = existingReactions.reactions.first(where: { $0.emoji == emoji && $0.userId == userId }) {
-            // 已存在，刪除它
-            try await deleteReaction(conversationId: conversationId, messageId: messageId, reactionId: existingReaction.id)
-        } else {
-            // 不存在，添加它
-            try await addReaction(conversationId: conversationId, messageId: messageId, emoji: emoji)
-        }
+        try await reactionsService.toggleReaction(conversationId: conversationId, messageId: messageId, emoji: emoji)
     }
 
-    /// 获取消息的所有表情回应 - 優先使用 Matrix SDK
-    /// - Parameters:
-    ///   - conversationId: 會話 ID
-    ///   - messageId: 消息ID
-    /// - Returns: 表情回应列表响应
     @MainActor
     func getReactions(conversationId: String, messageId: String) async throws -> GetReactionsResponse {
-        // 優先使用 Matrix SDK
-        if MatrixBridgeService.shared.isInitialized {
-            do {
-                let matrixReactions = try await MatrixBridgeService.shared.getReactions(
-                    conversationId: conversationId,
-                    messageId: messageId
-                )
-
-                // 轉換 MatrixReaction 到 MessageReaction
-                let reactions = matrixReactions.map { matrixReaction in
-                    MessageReaction(
-                        id: matrixReaction.id,
-                        messageId: messageId,
-                        userId: matrixReaction.senderId,
-                        emoji: matrixReaction.emoji,
-                        createdAt: matrixReaction.timestamp
-                    )
-                }
-
-                #if DEBUG
-                print("[ChatService] ✅ Fetched \(reactions.count) reactions via Matrix SDK for message \(messageId)")
-                #endif
-
-                return GetReactionsResponse(reactions: reactions, totalCount: reactions.count)
-            } catch {
-                #if DEBUG
-                print("[ChatService] Matrix getReactions failed, falling back to REST API: \(error)")
-                #endif
-            }
-        }
-
-        // Fallback: REST API
-        let response: GetReactionsResponse = try await client.get(
-            endpoint: APIConfig.Chat.getReactions(messageId)
-        )
-
-        #if DEBUG
-        print("[ChatService] Fetched \(response.reactions.count) reactions via REST API for message \(messageId)")
-        #endif
-
-        return response
+        try await reactionsService.getReactions(conversationId: conversationId, messageId: messageId)
     }
 
-    /// 删除表情回应 - 優先使用 Matrix SDK
-    /// - Parameters:
-    ///   - conversationId: 會話 ID
-    ///   - messageId: 消息ID
-    ///   - reactionId: 表情回应ID（或 emoji 符號）
     @MainActor
     func deleteReaction(conversationId: String, messageId: String, reactionId: String) async throws {
-        // 優先使用 Matrix SDK（使用 emoji 作為 key）
-        if MatrixBridgeService.shared.isInitialized {
-            do {
-                // 在 Matrix 中，我們使用 emoji 來識別 reaction，而不是 reactionId
-                // 嘗試將 reactionId 解析為 emoji，或直接使用它
-                try await MatrixBridgeService.shared.removeReaction(
-                    conversationId: conversationId,
-                    messageId: messageId,
-                    emoji: reactionId
-                )
-                #if DEBUG
-                print("[ChatService] ✅ Reaction removed via Matrix SDK: \(reactionId)")
-                #endif
-                return
-            } catch {
-                #if DEBUG
-                print("[ChatService] Matrix removeReaction failed, falling back to REST API: \(error)")
-                #endif
-            }
-        }
-
-        // Fallback: REST API
-        struct EmptyResponse: Codable {}
-
-        let _: EmptyResponse = try await client.request(
-            endpoint: APIConfig.Chat.deleteReaction(messageId: messageId, reactionId: reactionId),
-            method: "DELETE"
-        )
-
-        #if DEBUG
-        print("[ChatService] Reaction deleted via REST API: \(reactionId)")
-        #endif
+        try await reactionsService.deleteReaction(conversationId: conversationId, messageId: messageId, reactionId: reactionId)
     }
 
-    // MARK: - Deprecated Reaction Methods (向後兼容)
+    // MARK: - Deprecated Reaction Methods (delegated)
 
-    /// 添加表情回应到消息（已棄用，請使用包含 conversationId 的版本）
     @available(*, deprecated, message: "Use addReaction(conversationId:messageId:emoji:) instead")
     @MainActor
     func addReaction(messageId: String, emoji: String) async throws -> MessageReaction {
-        let request = AddReactionRequest(emoji: emoji)
-
-        let reaction: MessageReaction = try await client.request(
-            endpoint: APIConfig.Chat.addReaction(messageId),
-            method: "POST",
-            body: request
-        )
-
-        return reaction
+        try await reactionsService.addReaction(messageId: messageId, emoji: emoji)
     }
 
-    /// 获取消息的所有表情回应（已棄用，請使用包含 conversationId 的版本）
     @available(*, deprecated, message: "Use getReactions(conversationId:messageId:) instead")
     @MainActor
     func getReactions(messageId: String) async throws -> GetReactionsResponse {
-        let response: GetReactionsResponse = try await client.get(
-            endpoint: APIConfig.Chat.getReactions(messageId)
-        )
-        return response
+        try await reactionsService.getReactions(messageId: messageId)
     }
 
-    /// 删除表情回应（已棄用，請使用包含 conversationId 的版本）
     @available(*, deprecated, message: "Use deleteReaction(conversationId:messageId:reactionId:) instead")
     @MainActor
     func deleteReaction(messageId: String, reactionId: String) async throws {
-        struct EmptyResponse: Codable {}
-
-        let _: EmptyResponse = try await client.request(
-            endpoint: APIConfig.Chat.deleteReaction(messageId: messageId, reactionId: reactionId),
-            method: "DELETE"
-        )
+        try await reactionsService.deleteReaction(messageId: messageId, reactionId: reactionId)
     }
 
     // MARK: - Group Management
