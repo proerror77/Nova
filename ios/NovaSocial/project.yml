@@ -26,6 +26,9 @@ targets:
     platform: iOS
     deploymentTarget: "26.0"
     sources:
+      - path: Shared/Fonts
+        type: folder
+        buildPhase: resources
       - path: .
         excludes:
           - "*.xcodeproj"
@@ -95,6 +98,13 @@ targets:
             - MATRIX_SDK_ENABLED
     entitlements:
       path: ICERED.entitlements
+      properties:
+        com.apple.developer.applesignin:
+          - Default
+        com.apple.developer.associated-domains:
+          - webcredentials:aasa.icered.com?mode=developer
+        com.apple.security.application-groups:
+          - group.com.app.icered.pro
 
   ICEREDTests:
     type: bundle.unit-test
