@@ -62,6 +62,7 @@ final class ChatService {
     @ObservationIgnored private lazy var reactionsService = ChatReactionsService()
     @ObservationIgnored private lazy var groupService = ChatGroupService()
     @ObservationIgnored private lazy var callService = ChatCallService()
+    @ObservationIgnored private lazy var locationService = ChatLocationService()
 
     // MARK: - Initialization
 
@@ -1307,14 +1308,8 @@ final class ChatService {
         try await callService.getIceServers()
     }
 
-    // MARK: - Location Sharing
+    // MARK: - Location Sharing (delegated to ChatLocationService)
 
-    /// 分享当前位置到会话
-    /// - Parameters:
-    ///   - conversationId: 会话ID
-    ///   - latitude: 纬度
-    ///   - longitude: 经度
-    ///   - accuracy: 精度（米）
     @MainActor
     func shareLocation(
         conversationId: String,
@@ -1322,71 +1317,21 @@ final class ChatService {
         longitude: Double,
         accuracy: Double? = nil
     ) async throws {
-        struct Request: Codable {
-            let latitude: Double
-            let longitude: Double
-            let accuracy: Double?
-        }
-
-        struct Response: Codable {
-            let success: Bool
-        }
-
-        let request = Request(latitude: latitude, longitude: longitude, accuracy: accuracy)
-
-        let _: Response = try await client.request(
-            endpoint: APIConfig.Chat.shareLocation(conversationId),
-            method: "POST",
-            body: request
-        )
-
-        #if DEBUG
-        print("[ChatService] Location shared: \(latitude), \(longitude)")
-        #endif
+        try await locationService.shareLocation(conversationId: conversationId, latitude: latitude, longitude: longitude, accuracy: accuracy)
     }
 
-    /// 停止分享位置
-    /// - Parameter conversationId: 会话ID
     @MainActor
     func stopSharingLocation(conversationId: String) async throws {
-        struct EmptyResponse: Codable {}
-
-        let _: EmptyResponse = try await client.request(
-            endpoint: APIConfig.Chat.stopSharingLocation(conversationId),
-            method: "DELETE"
-        )
-
-        #if DEBUG
-        print("[ChatService] Stopped sharing location for conversation \(conversationId)")
-        #endif
+        try await locationService.stopSharingLocation(conversationId: conversationId)
     }
 
-    /// 获取附近的用户
-    /// - Parameters:
-    ///   - latitude: 当前纬度
-    ///   - longitude: 当前经度
-    ///   - radius: 搜索半径（米，默认1000米）
-    /// - Returns: 附近用户列表
     @MainActor
     func getNearbyUsers(
         latitude: Double,
         longitude: Double,
         radius: Int = 1000
     ) async throws -> NearbyUsersResponse {
-        let response: NearbyUsersResponse = try await client.get(
-            endpoint: APIConfig.Chat.getNearbyUsers,
-            queryParams: [
-                "latitude": String(latitude),
-                "longitude": String(longitude),
-                "radius": String(radius)
-            ]
-        )
-
-        #if DEBUG
-        print("[ChatService] Found \(response.users.count) nearby users")
-        #endif
-
-        return response
+        try await locationService.getNearbyUsers(latitude: latitude, longitude: longitude, radius: radius)
     }
 
     // MARK: - Cleanup
