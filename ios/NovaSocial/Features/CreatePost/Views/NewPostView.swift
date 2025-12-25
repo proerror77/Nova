@@ -37,11 +37,11 @@ struct NewPostView: View {
     @State private var suggestedChannels: [ChannelSuggestion] = []
     @State private var isLoadingSuggestions: Bool = false
 
-    // VLM (Vision Language Model) states - TODO: Add VLMService.swift to project
-    // @State private var vlmTags: [TagSuggestion] = []
-    // @State private var selectedVLMTags: Set<String> = []
+    // VLM (Vision Language Model) states
+    @State private var vlmTags: [TagSuggestion] = []
+    @State private var selectedVLMTags: Set<String> = []
     @State private var isAnalyzingImage: Bool = false
-    // @State private var vlmChannelSuggestions: [ChannelSuggestion] = []
+    @State private var vlmChannelSuggestions: [ChannelSuggestion] = []
 
     // Services
     private let mediaService = MediaService()
@@ -49,7 +49,7 @@ struct NewPostView: View {
     private let livePhotoManager = LivePhotoManager.shared
     private let aliceService = AliceService.shared
     private let feedService = FeedService()
-    // private let vlmService = VLMService.shared  // TODO: Add to project
+    private let vlmService = VLMService.shared
     // WebP image compression (25-35% smaller than JPEG)
     private let imageCompressor = ImageCompressor.shared
     // Background upload manager for non-blocking uploads
@@ -102,14 +102,14 @@ struct NewPostView: View {
             // 如果有初始媒体项目（来自 PhotosPicker），添加到 selectedMediaItems
             if let mediaItems = initialMediaItems, !mediaItems.isEmpty, selectedMediaItems.isEmpty {
                 selectedMediaItems = mediaItems
-                // Trigger VLM analysis for initial media - TODO: re-enable
-                // analyzeImageWithVLM()
+                // Trigger VLM analysis for initial media
+                analyzeImageWithVLM()
             }
             // 如果有初始图片，添加到 selectedMediaItems
             else if let image = initialImage, selectedMediaItems.isEmpty {
                 selectedMediaItems = [.image(image)]
-                // Trigger VLM analysis for initial image - TODO: re-enable
-                // analyzeImageWithVLM()
+                // Trigger VLM analysis for initial image
+                analyzeImageWithVLM()
             } else if initialMediaItems == nil && initialImage == nil {
                 // 没有初始媒体时，尝试加载草稿
                 loadDraft()
@@ -228,7 +228,7 @@ struct NewPostView: View {
         VStack(spacing: 0) {
             postAsSection
             imagePreviewSection
-            // vlmTagsSection  // VLM-generated tags - TODO: re-enable
+            vlmTagsSection  // VLM-generated tags
             textInputSection
             channelsAndEnhanceSection
 
@@ -471,10 +471,48 @@ struct NewPostView: View {
         .padding(.top, 16)
     }
 
-    // MARK: - VLM Tags Section (disabled - TODO: Add VLMService.swift to project)
+    // MARK: - VLM Tags Section
     @ViewBuilder
     private var vlmTagsSection: some View {
-        EmptyView()
+        if isAnalyzingImage || !vlmTags.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("AI Suggested Tags")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+
+                    if isAnalyzingImage {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    }
+
+                    Spacer()
+
+                    if !vlmTags.isEmpty {
+                        Text("\(selectedVLMTags.count) selected")
+                            .font(.system(size: 12))
+                            .foregroundColor(DesignTokens.textMuted)
+                    }
+                }
+
+                if !vlmTags.isEmpty {
+                    // Flow layout for tags
+                    FlowLayout(spacing: 8) {
+                        ForEach(vlmTags) { tagSuggestion in
+                            VLMTagChip(
+                                tag: tagSuggestion.tag,
+                                confidence: tagSuggestion.confidence,
+                                isSelected: selectedVLMTags.contains(tagSuggestion.tag),
+                                onTap: { toggleVLMTag(tagSuggestion.tag) }
+                            )
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color.white)
+        }
     }
 
     // MARK: - Total media count
@@ -588,18 +626,64 @@ struct NewPostView: View {
         selectedMediaItems.first?.displayImage
     }
 
-    // MARK: - VLM Image Analysis (disabled - TODO: Add VLMService.swift to project)
-    /*
+    // MARK: - VLM Image Analysis
     private func analyzeImageWithVLM() {
         guard let firstImage = getFirstImage() else { return }
         guard !isAnalyzingImage else { return }
-        isAnalyzingImage = true
-        // ... VLM analysis code disabled
-    }
-    */
 
-    // MARK: - Toggle VLM Tag Selection (disabled)
-    /*
+        isAnalyzingImage = true
+        vlmTags = []
+        vlmChannelSuggestions = []
+
+        Task {
+            do {
+                // Compress image for upload
+                let compressionResult = await imageCompressor.compressImage(firstImage, quality: .low)
+                let imageData = compressionResult.data
+                let filename = "vlm_\(UUID().uuidString).\(compressionResult.format.fileExtension)"
+
+                // Upload to get URL
+                let imageUrl = try await mediaService.uploadImage(imageData: imageData, filename: filename)
+
+                // Call VLM API
+                let result = try await vlmService.analyzeImage(
+                    imageUrl: imageUrl,
+                    includeChannels: true,
+                    maxTags: 15
+                )
+
+                await MainActor.run {
+                    vlmTags = result.tags
+                    vlmChannelSuggestions = result.channels ?? []
+
+                    // Auto-select high confidence tags (>80%)
+                    for tag in result.tags where tag.confidence >= 0.8 {
+                        selectedVLMTags.insert(tag.tag)
+                    }
+
+                    // Auto-suggest channels if none selected
+                    if selectedChannelIds.isEmpty, let topChannel = vlmChannelSuggestions.first {
+                        selectedChannelIds = [topChannel.id]
+                    }
+
+                    isAnalyzingImage = false
+                }
+
+                #if DEBUG
+                print("[NewPost] VLM analysis complete: \(result.tags.count) tags, \(result.channels?.count ?? 0) channels")
+                #endif
+            } catch {
+                #if DEBUG
+                print("[NewPost] VLM analysis failed: \(error)")
+                #endif
+                await MainActor.run {
+                    isAnalyzingImage = false
+                }
+            }
+        }
+    }
+
+    // MARK: - Toggle VLM Tag Selection
     private func toggleVLMTag(_ tag: String) {
         if selectedVLMTags.contains(tag) {
             selectedVLMTags.remove(tag)
@@ -607,7 +691,6 @@ struct NewPostView: View {
             selectedVLMTags.insert(tag)
         }
     }
-    */
 
     // MARK: - Process Selected Photos (with Live Photo support)
     private func processSelectedPhotos(_ items: [PhotosPickerItem]) async {
@@ -630,10 +713,10 @@ struct NewPostView: View {
             
             await MainActor.run {
                 selectedMediaItems.append(contentsOf: newMedia)
-                // Trigger VLM analysis when first image is added - TODO: re-enable
-                // if !newMedia.isEmpty {
-                //     analyzeImageWithVLM()
-                // }
+                // Trigger VLM analysis when first image is added
+                if !newMedia.isEmpty && vlmTags.isEmpty {
+                    analyzeImageWithVLM()
+                }
             }
         } catch {
             #if DEBUG
