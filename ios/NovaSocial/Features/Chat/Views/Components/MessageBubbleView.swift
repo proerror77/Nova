@@ -9,6 +9,7 @@ struct MessageBubbleView: View {
     var senderAvatarUrl: String? = nil  // 發送者頭像URL
     var myAvatarUrl: String? = nil  // 當前用戶頭像URL
     var onLongPress: ((ChatMessage) -> Void)? = nil  // 長按回調
+    var onRetry: ((ChatMessage) -> Void)? = nil  // 重試回調（發送失敗時）
 
     private let myBubbleColor = Color(red: 0.91, green: 0.20, blue: 0.34)
     private let otherBubbleColor = Color(red: 0.92, green: 0.92, blue: 0.92)
@@ -83,9 +84,19 @@ struct MessageBubbleView: View {
                 .font(.system(size: 10))
                 .foregroundColor(.blue)
         case .failed:
-            Image(systemName: "exclamationmark.circle.fill")
-                .font(.system(size: 10))
-                .foregroundColor(.red)
+            Button {
+                onRetry?(message)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.red)
+                    Text("Retry")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.red)
+                }
+            }
+            .buttonStyle(.plain)
         }
     }
 

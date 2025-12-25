@@ -6,6 +6,11 @@ import Combine
 import AVFoundation
 import UniformTypeIdentifiers
 
+// MARK: - Message Send Error
+enum MessageSendError: Error {
+    case timeout
+}
+
 // MARK: - ChatView
 struct ChatView: View {
     // MARK: - Static Properties
@@ -372,6 +377,9 @@ struct ChatView: View {
                             myAvatarUrl: currentUserAvatarUrl,
                             onLongPress: { msg in
                                 handleMessageLongPress(msg)
+                            },
+                            onRetry: { msg in
+                                retryFailedMessage(msg)
                             }
                         )
                         .id(message.id)
@@ -944,35 +952,152 @@ struct ChatView: View {
         showAttachmentOptions = false
 
         // 立即添加到本地 UI（樂觀更新）
-        let localMessage = ChatMessage(localText: trimmedText, isFromMe: true)
+        var localMessage = ChatMessage(localText: trimmedText, isFromMe: true)
         messages.append(localMessage)
+        let localMessageId = localMessage.id
 
         Task {
             isSending = true
             do {
                 try? await matrixBridge.setTyping(conversationId: conversationId, isTyping: false)
-                let eventId = try await matrixBridge.sendMessage(conversationId: conversationId, content: trimmedText)
+
+                // 使用超時機制發送訊息（30秒）
+                let eventId = try await withTimeout(seconds: 30) {
+                    try await matrixBridge.sendMessage(conversationId: conversationId, content: trimmedText)
+                }
+
                 try? await matrixBridge.markAsRead(conversationId: conversationId)
 
-                // 用服务器返回的消息ID更新本地消息
-                if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
-                    var updatedMessage = messages[index]
-                    updatedMessage.id = eventId
-                    messages[index] = updatedMessage
+                // 更新本地消息：ID 和狀態
+                await MainActor.run {
+                    if let index = messages.firstIndex(where: { $0.id == localMessageId }) {
+                        messages[index].id = eventId
+                        messages[index].status = .sent
+                    }
                 }
 
                 #if DEBUG
                 print("[ChatView] ✅ Message sent via Matrix: room=\(conversationId), eventId=\(eventId)")
                 #endif
             } catch {
-                // Send failed - remove the local message and show error
-                messages.removeAll { $0.id == localMessage.id }
-                self.error = "Failed to send message: \(error.localizedDescription)"
+                // 發送失敗 - 更新狀態為 failed（保留訊息以便重試）
+                await MainActor.run {
+                    if let index = messages.firstIndex(where: { $0.id == localMessageId }) {
+                        messages[index].status = .failed
+                    }
+                    self.error = getMessageSendErrorMessage(for: error)
+                }
                 #if DEBUG
                 print("[ChatView] ❌ Failed to send message: \(error)")
                 #endif
             }
-            isSending = false
+            await MainActor.run {
+                isSending = false
+            }
+        }
+    }
+
+    /// 帶超時的異步操作
+    private func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw MessageSendError.timeout
+            }
+
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
+    }
+
+    /// 獲取訊息發送錯誤訊息
+    private func getMessageSendErrorMessage(for error: Error) -> String {
+        if let sendError = error as? MessageSendError {
+            switch sendError {
+            case .timeout:
+                return "Message sending timed out. Tap to retry."
+            }
+        }
+
+        if let matrixError = error as? MatrixBridgeError {
+            switch matrixError {
+            case .notInitialized:
+                return "Connection not ready. Tap to retry."
+            case .notAuthenticated:
+                return "Please sign in again."
+            case .sessionExpired:
+                return "Session expired. Please restart the app."
+            case .roomMappingFailed:
+                return "Chat room not found."
+            case .messageSendFailed(let reason):
+                return "Failed to send: \(reason)"
+            case .bridgeDisabled:
+                return "Messaging is temporarily unavailable."
+            }
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case NSURLErrorNotConnectedToInternet:
+                return "No internet connection. Tap to retry."
+            case NSURLErrorTimedOut:
+                return "Request timed out. Tap to retry."
+            default:
+                return "Network error. Tap to retry."
+            }
+        }
+
+        return "Failed to send message. Tap to retry."
+    }
+
+    /// 重試發送失敗的訊息
+    private func retryFailedMessage(_ message: ChatMessage) {
+        guard message.status == .failed else { return }
+
+        // 找到訊息索引並更新狀態為 sending
+        guard let index = messages.firstIndex(where: { $0.id == message.id }) else { return }
+        messages[index].status = .sending
+
+        let messageId = message.id
+        let messageText = message.text
+
+        Task {
+            do {
+                // 使用超時機制重新發送
+                let eventId = try await withTimeout(seconds: 30) {
+                    try await matrixBridge.sendMessage(conversationId: conversationId, content: messageText)
+                }
+
+                // 更新成功
+                await MainActor.run {
+                    if let idx = messages.firstIndex(where: { $0.id == messageId }) {
+                        messages[idx].id = eventId
+                        messages[idx].status = .sent
+                    }
+                }
+
+                #if DEBUG
+                print("[ChatView] ✅ Message retry succeeded: \(eventId)")
+                #endif
+            } catch {
+                // 重試失敗
+                await MainActor.run {
+                    if let idx = messages.firstIndex(where: { $0.id == messageId }) {
+                        messages[idx].status = .failed
+                    }
+                    self.error = getMessageSendErrorMessage(for: error)
+                }
+
+                #if DEBUG
+                print("[ChatView] ❌ Message retry failed: \(error)")
+                #endif
+            }
         }
     }
 
