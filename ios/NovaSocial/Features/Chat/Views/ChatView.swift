@@ -6,134 +6,35 @@ import Combine
 import AVFoundation
 import UniformTypeIdentifiers
 
-// MARK: - Message Send Error
-enum MessageSendError: Error {
-    case timeout
-}
-
 // MARK: - ChatView
 struct ChatView: View {
-    // MARK: - Static Properties
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy/MM/dd  HH:mm"
-        return formatter
-    }()
+    // MARK: - Parameters
 
-    // MARK: - 预览模式配置 (开发调试用)
-    // 🎨 在模拟器上运行时启用预览模式，方便调试UI
-    #if DEBUG
-    private static var useChatPreviewMode: Bool {
-        #if targetEnvironment(simulator)
-        return false  // 关闭模拟器预览模式，使用真实API
-        #else
-        return false
-        #endif
-    }
-    #else
-    private static let useChatPreviewMode = false
-    #endif
-
-    // MARK: - Mock Data for UI Preview
-    private static var mockMessages: [ChatMessage] {
-        let calendar = Calendar.current
-        let now = Date()
-        _ = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: now) ?? now
-
-        return [
-            ChatMessage(localText: "Hello, how are you bro~", isFromMe: false),
-            ChatMessage(localText: "Have you been busy recently?", isFromMe: false),
-            ChatMessage(localText: "Not bad. There's a new project recently and I'm extremely busy", isFromMe: true),
-            ChatMessage(localText: "Is there dinner time tonight? There is a project that you might be interested in", isFromMe: false),
-        ]
-    }
-
-    // MARK: - Services
-    private let matrixBridge = MatrixBridgeService.shared
-    private let messageSender: ChatMessageSender
-
-    /// 必需参数
     @Binding var showChat: Bool
-    let conversationId: String  // ← 从上级View传入，标识当前聊天对象
+    let conversationId: String
     var userName: String = "User"
-    var otherUserAvatarUrl: String? = nil  // 對方用戶頭像URL（從父視圖傳入）
+    var otherUserAvatarUrl: String?
+
+    // MARK: - ViewModel
+
+    @State private var viewModel = ChatViewModel()
 
     // MARK: - View Models & Handlers
+
     @StateObject private var typingHandler: ChatTypingHandler
-
-    // MARK: - State
-    @State private var messageText = ""
-    @State private var showUserProfile = false
-    @State private var messages: [ChatMessage] = []
-    @State private var showAttachmentOptions = false
-    @FocusState private var isInputFocused: Bool
-
-    // Loading states
-    @State private var isLoadingHistory = false
-    @State private var isSending = false
-    @State private var isUploadingImage = false
-    @State private var error: String?
-    @State private var isPreviewMode = false  // 追踪预览模式状态
-
-    // Matrix E2EE status
-    @State private var isMatrixE2EEEnabled = false
-
-    // Pagination
-    @State private var hasMoreMessages = true
-    @State private var nextCursor: String?
-
-
-    // 相册相关
-    @State private var selectedPhotoItem: PhotosPickerItem?
-
-    // 相机相关
-    @State private var showCamera = false
-    @State private var cameraImage: UIImage?
-    @State private var showCameraPermissionAlert = false
-
-    // 位置相关
     @StateObject private var locationManager = ChatLocationManager()
 
-    // 语音录制相关
-    @State private var audioRecorder = AudioRecorderService()
-    @State private var audioPlayer = AudioPlayerService()
-    @State private var isRecordingVoice = false
-    @State private var showMicrophonePermissionAlert = false
-    @State private var showLocationAlert = false
+    // MARK: - Focus State (must stay in View)
 
-    // 通話相關
-    @State private var showVoiceCall = false
-    @State private var showVideoCall = false
-
-    // 檔案分享相關
-    @State private var showFilePicker = false
-    @State private var isUploadingFile = false
-
-    // 当前用户ID（从Keychain获取）
-    private var currentUserId: String {
-        KeychainService.shared.get(.userId) ?? "unknown"
-    }
-
-    // 當前用戶頭像URL（從AuthenticationManager獲取）
-    private var currentUserAvatarUrl: String? {
-        AuthenticationManager.shared.currentUser?.avatarUrl
-    }
-    
-    // Matrix 消息处理器状态（防止重复设置）
-    @State private var matrixMessageHandlerSetup = false
+    @FocusState private var isInputFocused: Bool
 
     // MARK: - Initializer
+
     init(showChat: Binding<Bool>, conversationId: String, userName: String = "User", otherUserAvatarUrl: String? = nil) {
         self._showChat = showChat
         self.conversationId = conversationId
         self.userName = userName
         self.otherUserAvatarUrl = otherUserAvatarUrl
-
-        // Initialize message sender
-        self.messageSender = ChatMessageSender(
-            chatService: ChatService.shared,
-            conversationId: conversationId
-        )
 
         // Initialize typing handler
         let currentUserId = KeychainService.shared.get(.userId) ?? "unknown"
@@ -161,16 +62,16 @@ struct ChatView: View {
                 inputAreaView
             }
         }
-        .fullScreenCover(isPresented: $showUserProfile) {
+        .fullScreenCover(isPresented: $viewModel.showUserProfile) {
             UserProfileView(
-                showUserProfile: $showUserProfile,
-                userId: conversationId  // 使用会话ID（实际项目中应传入对方用户ID）
+                showUserProfile: $viewModel.showUserProfile,
+                userId: conversationId
             )
         }
-        .fullScreenCover(isPresented: $showCamera) {
-            CameraView(image: $cameraImage)
+        .fullScreenCover(isPresented: $viewModel.showCamera) {
+            CameraView(image: $viewModel.cameraImage)
         }
-        .fullScreenCover(isPresented: $showVoiceCall) {
+        .fullScreenCover(isPresented: $viewModel.showVoiceCall) {
             CallView(
                 roomId: conversationId,
                 roomName: userName,
@@ -178,7 +79,7 @@ struct ChatView: View {
                 intent: .startCallDM
             )
         }
-        .fullScreenCover(isPresented: $showVideoCall) {
+        .fullScreenCover(isPresented: $viewModel.showVideoCall) {
             CallView(
                 roomId: conversationId,
                 roomName: userName,
@@ -186,36 +87,36 @@ struct ChatView: View {
                 intent: .startCallDM
             )
         }
-        .sheet(isPresented: $showFilePicker) {
+        .sheet(isPresented: $viewModel.showFilePicker) {
             DocumentPickerView(
                 onDocumentPicked: { data, filename, mimeType in
-                    handleDocumentPicked(data: data, filename: filename, mimeType: mimeType)
+                    viewModel.handleDocumentPicked(data: data, filename: filename, mimeType: mimeType)
                 },
                 onError: { error in
-                    self.error = "Cannot access file: \(error.localizedDescription)"
+                    viewModel.error = "Cannot access file: \(error.localizedDescription)"
                 }
             )
         }
-        .onChange(of: selectedPhotoItem) { _, newItem in
-            handlePhotoSelection(newItem)
+        .onChange(of: viewModel.selectedPhotoItem) { _, newItem in
+            viewModel.handlePhotoSelection(newItem)
         }
-        .onChange(of: cameraImage) { _, newImage in
-            handleCameraImage(newImage)
+        .onChange(of: viewModel.cameraImage) { _, newImage in
+            viewModel.handleCameraImage(newImage)
         }
         .onReceive(locationManager.$location) { newLocation in
-            handleLocationUpdate(newLocation)
+            viewModel.handleLocationUpdate(newLocation)
         }
-        .alert("Share Location", isPresented: $showLocationAlert) {
+        .alert("Share Location", isPresented: $viewModel.showLocationAlert) {
             Button("Share") {
                 if let location = locationManager.location {
-                    sendLocationMessage(location: location)
+                    viewModel.sendLocationMessage(location: location)
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Share your current location?")
         }
-        .alert("Camera Access Required", isPresented: $showCameraPermissionAlert) {
+        .alert("Camera Access Required", isPresented: $viewModel.showCameraPermissionAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Settings") {
                 if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
@@ -225,7 +126,7 @@ struct ChatView: View {
         } message: {
             Text("Please enable camera access in Settings to take photos.")
         }
-        .alert("Microphone Access Required", isPresented: $showMicrophonePermissionAlert) {
+        .alert("Microphone Access Required", isPresented: $viewModel.showMicrophonePermissionAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Settings") {
                 if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
@@ -239,33 +140,24 @@ struct ChatView: View {
             transaction.disablesAnimations = true
         }
         .task {
-            // Set up message sender callbacks
-            setupMessageSenderCallbacks()
+            // Configure ViewModel
+            viewModel.configure(
+                conversationId: conversationId,
+                userName: userName,
+                otherUserAvatarUrl: otherUserAvatarUrl,
+                typingHandler: typingHandler,
+                onDismiss: { showChat = false }
+            )
 
-            // ✅ 使用.task而非.onAppear - 自动处理取消
-            await loadChatData()
+            await viewModel.loadChatData()
         }
         .onDisappear {
-            // Clear Matrix callbacks and reset handler setup flag
-            MatrixBridgeService.shared.onMatrixMessage = nil
-            MatrixBridgeService.shared.onTypingIndicator = nil
-            matrixMessageHandlerSetup = false
-
-            Task {
-                await matrixBridge.stopListening(conversationId: conversationId)
-                try? await matrixBridge.setTyping(conversationId: conversationId, isTyping: false)
-            }
-
-            // Clean up typing handler
-            typingHandler.cleanup()
-
-            #if DEBUG
-            print("[ChatView] Cleanup completed for conversation \(conversationId)")
-            #endif
+            viewModel.cleanup()
         }
     }
 
-    // MARK: - 导航栏
+    // MARK: - Navigation Bar
+
     private var navigationBar: some View {
         HStack(spacing: 13) {
             Button(action: {
@@ -277,7 +169,7 @@ struct ChatView: View {
             }
 
             HStack(spacing: 13) {
-                // 头像 - alice 使用自定义图片，其他用户使用默认头像
+                // Avatar
                 if userName.lowercased() == "alice" {
                     Image("alice-avatar")
                         .resizable()
@@ -293,8 +185,8 @@ struct ChatView: View {
                         .font(.system(size: 20, weight: .medium))
                         .foregroundColor(DesignTokens.textPrimary)
 
-                    // Matrix E2EE 狀態指示器
-                    if isMatrixE2EEEnabled {
+                    // Matrix E2EE status indicator
+                    if viewModel.isMatrixE2EEEnabled {
                         HStack(spacing: 4) {
                             Image(systemName: "lock.shield.fill")
                                 .font(.system(size: 10))
@@ -311,7 +203,7 @@ struct ChatView: View {
                 var transaction = Transaction()
                 transaction.disablesAnimations = true
                 withTransaction(transaction) {
-                    showUserProfile = true
+                    viewModel.showUserProfile = true
                 }
             }
 
@@ -322,15 +214,16 @@ struct ChatView: View {
         .background(DesignTokens.surface)
     }
 
-    // MARK: - 消息列表
+    // MARK: - Message List View
+
     private var messageListView: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    // MARK: - 加載更多歷史消息按鈕
-                    if hasMoreMessages && !isLoadingHistory {
+                    // Load more history button
+                    if viewModel.hasMoreMessages && !viewModel.isLoadingHistory {
                         Button(action: {
-                            Task { await loadMoreMessages() }
+                            Task { await viewModel.loadMoreMessages() }
                         }) {
                             HStack(spacing: 8) {
                                 Image(systemName: "arrow.up.circle")
@@ -342,10 +235,10 @@ struct ChatView: View {
                             .padding(.vertical, 10)
                         }
                     }
-                    
-                    // MARK: - 预览模式提示（仅在DEBUG模式显示）
+
+                    // Preview mode indicator
                     #if DEBUG
-                    if isPreviewMode {
+                    if viewModel.isPreviewMode {
                         HStack(spacing: 8) {
                             Image(systemName: "eye.fill")
                                 .font(.system(size: 12))
@@ -360,14 +253,14 @@ struct ChatView: View {
                     }
                     #endif
 
-                    // 加载状态指示器
-                    if isLoadingHistory {
+                    // Loading indicator
+                    if viewModel.isLoadingHistory {
                         ProgressView("Loading messages...")
                             .padding()
                     }
 
-                    // 错误提示
-                    if let error = error {
+                    // Error message
+                    if let error = viewModel.error {
                         VStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle")
                                 .font(.system(size: 30))
@@ -377,45 +270,44 @@ struct ChatView: View {
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
                             Button("Retry") {
-                                Task { await loadChatData() }
+                                Task { await viewModel.loadChatData() }
                             }
                             .buttonStyle(.bordered)
                         }
                         .padding()
                     }
 
-                    // 日期分隔符
-                    Text(currentDateString())
+                    // Date separator
+                    Text(viewModel.currentDateString())
                         .font(Font.custom("Helvetica Neue", size: 12))
                         .lineSpacing(20)
                         .foregroundColor(Color(red: 0.59, green: 0.59, blue: 0.59))
                         .padding(.top, 16)
 
-                    // 消息列表
-                    ForEach(messages) { message in
+                    // Message list
+                    ForEach(viewModel.messages) { message in
                         MessageBubbleView(
                             message: message,
-                            audioPlayer: audioPlayer,
+                            audioPlayer: viewModel.audioPlayer,
                             senderAvatarUrl: otherUserAvatarUrl,
-                            myAvatarUrl: currentUserAvatarUrl,
+                            myAvatarUrl: viewModel.currentUserAvatarUrl,
                             onLongPress: { msg in
-                                handleMessageLongPress(msg)
+                                viewModel.handleMessageLongPress(msg)
                             },
                             onRetry: { msg in
-                                retryFailedMessage(msg)
+                                viewModel.retryFailedMessage(msg)
                             }
                         )
                         .id(message.id)
-                        // 首條消息出現時嘗試加載更多
                         .onAppear {
-                            if message.id == messages.first?.id && hasMoreMessages && !isLoadingHistory {
-                                Task { await loadMoreMessages() }
+                            if message.id == viewModel.messages.first?.id && viewModel.hasMoreMessages && !viewModel.isLoadingHistory {
+                                Task { await viewModel.loadMoreMessages() }
                             }
                         }
                     }
 
                     // Sending indicator
-                    if isSending {
+                    if viewModel.isSending {
                         HStack {
                             Spacer()
                             ProgressView()
@@ -427,7 +319,7 @@ struct ChatView: View {
                         }
                         .padding(.horizontal)
                     }
-                    
+
                     // Typing indicator
                     if typingHandler.isOtherUserTyping {
                         HStack(spacing: 6) {
@@ -439,7 +331,6 @@ struct ChatView: View {
                                     .foregroundColor(DesignTokens.textMuted)
                                     .italic()
 
-                                // Animated dots
                                 TypingDotsView()
                             }
                             .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
@@ -450,980 +341,224 @@ struct ChatView: View {
                         }
                         .padding(.horizontal, 16)
                         .transition(.opacity)
-                        .animation(.easeInOut(duration: 0.2), value: typingHandler.isOtherUserTyping)
                     }
                 }
-                .padding(.bottom, 16)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
             }
-            .refreshable {
-                await loadMoreMessages()
-            }
-            .onChange(of: messages.count) { oldCount, newCount in
-                // 只有新消息添加時才滾動到底部（不是加載歷史）
-                if newCount > oldCount, let lastMessage = messages.last {
+            .onChange(of: viewModel.messages.count) { _, _ in
+                if let lastMessage = viewModel.messages.last {
                     withAnimation {
                         proxy.scrollTo(lastMessage.id, anchor: .bottom)
                     }
                 }
             }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                if showAttachmentOptions {
-                    showAttachmentOptions = false
-                }
-            }
         }
     }
 
-    // MARK: - 输入区域
+    // MARK: - Input Area View
+
     private var inputAreaView: some View {
         VStack(spacing: 0) {
-            Divider()
-                .frame(height: 0.5)
-                .background(DesignTokens.borderColor)
+            if viewModel.showAttachmentOptions {
+                attachmentOptionsView
+            }
 
             HStack(spacing: 12) {
+                // Attachment button
                 Button(action: {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showAttachmentOptions.toggle()
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        viewModel.showAttachmentOptions.toggle()
                     }
                 }) {
-                    ZStack {
-                        Circle()
-                            .stroke(Color(red: 0.91, green: 0.18, blue: 0.30), lineWidth: 2)
-                            .frame(width: 26, height: 26)
-
-                        Image(systemName: showAttachmentOptions ? "xmark" : "plus")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(Color(red: 0.91, green: 0.18, blue: 0.30))
-                    }
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(DesignTokens.accentColor)
+                        .rotationEffect(.degrees(viewModel.showAttachmentOptions ? 45 : 0))
                 }
 
-                // Text Input (voice recording is handled by the mic button)
-                    HStack(spacing: 8) {
-                        TextField("Type a message...", text: $messageText)
-                            .font(Font.custom("Helvetica Neue", size: 16))
-                            .foregroundColor(DesignTokens.textPrimary)
-                            .focused($isInputFocused)
-                            .onSubmit {
-                                sendMessage()
-                            }
-                            .onChange(of: messageText) { oldValue, newValue in
-                                // Send typing indicator when user starts typing
-                                if oldValue.isEmpty && !newValue.isEmpty {
-                                    Task { try? await matrixBridge.setTyping(conversationId: conversationId, isTyping: true) }
-                                }
-                                // Send typing stop when text is cleared
-                                if !oldValue.isEmpty && newValue.isEmpty {
-                                    Task { try? await matrixBridge.setTyping(conversationId: conversationId, isTyping: false) }
-                                }
-                            }
-                    }
-                    .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-                    .background(DesignTokens.inputBackground)
-                    .cornerRadius(26)
-                    .onChange(of: isInputFocused) { _, focused in
-                        if focused && showAttachmentOptions {
-                            showAttachmentOptions = false
+                // Text input
+                HStack(spacing: 8) {
+                    TextField("Type a message...", text: $viewModel.messageText)
+                        .font(.system(size: 16))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .focused($isInputFocused)
+                        .onChange(of: viewModel.messageText) { _, newValue in
+                            viewModel.sendTypingIndicator(isTyping: !newValue.isEmpty)
+                        }
+
+                    // Voice record / Send button
+                    if viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        voiceRecordButton
+                    } else {
+                        Button(action: {
+                            viewModel.sendMessage()
+                        }) {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(DesignTokens.accentColor)
                         }
                     }
-
-                // Send button or Voice Record button
-                if messageText.isEmpty {
-                    // Press-and-hold voice record button
-                    voiceRecordButton
-                } else {
-                    // Send text message button
-                    Button(action: {
-                        sendMessage()
-                    }) {
-                        Circle()
-                            .fill(Color(red: 0.91, green: 0.18, blue: 0.30))
-                            .frame(width: 33, height: 33)
-                            .overlay(
-                                Image(systemName: "paperplane.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.white)
-                            )
-                    }
                 }
+                .background(DesignTokens.surface)
+                .cornerRadius(20)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(DesignTokens.borderColor, lineWidth: 1)
+                )
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.vertical, 8)
             .background(DesignTokens.surface)
-
-            if showAttachmentOptions {
-                attachmentOptionsView
-                    .transition(.move(edge: .bottom))
-            }
         }
     }
 
-    // MARK: - 附件选项视图
+    // MARK: - Attachment Options View
+
     private var attachmentOptionsView: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 15) {
-                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                    VStack(spacing: 4) {
-                        Rectangle()
-                            .foregroundColor(.clear)
-                            .frame(width: 60, height: 60)
-                            .background(DesignTokens.surface)
-                            .cornerRadius(10)
-                            .overlay(
-                                Image(systemName: "photo.on.rectangle")
-                                    .font(.system(size: 24))
-                                    .foregroundColor(DesignTokens.textPrimary)
-                            )
-                        Text("Album")
-                            .font(.system(size: 12))
-                            .lineSpacing(20)
-                            .foregroundColor(DesignTokens.textPrimary)
-                    }
-                    .frame(width: 60)
+        HStack(spacing: 20) {
+            // Photo picker
+            PhotosPicker(selection: $viewModel.selectedPhotoItem, matching: .images) {
+                VStack(spacing: 4) {
+                    Image(systemName: "photo.on.rectangle")
+                        .font(.system(size: 22))
+                    Text("Album")
+                        .font(.system(size: 11))
                 }
-
-                AttachmentOptionButton(icon: "camera", title: "Camera") {
-                    showAttachmentOptions = false
-                    checkCameraPermissionAndOpen()
-                }
-
-                AttachmentOptionButton(icon: "video.fill", title: "Video Call") {
-                    showAttachmentOptions = false
-                    showVideoCall = true
-                }
-
-                AttachmentOptionButton(icon: "phone.fill", title: "Voice Call") {
-                    showAttachmentOptions = false
-                    showVoiceCall = true
-                }
-
-                AttachmentOptionButton(icon: "location.fill", title: "Location") {
-                    showAttachmentOptions = false
-                    locationManager.requestLocation()
-                    showLocationAlert = true
-                }
-
-                AttachmentOptionButton(icon: "doc.fill", title: "File") {
-                    showAttachmentOptions = false
-                    showFilePicker = true
-                }
+                .foregroundColor(DesignTokens.textSecondary)
+                .frame(width: 60, height: 60)
             }
-            .padding(.vertical, 16)
+
+            // Camera
+            Button(action: {
+                viewModel.checkCameraPermissionAndOpen()
+            }) {
+                VStack(spacing: 4) {
+                    Image(systemName: "camera")
+                        .font(.system(size: 22))
+                    Text("Camera")
+                        .font(.system(size: 11))
+                }
+                .foregroundColor(DesignTokens.textSecondary)
+                .frame(width: 60, height: 60)
+            }
+
+            // Video call
+            Button(action: {
+                viewModel.showVideoCall = true
+            }) {
+                VStack(spacing: 4) {
+                    Image(systemName: "video")
+                        .font(.system(size: 22))
+                    Text("Video")
+                        .font(.system(size: 11))
+                }
+                .foregroundColor(DesignTokens.textSecondary)
+                .frame(width: 60, height: 60)
+            }
+
+            // Voice call
+            Button(action: {
+                viewModel.showVoiceCall = true
+            }) {
+                VStack(spacing: 4) {
+                    Image(systemName: "phone")
+                        .font(.system(size: 22))
+                    Text("Call")
+                        .font(.system(size: 11))
+                }
+                .foregroundColor(DesignTokens.textSecondary)
+                .frame(width: 60, height: 60)
+            }
+
+            // Location
+            Button(action: {
+                locationManager.requestLocation()
+                viewModel.showLocationAlert = true
+            }) {
+                VStack(spacing: 4) {
+                    Image(systemName: "location")
+                        .font(.system(size: 22))
+                    Text("Location")
+                        .font(.system(size: 11))
+                }
+                .foregroundColor(DesignTokens.textSecondary)
+                .frame(width: 60, height: 60)
+            }
+
+            // File picker
+            Button(action: {
+                viewModel.showFilePicker = true
+            }) {
+                VStack(spacing: 4) {
+                    Image(systemName: "doc")
+                        .font(.system(size: 22))
+                    Text("File")
+                        .font(.system(size: 11))
+                }
+                .foregroundColor(DesignTokens.textSecondary)
+                .frame(width: 60, height: 60)
+            }
         }
-        .frame(maxWidth: .infinity)
-        .background(DesignTokens.attachmentBackground)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .background(DesignTokens.surface)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
-    // MARK: - 按住录音按钮
-    /// 按住錄音、放開發送、向上滑動取消
-    @State private var voiceRecordDragOffset: CGFloat = 0
-    private let voiceCancelThreshold: CGFloat = -60
+    // MARK: - Voice Record Button
 
     private var voiceRecordButton: some View {
         ZStack {
-            // 錄音中的背景脈衝動畫
-            if isRecordingVoice {
+            // Recording indicator
+            if viewModel.isRecordingVoice {
                 Circle()
                     .fill(Color.red.opacity(0.2))
-                    .frame(width: 50, height: 50)
-                    .scaleEffect(audioRecorder.audioLevel > 0.3 ? 1.3 : 1.0)
-                    .animation(.easeInOut(duration: 0.2), value: audioRecorder.audioLevel)
+                    .frame(width: 60, height: 60)
+                    .scaleEffect(1.0 + sin(Date().timeIntervalSince1970 * 3) * 0.1)
+                    .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: viewModel.isRecordingVoice)
             }
 
-            // 主按鈕
-            Circle()
-                .fill(isRecordingVoice ? Color.red : Color.gray.opacity(0.3))
-                .frame(width: 33, height: 33)
-                .overlay(
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 14))
-                        .foregroundColor(isRecordingVoice ? .white : DesignTokens.textMuted)
+            // Microphone button
+            Image(systemName: viewModel.isRecordingVoice ? "stop.circle.fill" : "mic.circle.fill")
+                .font(.system(size: 28))
+                .foregroundColor(viewModel.isRecordingVoice ? .red : DesignTokens.textSecondary)
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            if !viewModel.isRecordingVoice {
+                                viewModel.startVoiceRecording()
+                            }
+                            viewModel.handleVoiceRecordDragChanged(value)
+                        }
+                        .onEnded { value in
+                            viewModel.handleVoiceRecordDragEnded(value)
+                        }
                 )
-                .scaleEffect(isRecordingVoice ? 1.2 : 1.0)
-                .offset(y: voiceRecordDragOffset)
-                .animation(.spring(response: 0.3), value: isRecordingVoice)
 
-            // 取消提示
-            if isRecordingVoice && voiceRecordDragOffset < voiceCancelThreshold {
+            // Cancel indicator
+            if viewModel.isRecordingVoice && viewModel.voiceRecordDragOffset < viewModel.voiceCancelThreshold {
                 VStack {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 24))
                         .foregroundColor(.red)
-                    Text("Release to Cancel")
-                        .font(.caption)
+                    Text("Release to cancel")
+                        .font(.system(size: 10))
                         .foregroundColor(.red)
                 }
-                .offset(y: -70)
-                .transition(.opacity)
+                .offset(y: -50)
             }
 
-            // 錄音時間顯示
-            if isRecordingVoice {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(Color.red)
-                        .frame(width: 8, height: 8)
-
-                    Text(formatDuration(audioRecorder.recordingDuration))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundColor(.red)
-                }
-                .offset(x: -80)
-                .transition(.opacity)
+            // Recording duration
+            if viewModel.isRecordingVoice {
+                Text(viewModel.formatDuration(viewModel.audioRecorder.recordingDuration))
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundColor(.red)
+                    .offset(y: 25)
             }
         }
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    handleVoiceRecordDragChanged(value)
-                }
-                .onEnded { value in
-                    handleVoiceRecordDragEnded(value)
-                }
-        )
-    }
-
-    private func handleVoiceRecordDragChanged(_ value: DragGesture.Value) {
-        // 開始錄音
-        if !isRecordingVoice {
-            startVoiceRecording()
-        }
-
-        // 追蹤拖動以支持取消手勢
-        voiceRecordDragOffset = min(0, value.translation.height)
-    }
-
-    private func handleVoiceRecordDragEnded(_ value: DragGesture.Value) {
-        // 檢查是否應該取消
-        if voiceRecordDragOffset < voiceCancelThreshold {
-            cancelVoiceRecording()
-        } else if isRecordingVoice {
-            stopAndSendVoiceMessage()
-        }
-
-        voiceRecordDragOffset = 0
-    }
-
-    // MARK: - 事件处理
-    private func handlePhotoSelection(_ newItem: PhotosPickerItem?) {
-        Task {
-            do {
-                if let data = try await newItem?.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    await MainActor.run {
-                        sendImageMessage(image: image)
-                    }
-                }
-            } catch {
-                print("Failed to load photo: \(error.localizedDescription)")
-                // Consider showing user-facing error in future
-            }
-        }
-    }
-
-    private func handleCameraImage(_ newImage: UIImage?) {
-        if let image = newImage {
-            sendImageMessage(image: image)
-            cameraImage = nil
-        }
-    }
-
-    private func handleLocationUpdate(_ newLocation: CLLocationCoordinate2D?) {
-        if let location = newLocation, showLocationAlert {
-            sendLocationMessage(location: location)
-            showLocationAlert = false
-        }
-    }
-
-    // MARK: - API Calls
-
-    /// Set up message sender callbacks
-    private func setupMessageSenderCallbacks() {
-        messageSender.onMessageAdded = { [self] message in
-            Task { @MainActor in
-                self.messages.append(message)
-            }
-        }
-
-        messageSender.onMessageUpdated = { [self] localId, updatedMessage in
-            Task { @MainActor in
-                if let index = self.messages.firstIndex(where: { $0.id == localId }) {
-                    self.messages[index] = updatedMessage
-                }
-            }
-        }
-
-        messageSender.onMessageRemoved = { [self] messageId in
-            Task { @MainActor in
-                self.messages.removeAll { $0.id == messageId }
-            }
-        }
-
-        messageSender.onSendingStateChanged = { [self] isSending in
-            Task { @MainActor in
-                self.isSending = isSending
-            }
-        }
-
-        messageSender.onUploadingStateChanged = { [self] isUploading in
-            Task { @MainActor in
-                self.isUploadingImage = isUploading
-            }
-        }
-
-        messageSender.onError = { [self] errorMessage in
-            Task { @MainActor in
-                self.error = errorMessage
-            }
-        }
-
-        messageSender.currentUserId = { [self] in
-            self.currentUserId
-        }
-    }
-
-    /// Load chat data via Matrix timeline/sync (Matrix-first)
-    /// - Parameter retryCount: Number of retry attempts made (for automatic recovery)
-    private func loadChatData(retryCount: Int = 0) async {
-        // 🎨 预览模式：使用模拟数据进行UI调试
-        if Self.useChatPreviewMode {
-            print("🎨 [ChatView] Preview Mode enabled - using mock data")
-            await MainActor.run {
-                self.messages = Self.mockMessages
-                self.isLoadingHistory = false
-                self.error = nil
-                self.isPreviewMode = true
-            }
-            return
-        }
-
-        await MainActor.run {
-            self.isPreviewMode = false
-        }
-
-        isLoadingHistory = true
-        error = nil
-
-        do {
-            if !matrixBridge.isInitialized {
-                try await matrixBridge.initialize()
-            }
-
-            isMatrixE2EEEnabled = matrixBridge.isInitialized
-
-            setupMatrixMessageHandler()
-
-            let matrixMessages = try await matrixBridge.getMessages(conversationId: conversationId, limit: 50)
-            let sorted = matrixMessages.sorted { $0.timestamp < $1.timestamp }
-            messages = sorted.map { matrixMessage in
-                let novaMessage = matrixBridge.convertToNovaMessage(matrixMessage, conversationId: conversationId)
-                return ChatMessage(from: novaMessage, currentUserId: currentUserId)
-            }
-
-            // 如果返回了請求的消息數量，可能還有更多歷史消息
-            hasMoreMessages = matrixMessages.count >= 50
-            nextCursor = nil
-
-            try? await matrixBridge.markAsRead(conversationId: conversationId)
-
-            #if DEBUG
-            print("[ChatView] Loaded \(messages.count) Matrix messages for room \(conversationId)")
-            #endif
-        } catch {
-            // Check if this is a recoverable database corruption error
-            if matrixBridge.handleMatrixError(error) && retryCount < 1 {
-                #if DEBUG
-                print("[ChatView] Database corruption detected, retrying with fresh session...")
-                #endif
-                // Re-initialize Matrix bridge after clearing session
-                try? await matrixBridge.initialize()
-                await loadChatData(retryCount: retryCount + 1)
-                return
-            }
-
-            self.error = "Failed to load messages: \(error.localizedDescription)"
-            #if DEBUG
-            print("[ChatView] Load error: \(error)")
-            #endif
-        }
-
-        isLoadingHistory = false
-    }
-
-    /// Setup Matrix Bridge message handler for E2EE messages
-    private func setupMatrixMessageHandler() {
-        // 防止重复设置处理器 - 只设置一次
-        guard !matrixMessageHandlerSetup else {
-            #if DEBUG
-            print("[ChatView] ⚠️ Matrix message handler already setup, skipping duplicate setup")
-            #endif
-            return
-        }
-        
-        matrixMessageHandlerSetup = true
-        
-        MatrixBridgeService.shared.onMatrixMessage = { [self] conversationId, matrixMessage in
-            Task { @MainActor in
-                // 只處理當前會話的訊息
-                guard conversationId == self.conversationId else { return }
-
-                // 跳過自己發送的訊息（避免與 optimistic update 重複）
-                // 自己發的訊息已經通過 sendMessage() 的 optimistic update 添加
-                if let myMatrixId = MatrixBridgeService.shared.matrixUserId,
-                   matrixMessage.senderId == myMatrixId {
-                    #if DEBUG
-                    print("[ChatView] ✅ Skipping own message from Matrix sync: \(matrixMessage.id)")
-                    #endif
-                    return
-                }
-
-                // 避免重複
-                if self.messages.contains(where: { $0.id == matrixMessage.id }) {
-                    #if DEBUG
-                    print("[ChatView] ⚠️ Skipping duplicate message: \(matrixMessage.id) (already exists)")
-                    #endif
-                    return
-                }
-
-                // 轉換 Matrix 訊息為 Nova 訊息格式
-                let novaMessage = MatrixBridgeService.shared.convertToNovaMessage(
-                    matrixMessage,
-                    conversationId: conversationId
-                )
-                
-                let newChatMessage = ChatMessage(from: novaMessage, currentUserId: self.currentUserId)
-                
-                // 再次檢查 - 防止競態條件（消息可能在轉換期間被添加）
-                if self.messages.contains(where: { $0.id == newChatMessage.id }) {
-                    #if DEBUG
-                    print("[ChatView] ⚠️ Skipping duplicate message: \(newChatMessage.id) (added during conversion)")
-                    #endif
-                    return
-                }
-
-                // 添加到 UI
-                self.messages.append(newChatMessage)
-
-                #if DEBUG
-                print("[ChatView] ✅ Message added to UI - ID: \(newChatMessage.id), Sender: \(newChatMessage.isFromMe ? "me" : "other"), Total: \(self.messages.count)")
-                #endif
-
-                // 清除打字指示器
-                self.typingHandler.stopTypingIndicator()
-
-                // Mark as read (Matrix read receipt)
-                if novaMessage.senderId != self.currentUserId {
-                    #if DEBUG
-                    print("[ChatView] 📖 Marking message as read - ID: \(matrixMessage.id)")
-                    #endif
-                    try? await self.matrixBridge.markAsRead(conversationId: self.conversationId)
-                }
-            }
-        }
-
-        // Matrix 打字指示器 - delegate to typing handler
-        MatrixBridgeService.shared.onTypingIndicator = { [self] conversationId, userIds in
-            Task { @MainActor in
-                guard conversationId == self.conversationId else { return }
-
-                // Delegate to typing handler
-                self.typingHandler.handleMatrixTypingIndicator(userIds: userIds)
-            }
-        }
-
-        #if DEBUG
-        print("[ChatView] Matrix message handler setup complete")
-        #endif
-    }
-    
-    /// Load more messages (pagination)
-    private func loadMoreMessages() async {
-        guard !isLoadingHistory, hasMoreMessages else { return }
-
-        isLoadingHistory = true
-        let previousCount = messages.count
-
-        do {
-            // 請求比當前更多的消息來實現分頁
-            let desiredLimit = messages.count + 50
-            let matrixMessages = try await matrixBridge.getMessages(conversationId: conversationId, limit: desiredLimit)
-            let sorted = matrixMessages.sorted { $0.timestamp < $1.timestamp }
-            
-            // 記錄第一條消息 ID 以保持滾動位置
-            let firstMessageId = messages.first?.id
-            
-            messages = sorted.map { matrixMessage in
-                let novaMessage = matrixBridge.convertToNovaMessage(matrixMessage, conversationId: conversationId)
-                return ChatMessage(from: novaMessage, currentUserId: currentUserId)
-            }
-            
-            // 檢查是否還有更多消息
-            hasMoreMessages = messages.count > previousCount && matrixMessages.count >= desiredLimit
-            
-            #if DEBUG
-            print("[ChatView] Loaded more messages: \(previousCount) -> \(messages.count), hasMore: \(hasMoreMessages)")
-            #endif
-        } catch {
-            #if DEBUG
-            print("[ChatView] Load more error: \(error)")
-            #endif
-        }
-
-        isLoadingHistory = false
-    }
-    
-    /// 處理消息長按操作
-    private func handleMessageLongPress(_ message: ChatMessage) {
-        // 刪除消息
-        Task {
-            do {
-                try await matrixBridge.deleteMessage(
-                    conversationId: conversationId,
-                    messageId: message.id,
-                    reason: nil
-                )
-                // 從本地列表移除
-                await MainActor.run {
-                    messages.removeAll { $0.id == message.id }
-                }
-                #if DEBUG
-                print("[ChatView] Message deleted: \(message.id)")
-                #endif
-            } catch {
-                #if DEBUG
-                print("[ChatView] Failed to delete message: \(error)")
-                #endif
-                self.error = "無法刪除消息"
-            }
-        }
-    }
-
-    // MARK: - Send Text Message
-    /// 發送文字訊息 - 使用 Matrix E2EE（端到端加密）
-    private func sendMessage() {
-        let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return }
-
-        messageText = ""
-        showAttachmentOptions = false
-
-        Task {
-            await messageSender.sendTextMessage(trimmedText)
-        }
-    }
-
-    /// 帶超時的異步操作
-    private func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask {
-                try await operation()
-            }
-
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-                throw MessageSendError.timeout
-            }
-
-            let result = try await group.next()!
-            group.cancelAll()
-            return result
-        }
-    }
-
-    /// 獲取訊息發送錯誤訊息
-    private func getMessageSendErrorMessage(for error: Error) -> String {
-        if let sendError = error as? MessageSendError {
-            switch sendError {
-            case .timeout:
-                return "Message sending timed out. Tap to retry."
-            }
-        }
-
-        if let matrixError = error as? MatrixBridgeError {
-            switch matrixError {
-            case .notInitialized:
-                return "Connection not ready. Tap to retry."
-            case .notAuthenticated:
-                return "Please sign in again."
-            case .sessionExpired:
-                return "Session expired. Please restart the app."
-            case .roomMappingFailed:
-                return "Chat room not found."
-            case .messageSendFailed(let reason):
-                return "Failed to send: \(reason)"
-            case .bridgeDisabled:
-                return "Messaging is temporarily unavailable."
-            }
-        }
-
-        let nsError = error as NSError
-        if nsError.domain == NSURLErrorDomain {
-            switch nsError.code {
-            case NSURLErrorNotConnectedToInternet:
-                return "No internet connection. Tap to retry."
-            case NSURLErrorTimedOut:
-                return "Request timed out. Tap to retry."
-            default:
-                return "Network error. Tap to retry."
-            }
-        }
-
-        return "Failed to send message. Tap to retry."
-    }
-
-    /// 重試發送失敗的訊息
-    private func retryFailedMessage(_ message: ChatMessage) {
-        guard message.status == .failed else { return }
-
-        // 找到訊息索引並更新狀態為 sending
-        guard let index = messages.firstIndex(where: { $0.id == message.id }) else { return }
-        messages[index].status = .sending
-
-        let messageId = message.id
-        let messageText = message.text
-
-        Task {
-            do {
-                // 使用超時機制重新發送
-                let eventId = try await withTimeout(seconds: 30) {
-                    try await matrixBridge.sendMessage(conversationId: conversationId, content: messageText)
-                }
-
-                // 更新成功
-                await MainActor.run {
-                    if let idx = messages.firstIndex(where: { $0.id == messageId }) {
-                        messages[idx].id = eventId
-                        messages[idx].status = .sent
-                    }
-                }
-
-                #if DEBUG
-                print("[ChatView] ✅ Message retry succeeded: \(eventId)")
-                #endif
-            } catch {
-                // 重試失敗
-                await MainActor.run {
-                    if let idx = messages.firstIndex(where: { $0.id == messageId }) {
-                        messages[idx].status = .failed
-                    }
-                    self.error = getMessageSendErrorMessage(for: error)
-                }
-
-                #if DEBUG
-                print("[ChatView] ❌ Message retry failed: \(error)")
-                #endif
-            }
-        }
-    }
-
-    // MARK: - 發送圖片訊息
-    /// 使用 Matrix SDK 發送圖片訊息
-    private func sendImageMessage(image: UIImage) {
-        showAttachmentOptions = false
-
-        Task {
-            await messageSender.sendImageMessage(image)
-        }
-    }
-
-    // MARK: - 發送位置訊息
-    /// 發送位置訊息 - 使用 Matrix SDK
-    private func sendLocationMessage(location: CLLocationCoordinate2D) {
-        showAttachmentOptions = false
-
-        Task {
-            await messageSender.sendLocationMessage(location)
-        }
-    }
-
-    // MARK: - 获取当前日期字符串
-    private func currentDateString() -> String {
-        return Self.dateFormatter.string(from: Date())
-    }
-
-    // MARK: - 检查相机权限
-    private func checkCameraPermissionAndOpen() {
-        switch AVCaptureDevice.authorizationStatus(for: .video) {
-        case .authorized:
-            // Already authorized - open camera
-            showCamera = true
-        case .notDetermined:
-            // Request permission
-            AVCaptureDevice.requestAccess(for: .video) { granted in
-                DispatchQueue.main.async {
-                    if granted {
-                        showCamera = true
-                    } else {
-                        showCameraPermissionAlert = true
-                    }
-                }
-            }
-        case .denied, .restricted:
-            // Permission denied - show alert to open settings
-            showCameraPermissionAlert = true
-        @unknown default:
-            showCameraPermissionAlert = true
-        }
-    }
-
-    // MARK: - 语音录制功能
-
-    /// 开始录制语音消息
-    private func startVoiceRecording() {
-        Task {
-            let started = await audioRecorder.startRecording()
-            if started {
-                isRecordingVoice = true
-                #if DEBUG
-                print("[ChatView] Voice recording started")
-                #endif
-            } else {
-                // Show permission alert if needed
-                if !audioRecorder.permissionGranted {
-                    showMicrophonePermissionAlert = true
-                } else if let errorMsg = audioRecorder.errorMessage {
-                    error = errorMsg
-                }
-            }
-        }
-    }
-
-    /// 取消录制
-    private func cancelVoiceRecording() {
-        audioRecorder.cancelRecording()
-        isRecordingVoice = false
-        #if DEBUG
-        print("[ChatView] Voice recording cancelled")
-        #endif
-    }
-
-    /// 停止录制并发送语音消息
-    private func stopAndSendVoiceMessage() {
-        guard let result = audioRecorder.stopRecording() else {
-            isRecordingVoice = false
-            error = "Failed to save recording"
-            return
-        }
-
-        isRecordingVoice = false
-
-        // 检查录音时长（太短的录音不发送）
-        guard result.duration >= 1.0 else {
-            #if DEBUG
-            print("[ChatView] Recording too short: \(result.duration)s")
-            #endif
-            error = "Recording too short"
-            audioRecorder.cleanupTempFiles()
-            return
-        }
-
-        sendVoiceMessage(audioData: result.data, duration: result.duration, url: result.url)
-    }
-
-    /// 發送語音訊息 - 使用 Matrix SDK
-    private func sendVoiceMessage(audioData: Data, duration: TimeInterval, url: URL) {
-        showAttachmentOptions = false
-
-        Task {
-            await messageSender.sendVoiceMessage(audioData: audioData, duration: duration, url: url)
-            audioRecorder.cleanupTempFiles()
-        }
-    }
-
-    /// 格式化时长显示
-    private func formatDuration(_ duration: TimeInterval) -> String {
-        let minutes = Int(duration) / 60
-        let seconds = Int(duration) % 60
-        return String(format: "%d:%02d", minutes, seconds)
-    }
-
-    /// 根據錯誤類型返回用戶友好的錯誤訊息
-    private func getImageSendErrorMessage(for error: Error) -> String {
-        // 檢查是否是 Matrix 錯誤
-        if let matrixError = error as? MatrixBridgeError {
-            switch matrixError {
-            case .notInitialized:
-                return "Connection not ready. Please try again."
-            case .notAuthenticated:
-                return "Please sign in again to send images."
-            case .sessionExpired:
-                return "Session expired. Please restart the app."
-            case .roomMappingFailed:
-                return "Chat room not found. Please reopen the chat."
-            case .messageSendFailed(let reason):
-                return "Failed to send: \(reason)"
-            case .bridgeDisabled:
-                return "Messaging is temporarily unavailable."
-            }
-        }
-
-        // 檢查網路錯誤
-        let nsError = error as NSError
-        if nsError.domain == NSURLErrorDomain {
-            switch nsError.code {
-            case NSURLErrorNotConnectedToInternet:
-                return "No internet connection. Please check your network."
-            case NSURLErrorTimedOut:
-                return "Request timed out. Please try again."
-            case NSURLErrorNetworkConnectionLost:
-                return "Connection lost. Please try again."
-            case NSURLErrorCannotConnectToHost:
-                return "Cannot connect to server. Please try later."
-            default:
-                return "Network error. Please check your connection."
-            }
-        }
-
-        // 檢查檔案相關錯誤
-        if nsError.domain == NSCocoaErrorDomain {
-            switch nsError.code {
-            case NSFileNoSuchFileError, NSFileReadNoSuchFileError:
-                return "Image file not found. Please try selecting again."
-            case NSFileReadNoPermissionError:
-                return "Cannot access image. Please check permissions."
-            case NSFileWriteOutOfSpaceError:
-                return "Storage full. Please free up space."
-            default:
-                break
-            }
-        }
-
-        // 預設錯誤訊息，包含原始錯誤描述
-        let description = error.localizedDescription
-        if description.isEmpty || description == "The operation couldn't be completed." {
-            return "Failed to send image. Please try again."
-        }
-        return "Failed to send image: \(description)"
-    }
-
-    // MARK: - 檔案處理
-
-    /// 處理選擇的檔案（數據已在 DocumentPicker 回調中讀取）
-    private func handleDocumentPicked(data: Data, filename: String, mimeType: String) {
-        Task {
-            isUploadingFile = true
-            isSending = true
-
-            do {
-                // 將檔案數據複製到臨時目錄
-                let tempDir = FileManager.default.temporaryDirectory
-                let tempFileURL = tempDir.appendingPathComponent(filename)
-                try data.write(to: tempFileURL)
-
-                #if DEBUG
-                print("[ChatView] 📎 Sending file: \(filename) (\(data.count) bytes)")
-                #endif
-
-                // 使用 Matrix SDK 發送檔案
-                let eventId = try await MatrixBridgeService.shared.sendMessage(
-                    conversationId: conversationId,
-                    content: filename,
-                    mediaURL: tempFileURL,
-                    mimeType: mimeType
-                )
-
-                // 清理臨時檔案
-                try? FileManager.default.removeItem(at: tempFileURL)
-
-                #if DEBUG
-                print("[ChatView] ✅ File sent via Matrix: \(eventId)")
-                #endif
-
-            } catch {
-                #if DEBUG
-                print("[ChatView] ❌ Failed to send file: \(error)")
-                #endif
-                // 提供更具體的錯誤訊息
-                self.error = getFileSendErrorMessage(for: error, filename: filename)
-            }
-
-            isUploadingFile = false
-            isSending = false
-        }
-    }
-
-    /// 根據錯誤類型返回用戶友好的檔案發送錯誤訊息
-    private func getFileSendErrorMessage(for error: Error, filename: String) -> String {
-        // 檢查是否是 Matrix 錯誤
-        if let matrixError = error as? MatrixBridgeError {
-            switch matrixError {
-            case .notInitialized:
-                return "Connection not ready. Please try again."
-            case .notAuthenticated:
-                return "Please sign in again to send files."
-            case .sessionExpired:
-                return "Session expired. Please restart the app."
-            case .roomMappingFailed:
-                return "Chat room not found. Please reopen the chat."
-            case .messageSendFailed(let reason):
-                return "Failed to send \(filename): \(reason)"
-            case .bridgeDisabled:
-                return "Messaging is temporarily unavailable."
-            }
-        }
-
-        // 檢查網路錯誤
-        let nsError = error as NSError
-        if nsError.domain == NSURLErrorDomain {
-            switch nsError.code {
-            case NSURLErrorNotConnectedToInternet:
-                return "No internet connection. Please check your network."
-            case NSURLErrorTimedOut:
-                return "Upload timed out. Please try again."
-            case NSURLErrorNetworkConnectionLost:
-                return "Connection lost during upload. Please try again."
-            default:
-                return "Network error. Please check your connection."
-            }
-        }
-
-        // 預設錯誤訊息
-        let description = error.localizedDescription
-        if description.isEmpty || description == "The operation couldn't be completed." {
-            return "Failed to send \(filename). Please try again."
-        }
-        return "Failed to send file: \(description)"
-    }
-
-    /// 獲取檔案的 MIME 類型
-    private func getMimeType(for url: URL) -> String {
-        let pathExtension = url.pathExtension.lowercased()
-        switch pathExtension {
-        case "pdf":
-            return "application/pdf"
-        case "doc":
-            return "application/msword"
-        case "docx":
-            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        case "xls":
-            return "application/vnd.ms-excel"
-        case "xlsx":
-            return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        case "ppt":
-            return "application/vnd.ms-powerpoint"
-        case "pptx":
-            return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        case "txt":
-            return "text/plain"
-        case "zip":
-            return "application/zip"
-        case "png":
-            return "image/png"
-        case "jpg", "jpeg":
-            return "image/jpeg"
-        case "gif":
-            return "image/gif"
-        case "mp3":
-            return "audio/mpeg"
-        case "mp4":
-            return "video/mp4"
-        case "mov":
-            return "video/quicktime"
-        default:
-            return "application/octet-stream"
-        }
+        .frame(width: 44, height: 44)
     }
 }
 
