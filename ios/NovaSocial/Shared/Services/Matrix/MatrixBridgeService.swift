@@ -19,13 +19,13 @@ final class MatrixBridgeService {
 
     static let shared = MatrixBridgeService()
 
-    // MARK: - Dependencies
+    // MARK: - Dependencies (internal for extension access)
 
-    private let matrixService = MatrixService.shared
-    private let matrixSSOManager = MatrixSSOManager.shared
-    private let chatService = ChatService()
-    private let keychain = KeychainService.shared
-    private let apiClient = APIClient.shared
+    let matrixService = MatrixService.shared
+    let matrixSSOManager = MatrixSSOManager.shared
+    let chatService = ChatService()
+    let keychain = KeychainService.shared
+    let apiClient = APIClient.shared
 
     /// Feature flag to use SSO login instead of legacy token endpoint
     /// When false, uses the Nova access token to exchange for a Matrix token via backend
@@ -42,13 +42,13 @@ final class MatrixBridgeService {
     private(set) var isBridgeEnabled = false
     private(set) var initializationError: Error?
 
-    // MARK: - ID Mapping Cache
+    // MARK: - ID Mapping Cache (internal for extension access)
 
     /// Conversation ID -> Room ID mapping
-    private var conversationToRoomMap: [String: String] = [:]
+    var conversationToRoomMap: [String: String] = [:]
 
     /// Room ID -> Conversation ID mapping (reverse lookup)
-    private var roomToConversationMap: [String: String] = [:]
+    var roomToConversationMap: [String: String] = [:]
 
     // MARK: - Callbacks
 
@@ -564,7 +564,7 @@ final class MatrixBridgeService {
     /// Resolve a Matrix room ID from either:
     /// - a Matrix room ID (`!room:server`) in Matrix-first mode, or
     /// - a Nova conversation ID (requires mapping via backend/cache) in Nova-first mode.
-    private func resolveRoomId(for conversationOrRoomId: String) async throws -> String {
+    func resolveRoomId(for conversationOrRoomId: String) async throws -> String {
         if conversationOrRoomId.hasPrefix("!") {
             return conversationOrRoomId
         }
@@ -587,308 +587,9 @@ final class MatrixBridgeService {
         return nil
     }
 
-    // MARK: - Message Operations
+    // MARK: - Message Operations (moved to MatrixBridgeService+Messages.swift)
 
-    /// Send message via Matrix (E2EE)
-    func sendMessage(
-        conversationId: String,
-        content: String,
-        mediaURL: URL? = nil,
-        mimeType: String? = nil
-    ) async throws -> String {
-        guard isInitialized else {
-            throw MatrixBridgeError.notInitialized
-        }
-
-        let roomId = try await resolveRoomId(for: conversationId)
-
-        let eventId: String
-        if let mediaURL = mediaURL, let mimeType = mimeType {
-            eventId = try await matrixService.sendMedia(
-                roomId: roomId,
-                mediaURL: mediaURL,
-                mimeType: mimeType,
-                caption: content.isEmpty ? nil : content
-            )
-        } else {
-            eventId = try await matrixService.sendMessage(
-                roomId: roomId,
-                content: content
-            )
-        }
-
-        #if DEBUG
-        print("[MatrixBridge] Sent message \(eventId) to room \(roomId)")
-        #endif
-
-        return eventId
-    }
-
-    /// Send location via Matrix (E2EE)
-    func sendLocation(
-        conversationId: String,
-        latitude: Double,
-        longitude: Double,
-        description: String? = nil
-    ) async throws -> String {
-        guard isInitialized else {
-            throw MatrixBridgeError.notInitialized
-        }
-
-        // TODO: Implement location sharing via Matrix
-        // For now, send as a text message with location coordinates
-        let locationText = description ?? "Location: \(latitude), \(longitude)"
-        return try await sendMessage(conversationId: conversationId, content: locationText)
-    }
-
-    /// Get messages for a conversation via Matrix
-    func getMessages(
-        conversationId: String,
-        limit: Int = 50,
-        from: String? = nil
-    ) async throws -> [MatrixMessage] {
-        guard isInitialized else {
-            throw MatrixBridgeError.notInitialized
-        }
-
-        let roomId = try await resolveRoomId(for: conversationId)
-        try await matrixService.subscribeToRoomTimeline(roomId: roomId)
-        return try await matrixService.getRoomMessages(roomId: roomId, limit: limit, from: from)
-    }
-
-    func stopListening(conversationId: String) async {
-        guard isInitialized else { return }
-        guard let roomId = try? await resolveRoomId(for: conversationId) else { return }
-        matrixService.unsubscribeFromRoomTimeline(roomId: roomId)
-    }
-
-    /// Set typing indicator for a conversation
-    func setTyping(conversationId: String, isTyping: Bool) async throws {
-        guard isInitialized else {
-            throw MatrixBridgeError.notInitialized
-        }
-
-        let roomId = try await resolveRoomId(for: conversationId)
-        try await matrixService.setTyping(roomId: roomId, isTyping: isTyping)
-    }
-
-    /// Mark conversation as read
-    func markAsRead(conversationId: String) async throws {
-        guard isInitialized else {
-            throw MatrixBridgeError.notInitialized
-        }
-
-        let roomId = try await resolveRoomId(for: conversationId)
-        try await matrixService.markRoomAsRead(roomId: roomId)
-    }
-
-    // MARK: - Message Edit/Delete/Reactions
-
-    /// Edit a message in a conversation
-    func editMessage(conversationId: String, messageId: String, newContent: String) async throws {
-        guard isInitialized else {
-            throw MatrixBridgeError.notInitialized
-        }
-
-        let roomId = try await resolveRoomId(for: conversationId)
-        try await matrixService.editMessage(roomId: roomId, eventId: messageId, newContent: newContent)
-
-        #if DEBUG
-        print("[MatrixBridge] Edited message \(messageId) in conversation \(conversationId)")
-        #endif
-    }
-
-    /// Delete/redact a message in a conversation
-    func deleteMessage(conversationId: String, messageId: String, reason: String? = nil) async throws {
-        guard isInitialized else {
-            throw MatrixBridgeError.notInitialized
-        }
-
-        let roomId = try await resolveRoomId(for: conversationId)
-        try await matrixService.redactMessage(roomId: roomId, eventId: messageId, reason: reason)
-
-        #if DEBUG
-        print("[MatrixBridge] Deleted message \(messageId) in conversation \(conversationId)")
-        #endif
-    }
-
-    /// Recall (unsend) a message - same as delete but with different semantic
-    func recallMessage(conversationId: String, messageId: String) async throws {
-        try await deleteMessage(conversationId: conversationId, messageId: messageId, reason: "Message recalled by sender")
-    }
-
-    /// Toggle reaction on a message (add if not present, remove if present)
-    func toggleReaction(conversationId: String, messageId: String, emoji: String) async throws {
-        guard isInitialized else {
-            throw MatrixBridgeError.notInitialized
-        }
-
-        let roomId = try await resolveRoomId(for: conversationId)
-        try await matrixService.toggleReaction(roomId: roomId, eventId: messageId, emoji: emoji)
-
-        #if DEBUG
-        print("[MatrixBridge] Toggled reaction \(emoji) on message \(messageId)")
-        #endif
-    }
-
-    /// Add a reaction to a message
-    func addReaction(conversationId: String, messageId: String, emoji: String) async throws {
-        guard isInitialized else {
-            throw MatrixBridgeError.notInitialized
-        }
-
-        let roomId = try await resolveRoomId(for: conversationId)
-        try await matrixService.sendReaction(roomId: roomId, eventId: messageId, emoji: emoji)
-
-        #if DEBUG
-        print("[MatrixBridge] Added reaction \(emoji) to message \(messageId)")
-        #endif
-    }
-
-    /// Remove a reaction from a message (uses toggle since Matrix doesn't have direct remove)
-    func removeReaction(conversationId: String, messageId: String, emoji: String) async throws {
-        // In Matrix, toggleReaction will remove if already present
-        try await toggleReaction(conversationId: conversationId, messageId: messageId, emoji: emoji)
-    }
-
-    /// Get reactions for a message
-    func getReactions(conversationId: String, messageId: String) async throws -> [MatrixReaction] {
-        guard isInitialized else {
-            throw MatrixBridgeError.notInitialized
-        }
-
-        let roomId = try await resolveRoomId(for: conversationId)
-        return try await matrixService.getReactions(roomId: roomId, eventId: messageId)
-    }
-
-    // MARK: - Room Operations
-
-    /// Create Matrix room for a new Nova conversation
-    @discardableResult
-    func createRoomForConversation(_ conversation: Conversation) async throws -> String {
-        guard isInitialized else {
-            throw MatrixBridgeError.notInitialized
-        }
-
-        let isDirect = conversation.type == .direct
-        let participantIds = conversation.participants
-
-        let roomId = try await matrixService.createRoom(
-            name: isDirect ? nil : conversation.name,
-            isDirect: isDirect,
-            inviteUserIds: participantIds,
-            isEncrypted: conversation.isEncrypted  // Use E2EE only for private chats
-        )
-
-        #if DEBUG
-        print("[MatrixBridge] Created room \(roomId) for conversation \(conversation.id)")
-        #endif
-
-        // Cache and save the mapping
-        cacheMapping(conversationId: conversation.id, roomId: roomId)
-        try await saveRoomMapping(conversationId: conversation.id, roomId: roomId)
-
-        return roomId
-    }
-
-    /// Create a new conversation with a friend and setup Matrix room
-    /// This is the main entry point for starting a chat with a friend
-    /// - Parameters:
-    ///   - friendUserId: The user ID of the friend to chat with
-    ///   - isPrivate: Whether this is a private (E2EE encrypted) chat. Default is false (plain text)
-    func startConversationWithFriend(friendUserId: String, isPrivate: Bool = false) async throws -> Conversation {
-        guard isInitialized else {
-            throw MatrixBridgeError.notInitialized
-        }
-
-        guard let currentUserId = AuthenticationManager.shared.currentUser?.id else {
-            throw MatrixBridgeError.notAuthenticated
-        }
-
-        #if DEBUG
-        print("[MatrixBridge] Starting \(isPrivate ? "private" : "regular") conversation with friend: \(friendUserId)")
-        #endif
-
-        // Create Nova conversation first
-        let conversation = try await chatService.createConversation(
-            type: .direct,
-            participantIds: [currentUserId, friendUserId],
-            name: nil,
-            isEncrypted: isPrivate
-        )
-
-        // Create Matrix room - only use E2EE for private chats
-        let roomId = try await matrixService.createRoom(
-            name: nil,
-            isDirect: true,
-            inviteUserIds: [friendUserId],
-            isEncrypted: isPrivate
-        )
-
-        // Save mapping
-        cacheMapping(conversationId: conversation.id, roomId: roomId)
-        try await saveRoomMapping(conversationId: conversation.id, roomId: roomId)
-
-        #if DEBUG
-        print("[MatrixBridge] Created \(isPrivate ? "private" : "regular") conversation \(conversation.id) with Matrix room \(roomId)")
-        #endif
-
-        return conversation
-    }
-
-    /// Invite user to conversation's Matrix room
-    func inviteUser(conversationId: String, userId: String) async throws {
-        guard isInitialized else {
-            throw MatrixBridgeError.notInitialized
-        }
-
-        let roomId = try await resolveRoomId(for: conversationId)
-        try await matrixService.inviteUser(roomId: roomId, userId: userId)
-    }
-
-    /// Remove user from conversation's Matrix room
-    func removeUser(conversationId: String, userId: String, reason: String? = nil) async throws {
-        guard isInitialized else {
-            throw MatrixBridgeError.notInitialized
-        }
-
-        let roomId = try await resolveRoomId(for: conversationId)
-        try await matrixService.kickUser(roomId: roomId, userId: userId, reason: reason)
-    }
-
-    /// Get all Matrix rooms as conversations
-    func getMatrixRooms() async throws -> [MatrixRoom] {
-        guard isInitialized else {
-            throw MatrixBridgeError.notInitialized
-        }
-
-        return try await matrixService.getJoinedRooms()
-    }
-
-    /// Leave/delete a conversation (leave the Matrix room)
-    func leaveConversation(conversationId: String) async throws {
-        guard isInitialized else {
-            throw MatrixBridgeError.notInitialized
-        }
-
-        // Get the Matrix room ID for this conversation
-        let roomId = try await getRoomId(for: conversationId)
-
-        #if DEBUG
-        print("[MatrixBridgeService] Leaving conversation: \(conversationId), roomId: \(roomId)")
-        #endif
-
-        // Leave the Matrix room
-        try await matrixService.leaveRoom(roomId: roomId)
-
-        // Clear the mapping cache
-        conversationToRoomMap.removeValue(forKey: conversationId)
-        roomToConversationMap.removeValue(forKey: roomId)
-
-        #if DEBUG
-        print("[MatrixBridgeService] Successfully left conversation: \(conversationId)")
-        #endif
-    }
+    // MARK: - Room Operations (moved to MatrixBridgeService+Rooms.swift)
 
     // MARK: - Private Methods
 
@@ -955,209 +656,17 @@ final class MatrixBridgeService {
         }
     }
 
-    private func cacheMapping(conversationId: String, roomId: String) {
+    func cacheMapping(conversationId: String, roomId: String) {
         conversationToRoomMap[conversationId] = roomId
         roomToConversationMap[roomId] = conversationId
     }
 
-    // MARK: - Backend API Calls
-
-    private func checkBridgeEnabled() async -> Bool {
-        // Check feature flag from backend
-        do {
-            struct ConfigResponse: Codable {
-                let enabled: Bool
-                let homeserverUrl: String?
-            }
-
-            let response: ConfigResponse = try await apiClient.get(
-                endpoint: APIConfig.Matrix.getConfig
-            )
-            #if DEBUG
-            print("[MatrixBridge] Backend config: enabled=\(response.enabled), homeserver=\(response.homeserverUrl ?? "nil")")
-            #endif
-            return response.enabled
-        } catch {
-            #if DEBUG
-            print("[MatrixBridge] Failed to check bridge status: \(error)")
-            print("[MatrixBridge] ⚠️ Backend Matrix config not available; assuming enabled for Matrix-first mode")
-            #endif
-            // Matrix-first: default to ENABLED when backend is not available.
-            return true
-        }
+    func clearMapping(conversationId: String, roomId: String) {
+        conversationToRoomMap.removeValue(forKey: conversationId)
+        roomToConversationMap.removeValue(forKey: roomId)
     }
 
-    /// Matrix credentials returned from Nova backend
-    struct MatrixCredentials {
-        let accessToken: String
-        let matrixUserId: String
-        let deviceId: String
-        let homeserverUrl: String?
-    }
-
-    /// Get Matrix credentials from Nova backend
-    /// Returns access token, Matrix user ID, device ID, and homeserver URL
-    ///
-    /// The backend generates a device-bound access token using Synapse Admin API.
-    /// This enables seamless single sign-on without requiring a second SSO prompt.
-    private func getMatrixCredentials(novaUserId: String) async throws -> MatrixCredentials {
-        struct MatrixTokenRequest: Codable {
-            let deviceId: String
-
-            enum CodingKeys: String, CodingKey {
-                case deviceId = "device_id"
-            }
-        }
-
-        struct MatrixTokenResponse: Codable {
-            // Note: No CodingKeys needed - APIClient uses .convertFromSnakeCase
-            let accessToken: String
-            let matrixUserId: String
-            let deviceId: String
-            let homeserverUrl: String?
-        }
-
-        // Generate a persistent device ID for this device
-        // This ensures E2EE keys are consistent across app sessions
-        let deviceId = getOrCreateDeviceId()
-
-        #if DEBUG
-        print("[MatrixBridge] Requesting device-bound token with device_id: \(deviceId)")
-        #endif
-
-        let response: MatrixTokenResponse = try await apiClient.request(
-            endpoint: APIConfig.Matrix.getToken,
-            method: "POST",
-            body: MatrixTokenRequest(deviceId: deviceId)
-        )
-
-        return MatrixCredentials(
-            accessToken: response.accessToken,
-            matrixUserId: response.matrixUserId,
-            deviceId: response.deviceId,
-            homeserverUrl: response.homeserverUrl
-        )
-    }
-
-    /// Get or create a persistent device ID for Matrix sessions
-    /// This ensures E2EE keys are consistent across app sessions on the same device
-    private func getOrCreateDeviceId() -> String {
-        // Check if we already have a device ID stored
-        if let existingDeviceId = keychain.get(.matrixDeviceId), !existingDeviceId.isEmpty {
-            return existingDeviceId
-        }
-
-        // Generate a new device ID
-        // Format: NOVA_IOS_{UUID} to identify Nova iOS clients
-        let newDeviceId = "NOVA_IOS_\(UUID().uuidString.prefix(8))"
-
-        // Store for future use
-        _ = keychain.save(newDeviceId, for: .matrixDeviceId)
-
-        #if DEBUG
-        print("[MatrixBridge] Generated new device ID: \(newDeviceId)")
-        #endif
-
-        return newDeviceId
-    }
-
-    private func queryRoomMapping(conversationId: String) async throws -> String? {
-        struct RoomMappingResponse: Codable {
-            let roomId: String?
-
-            enum CodingKeys: String, CodingKey {
-                case roomId = "room_id"
-            }
-        }
-
-        do {
-            let response: RoomMappingResponse = try await apiClient.get(
-                endpoint: APIConfig.Matrix.getRoomMapping(conversationId)
-            )
-            return response.roomId
-        } catch {
-            // 404 means no mapping exists
-            return nil
-        }
-    }
-
-    private func queryConversationMapping(roomId: String) async throws -> String? {
-        struct ConversationMappingResponse: Codable {
-            let conversationId: String?
-
-            enum CodingKeys: String, CodingKey {
-                case conversationId = "conversation_id"
-            }
-        }
-
-        // URL encode room ID (!xxx:server contains special chars)
-        let encodedRoomId = roomId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? roomId
-
-        do {
-            let response: ConversationMappingResponse = try await apiClient.get(
-                endpoint: APIConfig.Matrix.getConversationMapping,
-                queryParams: ["room_id": encodedRoomId]
-            )
-            return response.conversationId
-        } catch {
-            return nil
-        }
-    }
-
-    private func saveRoomMapping(conversationId: String, roomId: String) async throws {
-        struct SaveMappingRequest: Codable {
-            let conversationId: String
-            let roomId: String
-
-            enum CodingKeys: String, CodingKey {
-                case conversationId = "conversation_id"
-                case roomId = "room_id"
-            }
-        }
-
-        struct EmptyResponse: Codable {}
-
-        let _: EmptyResponse = try await apiClient.request(
-            endpoint: APIConfig.Matrix.saveRoomMapping,
-            method: "POST",
-            body: SaveMappingRequest(conversationId: conversationId, roomId: roomId)
-        )
-    }
-
-    private func loadConversationMappings() async throws {
-        struct AllMappingsResponse: Codable {
-            let mappings: [MappingEntry]
-
-            struct MappingEntry: Codable {
-                let conversationId: String
-                let roomId: String
-
-                enum CodingKeys: String, CodingKey {
-                    case conversationId = "conversation_id"
-                    case roomId = "room_id"
-                }
-            }
-        }
-
-        do {
-            let response: AllMappingsResponse = try await apiClient.get(
-                endpoint: APIConfig.Matrix.getRoomMappings
-            )
-
-            for mapping in response.mappings {
-                cacheMapping(conversationId: mapping.conversationId, roomId: mapping.roomId)
-            }
-
-            #if DEBUG
-            print("[MatrixBridge] Loaded \(response.mappings.count) conversation mappings")
-            #endif
-        } catch {
-            #if DEBUG
-            print("[MatrixBridge] Failed to load mappings: \(error)")
-            #endif
-            // Not critical - mappings will be created on demand
-        }
-    }
+    // MARK: - Backend API Calls (moved to MatrixBridgeService+API.swift)
 }
 
 // MARK: - Matrix Bridge Errors
