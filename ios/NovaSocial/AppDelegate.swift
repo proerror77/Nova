@@ -15,8 +15,13 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Set up notification center delegate
         UNUserNotificationCenter.current().delegate = PushNotificationManager.shared
 
+        // Enable background fetch for offline message sync
+        // iOS will periodically wake the app to fetch new messages
+        application.setMinimumBackgroundFetchInterval(UIApplication.backgroundFetchIntervalMinimum)
+
         #if DEBUG
         print("[AppDelegate] Application did finish launching")
+        print("[AppDelegate] Background fetch enabled")
         #endif
 
         // Check if app was launched from a notification
@@ -29,6 +34,35 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         }
 
         return true
+    }
+
+    // MARK: - Background Fetch
+
+    /// Called by iOS when it's time to perform a background fetch
+    /// This is used to sync Matrix messages while the app is in the background
+    func application(
+        _ application: UIApplication,
+        performFetchWithCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        #if DEBUG
+        print("[AppDelegate] 🔄 Performing background fetch...")
+        #endif
+
+        Task {
+            do {
+                // Attempt to sync Matrix messages
+                try await MatrixBridgeService.shared.resumeSync()
+                #if DEBUG
+                print("[AppDelegate] ✅ Background fetch completed - new data")
+                #endif
+                completionHandler(.newData)
+            } catch {
+                #if DEBUG
+                print("[AppDelegate] ❌ Background fetch failed: \(error)")
+                #endif
+                completionHandler(.failed)
+            }
+        }
     }
 
     // MARK: - Remote Notification Registration

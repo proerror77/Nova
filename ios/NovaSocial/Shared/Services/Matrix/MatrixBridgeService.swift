@@ -362,6 +362,64 @@ final class MatrixBridgeService {
         }
     }
 
+    /// Resume Matrix sync after app returns from background
+    /// This should be called when:
+    /// - App comes back to foreground
+    /// - Push notification arrives (to fetch pending messages)
+    /// Does not trigger SSO login - only syncs if already authenticated
+    func resumeSync() async throws {
+        #if DEBUG
+        print("[MatrixBridge] 🔄 Resuming sync...")
+        #endif
+
+        // If not initialized, try to initialize without requiring login
+        // This prevents SSO dialog from appearing when app resumes
+        if !isInitialized {
+            #if DEBUG
+            print("[MatrixBridge] Not initialized, attempting silent initialization...")
+            #endif
+            do {
+                try await initialize(requireLogin: false)
+            } catch {
+                #if DEBUG
+                print("[MatrixBridge] Silent initialization failed: \(error)")
+                #endif
+                // Don't throw - just skip sync if we can't initialize silently
+                return
+            }
+        }
+
+        // If still not initialized (no stored session), skip
+        guard isInitialized else {
+            #if DEBUG
+            print("[MatrixBridge] ⚠️ Cannot resume sync - no active session")
+            #endif
+            return
+        }
+
+        // Restart sync to fetch any pending messages
+        do {
+            try await matrixService.startSync()
+            #if DEBUG
+            print("[MatrixBridge] ✅ Sync resumed successfully")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[MatrixBridge] ❌ Failed to resume sync: \(error)")
+            #endif
+            throw error
+        }
+    }
+
+    /// Pause Matrix sync when app enters background
+    /// This should be called when app enters background to save resources
+    func pauseSync() {
+        #if DEBUG
+        print("[MatrixBridge] ⏸️ Pausing sync...")
+        #endif
+        matrixService.stopSync()
+    }
+
     /// Shutdown the Matrix bridge
     /// - Parameter clearCredentials: If true, clears stored SSO credentials (for full logout)
     func shutdown(clearCredentials: Bool = false) async {

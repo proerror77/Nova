@@ -208,13 +208,16 @@ struct IceredApp: App {
                 handleDeepLink(url)
             }
             .onChange(of: scenePhase) { oldPhase, newPhase in
-                // 当 App 进入后台时，记录时间戳
+                // 当 App 进入后台时，记录时间戳并暂停同步
                 if newPhase == .background {
                     backgroundEntryTime = Date()
                     // Save coordinator state for restoration
                     coordinator.saveState()
                     selectedTabRaw = coordinator.selectedTab.rawValue
                     print("[App] 📱 App entered background")
+
+                    // Pause Matrix sync to save resources
+                    MatrixBridgeService.shared.pauseSync()
                 }
                 // 当 App 从后台返回到活跃状态时
                 if newPhase == .active, let entryTime = backgroundEntryTime {
@@ -233,6 +236,19 @@ struct IceredApp: App {
 
                     // 重置时间戳
                     backgroundEntryTime = nil
+
+                    // Resume Matrix sync to fetch any offline messages
+                    // This is critical for users to receive messages sent while app was in background
+                    if authManager.isAuthenticated && !authManager.isGuestMode {
+                        Task {
+                            do {
+                                try await MatrixBridgeService.shared.resumeSync()
+                                print("[App] ✅ Matrix sync resumed after returning from background")
+                            } catch {
+                                print("[App] ❌ Failed to resume Matrix sync: \(error)")
+                            }
+                        }
+                    }
                 }
             }
         }
