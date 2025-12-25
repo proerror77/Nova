@@ -633,8 +633,8 @@ struct MessageView: View {
                         .foregroundColor(DesignTokens.textSecondary)
 
                     TextField("Search", text: $searchText)
-                        .font(Font.custom("Helvetica Neue", size: 14))
-                        .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        .font(.system(size: 14))
+                        .foregroundColor(DesignTokens.textSecondary)
                         .focused($isSearchFocused)
                         .onChange(of: searchText) { _, newValue in
                             isSearching = !newValue.isEmpty
@@ -662,7 +662,7 @@ struct MessageView: View {
                 }
                 .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
                 .frame(height: 32)
-                .background(Color(red: 0.91, green: 0.91, blue: 0.91))
+                .background(DesignTokens.searchBarBackground)
                 .cornerRadius(32)
                 .padding(EdgeInsets(top: 12, leading: 18, bottom: 16, trailing: 18))
 
@@ -772,25 +772,8 @@ struct MessageView: View {
                     // 会话列表 (支持滑動刪除)
                     List {
                         ForEach(conversations) { convo in
-                            MessageListItem(
-                                name: convo.userName,
-                                messagePreview: convo.lastMessage,
-                                time: convo.time,
-                                unreadCount: convo.unreadCount,
-                                showMessagePreview: true,
-                                showTimeAndBadge: convo.hasUnread,
-                                isEncrypted: convo.isEncrypted,
-                                userId: convo.id,
-                                avatarUrl: convo.avatarUrl,
-                                onAvatarTapped: { userId in
-                                    if convo.userName.lowercased() != "alice" {
-                                        selectedUserId = userId
-                                        showUserProfile = true
-                                    }
-                                }
-                            )
-                            .contentShape(Rectangle())
-                            .onTapGesture {
+                            Button {
+                                // 點擊動作
                                 if convo.userName.lowercased() == "alice" {
                                     currentPage = .alice
                                 } else {
@@ -799,7 +782,26 @@ struct MessageView: View {
                                     selectedAvatarUrl = convo.avatarUrl
                                     showChat = true
                                 }
+                            } label: {
+                                MessageListItem(
+                                    name: convo.userName,
+                                    messagePreview: convo.lastMessage,
+                                    time: convo.time,
+                                    unreadCount: convo.unreadCount,
+                                    showMessagePreview: true,
+                                    showTimeAndBadge: convo.hasUnread,
+                                    isEncrypted: convo.isEncrypted,
+                                    userId: convo.id,
+                                    avatarUrl: convo.avatarUrl,
+                                    onAvatarTapped: { userId in
+                                        if convo.userName.lowercased() != "alice" {
+                                            selectedUserId = userId
+                                            showUserProfile = true
+                                        }
+                                    }
+                                )
                             }
+                            .buttonStyle(ConversationRowButtonStyle())
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 Button(role: .destructive) {
                                     deleteConversation(convo)
@@ -813,6 +815,10 @@ struct MessageView: View {
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
+                    .refreshable {
+                        // 下拉刷新對話列表
+                        await loadConversationsFromMatrix()
+                    }
                     .padding(.bottom, DesignTokens.bottomBarHeight + DesignTokens.spacing12 + 40)
                 }
                 } // End of else (non-searching state)
@@ -944,7 +950,7 @@ struct MessageListItem: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // 头像 - alice 使用自定义图片，其他用户使用 AvatarView 加载真实头像
+            // 头像 - alice 使用自定义图片，其他用户使用 AvatarView 加载真实头像（支持首字母占位）
             Group {
                 if name.lowercased() == "alice" {
                     Image("alice-avatar")
@@ -953,7 +959,7 @@ struct MessageListItem: View {
                         .frame(width: 50, height: 50)
                         .clipShape(Circle())
                 } else {
-                    AvatarView(image: nil, url: avatarUrl, size: 50)
+                    AvatarView(image: nil, url: avatarUrl, size: 50, name: name)
                 }
             }
             .onTapGesture {
@@ -975,10 +981,12 @@ struct MessageListItem: View {
                     }
                 }
 
-                // 消息预览 - 使用动态消息
+                // 消息预览 - 使用动态消息（限制單行並截斷）
                 Text(messagePreview)
                     .font(.system(size: 15))
                     .foregroundColor(DesignTokens.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                     .opacity(showMessagePreview ? 1 : 0)
             }
 
@@ -991,13 +999,17 @@ struct MessageListItem: View {
                         .font(.system(size: 13))
                         .foregroundColor(DesignTokens.textMuted)
 
+                    // 未讀徽章：超過 9 顯示 "9+"
+                    let badgeText = unreadCount > 9 ? "9+" : "\(unreadCount)"
+                    let badgeWidth: CGFloat = unreadCount > 9 ? 22 : 17
+                    
                     ZStack {
-                        Circle()
+                        Capsule()
                             .fill(DesignTokens.accentColor)
-                            .frame(width: 17, height: 17)
+                            .frame(width: badgeWidth, height: 17)
 
-                        Text(LocalizedStringKey("\(unreadCount)"))
-                            .font(.system(size: 12, weight: .medium))
+                        Text(badgeText)
+                            .font(.system(size: 11, weight: .medium))
                             .foregroundColor(.white)
                     }
                 }
@@ -1006,6 +1018,19 @@ struct MessageListItem: View {
         .padding(EdgeInsets(top: 13, leading: 18, bottom: 13, trailing: 18))
         .frame(height: 80)
         .background(DesignTokens.backgroundColor)
+    }
+}
+
+// MARK: - 對話列表按鈕樣式（點擊視覺反饋）
+struct ConversationRowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                configuration.isPressed 
+                    ? DesignTokens.borderColor.opacity(0.5)
+                    : Color.clear
+            )
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 

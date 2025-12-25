@@ -812,23 +812,21 @@ final class MatrixBridgeService {
         guard isInitialized else {
             throw MatrixBridgeError.notInitialized
         }
-        
+
         // Get the Matrix room ID for this conversation
-        guard let roomId = await getRoomId(for: conversationId) else {
-            throw MatrixBridgeError.roomNotFound
-        }
-        
+        let roomId = try await getRoomId(for: conversationId)
+
         #if DEBUG
         print("[MatrixBridgeService] Leaving conversation: \(conversationId), roomId: \(roomId)")
         #endif
-        
+
         // Leave the Matrix room
         try await matrixService.leaveRoom(roomId: roomId)
-        
+
         // Clear the mapping cache
         conversationToRoomMap.removeValue(forKey: conversationId)
         roomToConversationMap.removeValue(forKey: roomId)
-        
+
         #if DEBUG
         print("[MatrixBridgeService] Successfully left conversation: \(conversationId)")
         #endif

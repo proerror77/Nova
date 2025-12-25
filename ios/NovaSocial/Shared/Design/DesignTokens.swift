@@ -280,6 +280,10 @@ struct DesignTokens {
         light: UIColor(red: 0.91, green: 0.91, blue: 0.91, alpha: 1.0),
         dark: UIColor(red: 0.18, green: 0.18, blue: 0.19, alpha: 1.0)
     )
+    static let searchBarBackground = Color.dynamic(
+        light: UIColor(red: 0.91, green: 0.91, blue: 0.91, alpha: 1.0),
+        dark: UIColor(red: 0.18, green: 0.18, blue: 0.19, alpha: 1.0)
+    )
 
     // MARK: - Spacing
 
