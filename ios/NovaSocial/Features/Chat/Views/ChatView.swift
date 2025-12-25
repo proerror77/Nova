@@ -1052,7 +1052,8 @@ struct ChatView: View {
                 #if DEBUG
                 print("[ChatView] ❌ Failed to send image: \(error)")
                 #endif
-                self.error = "Failed to send image"
+                // 提供更具體的錯誤訊息
+                self.error = getImageSendErrorMessage(for: error)
                 // 移除失敗的本地訊息
                 messages.removeAll { $0.id == localMessage.id }
             }
@@ -1293,6 +1294,65 @@ struct ChatView: View {
         return String(format: "%d:%02d", minutes, seconds)
     }
 
+    /// 根據錯誤類型返回用戶友好的錯誤訊息
+    private func getImageSendErrorMessage(for error: Error) -> String {
+        // 檢查是否是 Matrix 錯誤
+        if let matrixError = error as? MatrixBridgeError {
+            switch matrixError {
+            case .notInitialized:
+                return "Connection not ready. Please try again."
+            case .notAuthenticated:
+                return "Please sign in again to send images."
+            case .sessionExpired:
+                return "Session expired. Please restart the app."
+            case .roomMappingFailed:
+                return "Chat room not found. Please reopen the chat."
+            case .messageSendFailed(let reason):
+                return "Failed to send: \(reason)"
+            case .bridgeDisabled:
+                return "Messaging is temporarily unavailable."
+            }
+        }
+
+        // 檢查網路錯誤
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case NSURLErrorNotConnectedToInternet:
+                return "No internet connection. Please check your network."
+            case NSURLErrorTimedOut:
+                return "Request timed out. Please try again."
+            case NSURLErrorNetworkConnectionLost:
+                return "Connection lost. Please try again."
+            case NSURLErrorCannotConnectToHost:
+                return "Cannot connect to server. Please try later."
+            default:
+                return "Network error. Please check your connection."
+            }
+        }
+
+        // 檢查檔案相關錯誤
+        if nsError.domain == NSCocoaErrorDomain {
+            switch nsError.code {
+            case NSFileNoSuchFileError, NSFileReadNoSuchFileError:
+                return "Image file not found. Please try selecting again."
+            case NSFileReadNoPermissionError:
+                return "Cannot access image. Please check permissions."
+            case NSFileWriteOutOfSpaceError:
+                return "Storage full. Please free up space."
+            default:
+                break
+            }
+        }
+
+        // 預設錯誤訊息，包含原始錯誤描述
+        let description = error.localizedDescription
+        if description.isEmpty || description == "The operation couldn't be completed." {
+            return "Failed to send image. Please try again."
+        }
+        return "Failed to send image: \(description)"
+    }
+
     // MARK: - 檔案處理
 
     /// 處理選擇的檔案（數據已在 DocumentPicker 回調中讀取）
@@ -1330,12 +1390,56 @@ struct ChatView: View {
                 #if DEBUG
                 print("[ChatView] ❌ Failed to send file: \(error)")
                 #endif
-                self.error = "Failed to send file: \(error.localizedDescription)"
+                // 提供更具體的錯誤訊息
+                self.error = getFileSendErrorMessage(for: error, filename: filename)
             }
 
             isUploadingFile = false
             isSending = false
         }
+    }
+
+    /// 根據錯誤類型返回用戶友好的檔案發送錯誤訊息
+    private func getFileSendErrorMessage(for error: Error, filename: String) -> String {
+        // 檢查是否是 Matrix 錯誤
+        if let matrixError = error as? MatrixBridgeError {
+            switch matrixError {
+            case .notInitialized:
+                return "Connection not ready. Please try again."
+            case .notAuthenticated:
+                return "Please sign in again to send files."
+            case .sessionExpired:
+                return "Session expired. Please restart the app."
+            case .roomMappingFailed:
+                return "Chat room not found. Please reopen the chat."
+            case .messageSendFailed(let reason):
+                return "Failed to send \(filename): \(reason)"
+            case .bridgeDisabled:
+                return "Messaging is temporarily unavailable."
+            }
+        }
+
+        // 檢查網路錯誤
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case NSURLErrorNotConnectedToInternet:
+                return "No internet connection. Please check your network."
+            case NSURLErrorTimedOut:
+                return "Upload timed out. Please try again."
+            case NSURLErrorNetworkConnectionLost:
+                return "Connection lost during upload. Please try again."
+            default:
+                return "Network error. Please check your connection."
+            }
+        }
+
+        // 預設錯誤訊息
+        let description = error.localizedDescription
+        if description.isEmpty || description == "The operation couldn't be completed." {
+            return "Failed to send \(filename). Please try again."
+        }
+        return "Failed to send file: \(description)"
     }
 
     /// 獲取檔案的 MIME 類型

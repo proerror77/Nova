@@ -48,6 +48,9 @@ struct GroupChatView: View {
     @State private var voiceRecordDragOffset: CGFloat = 0
     private let voiceCancelThreshold: CGFloat = -60
 
+    // 錯誤處理
+    @State private var error: String?
+
     // Matrix 服務
     private let matrixBridge = MatrixBridgeService.shared
 
@@ -113,15 +116,28 @@ struct GroupChatView: View {
                 onDocumentPicked: { data, filename, mimeType in
                     handleDocumentPicked(data: data, filename: filename, mimeType: mimeType)
                 },
-                onError: { error in
+                onError: { fileError in
                     #if DEBUG
-                    print("[GroupChatView] ❌ Cannot access file: \(error)")
+                    print("[GroupChatView] ❌ Cannot access file: \(fileError)")
                     #endif
+                    self.error = "Cannot access file: \(fileError.localizedDescription)"
                 }
             )
         }
         .onChange(of: selectedPhotoItem) { _, newItem in
             handlePhotoSelection(newItem)
+        }
+        .alert("Error", isPresented: Binding(
+            get: { error != nil },
+            set: { if !$0 { error = nil } }
+        )) {
+            Button("OK") {
+                error = nil
+            }
+        } message: {
+            if let error = error {
+                Text(error)
+            }
         }
     }
 
@@ -630,6 +646,9 @@ struct GroupChatView: View {
                 #if DEBUG
                 print("[GroupChatView] ❌ Failed to send image: \(error)")
                 #endif
+                await MainActor.run {
+                    self.error = getMediaSendErrorMessage(for: error, type: "image")
+                }
             }
         }
     }
@@ -659,8 +678,54 @@ struct GroupChatView: View {
                 #if DEBUG
                 print("[GroupChatView] ❌ Failed to send file: \(error)")
                 #endif
+                await MainActor.run {
+                    self.error = getMediaSendErrorMessage(for: error, type: "file")
+                }
             }
         }
+    }
+
+    /// 根據錯誤類型返回用戶友好的媒體發送錯誤訊息
+    private func getMediaSendErrorMessage(for error: Error, type: String) -> String {
+        // 檢查是否是 Matrix 錯誤
+        if let matrixError = error as? MatrixBridgeError {
+            switch matrixError {
+            case .notInitialized:
+                return "Connection not ready. Please try again."
+            case .notAuthenticated:
+                return "Please sign in again to send \(type)s."
+            case .sessionExpired:
+                return "Session expired. Please restart the app."
+            case .roomMappingFailed:
+                return "Chat room not found. Please reopen the chat."
+            case .messageSendFailed(let reason):
+                return "Failed to send: \(reason)"
+            case .bridgeDisabled:
+                return "Messaging is temporarily unavailable."
+            }
+        }
+
+        // 檢查網路錯誤
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case NSURLErrorNotConnectedToInternet:
+                return "No internet connection. Please check your network."
+            case NSURLErrorTimedOut:
+                return "Request timed out. Please try again."
+            case NSURLErrorNetworkConnectionLost:
+                return "Connection lost. Please try again."
+            default:
+                return "Network error. Please check your connection."
+            }
+        }
+
+        // 預設錯誤訊息
+        let description = error.localizedDescription
+        if description.isEmpty || description == "The operation couldn't be completed." {
+            return "Failed to send \(type). Please try again."
+        }
+        return "Failed to send \(type): \(description)"
     }
 
     private func getMimeType(for url: URL) -> String {
@@ -680,9 +745,6 @@ struct GroupChatView: View {
         }
     }
 }
-
-// MARK: - Group Document Picker (uses shared DocumentPickerView)
-// GroupDocumentPickerView removed - now using shared DocumentPickerView from Chat/Views/Components
 
 // MARK: - Group Message Bubble View
 struct GroupMessageBubbleView: View {
