@@ -49,6 +49,9 @@ struct LiveKitVoiceChatView: View {
     @State private var reconnectAttempts: Int = 0
     private let maxReconnectAttempts: Int = 3
 
+    // 動畫計時器
+    @State private var waveAnimationTimer: Timer?
+
     var body: some View {
         ZStack {
             backgroundGradient
@@ -571,6 +574,12 @@ struct LiveKitVoiceChatView: View {
         print("[LiveKitVoiceChatView] Starting LiveKit voice chat")
         reconnectAttempts = 0
 
+        // 啟動波形動畫計時器（每 0.1 秒更新一次，而非每個音頻回調）
+        waveAnimationTimer?.invalidate()
+        waveAnimationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+            wavePhase += 0.1
+        }
+
         let handler = LiveKitVoiceDelegateHandler(
             onStateChange: { newState in
                 let oldState = state
@@ -596,8 +605,12 @@ struct LiveKitVoiceChatView: View {
                 if isFinal {
                     // 最終結果：加入歷史記錄
                     if !text.isEmpty {
-                        let message = VoiceChatMessage(role: .user, text: text, timestamp: Date())
-                        messages.append(message)
+                        // 檢查是否已存在相同內容（避免重複）
+                        let isDuplicate = messages.last?.text == text && messages.last?.role == .user
+                        if !isDuplicate {
+                            let message = VoiceChatMessage(role: .user, text: text, timestamp: Date())
+                            messages.append(message)
+                        }
                         pendingUserText = ""
                         transcript = text
                     }
@@ -620,8 +633,11 @@ struct LiveKitVoiceChatView: View {
                 }
             },
             onAudioLevel: { level in
-                audioLevel = level
-                wavePhase += 0.1
+                // 只有當音量變化超過閾值時才更新，減少不必要的 UI 重繪
+                if abs(audioLevel - level) > 0.05 {
+                    audioLevel = level
+                }
+                // 使用 Timer 控制動畫而非每次回調都更新
             },
             onError: { code, message in
                 print("[LiveKitVoiceChatView] Error: \(code) - \(message)")
@@ -652,6 +668,9 @@ struct LiveKitVoiceChatView: View {
     }
 
     private func endVoiceChat() {
+        // 停止動畫計時器
+        waveAnimationTimer?.invalidate()
+        waveAnimationTimer = nil
         voiceService.endVoiceChat()
     }
 
