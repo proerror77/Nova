@@ -30,6 +30,7 @@ enum AITaskType {
 
 /// Errors that can occur during AI processing
 enum AIServiceError: LocalizedError {
+    // Basic errors
     case foundationModelsUnavailable
     case modelNotReady
     case contextTooLong
@@ -38,6 +39,21 @@ enum AIServiceError: LocalizedError {
     case generationFailed(String)
     case invalidInput
     case timeout
+
+    // Tool-specific errors
+    case toolExecutionFailed(toolName: String, reason: String)
+    case toolNotFound(String)
+    case toolArgumentsInvalid(String)
+
+    // Structured output errors
+    case structuredOutputFailed(String)
+    case partialOutputTimeout
+    case schemaValidationFailed(String)
+
+    // Session errors
+    case sessionExpired
+    case sessionLimitReached
+    case transcriptTooLong
 
     var errorDescription: String? {
         switch self {
@@ -57,6 +73,82 @@ enum AIServiceError: LocalizedError {
             return NSLocalizedString("Invalid input provided", comment: "")
         case .timeout:
             return NSLocalizedString("AI processing timed out", comment: "")
+
+        // Tool errors
+        case .toolExecutionFailed(let toolName, let reason):
+            return String(format: NSLocalizedString("Tool '%@' failed: %@", comment: ""), toolName, reason)
+        case .toolNotFound(let name):
+            return String(format: NSLocalizedString("Tool '%@' is not available", comment: ""), name)
+        case .toolArgumentsInvalid(let details):
+            return String(format: NSLocalizedString("Invalid tool arguments: %@", comment: ""), details)
+
+        // Structured output errors
+        case .structuredOutputFailed(let reason):
+            return String(format: NSLocalizedString("Failed to generate structured output: %@", comment: ""), reason)
+        case .partialOutputTimeout:
+            return NSLocalizedString("Streaming output timed out", comment: "")
+        case .schemaValidationFailed(let details):
+            return String(format: NSLocalizedString("Output validation failed: %@", comment: ""), details)
+
+        // Session errors
+        case .sessionExpired:
+            return NSLocalizedString("AI session has expired, please retry", comment: "")
+        case .sessionLimitReached:
+            return NSLocalizedString("Maximum session limit reached", comment: "")
+        case .transcriptTooLong:
+            return NSLocalizedString("Conversation is too long, please start a new chat", comment: "")
+        }
+    }
+
+    /// Whether this error can be recovered from by retrying
+    var isRecoverable: Bool {
+        switch self {
+        case .timeout, .partialOutputTimeout, .sessionExpired:
+            return true
+        case .networkUnavailable:
+            return true
+        case .toolExecutionFailed:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Suggested action for the user
+    var suggestedAction: String? {
+        switch self {
+        case .foundationModelsUnavailable:
+            return NSLocalizedString("Switch to cloud AI", comment: "")
+        case .networkUnavailable:
+            return NSLocalizedString("Check your connection", comment: "")
+        case .sessionExpired, .transcriptTooLong:
+            return NSLocalizedString("Start new conversation", comment: "")
+        case .timeout, .partialOutputTimeout:
+            return NSLocalizedString("Try again", comment: "")
+        case .modelNotReady:
+            return NSLocalizedString("Wait a moment", comment: "")
+        case .contextTooLong:
+            return NSLocalizedString("Shorten your message", comment: "")
+        default:
+            return nil
+        }
+    }
+
+    /// Icon name for displaying in UI
+    var iconName: String {
+        switch self {
+        case .networkUnavailable:
+            return "wifi.slash"
+        case .timeout, .partialOutputTimeout:
+            return "clock.badge.exclamationmark"
+        case .foundationModelsUnavailable, .modelNotReady:
+            return "cpu"
+        case .sessionExpired, .sessionLimitReached, .transcriptTooLong:
+            return "bubble.left.and.bubble.right"
+        case .toolExecutionFailed, .toolNotFound, .toolArgumentsInvalid:
+            return "wrench.and.screwdriver"
+        default:
+            return "exclamationmark.triangle"
         }
     }
 }
