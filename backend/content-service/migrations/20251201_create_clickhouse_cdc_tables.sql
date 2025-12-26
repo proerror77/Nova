@@ -62,10 +62,10 @@ ORDER BY (post_id, id, cdc_timestamp)
 TTL created_at + INTERVAL 365 DAY;
 
 -- Follows CDC Table (for social graph analytics)
--- Note: Uses followee_id to match analytics-service insert schema
+-- Note: Uses followed_id to match the actual ClickHouse schema
 CREATE TABLE IF NOT EXISTS follows_cdc (
     follower_id UUID,
-    followee_id UUID,  -- Changed from followed_id for consistency
+    followed_id UUID,  -- The user being followed
     created_at DateTime64(3) DEFAULT now64(3),
     -- CDC metadata
     cdc_operation Enum8('INSERT' = 1, 'DELETE' = 2),
@@ -73,10 +73,10 @@ CREATE TABLE IF NOT EXISTS follows_cdc (
     -- For SummingMergeTree: +1 for INSERT, -1 for DELETE
     follow_count Int8,
     INDEX idx_follower_id (follower_id) TYPE bloom_filter GRANULARITY 1,
-    INDEX idx_followee_id (followee_id) TYPE bloom_filter GRANULARITY 1
+    INDEX idx_followed_id (followed_id) TYPE bloom_filter GRANULARITY 1
 ) ENGINE = SummingMergeTree((follow_count))
 PARTITION BY toYYYYMM(created_at)
-ORDER BY (followee_id, follower_id, cdc_timestamp)
+ORDER BY (followed_id, follower_id, cdc_timestamp)
 TTL created_at + INTERVAL 365 DAY;
 
 -- Materialized view for post engagement statistics (hourly aggregation)
@@ -109,13 +109,13 @@ GROUP BY user_id, day;
 CREATE MATERIALIZED VIEW IF NOT EXISTS follower_growth_daily
 ENGINE = SummingMergeTree()
 PARTITION BY toYYYYMM(day)
-ORDER BY (followee_id, day)
+ORDER BY (followed_id, day)
 AS SELECT
-    followee_id AS user_id,
+    followed_id AS user_id,
     toStartOfDay(cdc_timestamp) AS day,
     sum(follow_count) AS net_followers
 FROM follows_cdc
-GROUP BY followee_id, day;
+GROUP BY followed_id, day;
 
 -- Sample queries:
 -- 1. Get total likes for a post:
