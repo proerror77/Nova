@@ -336,9 +336,19 @@ struct APIConfig {
     struct Friends {
         static let searchUsers = "/api/v2/search/users"  // GET 搜索用戶 ?q={query}
         static let getRecommendations = "/api/v2/friends/recommendations"  // GET 獲取推薦聯絡人
-        static let addFriend = "/api/v2/friends/add"  // POST 添加好友
+        static let addFriend = "/api/v2/friends/add"  // POST 添加好友 (直接添加，無需確認)
         static let removeFriend = "/api/v2/friends/remove"  // DELETE 移除好友
         static let getFriendsList = "/api/v2/friends/list"  // GET 獲取好友列表
+
+        // MARK: - Friend Request Management
+        static let sendRequest = "/api/v2/friends/request"  // POST 發送好友請求
+        static let getPendingRequests = "/api/v2/friends/requests"  // GET 待處理請求 ?type=received|sent
+        static let acceptRequest = "/api/v2/friends/request/accept"  // POST 接受請求
+        static let rejectRequest = "/api/v2/friends/request/reject"  // POST 拒絕請求
+        static func cancelRequest(_ requestId: String) -> String {  // DELETE 取消已發送的請求
+            "/api/v2/friends/request/\(requestId)"
+        }
+        static let pendingCount = "/api/v2/friends/requests/count"  // GET 待處理請求數量
     }
 
     // MARK: - Channels API

@@ -25,18 +25,18 @@ spec:
         imagePullPolicy: Always
         ports:
         - name: http
-          containerPort: 8093
+          containerPort: 8006
           protocol: TCP
         - name: grpc
           containerPort: 9093
           protocol: TCP
         env:
-        - name: HTTP_PORT
-          value: "8093"
+        - name: PORT
+          value: "8006"
         - name: SERVER_HOST
           value: "0.0.0.0"
         - name: SERVER_PORT
-          value: "8093"
+          value: "8006"
         - name: GRPC_PORT
           value: "9093"
         - name: RUST_LOG
@@ -55,16 +55,16 @@ spec:
             cpu: "500m"
         livenessProbe:
           httpGet:
-            path: /api/v1/health/live
-            port: 8093
+            path: /health
+            port: 8006
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /api/v1/health/ready
-            port: 8093
+            path: /health
+            port: 8006
           initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 3
@@ -72,8 +72,8 @@ spec:
           failureThreshold: 3
         startupProbe:
           httpGet:
-            path: /api/v1/health
-            port: 8093
+            path: /health
+            port: 8006
           initialDelaySeconds: 0
           periodSeconds: 5
           timeoutSeconds: 3
@@ -92,8 +92,8 @@ spec:
   type: ClusterIP
   ports:
   - name: http
-    port: 8093
-    targetPort: 8093
+    port: 8006
+    targetPort: 8006
     protocol: TCP
   - name: grpc
     port: 9093

@@ -54,6 +54,10 @@ struct HomeView: View {
     // iOS 17+ @Observable 使用 @State 替代 @StateObject
     @State private var feedViewModel = FeedViewModel()
     @State private var showReportView = false
+
+    // Deep link navigation support
+    private let coordinator = AppCoordinator.shared
+    private let contentService = ContentService()
     @State private var showThankYouView = false
     @State private var showNewPost = false
     @State private var showSearch = false
@@ -200,6 +204,65 @@ struct HomeView: View {
             if feedViewModel.posts.isEmpty {
                 Task { await feedViewModel.loadFeed(algorithm: selectedTab.algorithm) }
             }
+            // Check for pending deep link navigation
+            handlePendingNavigation()
+        }
+        .onChange(of: coordinator.homePath) { _, newPath in
+            handlePendingNavigation()
+        }
+    }
+
+    // MARK: - Deep Link Navigation
+
+    /// Handle pending navigation from AppCoordinator
+    private func handlePendingNavigation() {
+        guard let route = coordinator.homePath.last else { return }
+
+        switch route {
+        case .post(let postId):
+            // Navigate to post detail
+            Task {
+                await navigateToPost(id: postId)
+            }
+        case .profile(let userId):
+            // Navigate to user profile
+            selectedUserId = userId
+            showUserProfile = true
+            // Remove the route after handling
+            coordinator.homePath.removeAll { $0 == route }
+        default:
+            break
+        }
+    }
+
+    /// Load and display a post by ID
+    private func navigateToPost(id postId: String) async {
+        do {
+            if let post = try await contentService.getPost(postId: postId) {
+                await MainActor.run {
+                    // Convert Post to FeedPost for PostDetailView
+                    let feedPost = FeedPost(
+                        from: post,
+                        authorName: post.displayAuthorName,
+                        authorAvatar: post.authorAvatarUrl
+                    )
+                    selectedPostForDetail = feedPost
+                    showPostDetail = true
+                    // Remove the route after handling
+                    coordinator.homePath.removeAll {
+                        if case .post = $0 { return true }
+                        return false
+                    }
+                }
+            } else {
+                #if DEBUG
+                print("[HomeView] Post not found: \(postId)")
+                #endif
+            }
+        } catch {
+            #if DEBUG
+            print("[HomeView] Failed to load post \(postId): \(error)")
+            #endif
         }
     }
 

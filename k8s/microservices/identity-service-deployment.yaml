@@ -136,6 +136,19 @@ spec:
             configMapKeyRef:
               name: identity-service-configmap
               key: passkey-origin
+        # Google OAuth 2.0 configuration
+        - name: OAUTH_GOOGLE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: identity-service-secret
+              key: oauth-google-client-id
+        - name: OAUTH_GOOGLE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: identity-service-secret
+              key: oauth-google-client-secret
+        - name: OAUTH_GOOGLE_REDIRECT_URI
+          value: "https://staging-api.icered.com/api/v2/auth/oauth/google/callback"
         - name: GRPC_SERVER_CERT_PATH
           value: /etc/nova/certs/server.crt
         - name: GRPC_SERVER_KEY_PATH

@@ -18,24 +18,26 @@ struct ScreenScale {
 
     /// 当前设备屏幕宽度 (缓存值，启动时计算一次)
     static let screenWidth: CGFloat = {
-        // Fallback to a safe default if UIScreen is unavailable
-        guard let screen = UIApplication.shared.connectedScenes
+        // Use connected scenes first (iOS 13+), fallback to base width
+        if let screen = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
-            .first?.screen else {
-            return UIScreen.main.bounds.width
+            .first?.screen {
+            return screen.bounds.width
         }
-        return screen.bounds.width
+        // Fallback to base width if no scene available yet
+        return baseWidth
     }()
 
     /// 当前设备屏幕高度 (缓存值，启动时计算一次)
     static let screenHeight: CGFloat = {
-        // Fallback to a safe default if UIScreen is unavailable
-        guard let screen = UIApplication.shared.connectedScenes
+        // Use connected scenes first (iOS 13+), fallback to base height
+        if let screen = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
-            .first?.screen else {
-            return UIScreen.main.bounds.height
+            .first?.screen {
+            return screen.bounds.height
         }
-        return screen.bounds.height
+        // Fallback to base height if no scene available yet
+        return baseHeight
     }()
 
     /// 宽度缩放比例 (缓存值)
@@ -120,32 +122,70 @@ extension Double {
 // MARK: - Typography
 /// 统一字体样式
 enum Typography {
-    // Regular weights
-    static let regular10: Font = .system(size: 10.f, weight: .regular)
-    static let regular12: Font = .system(size: 12.f, weight: .regular)
-    static let regular13: Font = .system(size: 13.f, weight: .regular)
-    static let regular14: Font = .system(size: 14.f, weight: .regular)
-    static let regular15: Font = .system(size: 15.f, weight: .regular)
-    static let regular16: Font = .system(size: 16.f, weight: .regular)
-    static let regular20: Font = .system(size: 20.f, weight: .regular)
+    // MARK: - SF Pro Display Font Names
+    private static let fontRegular = "SFProDisplay-Regular"
+    private static let fontMedium = "SFProDisplay-Medium"
+    private static let fontSemibold = "SFProDisplay-Semibold"
+    private static let fontBold = "SFProDisplay-Bold"
+    private static let fontHeavy = "SFProDisplay-Heavy"
+    private static let fontLight = "SFProDisplay-Light"
+    private static let fontThin = "SFProDisplay-Thin"
+    
+    // MARK: - Font Validation (Debug)
+    #if DEBUG
+    /// 在 App 启动时调用此方法验证字体是否正确加载
+    /// 使用方法：在 AppDelegate 或 App.swift 中调用 Typography.validateFonts()
+    static func validateFonts() {
+        print("🔤 === Font Validation ===")
+        let fontNames = [fontRegular, fontMedium, fontSemibold, fontBold, fontHeavy, fontLight, fontThin]
+        for name in fontNames {
+            if UIFont(name: name, size: 14) != nil {
+                print("✅ \(name) - loaded successfully")
+            } else {
+                print("❌ \(name) - FAILED to load!")
+            }
+        }
+        print("🔤 === Available SF Pro Display fonts ===")
+        for family in UIFont.familyNames.sorted() where family.contains("SF") || family.contains("Pro") {
+            print("Family: \(family)")
+            for fontName in UIFont.fontNames(forFamilyName: family) {
+                print("  - \(fontName)")
+            }
+        }
+    }
+    #endif
+    
+    // MARK: - Regular weights
+    static let regular10: Font = .custom(fontRegular, size: 10.f)
+    static let regular12: Font = .custom(fontRegular, size: 12.f)
+    static let regular13: Font = .custom(fontRegular, size: 13.f)
+    static let regular14: Font = .custom(fontRegular, size: 14.f)
+    static let regular15: Font = .custom(fontRegular, size: 15.f)
+    static let regular16: Font = .custom(fontRegular, size: 16.f)
+    static let regular20: Font = .custom(fontRegular, size: 20.f)
 
-    // Light weights
-    static let light14: Font = .system(size: 14.f, weight: .light)
-    static let thin11: Font = .system(size: 11.f, weight: .thin)
+    // MARK: - Light weights
+    static let light14: Font = .custom(fontLight, size: 14.f)
+    static let thin11: Font = .custom(fontThin, size: 11.f)
 
-    // Semibold weights
-    static let semibold14: Font = .system(size: 14.f, weight: .semibold)
-    static let semibold15: Font = .system(size: 15.f, weight: .semibold)
-    static let semibold16: Font = .system(size: 16.f, weight: .semibold)
-    static let semibold18: Font = .system(size: 18.f, weight: .semibold)
-    static let semibold24: Font = .system(size: 24.f, weight: .semibold)
+    // MARK: - Semibold weights
+    static let semibold14: Font = .custom(fontSemibold, size: 14.f)
+    static let semibold15: Font = .custom(fontSemibold, size: 15.f)
+    static let semibold16: Font = .custom(fontSemibold, size: 16.f)
+    static let semibold18: Font = .custom(fontSemibold, size: 18.f)
+    static let semibold24: Font = .custom(fontSemibold, size: 24.f)
 
-    // Bold weights
-    static let bold12: Font = .system(size: 12.f, weight: .bold)
-    static let bold20: Font = .system(size: 20.f, weight: .bold)
+    // MARK: - Bold weights
+    static let bold12: Font = .custom(fontBold, size: 12.f)
+    static let bold20: Font = .custom(fontBold, size: 20.f)
 
-    // Heavy weights
-    static let heavy16: Font = .system(size: 16.f, weight: .heavy)
+    // MARK: - Heavy weights
+    static let heavy16: Font = .custom(fontHeavy, size: 16.f)
+    
+    // MARK: - Medium weights (新增，Figma 常用)
+    static let medium14: Font = .custom(fontMedium, size: 14.f)
+    static let medium16: Font = .custom(fontMedium, size: 16.f)
+    static let medium18: Font = .custom(fontMedium, size: 18.f)
 }
 
 // MARK: - Letter Spacing
@@ -239,6 +279,10 @@ struct DesignTokens {
         dark: UIColor(red: 0.28, green: 0.28, blue: 0.30, alpha: 1.0)
     )
     static let attachmentBackground = Color.dynamic(
+        light: UIColor(red: 0.91, green: 0.91, blue: 0.91, alpha: 1.0),
+        dark: UIColor(red: 0.18, green: 0.18, blue: 0.19, alpha: 1.0)
+    )
+    static let searchBarBackground = Color.dynamic(
         light: UIColor(red: 0.91, green: 0.91, blue: 0.91, alpha: 1.0),
         dark: UIColor(red: 0.18, green: 0.18, blue: 0.19, alpha: 1.0)
     )

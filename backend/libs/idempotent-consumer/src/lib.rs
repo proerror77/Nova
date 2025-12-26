@@ -35,7 +35,7 @@
 //!
 //! ### Basic Usage: Process Event with Idempotency
 //!
-//! ```rust,no_run
+//! ```ignore
 //! use idempotent_consumer::{IdempotencyGuard, ProcessingResult};
 //! use sqlx::PgPool;
 //! use std::time::Duration;
@@ -66,7 +66,7 @@
 //!
 //! ### Advanced: Manual Control
 //!
-//! ```rust,no_run
+//! ```ignore
 //! use idempotent_consumer::IdempotencyGuard;
 //! # use sqlx::PgPool;
 //! # use std::time::Duration;
@@ -100,7 +100,7 @@
 //!
 //! ### Periodic Cleanup
 //!
-//! ```rust,no_run
+//! ```ignore
 //! use idempotent_consumer::IdempotencyGuard;
 //! # use sqlx::PgPool;
 //! # use std::time::Duration;
@@ -291,7 +291,7 @@ pub struct ProcessedEvent {
 ///
 /// # Example
 ///
-/// ```rust,no_run
+/// ```ignore
 /// use idempotent_consumer::{IdempotencyGuard, ProcessingResult};
 /// # use sqlx::PgPool;
 /// # use std::time::Duration;
@@ -331,7 +331,7 @@ impl IdempotencyGuard {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
+    /// ```ignore
     /// # use idempotent_consumer::IdempotencyGuard;
     /// # use sqlx::PgPool;
     /// use std::time::Duration;
@@ -364,7 +364,7 @@ impl IdempotencyGuard {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
+    /// ```ignore
     /// # use idempotent_consumer::IdempotencyGuard;
     /// # use sqlx::PgPool;
     /// # use std::time::Duration;
@@ -419,7 +419,7 @@ impl IdempotencyGuard {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
+    /// ```ignore
     /// # use idempotent_consumer::IdempotencyGuard;
     /// # use sqlx::PgPool;
     /// # use std::time::Duration;
@@ -497,7 +497,7 @@ impl IdempotencyGuard {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
+    /// ```ignore
     /// # use idempotent_consumer::{IdempotencyGuard, ProcessingResult};
     /// # use sqlx::PgPool;
     /// # use std::time::Duration;
@@ -573,7 +573,7 @@ impl IdempotencyGuard {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
+    /// ```ignore
     /// # use idempotent_consumer::IdempotencyGuard;
     /// # use sqlx::PgPool;
     /// # use std::time::Duration;

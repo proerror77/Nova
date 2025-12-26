@@ -411,9 +411,7 @@ mod tests {
             std::env::var("NEO4J_PASSWORD").unwrap_or_else(|_| "password".to_string());
 
         let pg_pool = PgPool::connect(&database_url).await.unwrap();
-        let neo4j_graph = Graph::new(&neo4j_uri, &neo4j_user, &neo4j_password)
-            .await
-            .unwrap();
+        let neo4j_graph = Graph::new(&neo4j_uri, &neo4j_user, &neo4j_password).unwrap();
 
         let backfill = Neo4jBackfill::new(pg_pool, Arc::new(neo4j_graph));
 

@@ -1,101 +1,256 @@
 import SwiftUI
+import PhotosUI
 import CoreLocation
+import AVFoundation
+
+// MARK: - Message Send Error
+enum MessageSendError: Error {
+    case timeout
+}
+
+// MARK: - ChatViewModel
+/// ViewModel for ChatView - handles all state and business logic for chat conversations
+/// Uses MatrixBridgeService for E2EE messaging
 
 @MainActor
-class ChatViewModel: ObservableObject {
-    // MARK: - Dependencies
-    // Use nonisolated(unsafe) to allow access in deinit
-    // This is safe because ChatService handles its own thread safety
-    nonisolated(unsafe) var chatService = ChatService()
-    private let mediaService = MediaService()
+@Observable
+final class ChatViewModel {
 
-    // MARK: - Core State
-    @Published var messages: [ChatMessage] = []
-    @Published var messageText = ""
-    @Published var error: String?
+    // MARK: - Configuration
+
+    private(set) var conversationId: String = ""
+    private(set) var userName: String = "User"
+    private(set) var otherUserAvatarUrl: String?
+
+    // MARK: - Services
+
+    private let matrixBridge = MatrixBridgeService.shared
+    private(set) var messageSender: ChatMessageSender?
+    let audioRecorder = AudioRecorderService()
+    let audioPlayer = AudioPlayerService()
+
+    // MARK: - Message State
+
+    var messageText = ""
+    var messages: [ChatMessage] = []
+
+    // MARK: - UI State
+
+    var showUserProfile = false
+    var showAttachmentOptions = false
+    var showCamera = false
+    var showVoiceCall = false
+    var showVideoCall = false
+    var showFilePicker = false
+    var showLocationAlert = false
+    var showCameraPermissionAlert = false
+    var showMicrophonePermissionAlert = false
+
+    // MARK: - Media State
+
+    var selectedPhotoItem: PhotosPickerItem?
+    var cameraImage: UIImage?
 
     // MARK: - Loading States
-    @Published var isLoadingHistory = false
-    @Published var isSending = false
-    @Published var isUploadingImage = false
+
+    var isLoadingHistory = false
+    var isSending = false
+    var isUploadingImage = false
+    var isUploadingFile = false
+    var isRecordingVoice = false
+    var isPreviewMode = false
+
+    // MARK: - Matrix E2EE
+
+    var isMatrixE2EEEnabled = false
 
     // MARK: - Pagination
-    @Published var hasMoreMessages = true
+
+    var hasMoreMessages = true
     var nextCursor: String?
 
-    // MARK: - Matrix/E2EE
-    @Published var isMatrixE2EEEnabled = false
+    // MARK: - Error State
 
-    // MARK: - Typing Indicator
-    @Published var isOtherUserTyping = false
-    @Published var typingUserName = ""
-    // Use nonisolated(unsafe) for timer to allow invalidation in deinit
-    nonisolated(unsafe) var typingTimer: Timer?
+    var error: String?
 
-    // MARK: - Properties
-    let conversationId: String
-    let userName: String
-    let otherUserId: String
+    // MARK: - Voice Recording
 
-    // MARK: - Computed
+    var voiceRecordDragOffset: CGFloat = 0
+    let voiceCancelThreshold: CGFloat = -60
+
+    // MARK: - Internal State
+
+    private var matrixMessageHandlerSetup = false
+
+    // MARK: - Callbacks
+
+    var onDismiss: (() -> Void)?
+
+    // MARK: - Dependencies
+
+    private weak var typingHandler: ChatTypingHandler?
+
+    // MARK: - Computed Properties
+
     var currentUserId: String {
         KeychainService.shared.get(.userId) ?? "unknown"
     }
 
-    // MARK: - Init
-    init(conversationId: String, userName: String, otherUserId: String = "") {
-        self.conversationId = conversationId
-        self.userName = userName
-        self.otherUserId = otherUserId
+    var currentUserAvatarUrl: String? {
+        AuthenticationManager.shared.currentUser?.avatarUrl
     }
 
-    // MARK: - Lifecycle Methods
+    // MARK: - Static Properties
 
-    /// Load chat data (message history + WebSocket connection)
-    func loadChatData() async {
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy/MM/dd  HH:mm"
+        return formatter
+    }()
+
+    #if DEBUG
+    private static var useChatPreviewMode: Bool {
+        #if targetEnvironment(simulator)
+        return false
+        #else
+        return false
+        #endif
+    }
+
+    private static var mockMessages: [ChatMessage] {
+        [
+            ChatMessage(localText: "Hello, how are you bro~", isFromMe: false),
+            ChatMessage(localText: "Have you been busy recently?", isFromMe: false),
+            ChatMessage(localText: "Not bad. There's a new project recently and I'm extremely busy", isFromMe: true),
+            ChatMessage(localText: "Is there dinner time tonight? There is a project that you might be interested in", isFromMe: false),
+        ]
+    }
+    #endif
+
+    // MARK: - Initialization
+
+    init() {}
+
+    func configure(
+        conversationId: String,
+        userName: String,
+        otherUserAvatarUrl: String?,
+        typingHandler: ChatTypingHandler,
+        onDismiss: (() -> Void)? = nil
+    ) {
+        self.conversationId = conversationId
+        self.userName = userName
+        self.otherUserAvatarUrl = otherUserAvatarUrl
+        self.typingHandler = typingHandler
+        self.onDismiss = onDismiss
+
+        // Initialize message sender
+        self.messageSender = ChatMessageSender(
+            chatService: ChatService.shared,
+            conversationId: conversationId
+        )
+
+        setupMessageSenderCallbacks()
+    }
+
+    // MARK: - Message Sender Callbacks
+
+    private func setupMessageSenderCallbacks() {
+        messageSender?.onMessageAdded = { [weak self] message in
+            Task { @MainActor in
+                self?.messages.append(message)
+            }
+        }
+
+        messageSender?.onMessageUpdated = { [weak self] localId, updatedMessage in
+            Task { @MainActor in
+                if let index = self?.messages.firstIndex(where: { $0.id == localId }) {
+                    self?.messages[index] = updatedMessage
+                }
+            }
+        }
+
+        messageSender?.onMessageRemoved = { [weak self] messageId in
+            Task { @MainActor in
+                self?.messages.removeAll { $0.id == messageId }
+            }
+        }
+
+        messageSender?.onSendingStateChanged = { [weak self] isSending in
+            Task { @MainActor in
+                self?.isSending = isSending
+            }
+        }
+
+        messageSender?.onUploadingStateChanged = { [weak self] isUploading in
+            Task { @MainActor in
+                self?.isUploadingImage = isUploading
+            }
+        }
+
+        messageSender?.onError = { [weak self] errorMessage in
+            Task { @MainActor in
+                self?.error = errorMessage
+            }
+        }
+
+        messageSender?.currentUserId = { [weak self] in
+            self?.currentUserId ?? "unknown"
+        }
+    }
+
+    // MARK: - Load Chat Data
+
+    func loadChatData(retryCount: Int = 0) async {
+        #if DEBUG
+        if Self.useChatPreviewMode {
+            print("🎨 [ChatViewModel] Preview Mode enabled - using mock data")
+            messages = Self.mockMessages
+            isLoadingHistory = false
+            error = nil
+            isPreviewMode = true
+            return
+        }
+        #endif
+
+        isPreviewMode = false
         isLoadingHistory = true
         error = nil
 
         do {
-            // 0. 檢查並啟用 Matrix E2EE
-            chatService.enableMatrixE2EE()
-            isMatrixE2EEEnabled = MatrixBridgeService.shared.isInitialized
-
-            #if DEBUG
-            print("[ChatViewModel] Matrix E2EE enabled: \(isMatrixE2EEEnabled)")
-            #endif
-
-            // 1. Get message history
-            let response = try await chatService.getMessages(conversationId: conversationId, limit: 50)
-
-            // 2. Convert to UI messages
-            messages = response.messages.map { ChatMessage(from: $0, currentUserId: currentUserId) }
-
-            // 3. Store pagination info
-            hasMoreMessages = response.hasMore
-            nextCursor = response.nextCursor
-
-            // 4. Setup WebSocket callbacks
-            setupWebSocketCallbacks()
-
-            // 5. Connect WebSocket
-            chatService.connectWebSocket(conversationId: conversationId, userId: currentUserId)
-
-            // 6. Mark messages as read
-            if let lastMessage = messages.last {
-                try? await chatService.markAsRead(conversationId: conversationId, messageId: lastMessage.id)
+            if !matrixBridge.isInitialized {
+                try await matrixBridge.initialize()
             }
 
-            // 7. Setup Matrix message handler (如果已啟用)
-            if isMatrixE2EEEnabled {
-                setupMatrixMessageHandler()
+            isMatrixE2EEEnabled = matrixBridge.isInitialized
+
+            setupMatrixMessageHandler()
+
+            let matrixMessages = try await matrixBridge.getMessages(conversationId: conversationId, limit: 50)
+            let sorted = matrixMessages.sorted { $0.timestamp < $1.timestamp }
+            messages = sorted.map { matrixMessage in
+                let novaMessage = matrixBridge.convertToNovaMessage(matrixMessage, conversationId: conversationId)
+                return ChatMessage(from: novaMessage, currentUserId: currentUserId)
             }
 
-            #if DEBUG
-            print("[ChatViewModel] Loaded \(messages.count) messages for conversation \(conversationId)")
-            #endif
+            hasMoreMessages = matrixMessages.count >= 50
+            nextCursor = nil
 
+            try? await matrixBridge.markAsRead(conversationId: conversationId)
+
+            #if DEBUG
+            print("[ChatViewModel] Loaded \(messages.count) Matrix messages for room \(conversationId)")
+            #endif
         } catch {
+            if matrixBridge.handleMatrixError(error) && retryCount < 1 {
+                #if DEBUG
+                print("[ChatViewModel] Database corruption detected, retrying with fresh session...")
+                #endif
+                try? await matrixBridge.initialize()
+                await loadChatData(retryCount: retryCount + 1)
+                return
+            }
+
             self.error = "Failed to load messages: \(error.localizedDescription)"
             #if DEBUG
             print("[ChatViewModel] Load error: \(error)")
@@ -105,131 +260,74 @@ class ChatViewModel: ObservableObject {
         isLoadingHistory = false
     }
 
-    /// Setup WebSocket event callbacks
-    func setupWebSocketCallbacks() {
-        // New message received
-        chatService.onMessageReceived = { [weak self] newMessage in
-            Task { @MainActor [weak self] in
-                guard let self = self else { return }
+    // MARK: - Matrix Message Handler
 
-                // 跳過自己發送的訊息（避免與 optimistic update 重複）
-                if newMessage.senderId == self.currentUserId {
-                    #if DEBUG
-                    print("[ChatViewModel] Skipping own message from WebSocket: \(newMessage.id)")
-                    #endif
-                    return
-                }
-
-                // Avoid duplicates
-                guard !self.messages.contains(where: { $0.id == newMessage.id }) else { return }
-                self.messages.append(ChatMessage(from: newMessage, currentUserId: self.currentUserId))
-
-                // Clear typing indicator when message is received
-                self.isOtherUserTyping = false
-
-                // Mark as read
-                try? await self.chatService.markAsRead(
-                    conversationId: self.conversationId,
-                    messageId: newMessage.id
-                )
-            }
+    private func setupMatrixMessageHandler() {
+        guard !matrixMessageHandlerSetup else {
+            #if DEBUG
+            print("[ChatViewModel] ⚠️ Matrix message handler already setup, skipping")
+            #endif
+            return
         }
 
-        // Typing indicator received
-        chatService.onTypingIndicator = { [weak self] typingData in
-            Task { @MainActor [weak self] in
-                guard let self = self else { return }
-                // Only show if it's for this conversation and not from me
-                guard typingData.conversationId == self.conversationId,
-                      typingData.userId != self.currentUserId else { return }
+        matrixMessageHandlerSetup = true
 
-                if typingData.isTyping {
-                    self.startTypingIndicator(userName: typingData.username)
-                } else {
-                    self.stopTypingIndicator()
-                }
-            }
-        }
-
-        // Read receipt received
-        chatService.onReadReceipt = { [weak self] readData in
-            Task { @MainActor [weak self] in
-                guard let self = self else { return }
-                guard readData.conversationId == self.conversationId else { return }
-
-                // Update message status to "read" for messages up to lastReadMessageId
-                // This enables showing double checkmarks in the UI
-                #if DEBUG
-                print("[ChatViewModel] Read receipt: \(readData.userId) read up to \(readData.lastReadMessageId)")
-                #endif
-            }
-        }
-    }
-
-    /// Setup Matrix Bridge message handler for E2EE messages
-    func setupMatrixMessageHandler() {
         MatrixBridgeService.shared.onMatrixMessage = { [weak self] conversationId, matrixMessage in
-            Task { @MainActor [weak self] in
+            Task { @MainActor in
                 guard let self = self else { return }
-                // 只處理當前會話的訊息
                 guard conversationId == self.conversationId else { return }
 
-                // 跳過自己發送的訊息（避免與 optimistic update 重複）
-                // 自己發的訊息已經通過 sendMessage() 的 optimistic update 添加
-                let myMatrixId = MatrixBridgeService.shared.matrixUserId
-                #if DEBUG
-                print("[ChatViewModel] Matrix message received - senderId: \(matrixMessage.senderId), myMatrixId: \(myMatrixId ?? "nil"), messageId: \(matrixMessage.id)")
-                #endif
-
-                if let myId = myMatrixId, matrixMessage.senderId == myId {
+                // Skip own messages (avoid duplicate with optimistic update)
+                if let myMatrixId = MatrixBridgeService.shared.matrixUserId,
+                   matrixMessage.senderId == myMatrixId {
                     #if DEBUG
                     print("[ChatViewModel] ✅ Skipping own message from Matrix sync: \(matrixMessage.id)")
                     #endif
                     return
                 }
 
-                // 避免重複（來自其他用戶的訊息）
-                let existingIds = self.messages.map { $0.id }
-                #if DEBUG
-                print("[ChatViewModel] Existing message IDs: \(existingIds.suffix(5))")
-                #endif
-                guard !self.messages.contains(where: { $0.id == matrixMessage.id }) else {
+                // Avoid duplicates
+                if self.messages.contains(where: { $0.id == matrixMessage.id }) {
                     #if DEBUG
-                    print("[ChatViewModel] ✅ Skipping duplicate message (already exists): \(matrixMessage.id)")
+                    print("[ChatViewModel] ⚠️ Skipping duplicate message: \(matrixMessage.id)")
                     #endif
                     return
                 }
 
-                // 轉換 Matrix 訊息為 Nova 訊息格式
                 let novaMessage = MatrixBridgeService.shared.convertToNovaMessage(
                     matrixMessage,
                     conversationId: conversationId
                 )
 
-                // 添加到 UI
-                self.messages.append(ChatMessage(from: novaMessage, currentUserId: self.currentUserId))
+                let newChatMessage = ChatMessage(from: novaMessage, currentUserId: self.currentUserId)
 
-                // 清除打字指示器
-                self.isOtherUserTyping = false
+                // Double-check for race conditions
+                if self.messages.contains(where: { $0.id == newChatMessage.id }) {
+                    return
+                }
+
+                self.messages.append(newChatMessage)
 
                 #if DEBUG
-                print("[ChatViewModel] Matrix E2EE message received: \(matrixMessage.id)")
+                print("[ChatViewModel] ✅ Message added - ID: \(newChatMessage.id), Total: \(self.messages.count)")
                 #endif
+
+                // Clear typing indicator
+                self.typingHandler?.stopTypingIndicator()
+
+                // Mark as read
+                if novaMessage.senderId != self.currentUserId {
+                    try? await self.matrixBridge.markAsRead(conversationId: self.conversationId)
+                }
             }
         }
 
-        // Matrix 打字指示器
+        // Matrix typing indicator
         MatrixBridgeService.shared.onTypingIndicator = { [weak self] conversationId, userIds in
-            Task { @MainActor [weak self] in
+            Task { @MainActor in
                 guard let self = self else { return }
                 guard conversationId == self.conversationId else { return }
-                guard !userIds.contains(self.currentUserId) else { return }
-
-                if !userIds.isEmpty {
-                    self.startTypingIndicator()
-                } else {
-                    self.stopTypingIndicator()
-                }
+                self.typingHandler?.handleMatrixTypingIndicator(userIds: userIds)
             }
         }
 
@@ -238,26 +336,29 @@ class ChatViewModel: ObservableObject {
         #endif
     }
 
-    /// Load more messages (pagination)
+    // MARK: - Load More Messages
+
     func loadMoreMessages() async {
-        guard hasMoreMessages, let cursor = nextCursor, !isLoadingHistory else { return }
+        guard !isLoadingHistory, hasMoreMessages else { return }
 
         isLoadingHistory = true
+        let previousCount = messages.count
 
         do {
-            let response = try await chatService.getMessages(
-                conversationId: conversationId,
-                limit: 50,
-                cursor: cursor
-            )
+            let desiredLimit = messages.count + 50
+            let matrixMessages = try await matrixBridge.getMessages(conversationId: conversationId, limit: desiredLimit)
+            let sorted = matrixMessages.sorted { $0.timestamp < $1.timestamp }
 
-            // Prepend older messages
-            let olderMessages = response.messages.map { ChatMessage(from: $0, currentUserId: currentUserId) }
-            messages.insert(contentsOf: olderMessages, at: 0)
+            messages = sorted.map { matrixMessage in
+                let novaMessage = matrixBridge.convertToNovaMessage(matrixMessage, conversationId: conversationId)
+                return ChatMessage(from: novaMessage, currentUserId: currentUserId)
+            }
 
-            hasMoreMessages = response.hasMore
-            nextCursor = response.nextCursor
+            hasMoreMessages = messages.count > previousCount && matrixMessages.count >= desiredLimit
 
+            #if DEBUG
+            print("[ChatViewModel] Loaded more messages: \(previousCount) -> \(messages.count), hasMore: \(hasMoreMessages)")
+            #endif
         } catch {
             #if DEBUG
             print("[ChatViewModel] Load more error: \(error)")
@@ -267,361 +368,474 @@ class ChatViewModel: ObservableObject {
         isLoadingHistory = false
     }
 
-    // MARK: - Send Text Message
+    // MARK: - Send Messages
 
-    /// 發送文字訊息 - 使用 Matrix E2EE（端到端加密）
-    func sendMessage() async {
+    func sendMessage() {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty, !isSending else { return }
-
-        // Stop typing indicator
-        chatService.sendTypingStop(conversationId: conversationId)
-
-        // Add to UI immediately (optimistic update)
-        let localMessage = ChatMessage(localText: trimmedText, isFromMe: true)
-        messages.append(localMessage)
+        guard !trimmedText.isEmpty else { return }
 
         messageText = ""
+        showAttachmentOptions = false
 
-        // Send to server asynchronously
-        isSending = true
-        do {
-            // 使用 Matrix SDK 發送訊息（E2EE 端到端加密）
-            let sentMessage = try await chatService.sendSecureMessage(
-                conversationId: conversationId,
-                content: trimmedText,
-                type: .text
-            )
-
-            // Replace local message with server response
-            if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
-                messages[index] = ChatMessage(from: sentMessage, currentUserId: currentUserId)
-            }
-
-            #if DEBUG
-            print("[ChatViewModel] ✅ Message sent via Matrix E2EE: \(sentMessage.id)")
-            #endif
-
-        } catch {
-            // Send failed - mark message as failed (TODO: add retry UI)
-            #if DEBUG
-            print("[ChatViewModel] Failed to send message: \(error)")
-            #endif
-            // Could remove failed message or add retry button here
+        Task {
+            await messageSender?.sendTextMessage(trimmedText)
         }
-        isSending = false
     }
 
-    // MARK: - Send Image Message
+    func sendImageMessage(image: UIImage) {
+        showAttachmentOptions = false
 
-    /// 發送圖片訊息 - 使用 Matrix SDK
-    func sendImageMessage(_ image: UIImage) async {
-        // 壓縮圖片
-        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
-            #if DEBUG
-            print("[ChatViewModel] ❌ Failed to compress image")
-            #endif
-            error = "Failed to compress image"
+        Task {
+            await messageSender?.sendImageMessage(image)
+        }
+    }
+
+    func sendLocationMessage(location: CLLocationCoordinate2D) {
+        showAttachmentOptions = false
+
+        Task {
+            await messageSender?.sendLocationMessage(location)
+        }
+    }
+
+    func sendVoiceMessage(audioData: Data, duration: TimeInterval, url: URL) {
+        showAttachmentOptions = false
+
+        Task {
+            await messageSender?.sendVoiceMessage(audioData: audioData, duration: duration, url: url)
+            audioRecorder.cleanupTempFiles()
+        }
+    }
+
+    // MARK: - Message Actions
+
+    func handleMessageLongPress(_ message: ChatMessage) {
+        Task {
+            do {
+                try await matrixBridge.deleteMessage(
+                    conversationId: conversationId,
+                    messageId: message.id,
+                    reason: nil
+                )
+                messages.removeAll { $0.id == message.id }
+                #if DEBUG
+                print("[ChatViewModel] Message deleted: \(message.id)")
+                #endif
+            } catch {
+                #if DEBUG
+                print("[ChatViewModel] Failed to delete message: \(error)")
+                #endif
+                self.error = "無法刪除消息"
+            }
+        }
+    }
+
+    func retryFailedMessage(_ message: ChatMessage) {
+        guard message.status == .failed else { return }
+        guard let index = messages.firstIndex(where: { $0.id == message.id }) else { return }
+
+        messages[index].status = .sending
+
+        let messageId = message.id
+        let messageText = message.text
+
+        Task {
+            do {
+                let eventId = try await withTimeout(seconds: 30) {
+                    try await self.matrixBridge.sendMessage(conversationId: self.conversationId, content: messageText)
+                }
+
+                if let idx = messages.firstIndex(where: { $0.id == messageId }) {
+                    messages[idx].id = eventId
+                    messages[idx].status = .sent
+                }
+
+                #if DEBUG
+                print("[ChatViewModel] ✅ Message retry succeeded: \(eventId)")
+                #endif
+            } catch {
+                if let idx = messages.firstIndex(where: { $0.id == messageId }) {
+                    messages[idx].status = .failed
+                }
+                self.error = getMessageSendErrorMessage(for: error)
+
+                #if DEBUG
+                print("[ChatViewModel] ❌ Message retry failed: \(error)")
+                #endif
+            }
+        }
+    }
+
+    // MARK: - Photo/Camera Handling
+
+    func handlePhotoSelection(_ newItem: PhotosPickerItem?) {
+        Task {
+            do {
+                if let data = try await newItem?.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    sendImageMessage(image: image)
+                }
+            } catch {
+                print("Failed to load photo: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func handleCameraImage(_ newImage: UIImage?) {
+        if let image = newImage {
+            sendImageMessage(image: image)
+            cameraImage = nil
+        }
+    }
+
+    func handleLocationUpdate(_ newLocation: CLLocationCoordinate2D?) {
+        if let location = newLocation, showLocationAlert {
+            sendLocationMessage(location: location)
+            showLocationAlert = false
+        }
+    }
+
+    func checkCameraPermissionAndOpen() {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            showCamera = true
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async {
+                    if granted {
+                        self.showCamera = true
+                    } else {
+                        self.showCameraPermissionAlert = true
+                    }
+                }
+            }
+        case .denied, .restricted:
+            showCameraPermissionAlert = true
+        @unknown default:
+            showCameraPermissionAlert = true
+        }
+    }
+
+    // MARK: - Voice Recording
+
+    func startVoiceRecording() {
+        Task {
+            let started = await audioRecorder.startRecording()
+            if started {
+                isRecordingVoice = true
+                #if DEBUG
+                print("[ChatViewModel] Voice recording started")
+                #endif
+            } else {
+                if !audioRecorder.permissionGranted {
+                    showMicrophonePermissionAlert = true
+                } else if let errorMsg = audioRecorder.errorMessage {
+                    error = errorMsg
+                }
+            }
+        }
+    }
+
+    func cancelVoiceRecording() {
+        audioRecorder.cancelRecording()
+        isRecordingVoice = false
+        #if DEBUG
+        print("[ChatViewModel] Voice recording cancelled")
+        #endif
+    }
+
+    func stopAndSendVoiceMessage() {
+        guard let result = audioRecorder.stopRecording() else {
+            isRecordingVoice = false
+            error = "Failed to save recording"
             return
         }
 
-        // 立即添加到本地 UI（樂觀更新）
-        let localMessage = ChatMessage(localText: "", isFromMe: true, image: image)
-        messages.append(localMessage)
+        isRecordingVoice = false
 
-        isUploadingImage = true
-
-        do {
-            // 確保 Matrix 已初始化
-            guard MatrixBridgeService.shared.isInitialized else {
-                throw NSError(domain: "ChatViewModel", code: -1, userInfo: [
-                    NSLocalizedDescriptionKey: "Matrix service not initialized"
-                ])
-            }
-
+        guard result.duration >= 1.0 else {
             #if DEBUG
-            print("[ChatViewModel] 📤 Sending image via Matrix SDK")
+            print("[ChatViewModel] Recording too short: \(result.duration)s")
             #endif
-
-            // 將圖片數據保存到臨時文件
-            let tempDir = FileManager.default.temporaryDirectory
-            let filename = "chat_image_\(UUID().uuidString).jpg"
-            let tempFileURL = tempDir.appendingPathComponent(filename)
-            try imageData.write(to: tempFileURL)
-
-            // 使用 Matrix SDK 發送圖片（本地文件 URL）
-            let eventId = try await MatrixBridgeService.shared.sendMessage(
-                conversationId: conversationId,
-                content: "",
-                mediaURL: tempFileURL,
-                mimeType: "image/jpeg"
-            )
-
-            // 清理臨時文件
-            try? FileManager.default.removeItem(at: tempFileURL)
-
-            let senderId = KeychainService.shared.get(.userId) ?? ""
-            let sentMessage = Message(
-                id: eventId,
-                conversationId: conversationId,
-                senderId: senderId,
-                content: "",
-                type: .image,
-                createdAt: Date(),
-                status: .sent,
-                encryptionVersion: 3  // Matrix E2EE
-            )
-
-            #if DEBUG
-            print("[ChatViewModel] ✅ Image sent via Matrix: \(eventId)")
-            #endif
-
-            // 替換本地訊息為伺服器返回的訊息
-            if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
-                var updatedMessage = ChatMessage(from: sentMessage, currentUserId: currentUserId)
-                updatedMessage.image = image  // 保留本地圖片用於顯示
-                messages[index] = updatedMessage
-            }
-
-        } catch {
-            #if DEBUG
-            print("[ChatViewModel] ❌ Failed to send image: \(error)")
-            #endif
-            self.error = "Failed to send image"
-            // 移除失敗的本地訊息
-            messages.removeAll { $0.id == localMessage.id }
+            error = "Recording too short"
+            audioRecorder.cleanupTempFiles()
+            return
         }
 
-        isUploadingImage = false
+        sendVoiceMessage(audioData: result.data, duration: result.duration, url: result.url)
     }
 
-    // MARK: - Send Location Message
-
-    /// 發送位置訊息 - 使用 Matrix SDK
-    func sendLocationMessage(_ location: CLLocationCoordinate2D) async {
-        // 立即添加到本地 UI（樂觀更新）
-        let localMessage = ChatMessage(localText: "", isFromMe: true, location: location)
-        messages.append(localMessage)
-
-        isSending = true
-
-        do {
-            // 確保 Matrix 已初始化
-            guard MatrixBridgeService.shared.isInitialized else {
-                throw NSError(domain: "ChatViewModel", code: -1, userInfo: [
-                    NSLocalizedDescriptionKey: "Matrix service not initialized"
-                ])
-            }
-
-            #if DEBUG
-            print("[ChatViewModel] 📍 Sending location via Matrix SDK")
-            #endif
-
-            // 使用 Matrix SDK 發送位置訊息
-            let eventId = try await MatrixBridgeService.shared.sendLocation(
-                conversationId: conversationId,
-                latitude: location.latitude,
-                longitude: location.longitude
-            )
-
-            let senderId = KeychainService.shared.get(.userId) ?? ""
-            let sentMessage = Message(
-                id: eventId,
-                conversationId: conversationId,
-                senderId: senderId,
-                content: "geo:\(location.latitude),\(location.longitude)",
-                type: .location,
-                createdAt: Date(),
-                status: .sent,
-                encryptionVersion: 3  // Matrix E2EE
-            )
-
-            #if DEBUG
-            print("[ChatViewModel] ✅ Location sent via Matrix: \(eventId)")
-            #endif
-
-            // 替換本地訊息為伺服器返回的訊息
-            if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
-                var updatedMessage = ChatMessage(from: sentMessage, currentUserId: currentUserId)
-                updatedMessage.location = location
-                messages[index] = updatedMessage
-            }
-
-        } catch {
-            #if DEBUG
-            print("[ChatViewModel] ❌ Failed to send location: \(error)")
-            #endif
-            self.error = "Failed to share location"
-            // 移除失敗的本地訊息
-            messages.removeAll { $0.id == localMessage.id }
-        }
-
-        isSending = false
+    func handleVoiceRecordDragChanged(_ value: DragGesture.Value) {
+        voiceRecordDragOffset = value.translation.height
     }
 
-    // MARK: - Send Voice Message
-
-    /// 發送語音訊息 - 使用 Matrix SDK
-    func sendVoiceMessage(audioData: Data, duration: TimeInterval, url: URL) async {
-        // 立即添加到本地 UI（樂觀更新）
-        let localMessage = ChatMessage(
-            localText: "",
-            isFromMe: true,
-            audioData: audioData,
-            audioDuration: duration,
-            audioUrl: url
-        )
-        messages.append(localMessage)
-
-        isSending = true
-
-        do {
-            // 確保 Matrix 已初始化
-            guard MatrixBridgeService.shared.isInitialized else {
-                throw NSError(domain: "ChatViewModel", code: -1, userInfo: [
-                    NSLocalizedDescriptionKey: "Matrix service not initialized"
-                ])
-            }
-
-            #if DEBUG
-            print("[ChatViewModel] 📤 Sending voice via Matrix SDK: \(url)")
-            #endif
-
-            // 使用 Matrix SDK 發送語音訊息（本地文件 URL）
-            let eventId = try await MatrixBridgeService.shared.sendMessage(
-                conversationId: conversationId,
-                content: String(format: "%.1f", duration),
-                mediaURL: url,
-                mimeType: "audio/mp4"
-            )
-
-            let senderId = KeychainService.shared.get(.userId) ?? ""
-            let sentMessage = Message(
-                id: eventId,
-                conversationId: conversationId,
-                senderId: senderId,
-                content: String(format: "%.1f", duration),
-                type: .audio,
-                createdAt: Date(),
-                status: .sent,
-                encryptionVersion: 3  // Matrix E2EE
-            )
-
-            #if DEBUG
-            print("[ChatViewModel] ✅ Voice sent via Matrix: \(eventId)")
-            #endif
-
-            // 替換本地訊息為伺服器返回的訊息
-            if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
-                var updatedMessage = ChatMessage(from: sentMessage, currentUserId: currentUserId)
-                updatedMessage.audioData = audioData
-                updatedMessage.audioDuration = duration
-                updatedMessage.audioUrl = url
-                messages[index] = updatedMessage
-            }
-
-        } catch {
-            #if DEBUG
-            print("[ChatViewModel] ❌ Failed to send voice: \(error)")
-            #endif
-            self.error = "Failed to send voice message"
-            // 移除失敗的本地訊息
-            messages.removeAll { $0.id == localMessage.id }
+    func handleVoiceRecordDragEnded(_ value: DragGesture.Value) {
+        if voiceRecordDragOffset < voiceCancelThreshold {
+            cancelVoiceRecording()
+        } else if isRecordingVoice {
+            stopAndSendVoiceMessage()
         }
+        voiceRecordDragOffset = 0
+    }
 
-        isSending = false
+    // MARK: - File Handling
+
+    func handleDocumentPicked(data: Data, filename: String, mimeType: String) {
+        Task {
+            isUploadingFile = true
+            isSending = true
+
+            do {
+                let tempDir = FileManager.default.temporaryDirectory
+                let tempFileURL = tempDir.appendingPathComponent(filename)
+                try data.write(to: tempFileURL)
+
+                #if DEBUG
+                print("[ChatViewModel] 📎 Sending file: \(filename) (\(data.count) bytes)")
+                #endif
+
+                let eventId = try await MatrixBridgeService.shared.sendMessage(
+                    conversationId: conversationId,
+                    content: filename,
+                    mediaURL: tempFileURL,
+                    mimeType: mimeType
+                )
+
+                try? FileManager.default.removeItem(at: tempFileURL)
+
+                #if DEBUG
+                print("[ChatViewModel] ✅ File sent via Matrix: \(eventId)")
+                #endif
+            } catch {
+                #if DEBUG
+                print("[ChatViewModel] ❌ Failed to send file: \(error)")
+                #endif
+                self.error = getFileSendErrorMessage(for: error, filename: filename)
+            }
+
+            isUploadingFile = false
+            isSending = false
+        }
     }
 
     // MARK: - Typing Indicator
 
-    /// Send typing start indicator
-    func sendTypingStart() {
-        chatService.sendTypingStart(conversationId: conversationId)
-    }
-
-    /// Send typing stop indicator
-    func sendTypingStop() {
-        chatService.sendTypingStop(conversationId: conversationId)
-    }
-
-    /// Start typing indicator with auto-hide timer
-    /// - Parameter userName: Optional username to display
-    private func startTypingIndicator(userName: String? = nil) {
-        isOtherUserTyping = true
-        if let userName = userName {
-            typingUserName = userName
+    func sendTypingIndicator(isTyping: Bool) {
+        if isTyping {
+            typingHandler?.sendTypingStart()
+        } else {
+            typingHandler?.sendTypingStop()
         }
-
-        // Cancel existing timer and start new one
-        typingTimer?.invalidate()
-        typingTimer = nil
-        typingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.isOtherUserTyping = false
-                self?.typingTimer = nil
-            }
-        }
-    }
-
-    /// Stop typing indicator and cancel timer
-    private func stopTypingIndicator() {
-        isOtherUserTyping = false
-        typingTimer?.invalidate()
-        typingTimer = nil
     }
 
     // MARK: - Cleanup
 
-    /// Disconnect WebSocket when view disappears
     func cleanup() {
-        // Clear all callbacks first to break any potential retain cycles
-        chatService.onMessageReceived = nil
-        chatService.onTypingIndicator = nil
-        chatService.onReadReceipt = nil
-        chatService.onConnectionStatusChanged = nil
-        
-        // Clear Matrix callbacks
         MatrixBridgeService.shared.onMatrixMessage = nil
         MatrixBridgeService.shared.onTypingIndicator = nil
-        
-        // Disconnect WebSocket
-        chatService.disconnectWebSocket()
-        
-        // Clean up timer
-        typingTimer?.invalidate()
-        typingTimer = nil
-        
+        matrixMessageHandlerSetup = false
+
+        Task {
+            await matrixBridge.stopListening(conversationId: conversationId)
+            try? await matrixBridge.setTyping(conversationId: conversationId, isTyping: false)
+        }
+
+        typingHandler?.cleanup()
+
         #if DEBUG
         print("[ChatViewModel] Cleanup completed for conversation \(conversationId)")
         #endif
     }
 
-    deinit {
-        // Clean up timer synchronously (timers are thread-safe)
-        typingTimer?.invalidate()
-        
-        // Capture chatService reference for async cleanup
-        let service = chatService
-        let convId = conversationId
-        
-        // All MainActor-isolated cleanup must be async
-        Task { @MainActor in
-            // Clear ChatService callbacks
-            service.onMessageReceived = nil
-            service.onTypingIndicator = nil
-            service.onReadReceipt = nil
-            service.onConnectionStatusChanged = nil
-            
-            // Disconnect WebSocket
-            service.disconnectWebSocket()
-            
-            // Clear Matrix callbacks
-            MatrixBridgeService.shared.onMatrixMessage = nil
-            MatrixBridgeService.shared.onTypingIndicator = nil
-            
-            #if DEBUG
-            print("[ChatViewModel] deinit - resources released for conversation \(convId)")
-            #endif
+    // MARK: - Helper Methods
+
+    func currentDateString() -> String {
+        Self.dateFormatter.string(from: Date())
+    }
+
+    func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    // MARK: - Error Message Helpers
+
+    private func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw MessageSendError.timeout
+            }
+
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
+    }
+
+    private func getMessageSendErrorMessage(for error: Error) -> String {
+        if let sendError = error as? MessageSendError {
+            switch sendError {
+            case .timeout:
+                return "Message sending timed out. Tap to retry."
+            }
+        }
+
+        if let matrixError = error as? MatrixBridgeError {
+            switch matrixError {
+            case .notInitialized:
+                return "Connection not ready. Tap to retry."
+            case .notAuthenticated:
+                return "Please sign in again."
+            case .sessionExpired:
+                return "Session expired. Please restart the app."
+            case .roomMappingFailed:
+                return "Chat room not found."
+            case .messageSendFailed(let reason):
+                return "Failed to send: \(reason)"
+            case .bridgeDisabled:
+                return "Messaging is temporarily unavailable."
+            case .roomNotFound:
+                return "Chat room not found."
+            }
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case NSURLErrorNotConnectedToInternet:
+                return "No internet connection. Tap to retry."
+            case NSURLErrorTimedOut:
+                return "Request timed out. Tap to retry."
+            default:
+                return "Network error. Tap to retry."
+            }
+        }
+
+        return "Failed to send message. Tap to retry."
+    }
+
+    func getImageSendErrorMessage(for error: Error) -> String {
+        if let matrixError = error as? MatrixBridgeError {
+            switch matrixError {
+            case .notInitialized:
+                return "Connection not ready. Please try again."
+            case .notAuthenticated:
+                return "Please sign in again to send images."
+            case .sessionExpired:
+                return "Session expired. Please restart the app."
+            case .roomMappingFailed:
+                return "Chat room not found. Please reopen the chat."
+            case .messageSendFailed(let reason):
+                return "Failed to send: \(reason)"
+            case .bridgeDisabled:
+                return "Messaging is temporarily unavailable."
+            case .roomNotFound:
+                return "Chat room not found. Please reopen the chat."
+            }
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case NSURLErrorNotConnectedToInternet:
+                return "No internet connection. Please check your network."
+            case NSURLErrorTimedOut:
+                return "Request timed out. Please try again."
+            case NSURLErrorNetworkConnectionLost:
+                return "Connection lost. Please try again."
+            case NSURLErrorCannotConnectToHost:
+                return "Cannot connect to server. Please try later."
+            default:
+                return "Network error. Please check your connection."
+            }
+        }
+
+        if nsError.domain == NSCocoaErrorDomain {
+            switch nsError.code {
+            case NSFileNoSuchFileError, NSFileReadNoSuchFileError:
+                return "Image file not found. Please try selecting again."
+            case NSFileReadNoPermissionError:
+                return "Cannot access image. Please check permissions."
+            case NSFileWriteOutOfSpaceError:
+                return "Storage full. Please free up space."
+            default:
+                break
+            }
+        }
+
+        let description = error.localizedDescription
+        if description.isEmpty || description == "The operation couldn't be completed." {
+            return "Failed to send image. Please try again."
+        }
+        return "Failed to send image: \(description)"
+    }
+
+    private func getFileSendErrorMessage(for error: Error, filename: String) -> String {
+        if let matrixError = error as? MatrixBridgeError {
+            switch matrixError {
+            case .notInitialized:
+                return "Connection not ready. Please try again."
+            case .notAuthenticated:
+                return "Please sign in again to send files."
+            case .sessionExpired:
+                return "Session expired. Please restart the app."
+            case .roomMappingFailed:
+                return "Chat room not found. Please reopen the chat."
+            case .messageSendFailed(let reason):
+                return "Failed to send \(filename): \(reason)"
+            case .bridgeDisabled:
+                return "Messaging is temporarily unavailable."
+            case .roomNotFound:
+                return "Chat room not found. Please reopen the chat."
+            }
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case NSURLErrorNotConnectedToInternet:
+                return "No internet connection. Please check your network."
+            case NSURLErrorTimedOut:
+                return "Upload timed out. Please try again."
+            case NSURLErrorNetworkConnectionLost:
+                return "Connection lost during upload. Please try again."
+            default:
+                return "Network error. Please check your connection."
+            }
+        }
+
+        let description = error.localizedDescription
+        if description.isEmpty || description == "The operation couldn't be completed." {
+            return "Failed to send \(filename). Please try again."
+        }
+        return "Failed to send file: \(description)"
+    }
+
+    func getMimeType(for url: URL) -> String {
+        let pathExtension = url.pathExtension.lowercased()
+        switch pathExtension {
+        case "pdf": return "application/pdf"
+        case "doc": return "application/msword"
+        case "docx": return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        case "xls": return "application/vnd.ms-excel"
+        case "xlsx": return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        case "ppt": return "application/vnd.ms-powerpoint"
+        case "pptx": return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        case "txt": return "text/plain"
+        case "zip": return "application/zip"
+        case "png": return "image/png"
+        case "jpg", "jpeg": return "image/jpeg"
+        case "gif": return "image/gif"
+        case "mp3": return "audio/mpeg"
+        case "mp4": return "video/mp4"
+        case "mov": return "video/quicktime"
+        default: return "application/octet-stream"
         }
     }
 }

@@ -139,27 +139,7 @@ actor VideoCompressor {
             throw VideoCompressionError.exportSessionCreationFailed
         }
 
-        exportSession.outputURL = outputURL
-        exportSession.outputFileType = .mp4
         exportSession.shouldOptimizeForNetworkUse = true
-
-        // Start progress monitoring
-        let progressTask = Task {
-            while !Task.isCancelled {
-                let progress = Double(exportSession.progress)
-                progressCallback?(progress)
-
-                if exportSession.status == .completed || exportSession.status == .failed || exportSession.status == .cancelled {
-                    break
-                }
-
-                try await Task.sleep(nanoseconds: 100_000_000) // 100ms
-            }
-        }
-
-        defer {
-            progressTask.cancel()
-        }
 
         #if DEBUG
         let startTime = CFAbsoluteTimeGetCurrent()
@@ -167,42 +147,77 @@ actor VideoCompressor {
         print("[VideoCompressor] Original size: \(ByteCountFormatter.string(fromByteCount: originalSize, countStyle: .file))")
         #endif
 
-        // Export
-        await exportSession.export()
+        // iOS 18+: Use new async throwing export API
+        if #available(iOS 18.0, *) {
+            // Start progress monitoring using states() for iOS 18+
+            let progressTask = Task {
+                for await state in exportSession.states(updateInterval: 0.1) {
+                    if case .exporting(let progress) = state {
+                        progressCallback?(Double(progress.fractionCompleted))
+                    }
+                }
+            }
 
-        // Check result
-        switch exportSession.status {
-        case .completed:
-            let compressedSize = try getFileSize(url: outputURL)
-            let duration = try await getVideoDuration(url: inputURL)
-            let ratio = Double(compressedSize) / Double(originalSize)
+            defer { progressTask.cancel() }
 
-            #if DEBUG
-            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-            print("[VideoCompressor] Compression completed in \(String(format: "%.2f", elapsed))s")
-            print("[VideoCompressor] Compressed size: \(ByteCountFormatter.string(fromByteCount: compressedSize, countStyle: .file))")
-            print("[VideoCompressor] Compression ratio: \(String(format: "%.1f", ratio * 100))%")
-            #endif
+            do {
+                try await exportSession.export(to: outputURL, as: .mp4)
+            } catch {
+                throw VideoCompressionError.exportFailed
+            }
+        } else {
+            // iOS 17 and earlier: Use legacy export API
+            exportSession.outputURL = outputURL
+            exportSession.outputFileType = .mp4
 
-            progressCallback?(1.0)
+            let progressTask = Task {
+                while !Task.isCancelled {
+                    let progress = Double(exportSession.progress)
+                    progressCallback?(progress)
+                    if exportSession.status == .completed || exportSession.status == .failed || exportSession.status == .cancelled {
+                        break
+                    }
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
+            }
 
-            return VideoCompressionResult(
-                outputURL: outputURL,
-                originalSize: originalSize,
-                compressedSize: compressedSize,
-                compressionRatio: ratio,
-                duration: duration
-            )
+            defer { progressTask.cancel() }
 
-        case .failed:
-            throw exportSession.error ?? VideoCompressionError.exportFailed
+            await exportSession.export()
 
-        case .cancelled:
-            throw VideoCompressionError.exportCancelled
-
-        default:
-            throw VideoCompressionError.unknownError
+            switch exportSession.status {
+            case .completed:
+                break
+            case .failed:
+                throw exportSession.error ?? VideoCompressionError.exportFailed
+            case .cancelled:
+                throw VideoCompressionError.exportCancelled
+            default:
+                throw VideoCompressionError.unknownError
+            }
         }
+
+        // Common result handling
+        let compressedSize = try getFileSize(url: outputURL)
+        let duration = try await getVideoDuration(url: inputURL)
+        let ratio = Double(compressedSize) / Double(originalSize)
+
+        #if DEBUG
+        let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+        print("[VideoCompressor] Compression completed in \(String(format: "%.2f", elapsed))s")
+        print("[VideoCompressor] Compressed size: \(ByteCountFormatter.string(fromByteCount: compressedSize, countStyle: .file))")
+        print("[VideoCompressor] Compression ratio: \(String(format: "%.1f", ratio * 100))%")
+        #endif
+
+        progressCallback?(1.0)
+
+        return VideoCompressionResult(
+            outputURL: outputURL,
+            originalSize: originalSize,
+            compressedSize: compressedSize,
+            compressionRatio: ratio,
+            duration: duration
+        )
     }
 
     /// Compresses multiple videos in parallel

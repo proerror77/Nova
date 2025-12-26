@@ -33,12 +33,12 @@ async fn test_feed_endpoint_returns_actual_posts() {
 
     // Verify that actual implementation IS present
     assert!(
-        source.contains("get_posts_by_author"),
-        "Feed handler should call get_posts_by_author to fetch posts"
+        source.contains("get_user_posts"),
+        "Feed handler should call get_user_posts to fetch posts"
     );
 
     assert!(
-        source.contains("for user_id in followed_user_ids.iter()"),
+        source.contains("for uid in followed_user_ids.iter()"),
         "Feed handler should iterate over followed users"
     );
 
@@ -47,20 +47,20 @@ async fn test_feed_endpoint_returns_actual_posts() {
 
 #[actix_web::test]
 async fn test_feed_handler_imports_grpc_request() {
-    // Verify that GetPostsByAuthorRequest is imported (required for post fetching)
+    // Verify that GetUserPostsRequest is imported (required for post fetching)
     let source = include_str!("../src/handlers/feed.rs");
 
     assert!(
-        source.contains("GetPostsByAuthorRequest"),
-        "Handler should use GetPostsByAuthorRequest for gRPC calls"
+        source.contains("GetUserPostsRequest"),
+        "Handler should use GetUserPostsRequest for gRPC calls"
     );
 
     assert!(
-        source.contains("author_id"),
-        "gRPC request should use author_id field (not user_id)"
+        source.contains("user_id"),
+        "gRPC request should use user_id field"
     );
 
-    println!("✅ gRPC request structure verified: GetPostsByAuthorRequest is properly used");
+    println!("✅ gRPC request structure verified: GetUserPostsRequest is properly used");
 }
 
 #[actix_web::test]
@@ -102,13 +102,16 @@ async fn test_feed_error_handling() {
     );
 
     assert!(
-        source.contains("debug!(\"Failed to fetch posts from user"),
+        source.contains(r#"debug!("Failed to fetch posts from user"#),
         "Handler should log failures"
     );
 
+    // The error handling block logs the error but doesn't break the loop,
+    // which means it continues fetching other users' posts
     assert!(
-        source.contains("// Continue fetching other users' posts on partial failure"),
-        "Handler should continue on partial failure"
+        source.contains(r#"Err(e) => {
+                                    debug!("Failed to fetch posts from user"#),
+        "Handler should continue on partial failure by logging and not breaking"
     );
 
     println!("✅ Error handling verified: graceful degradation on individual user failures");

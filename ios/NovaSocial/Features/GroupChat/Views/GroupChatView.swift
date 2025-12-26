@@ -2,21 +2,6 @@ import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
 
-// MARK: - Group Chat Message Model
-struct GroupChatMessage: Identifiable, Equatable {
-    let id: String
-    let text: String
-    let senderId: String
-    let senderName: String
-    let senderAvatarUrl: String?
-    let isFromMe: Bool
-    let timestamp: Date
-
-    static func == (lhs: GroupChatMessage, rhs: GroupChatMessage) -> Bool {
-        lhs.id == rhs.id
-    }
-}
-
 // MARK: - Group Chat View
 struct GroupChatView: View {
     @Binding var showGroupChat: Bool
@@ -25,46 +10,17 @@ struct GroupChatView: View {
     let groupName: String
     let memberCount: Int
 
-    // MARK: - State
-    @State private var messageText = ""
-    @State private var messages: [GroupChatMessage] = []
-    @State private var showAttachmentOptions = false
-    @State private var isLoading = false
-    @FocusState private var isInputFocused: Bool
+    // MARK: - ViewModel
+    @State private var viewModel = GroupChatViewModel()
 
-    // 通話相關
-    @State private var showVoiceCall = false
-    @State private var showVideoCall = false
+    // MARK: - State
+    @FocusState private var isInputFocused: Bool
 
     // 圖片選擇
     @State private var selectedPhotoItem: PhotosPickerItem?
 
-    // 檔案選擇
-    @State private var showFilePicker = false
-
-    // 語音錄製
-    @State private var audioRecorder = AudioRecorderService()
-    @State private var isRecordingVoice = false
-    @State private var voiceRecordDragOffset: CGFloat = 0
-    private let voiceCancelThreshold: CGFloat = -60
-
-    // Matrix 服務
-    private let matrixBridge = MatrixBridgeService.shared
-
-    // MARK: - Preview Mode
-    @State private var isPreviewMode = false
-
-    #if DEBUG
-    private static var usePreviewMode: Bool {
-        #if targetEnvironment(simulator)
-        return false  // 关闭模拟器预览模式，使用真实API
-        #else
-        return false
-        #endif
-    }
-    #else
-    private static let usePreviewMode = false
-    #endif
+    // 群組設定
+    @State private var showGroupSettings = false
 
     init(showGroupChat: Binding<Bool>, conversationId: String, groupName: String, memberCount: Int) {
         self._showGroupChat = showGroupChat
@@ -90,9 +46,14 @@ struct GroupChatView: View {
             }
         }
         .task {
-            await loadMessages()
+            viewModel.configure(
+                conversationId: conversationId,
+                groupName: groupName,
+                memberCount: memberCount
+            )
+            await viewModel.loadMessages()
         }
-        .fullScreenCover(isPresented: $showVoiceCall) {
+        .fullScreenCover(isPresented: $viewModel.showVoiceCall) {
             CallView(
                 roomId: conversationId,
                 roomName: groupName,
@@ -100,7 +61,7 @@ struct GroupChatView: View {
                 intent: .startCall
             )
         }
-        .fullScreenCover(isPresented: $showVideoCall) {
+        .fullScreenCover(isPresented: $viewModel.showVideoCall) {
             CallView(
                 roomId: conversationId,
                 roomName: groupName,
@@ -108,11 +69,41 @@ struct GroupChatView: View {
                 intent: .startCall
             )
         }
-        .sheet(isPresented: $showFilePicker) {
-            GroupDocumentPickerView(onDocumentPicked: handleDocumentPicked)
+        .sheet(isPresented: $viewModel.showFilePicker) {
+            DocumentPickerView(
+                onDocumentPicked: { data, filename, mimeType in
+                    viewModel.sendFileMessage(data: data, filename: filename, mimeType: mimeType)
+                },
+                onError: { fileError in
+                    #if DEBUG
+                    print("[GroupChatView] ❌ Cannot access file: \(fileError)")
+                    #endif
+                    viewModel.error = "Cannot access file: \(fileError.localizedDescription)"
+                }
+            )
+        }
+        .sheet(isPresented: $showGroupSettings) {
+            GroupSettingsView(
+                isPresented: $showGroupSettings,
+                conversationId: conversationId,
+                groupName: groupName,
+                memberCount: memberCount
+            )
         }
         .onChange(of: selectedPhotoItem) { _, newItem in
             handlePhotoSelection(newItem)
+        }
+        .alert("Error", isPresented: Binding(
+            get: { viewModel.error != nil },
+            set: { if !$0 { viewModel.error = nil } }
+        )) {
+            Button("OK") {
+                viewModel.error = nil
+            }
+        } message: {
+            if let error = viewModel.error {
+                Text(error)
+            }
         }
     }
 
@@ -138,7 +129,7 @@ struct GroupChatView: View {
             Spacer()
 
             Button(action: {
-                // TODO: Group settings
+                showGroupSettings = true
             }) {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 20))
@@ -165,7 +156,7 @@ struct GroupChatView: View {
             ScrollView {
                 LazyVStack(spacing: 12) {
                     // Preview mode indicator
-                    if isPreviewMode {
+                    if viewModel.isPreviewMode {
                         HStack {
                             Image(systemName: "eye.fill")
                                 .font(.system(size: 12))
@@ -176,7 +167,7 @@ struct GroupChatView: View {
                         .padding(.vertical, 8)
                     }
 
-                    ForEach(groupedMessages, id: \.date) { group in
+                    ForEach(viewModel.groupedMessages, id: \.date) { group in
                         // Date separator
                         Text(formatDateHeader(group.date))
                             .font(Font.custom("Helvetica Neue", size: 12))
@@ -192,8 +183,8 @@ struct GroupChatView: View {
                 }
                 .padding(.vertical, 16)
             }
-            .onChange(of: messages.count) { _, _ in
-                if let lastMessage = messages.last {
+            .onChange(of: viewModel.messages.count) { _, _ in
+                if let lastMessage = viewModel.messages.last {
                     withAnimation {
                         proxy.scrollTo(lastMessage.id, anchor: .bottom)
                     }
@@ -202,8 +193,8 @@ struct GroupChatView: View {
         }
         .onTapGesture {
             isInputFocused = false
-            if showAttachmentOptions {
-                showAttachmentOptions = false
+            if viewModel.showAttachmentOptions {
+                viewModel.showAttachmentOptions = false
             }
         }
     }
@@ -219,7 +210,7 @@ struct GroupChatView: View {
                 // Attachment button
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        showAttachmentOptions.toggle()
+                        viewModel.showAttachmentOptions.toggle()
                     }
                 }) {
                     ZStack {
@@ -227,7 +218,7 @@ struct GroupChatView: View {
                             .stroke(DesignTokens.accentColor, lineWidth: 2)
                             .frame(width: 30, height: 30)
 
-                        Image(systemName: showAttachmentOptions ? "xmark" : "plus")
+                        Image(systemName: viewModel.showAttachmentOptions ? "xmark" : "plus")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(DesignTokens.accentColor)
                     }
@@ -239,29 +230,29 @@ struct GroupChatView: View {
                         .font(.system(size: 14))
                         .foregroundColor(DesignTokens.textMuted)
 
-                    TextField("Type a message...", text: $messageText)
+                    TextField("Type a message...", text: $viewModel.messageText)
                         .font(Font.custom("Helvetica Neue", size: 16))
                         .foregroundColor(DesignTokens.textPrimary)
                         .focused($isInputFocused)
                         .onSubmit {
-                            sendMessage()
+                            viewModel.sendMessage()
                         }
                 }
                 .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
                 .background(Color(red: 0.85, green: 0.85, blue: 0.85))
                 .cornerRadius(28)
                 .onChange(of: isInputFocused) { _, focused in
-                    if focused && showAttachmentOptions {
-                        showAttachmentOptions = false
+                    if focused && viewModel.showAttachmentOptions {
+                        viewModel.showAttachmentOptions = false
                     }
                 }
 
                 // Send button or Voice record button
-                if messageText.isEmpty {
+                if viewModel.messageText.isEmpty {
                     voiceRecordButton
                 } else {
                     Button(action: {
-                        sendMessage()
+                        viewModel.sendMessage()
                     }) {
                         Circle()
                             .fill(DesignTokens.accentColor)
@@ -279,7 +270,7 @@ struct GroupChatView: View {
             .background(DesignTokens.surface)
 
             // Attachment options
-            if showAttachmentOptions {
+            if viewModel.showAttachmentOptions {
                 attachmentOptionsView
                     .transition(.move(edge: .bottom))
             }
@@ -310,18 +301,18 @@ struct GroupChatView: View {
             }
 
             GroupAttachmentButton(icon: "video.fill", title: "Video Call") {
-                showAttachmentOptions = false
-                showVideoCall = true
+                viewModel.showAttachmentOptions = false
+                viewModel.showVideoCall = true
             }
 
             GroupAttachmentButton(icon: "phone.fill", title: "Voice Call") {
-                showAttachmentOptions = false
-                showVoiceCall = true
+                viewModel.showAttachmentOptions = false
+                viewModel.showVoiceCall = true
             }
 
             GroupAttachmentButton(icon: "doc.fill", title: "File") {
-                showAttachmentOptions = false
-                showFilePicker = true
+                viewModel.showAttachmentOptions = false
+                viewModel.showFilePicker = true
             }
         }
         .padding(.vertical, 16)
@@ -333,29 +324,29 @@ struct GroupChatView: View {
     private var voiceRecordButton: some View {
         ZStack {
             // 錄音時的脈衝動畫背景
-            if isRecordingVoice {
+            if viewModel.isRecordingVoice {
                 Circle()
                     .fill(Color.red.opacity(0.2))
                     .frame(width: 50, height: 50)
-                    .scaleEffect(audioRecorder.audioLevel > 0.3 ? 1.3 : 1.0)
-                    .animation(.easeInOut(duration: 0.2), value: audioRecorder.audioLevel)
+                    .scaleEffect(viewModel.audioRecorder.audioLevel > 0.3 ? 1.3 : 1.0)
+                    .animation(.easeInOut(duration: 0.2), value: viewModel.audioRecorder.audioLevel)
             }
 
             // 主按鈕
             Circle()
-                .fill(isRecordingVoice ? Color.red : Color.gray.opacity(0.3))
+                .fill(viewModel.isRecordingVoice ? Color.red : Color.gray.opacity(0.3))
                 .frame(width: 33, height: 33)
                 .overlay(
                     Image(systemName: "mic.fill")
                         .font(.system(size: 14))
-                        .foregroundColor(isRecordingVoice ? .white : DesignTokens.textMuted)
+                        .foregroundColor(viewModel.isRecordingVoice ? .white : DesignTokens.textMuted)
                 )
-                .scaleEffect(isRecordingVoice ? 1.1 : 1.0)
-                .offset(y: voiceRecordDragOffset)
-                .animation(.spring(response: 0.3), value: isRecordingVoice)
+                .scaleEffect(viewModel.isRecordingVoice ? 1.1 : 1.0)
+                .offset(y: viewModel.voiceRecordDragOffset)
+                .animation(.spring(response: 0.3), value: viewModel.isRecordingVoice)
 
             // 取消提示
-            if isRecordingVoice && voiceRecordDragOffset < voiceCancelThreshold {
+            if viewModel.isRecordingVoice && viewModel.voiceRecordDragOffset < viewModel.voiceCancelThreshold {
                 VStack(spacing: 4) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 24))
@@ -368,13 +359,13 @@ struct GroupChatView: View {
             }
 
             // 錄音時長顯示
-            if isRecordingVoice {
+            if viewModel.isRecordingVoice {
                 HStack(spacing: 6) {
                     Circle()
                         .fill(Color.red)
                         .frame(width: 8, height: 8)
 
-                    Text(formatRecordingDuration(audioRecorder.recordingDuration))
+                    Text(formatRecordingDuration(viewModel.audioRecorder.recordingDuration))
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundColor(.red)
 
@@ -408,102 +399,62 @@ struct GroupChatView: View {
     // MARK: - Voice Recording Gesture Handlers
     private func handleVoiceRecordDragChanged(_ value: DragGesture.Value) {
         // 開始錄音
-        if !isRecordingVoice && !audioRecorder.isRecording {
+        if !viewModel.isRecordingVoice && !viewModel.audioRecorder.isRecording {
             startVoiceRecording()
         }
 
         // 追蹤拖動偏移（只允許向上）
-        voiceRecordDragOffset = min(0, value.translation.height)
+        viewModel.voiceRecordDragOffset = min(0, value.translation.height)
     }
 
     private func handleVoiceRecordDragEnded(_ value: DragGesture.Value) {
         // 檢查是否應該取消
-        if value.translation.height < voiceCancelThreshold {
+        if value.translation.height < viewModel.voiceCancelThreshold {
             cancelVoiceRecording()
         } else {
             stopAndSendVoiceMessage()
         }
 
         // 重置狀態
-        voiceRecordDragOffset = 0
+        viewModel.voiceRecordDragOffset = 0
     }
 
     // MARK: - Voice Recording Control
     private func startVoiceRecording() {
         Task {
-            let success = await audioRecorder.startRecording()
+            let success = await viewModel.audioRecorder.startRecording()
             await MainActor.run {
-                isRecordingVoice = success
+                viewModel.isRecordingVoice = success
             }
         }
     }
 
     private func cancelVoiceRecording() {
-        audioRecorder.cancelRecording()
-        isRecordingVoice = false
+        viewModel.audioRecorder.cancelRecording()
+        viewModel.isRecordingVoice = false
         #if DEBUG
         print("[GroupChatView] 🎙️ Voice recording cancelled")
         #endif
     }
 
     private func stopAndSendVoiceMessage() {
-        guard isRecordingVoice else { return }
+        guard viewModel.isRecordingVoice else { return }
 
-        if let result = audioRecorder.stopRecording() {
+        if let result = viewModel.audioRecorder.stopRecording() {
             // 最少 0.5 秒才發送
             if result.duration >= 0.5 {
-                sendVoiceMessage(data: result.data, duration: result.duration)
+                viewModel.sendVoiceMessage(data: result.data, duration: result.duration)
             }
-            audioRecorder.cleanupTempFiles()
+            viewModel.audioRecorder.cleanupTempFiles()
         }
 
-        isRecordingVoice = false
-    }
-
-    private func sendVoiceMessage(data: Data, duration: TimeInterval) {
-        Task {
-            do {
-                // 保存到臨時檔案
-                let tempDir = FileManager.default.temporaryDirectory
-                let tempFileURL = tempDir.appendingPathComponent("\(UUID().uuidString).m4a")
-                try data.write(to: tempFileURL)
-
-                // 通過 Matrix 發送語音消息
-                _ = try await matrixBridge.sendMessage(
-                    conversationId: conversationId,
-                    content: "Voice message (\(Int(duration))s)",
-                    mediaURL: tempFileURL,
-                    mimeType: "audio/mp4"
-                )
-
-                // 清理臨時檔案
-                try? FileManager.default.removeItem(at: tempFileURL)
-
-                #if DEBUG
-                print("[GroupChatView] 🎙️ Voice message sent: \(duration)s, \(data.count) bytes")
-                #endif
-            } catch {
-                #if DEBUG
-                print("[GroupChatView] ❌ Failed to send voice message: \(error)")
-                #endif
-            }
-        }
+        viewModel.isRecordingVoice = false
     }
 
     private func formatRecordingDuration(_ duration: TimeInterval) -> String {
         let minutes = Int(duration) / 60
         let seconds = Int(duration) % 60
         return String(format: "%d:%02d", minutes, seconds)
-    }
-
-    // MARK: - Grouped Messages
-    private var groupedMessages: [(date: Date, messages: [GroupChatMessage])] {
-        let calendar = Calendar.current
-        let grouped = Dictionary(grouping: messages) { message in
-            calendar.startOfDay(for: message.timestamp)
-        }
-        return grouped.map { (date: $0.key, messages: $0.value) }
-            .sorted { $0.date < $1.date }
     }
 
     // MARK: - Date Formatting
@@ -513,211 +464,29 @@ struct GroupChatView: View {
         return formatter.string(from: date)
     }
 
-    // MARK: - Load Messages
-    private func loadMessages() async {
-        if Self.usePreviewMode {
-            loadMockMessages()
-            isPreviewMode = true
-            return
-        }
-
-        isLoading = true
-        // TODO: Load real messages from API
-        isLoading = false
-    }
-
-    // MARK: - Send Message
-    private func sendMessage() {
-        let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return }
-
-        let newMessage = GroupChatMessage(
-            id: UUID().uuidString,
-            text: trimmedText,
-            senderId: "me",
-            senderName: "Me",
-            senderAvatarUrl: nil,
-            isFromMe: true,
-            timestamp: Date()
-        )
-
-        messages.append(newMessage)
-        messageText = ""
-        showAttachmentOptions = false
-
-        // TODO: Send message to API
-    }
-
-    // MARK: - Mock Data
-    private func loadMockMessages() {
-        let mockDate = Calendar.current.date(from: DateComponents(year: 2025, month: 10, day: 22, hour: 12, minute: 0)) ?? Date()
-
-        messages = [
-            GroupChatMessage(
-                id: "1",
-                text: "Has everyone come in?",
-                senderId: "user1",
-                senderName: "Alice",
-                senderAvatarUrl: nil,
-                isFromMe: false,
-                timestamp: mockDate
-            ),
-            GroupChatMessage(
-                id: "2",
-                text: "yup!",
-                senderId: "user2",
-                senderName: "Bob",
-                senderAvatarUrl: nil,
-                isFromMe: false,
-                timestamp: mockDate.addingTimeInterval(30)
-            ),
-            GroupChatMessage(
-                id: "3",
-                text: "I'm already in.",
-                senderId: "me",
-                senderName: "Me",
-                senderAvatarUrl: nil,
-                isFromMe: true,
-                timestamp: mockDate.addingTimeInterval(60)
-            ),
-            GroupChatMessage(
-                id: "4",
-                text: "Let's proceed to the next step.",
-                senderId: "user3",
-                senderName: "Charlie",
-                senderAvatarUrl: nil,
-                isFromMe: false,
-                timestamp: mockDate.addingTimeInterval(120)
-            ),
-        ]
-    }
-
     // MARK: - Photo Selection
     private func handlePhotoSelection(_ newItem: PhotosPickerItem?) {
         Task {
             do {
                 if let data = try await newItem?.loadTransferable(type: Data.self) {
-                    // 將圖片複製到臨時目錄
-                    let tempDir = FileManager.default.temporaryDirectory
-                    let tempFileURL = tempDir.appendingPathComponent("\(UUID().uuidString).jpg")
-                    try data.write(to: tempFileURL)
-
-                    // 使用 Matrix 發送圖片
-                    _ = try await matrixBridge.sendMessage(
-                        conversationId: conversationId,
-                        content: "Image",
-                        mediaURL: tempFileURL,
-                        mimeType: "image/jpeg"
-                    )
-
-                    // 清理臨時檔案
-                    try? FileManager.default.removeItem(at: tempFileURL)
-
+                    viewModel.sendImageMessage(data: data, mimeType: "image/jpeg")
                     #if DEBUG
-                    print("[GroupChatView] ✅ Image sent via Matrix")
+                    print("[GroupChatView] ✅ Image sent via ViewModel")
                     #endif
                 }
             } catch {
                 #if DEBUG
-                print("[GroupChatView] ❌ Failed to send image: \(error)")
+                print("[GroupChatView] ❌ Failed to load image: \(error)")
                 #endif
+                viewModel.error = "Failed to load image"
             }
-        }
-    }
-
-    // MARK: - Document Handling
-    private func handleDocumentPicked(_ url: URL) {
-        guard url.startAccessingSecurityScopedResource() else {
-            return
-        }
-
-        defer {
-            url.stopAccessingSecurityScopedResource()
-        }
-
-        Task {
-            do {
-                let fileData = try Data(contentsOf: url)
-                let fileName = url.lastPathComponent
-
-                let tempDir = FileManager.default.temporaryDirectory
-                let tempFileURL = tempDir.appendingPathComponent(fileName)
-                try fileData.write(to: tempFileURL)
-
-                _ = try await matrixBridge.sendMessage(
-                    conversationId: conversationId,
-                    content: fileName,
-                    mediaURL: tempFileURL,
-                    mimeType: getMimeType(for: url)
-                )
-
-                try? FileManager.default.removeItem(at: tempFileURL)
-
-                #if DEBUG
-                print("[GroupChatView] ✅ File sent via Matrix: \(fileName)")
-                #endif
-            } catch {
-                #if DEBUG
-                print("[GroupChatView] ❌ Failed to send file: \(error)")
-                #endif
-            }
-        }
-    }
-
-    private func getMimeType(for url: URL) -> String {
-        let ext = url.pathExtension.lowercased()
-        switch ext {
-        case "pdf": return "application/pdf"
-        case "doc": return "application/msword"
-        case "docx": return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        case "xls": return "application/vnd.ms-excel"
-        case "xlsx": return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        case "txt": return "text/plain"
-        case "png": return "image/png"
-        case "jpg", "jpeg": return "image/jpeg"
-        case "mp3": return "audio/mpeg"
-        case "mp4": return "video/mp4"
-        default: return "application/octet-stream"
-        }
-    }
-}
-
-// MARK: - Group Document Picker View
-struct GroupDocumentPickerView: UIViewControllerRepresentable {
-    let onDocumentPicked: (URL) -> Void
-
-    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [
-            .pdf, .plainText, .image, .audio, .video, .data, .item
-        ])
-        picker.delegate = context.coordinator
-        picker.allowsMultipleSelection = false
-        return picker
-    }
-
-    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    class Coordinator: NSObject, UIDocumentPickerDelegate {
-        let parent: GroupDocumentPickerView
-
-        init(_ parent: GroupDocumentPickerView) {
-            self.parent = parent
-        }
-
-        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-            guard let url = urls.first else { return }
-            parent.onDocumentPicked(url)
         }
     }
 }
 
 // MARK: - Group Message Bubble View
 struct GroupMessageBubbleView: View {
-    let message: GroupChatMessage
+    let message: GroupChatUIMessage
 
     private let myBubbleColor = Color(red: 0.92, green: 0.20, blue: 0.34)
     private let otherBubbleColor = Color(red: 0.92, green: 0.92, blue: 0.92)
@@ -736,13 +505,7 @@ struct GroupMessageBubbleView: View {
         HStack(alignment: .top, spacing: 10) {
             Spacer()
 
-            Text(message.text)
-                .font(Font.custom("Helvetica Neue", size: 16))
-                .lineSpacing(4)
-                .foregroundColor(.white)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
+            messageContent
                 .background(myBubbleColor)
                 .cornerRadius(14)
                 .frame(maxWidth: 220, alignment: .trailing)
@@ -757,20 +520,106 @@ struct GroupMessageBubbleView: View {
         HStack(alignment: .top, spacing: 10) {
             avatarView(url: message.senderAvatarUrl)
 
-            Text(message.text)
-                .font(Font.custom("Helvetica Neue", size: 16))
-                .lineSpacing(4)
-                .foregroundColor(otherTextColor)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
-                .background(otherBubbleColor)
-                .cornerRadius(14)
-                .frame(maxWidth: 220, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                // Sender name for group messages
+                Text(message.senderName)
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(red: 0.59, green: 0.59, blue: 0.59))
+
+                messageContent
+                    .background(otherBubbleColor)
+                    .cornerRadius(14)
+            }
+            .frame(maxWidth: 220, alignment: .leading)
 
             Spacer()
         }
         .padding(.horizontal, 16)
+    }
+
+    // MARK: - Message Content
+    @ViewBuilder
+    private var messageContent: some View {
+        switch message.messageType {
+        case .image:
+            if let image = message.image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 200, maxHeight: 200)
+                    .cornerRadius(10)
+            } else if let mediaUrl = message.mediaUrl, let url = URL(string: mediaUrl) {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFit()
+                } placeholder: {
+                    ProgressView()
+                }
+                .frame(maxWidth: 200, maxHeight: 200)
+                .cornerRadius(10)
+            } else {
+                Text("[Image]")
+                    .font(Font.custom("Helvetica Neue", size: 16))
+                    .foregroundColor(message.isFromMe ? .white : otherTextColor)
+                    .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
+            }
+
+        case .audio:
+            HStack(spacing: 8) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 16))
+                    .foregroundColor(message.isFromMe ? .white : otherTextColor)
+
+                if let duration = message.audioDuration {
+                    Text(formatDuration(duration))
+                        .font(.system(size: 14))
+                        .foregroundColor(message.isFromMe ? .white : otherTextColor)
+                }
+            }
+            .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
+
+        case .location:
+            HStack(spacing: 8) {
+                Image(systemName: "location.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(message.isFromMe ? .white : otherTextColor)
+
+                Text("Location")
+                    .font(Font.custom("Helvetica Neue", size: 16))
+                    .foregroundColor(message.isFromMe ? .white : otherTextColor)
+            }
+            .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
+
+        case .file:
+            HStack(spacing: 8) {
+                Image(systemName: "doc.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(message.isFromMe ? .white : otherTextColor)
+
+                Text(message.text)
+                    .font(Font.custom("Helvetica Neue", size: 16))
+                    .foregroundColor(message.isFromMe ? .white : otherTextColor)
+                    .lineLimit(2)
+            }
+            .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
+
+        default:
+            // Text message
+            Text(message.text)
+                .font(Font.custom("Helvetica Neue", size: 16))
+                .lineSpacing(4)
+                .foregroundColor(message.isFromMe ? .white : otherTextColor)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
+        }
+    }
+
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
     }
 
     // MARK: - Avatar View

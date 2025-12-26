@@ -49,6 +49,7 @@ protocol LiveKitVoiceServiceDelegate: AnyObject {
     func liveKitVoiceDidReceiveTranscript(_ text: String, isFinal: Bool)
     func liveKitVoiceDidReceiveResponse(_ text: String)
     func liveKitVoiceAudioLevelDidChange(_ level: Float)
+    func liveKitVoiceDidReceiveError(_ code: String, message: String)
 }
 
 // MARK: - Token Response
@@ -87,6 +88,9 @@ final class LiveKitVoiceService: NSObject {
     #if canImport(LiveKit)
     private var room: Room?
     #endif
+
+    // MARK: - Audio Session
+    private let audioSession = AVAudioSession.sharedInstance()
 
     // MARK: - Configuration
     private var currentToken: String?
@@ -146,10 +150,49 @@ final class LiveKitVoiceService: NSObject {
         #endif
     }
 
+    // MARK: - Audio Session Setup
+
+    private func setupAudioSession() async {
+        do {
+            // Configure audio session for voice chat
+            // - .playAndRecord: allows both playing received audio and recording microphone
+            // - .voiceChat: optimized for voice conversations with echo cancellation
+            // - .defaultToSpeaker: output to speaker by default
+            // - .allowBluetoothHFP: support Bluetooth headsets
+            try audioSession.setCategory(
+                .playAndRecord,
+                mode: .voiceChat,
+                options: [.defaultToSpeaker, .allowBluetoothHFP]
+            )
+            try audioSession.setActive(true)
+            liveKitLog("Audio session configured successfully")
+        } catch {
+            liveKitLog("Failed to configure audio session: \(error.localizedDescription)")
+            updateState(.error("無法配置音訊: \(error.localizedDescription)"))
+        }
+    }
+
+    private func deactivateAudioSession() {
+        do {
+            try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+            liveKitLog("Audio session deactivated")
+        } catch {
+            liveKitLog("Failed to deactivate audio session: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - Connection
 
     private func connect() async {
         updateState(.connecting)
+
+        // 0. 配置音訊會話（必須在連接前設置）
+        await setupAudioSession()
+
+        // Check if audio session setup failed
+        if case .error = state {
+            return
+        }
 
         do {
             // 1. 從後端獲取 LiveKit Token
@@ -190,6 +233,9 @@ final class LiveKitVoiceService: NSObject {
         currentTranscript = ""
         aiResponse = ""
         updateState(.disconnected)
+
+        // 釋放音訊會話
+        deactivateAudioSession()
     }
 
     // MARK: - Token Fetching
@@ -307,6 +353,19 @@ final class LiveKitVoiceService: NSObject {
             if let speaking = json["speaking"] as? Bool {
                 updateState(speaking ? .aiSpeaking : .listening)
             }
+
+        case "error":
+            let code = json["code"] as? String ?? "unknown"
+            let message = json["message"] as? String ?? "發生錯誤"
+            liveKitLog("Received error: \(code) - \(message)")
+            delegate?.liveKitVoiceDidReceiveError(code, message: message)
+            // 更新狀態為錯誤
+            updateState(.error(message))
+
+        case "session_closed":
+            let reason = json["reason"] as? String ?? "Session ended"
+            liveKitLog("Session closed: \(reason)")
+            updateState(.disconnected)
 
         default:
             liveKitLog("Unknown message type: \(type)")

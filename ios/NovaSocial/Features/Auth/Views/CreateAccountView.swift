@@ -21,6 +21,8 @@ struct CreateAccountView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var selectedAvatar: UIImage?
     @State private var showErrorView = false
+    @State private var isGoogleLoading = false
+    @State private var isAppleLoading = false
 
     // MARK: - Focus State
     @FocusState private var focusedField: Field?
@@ -338,12 +340,19 @@ struct CreateAccountView: View {
 
                             // Apple button
                             Button(action: {
-                                // TODO: Apple login
+                                Task {
+                                    await handleAppleSignIn()
+                                }
                             }) {
                                 HStack(spacing: 8) {
-                                    Image(systemName: "apple.logo")
-                                        .font(Typography.regular20)
-                                        .foregroundColor(.white)
+                                    if isAppleLoading {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    } else {
+                                        Image(systemName: "apple.logo")
+                                            .font(Typography.regular20)
+                                            .foregroundColor(.white)
+                                    }
                                 }
                                 .frame(width: 46.s, height: 46.s)
                                 .cornerRadius(23)
@@ -353,15 +362,23 @@ struct CreateAccountView: View {
                                         .stroke(.white, lineWidth: 0.20)
                                 )
                             }
+                            .disabled(isLoading || isGoogleLoading || isAppleLoading)
 
                             // Google button
                             Button(action: {
-                                // TODO: Google login
+                                Task {
+                                    await handleGoogleSignIn()
+                                }
                             }) {
                                 HStack(spacing: 8) {
-                                    Text("G")
-                                        .font(Typography.bold20)
-                                        .foregroundColor(.white)
+                                    if isGoogleLoading {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    } else {
+                                        Text("G")
+                                            .font(Typography.bold20)
+                                            .foregroundColor(.white)
+                                    }
                                 }
                                 .frame(width: 46.s, height: 46.s)
                                 .cornerRadius(23)
@@ -371,6 +388,7 @@ struct CreateAccountView: View {
                                         .stroke(.white, lineWidth: 0.20)
                                 )
                             }
+                            .disabled(isLoading || isGoogleLoading || isAppleLoading)
                         }
                         .offset(x: 0.50, y: 263)
 
@@ -586,6 +604,48 @@ struct CreateAccountView: View {
     private func isStrongPassword(_ password: String) -> Bool {
         // Simplified validation - only check minimum length
         return password.count >= 6
+    }
+
+    // MARK: - Social Login
+
+    private func handleGoogleSignIn() async {
+        isGoogleLoading = true
+        errorMessage = nil
+
+        do {
+            let _ = try await authManager.loginWithGoogle()
+            await MainActor.run {
+                currentPage = .home
+            }
+        } catch {
+            #if DEBUG
+            print("[CreateAccountView] Google sign in error: \(error)")
+            #endif
+            errorMessage = "Google sign in failed. Please try again."
+            showErrorView = true
+        }
+
+        isGoogleLoading = false
+    }
+
+    private func handleAppleSignIn() async {
+        isAppleLoading = true
+        errorMessage = nil
+
+        do {
+            let _ = try await authManager.loginWithApple()
+            await MainActor.run {
+                currentPage = .home
+            }
+        } catch {
+            #if DEBUG
+            print("[CreateAccountView] Apple sign in error: \(error)")
+            #endif
+            errorMessage = "Apple sign in failed. Please try again."
+            showErrorView = true
+        }
+
+        isAppleLoading = false
     }
 }
 

@@ -230,7 +230,7 @@ impl GrpcConfig {
             },
             feature_store: ServiceEndpoint {
                 url: env::var("GRPC_FEATURE_STORE_URL")
-                    .unwrap_or_else(|_| "http://feature-store:9089".to_string()),
+                    .unwrap_or_else(|_| "http://feature-store:9010".to_string()),
                 tier: DependencyTier::from_env("GRPC_FEATURE_STORE_TIER", default_tier1),
             },
             trust_safety_service: ServiceEndpoint {
@@ -466,7 +466,7 @@ impl GrpcConfig {
                 tier: DependencyTier::Tier0,
             },
             feature_store: ServiceEndpoint {
-                url: "http://localhost:9089".to_string(),
+                url: "http://localhost:9010".to_string(),
                 tier: DependencyTier::Tier1,
             },
             trust_safety_service: ServiceEndpoint {

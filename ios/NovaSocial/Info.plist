@@ -44,11 +44,16 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>32</string>
+	<string>41</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
 	<key>NOVA_STAGING_URL</key>
 	<string>$(NOVA_STAGING_URL)</string>
 	<key>NSAppTransportSecurity</key>
@@ -95,6 +100,9 @@
 	<string>We need access to your photo library to select photos for your posts.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>We need speech recognition to convert your voice to text for Alice AI.</string>
+	<key>UIAppFonts</key>
+	<array>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

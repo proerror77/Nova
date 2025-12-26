@@ -236,34 +236,20 @@ struct ProfileView: View {
 
     // MARK: - Profile 主内容
     private var profileContent: some View {
-        GeometryReader { geometry in
-            ZStack {
-                // MARK: - 背景层（全屏）
-                profileBackgroundSection
-                    .frame(width: geometry.size.width, height: geometry.size.height)
+        ZStack(alignment: .bottom) {
+            // 主内容区域
+            VStack(spacing: 0) {
+                // MARK: - 区域1：用户信息头部（自适应高度）
+                userHeaderSection
 
-                // MARK: - 内容层
-                VStack(spacing: 0) {
-                    // 顶部导航栏（直接在主 VStack 中，与 UserProfile 一致）
-                    profileNavigationBar
-
-                    // 用户信息区域
-                    userInfoSection
-
-                    // 内容区域
-                    contentSection
-                        .frame(maxHeight: .infinity)
-                        .offset(y: contentSectionVerticalOffset)
-                }
-                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
-
-                // MARK: - 底部导航栏
-                VStack {
-                    Spacer()
-                    bottomNavigationBar
-                }
-                .frame(width: geometry.size.width, height: geometry.size.height)
+                // MARK: - 区域2：内容区域
+                contentSection
+                    .frame(maxHeight: .infinity)  // 填满剩余空间
+                    .offset(y: contentSectionVerticalOffset)  // 应用垂直偏移
             }
+
+            // MARK: - 底部导航栏（覆盖在内容上方，忽略安全区域）
+            bottomNavigationBar
         }
         .ignoresSafeArea(edges: [.top, .bottom])
         // MARK: - 照片选项弹窗
@@ -696,7 +682,7 @@ struct ProfileView: View {
                     }
                 }
                 .padding(.horizontal, 17.w)
-                .padding(.top, 64.h)  // 距离手机绝对顶部 64pt
+                .padding(.top, 64.h)  // 距离手机顶部 64pt（忽略安全区域后）
 
                 // MARK: - 用户信息区域
                 VStack(spacing: 8.h) {
@@ -838,43 +824,72 @@ struct ProfileView: View {
                 .frame(height: 0.5)
 
             // MARK: - 标签栏
-            HStack(spacing: 40.s) {
-                Button(action: {
-                    profileData.selectedTab = .posts
-                    Task {
-                        await profileData.loadContent(for: .posts)
+            HStack(spacing: 42.s) {
+                // 标签按钮
+                HStack(spacing: 40.s) {
+                    Button(action: {
+                        profileData.selectedTab = .posts
+                        Task {
+                            await profileData.loadContent(for: .posts)
+                        }
+                    }) {
+                        Text("Posts")
+                            .font(.system(size: 16.f, weight: .semibold))
+                            .foregroundColor(profileData.selectedTab == .posts ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
                     }
-                }) {
-                    Text("Posts")
-                        .font(.system(size: 16.f, weight: .semibold))
-                        .foregroundColor(profileData.selectedTab == .posts ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
-                }
 
-                Button(action: {
-                    profileData.selectedTab = .saved
-                    Task {
-                        await profileData.loadContent(for: .saved)
+                    Button(action: {
+                        profileData.selectedTab = .saved
+                        Task {
+                            await profileData.loadContent(for: .saved)
+                        }
+                    }) {
+                        Text("Saved")
+                            .font(.system(size: 16.f, weight: .semibold))
+                            .foregroundColor(profileData.selectedTab == .saved ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
                     }
-                }) {
-                    Text("Saved")
-                        .font(.system(size: 16.f, weight: .semibold))
-                        .foregroundColor(profileData.selectedTab == .saved ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
-                }
 
+                    Button(action: {
+                        profileData.selectedTab = .liked
+                        Task {
+                            await profileData.loadContent(for: .liked)
+                        }
+                    }) {
+                        Text("Liked")
+                            .font(.system(size: 16.f, weight: .semibold))
+                            .foregroundColor(profileData.selectedTab == .liked ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                    }
+                }
+                .frame(width: 211.w, height: 24.h)
+
+                // 搜索图标
                 Button(action: {
-                    profileData.selectedTab = .liked
-                    Task {
-                        await profileData.loadContent(for: .liked)
+                    let wasShowingSearch = showSearchBar
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showSearchBar.toggle()
+                    }
+                    if wasShowingSearch {
+                        searchText = ""
+                        profileData.searchQuery = ""
+                        profileData.isSearching = false
                     }
                 }) {
-                    Text("Liked")
-                        .font(.system(size: 16.f, weight: .semibold))
-                        .foregroundColor(profileData.selectedTab == .liked ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                    if showSearchBar {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 20.f))
+                            .foregroundColor(.black)
+                    } else {
+                        Image("search(gray)")
+                            .resizable()
+                            .scaledToFit()
+                    }
                 }
+                .frame(width: 24.s, height: 24.s)
             }
-            .frame(height: 24.h)
             .padding(.top, 12.h)
             .padding(.bottom, 16.h)
+            .padding(.leading, 82.w)
+            .padding(.trailing, 16.w)
             .frame(maxWidth: .infinity)
 
             // MARK: - 搜索框

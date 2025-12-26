@@ -1,6 +1,7 @@
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use anyhow::{Context, Result};
-use sqlx::postgres::PgPoolOptions;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinSet;
@@ -123,14 +124,18 @@ async fn main() -> Result<()> {
         config.app.env, config.app.http_port, config.grpc.port
     );
 
-    // Initialize database pool
+    // Initialize database pool with prepared statement caching disabled for PgBouncer compatibility
+    let connect_options = PgConnectOptions::from_str(&config.database.url)
+        .context("Failed to parse DATABASE_URL")?
+        .statement_cache_capacity(0); // Disable prepared statement caching for PgBouncer transaction mode
+
     let pg_pool = PgPoolOptions::new()
         .max_connections(config.database.max_connections)
         .min_connections(config.database.min_connections)
         .acquire_timeout(Duration::from_secs(10))
         .idle_timeout(Duration::from_secs(600))
         .max_lifetime(Duration::from_secs(1800))
-        .connect(&config.database.url)
+        .connect_with(connect_options)
         .await
         .context("Failed to connect to database")?;
 

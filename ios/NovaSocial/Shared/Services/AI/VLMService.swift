@@ -215,7 +215,7 @@ struct TagSuggestion: Identifiable, Hashable {
 }
 
 /// A channel suggestion from VLM analysis
-struct ChannelSuggestion: Identifiable {
+struct ChannelSuggestion: Codable, Identifiable {
     let id: String
     let name: String
     let slug: String
