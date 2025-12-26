@@ -1009,6 +1009,29 @@ class FeedViewModel {
         posts[index] = post.copying(commentCount: post.commentCount + 1)
     }
 
+    /// Update comment count for a post to a specific value (called when actual count is fetched from API)
+    func updateCommentCount(postId: String, count: Int) {
+        #if DEBUG
+        print("[Feed] 📝 updateCommentCount called - postId: \(postId), newCount: \(count)")
+        #endif
+        guard let index = posts.firstIndex(where: { $0.id == postId }) else {
+            #if DEBUG
+            print("[Feed] ❌ updateCommentCount - post not found in array")
+            #endif
+            return
+        }
+        let post = posts[index]
+        #if DEBUG
+        print("[Feed] 📝 updateCommentCount - oldCount: \(post.commentCount), newCount: \(count)")
+        #endif
+        if post.commentCount != count {
+            posts[index] = post.copying(commentCount: count)
+            #if DEBUG
+            print("[Feed] ✅ updateCommentCount - count updated successfully")
+            #endif
+        }
+    }
+
     /// Toggle bookmark on a post
     func toggleBookmark(postId: String) async {
         // Prevent concurrent bookmark operations for the same post
@@ -1037,8 +1060,11 @@ class FeedViewModel {
         let post = posts[index]
         let wasBookmarked = post.isBookmarked
 
-        // Optimistic update
-        posts[index] = post.copying(isBookmarked: !wasBookmarked)
+        // Optimistic update - 同时更新 bookmarkCount 和 isBookmarked
+        posts[index] = post.copying(
+            bookmarkCount: wasBookmarked ? post.bookmarkCount - 1 : post.bookmarkCount + 1,
+            isBookmarked: !wasBookmarked
+        )
 
         do {
             if wasBookmarked {

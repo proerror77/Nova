@@ -137,13 +137,14 @@ class SocialService {
     }
 
     func deleteComment(commentId: String, userId: String) async throws {
-        struct Response: Codable {
-            let success: Bool
+        struct Request: Codable {
+            let comment_id: String
         }
 
-        let _: Response = try await client.request(
-            endpoint: APIConfig.Social.deleteComment(commentId),
-            method: "DELETE"
+        // Backend returns empty response (200 with no body)
+        try await client.delete(
+            endpoint: APIConfig.Social.deleteComment,
+            body: Request(comment_id: commentId)
         )
     }
 

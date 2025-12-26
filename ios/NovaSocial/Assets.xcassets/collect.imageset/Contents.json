@@ -1,17 +1,17 @@
 {
   "images" : [
     {
-      "filename" : "collect.png",
+      "filename" : "collect2.png",
       "idiom" : "universal",
       "scale" : "1x"
     },
     {
-      "filename" : "collect@2x.png",
+      "filename" : "collect2@2x.png",
       "idiom" : "universal",
       "scale" : "2x"
     },
     {
-      "filename" : "collect@3x.png",
+      "filename" : "collect2@3x.png",
       "idiom" : "universal",
       "scale" : "3x"
     }

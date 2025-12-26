@@ -441,10 +441,8 @@ impl SocialService for SocialServiceImpl {
             .await
             .map_err(|e| Status::internal(format!("Failed to get comments: {}", e)))?;
 
-        let total = match self.state.counter_service.get_comment_count(post_id).await {
-            Ok(count) => count as i32,
-            Err(_) => repo.get_comment_count(post_id).await.unwrap_or(0) as i32,
-        };
+        // Always use DB count for accuracy (counter cache can become stale after deletions)
+        let total = repo.get_comment_count(post_id).await.unwrap_or(0) as i32;
 
         Ok(Response::new(GetCommentsResponse {
             comments: comments.into_iter().map(to_proto_comment).collect(),
