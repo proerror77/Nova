@@ -336,6 +336,190 @@ impl PostService {
         Ok(updated)
     }
 
+    /// Get posts liked by a user using SQL JOIN (single query)
+    pub async fn get_user_liked_posts(
+        &self,
+        user_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<Post>, i64)> {
+        // Get posts with JOIN on likes table
+        let posts = sqlx::query_as::<_, Post>(
+            r#"
+            SELECT p.id, p.user_id, p.content, p.caption, p.media_key, p.media_type, p.media_urls, p.status,
+                   p.created_at, p.updated_at, p.deleted_at, p.soft_delete::text AS soft_delete
+            FROM posts p
+            INNER JOIN likes l ON p.id = l.post_id
+            WHERE l.user_id = $1 AND p.deleted_at IS NULL
+            ORDER BY l.created_at DESC
+            LIMIT $2 OFFSET $3
+            "#,
+        )
+        .bind(user_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        // Get total count
+        let total: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*)
+            FROM likes l
+            INNER JOIN posts p ON p.id = l.post_id
+            WHERE l.user_id = $1 AND p.deleted_at IS NULL
+            "#,
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Cache fetched posts
+        for post in &posts {
+            if let Some(cache) = self.cache() {
+                if let Err(err) = cache.cache_post(post).await {
+                    tracing::debug!(post_id = %post.id, "post cache set failed: {}", err);
+                }
+            }
+        }
+
+        Ok((posts, total))
+    }
+
+    /// Get posts saved/bookmarked by a user using SQL JOIN (single query)
+    pub async fn get_user_saved_posts(
+        &self,
+        user_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<Post>, i64)> {
+        // Get posts with JOIN on bookmarks table
+        let posts = sqlx::query_as::<_, Post>(
+            r#"
+            SELECT p.id, p.user_id, p.content, p.caption, p.media_key, p.media_type, p.media_urls, p.status,
+                   p.created_at, p.updated_at, p.deleted_at, p.soft_delete::text AS soft_delete
+            FROM posts p
+            INNER JOIN bookmarks b ON p.id = b.post_id
+            WHERE b.user_id = $1 AND p.deleted_at IS NULL
+            ORDER BY b.created_at DESC
+            LIMIT $2 OFFSET $3
+            "#,
+        )
+        .bind(user_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        // Get total count
+        let total: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*)
+            FROM bookmarks b
+            INNER JOIN posts p ON p.id = b.post_id
+            WHERE b.user_id = $1 AND p.deleted_at IS NULL
+            "#,
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Cache fetched posts
+        for post in &posts {
+            if let Some(cache) = self.cache() {
+                if let Err(err) = cache.cache_post(post).await {
+                    tracing::debug!(post_id = %post.id, "post cache set failed: {}", err);
+                }
+            }
+        }
+
+        Ok((posts, total))
+    }
+
+    /// Get multiple posts by IDs in a single query (batch fetch)
+    /// Returns posts in the order of the input IDs, skipping any that don't exist
+    pub async fn get_posts_batch(&self, post_ids: &[Uuid]) -> Result<Vec<Post>> {
+        if post_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Limit batch size to prevent abuse
+        const MAX_BATCH_SIZE: usize = 100;
+        let ids_to_fetch = if post_ids.len() > MAX_BATCH_SIZE {
+            tracing::warn!(
+                requested = post_ids.len(),
+                max = MAX_BATCH_SIZE,
+                "Batch request exceeds max size, truncating"
+            );
+            &post_ids[..MAX_BATCH_SIZE]
+        } else {
+            post_ids
+        };
+
+        // Check cache first for any cached posts
+        let mut cached_posts: std::collections::HashMap<Uuid, Post> = std::collections::HashMap::new();
+        let mut uncached_ids: Vec<Uuid> = Vec::new();
+
+        if let Some(cache) = self.cache() {
+            for &id in ids_to_fetch {
+                match cache.get_post(id).await {
+                    Ok(Some(post)) => {
+                        cached_posts.insert(id, post);
+                    }
+                    _ => {
+                        uncached_ids.push(id);
+                    }
+                }
+            }
+        } else {
+            uncached_ids.extend(ids_to_fetch);
+        }
+
+        // Fetch uncached posts from database in a single query
+        let mut db_posts: std::collections::HashMap<Uuid, Post> = std::collections::HashMap::new();
+        if !uncached_ids.is_empty() {
+            let posts = sqlx::query_as::<_, Post>(
+                r#"
+                SELECT id, user_id, content, caption, media_key, media_type, media_urls, status,
+                       created_at, updated_at, deleted_at, soft_delete::text AS soft_delete
+                FROM posts
+                WHERE id = ANY($1) AND deleted_at IS NULL
+                "#,
+            )
+            .bind(&uncached_ids)
+            .fetch_all(&self.pool)
+            .await?;
+
+            // Cache fetched posts and build lookup map
+            for post in posts {
+                if let Some(cache) = self.cache() {
+                    if let Err(err) = cache.cache_post(&post).await {
+                        tracing::debug!(post_id = %post.id, "post cache set failed: {}", err);
+                    }
+                }
+                db_posts.insert(post.id, post);
+            }
+        }
+
+        // Build result in original order
+        let result: Vec<Post> = ids_to_fetch
+            .iter()
+            .filter_map(|id| {
+                cached_posts
+                    .remove(id)
+                    .or_else(|| db_posts.remove(id))
+            })
+            .collect();
+
+        tracing::debug!(
+            requested = ids_to_fetch.len(),
+            found = result.len(),
+            "Batch post fetch completed"
+        );
+
+        Ok(result)
+    }
+
     /// Soft delete a post
     pub async fn delete_post(&self, post_id: Uuid, user_id: Uuid) -> Result<bool> {
         // Start transaction for atomic soft delete + event publishing

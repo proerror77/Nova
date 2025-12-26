@@ -18,7 +18,8 @@ use tracing::{error, info, warn};
 use super::models::ErrorResponse;
 use crate::clients::proto::auth::GetUserProfilesByIdsRequest;
 use crate::clients::proto::content::{
-    CreatePostRequest, DeletePostRequest, GetPostRequest, GetUserPostsRequest, UpdatePostRequest,
+    CreatePostRequest, DeletePostRequest, GetPostRequest, GetUserLikedPostsRequest,
+    GetUserPostsRequest, GetUserSavedPostsRequest, UpdatePostRequest,
 };
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
@@ -599,6 +600,206 @@ pub async fn delete_post(
             };
 
             Ok(error_response)
+        }
+    }
+}
+
+// ============================================================================
+// SQL JOIN OPTIMIZED ENDPOINTS FOR LIKED/SAVED POSTS
+// ============================================================================
+
+/// GET /api/v1/posts/user/{user_id}/liked
+/// Get posts liked by a user using SQL JOIN for single-query efficiency
+/// Returns full Post objects with author information (not just IDs)
+pub async fn get_user_liked_posts(
+    path: web::Path<String>,
+    clients: web::Data<ServiceClients>,
+    query: web::Query<UserPostsQueryParams>,
+) -> Result<HttpResponse> {
+    let user_id = path.into_inner();
+    let limit = query.limit.unwrap_or(20).min(100);
+    let offset = query.offset.unwrap_or(0);
+
+    info!(
+        user_id = %user_id,
+        limit = %limit,
+        offset = %offset,
+        "GET /api/v1/posts/user/{user_id}/liked"
+    );
+
+    let mut content_client = clients.content_client();
+
+    let grpc_request = tonic::Request::new(GetUserLikedPostsRequest {
+        user_id: user_id.clone(),
+        limit,
+        offset,
+    });
+
+    match content_client.get_user_liked_posts(grpc_request).await {
+        Ok(response) => {
+            let grpc_response = response.into_inner();
+
+            // Collect unique author IDs for batch profile lookup
+            let author_ids: Vec<String> = grpc_response
+                .posts
+                .iter()
+                .map(|p| p.author_id.clone())
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .collect();
+
+            // Batch fetch author info
+            let author_map = fetch_author_info(author_ids, &clients).await;
+
+            let posts: Vec<PostResponse> = grpc_response
+                .posts
+                .into_iter()
+                .map(|p| {
+                    let author_info = author_map.get(&p.author_id).cloned().unwrap_or_default();
+                    PostResponse {
+                        id: p.id,
+                        author_id: p.author_id,
+                        content: p.content,
+                        created_at: p.created_at,
+                        updated_at: p.updated_at,
+                        status: status_to_string(p.status),
+                        media_urls: p.media_urls,
+                        media_type: if p.media_type.is_empty() {
+                            None
+                        } else {
+                            Some(p.media_type)
+                        },
+                        author_username: author_info.username,
+                        author_display_name: author_info.display_name,
+                        author_avatar_url: author_info.avatar_url,
+                    }
+                })
+                .collect();
+
+            info!(
+                user_id = %user_id,
+                total_count = grpc_response.total_count,
+                returned = posts.len(),
+                "User liked posts retrieved"
+            );
+
+            Ok(HttpResponse::Ok().json(GetUserPostsResponse {
+                posts,
+                total_count: grpc_response.total_count,
+                has_more: grpc_response.has_more,
+            }))
+        }
+        Err(status) => {
+            error!(
+                user_id = %user_id,
+                error = %status,
+                "Failed to get user liked posts from content-service"
+            );
+
+            Ok(
+                HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                    "Failed to get liked posts",
+                    status.message(),
+                )),
+            )
+        }
+    }
+}
+
+/// GET /api/v1/posts/user/{user_id}/saved
+/// Get posts saved/bookmarked by a user using SQL JOIN for single-query efficiency
+/// Returns full Post objects with author information (not just IDs)
+pub async fn get_user_saved_posts(
+    path: web::Path<String>,
+    clients: web::Data<ServiceClients>,
+    query: web::Query<UserPostsQueryParams>,
+) -> Result<HttpResponse> {
+    let user_id = path.into_inner();
+    let limit = query.limit.unwrap_or(20).min(100);
+    let offset = query.offset.unwrap_or(0);
+
+    info!(
+        user_id = %user_id,
+        limit = %limit,
+        offset = %offset,
+        "GET /api/v1/posts/user/{user_id}/saved"
+    );
+
+    let mut content_client = clients.content_client();
+
+    let grpc_request = tonic::Request::new(GetUserSavedPostsRequest {
+        user_id: user_id.clone(),
+        limit,
+        offset,
+    });
+
+    match content_client.get_user_saved_posts(grpc_request).await {
+        Ok(response) => {
+            let grpc_response = response.into_inner();
+
+            // Collect unique author IDs for batch profile lookup
+            let author_ids: Vec<String> = grpc_response
+                .posts
+                .iter()
+                .map(|p| p.author_id.clone())
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .collect();
+
+            // Batch fetch author info
+            let author_map = fetch_author_info(author_ids, &clients).await;
+
+            let posts: Vec<PostResponse> = grpc_response
+                .posts
+                .into_iter()
+                .map(|p| {
+                    let author_info = author_map.get(&p.author_id).cloned().unwrap_or_default();
+                    PostResponse {
+                        id: p.id,
+                        author_id: p.author_id,
+                        content: p.content,
+                        created_at: p.created_at,
+                        updated_at: p.updated_at,
+                        status: status_to_string(p.status),
+                        media_urls: p.media_urls,
+                        media_type: if p.media_type.is_empty() {
+                            None
+                        } else {
+                            Some(p.media_type)
+                        },
+                        author_username: author_info.username,
+                        author_display_name: author_info.display_name,
+                        author_avatar_url: author_info.avatar_url,
+                    }
+                })
+                .collect();
+
+            info!(
+                user_id = %user_id,
+                total_count = grpc_response.total_count,
+                returned = posts.len(),
+                "User saved posts retrieved"
+            );
+
+            Ok(HttpResponse::Ok().json(GetUserPostsResponse {
+                posts,
+                total_count: grpc_response.total_count,
+                has_more: grpc_response.has_more,
+            }))
+        }
+        Err(status) => {
+            error!(
+                user_id = %user_id,
+                error = %status,
+                "Failed to get user saved posts from content-service"
+            );
+
+            Ok(
+                HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                    "Failed to get saved posts",
+                    status.message(),
+                )),
+            )
         }
     }
 }

@@ -12,7 +12,10 @@ pub mod stories;
 
 // Re-export handler functions at module level
 pub use feed::get_feed;
-pub use posts::{create_post, delete_post, get_post, get_user_posts, update_post_status};
+pub use posts::{
+    create_post, delete_post, get_post, get_posts_batch, get_user_liked_posts, get_user_posts,
+    get_user_saved_posts, update_post_status,
+};
 pub use stories::{
     add_close_friend, create_story, delete_story, get_stories_feed, get_story, get_user_stories,
     remove_close_friend, track_story_view, update_story_privacy,

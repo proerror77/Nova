@@ -86,18 +86,54 @@ class ProfileData {
         isLoading = true
         errorMessage = nil
 
+        #if DEBUG
+        print("[ProfileData] loadUserProfile started for userId: \(userId)")
+        #endif
+
         do {
             // Fetch user profile from IdentityService
             userProfile = try await identityService.getUser(userId: userId)
+            #if DEBUG
+            print("[ProfileData] userProfile loaded: \(userProfile?.username ?? "nil"), postCount=\(userProfile?.postCount ?? 0)")
+            #endif
 
             // Load initial content based on selected tab
             await loadContent(for: selectedTab)
+            #if DEBUG
+            print("[ProfileData] loadContent completed: posts.count=\(posts.count)")
+            #endif
+
+            // 背景預載入其他 tabs（提高切換速度）
+            Task.detached(priority: .utility) { [weak self] in
+                guard let self = self else { return }
+                await self.preloadOtherTabs()
+            }
         } catch {
+            #if DEBUG
+            print("[ProfileData] loadUserProfile error: \(error)")
+            #endif
             handleError(error)
             userProfile = nil
         }
 
         isLoading = false
+    }
+
+    /// 背景預載入 Saved 和 Liked tabs
+    private func preloadOtherTabs() async {
+        let tabsToPreload: [ContentTab] = [.saved, .liked].filter { $0 != selectedTab }
+
+        await withTaskGroup(of: Void.self) { group in
+            for tab in tabsToPreload {
+                group.addTask {
+                    await self.loadContent(for: tab)
+                }
+            }
+        }
+
+        #if DEBUG
+        print("[ProfileData] Preloaded tabs: saved=\(savedPosts.count), liked=\(likedPosts.count)")
+        #endif
     }
 
     func loadContent(for tab: ContentTab, forceRefresh: Bool = false) async {
@@ -121,30 +157,18 @@ class ProfileData {
                 totalPosts = response.totalCount
 
             case .saved:
+                // Use SQL JOIN optimized endpoint (single query)
                 savedPostsOffset = 0
-                let bookmarksResponse = try await contentService.getUserBookmarks(userId: userId)
-                totalSavedPosts = bookmarksResponse.totalCount
-                if !bookmarksResponse.postIds.isEmpty {
-                    // Only fetch first page worth of saved posts
-                    let idsToFetch = Array(bookmarksResponse.postIds.prefix(pageSize))
-                    let fetchedPosts = try await contentService.getPostsByIds(idsToFetch)
-                    // Enrich posts with author info if missing
-                    savedPosts = await enrichPostsWithAuthorInfo(fetchedPosts)
-                } else {
-                    savedPosts = []
-                }
+                let response = try await contentService.getUserSavedPosts(userId: userId, limit: pageSize, offset: 0)
+                savedPosts = await enrichPostsWithAuthorInfo(response.posts)
+                totalSavedPosts = response.totalCount
 
             case .liked:
+                // Use SQL JOIN optimized endpoint (single query)
                 likedPostsOffset = 0
-                let (postIds, total) = try await socialService.getUserLikedPosts(userId: userId, limit: pageSize, offset: 0)
-                totalLikedPosts = total
-                if !postIds.isEmpty {
-                    let fetchedPosts = try await contentService.getPostsByIds(postIds)
-                    // Enrich posts with author info if missing
-                    likedPosts = await enrichPostsWithAuthorInfo(fetchedPosts)
-                } else {
-                    likedPosts = []
-                }
+                let response = try await contentService.getUserLikedPosts(userId: userId, limit: pageSize, offset: 0)
+                likedPosts = await enrichPostsWithAuthorInfo(response.posts)
+                totalLikedPosts = response.totalCount
             }
 
             // Update cache timestamp
@@ -171,27 +195,22 @@ class ProfileData {
                 postsOffset = newOffset
 
             case .saved:
+                // Use SQL JOIN optimized endpoint for pagination
                 guard hasMoreSavedPosts else { isLoadingMore = false; return }
-                let bookmarksResponse = try await contentService.getUserBookmarks(userId: userId)
                 let newOffset = savedPosts.count
-                if newOffset < bookmarksResponse.postIds.count {
-                    let idsToFetch = Array(bookmarksResponse.postIds.dropFirst(newOffset).prefix(pageSize))
-                    let morePosts = try await contentService.getPostsByIds(idsToFetch)
-                    let enrichedPosts = await enrichPostsWithAuthorInfo(morePosts)
-                    savedPosts.append(contentsOf: enrichedPosts)
-                    savedPostsOffset = newOffset
-                }
+                let response = try await contentService.getUserSavedPosts(userId: userId, limit: pageSize, offset: newOffset)
+                let enrichedPosts = await enrichPostsWithAuthorInfo(response.posts)
+                savedPosts.append(contentsOf: enrichedPosts)
+                savedPostsOffset = newOffset
 
             case .liked:
+                // Use SQL JOIN optimized endpoint for pagination
                 guard hasMoreLikedPosts else { isLoadingMore = false; return }
                 let newOffset = likedPosts.count
-                let (postIds, _) = try await socialService.getUserLikedPosts(userId: userId, limit: pageSize, offset: newOffset)
-                if !postIds.isEmpty {
-                    let morePosts = try await contentService.getPostsByIds(postIds)
-                    let enrichedPosts = await enrichPostsWithAuthorInfo(morePosts)
-                    likedPosts.append(contentsOf: enrichedPosts)
-                    likedPostsOffset = newOffset
-                }
+                let response = try await contentService.getUserLikedPosts(userId: userId, limit: pageSize, offset: newOffset)
+                let enrichedPosts = await enrichPostsWithAuthorInfo(response.posts)
+                likedPosts.append(contentsOf: enrichedPosts)
+                likedPostsOffset = newOffset
             }
         } catch {
             handleError(error)

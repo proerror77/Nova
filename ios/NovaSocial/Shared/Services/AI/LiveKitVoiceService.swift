@@ -297,11 +297,25 @@ final class LiveKitVoiceService: NSObject {
     private func connectToRoom(url: String, token: String) async throws {
         liveKitLog("Connecting to LiveKit room at \(url)...")
 
+        // 創建 RoomOptions 配置音訊
+        let roomOptions = RoomOptions(
+            defaultAudioCaptureOptions: AudioCaptureOptions(
+                echoCancellation: true,
+                autoGainControl: true,
+                noiseSuppression: true
+            ),
+            defaultAudioPublishOptions: AudioPublishOptions(
+                dtx: true  // 啟用不連續傳輸以節省帶寬
+            ),
+            adaptiveStream: true,  // 自適應串流
+            dynacast: true  // 動態廣播
+        )
+
         // 創建 Room 並設置 delegate
-        room = Room()
+        room = Room(roomOptions: roomOptions)
         room?.add(delegate: self)
 
-        // 使用 ConnectOptions 連接並自動啟用麥克風
+        // 使用 ConnectOptions 連接
         let connectOptions = ConnectOptions(
             autoSubscribe: true  // 自動訂閱遠端 tracks
         )
@@ -309,12 +323,23 @@ final class LiveKitVoiceService: NSObject {
         // 連接到 LiveKit 服務器
         try await room?.connect(url: url, token: token, connectOptions: connectOptions)
 
-        // 連接後啟用麥克風
-        try await room?.localParticipant.setMicrophone(enabled: true)
-
         isConnected = true
         updateState(.connected)
-        liveKitLog("Connected and publishing audio")
+        liveKitLog("Connected to room successfully")
+
+        // 延遲啟用麥克風，確保音訊引擎已初始化
+        try await Task.sleep(nanoseconds: 500_000_000)  // 0.5 秒延遲
+
+        do {
+            try await room?.localParticipant.setMicrophone(enabled: true)
+            liveKitLog("Microphone enabled successfully")
+        } catch {
+            // 如果麥克風啟用失敗，記錄但不中斷連接
+            // 在模擬器上這是常見的，用戶仍可接收音訊
+            liveKitLog("⚠️ Failed to enable microphone: \(error.localizedDescription)")
+            liveKitLog("Note: Microphone may not work on iOS Simulator")
+            // 不拋出錯誤，讓連接保持活躍
+        }
     }
 
     #endif

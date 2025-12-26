@@ -82,14 +82,60 @@ class ContentService {
         }
     }
 
-    /// Batch fetch posts by IDs with limited concurrency
+    /// Batch fetch posts by IDs using the batch endpoint (single request)
+    /// Falls back to individual requests if batch endpoint fails
     func getPostsByIds(_ ids: [String]) async throws -> [Post] {
         guard !ids.isEmpty else { return [] }
 
-        let maxConcurrent = 6
+        // Try batch endpoint first (single request)
+        do {
+            return try await getPostsByIdsBatch(ids)
+        } catch {
+            #if DEBUG
+            print("[ContentService] Batch endpoint failed, falling back to individual requests: \(error)")
+            #endif
+            // Fall back to individual requests if batch fails
+            return try await getPostsByIdsIndividual(ids)
+        }
+    }
+
+    /// Fetch posts using the batch endpoint (POST /api/v1/posts/batch)
+    private func getPostsByIdsBatch(_ ids: [String]) async throws -> [Post] {
+        struct Request: Codable {
+            let postIds: [String]
+
+            enum CodingKeys: String, CodingKey {
+                case postIds = "post_ids"
+            }
+        }
+
+        struct Response: Codable {
+            let posts: [Post]
+            let requested: Int
+            let found: Int
+        }
+
+        let request = Request(postIds: ids)
+        let response: Response = try await client.request(
+            endpoint: APIConfig.Content.batchPosts,
+            method: "POST",
+            body: request
+        )
+
+        #if DEBUG
+        print("[ContentService] Batch fetch: requested=\(response.requested), found=\(response.found)")
+        #endif
+
+        // Sort by original ID order
+        let idOrder = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0) })
+        return response.posts.sorted { (idOrder[$0.id] ?? Int.max) < (idOrder[$1.id] ?? Int.max) }
+    }
+
+    /// Fallback: Fetch posts individually with limited concurrency
+    private func getPostsByIdsIndividual(_ ids: [String]) async throws -> [Post] {
+        let maxConcurrent = 12
         var posts: [Post] = []
 
-        // Process in batches to limit concurrent requests
         for batchStart in stride(from: 0, to: ids.count, by: maxConcurrent) {
             let batchEnd = min(batchStart + maxConcurrent, ids.count)
             let batchIds = Array(ids[batchStart..<batchEnd])
@@ -256,6 +302,43 @@ class ContentService {
                 "offset": String(offset)
             ]
         )
+    }
+
+    // MARK: - SQL JOIN Optimized Endpoints
+
+    /// Get posts liked by user using SQL JOIN (single query, much faster)
+    func getUserLikedPosts(userId: String, limit: Int = 20, offset: Int = 0) async throws -> UserPostsResponse {
+        return try await client.get(
+            endpoint: APIConfig.Content.userLikedPosts(userId),
+            queryParams: [
+                "limit": String(limit),
+                "offset": String(offset)
+            ]
+        )
+    }
+
+    /// Get posts saved by user using SQL JOIN (single query, much faster)
+    func getUserSavedPosts(userId: String, limit: Int = 20, offset: Int = 0) async throws -> UserPostsResponse {
+        return try await client.get(
+            endpoint: APIConfig.Content.userSavedPosts(userId),
+            queryParams: [
+                "limit": String(limit),
+                "offset": String(offset)
+            ]
+        )
+    }
+}
+
+/// Response type for SQL JOIN optimized user posts endpoints
+struct UserPostsResponse: Codable {
+    let posts: [Post]
+    let totalCount: Int
+    let hasMore: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case posts
+        case totalCount = "total_count"
+        case hasMore = "has_more"
     }
 }
 

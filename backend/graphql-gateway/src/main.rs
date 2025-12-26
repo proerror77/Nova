@@ -455,6 +455,15 @@ async fn main() -> std::io::Result<()> {
                 "/api/v2/content/{id}",
                 web::delete().to(rest_api::content::delete_post),
             )
+            // SQL JOIN optimized endpoints for user's liked/saved posts
+            .route(
+                "/api/v1/posts/user/{user_id}/liked",
+                web::get().to(rest_api::content::get_user_liked_posts),
+            )
+            .route(
+                "/api/v1/posts/user/{user_id}/saved",
+                web::get().to(rest_api::content::get_user_saved_posts),
+            )
             // ✅ User Profile API
             // NOTE: username route MUST be before {id} route to prevent {id} from matching "username"
             .route(

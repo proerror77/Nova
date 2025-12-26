@@ -90,8 +90,10 @@ struct ProfileView: View {
 
 
     // Computed property for user display
+    // 優先使用 profileData.userProfile（從 API 載入的最新數據）
+    // 回退到 authManager.currentUser（登入時的緩存數據）
     private var displayUser: UserProfile? {
-        authManager.currentUser ?? profileData.userProfile
+        profileData.userProfile ?? authManager.currentUser
     }
     
     // Computed property for filtered user posts (搜索过滤 - Posts tab)
@@ -291,10 +293,18 @@ struct ProfileView: View {
         .task {
             // Use current user from AuthenticationManager
             if let userId = authManager.currentUser?.id {
-                // 並行載入用戶資料和帖子，提高載入速度
-                async let profileTask: () = profileData.loadUserProfile(userId: userId)
-                async let postsTask: () = userPostsManager.loadUserPosts(userId: userId)
-                _ = await (profileTask, postsTask)
+                #if DEBUG
+                print("[ProfileView] Loading profile for userId: \(userId)")
+                #endif
+                await profileData.loadUserProfile(userId: userId)
+                await userPostsManager.loadUserPosts(userId: userId)
+                #if DEBUG
+                print("[ProfileView] Profile loaded: posts=\(profileData.posts.count), userProfile=\(profileData.userProfile?.username ?? "nil")")
+                #endif
+            } else {
+                #if DEBUG
+                print("[ProfileView] No userId found in authManager.currentUser")
+                #endif
             }
         }
         .sheet(isPresented: Binding(
