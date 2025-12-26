@@ -18,7 +18,7 @@ class FeedService {
     /// - Returns: FeedResponse containing post IDs and pagination info
     func getFeed(algo: FeedAlgorithm = .chronological, limit: Int = 20, cursor: String? = nil, channelId: String? = nil) async throws -> FeedResponse {
         var queryParams: [String: String] = [
-            "algo": algo.rawValue,
+            "algorithm": algo.rawValue,  // Backend expects "algorithm", not "algo"
             "limit": String(min(max(limit, 1), 100))
         ]
 
