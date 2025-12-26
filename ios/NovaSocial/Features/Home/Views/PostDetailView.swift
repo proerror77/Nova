@@ -115,9 +115,9 @@ class CommentViewModel {
 
     // MARK: - Delete Comment
 
-    func deleteComment(commentId: String, userId: String) async -> Bool {
+    func deleteComment(commentId: String) async -> Bool {
         do {
-            try await socialService.deleteComment(commentId: commentId, userId: userId)
+            try await socialService.deleteComment(commentId: commentId)
             comments.removeAll { $0.id == commentId }
             totalCount -= 1
             return true

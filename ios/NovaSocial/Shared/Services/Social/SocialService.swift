@@ -136,7 +136,7 @@ class SocialService {
         return response.comment
     }
 
-    func deleteComment(commentId: String, userId: String) async throws {
+    func deleteComment(commentId: String) async throws {
         struct Request: Codable {
             let comment_id: String
         }

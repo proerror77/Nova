@@ -356,10 +356,10 @@ struct SettingsView: View {
     /// Handle account tap action
     private func handleAccountTap(_ account: AccountDisplayData) {
         if account.isAlias {
-            if account.id == "loading-alias" {
+            if account.id == AccountDisplayData.loadingAliasID {
                 // 加载中，忽略点击
                 return
-            } else if account.id == "placeholder-alias" {
+            } else if account.id == AccountDisplayData.placeholderAliasID {
                 // Navigate to create alias
                 viewModel.createNewAliasAccount()
                 currentPage = .aliasName

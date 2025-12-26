@@ -74,9 +74,6 @@ struct CommentSheetView: View {
                                     comment: comment,
                                     canDelete: canDeleteComment(comment),
                                     onAvatarTapped: { userId in
-                                        #if DEBUG
-                                        print("[CommentSheet] 🔍 Avatar tapped - userId: \(userId), displayName: \(comment.displayAuthorName)")
-                                        #endif
                                         // 关闭评论弹窗，触发头像点击回调
                                         isPresented = false
                                         onAvatarTapped?(userId)
@@ -177,9 +174,6 @@ struct CommentSheetView: View {
         // 帖子拥有者可以删除任何评论
         let isPostOwner = post.authorId == currentUserId
         let canDelete = isCommentAuthor || isPostOwner
-        #if DEBUG
-        print("[CommentSheet] 🔐 canDelete check - currentUserId: \(currentUserId), commentUserId: \(comment.userId), postAuthorId: \(post.authorId), isAuthor: \(isCommentAuthor), isOwner: \(isPostOwner), result: \(canDelete)")
-        #endif
         return canDelete
     }
 
@@ -193,10 +187,6 @@ struct CommentSheetView: View {
             let result = try await socialService.getComments(postId: post.id, limit: 50, offset: 0)
             comments = result.comments
             totalCount = result.totalCount
-
-            #if DEBUG
-            print("[CommentSheet] 📥 Loaded \(result.comments.count) comments, totalCount: \(totalCount), post.commentCount: \(post.commentCount)")
-            #endif
 
             // Sync actual comment count back to feed if it differs from displayed count
             if totalCount != post.commentCount {
@@ -254,20 +244,16 @@ struct CommentSheetView: View {
     }
 
     private func deleteComment(_ comment: SocialComment) async {
-        guard let currentUserId = authManager.currentUser?.id else { return }
+        guard authManager.currentUser != nil else { return }
         isDeleting = true
 
         do {
-            try await socialService.deleteComment(commentId: comment.id, userId: currentUserId)
+            try await socialService.deleteComment(commentId: comment.id)
 
             // 从列表中移除评论
             if let index = comments.firstIndex(where: { $0.id == comment.id }) {
                 comments.remove(at: index)
                 totalCount -= 1
-
-                #if DEBUG
-                print("[CommentSheet] 🗑️ Comment deleted - new totalCount: \(totalCount)")
-                #endif
 
                 // 同步评论数量到 feed
                 onCommentCountUpdated?(post.id, totalCount)
@@ -367,9 +353,6 @@ struct SocialCommentRow: View {
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.5)
                 .onEnded { _ in
-                    #if DEBUG
-                    print("[SocialCommentRow] 👆 Long press detected - canDelete: \(canDelete)")
-                    #endif
                     if canDelete {
                         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                         impactFeedback.impactOccurred()
