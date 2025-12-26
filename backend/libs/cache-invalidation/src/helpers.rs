@@ -80,7 +80,7 @@ pub fn build_pattern(entity_type: &str, pattern: Option<&str>) -> String {
 /// assert_eq!(entity_type, None);
 /// ```
 pub fn extract_entity_type(key: &str) -> Option<&str> {
-    key.split(':').next()
+    key.split_once(':').map(|(entity, _)| entity)
 }
 
 /// Validate cache key format
@@ -161,8 +161,8 @@ mod tests {
     fn test_extract_entity_type() {
         assert_eq!(extract_entity_type("user:123"), Some("user"));
         assert_eq!(extract_entity_type("post:456"), Some("post"));
-        assert_eq!(extract_entity_type("invalid"), Some("invalid"));
-        assert_eq!(extract_entity_type(""), Some(""));
+        assert_eq!(extract_entity_type("invalid"), None);
+        assert_eq!(extract_entity_type(""), None);
     }
 
     #[test]

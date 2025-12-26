@@ -413,13 +413,18 @@ class LocationPickerManager: NSObject, ObservableObject, CLLocationManagerDelega
         guard let location = locations.last else { return }
         self.location = location
 
-        // 反向地理编码
-        let geocoder = CLGeocoder()
-        geocoder.reverseGeocodeLocation(location) { [weak self] placemarks, error in
-            if let placemark = placemarks?.first {
-                DispatchQueue.main.async {
+        // 反向地理编码 (使用 async/await API)
+        Task { @MainActor [weak self] in
+            do {
+                let geocoder = CLGeocoder()
+                let placemarks = try await geocoder.reverseGeocodeLocation(location)
+                if let placemark = placemarks.first {
                     self?.currentPlacemark = placemark
                 }
+            } catch {
+                #if DEBUG
+                print("[LocationPickerManager] Reverse geocode error: \(error)")
+                #endif
             }
         }
     }

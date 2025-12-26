@@ -1,34 +1,15 @@
 import Foundation
 
-// MARK: - Upload Progress
-
-/// Progress callback for upload operations
-typealias UploadProgressCallback = (Double) -> Void
-
-/// Result of a batch upload operation
-struct BatchUploadResult {
-    /// Map of original index to uploaded URL (preserves order mapping)
-    let urlsByIndex: [Int: String]
-    let failedIndices: [Int]
-    let errors: [Int: Error]
-    
-    /// Convenience: URLs sorted by original index
-    var successfulUrls: [String] {
-        urlsByIndex.sorted { $0.key < $1.key }.map { $0.value }
-    }
-    
-    /// Get URL for a specific original index
-    func url(for index: Int) -> String? {
-        urlsByIndex[index]
-    }
-}
-
 // MARK: - Media Service
 
 /// Manages media uploads using media-service backend
 /// Handles image/video uploads via multipart/form-data
 class MediaService {
     private let client = APIClient.shared
+
+    // MARK: - Delegated Services
+    private lazy var videoService = VideoService()
+    private lazy var reelsService = ReelsService()
 
     // MARK: - Content Type Helper
 
@@ -105,7 +86,7 @@ class MediaService {
         var errors: [Int: Error] = [:]
         var completedCount = 0
         let totalCount = images.count
-        let lock = NSLock()
+        // Note: Lock removed - for await loop processes results sequentially, no concurrent access
         
         await withTaskGroup(of: (Int, Result<String, Error>).self) { group in
             var activeCount = 0
@@ -157,10 +138,9 @@ class MediaService {
             
             // Process results and add more tasks
             for await (index, result) in group {
-                lock.lock()
                 activeCount -= 1
                 completedCount += 1
-                
+
                 switch result {
                 case .success(let url):
                     urlsByIndex[index] = url
@@ -168,10 +148,9 @@ class MediaService {
                     failedIndices.append(index)
                     errors[index] = error
                 }
-                
+
                 // Report progress
                 let progress = Double(completedCount) / Double(totalCount)
-                lock.unlock()
                 
                 await MainActor.run {
                     progressCallback?(progress)
@@ -914,43 +893,12 @@ class MediaService {
         #endif
     }
 
-    // MARK: - Video Management
+    // MARK: - Video Management (delegated to VideoService)
 
-    /// Get list of user's videos
-    /// - Parameters:
-    ///   - limit: Maximum number of videos to return
-    ///   - offset: Pagination offset
-    /// - Returns: List of video metadata
     func getVideos(limit: Int = 20, offset: Int = 0) async throws -> VideoListResponse {
-        let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.videos)?limit=\(limit)&offset=\(offset)")!
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-
-        if let token = client.getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.invalidResponse
-        }
-
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(VideoListResponse.self, from: data)
+        try await videoService.getVideos(limit: limit, offset: offset)
     }
 
-    /// Create video record
-    /// - Parameters:
-    ///   - videoUrl: URL of uploaded video
-    ///   - thumbnailUrl: URL of video thumbnail
-    ///   - duration: Video duration in seconds
-    ///   - title: Video title
-    ///   - description: Video description
-    /// - Returns: Created video metadata
     func createVideo(
         videoUrl: String,
         thumbnailUrl: String?,
@@ -958,271 +906,51 @@ class MediaService {
         title: String?,
         description: String?
     ) async throws -> VideoMetadata {
-        struct Request: Codable {
-            let videoUrl: String
-            let thumbnailUrl: String?
-            let duration: Int
-            let title: String?
-            let description: String?
-
-            enum CodingKeys: String, CodingKey {
-                case videoUrl = "video_url"
-                case thumbnailUrl = "thumbnail_url"
-                case duration
-                case title
-                case description
-            }
-        }
-
-        let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.videos)")!
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        if let token = client.getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        let requestBody = Request(
+        try await videoService.createVideo(
             videoUrl: videoUrl,
             thumbnailUrl: thumbnailUrl,
             duration: duration,
             title: title,
             description: description
         )
-        request.httpBody = try JSONEncoder().encode(requestBody)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.invalidResponse
-        }
-
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(VideoMetadata.self, from: data)
     }
 
-    /// Get specific video metadata
-    /// - Parameter videoId: Video ID
-    /// - Returns: Video metadata
     func getVideo(videoId: String) async throws -> VideoMetadata {
-        let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.videos)/\(videoId)")!
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-
-        if let token = client.getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.invalidResponse
-        }
-
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(VideoMetadata.self, from: data)
+        try await videoService.getVideo(videoId: videoId)
     }
 
-    /// Update video metadata
-    /// - Parameters:
-    ///   - videoId: Video ID
-    ///   - title: New title
-    ///   - description: New description
-    /// - Returns: Updated video metadata
     func updateVideo(
         videoId: String,
         title: String?,
         description: String?
     ) async throws -> VideoMetadata {
-        struct Request: Codable {
-            let title: String?
-            let description: String?
-        }
-
-        let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.videos)/\(videoId)")!
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "PATCH"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        if let token = client.getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        let requestBody = Request(title: title, description: description)
-        request.httpBody = try JSONEncoder().encode(requestBody)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.invalidResponse
-        }
-
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(VideoMetadata.self, from: data)
+        try await videoService.updateVideo(videoId: videoId, title: title, description: description)
     }
 
-    /// Delete video
-    /// - Parameter videoId: Video ID to delete
     func deleteVideo(videoId: String) async throws {
-        let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.videos)/\(videoId)")!
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
-
-        if let token = client.getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        let (_, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.invalidResponse
-        }
-
-        #if DEBUG
-        print("[Media] Video deleted: \(videoId)")
-        #endif
+        try await videoService.deleteVideo(videoId: videoId)
     }
 
-    // MARK: - Reels Management
+    // MARK: - Reels Management (delegated to ReelsService)
 
-    /// Get list of reels
-    /// - Parameters:
-    ///   - limit: Maximum number of reels to return
-    ///   - offset: Pagination offset
-    /// - Returns: List of reels
     func getReels(limit: Int = 20, offset: Int = 0) async throws -> ReelsListResponse {
-        let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.reels)?limit=\(limit)&offset=\(offset)")!
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-
-        if let token = client.getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.invalidResponse
-        }
-
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(ReelsListResponse.self, from: data)
+        try await reelsService.getReels(limit: limit, offset: offset)
     }
 
-    /// Create reel
-    /// - Parameters:
-    ///   - videoUrl: URL of uploaded reel video
-    ///   - thumbnailUrl: URL of reel thumbnail
-    ///   - caption: Reel caption
-    /// - Returns: Created reel metadata
     func createReel(
         videoUrl: String,
         thumbnailUrl: String?,
         caption: String?
     ) async throws -> ReelMetadata {
-        struct Request: Codable {
-            let videoUrl: String
-            let thumbnailUrl: String?
-            let caption: String?
-
-            enum CodingKeys: String, CodingKey {
-                case videoUrl = "video_url"
-                case thumbnailUrl = "thumbnail_url"
-                case caption
-            }
-        }
-
-        let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.reels)")!
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        if let token = client.getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        let requestBody = Request(
-            videoUrl: videoUrl,
-            thumbnailUrl: thumbnailUrl,
-            caption: caption
-        )
-        request.httpBody = try JSONEncoder().encode(requestBody)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.invalidResponse
-        }
-
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(ReelMetadata.self, from: data)
+        try await reelsService.createReel(videoUrl: videoUrl, thumbnailUrl: thumbnailUrl, caption: caption)
     }
 
-    /// Get specific reel
-    /// - Parameter reelId: Reel ID
-    /// - Returns: Reel metadata
     func getReel(reelId: String) async throws -> ReelMetadata {
-        let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.reels)/\(reelId)")!
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-
-        if let token = client.getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.invalidResponse
-        }
-
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(ReelMetadata.self, from: data)
+        try await reelsService.getReel(reelId: reelId)
     }
 
-    /// Delete reel
-    /// - Parameter reelId: Reel ID to delete
     func deleteReel(reelId: String) async throws {
-        let url = URL(string: "\(APIConfig.current.baseURL)\(APIConfig.Media.reels)/\(reelId)")!
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
-
-        if let token = client.getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        let (_, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.invalidResponse
-        }
-
-        #if DEBUG
-        print("[Media] Reel deleted: \(reelId)")
-        #endif
+        try await reelsService.deleteReel(reelId: reelId)
     }
 
     // MARK: - Live Photo Upload
@@ -1320,109 +1048,6 @@ class MediaService {
     /// Legacy method for backward compatibility
     func uploadImage(image: Data, userId: String, contentType: String = "image/jpeg") async throws -> String {
         return try await uploadImage(imageData: image, filename: "avatar_\(UUID().uuidString).jpg")
-    }
-}
-
-// MARK: - Live Photo Upload Result
-
-/// Result of uploading a Live Photo
-struct LivePhotoUploadResult {
-    let imageUrl: String
-    let videoUrl: String
-}
-
-// MARK: - Media Response Models
-
-/// Upload status information
-struct UploadStatus: Codable {
-    let uploadId: String
-    let status: String  // "pending", "processing", "completed", "failed"
-    let progress: Double  // 0.0 to 1.0
-    let bytesUploaded: Int64
-    let totalBytes: Int64
-    let mediaUrl: String?
-
-    enum CodingKeys: String, CodingKey {
-        case uploadId = "upload_id"
-        case status
-        case progress
-        case bytesUploaded = "bytes_uploaded"
-        case totalBytes = "total_bytes"
-        case mediaUrl = "media_url"
-    }
-}
-
-/// Video metadata
-struct VideoMetadata: Codable, Identifiable {
-    let id: String
-    let userId: String
-    let videoUrl: String
-    let thumbnailUrl: String?
-    let duration: Int
-    let title: String?
-    let description: String?
-    let createdAt: Date
-    let updatedAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case videoUrl = "video_url"
-        case thumbnailUrl = "thumbnail_url"
-        case duration
-        case title
-        case description
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
-    }
-}
-
-/// Video list response
-struct VideoListResponse: Codable {
-    let videos: [VideoMetadata]
-    let totalCount: Int
-    let hasMore: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case videos
-        case totalCount = "total_count"
-        case hasMore = "has_more"
-    }
-}
-
-/// Reel metadata
-struct ReelMetadata: Codable, Identifiable {
-    let id: String
-    let userId: String
-    let videoUrl: String
-    let thumbnailUrl: String?
-    let caption: String?
-    let viewCount: Int
-    let likeCount: Int
-    let createdAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case videoUrl = "video_url"
-        case thumbnailUrl = "thumbnail_url"
-        case caption
-        case viewCount = "view_count"
-        case likeCount = "like_count"
-        case createdAt = "created_at"
-    }
-}
-
-/// Reels list response
-struct ReelsListResponse: Codable {
-    let reels: [ReelMetadata]
-    let totalCount: Int
-    let hasMore: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case reels
-        case totalCount = "total_count"
-        case hasMore = "has_more"
     }
 }
 

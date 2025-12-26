@@ -94,7 +94,7 @@ spec:
     protocol: TCP
   - name: grpc
     port: 9091
-    targetPort: 9091
+    targetPort: 9080
     protocol: TCP
   selector:
     app: graph-service

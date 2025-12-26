@@ -18,24 +18,26 @@ struct ScreenScale {
 
     /// 当前设备屏幕宽度 (缓存值，启动时计算一次)
     static let screenWidth: CGFloat = {
-        // Fallback to a safe default if UIScreen is unavailable
-        guard let screen = UIApplication.shared.connectedScenes
+        // Use connected scenes first (iOS 13+), fallback to base width
+        if let screen = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
-            .first?.screen else {
-            return UIScreen.main.bounds.width
+            .first?.screen {
+            return screen.bounds.width
         }
-        return screen.bounds.width
+        // Fallback to base width if no scene available yet
+        return baseWidth
     }()
 
     /// 当前设备屏幕高度 (缓存值，启动时计算一次)
     static let screenHeight: CGFloat = {
-        // Fallback to a safe default if UIScreen is unavailable
-        guard let screen = UIApplication.shared.connectedScenes
+        // Use connected scenes first (iOS 13+), fallback to base height
+        if let screen = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
-            .first?.screen else {
-            return UIScreen.main.bounds.height
+            .first?.screen {
+            return screen.bounds.height
         }
-        return screen.bounds.height
+        // Fallback to base height if no scene available yet
+        return baseHeight
     }()
 
     /// 宽度缩放比例 (缓存值)
@@ -277,6 +279,10 @@ struct DesignTokens {
         dark: UIColor(red: 0.28, green: 0.28, blue: 0.30, alpha: 1.0)
     )
     static let attachmentBackground = Color.dynamic(
+        light: UIColor(red: 0.91, green: 0.91, blue: 0.91, alpha: 1.0),
+        dark: UIColor(red: 0.18, green: 0.18, blue: 0.19, alpha: 1.0)
+    )
+    static let searchBarBackground = Color.dynamic(
         light: UIColor(red: 0.91, green: 0.91, blue: 0.91, alpha: 1.0),
         dark: UIColor(red: 0.18, green: 0.18, blue: 0.19, alpha: 1.0)
     )

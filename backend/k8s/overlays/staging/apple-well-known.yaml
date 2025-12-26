@@ -39,11 +39,35 @@ data:
   apple-app-site-association: |
     {
       "webcredentials": {
-        "apps": ["2C77AZCA8W.com.libruce.icered"]
+        "apps": [
+          "2C77AZCA8W.com.app.icered",
+          "2C77AZCA8W.com.app.icered.pro",
+          "2C77AZCA8W.com.libruce.icered"
+        ]
       },
       "applinks": {
         "apps": [],
         "details": [
+          {
+            "appID": "2C77AZCA8W.com.app.icered",
+            "paths": [
+              "/reset-password/*",
+              "/verify/*",
+              "/invite/*",
+              "/callback/*",
+              "/auth/*"
+            ]
+          },
+          {
+            "appID": "2C77AZCA8W.com.app.icered.pro",
+            "paths": [
+              "/reset-password/*",
+              "/verify/*",
+              "/invite/*",
+              "/callback/*",
+              "/auth/*"
+            ]
+          },
           {
             "appID": "2C77AZCA8W.com.libruce.icered",
             "paths": [

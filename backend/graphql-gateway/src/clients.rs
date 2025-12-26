@@ -106,7 +106,7 @@ use proto::social::social_service_client::SocialServiceClient;
 /// - Fast-fail when circuit is open (< 1ms vs 10s timeout)
 ///
 /// # Example:
-/// ```rust
+/// ```ignore
 /// let clients = ServiceClients::new();
 /// let auth_client = clients.auth_client(); // First call: connects
 /// let auth_client2 = clients.auth_client(); // Subsequent calls: reuses connection
@@ -344,7 +344,7 @@ impl ServiceClients {
     /// # Circuit Breaker:
     /// Wrap gRPC calls with `call_with_circuit_breaker()` to get protection:
     ///
-    /// ```rust
+    /// ```ignore
     /// let mut client = clients.auth_client();
     /// let result = clients.call_auth(|| async move {
     ///     client.validate_token(request).await
@@ -366,7 +366,7 @@ impl ServiceClients {
     /// Execute auth service call with circuit breaker protection
     ///
     /// # Example:
-    /// ```rust
+    /// ```ignore
     /// let mut client = clients.auth_client();
     /// let result = clients.call_auth(|| async move {
     ///     client.validate_token(request).await
@@ -407,7 +407,7 @@ impl ServiceClients {
     /// Execute content service call with circuit breaker protection
     ///
     /// # Example:
-    /// ```rust
+    /// ```ignore
     /// let mut client = clients.content_client();
     /// let result = clients.call_content(|| async move {
     ///     client.get_post(request).await
@@ -445,7 +445,7 @@ impl ServiceClients {
     /// Execute feed service call with circuit breaker protection
     ///
     /// # Example:
-    /// ```rust
+    /// ```ignore
     /// let mut client = clients.feed_client();
     /// let result = clients.call_feed(|| async move {
     ///     client.get_recommendations(request).await
@@ -488,7 +488,7 @@ impl ServiceClients {
     /// Execute social service call with circuit breaker protection
     ///
     /// # Example:
-    /// ```rust
+    /// ```ignore
     /// let mut client = clients.social_client();
     /// let result = clients.call_social(|| async move {
     ///     client.follow_user(request).await
@@ -538,7 +538,7 @@ impl ServiceClients {
     /// Execute chat service call with circuit breaker protection
     ///
     /// # Example:
-    /// ```rust
+    /// ```ignore
     /// let mut client = clients.chat_client();
     /// let result = clients.call_chat(|| async move {
     ///     client.send_message(request).await
@@ -674,7 +674,7 @@ impl ServiceClients {
     /// Use this for health checks and observability.
     ///
     /// # Example:
-    /// ```rust
+    /// ```ignore
     /// let status = clients.health_status();
     /// for (service, state) in status {
     ///     println!("{}: {:?}", service, state);

@@ -56,6 +56,7 @@ async fn cleanup_test_events(pool: &PgPool) {
 }
 
 /// Test: Basic idempotency check - event not processed
+#[ignore = "Requires PostgreSQL database"]
 #[tokio::test]
 async fn test_is_processed_returns_false_for_new_event() {
     let pool = create_test_pool().await;
@@ -75,6 +76,7 @@ async fn test_is_processed_returns_false_for_new_event() {
 }
 
 /// Test: Mark event as processed and verify
+#[ignore = "Requires PostgreSQL database"]
 #[tokio::test]
 async fn test_mark_processed_and_verify() {
     let pool = create_test_pool().await;
@@ -103,6 +105,7 @@ async fn test_mark_processed_and_verify() {
 }
 
 /// Test: Duplicate mark returns false (ON CONFLICT DO NOTHING)
+#[ignore = "Requires PostgreSQL database"]
 #[tokio::test]
 async fn test_duplicate_mark_returns_false() {
     let pool = create_test_pool().await;
@@ -134,6 +137,7 @@ async fn test_duplicate_mark_returns_false() {
 }
 
 /// Test: Mark with metadata
+#[ignore = "Requires PostgreSQL database"]
 #[tokio::test]
 async fn test_mark_processed_with_metadata() {
     let pool = create_test_pool().await;
@@ -171,6 +175,7 @@ async fn test_mark_processed_with_metadata() {
 }
 
 /// Test: Process if new - first time processing
+#[ignore = "Requires PostgreSQL database"]
 #[tokio::test]
 async fn test_process_if_new_success() {
     let pool = create_test_pool().await;
@@ -208,6 +213,7 @@ async fn test_process_if_new_success() {
 }
 
 /// Test: Process if new - already processed
+#[ignore = "Requires PostgreSQL database"]
 #[tokio::test]
 async fn test_process_if_new_already_processed() {
     let pool = create_test_pool().await;
@@ -244,6 +250,7 @@ async fn test_process_if_new_already_processed() {
 }
 
 /// Test: Process if new - processing fails
+#[ignore = "Requires PostgreSQL database"]
 #[tokio::test]
 async fn test_process_if_new_processing_fails() {
     let pool = create_test_pool().await;
@@ -283,6 +290,7 @@ async fn test_process_if_new_processing_fails() {
 ///
 /// This test simulates 10 Kafka consumers processing the same event simultaneously.
 /// Only 1 should succeed, others should get AlreadyProcessed.
+#[ignore = "Requires PostgreSQL database"]
 #[tokio::test]
 async fn test_concurrent_processing_same_event() {
     let pool = create_test_pool().await;
@@ -360,6 +368,7 @@ async fn test_concurrent_processing_same_event() {
 }
 
 /// Test: Concurrent marking - 10 parallel mark_processed calls
+#[ignore = "Requires PostgreSQL database"]
 #[tokio::test]
 async fn test_concurrent_marking_same_event() {
     let pool = create_test_pool().await;
@@ -404,6 +413,7 @@ async fn test_concurrent_marking_same_event() {
 }
 
 /// Test: Cleanup old events
+#[ignore = "Requires PostgreSQL database"]
 #[tokio::test]
 async fn test_cleanup_old_events() {
     let pool = create_test_pool().await;
@@ -463,6 +473,7 @@ async fn test_cleanup_old_events() {
 }
 
 /// Test: Invalid event ID - empty string
+#[ignore = "Requires PostgreSQL database"]
 #[tokio::test]
 async fn test_invalid_event_id_empty() {
     let pool = create_test_pool().await;
@@ -473,6 +484,7 @@ async fn test_invalid_event_id_empty() {
 }
 
 /// Test: Invalid event ID - too long (>255 characters)
+#[ignore = "Requires PostgreSQL database"]
 #[tokio::test]
 async fn test_invalid_event_id_too_long() {
     let pool = create_test_pool().await;
@@ -487,6 +499,7 @@ async fn test_invalid_event_id_too_long() {
 }
 
 /// Test: Multiple different event IDs
+#[ignore = "Requires PostgreSQL database"]
 #[tokio::test]
 async fn test_multiple_different_events() {
     let pool = create_test_pool().await;
@@ -532,8 +545,8 @@ fn test_processing_result_helpers() {
 ///
 /// This is not a rigorous benchmark, just a sanity check.
 /// Expected: <1ms per event on local PostgreSQL
+#[ignore = "Requires PostgreSQL database"]
 #[tokio::test]
-#[ignore] // Run with: cargo test --package idempotent-consumer -- --ignored
 async fn benchmark_mark_1000_events() {
     let pool = create_test_pool().await;
     cleanup_test_events(&pool).await;

@@ -271,6 +271,10 @@ extension NotificationItem {
             return "replied to your comment."
         case .system:
             return message
+        case .friendRequest:
+            return "sent you a friend request."
+        case .friendAccepted:
+            return "accepted your friend request."
         }
     }
 
@@ -306,6 +310,10 @@ extension NotificationItem {
             return .follow
         case .system:
             return .none
+        case .friendRequest:
+            return .followBack  // Show accept button
+        case .friendAccepted:
+            return .message  // Show message button
         }
     }
 }

@@ -5,7 +5,7 @@ import Combine
 /// Manages navigation state, deep links, and tab coordination
 @MainActor
 @Observable
-final class AppCoordinator {
+final class AppCoordinator: @unchecked Sendable {
     static let shared = AppCoordinator()
 
     // MARK: - Navigation State
@@ -293,6 +293,7 @@ extension AppCoordinator {
         case .inviteFriends: return .inviteFriends
         case .myChannels: return .myChannels
         case .addFriends: return .addFriends
+        case .friendRequests: return .friendRequests
         case .newChat: return .newChat
         case .write: return .write
         case .getVerified: return .getVerified

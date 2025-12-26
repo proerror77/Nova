@@ -316,6 +316,7 @@ mod tests {
         let cf_model = CollaborativeFilteringModel {
             user_similarity: HashMap::new(),
             item_similarity: HashMap::new(),
+            user_liked_posts: HashMap::new(),
             k_neighbors: 50,
             metric: crate::services::recommendation_v2::collaborative_filtering::SimilarityMetric::Cosine,
         };

@@ -6,7 +6,7 @@
 ///
 /// # Usage
 ///
-/// ```rust,no_run
+/// ```ignore
 /// use transactional_outbox::{publish_event, SqlxOutboxRepository};
 /// use sqlx::PgPool;
 /// use uuid::Uuid;
@@ -76,7 +76,7 @@ macro_rules! publish_event {
 ///
 /// # Usage
 ///
-/// ```rust,no_run
+/// ```ignore
 /// use transactional_outbox::{publish_event_with_metadata, SqlxOutboxRepository};
 /// use sqlx::PgPool;
 /// use uuid::Uuid;

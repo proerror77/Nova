@@ -1,6 +1,19 @@
 import SwiftUI
 import AVFoundation
 
+// MARK: - Conversation Message Model
+struct VoiceChatMessage: Identifiable, Equatable {
+    let id = UUID()
+    let role: MessageRole
+    let text: String
+    let timestamp: Date
+
+    enum MessageRole {
+        case user
+        case assistant
+    }
+}
+
 // MARK: - LiveKit Voice Chat View
 /// 使用 LiveKit + xAI Grok Voice Agent 的語音對話視圖
 /// 提供可靠的 WebRTC 回音消除和 barge-in 支援
@@ -17,10 +30,27 @@ struct LiveKitVoiceChatView: View {
     @State private var showErrorAlert: Bool = false
     @State private var errorMessage: String = ""
 
+    // 對話歷史
+    @State private var messages: [VoiceChatMessage] = []
+    @State private var pendingUserText: String = ""
+    @State private var pendingAIText: String = ""
+
+    // 文字輸入模式
+    @State private var isTextInputMode: Bool = false
+    @State private var textInput: String = ""
+    @FocusState private var isTextFieldFocused: Bool
+
     // 動畫
     @State private var pulseAnimation: Bool = false
     @State private var wavePhase: Double = 0
     @State private var delegateHandler: LiveKitVoiceDelegateHandler?
+
+    // 重連邏輯
+    @State private var reconnectAttempts: Int = 0
+    private let maxReconnectAttempts: Int = 3
+
+    // 動畫計時器
+    @State private var waveAnimationTimer: Timer?
 
     var body: some View {
         ZStack {
@@ -28,10 +58,18 @@ struct LiveKitVoiceChatView: View {
 
             VStack(spacing: 0) {
                 topBar
-                Spacer()
-                mainContent
-                Spacer()
-                bottomControls
+
+                if isTextInputMode {
+                    // 文字輸入模式：顯示對話歷史 + 輸入框
+                    conversationHistoryView
+                    textInputBar
+                } else {
+                    // 語音模式：顯示 Avatar + 當前對話
+                    Spacer()
+                    mainContent
+                    Spacer()
+                    bottomControls
+                }
             }
         }
         .onAppear {
@@ -51,10 +89,7 @@ struct LiveKitVoiceChatView: View {
         }
         .alert("連線錯誤", isPresented: $showErrorAlert) {
             Button("重試") {
-                endVoiceChat()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    startVoiceChat()
-                }
+                attemptReconnect()
             }
             Button("關閉", role: .cancel) {
                 endVoiceChat()
@@ -100,7 +135,6 @@ struct LiveKitVoiceChatView: View {
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.white.opacity(0.8))
 
-                // LiveKit 標記
                 Text("LiveKit")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.green)
@@ -112,7 +146,21 @@ struct LiveKitVoiceChatView: View {
 
             Spacer()
 
-            Color.clear.frame(width: 44, height: 44)
+            // 切換文字/語音模式
+            Button(action: {
+                withAnimation(.spring(response: 0.3)) {
+                    isTextInputMode.toggle()
+                    if isTextInputMode {
+                        isTextFieldFocused = true
+                    }
+                }
+                triggerHaptic(.light)
+            }) {
+                Image(systemName: isTextInputMode ? "waveform" : "keyboard")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.white.opacity(0.8))
+                    .frame(width: 44, height: 44)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
@@ -123,17 +171,162 @@ struct LiveKitVoiceChatView: View {
         case .disconnected, .error: return .red
         case .connecting: return .yellow
         case .connected, .listening: return .green
-        case .userSpeaking: return .cyan  // 用戶說話時顯示青色
-        case .aiSpeaking: return .purple  // AI 說話時顯示紫色
+        case .userSpeaking: return .cyan
+        case .aiSpeaking: return .purple
         }
     }
 
-    // MARK: - Main Content
+    // MARK: - Conversation History View
+    private var conversationHistoryView: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(messages) { message in
+                        messageBubble(message)
+                            .id(message.id)
+                    }
+
+                    // 顯示正在進行的對話
+                    if !pendingUserText.isEmpty {
+                        pendingMessageBubble(text: pendingUserText, isUser: true)
+                    }
+                    if !pendingAIText.isEmpty {
+                        pendingMessageBubble(text: pendingAIText, isUser: false)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            }
+            .onChange(of: messages.count) { _, _ in
+                if let lastMessage = messages.last {
+                    withAnimation {
+                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                    }
+                }
+            }
+        }
+    }
+
+    private func messageBubble(_ message: VoiceChatMessage) -> some View {
+        HStack {
+            if message.role == .user { Spacer(minLength: 60) }
+
+            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
+                Text(message.role == .user ? "你" : "Alice")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(message.role == .user ? .cyan.opacity(0.7) : .purple.opacity(0.7))
+
+                Text(message.text)
+                    .font(.system(size: 15))
+                    .foregroundColor(.white.opacity(0.95))
+                    .multilineTextAlignment(message.role == .user ? .trailing : .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(
+                        message.role == .user
+                            ? AnyShapeStyle(Color.cyan.opacity(0.2))
+                            : AnyShapeStyle(LinearGradient(
+                                colors: [.purple.opacity(0.25), .blue.opacity(0.15)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ))
+                    )
+                    .cornerRadius(16)
+            }
+
+            if message.role == .assistant { Spacer(minLength: 60) }
+        }
+    }
+
+    private func pendingMessageBubble(text: String, isUser: Bool) -> some View {
+        HStack {
+            if isUser { Spacer(minLength: 60) }
+
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+                HStack(spacing: 4) {
+                    Text(isUser ? "你" : "Alice")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(isUser ? .cyan.opacity(0.7) : .purple.opacity(0.7))
+
+                    // 打字指示器
+                    Text("...")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.4))
+                }
+
+                Text(text)
+                    .font(.system(size: 15))
+                    .foregroundColor(.white.opacity(0.7))
+                    .italic()
+                    .multilineTextAlignment(isUser ? .trailing : .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color.white.opacity(0.08))
+                    .cornerRadius(16)
+            }
+
+            if !isUser { Spacer(minLength: 60) }
+        }
+    }
+
+    // MARK: - Text Input Bar
+    private var textInputBar: some View {
+        HStack(spacing: 12) {
+            TextField("輸入訊息...", text: $textInput)
+                .textFieldStyle(.plain)
+                .font(.system(size: 16))
+                .foregroundColor(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(24)
+                .focused($isTextFieldFocused)
+                .onSubmit {
+                    sendTextMessage()
+                }
+
+            Button(action: sendTextMessage) {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.system(size: 36))
+                    .foregroundColor(textInput.isEmpty ? .white.opacity(0.3) : .purple)
+            }
+            .disabled(textInput.isEmpty)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.black.opacity(0.3))
+    }
+
+    // MARK: - Main Content (Voice Mode)
     private var mainContent: some View {
-        VStack(spacing: 40) {
+        VStack(spacing: 30) {
             aliceAvatarWithWaves
+
             stateIndicator
-            transcriptView
+
+            // 當前對話顯示（簡化版）
+            currentTranscriptView
+
+            // 顯示歷史對話數量提示
+            if !messages.isEmpty {
+                Button(action: {
+                    withAnimation(.spring(response: 0.3)) {
+                        isTextInputMode = true
+                    }
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.system(size: 12))
+                        Text("查看 \(messages.count) 則對話")
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                    .foregroundColor(.white.opacity(0.6))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(20)
+                }
+            }
         }
         .padding(.horizontal, 32)
     }
@@ -141,7 +334,7 @@ struct LiveKitVoiceChatView: View {
     // MARK: - Alice Avatar
     private var aliceAvatarWithWaves: some View {
         ZStack {
-            // 波紋動畫 - 用戶說話時用青色，AI 說話時用紫色
+            // 波紋動畫
             if state == .userSpeaking || state == .listening || state == .aiSpeaking {
                 ForEach(0..<3, id: \.self) { index in
                     Circle()
@@ -155,7 +348,7 @@ struct LiveKitVoiceChatView: View {
                             ),
                             lineWidth: state == .userSpeaking ? 3 : 2
                         )
-                        .frame(width: 160 + CGFloat(index * 40), height: 160 + CGFloat(index * 40))
+                        .frame(width: 140 + CGFloat(index * 35), height: 140 + CGFloat(index * 35))
                         .scaleEffect(pulseAnimation ? 1.2 : 1.0)
                         .opacity(pulseAnimation ? 0 : (state == .userSpeaking ? 0.8 : 0.6))
                         .animation(
@@ -182,16 +375,16 @@ struct LiveKitVoiceChatView: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 140, height: 140)
+                    .frame(width: 120, height: 120)
 
                 Image("alice-center-icon")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 100, height: 100)
+                    .frame(width: 85, height: 85)
             }
             .shadow(color: .purple.opacity(0.5), radius: 20, x: 0, y: 10)
         }
-        .frame(height: 280)
+        .frame(height: 240)
         .onAppear {
             pulseAnimation = true
         }
@@ -218,26 +411,26 @@ struct LiveKitVoiceChatView: View {
                     )
             }
         }
-        .frame(height: 60)
-        .offset(y: 100)
+        .frame(height: 50)
+        .offset(y: 85)
     }
 
     private func waveHeight(for index: Int) -> CGFloat {
-        let baseHeight: CGFloat = 10
-        let maxHeight: CGFloat = 50
+        let baseHeight: CGFloat = 8
+        let maxHeight: CGFloat = 40
         let variation = sin(Double(index) * 0.5 + wavePhase) * 0.5 + 0.5
         return baseHeight + (maxHeight - baseHeight) * CGFloat(audioLevel) * CGFloat(variation)
     }
 
     // MARK: - State Indicator
     private var stateIndicator: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             Text(stateTitle)
-                .font(.system(size: 24, weight: .semibold))
+                .font(.system(size: 22, weight: .semibold))
                 .foregroundColor(.white)
 
             Text(stateSubtitle)
-                .font(.system(size: 14))
+                .font(.system(size: 13))
                 .foregroundColor(.white.opacity(0.6))
         }
     }
@@ -266,37 +459,33 @@ struct LiveKitVoiceChatView: View {
         }
     }
 
-    // MARK: - Transcript View
-    private var transcriptView: some View {
-        VStack(spacing: 16) {
-            if !transcript.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("你說：")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.white.opacity(0.5))
-                    Text(transcript)
-                        .font(.system(size: 16))
-                        .foregroundColor(.white.opacity(0.9))
-                        .multilineTextAlignment(.leading)
+    // MARK: - Current Transcript View
+    private var currentTranscriptView: some View {
+        VStack(spacing: 12) {
+            if !pendingUserText.isEmpty || !transcript.isEmpty {
+                HStack {
+                    Text(pendingUserText.isEmpty ? transcript : pendingUserText)
+                        .font(.system(size: 15))
+                        .foregroundColor(.white.opacity(0.85))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background(Color.white.opacity(0.1))
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(Color.cyan.opacity(0.15))
                 .cornerRadius(16)
             }
 
-            if !aiResponse.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Alice：")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.purple.opacity(0.8))
-                    Text(aiResponse)
-                        .font(.system(size: 16))
-                        .foregroundColor(.white.opacity(0.9))
-                        .multilineTextAlignment(.leading)
+            if !pendingAIText.isEmpty || !aiResponse.isEmpty {
+                HStack {
+                    Text(pendingAIText.isEmpty ? aiResponse : pendingAIText)
+                        .font(.system(size: 15))
+                        .foregroundColor(.white.opacity(0.85))
+                        .lineLimit(3)
+                        .multilineTextAlignment(.center)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
                 .background(
                     LinearGradient(
                         colors: [.purple.opacity(0.2), .blue.opacity(0.1)],
@@ -307,17 +496,18 @@ struct LiveKitVoiceChatView: View {
                 .cornerRadius(16)
             }
         }
-        .frame(minHeight: 100)
+        .frame(minHeight: 80)
     }
 
     // MARK: - Bottom Controls
     private var bottomControls: some View {
-        VStack(spacing: 24) {
-            HStack(spacing: 60) {
+        VStack(spacing: 20) {
+            HStack(spacing: 50) {
                 // 靜音
                 controlButton(
                     icon: isMuted ? "mic.slash.fill" : "mic.fill",
                     isActive: !isMuted,
+                    color: isMuted ? .red : .white,
                     action: toggleMute
                 )
 
@@ -326,68 +516,134 @@ struct LiveKitVoiceChatView: View {
                     ZStack {
                         Circle()
                             .fill(Color.red)
-                            .frame(width: 72, height: 72)
+                            .frame(width: 68, height: 68)
 
                         Image(systemName: "phone.down.fill")
-                            .font(.system(size: 28))
+                            .font(.system(size: 26))
                             .foregroundColor(.white)
                     }
                 }
                 .shadow(color: .red.opacity(0.4), radius: 10, x: 0, y: 5)
 
-                // 揚聲器
+                // 鍵盤切換
                 controlButton(
-                    icon: "speaker.wave.2.fill",
+                    icon: "keyboard",
                     isActive: true,
-                    action: { }
+                    color: .white,
+                    action: {
+                        withAnimation(.spring(response: 0.3)) {
+                            isTextInputMode = true
+                            isTextFieldFocused = true
+                        }
+                    }
                 )
             }
 
             Text("LiveKit WebRTC • 支援語音打斷")
-                .font(.system(size: 12))
+                .font(.system(size: 11))
                 .foregroundColor(.white.opacity(0.4))
         }
-        .padding(.bottom, 50)
+        .padding(.bottom, 40)
     }
 
-    private func controlButton(icon: String, isActive: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    private func controlButton(icon: String, isActive: Bool, color: Color = .white, action: @escaping () -> Void) -> some View {
+        Button(action: {
+            action()
+            triggerHaptic(.light)
+        }) {
             ZStack {
                 Circle()
                     .fill(Color.white.opacity(isActive ? 0.2 : 0.1))
-                    .frame(width: 56, height: 56)
+                    .frame(width: 52, height: 52)
 
                 Image(systemName: icon)
-                    .font(.system(size: 24))
-                    .foregroundColor(isActive ? .white : .white.opacity(0.5))
+                    .font(.system(size: 22))
+                    .foregroundColor(isActive ? color : color.opacity(0.5))
             }
         }
     }
 
+    // MARK: - Haptic Feedback
+    private func triggerHaptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
+        let generator = UIImpactFeedbackGenerator(style: style)
+        generator.impactOccurred()
+    }
+
     // MARK: - Actions
     private func startVoiceChat() {
-        print("[LiveKitVoiceChatView] 🚀 Starting LiveKit voice chat")
+        print("[LiveKitVoiceChatView] Starting LiveKit voice chat")
+        reconnectAttempts = 0
+
+        // 啟動波形動畫計時器（每 0.1 秒更新一次，而非每個音頻回調）
+        waveAnimationTimer?.invalidate()
+        waveAnimationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+            wavePhase += 0.1
+        }
 
         let handler = LiveKitVoiceDelegateHandler(
             onStateChange: { newState in
+                let oldState = state
                 withAnimation(.easeInOut(duration: 0.3)) {
                     state = newState
                 }
+
+                // Haptic feedback on state changes
+                if oldState != newState {
+                    switch newState {
+                    case .connected:
+                        triggerHaptic(.medium)
+                    case .aiSpeaking:
+                        triggerHaptic(.light)
+                    case .error:
+                        triggerHaptic(.heavy)
+                    default:
+                        break
+                    }
+                }
             },
             onTranscript: { text, isFinal in
-                transcript = text
+                if isFinal {
+                    // 最終結果：加入歷史記錄
+                    if !text.isEmpty {
+                        // 檢查是否已存在相同內容（避免重複）
+                        let isDuplicate = messages.last?.text == text && messages.last?.role == .user
+                        if !isDuplicate {
+                            let message = VoiceChatMessage(role: .user, text: text, timestamp: Date())
+                            messages.append(message)
+                        }
+                        pendingUserText = ""
+                        transcript = text
+                    }
+                } else {
+                    // 暫時結果：顯示 pending
+                    pendingUserText = text
+                    transcript = text
+                }
             },
             onAIResponse: { text in
-                aiResponse = text
+                // AI 回覆完成：加入歷史記錄
+                if !text.isEmpty {
+                    // 檢查是否已存在相同內容（避免重複）
+                    if messages.last?.text != text || messages.last?.role != .assistant {
+                        let message = VoiceChatMessage(role: .assistant, text: text, timestamp: Date())
+                        messages.append(message)
+                    }
+                    pendingAIText = ""
+                    aiResponse = text
+                }
             },
             onAudioLevel: { level in
-                audioLevel = level
-                wavePhase += 0.1
+                // 只有當音量變化超過閾值時才更新，減少不必要的 UI 重繪
+                if abs(audioLevel - level) > 0.05 {
+                    audioLevel = level
+                }
+                // 使用 Timer 控制動畫而非每次回調都更新
             },
             onError: { code, message in
-                print("[LiveKitVoiceChatView] ❌ Error: \(code) - \(message)")
+                print("[LiveKitVoiceChatView] Error: \(code) - \(message)")
                 errorMessage = message
                 showErrorAlert = true
+                triggerHaptic(.heavy)
             }
         )
         delegateHandler = handler
@@ -396,13 +652,57 @@ struct LiveKitVoiceChatView: View {
         voiceService.startVoiceChat()
     }
 
+    private func attemptReconnect() {
+        reconnectAttempts += 1
+        if reconnectAttempts <= maxReconnectAttempts {
+            print("[LiveKitVoiceChatView] Reconnect attempt \(reconnectAttempts)/\(maxReconnectAttempts)")
+            endVoiceChat()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                startVoiceChat()
+            }
+        } else {
+            print("[LiveKitVoiceChatView] Max reconnect attempts reached")
+            errorMessage = "多次連線失敗，請稍後再試"
+            showErrorAlert = true
+        }
+    }
+
     private func endVoiceChat() {
+        // 停止動畫計時器
+        waveAnimationTimer?.invalidate()
+        waveAnimationTimer = nil
         voiceService.endVoiceChat()
     }
 
     private func toggleMute() {
         isMuted.toggle()
         voiceService.toggleMute()
+        triggerHaptic(.light)
+    }
+
+    private func sendTextMessage() {
+        guard !textInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        let messageText = textInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        textInput = ""
+
+        // 加入用戶訊息到歷史
+        let userMessage = VoiceChatMessage(role: .user, text: messageText, timestamp: Date())
+        messages.append(userMessage)
+
+        // TODO: 發送文字到 LiveKit Agent（需要後端支援）
+        // 目前 LiveKit Agent 只支援語音輸入，未來可以添加 data channel 文字支援
+        print("[LiveKitVoiceChatView] Text message (not yet supported): \(messageText)")
+
+        // 暫時顯示提示
+        let systemMessage = VoiceChatMessage(
+            role: .assistant,
+            text: "文字輸入功能開發中，請使用語音對話",
+            timestamp: Date()
+        )
+        messages.append(systemMessage)
+
+        triggerHaptic(.light)
     }
 }
 
@@ -461,12 +761,10 @@ private class LiveKitVoiceDelegateHandler: LiveKitVoiceServiceDelegate {
 
 // MARK: - Feature Flag
 enum VoiceServiceType {
-    case grok       // 直接 WebSocket 連接 xAI
-    case liveKit    // LiveKit + xAI (推薦，支援 barge-in)
+    case grok
+    case liveKit
 
     static var current: VoiceServiceType {
-        // 可以根據需要切換
-        // 推薦使用 LiveKit 以獲得更好的 barge-in 支援
         #if DEBUG
         return .liveKit
         #else

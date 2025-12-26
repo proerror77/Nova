@@ -333,18 +333,43 @@ pub async fn chat(
             } else {
                 let error_text = response.text().await.unwrap_or_default();
                 error!("X.AI API error: {} - {}", status, error_text);
-                Ok(HttpResponse::BadGateway().json(serde_json::json!({
-                    "status": "error",
-                    "message": format!("AI API error: {}", status),
-                    "details": error_text,
-                })))
+
+                // Handle specific error codes with user-friendly messages
+                if status.as_u16() == 429 {
+                    // Rate limit or quota exceeded
+                    warn!("X.AI API quota exceeded or rate limited");
+                    Ok(HttpResponse::TooManyRequests().json(serde_json::json!({
+                        "status": "quota_exceeded",
+                        "error_code": "QUOTA_EXCEEDED",
+                        "message": "AI service quota exceeded. Please try again later.",
+                        "message_zh": "AI 服務配額已用完，請稍後再試。",
+                        "details": error_text,
+                    })))
+                } else if status.as_u16() == 401 || status.as_u16() == 403 {
+                    // Authentication error
+                    Ok(HttpResponse::ServiceUnavailable().json(serde_json::json!({
+                        "status": "auth_error",
+                        "error_code": "AUTH_ERROR",
+                        "message": "AI service authentication failed.",
+                        "message_zh": "AI 服務認證失敗。",
+                    })))
+                } else {
+                    Ok(HttpResponse::BadGateway().json(serde_json::json!({
+                        "status": "error",
+                        "error_code": "API_ERROR",
+                        "message": format!("AI API error: {}", status),
+                        "details": error_text,
+                    })))
+                }
             }
         }
         Err(e) => {
             error!("Failed to call X.AI API: {}", e);
             Ok(HttpResponse::BadGateway().json(serde_json::json!({
                 "status": "error",
-                "message": format!("Failed to connect to AI service: {}", e),
+                "error_code": "CONNECTION_ERROR",
+                "message": "Failed to connect to AI service. Please try again.",
+                "message_zh": "無法連接 AI 服務，請稍後再試。",
             })))
         }
     }
@@ -441,8 +466,29 @@ pub async fn chat_stream(
             if !status.is_success() {
                 let error_text = response.text().await.unwrap_or_default();
                 error!("X.AI API error: {} - {}", status, error_text);
+
+                // Handle specific error codes with user-friendly messages
+                if status.as_u16() == 429 {
+                    warn!("X.AI API quota exceeded or rate limited");
+                    return Ok(HttpResponse::TooManyRequests().json(serde_json::json!({
+                        "status": "quota_exceeded",
+                        "error_code": "QUOTA_EXCEEDED",
+                        "message": "AI service quota exceeded. Please try again later.",
+                        "message_zh": "AI 服務配額已用完，請稍後再試。",
+                        "details": error_text,
+                    })));
+                } else if status.as_u16() == 401 || status.as_u16() == 403 {
+                    return Ok(HttpResponse::ServiceUnavailable().json(serde_json::json!({
+                        "status": "auth_error",
+                        "error_code": "AUTH_ERROR",
+                        "message": "AI service authentication failed.",
+                        "message_zh": "AI 服務認證失敗。",
+                    })));
+                }
+
                 return Ok(HttpResponse::BadGateway().json(serde_json::json!({
                     "status": "error",
+                    "error_code": "API_ERROR",
                     "message": format!("AI API error: {}", status),
                     "details": error_text,
                 })));
@@ -482,7 +528,9 @@ pub async fn chat_stream(
             error!("Failed to call X.AI API: {}", e);
             Ok(HttpResponse::BadGateway().json(serde_json::json!({
                 "status": "error",
-                "message": format!("Failed to connect to AI service: {}", e),
+                "error_code": "CONNECTION_ERROR",
+                "message": "Failed to connect to AI service. Please try again.",
+                "message_zh": "無法連接 AI 服務，請稍後再試。",
             })))
         }
     }

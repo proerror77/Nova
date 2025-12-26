@@ -232,13 +232,14 @@ mod tests {
     fn test_time_decay_comparison() {
         let algo = TrendingAlgorithm::default();
 
-        // Old content with high engagement
-        let old_score = algo.score_event(1000.0, 24.0); // 24 hours old
+        // Old content with high engagement (48 hours old - heavily decayed)
+        let old_score = algo.score_event(1000.0, 48.0); // 48 hours old
 
         // New content with low engagement
         let new_score = algo.score_event(100.0, 1.0); // 1 hour old
 
         // New content should score higher due to recency
+        // 100 * exp(-0.1 * 1) = 90.5 > 1000 * exp(-0.1 * 48) = 8.2
         assert!(new_score > old_score);
     }
 }

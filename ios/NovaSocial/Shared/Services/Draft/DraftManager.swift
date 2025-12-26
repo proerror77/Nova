@@ -314,14 +314,18 @@ actor PostDraftManager {
 
         var totalSize: Int64 = 0
 
-        if let enumerator = fileManager.enumerator(
-            at: draftDir,
-            includingPropertiesForKeys: [.fileSizeKey]
-        ) {
-            for case let file as URL in enumerator {
-                if let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize {
-                    totalSize += Int64(size)
-                }
+        // Collect files synchronously to avoid Swift 6 makeIterator() issue in async context
+        let files: [URL] = {
+            guard let enumerator = fileManager.enumerator(
+                at: draftDir,
+                includingPropertiesForKeys: [.fileSizeKey]
+            ) else { return [] }
+            return enumerator.compactMap { $0 as? URL }
+        }()
+
+        for file in files {
+            if let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                totalSize += Int64(size)
             }
         }
 

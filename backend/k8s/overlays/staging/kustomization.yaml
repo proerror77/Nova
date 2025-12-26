@@ -133,6 +133,19 @@ patches:
       - op: add
         path: /data/LIVEKIT_API_SECRET
         value: "kxHgmEKkvbNDzWTFJoFgHlVfgbeaSAFV5fburhMwKccA"
+      # Passkey (WebAuthn) configuration
+      - op: add
+        path: /data/PASSKEY_ENABLED
+        value: "true"
+      - op: add
+        path: /data/PASSKEY_RP_ID
+        value: "aasa.icered.com"
+      - op: add
+        path: /data/PASSKEY_RP_NAME
+        value: "ICERED"
+      - op: add
+        path: /data/PASSKEY_ORIGIN
+        value: "https://aasa.icered.com"
 
 # Staging image tags - use full GAR registry path
 images:

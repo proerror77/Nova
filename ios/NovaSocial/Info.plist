@@ -44,11 +44,16 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>32</string>
+	<string>44</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
 	<key>NOVA_STAGING_URL</key>
 	<string>$(NOVA_STAGING_URL)</string>
 	<key>NSAppTransportSecurity</key>
@@ -97,15 +102,6 @@
 	<string>We need speech recognition to convert your voice to text for Alice AI.</string>
 	<key>UIAppFonts</key>
 	<array>
-		<string>SF-Pro-Display-Regular.otf</string>
-		<string>SF-Pro-Display-Medium.otf</string>
-		<string>SF-Pro-Display-Semibold.otf</string>
-		<string>SF-Pro-Display-Bold.otf</string>
-		<string>SF-Pro-Display-Heavy.otf</string>
-		<string>SF-Pro-Display-Black.otf</string>
-		<string>SF-Pro-Display-Light.otf</string>
-		<string>SF-Pro-Display-Thin.otf</string>
-		<string>SF-Pro-Display-Ultralight.otf</string>
 	</array>
 	<key>UILaunchScreen</key>
 	<dict>

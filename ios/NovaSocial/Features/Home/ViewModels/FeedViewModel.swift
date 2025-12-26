@@ -3,19 +3,22 @@ import SwiftUI
 import OSLog
 
 // MARK: - Feed Logger
+
 enum FeedLogger {
-    static func debug(_ message: String) {
+    static func debug(_ message: String, file: String = #file) {
         #if DEBUG
-        print("[Feed] \(message)")
+        let fileName = (file as NSString).lastPathComponent
+        print("[Feed] [\(fileName)] \(message)")
         #endif
     }
 
-    static func error(_ message: String, error: Error? = nil) {
+    static func error(_ message: String, error: Error? = nil, file: String = #file) {
         #if DEBUG
+        let fileName = (file as NSString).lastPathComponent
         if let error = error {
-            print("[Feed] ERROR: \(message) - \(error)")
+            print("[Feed] [\(fileName)] ERROR: \(message) - \(error)")
         } else {
-            print("[Feed] ERROR: \(message)")
+            print("[Feed] [\(fileName)] ERROR: \(message)")
         }
         #endif
     }
@@ -23,16 +26,15 @@ enum FeedLogger {
 
 // MARK: - Feed ViewModel
 // iOS 17+ 使用 @Observable macro 替代 ObservableObject
-// 优点：自动追踪属性变化，更细粒度的更新，减少不必要的视图重绘
+// 重構後：委派職責給專門的 Handler 類別
 
 @MainActor
 @Observable
-class FeedViewModel {
-    // MARK: - Observable Properties (无需 @Published)
+final class FeedViewModel {
+    // MARK: - Observable State
 
     var posts: [FeedPost] = [] {
         didSet {
-            // 当 posts 变化时自动更新 feedItems 缓存
             _cachedFeedItems = nil
         }
     }
@@ -40,21 +42,15 @@ class FeedViewModel {
     var isLoading = false
     var isLoadingMore = false
     var error: String?
-    var toastError: String?  // Transient error for toast notifications
+    var toastError: String?
     var hasMore = true
-    var isRefreshing = false  // Explicit refresh state for UI feedback
-    var lastRefreshedAt: Date?  // Track last refresh time
+    var isRefreshing = false
+    var lastRefreshedAt: Date?
 
-    // MARK: - Channel State
-    var channels: [FeedChannel] = []
-    var selectedChannelId: String? = nil  // nil = "For You" / all content
-    var isLoadingChannels = false
-    
-    // MARK: - Cached Feed Items (性能优化)
-    // 缓存 buildFeedItems 结果，避免每次渲染都重新计算
+    // MARK: - Cached Feed Items
+
     private var _cachedFeedItems: [FeedItemType]?
-    
-    /// 获取用于显示的 Feed 项目列表（带缓存）
+
     var feedItems: [FeedItemType] {
         if let cached = _cachedFeedItems {
             return cached
@@ -64,139 +60,49 @@ class FeedViewModel {
         return items
     }
 
-    // MARK: - Private Properties
+    // MARK: - Handlers (Delegated Responsibilities)
+
+    private let socialActionsHandler: FeedSocialActionsHandler
+    private let imagePrefetcher: FeedImagePrefetcher
+    private let postProcessor: FeedPostProcessor
+    let channelManager: FeedChannelManager
+    private let memoryManager: FeedMemoryManager
+
+    // MARK: - Services
 
     private let feedService: FeedService
     private let contentService: ContentService
-    private let socialService: SocialService
     private let authManager: AuthenticationManager
     private let performanceMonitor = FeedPerformanceMonitor.shared
+
+    // MARK: - Private State
+
     private var currentCursor: String?
     private var currentAlgorithm: FeedAlgorithm = .chronological
+
     private var currentUserId: String? {
         KeychainService.shared.get(.userId)
     }
 
-    // Track ongoing like operations to prevent concurrent calls for the same post
-    private var ongoingLikeOperations: Set<String> = []
-
-    // Track recently created posts to preserve them after refresh (optimistic update)
-    // Posts are kept for 5 minutes to allow backend indexing
-    private var recentlyCreatedPosts: [(post: FeedPost, createdAt: Date)] = []
-    private let recentPostRetentionDuration: TimeInterval = 300  // 5 minutes
-
-    // MARK: - Memory Management
-
-    // Maximum number of posts to keep in memory to prevent excessive memory usage
-    private let maxPostsInMemory = 100
-    
-    #if DEBUG
-    private var loadFeedInvocationCounter: Int = 0
-    #endif
-
-    // Track ongoing bookmark operations to prevent concurrent calls for the same post
-    private var ongoingBookmarkOperations: Set<String> = []
-
-    // Image prefetch target size for feed cards
-    private let prefetchTargetSize = CGSize(width: 750, height: 1000)
-
-    // Prefetch throttling (debounce)
-    private var lastPrefetchTime: Date = .distantPast
-    private let prefetchDebounceInterval: TimeInterval = 0.5
-
-    // MARK: - Image Prefetching
-
-    // Track failed prefetch URLs to avoid repeated attempts
-    private var failedPrefetchUrls: Set<String> = []
-    private let maxPrefetchRetries = 2
-
-    /// Prefetch images for upcoming posts to improve scroll performance
-    private func prefetchImagesForPosts(_ posts: [FeedPost], startIndex: Int = 0, count: Int = 5) {
-        let endIndex = min(startIndex + count, posts.count)
-        guard startIndex < endIndex else { return }
-
-        let upcomingPosts = posts[startIndex..<endIndex]
-        let urls = upcomingPosts.flatMap { $0.displayMediaUrls }
-            .filter { !failedPrefetchUrls.contains($0) }  // Skip previously failed URLs
-
-        guard !urls.isEmpty else { return }
-
-        // Start tracking image prefetch
-        let signpostID = performanceMonitor.beginImagePrefetch(urlCount: urls.count)
-
-        // Run prefetch asynchronously with low priority and error handling
-        // Use Task instead of Task.detached to maintain MainActor context for failedPrefetchUrls access
-        Task(priority: .utility) { [urls, prefetchTargetSize, weak self] in
-            var successCount = 0
-            var failCount = 0
-
-            await ImageCacheService.shared.prefetch(urls: urls, targetSize: prefetchTargetSize, priority: .low)
-            successCount = urls.count
-
-            // Track prefetch completion
-            self?.performanceMonitor.endImagePrefetch(signpostID: signpostID, successCount: successCount, failCount: failCount)
-        }
-    }
-
-    /// Called when a post appears on screen - prefetch next batch
-    func onPostAppear(at index: Int) {
-        // Prefetch images for the next 5 posts
-        prefetchImagesForPosts(posts, startIndex: index + 1, count: 5)
-    }
-
-    /// Smart prefetch with visibility tracking for optimal performance
-    /// Uses debouncing to prevent excessive prefetch calls during rapid scrolling
-    func onVisiblePostsChanged(visibleIndices: Set<Int>) {
-        guard !posts.isEmpty else { return }
-
-        // Debounce: skip if called too frequently (within 0.5 seconds)
-        let now = Date()
-        guard now.timeIntervalSince(lastPrefetchTime) > prefetchDebounceInterval else {
-            return
-        }
-        lastPrefetchTime = now
-
-        let sortedIndices = visibleIndices.sorted()
-        guard let _ = sortedIndices.first,
-              let lastVisible = sortedIndices.last else { return }
-
-        // Get URLs for currently visible posts (high priority)
-        let visibleUrls = sortedIndices
-            .filter { $0 < posts.count }
-            .flatMap { posts[$0].displayMediaUrls }
-            .filter { !failedPrefetchUrls.contains($0) }
-
-        // Get URLs for upcoming posts (prefetch with low priority)
-        let prefetchStart = lastVisible + 1
-        let prefetchEnd = min(prefetchStart + 8, posts.count)
-        let upcomingUrls = (prefetchStart..<prefetchEnd)
-            .flatMap { posts[$0].displayMediaUrls }
-            .filter { !failedPrefetchUrls.contains($0) }
-
-        // Use smart prefetch for optimal loading with error handling
-        // Use Task instead of Task.detached to maintain MainActor context for failedPrefetchUrls access
-        Task(priority: .utility) { [visibleUrls, upcomingUrls, prefetchTargetSize, weak self] in
-            await ImageCacheService.shared.smartPrefetch(
-                visibleUrls: visibleUrls,
-                upcomingUrls: upcomingUrls,
-                targetSize: prefetchTargetSize
-            )
-        }
-    }
-
-    /// Clear failed prefetch cache (called on refresh)
-    func clearPrefetchFailures() {
-        failedPrefetchUrls.removeAll()
-    }
-
-    // MARK: - Public Methods
-
-    /// Check if user is authenticated (has valid token and is not in guest mode)
     private var isAuthenticated: Bool {
         authManager.isAuthenticated && !authManager.isGuestMode
     }
 
-    /// Formatted string showing when feed was last refreshed
+    #if DEBUG
+    private var loadFeedInvocationCounter: Int = 0
+    #endif
+
+    // MARK: - Channel State (Forwarded from ChannelManager)
+
+    var channels: [FeedChannel] { channelManager.channels }
+    var selectedChannelId: String? {
+        get { channelManager.selectedChannelId }
+        set { channelManager.selectedChannelId = newValue }
+    }
+    var isLoadingChannels: Bool { channelManager.isLoadingChannels }
+
+    // MARK: - Computed Properties
+
     var lastRefreshedText: String? {
         guard let lastRefresh = lastRefreshedAt else { return nil }
         let interval = Date().timeIntervalSince(lastRefresh)
@@ -217,11 +123,8 @@ class FeedViewModel {
         }
     }
 
-    /// Load initial feed - uses Guest Feed (trending) when not authenticated
-    /// - Parameters:
-    ///   - algorithm: Feed ranking algorithm
-    ///   - isGuestFallback: Internal flag to indicate we already fell back to guest feed once.
-    ///     This prevents infinite retry loops when even guest feed returns unauthorized.
+    // MARK: - Init
+
     init(
         feedService: FeedService = FeedService(),
         contentService: ContentService = ContentService(),
@@ -230,9 +133,45 @@ class FeedViewModel {
     ) {
         self.feedService = feedService
         self.contentService = contentService
-        self.socialService = socialService
         self.authManager = authManager ?? AuthenticationManager.shared
+
+        // Initialize handlers
+        self.socialActionsHandler = FeedSocialActionsHandler(
+            socialService: socialService,
+            authManager: self.authManager
+        )
+        self.imagePrefetcher = FeedImagePrefetcher()
+        self.postProcessor = FeedPostProcessor(
+            socialService: socialService,
+            feedService: feedService,
+            authManager: self.authManager
+        )
+        self.channelManager = FeedChannelManager(feedService: feedService)
+        self.memoryManager = FeedMemoryManager()
+
+        // Setup callbacks
+        setupHandlerCallbacks()
     }
+
+    private func setupHandlerCallbacks() {
+        // Social actions handler callbacks
+        socialActionsHandler.onPostUpdate = { [weak self] (postId: String, transform: (FeedPost) -> FeedPost) in
+            guard let self = self,
+                  let index = self.posts.firstIndex(where: { $0.id == postId }) else { return }
+            self.posts[index] = transform(self.posts[index])
+        }
+
+        socialActionsHandler.onError = { [weak self] (message: String) in
+            self?.toastError = message
+        }
+
+        // Channel manager callback
+        channelManager.onChannelSelected = { [weak self] (_: String?) in
+            await self?.loadFeed(algorithm: self?.currentAlgorithm ?? .chronological)
+        }
+    }
+
+    // MARK: - Feed Loading
 
     func loadFeed(
         algorithm: FeedAlgorithm = .chronological,
@@ -241,9 +180,8 @@ class FeedViewModel {
     ) async {
         guard !isLoading else { return }
 
-        // Start performance tracking
         let loadStartTime = Date()
-        let signpostID = performanceMonitor.beginFeedLoad(source: .initial, fromCache: false)
+        let signpostState = performanceMonitor.beginFeedLoad(source: .initial, fromCache: false)
 
         isLoading = true
         error = nil
@@ -253,250 +191,48 @@ class FeedViewModel {
         #if DEBUG
         loadFeedInvocationCounter += 1
         let invocationId = loadFeedInvocationCounter
-        print("[FeedVM] loadFeed #\(invocationId) start auth=\(isAuthenticated) guestFallback=\(isGuestFallback) channelId=\(selectedChannelId ?? "nil") forceRefresh=\(forceRefresh)")
+        FeedLogger.debug("loadFeed #\(invocationId) start auth=\(isAuthenticated) guestFallback=\(isGuestFallback) channelId=\(selectedChannelId ?? "nil")")
         #endif
 
-        // OPTIMIZATION: Return cached data first for instant display (unless force refresh)
+        // Try cached data first (unless force refresh)
         if !forceRefresh {
-            if let cachedResponse = await FeedCacheService.shared.getCachedFeed(
-                algo: algorithm,
-                channelId: selectedChannelId,
-                cursor: nil
-            ) {
-                #if DEBUG
-                print("[FeedVM] loadFeed #\(invocationId) using cached data (\(cachedResponse.posts.count) posts)")
-                #endif
-
-                // Track cache hit
-                performanceMonitor.recordCacheAccess(hit: true)
-
-                var cachedPosts = cachedResponse.posts.map { FeedPost(from: $0) }
-                cachedPosts = syncCurrentUserProfile(cachedPosts)
-                mergeRecentlyCreatedPosts(into: &cachedPosts)
-
-                var seenIds = Set<String>()
-                self.posts = cachedPosts.filter { post in
-                    guard !seenIds.contains(post.id) else { return false }
-                    seenIds.insert(post.id)
-                    return true
-                }
-                self.postIds = cachedResponse.postIds
-                self.hasMore = cachedResponse.hasMore
-
-                // Prefetch images for cached posts
-                prefetchImagesForPosts(self.posts, startIndex: 0, count: 10)
-
-                // Load bookmark status asynchronously (non-blocking)
-                loadBookmarkStatusAsync(for: self.posts.map { $0.id })
-            } else {
-                // Track cache miss
-                performanceMonitor.recordCacheAccess(hit: false)
-            }
+            await loadFromCacheIfAvailable(algorithm: algorithm)
         }
 
         do {
-            // Use Guest Feed API when not authenticated, otherwise use authenticated Feed API
-            let response: FeedResponse
-            if isAuthenticated {
-                // Pass channel filter if selected
-                response = try await feedService.getFeed(algo: algorithm, limit: 20, cursor: nil, channelId: selectedChannelId)
-            } else {
-                // Guest Mode: fetch trending posts without authentication
-                response = try await feedService.getTrendingFeed(limit: 20, cursor: nil)
-            }
-
-            #if DEBUG
-            let responsePreview = response.posts.prefix(5).map { "\($0.id.prefix(8))(\($0.mediaUrls?.count ?? 0))" }.joined(separator: ",")
-            print("[FeedVM] loadFeed #\(invocationId) response posts=\(response.posts.count) preview=[\(responsePreview)] (format: idPrefix(mediaCount))")
-            #endif
-
-            // Cache the response for future use
-            await FeedCacheService.shared.cacheFeed(
-                response,
-                algo: algorithm,
-                channelId: selectedChannelId,
-                cursor: nil
-            )
-
-            // Feed API now returns full post objects directly
-            self.postIds = response.postIds
-            self.currentCursor = response.cursor
-            self.hasMore = response.hasMore
-
-            #if DEBUG
-            print("[Feed] loadFeed response: \(response.posts.count) posts, hasMore=\(response.hasMore), cursor=\(response.cursor ?? "nil"), totalCount=\(response.totalCount ?? -1)")
-            #endif
-
-            // Convert raw posts to FeedPost objects directly
-            var allPosts = response.posts.map { FeedPost(from: $0) }
-
-            // DEBUG: Log posts after API conversion
-            #if DEBUG
-            print("[FeedVM] loadFeed AFTER API conversion: \(allPosts.count) posts")
-            for post in allPosts.prefix(3) {
-                print("[FeedVM]   -> \(post.id.prefix(8)): mediaUrls=\(post.mediaUrls.count), thumbnailUrls=\(post.thumbnailUrls.count)")
-            }
-            #endif
-
-            // Sync current user's profile for their own posts (ensures latest name/avatar is shown)
-            allPosts = syncCurrentUserProfile(allPosts)
-
-            // DEBUG: Log posts before merge
-            #if DEBUG
-            print("[FeedVM] BEFORE merge: \(allPosts.count) posts, recentlyCreatedPosts=\(recentlyCreatedPosts.count)")
-            for post in allPosts.prefix(3) {
-                print("[FeedVM]   -> \(post.id.prefix(8)): mediaUrls=\(post.mediaUrls.count)")
-            }
-            #endif
-
-            // Merge recently created posts that may not be in server response yet
-            mergeRecentlyCreatedPosts(into: &allPosts)
-
-            // DEBUG: Log posts after merge
-            #if DEBUG
-            print("[FeedVM] AFTER merge: \(allPosts.count) posts")
-            for post in allPosts.prefix(3) {
-                print("[FeedVM]   -> \(post.id.prefix(8)): mediaUrls=\(post.mediaUrls.count)")
-            }
-            #endif
-
-            // Client-side deduplication: Remove duplicate posts by ID
-            var seenIds = Set<String>()
-            self.posts = allPosts.filter { post in
-                guard !seenIds.contains(post.id) else { return false }
-                seenIds.insert(post.id)
-                return true
-            }
-
-            // DEBUG: Log what posts are being set
-            #if DEBUG
-            for post in self.posts.prefix(5) {
-                print("[FeedVM] Post \(post.id.prefix(8)) set with mediaUrls=\(post.mediaUrls), thumbnailUrls=\(post.thumbnailUrls)")
-            }
-
-            let responseIdSet = Set(response.posts.map { $0.id })
-            let finalIdSet = Set(self.posts.map { $0.id })
-            let missingFromFinal = responseIdSet.subtracting(finalIdSet)
-            if !missingFromFinal.isEmpty {
-                let preview = missingFromFinal.prefix(10).map { String($0.prefix(8)) }.joined(separator: ",")
-                print("[FeedVM] ⚠️ loadFeed #\(invocationId) missingFromFinal=\(missingFromFinal.count) preview=[\(preview)]")
-            } else {
-                print("[FeedVM] loadFeed #\(invocationId) missingFromFinal=0")
-            }
-            #endif
-
-            // Prefetch images for first batch of posts
-            prefetchImagesForPosts(self.posts, startIndex: 0, count: 10)
-
-            // OPTIMIZATION: Load bookmark status asynchronously (non-blocking)
-            // This allows the feed to display immediately while bookmarks load in background
-            loadBookmarkStatusAsync(for: self.posts.map { $0.id })
-
-            // OPTIMIZATION: Fetch missing author profiles asynchronously
-            // This updates placeholder names with real author info from identity-service
-            fetchMissingAuthorProfilesAsync(for: self.posts)
+            let response = try await fetchFeed(algorithm: algorithm)
+            await processFeedResponse(response, algorithm: algorithm)
 
             self.error = nil
 
-            // Track successful load
             let duration = Date().timeIntervalSince(loadStartTime)
-            performanceMonitor.endFeedLoad(signpostID: signpostID, success: true, postCount: self.posts.count, duration: duration)
+            performanceMonitor.endFeedLoad(signpostID: signpostState, success: true, postCount: posts.count, duration: duration)
+
         } catch let apiError as APIError {
-            // Track error
-            performanceMonitor.recordError(apiError, context: "loadFeed")
-            // Handle unauthorized: try token refresh or fallback to guest mode
-            if case .unauthorized = apiError, isAuthenticated, !isGuestFallback {
-                let refreshed = await authManager.attemptTokenRefresh()
-                if refreshed {
-                    // Retry after token refresh
-                    isLoading = false
-                    await loadFeed(algorithm: algorithm, isGuestFallback: isGuestFallback)
-                    return
-                } else {
-                    // Token refresh failed - gracefully degrade to guest mode without logging out
-                    // User stays authenticated but sees guest content until next successful API call
-                    FeedLogger.debug("Token refresh failed, falling back to guest feed")
-                    isLoading = false
-                    await loadFeed(algorithm: algorithm, isGuestFallback: true)
-                    return
-                }
-            } else if case .serverError(let statusCode, _) = apiError, (500...503).contains(statusCode) {
-                // Backend feed-service unreachable, bad gateway (502), or service unavailable (503)
-                // Fallback: load guest/trending feed instead of showing a hard error.
-                do {
-                    let fallbackResponse = try await feedService.getTrendingFeed(limit: 20, cursor: nil)
-
-                    self.postIds = fallbackResponse.postIds
-                    self.currentCursor = fallbackResponse.cursor
-                    self.hasMore = fallbackResponse.hasMore
-
-                    var allPosts = fallbackResponse.posts.map { FeedPost(from: $0) }
-
-                    // Sync current user's profile for their own posts
-                    allPosts = syncCurrentUserProfile(allPosts)
-
-                    // Merge recently created posts that may not be in server response yet
-                    mergeRecentlyCreatedPosts(into: &allPosts)
-
-                    var seenIds = Set<String>()
-                    self.posts = allPosts.filter { post in
-                        guard !seenIds.contains(post.id) else { return false }
-                        seenIds.insert(post.id)
-                        return true
-                    }
-
-                    // OPTIMIZATION: Load bookmark status asynchronously (non-blocking)
-                    loadBookmarkStatusAsync(for: self.posts.map { $0.id })
-
-                    self.error = nil
-                } catch {
-                    self.error = apiError.localizedDescription
-                    self.posts = []
-                }
-                isLoading = false
-                return
-            } else {
-                // Show error and stop retrying
-                self.error = apiError.localizedDescription
-                self.posts = []
-
-                // Track failed load
-                let duration = Date().timeIntervalSince(loadStartTime)
-                performanceMonitor.endFeedLoad(signpostID: signpostID, success: false, postCount: 0, duration: duration)
-            }
+            await handleLoadError(apiError, algorithm: algorithm, isGuestFallback: isGuestFallback, signpostState: signpostState, startTime: loadStartTime)
         } catch {
-            // Track error
             performanceMonitor.recordError(error, context: "loadFeed")
-
             self.error = "Failed to load feed: \(error.localizedDescription)"
             self.posts = []
 
-            // Track failed load
             let duration = Date().timeIntervalSince(loadStartTime)
-            performanceMonitor.endFeedLoad(signpostID: signpostID, success: false, postCount: 0, duration: duration)
+            performanceMonitor.endFeedLoad(signpostID: signpostState, success: false, postCount: 0, duration: duration)
         }
 
         isLoading = false
     }
 
-    /// Load more posts (pagination)
-    /// Uses cursor-based pagination with base64-encoded offset from backend
     func loadMore() async {
-        guard !isLoadingMore, hasMore else { return }
-
-        // Must have a cursor to load more (first page is loaded via loadFeed)
-        guard currentCursor != nil else {
-            #if DEBUG
-            print("[Feed] loadMore skipped: no cursor available")
-            #endif
-            hasMore = false
+        guard !isLoadingMore, hasMore, currentCursor != nil else {
+            if currentCursor == nil {
+                hasMore = false
+            }
             return
         }
 
         isLoadingMore = true
 
         do {
-            // Use cursor-based pagination: pass the cursor from previous response
             let response = try await feedService.getFeed(
                 algo: currentAlgorithm,
                 limit: 20,
@@ -504,164 +240,72 @@ class FeedViewModel {
                 channelId: selectedChannelId
             )
 
-            self.postIds.append(contentsOf: response.postIds)
-            self.currentCursor = response.cursor
-            self.hasMore = response.hasMore
+            postIds.append(contentsOf: response.postIds)
+            currentCursor = response.cursor
+            hasMore = response.hasMore
 
-            #if DEBUG
-            print("[Feed] loadMore response: \(response.posts.count) posts, hasMore=\(response.hasMore), nextCursor=\(response.cursor ?? "nil")")
-            #endif
-
-            // Convert raw posts to FeedPost objects directly
             var newPosts = response.posts.map { FeedPost(from: $0) }
+            newPosts = postProcessor.syncCurrentUserProfile(newPosts)
 
-            // Sync current user's profile for their own posts
-            newPosts = syncCurrentUserProfile(newPosts)
-
-            // Client-side deduplication: Only add posts that aren't already in the feed
-            let existingIds = Set(self.posts.map { $0.id })
+            let existingIds = Set(posts.map { $0.id })
             let uniqueNewPosts = newPosts.filter { !existingIds.contains($0.id) }
 
-            // If we got some posts from API but all were duplicates, this indicates a pagination issue
-            // However, we should NOT stop pagination - the server might have more posts after these duplicates
-            // Only stop if hasMore is explicitly false from the server response
-            if uniqueNewPosts.isEmpty && !newPosts.isEmpty {
-                #if DEBUG
-                print("[Feed] loadMore returned \(newPosts.count) posts but all were duplicates - server has_more=\(response.hasMore)")
-                #endif
-                // Trust the server's has_more flag instead of stopping on duplicates
-                // This prevents premature pagination termination due to edge cases
-            }
-
             if !uniqueNewPosts.isEmpty {
-                self.posts.append(contentsOf: uniqueNewPosts)
+                posts.append(contentsOf: uniqueNewPosts)
 
-                #if DEBUG
-                print("[Feed] loadMore added \(uniqueNewPosts.count) new posts, total: \(self.posts.count)")
-                #endif
-
-                // OPTIMIZATION: Load bookmark status asynchronously for new posts
-                loadBookmarkStatusAsync(for: uniqueNewPosts.map { $0.id })
-
-                // OPTIMIZATION: Fetch missing author profiles asynchronously for new posts
-                fetchMissingAuthorProfilesAsync(for: uniqueNewPosts)
-
-                // Enforce memory limit after adding new posts
-                enforceMemoryLimit()
+                loadAsyncEnrichments(for: uniqueNewPosts)
+                memoryManager.enforceMemoryLimit(posts: &posts, postIds: &postIds)
             }
 
         } catch {
-            // Don't stop pagination on error - allow retry
-            #if DEBUG
-            print("[Feed] loadMore error: \(error)")
-            #endif
+            FeedLogger.error("loadMore failed", error: error)
         }
 
         isLoadingMore = false
     }
 
-    /// Refresh feed (pull-to-refresh)
-    /// 下拉刷新时静默忽略取消错误，只在真正的网络错误时显示提示
     func refresh() async {
         guard !isLoading && !isRefreshing else { return }
 
-        // Start performance tracking for refresh
         let refreshStartTime = Date()
-        let signpostID = performanceMonitor.beginFeedLoad(source: .refresh, fromCache: false)
+        let signpostState = performanceMonitor.beginFeedLoad(source: .refresh, fromCache: false)
 
         isLoading = true
         isRefreshing = true
-        clearPrefetchFailures()  // Reset failed prefetch cache on refresh
-        // 刷新时不立即清除错误，只有在成功或真正的错误时才更新
+        imagePrefetcher.clearPrefetchFailures()
 
         do {
             let response: FeedResponse
             if isAuthenticated {
-                // Pass channel filter if selected
                 response = try await feedService.getFeed(algo: currentAlgorithm, limit: 20, cursor: nil, channelId: selectedChannelId)
             } else {
                 response = try await feedService.getTrendingFeed(limit: 20, cursor: nil)
             }
 
-            // Cache the refreshed response
-            await FeedCacheService.shared.cacheFeed(
-                response,
-                algo: currentAlgorithm,
-                channelId: selectedChannelId,
-                cursor: nil
-            )
+            await FeedCacheService.shared.cacheFeed(response, algo: currentAlgorithm, channelId: selectedChannelId, cursor: nil)
 
-            // 成功后更新数据
-            self.postIds = response.postIds
-            self.currentCursor = response.cursor
-            self.hasMore = response.hasMore
+            postIds = response.postIds
+            currentCursor = response.cursor
+            hasMore = response.hasMore
 
             var allPosts = response.posts.map { FeedPost(from: $0) }
+            allPosts = postProcessor.syncCurrentUserProfile(allPosts)
+            posts = postProcessor.deduplicatePosts(allPosts)
 
-            // Sync current user's profile for their own posts
-            allPosts = syncCurrentUserProfile(allPosts)
+            loadAsyncEnrichments(for: posts)
 
-            var seenIds = Set<String>()
-            self.posts = allPosts.filter { post in
-                guard !seenIds.contains(post.id) else { return false }
-                seenIds.insert(post.id)
-                return true
-            }
-
-            // OPTIMIZATION: Load bookmark status asynchronously (non-blocking)
-            loadBookmarkStatusAsync(for: self.posts.map { $0.id })
-
-            // OPTIMIZATION: Fetch missing author profiles asynchronously
-            fetchMissingAuthorProfilesAsync(for: self.posts)
-
-            // 成功时清除错误并更新刷新时间
             self.error = nil
-            self.lastRefreshedAt = Date()
+            lastRefreshedAt = Date()
 
-            // Track successful refresh
             let duration = Date().timeIntervalSince(refreshStartTime)
-            performanceMonitor.endFeedLoad(signpostID: signpostID, success: true, postCount: self.posts.count, duration: duration)
+            performanceMonitor.endFeedLoad(signpostID: signpostState, success: true, postCount: posts.count, duration: duration)
 
-        } catch let apiError as APIError {
-            // Track error
-            performanceMonitor.recordError(apiError, context: "refresh")
-            // 检查是否是取消错误（用户快速滑动导致）
-            if case .networkError(let underlyingError) = apiError {
-                let nsError = underlyingError as NSError
-                if nsError.code == NSURLErrorCancelled {
-                    // 静默忽略取消的请求，保持当前数据
-                    isLoading = false
-                    isRefreshing = false
-                    return
-                }
-            }
-            // 非取消错误：只有当前没有数据时才显示错误
-            if posts.isEmpty {
-                self.error = apiError.localizedDescription
-
-                // Track failed refresh
-                let duration = Date().timeIntervalSince(refreshStartTime)
-                performanceMonitor.endFeedLoad(signpostID: signpostID, success: false, postCount: 0, duration: duration)
-            }
         } catch {
-            // Track error
-            performanceMonitor.recordError(error, context: "refresh")
-
-            let nsError = error as NSError
-            // 检查是否是取消错误
-            if nsError.code == NSURLErrorCancelled || nsError.localizedDescription.lowercased().contains("cancelled") {
-                // 静默忽略取消的请求
-                isLoading = false
-                isRefreshing = false
-                return
-            }
-            // 非取消错误：只有当前没有数据时才显示错误
-            if posts.isEmpty {
+            if !isCancelledError(error) && posts.isEmpty {
                 self.error = "Failed to refresh: \(error.localizedDescription)"
 
-                // Track failed refresh
                 let duration = Date().timeIntervalSince(refreshStartTime)
-                performanceMonitor.endFeedLoad(signpostID: signpostID, success: false, postCount: 0, duration: duration)
+                performanceMonitor.endFeedLoad(signpostID: signpostState, success: false, postCount: 0, duration: duration)
             }
         }
 
@@ -669,57 +313,54 @@ class FeedViewModel {
         isRefreshing = false
     }
 
-    // MARK: - Channel Management
+    // MARK: - Channel Management (Delegated)
 
-    /// Load available channels from backend
     func loadChannels() async {
-        guard !isLoadingChannels else { return }
-        isLoadingChannels = true
-
-        do {
-            channels = try await feedService.getChannels(enabledOnly: true)
-            FeedLogger.debug("Loaded \(channels.count) channels")
-        } catch {
-            FeedLogger.error("Failed to load channels", error: error)
-            // Use fallback channels when API is unavailable
-            channels = FeedChannel.fallbackChannels
-        }
-
-        isLoadingChannels = false
+        await channelManager.loadChannels()
     }
 
-    /// Select a channel and reload feed
-    /// - Parameter channelId: Channel ID to filter by, or nil for "For You" (all content)
     func selectChannel(_ channelId: String?) async {
-        guard selectedChannelId != channelId else { return }
-
-        selectedChannelId = channelId
-
-        // Track channel selection for analytics
-        if let channelId = channelId,
-           let channel = channels.first(where: { $0.id == channelId }) {
-            FeedLogger.debug("Selected channel: \(channel.name) (\(channelId))")
-            // TODO: Add analytics tracking
-            // AnalyticsService.shared.track(.channelTabClick, properties: ["channel_id": channelId, "channel_name": channel.name])
-        } else {
-            FeedLogger.debug("Selected: For You (all content)")
-        }
-
-        // Reload feed with new channel filter (track as channel switch)
-        let loadStartTime = Date()
-        _ = performanceMonitor.beginFeedLoad(source: .channelSwitch, fromCache: false)
-
-        await loadFeed(algorithm: currentAlgorithm)
-
-        // Note: loadFeed handles its own tracking, but we track the overall channel switch duration here
-        let duration = Date().timeIntervalSince(loadStartTime)
-        FeedLogger.debug("Channel switch completed in \(String(format: "%.2f", duration))s")
+        await channelManager.selectChannel(channelId)
     }
 
-    /// Add a newly created post to the top of the feed (optimistic update)
-    /// This avoids the need to refresh the entire feed after posting
+    // MARK: - Social Actions (Delegated)
+
+    func toggleLike(postId: String) async {
+        guard let post = posts.first(where: { $0.id == postId }) else { return }
+        await socialActionsHandler.toggleLike(postId: postId, currentPost: post)
+    }
+
+    func toggleBookmark(postId: String) async {
+        guard let post = posts.first(where: { $0.id == postId }) else { return }
+        await socialActionsHandler.toggleBookmark(postId: postId, currentPost: post)
+    }
+
+    func sharePost(postId: String) async -> FeedPost? {
+        guard let post = posts.first(where: { $0.id == postId }) else { return nil }
+        return await socialActionsHandler.sharePost(postId: postId, currentPost: post)
+    }
+
+    func incrementCommentCount(postId: String) {
+        socialActionsHandler.incrementCommentCount(postId: postId)
+    }
+
+    // MARK: - Image Prefetching (Delegated)
+
+    func onPostAppear(at index: Int) {
+        imagePrefetcher.onPostAppear(at: index, posts: posts)
+    }
+
+    func onVisiblePostsChanged(visibleIndices: Set<Int>) {
+        imagePrefetcher.onVisiblePostsChanged(visibleIndices: visibleIndices, posts: posts)
+    }
+
+    func clearPrefetchFailures() {
+        imagePrefetcher.clearPrefetchFailures()
+    }
+
+    // MARK: - New Post
+
     func addNewPost(_ post: Post) {
-        // Use current user info for the new post
         let currentUser = authManager.currentUser
         let authorName = currentUser?.displayName ?? currentUser?.username ?? "User \(post.authorId.prefix(8))"
         let authorAvatar = currentUser?.avatarUrl
@@ -739,238 +380,67 @@ class FeedViewModel {
             isBookmarked: false
         )
 
-        #if DEBUG
-        print("[FeedVM] addNewPost id=\(post.id.prefix(8)) mediaUrlsCount=\(post.mediaUrls?.count ?? 0) firstUrl=\(post.mediaUrls?.first ?? "nil")")
-        #endif
+        posts.insert(feedPost, at: 0)
+        postIds.insert(post.id, at: 0)
 
-        // Add to the top of the feed
-        self.posts.insert(feedPost, at: 0)
-        self.postIds.insert(post.id, at: 0)
+        memoryManager.addRecentlyCreatedPost(feedPost)
 
-        // Track recently created post to preserve after refresh
-        cleanupExpiredRecentPosts()
-        recentlyCreatedPosts.append((post: feedPost, createdAt: Date()))
-
-        // Invalidate feed cache to ensure fresh data on next load
         Task.detached(priority: .utility) {
             await FeedCacheService.shared.invalidateCacheOnNewPost()
         }
 
-        // Enforce memory limit
-        enforceMemoryLimit()
-    }
-    
-    /// Clean up expired recently created posts
-    private func cleanupExpiredRecentPosts() {
-        let now = Date()
-        recentlyCreatedPosts.removeAll { now.timeIntervalSince($0.createdAt) > recentPostRetentionDuration }
+        memoryManager.enforceMemoryLimit(posts: &posts, postIds: &postIds)
     }
 
-    /// Enforce memory limit by removing oldest posts when exceeding maxPostsInMemory
-    /// This prevents excessive memory usage in long scrolling sessions
-    private func enforceMemoryLimit() {
-        guard posts.count > maxPostsInMemory else { return }
+    // MARK: - Algorithm
 
-        let excessCount = posts.count - maxPostsInMemory
-        // Remove oldest posts (from the end of the array)
-        posts.removeLast(excessCount)
-        postIds.removeLast(excessCount)
-
-        #if DEBUG
-        print("[FeedVM] Enforced memory limit: removed \(excessCount) oldest posts, now at \(posts.count) posts")
-        #endif
-    }
-
-    /// Load bookmark status asynchronously without blocking the main feed display
-    /// This optimization allows the feed to render immediately while bookmark states load in background
-    private func loadBookmarkStatusAsync(for postIds: [String]) {
-        guard isAuthenticated, !postIds.isEmpty else { return }
-
-        // Use Task instead of Task.detached to maintain MainActor context
-        Task(priority: .utility) { [weak self] in
-            guard let self = self else { return }
-
-            do {
-                let bookmarkedIds = try await self.socialService.batchCheckBookmarked(postIds: postIds)
-
-                // Already on MainActor, can safely update state
-                self.updateBookmarkStates(bookmarkedIds)
-
-                #if DEBUG
-                print("[FeedVM] Async bookmark load complete: \(bookmarkedIds.count) bookmarked")
-                #endif
-            } catch {
-                #if DEBUG
-                print("[FeedVM] Async bookmark load failed: \(error)")
-                #endif
-                // Silently fail - bookmarks are non-critical for feed display
-            }
-        }
-    }
-
-    /// Fetch missing author profiles and update posts
-    /// Called when posts have placeholder author names or missing avatars
-    private func fetchMissingAuthorProfilesAsync(for posts: [FeedPost]) {
-        guard isAuthenticated else { return }
-
-        // Find posts with missing author info (placeholder name or missing avatar)
-        let postsWithMissingProfiles = posts.filter { post in
-            post.authorName.isEmpty ||
-            post.authorName.hasPrefix("User ") ||
-            post.authorAvatar == nil
-        }
-
-        guard !postsWithMissingProfiles.isEmpty else { return }
-
-        let userIds = postsWithMissingProfiles.map { $0.authorId }
-
-        #if DEBUG
-        print("[FeedVM] Fetching \(userIds.count) missing author profiles")
-        #endif
-
-        Task(priority: .utility) { [weak self] in
-            guard let self = self else { return }
-
-            do {
-                let profiles = try await self.feedService.batchGetProfiles(userIds: userIds)
-
-                // Update posts with fetched author info
-                self.updateAuthorProfiles(profiles)
-
-                #if DEBUG
-                print("[FeedVM] Updated \(profiles.count) author profiles")
-                #endif
-            } catch {
-                #if DEBUG
-                print("[FeedVM] Failed to fetch author profiles: \(error)")
-                #endif
-                // Silently fail - placeholder names are acceptable fallback
-            }
-        }
-    }
-
-    /// Update posts with fetched author profiles
-    private func updateAuthorProfiles(_ profiles: [String: AuthorProfile]) {
-        guard !profiles.isEmpty else { return }
-
-        for i in posts.indices {
-            let post = posts[i]
-            if let profile = profiles[post.authorId] {
-                posts[i] = post.copying(
-                    authorName: profile.displayName,
-                    authorAvatar: .some(profile.avatarUrl)
-                )
-            }
-        }
-    }
-
-    /// Update bookmark states for posts
-    private func updateBookmarkStates(_ bookmarkedIds: Set<String>) {
-        for i in posts.indices {
-            if bookmarkedIds.contains(posts[i].id) && !posts[i].isBookmarked {
-                posts[i] = posts[i].copying(isBookmarked: true)
-            }
-        }
-    }
-    
-    /// Merge recently created posts that are not in the server response
-    private func mergeRecentlyCreatedPosts(into posts: inout [FeedPost]) {
-        cleanupExpiredRecentPosts()
-        
-        let serverPostIds = Set(posts.map { $0.id })
-        let missingPosts = recentlyCreatedPosts
-            .filter { !serverPostIds.contains($0.post.id) }
-            .map { $0.post }
-        
-        if !missingPosts.isEmpty {
-            // Insert missing recent posts at the top
-            posts.insert(contentsOf: missingPosts, at: 0)
-            FeedLogger.debug("Preserved \(missingPosts.count) recently created post(s) after refresh")
-        }
-    }
-
-    /// Switch feed algorithm
     func switchAlgorithm(to algorithm: FeedAlgorithm) async {
         guard algorithm != currentAlgorithm else { return }
         await loadFeed(algorithm: algorithm)
     }
 
-    // MARK: - Social Actions
+    // MARK: - Performance Monitoring
 
-    /// Toggle like on a post
-    func toggleLike(postId: String) async {
-        // Prevent concurrent like operations for the same post
-        guard !ongoingLikeOperations.contains(postId) else {
-            #if DEBUG
-            print("[Feed] toggleLike skipped - operation already in progress for postId: \(postId)")
-            #endif
-            return
-        }
-        ongoingLikeOperations.insert(postId)
-        defer { ongoingLikeOperations.remove(postId) }
+    func getPerformanceMetrics() -> FeedMetrics {
+        performanceMonitor.getMetrics()
+    }
 
+    func logPerformanceMetrics() {
         #if DEBUG
-        print("[Feed] toggleLike called for postId: \(postId)")
-        print("[Feed] currentUserId: \(currentUserId ?? "nil")")
-        print("[Feed] isAuthenticated: \(isAuthenticated)")
+        performanceMonitor.logMetrics()
         #endif
+    }
 
-        guard let index = posts.firstIndex(where: { $0.id == postId }),
-              let userId = currentUserId else {
-            #if DEBUG
-            print("[Feed] toggleLike early return - postId not found or userId is nil")
-            #endif
-            return
-        }
+    func resetPerformanceMetrics() {
+        performanceMonitor.resetMetrics()
+    }
 
-        let post = posts[index]
-        let wasLiked = post.isLiked
+    // MARK: - Private Helpers
 
-        // Optimistic update
-        posts[index] = post.copying(
-            likeCount: wasLiked ? post.likeCount - 1 : post.likeCount + 1,
-            isLiked: !wasLiked
-        )
+    private func loadFromCacheIfAvailable(algorithm: FeedAlgorithm) async {
+        if let cachedResponse = await FeedCacheService.shared.getCachedFeed(
+            algo: algorithm,
+            channelId: selectedChannelId,
+            cursor: nil
+        ) {
+            performanceMonitor.recordCacheAccess(hit: true)
 
-        do {
-            if wasLiked {
-                try await socialService.deleteLike(postId: postId, userId: userId)
-            } else {
-                try await socialService.createLike(postId: postId, userId: userId)
+            var cachedPosts = cachedResponse.posts.map { FeedPost(from: $0) }
+            cachedPosts = postProcessor.syncCurrentUserProfile(cachedPosts)
+
+            let missingPosts = memoryManager.getMissingRecentPosts(serverPostIds: Set(cachedPosts.map { $0.id }))
+            if !missingPosts.isEmpty {
+                cachedPosts.insert(contentsOf: missingPosts, at: 0)
             }
-        } catch let error as APIError {
-            // Revert on failure
-            posts[index] = post
 
-            // Handle specific error cases
-            switch error {
-            case .unauthorized:
-                // Session issue - show error instead of forcing logout
-                // APIClient's token refresh should handle re-authentication
-                self.toastError = "Please try again."
-                #if DEBUG
-                print("[Feed] Toggle like error: Unauthorized, will retry on next action")
-                #endif
-            case .noConnection:
-                self.toastError = "No internet connection. Please try again."
-            case .serviceUnavailable:
-                self.toastError = "Service temporarily unavailable. Please try again later."
-                #if DEBUG
-                print("[Feed] Toggle like error: Service unavailable (503)")
-                #endif
-            default:
-                self.toastError = "Failed to like post. Please try again."
-                #if DEBUG
-                print("[Feed] Toggle like error: \(error)")
-                #endif
-            }
-        } catch {
-            // Revert on failure
-            posts[index] = post
-            self.toastError = "Failed to like post. Please try again."
-            #if DEBUG
-            print("[Feed] Toggle like error: \(error)")
-            #endif
+            posts = postProcessor.deduplicatePosts(cachedPosts)
+            postIds = cachedResponse.postIds
+            hasMore = cachedResponse.hasMore
+
+            imagePrefetcher.prefetchImagesForPosts(posts, startIndex: 0, count: 10)
+            loadAsyncEnrichments(for: posts)
+        } else {
+            performanceMonitor.recordCacheAccess(hit: false)
         }
     }
 
@@ -1110,125 +580,100 @@ class FeedViewModel {
         }
     }
 
-    // MARK: - Private Methods
-
-    /// Process posts: sync current user profile, enrich with bookmark status and deduplicate
-    private func processAndDeduplicatePosts(_ posts: [FeedPost]) async -> [FeedPost] {
-        let syncedPosts = syncCurrentUserProfile(posts)
-        let enrichedPosts = await enrichWithBookmarkStatus(syncedPosts)
-        return deduplicatePosts(enrichedPosts)
-    }
-
-    /// Sync current user's name/avatar for their own posts
-    /// This ensures the Feed shows the latest profile data after user updates it locally
-    private func syncCurrentUserProfile(_ posts: [FeedPost]) -> [FeedPost] {
-        guard let currentUser = authManager.currentUser else {
-            return posts
-        }
-
-        let resolvedName: String = {
-            let display = currentUser.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if !display.isEmpty {
-                return display
-            }
-            return currentUser.username
-        }()
-
-        return posts.map { post in
-            guard post.authorId == currentUser.id else { return post }
-
-            let nameOverride: String? = resolvedName.isEmpty ? nil : resolvedName
-            let avatarOverride: String?? = {
-                if currentUser.avatarUrl != post.authorAvatar {
-                    return .some(currentUser.avatarUrl)
-                }
-                return nil
-            }()
-
-            if nameOverride == nil && avatarOverride == nil {
-                return post
-            }
-
-            return post.copying(authorName: nameOverride, authorAvatar: avatarOverride)
+    private func fetchFeed(algorithm: FeedAlgorithm) async throws -> FeedResponse {
+        if isAuthenticated {
+            return try await feedService.getFeed(algo: algorithm, limit: 20, cursor: nil, channelId: selectedChannelId)
+        } else {
+            return try await feedService.getTrendingFeed(limit: 20, cursor: nil)
         }
     }
 
-    /// Enrich posts with bookmark status for authenticated users
-    private func enrichWithBookmarkStatus(_ posts: [FeedPost]) async -> [FeedPost] {
-        guard isAuthenticated, !posts.isEmpty else { return posts }
+    private func processFeedResponse(_ response: FeedResponse, algorithm: FeedAlgorithm) async {
+        await FeedCacheService.shared.cacheFeed(response, algo: algorithm, channelId: selectedChannelId, cursor: nil)
 
+        postIds = response.postIds
+        currentCursor = response.cursor
+        hasMore = response.hasMore
+
+        var allPosts = response.posts.map { FeedPost(from: $0) }
+        allPosts = postProcessor.syncCurrentUserProfile(allPosts)
+
+        let missingPosts = memoryManager.getMissingRecentPosts(serverPostIds: Set(allPosts.map { $0.id }))
+        if !missingPosts.isEmpty {
+            allPosts.insert(contentsOf: missingPosts, at: 0)
+        }
+
+        posts = postProcessor.deduplicatePosts(allPosts)
+
+        imagePrefetcher.prefetchImagesForPosts(posts, startIndex: 0, count: 10)
+        loadAsyncEnrichments(for: posts)
+    }
+
+    private func loadAsyncEnrichments(for posts: [FeedPost]) {
         let postIds = posts.map { $0.id }
-        guard let bookmarkedIds = try? await socialService.batchCheckBookmarked(postIds: postIds) else {
-            return posts
+
+        postProcessor.loadBookmarkStatusAsync(for: postIds) { [weak self] (bookmarkedIds: Set<String>) in
+            guard let self = self else { return }
+            self.postProcessor.updateBookmarkStates(bookmarkedIds, in: &self.posts)
         }
 
-        return posts.map { post in
-            bookmarkedIds.contains(post.id) ? post.copying(isBookmarked: true) : post
+        postProcessor.fetchMissingAuthorProfilesAsync(for: posts) { [weak self] (profiles: [String: AuthorProfile]) in
+            guard let self = self else { return }
+            self.postProcessor.updateAuthorProfiles(profiles, in: &self.posts)
         }
     }
 
-    /// Remove duplicate posts by ID
-    /// Runs on background thread to avoid blocking UI with large datasets
-    private func deduplicatePosts(_ posts: [FeedPost]) -> [FeedPost] {
-        // For small datasets, process directly
-        guard posts.count > 50 else {
-            var seenIds = Set<String>()
-            return posts.filter { post in
-                guard !seenIds.contains(post.id) else { return false }
-                seenIds.insert(post.id)
-                return true
+    private func handleLoadError(
+        _ apiError: APIError,
+        algorithm: FeedAlgorithm,
+        isGuestFallback: Bool,
+        signpostState: OSSignpostIntervalState,
+        startTime: Date
+    ) async {
+        performanceMonitor.recordError(apiError, context: "loadFeed")
+
+        if case .unauthorized = apiError, isAuthenticated, !isGuestFallback {
+            let refreshed = await authManager.attemptTokenRefresh()
+            if refreshed {
+                isLoading = false
+                await loadFeed(algorithm: algorithm, isGuestFallback: isGuestFallback)
+                return
+            } else {
+                isLoading = false
+                await loadFeed(algorithm: algorithm, isGuestFallback: true)
+                return
             }
-        }
+        } else if case .serverError(let statusCode, _) = apiError, (500...503).contains(statusCode) {
+            await handleServerErrorFallback()
+        } else {
+            self.error = apiError.localizedDescription
+            self.posts = []
 
-        // For large datasets, process on background thread (handled by caller)
-        var seenIds = Set<String>()
-        return posts.filter { post in
-            guard !seenIds.contains(post.id) else { return false }
-            seenIds.insert(post.id)
-            return true
+            let duration = Date().timeIntervalSince(startTime)
+            performanceMonitor.endFeedLoad(signpostID: signpostState, success: false, postCount: 0, duration: duration)
         }
     }
 
-    /// Update feed state from response
-    private func updateFeedState(from response: FeedResponse) {
-        self.postIds = response.postIds
-        self.currentCursor = response.cursor
-        self.hasMore = response.hasMore
-    }
-
-    /// Handle server error by falling back to trending feed
-    private func handleServerErrorFallback(originalError: APIError) async {
+    private func handleServerErrorFallback() async {
         do {
             let fallbackResponse = try await feedService.getTrendingFeed(limit: 20, cursor: nil)
-            updateFeedState(from: fallbackResponse)
-            self.posts = await processAndDeduplicatePosts(fallbackResponse.posts.map { FeedPost(from: $0) })
+
+            postIds = fallbackResponse.postIds
+            currentCursor = fallbackResponse.cursor
+            hasMore = fallbackResponse.hasMore
+
+            var allPosts = fallbackResponse.posts.map { FeedPost(from: $0) }
+            allPosts = postProcessor.syncCurrentUserProfile(allPosts)
+            posts = postProcessor.deduplicatePosts(allPosts)
+
+            loadAsyncEnrichments(for: posts)
             self.error = nil
         } catch {
-            self.error = originalError.localizedDescription
+            self.error = "Feed service unavailable"
             self.posts = []
         }
     }
 
-    /// Handle social action errors with appropriate user feedback
-    private func handleSocialActionError(_ error: APIError, action: String) async {
-        switch error {
-        case .unauthorized:
-            // Session issue - show error instead of forcing logout
-            // APIClient's token refresh mechanism will handle re-authentication
-            self.toastError = "Please try again."
-            FeedLogger.debug("Toggle \(action) error: Unauthorized, will retry on next action")
-        case .noConnection:
-            self.toastError = "No internet connection. Please try again."
-        case .serviceUnavailable:
-            self.toastError = "Service temporarily unavailable. Please try again later."
-            FeedLogger.debug("Toggle \(action) error: Service unavailable (503)")
-        default:
-            self.toastError = "Failed to \(action) post. Please try again."
-            FeedLogger.debug("Toggle \(action) error: \(error)")
-        }
-    }
-
-    /// Check if error is a cancelled request error
     private func isCancelledError(_ error: Error) -> Bool {
         if let apiError = error as? APIError, case .networkError(let underlyingError) = apiError {
             let nsError = underlyingError as NSError
@@ -1238,73 +683,6 @@ class FeedViewModel {
         }
         let nsError = error as NSError
         return nsError.code == NSURLErrorCancelled || nsError.localizedDescription.lowercased().contains("cancelled")
-    }
-
-    // MARK: - Performance Monitoring
-
-    /// Get current performance metrics for debugging
-    func getPerformanceMetrics() -> FeedMetrics {
-        return performanceMonitor.getMetrics()
-    }
-
-    /// Log performance metrics report to console (debug builds only)
-    func logPerformanceMetrics() {
-        #if DEBUG
-        performanceMonitor.logMetrics()
-        #endif
-    }
-
-    /// Reset performance metrics (for testing or new session)
-    func resetPerformanceMetrics() {
-        performanceMonitor.resetMetrics()
-    }
-
-    /// Fetch post details from content-service and social stats (legacy method)
-    private func fetchPostDetails(postIds: [String]) async -> [FeedPost] {
-        guard !postIds.isEmpty else { return [] }
-
-        // Fetch content from content-service
-        let rawPosts: [Post]
-        do {
-            rawPosts = try await contentService.getPostsByIds(postIds)
-        } catch {
-            #if DEBUG
-            print("[Feed] Failed to fetch posts: \(error)")
-            #endif
-            return []
-        }
-
-        // Fetch social stats
-        let stats: [String: PostStats]
-        do {
-            stats = try await socialService.batchGetStats(postIds: postIds)
-        } catch {
-            #if DEBUG
-            print("[Feed] Failed to fetch stats: \(error)")
-            #endif
-            stats = [:]
-        }
-
-        // Convert to FeedPost with stats
-        return rawPosts.map { post in
-            let postStats = stats[post.id]
-            // Convert Unix timestamp (milliseconds) to Date
-            let createdDate = Date(timeIntervalSince1970: Double(post.createdAt) / 1000.0)
-            return FeedPost(
-                id: post.id,
-                authorId: post.creatorId,
-                authorName: "User \(post.creatorId.prefix(8))",  // TODO: Fetch user profile
-                authorAvatar: nil,
-                content: post.content,
-                mediaUrls: [],  // TODO: Fetch media from post
-                createdAt: createdDate,
-                likeCount: postStats?.likeCount ?? 0,
-                commentCount: postStats?.commentCount ?? 0,
-                shareCount: postStats?.shareCount ?? 0,
-                isLiked: postStats?.isLiked ?? false,
-                isBookmarked: false
-            )
-        }
     }
 }
 

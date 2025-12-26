@@ -125,7 +125,32 @@ class PushNotificationManager: NSObject, ObservableObject {
             }
         }
 
-        completion(.newData)
+        // Trigger Matrix sync to fetch offline messages
+        // This runs in background with iOS-provided time
+        Task {
+            await syncMessagesInBackground()
+            completion(.newData)
+        }
+    }
+
+    /// Sync messages in background when push notification arrives
+    /// This fetches any pending Matrix messages while app is in background
+    private func syncMessagesInBackground() async {
+        #if DEBUG
+        print("[Push] 🔄 Starting background message sync...")
+        #endif
+
+        do {
+            // Resume Matrix sync to fetch pending messages
+            try await MatrixBridgeService.shared.resumeSync()
+            #if DEBUG
+            print("[Push] ✅ Background sync completed")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[Push] ❌ Background sync failed: \(error)")
+            #endif
+        }
     }
 
     /// Unregister device token (call on logout)

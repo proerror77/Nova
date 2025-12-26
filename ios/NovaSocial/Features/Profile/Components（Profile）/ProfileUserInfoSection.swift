@@ -132,20 +132,20 @@ struct ProfileUserInfoSection: View {
         return "User"  // iOS 默认状态
     }
 
-    // 计算显示的位置（未填写时显示占位符）
+    // 计算显示的位置（未填写时显示空白，保留位置）
     private var displayLocation: String {
         if let loc = location, !loc.isEmpty {
             return loc
         }
-        return "Add Location"  // iOS 风格占位符
+        return " "  // 空白占位，保留行高
     }
 
-    // 计算显示的职业（未填写时显示占位符）
+    // 计算显示的职业（未填写时显示空白，保留位置）
     private var displayProfession: String {
         if let prof = profession, !prof.isEmpty {
             return prof
         }
-        return "Add Profession"  // iOS 风格占位符
+        return " "  // 空白占位，保留行高
     }
 
     // 判断位置是否已设置
