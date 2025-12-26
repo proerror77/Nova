@@ -291,9 +291,10 @@ struct ProfileView: View {
         .task {
             // Use current user from AuthenticationManager
             if let userId = authManager.currentUser?.id {
-                await profileData.loadUserProfile(userId: userId)
-                // 同时加载用户帖子到 UserPostsManager
-                await userPostsManager.loadUserPosts(userId: userId)
+                // 並行載入用戶資料和帖子，提高載入速度
+                async let profileTask: () = profileData.loadUserProfile(userId: userId)
+                async let postsTask: () = userPostsManager.loadUserPosts(userId: userId)
+                _ = await (profileTask, postsTask)
             }
         }
         .sheet(isPresented: Binding(
@@ -472,29 +473,13 @@ struct ProfileView: View {
                 // 头像
                 Button(action: { activeSheet = .avatarPicker }) {
                     ZStack {
-                        // 头像图片
-                        if let avatarImage = avatarManager.pendingAvatar ?? localAvatarImage {
-                            Image(uiImage: avatarImage)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 100.s, height: 100.s)
-                                .clipShape(Circle())
-                        } else if let avatarUrl = displayUser?.avatarUrl, let url = URL(string: avatarUrl) {
-                            AsyncImage(url: url) { image in
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                            } placeholder: {
-                                Circle()
-                                    .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                            }
-                            .frame(width: 100.s, height: 100.s)
-                            .clipShape(Circle())
-                        } else {
-                            Circle()
-                                .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                .frame(width: 100.s, height: 100.s)
-                        }
+                        // 头像图片 - 使用 AvatarView 组件统一处理
+                        AvatarView(
+                            image: avatarManager.pendingAvatar ?? localAvatarImage,
+                            url: displayUser?.avatarUrl,
+                            size: 100.s,
+                            name: displayUser?.displayName ?? displayUser?.username
+                        )
                     }
                     .frame(width: 108.s, height: 108.s)
                     .overlay(
@@ -690,29 +675,13 @@ struct ProfileView: View {
                         // 头像（距离导航栏 16px）
                         Button(action: { activeSheet = .avatarPicker }) {
                             ZStack {
-                                // 头像图片
-                                if let avatarImage = avatarManager.pendingAvatar ?? localAvatarImage {
-                                    Image(uiImage: avatarImage)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 100.s, height: 100.s)
-                                        .clipShape(Circle())
-                                } else if let avatarUrl = displayUser?.avatarUrl, let url = URL(string: avatarUrl) {
-                                    AsyncImage(url: url) { image in
-                                        image
-                                            .resizable()
-                                            .scaledToFill()
-                                    } placeholder: {
-                                        Circle()
-                                            .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                    }
-                                    .frame(width: 100.s, height: 100.s)
-                                    .clipShape(Circle())
-                                } else {
-                                    Circle()
-                                        .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                        .frame(width: 100.s, height: 100.s)
-                                }
+                                // 头像图片 - 使用 AvatarView 组件统一处理
+                                AvatarView(
+                                    image: avatarManager.pendingAvatar ?? localAvatarImage,
+                                    url: displayUser?.avatarUrl,
+                                    size: 100.s,
+                                    name: displayUser?.displayName ?? displayUser?.username
+                                )
                             }
                             .frame(width: 108.s, height: 108.s)
                             .overlay(

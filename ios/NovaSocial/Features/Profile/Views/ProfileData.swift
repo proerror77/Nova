@@ -299,18 +299,31 @@ class ProfileData {
         guard !postsNeedingEnrichment.isEmpty else { return posts }
 
         // Get unique author IDs
-        let authorIds = Set(postsNeedingEnrichment.map { $0.authorId })
+        let authorIds = Array(Set(postsNeedingEnrichment.map { $0.authorId }))
 
-        // Fetch author profiles
+        // Fetch author profiles IN PARALLEL for better performance
         var authorProfiles: [String: UserProfile] = [:]
-        for authorId in authorIds {
-            do {
-                let profile = try await userService.getUser(userId: authorId)
-                authorProfiles[authorId] = profile
-            } catch {
-                #if DEBUG
-                print("[ProfileData] Failed to fetch author \(authorId): \(error)")
-                #endif
+
+        await withTaskGroup(of: (String, UserProfile?).self) { group in
+            for authorId in authorIds {
+                group.addTask {
+                    do {
+                        let profile = try await self.userService.getUser(userId: authorId)
+                        return (authorId, profile)
+                    } catch {
+                        #if DEBUG
+                        print("[ProfileData] Failed to fetch author \(authorId): \(error)")
+                        #endif
+                        return (authorId, nil)
+                    }
+                }
+            }
+
+            // Collect results
+            for await (authorId, profile) in group {
+                if let profile = profile {
+                    authorProfiles[authorId] = profile
+                }
             }
         }
 
