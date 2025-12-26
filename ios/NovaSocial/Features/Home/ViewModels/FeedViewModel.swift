@@ -444,41 +444,6 @@ final class FeedViewModel {
         }
     }
 
-    /// Share a post - records share to backend and returns post for native share sheet
-    /// - Returns: The post to share, or nil if not found
-    func sharePost(postId: String) async -> FeedPost? {
-        guard let index = posts.firstIndex(where: { $0.id == postId }),
-              let userId = currentUserId else { return nil }
-
-        let post = posts[index]
-
-        // Record share to backend (don't block on this)
-        Task {
-            do {
-                try await socialService.createShare(postId: postId, userId: userId)
-                // Update share count on success
-                await MainActor.run {
-                    if let idx = posts.firstIndex(where: { $0.id == postId }) {
-                        posts[idx] = posts[idx].copying(shareCount: posts[idx].shareCount + 1)
-                    }
-                }
-            } catch {
-                #if DEBUG
-                print("[Feed] Share post error: \(error)")
-                #endif
-            }
-        }
-
-        return post
-    }
-
-    /// Increment comment count for a post (called when a comment is successfully added)
-    func incrementCommentCount(postId: String) {
-        guard let index = posts.firstIndex(where: { $0.id == postId }) else { return }
-        let post = posts[index]
-        posts[index] = post.copying(commentCount: post.commentCount + 1)
-    }
-
     /// Update comment count for a post to a specific value (called when actual count is fetched from API)
     func updateCommentCount(postId: String, count: Int) {
         #if DEBUG
@@ -498,84 +463,6 @@ final class FeedViewModel {
             posts[index] = post.copying(commentCount: count)
             #if DEBUG
             print("[Feed] ✅ updateCommentCount - count updated successfully")
-            #endif
-        }
-    }
-
-    /// Toggle bookmark on a post
-    func toggleBookmark(postId: String) async {
-        // Prevent concurrent bookmark operations for the same post
-        guard !ongoingBookmarkOperations.contains(postId) else {
-            #if DEBUG
-            print("[Feed] toggleBookmark skipped - operation already in progress for postId: \(postId)")
-            #endif
-            return
-        }
-        ongoingBookmarkOperations.insert(postId)
-        defer { ongoingBookmarkOperations.remove(postId) }
-
-        #if DEBUG
-        print("[Feed] toggleBookmark called for postId: \(postId)")
-        print("[Feed] currentUserId: \(currentUserId ?? "nil")")
-        #endif
-
-        guard let index = posts.firstIndex(where: { $0.id == postId }),
-              let userId = currentUserId else {
-            #if DEBUG
-            print("[Feed] toggleBookmark early return - postId not found or userId is nil")
-            #endif
-            return
-        }
-
-        let post = posts[index]
-        let wasBookmarked = post.isBookmarked
-
-        // Optimistic update - 同时更新 bookmarkCount 和 isBookmarked
-        posts[index] = post.copying(
-            bookmarkCount: wasBookmarked ? post.bookmarkCount - 1 : post.bookmarkCount + 1,
-            isBookmarked: !wasBookmarked
-        )
-
-        do {
-            if wasBookmarked {
-                try await socialService.deleteBookmark(postId: postId)
-            } else {
-                try await socialService.createBookmark(postId: postId, userId: userId)
-            }
-        } catch let error as APIError {
-            // Handle specific error cases - some errors should keep local state
-            switch error {
-            case .unauthorized:
-                // Revert on auth error
-                posts[index] = post
-                // Session issue - show error instead of forcing logout
-                self.toastError = "Please try again."
-                #if DEBUG
-                print("[Feed] Toggle bookmark error: Unauthorized, will retry on next action")
-                #endif
-            case .noConnection:
-                // Revert on connection error
-                posts[index] = post
-                self.toastError = "No internet connection. Please try again."
-            case .notFound, .serverError, .serviceUnavailable:
-                // Backend bookmark API not deployed yet or temporarily unavailable - keep local state (don't revert)
-                #if DEBUG
-                print("[Feed] Bookmark API not available (\(error)), using local state only")
-                #endif
-            default:
-                // Revert on other errors
-                posts[index] = post
-                self.toastError = "Failed to bookmark post. Please try again."
-                #if DEBUG
-                print("[Feed] Toggle bookmark error: \(error)")
-                #endif
-            }
-        } catch {
-            // Revert on unknown failure
-            posts[index] = post
-            self.toastError = "Failed to bookmark post. Please try again."
-            #if DEBUG
-            print("[Feed] Toggle bookmark error: \(error)")
             #endif
         }
     }

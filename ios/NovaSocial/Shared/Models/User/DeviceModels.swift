@@ -31,23 +31,25 @@ enum DeviceType: String, Codable {
 /// 设备信息模型
 struct Device: Codable, Identifiable {
     let id: String
-    let userId: String
     let deviceType: DeviceType
     let deviceName: String
-    let deviceModel: String?
     let osVersion: String?
-    let appVersion: String?
     let lastActiveAt: Int64?
-    let createdAt: Int64
     let isCurrent: Bool?
+    
+    // Optional fields (may not be in backend response)
+    let deviceModel: String?
+    let appVersion: String?
+    let createdAt: Int64?
 
-    /// 格式化的最后活跃时间
+    /// 格式化的最後活躍時間
     var formattedLastActive: String {
         guard let lastActiveAt = lastActiveAt else {
-            return "Invalid Date"
+            return "Unknown"
         }
 
-        let date = Date(timeIntervalSince1970: TimeInterval(lastActiveAt) / 1000.0)
+        // Backend returns seconds, convert to Date
+        let date = Date(timeIntervalSince1970: TimeInterval(lastActiveAt))
         let now = Date()
         let calendar = Calendar.current
         let components = calendar.dateComponents([.day, .hour, .minute], from: date, to: now)
@@ -78,15 +80,28 @@ struct Device: Codable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id
-        case userId = "user_id"
         case deviceType = "device_type"
-        case deviceName = "device_name"
-        case deviceModel = "device_model"
-        case osVersion = "os_version"
-        case appVersion = "app_version"
-        case lastActiveAt = "last_active_at"
-        case createdAt = "created_at"
+        case deviceName = "name"
+        case osVersion = "os"
+        case lastActiveAt = "last_active"
         case isCurrent = "is_current"
+        // Optional fields with snake_case mapping
+        case deviceModel = "device_model"
+        case appVersion = "app_version"
+        case createdAt = "created_at"
+    }
+    
+    // Custom initializer for creating local device
+    init(id: String, deviceType: DeviceType, deviceName: String, osVersion: String?, lastActiveAt: Int64?, isCurrent: Bool?, deviceModel: String? = nil, appVersion: String? = nil, createdAt: Int64? = nil) {
+        self.id = id
+        self.deviceType = deviceType
+        self.deviceName = deviceName
+        self.osVersion = osVersion
+        self.lastActiveAt = lastActiveAt
+        self.isCurrent = isCurrent
+        self.deviceModel = deviceModel
+        self.appVersion = appVersion
+        self.createdAt = createdAt
     }
 }
 

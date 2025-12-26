@@ -13,12 +13,40 @@ struct PostCard: View {
     var body: some View {
         VStack(spacing: 0) {
             // 图片区域 (272 - 55 = 217)
-            Image(imageName)
-                .resizable()
-                .scaledToFill()
+            if let imageUrl = imageUrl, let url = URL(string: imageUrl) {
+                // 使用网络图片
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure:
+                        Image(imageName)
+                            .resizable()
+                            .scaledToFill()
+                    case .empty:
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
+                            .overlay(ProgressView())
+                    @unknown default:
+                        Image(imageName)
+                            .resizable()
+                            .scaledToFill()
+                    }
+                }
                 .frame(width: 180.w, height: 217.h)
                 .clipped()
                 .clipShape(UnevenRoundedRectangle(topLeadingRadius: 6.s, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 6.s))
+            } else {
+                // 使用本地图片作为后备
+                Image(imageName)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 180.w, height: 217.h)
+                    .clipped()
+                    .clipShape(UnevenRoundedRectangle(topLeadingRadius: 6.s, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 6.s))
+            }
 
             // 底部内容区域 (55px)
             VStack(alignment: .leading, spacing: 6.s) {
