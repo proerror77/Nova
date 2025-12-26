@@ -282,6 +282,64 @@ impl AuthService for IdentityServiceServer {
         let tokens =
             generate_token_pair(user.id, &user.email, &user.username).map_err(anyhow_to_status)?;
 
+        // Create session for device tracking (if device_id is provided)
+        if !req.device_id.is_empty() {
+            // Determine device type from the device_type field or default based on device_name
+            let device_type = if !req.device_type.is_empty() {
+                Some(req.device_type.as_str())
+            } else {
+                None
+            };
+
+            // Parse OS name and version from os_version field (e.g., "iOS 18.0" -> "iOS", "18.0")
+            let (os_name, os_version) = if !req.os_version.is_empty() {
+                let parts: Vec<&str> = req.os_version.splitn(2, ' ').collect();
+                if parts.len() == 2 {
+                    (Some(parts[0]), Some(parts[1]))
+                } else {
+                    (Some(req.os_version.as_str()), None)
+                }
+            } else {
+                (None, None)
+            };
+
+            match db::sessions::create_session(
+                &self.db,
+                user.id,
+                &req.device_id,
+                if req.device_name.is_empty() { None } else { Some(&req.device_name) },
+                device_type,
+                os_name,
+                os_version,
+                None, // browser_name (not applicable for mobile)
+                None, // browser_version
+                None, // ip_address (could be extracted from request metadata)
+                if req.user_agent.is_empty() { None } else { Some(&req.user_agent) },
+                None, // location_country
+                None, // location_city
+            )
+            .await
+            {
+                Ok(session) => {
+                    info!(
+                        user_id = %user.id,
+                        session_id = %session.id,
+                        device_id = %req.device_id,
+                        "Session created for device"
+                    );
+                }
+                Err(e) => {
+                    // Log error but don't fail login - session creation is secondary
+                    warn!(
+                        user_id = %user.id,
+                        device_id = %req.device_id,
+                        error = %e,
+                        "Failed to create session for device"
+                    );
+                }
+            }
+        }
+
         info!(user_id = %user.id, "User logged in successfully");
 
         Ok(Response::new(LoginResponse {
