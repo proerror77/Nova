@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
 use crate::clients::proto::auth::{
+    AppleNativeSignInRequest as GrpcAppleNativeSignInRequest,
     CompleteOAuthFlowRequest as GrpcCompleteOAuthFlowRequest, OAuthProvider,
     StartOAuthFlowRequest as GrpcStartOAuthFlowRequest,
 };
@@ -284,12 +285,9 @@ pub async fn complete_apple_oauth(
 /// POST /api/v2/auth/oauth/apple/native
 /// Apple native Sign-In (for iOS app using ASAuthorizationController)
 /// This endpoint handles the native Apple Sign-In flow without web redirect
-///
-/// TODO: Implement when AppleNativeSignIn gRPC method is added to identity-service proto
-#[allow(dead_code)]
 pub async fn apple_native_sign_in(
     req: web::Json<AppleNativeSignInRequest>,
-    _clients: web::Data<ServiceClients>,
+    clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
     info!(
         user_identifier = %req.user_identifier,
@@ -297,12 +295,65 @@ pub async fn apple_native_sign_in(
         "POST /api/v2/auth/oauth/apple/native"
     );
 
-    // TODO: Implement when AppleNativeSignIn gRPC method is added to identity-service proto
-    // For now, return not implemented
-    Ok(
-        HttpResponse::NotImplemented().json(ErrorResponse::with_message(
-            "Not implemented",
-            "Apple native sign-in is not yet implemented. Please use the web OAuth flow.",
-        )),
-    )
+    let mut auth_client = clients.auth_client();
+
+    // Extract name components if provided
+    let (given_name, family_name) = match &req.full_name {
+        Some(name) => (name.given_name.clone(), name.family_name.clone()),
+        None => (None, None),
+    };
+
+    let grpc_request = tonic::Request::new(GrpcAppleNativeSignInRequest {
+        authorization_code: req.authorization_code.clone(),
+        identity_token: req.identity_token.clone(),
+        user_identifier: req.user_identifier.clone(),
+        email: req.email.clone(),
+        given_name,
+        family_name,
+        invite_code: req.invite_code.clone(),
+    });
+
+    match auth_client.apple_native_sign_in(grpc_request).await {
+        Ok(response) => {
+            let inner = response.into_inner();
+            info!(
+                user_id = %inner.user_id,
+                is_new_user = inner.is_new_user,
+                "Apple native sign-in completed"
+            );
+
+            Ok(HttpResponse::Ok().json(OAuthCallbackResponse {
+                user_id: inner.user_id.clone(),
+                token: inner.token,
+                refresh_token: if inner.refresh_token.is_empty() {
+                    None
+                } else {
+                    Some(inner.refresh_token)
+                },
+                expires_in: inner.expires_in,
+                is_new_user: inner.is_new_user,
+                user: Some(OAuthUserProfile {
+                    id: inner.user_id,
+                    username: inner.username,
+                    email: inner.email,
+                }),
+            }))
+        }
+        Err(status) => {
+            error!(error = %status, "Failed to complete Apple native sign-in");
+
+            let error_response = match status.code() {
+                tonic::Code::InvalidArgument => HttpResponse::BadRequest().json(
+                    ErrorResponse::with_message("Invalid Apple sign-in request", status.message()),
+                ),
+                tonic::Code::Unauthenticated => HttpResponse::Unauthorized().json(
+                    ErrorResponse::with_message("Apple sign-in failed", status.message()),
+                ),
+                _ => HttpResponse::InternalServerError()
+                    .json(ErrorResponse::with_message("Apple sign-in error", status.message())),
+            };
+
+            Ok(error_response)
+        }
+    }
 }
