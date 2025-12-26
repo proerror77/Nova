@@ -39,77 +39,192 @@ struct UserProfileContentSection: View {
     var onPostTapped: (String) -> Void = { _ in }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // MARK: - 标签栏（Posts 独立居中，搜索图标右对齐）
-            ZStack {
-                // Posts 文字 - 完全居中
-                Text("Posts")
-                    .font(.system(size: layout.tabBarFontSize, weight: .bold))
-                    .foregroundColor(layout.accentColor)
-                    .frame(maxWidth: .infinity)
-
-                // 搜索图标 - 右对齐，使用 Symbol Effect
-                HStack {
-                    Spacer()
-                    Button(action: onSearchTapped) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: layout.searchIconSize))
-                            .foregroundColor(layout.searchIconColor)
-                            .symbolEffect(.pulse, options: .speed(0.5))  // iOS 17+ 脉冲动画
-                    }
-                    .padding(.trailing, layout.searchIconTrailingPadding)
-                }
-            }
-            .padding(.vertical, layout.tabBarVerticalPadding)
-            .background(layout.tabBarBackgroundColor)
-
-            // MARK: - 分隔线
-            Rectangle()
-                .fill(layout.dividerColor)
-                .frame(height: layout.dividerHeight)
-
-            // MARK: - 帖子网格
+        GeometryReader { geometry in
+            // MARK: - 帖子网格（标签栏已移至 UserProfileView 背景板层）
             ScrollView {
                 if posts.isEmpty {
-                    // 空状态显示 - 使用 Symbol Effect
-                    VStack(spacing: 12) {
-                        Image(systemName: "photo.on.rectangle.angled")
-                            .font(.system(size: 48))
-                            .foregroundColor(.gray.opacity(0.5))
-                            .symbolEffect(.breathe, options: .repeat(.continuous))  // iOS 17+ 呼吸动画
-                        Text("No posts yet")
-                            .font(.system(size: 16))
-                            .foregroundColor(.gray)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 60)
+                    // 空状态 - 无内容显示
+                    Spacer()
                 } else {
+                    // 帖子卡片网格 - 响应式2列布局
+                    let cardWidth = (geometry.size.width - 15) / 2  // 5px间距 * 3 = 15
+                    let cardHeight = cardWidth * 1.51  // 保持 180:272 的比例
+                    
                     LazyVGrid(columns: [
-                        GridItem(.flexible(), spacing: layout.gridSpacing),
-                        GridItem(.flexible(), spacing: layout.gridSpacing)
-                    ], spacing: layout.gridSpacing) {
+                        GridItem(.flexible(), spacing: 5),
+                        GridItem(.flexible(), spacing: 5)
+                    ], spacing: 5) {
                         ForEach(posts) { post in
-                            UserProfilePostCard(
+                            UserProfilePostCardNew(
                                 avatarUrl: post.avatarUrl,
                                 username: post.username,
                                 likeCount: post.likeCount,
                                 imageUrl: post.imageUrl,
                                 content: post.content,
+                                cardWidth: cardWidth,
+                                cardHeight: cardHeight,
                                 onTap: {
                                     onPostTapped(post.id)
                                 }
                             )
                         }
                     }
-                    .padding(layout.gridPadding)
-                    .padding(.bottom, 50)  // 为 Home Indicator 预留更多空间，确保卡片完全可见
+                    .padding(.horizontal, 5)
+                    .padding(.top, 50)  // 为标签栏留出空间
+                    .padding(.bottom, 100)  // 底部留出空间
                 }
             }
             .scrollIndicators(.hidden)
-            .background(layout.backgroundColor)
-            .ignoresSafeArea(edges: .bottom)
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .ignoresSafeArea(edges: .bottom)
+    }
+}
+
+
+// MARK: - 新版帖子卡片（响应式设计）
+struct UserProfilePostCardNew: View {
+    // Data
+    var avatarUrl: String?
+    var username: String = "User"
+    var likeCount: Int = 0
+    var imageUrl: String?
+    var content: String = ""
+    var cardWidth: CGFloat
+    var cardHeight: CGFloat
+    var onTap: (() -> Void)? = nil
+
+    // 内容摘要（最多显示20个字符）
+    private var contentPreview: String {
+        let fullText = "\(username) \(content)"
+        let maxLength = 28
+        if fullText.count > maxLength {
+            return String(fullText.prefix(maxLength)) + "..."
+        }
+        return fullText
+    }
+
+    // 格式化点赞数
+    private var formattedLikeCount: String {
+        if likeCount >= 1000 {
+            return String(format: "%.1fk", Double(likeCount) / 1000.0)
+        }
+        return "\(likeCount)"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // MARK: - 图片区域
+            imageSection
+                .frame(width: cardWidth - 12, height: cardHeight * 0.75)
+                .cornerRadius(6)
+                .padding(.horizontal, 6)
+                .padding(.top, 6)
+
+            // MARK: - 底部内容预览
+            Text(contentPreview)
+                .font(Font.custom("SF Pro Display", size: 10))
+                .foregroundColor(.black)
+                .lineLimit(1)
+                .padding(.horizontal, 10)
+                .padding(.top, 8)
+
+            // MARK: - 底部用户信息 + 点赞数
+            HStack {
+                // 左侧：头像 + 用户名
+                HStack(spacing: 5) {
+                    avatarView
+                        .frame(width: 17, height: 17)
+
+                    Text(username)
+                        .font(Font.custom("SF Pro Display", size: 10))
+                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                // 右侧：点赞图标 + 数量
+                HStack(spacing: 5) {
+                    Image(systemName: "heart")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                        .frame(width: 12, height: 12)
+
+                    Text(formattedLikeCount)
+                        .font(Font.custom("SF Pro Display", size: 8.18))
+                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                }
+                .frame(width: 40)
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 6)
+            .padding(.bottom, 10)
+        }
+        .frame(width: cardWidth, height: cardHeight)
+        .background(.white)
+        .cornerRadius(6)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onTap?()
+        }
+    }
+
+    // MARK: - Avatar View
+    @ViewBuilder
+    private var avatarView: some View {
+        if let urlString = avatarUrl, let url = URL(string: urlString) {
+            CachedAsyncImage(
+                url: url,
+                targetSize: CGSize(width: 34, height: 34),
+                enableProgressiveLoading: false,
+                priority: .normal
+            ) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+            } placeholder: {
+                placeholderAvatar
+            }
+            .clipShape(Circle())
+        } else {
+            placeholderAvatar
+        }
+    }
+
+    private var placeholderAvatar: some View {
+        Ellipse()
+            .foregroundColor(.clear)
+            .background(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+            .clipShape(Circle())
+    }
+
+    // MARK: - Image Section
+    private var imageSection: some View {
+        Group {
+            if let urlString = imageUrl, let url = URL(string: urlString) {
+                CachedAsyncImage(
+                    url: url,
+                    targetSize: CGSize(width: (cardWidth - 12) * 2, height: cardHeight * 0.75 * 2),
+                    enableProgressiveLoading: true,
+                    priority: .normal
+                ) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: cardWidth - 12, height: cardHeight * 0.75)
+                        .clipped()
+                } placeholder: {
+                    imagePlaceholder
+                }
+            } else {
+                imagePlaceholder
+            }
+        }
+    }
+
+    private var imagePlaceholder: some View {
+        Rectangle()
+            .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
     }
 }
 

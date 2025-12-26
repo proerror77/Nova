@@ -142,10 +142,12 @@ struct AliceView: View {
 
     // MARK: - Alice 主内容
     private var aliceContent: some View {
-        ZStack {
-            // 背景色
-            DesignTokens.backgroundColor
-                .ignoresSafeArea()
+        ZStack(alignment: .bottom) {
+            // 内容区域
+            ZStack {
+                // 背景色
+                DesignTokens.backgroundColor
+                    .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // MARK: - 顶部导航栏
@@ -350,10 +352,7 @@ struct AliceView: View {
                     )
                     .padding(.horizontal, 16)
                 }
-                .padding(.bottom, -25)
-
-                // MARK: - 底部导航栏
-                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)
+                .padding(.bottom, 60)  // 为底部导航栏预留空间
             }
             .ignoresSafeArea(.keyboard, edges: .bottom)
 
@@ -380,7 +379,12 @@ struct AliceView: View {
                     }
                 )
             }
+            }
+
+            // MARK: - 底部导航栏（覆盖在内容上方）
+            BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)
         }
+        .ignoresSafeArea(edges: .bottom)
     }
 
     // MARK: - Send Message Function

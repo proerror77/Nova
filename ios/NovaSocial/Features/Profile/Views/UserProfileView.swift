@@ -18,16 +18,17 @@ struct UserProfileData {
     var aliasName: String? = nil
 
     /// 默认占位数据（用于加载中或预览）
+    /// 临时展示完整 UI 信息，方便调整布局
     static let placeholder = UserProfileData(
-        userId: "",
-        username: "Loading...",
+        userId: "preview-user",
+        username: "Juliette",
         avatarUrl: nil,
-        location: nil,
-        profession: nil,
-        followingCount: 0,
-        followersCount: 0,
-        likesCount: 0,
-        isVerified: false,
+        location: "England",
+        profession: "Artist",
+        followingCount: 592,
+        followersCount: 1449,
+        likesCount: 452,
+        isVerified: true,
         posts: []
     )
 
@@ -80,71 +81,365 @@ struct UserProfileView: View {
     private let accentColor = Color(red: 0.82, green: 0.11, blue: 0.26)
     private let buttonColor = Color(red: 0.87, green: 0.11, blue: 0.26)
 
-    // MARK: - 导航栏布局配置（可调整位置）
+    // MARK: - 导航栏布局配置（可调整位置，使用响应式）
     private var navBarLayout: UserProfileNavBarLayout {
         UserProfileNavBarLayout(
-            horizontalPadding: 20,      // 与 Profile 一致
-            topPadding: 60,             // 与 Profile 一致
-            bottomPadding: 40,          // 与 Profile 一致
-            backButtonSize: 20,
-            shareIconSize: 24
+            horizontalPadding: 17.w,      // 左右边距 17pt
+            topPadding: 64.h,             // 距离顶部 64.h（响应式，与 Profile 一致）
+            bottomPadding: 40.h,
+            backButtonSize: 20.s,
+            shareIconSize: 24.s
         )
     }
 
-    // MARK: - 用户信息区块垂直位置调整
+    // MARK: - 用户信息区块垂直位置调整（使用响应式）
     // 正值向下移动，负值向上移动（与 Profile 页面一致）
-    private let userInfoBlockVerticalOffset: CGFloat = -30
+    private var userInfoBlockVerticalOffset: CGFloat { (-30).h }
 
-    // MARK: - 操作按钮区块垂直位置调整
+    // MARK: - 操作按钮区块垂直位置调整（使用响应式）
     // 正值向下移动，负值向上移动
-    private let actionButtonsVerticalOffset: CGFloat = -40
+    private var actionButtonsVerticalOffset: CGFloat { (-40).h }
 
-    // MARK: - 内容区域（Posts）垂直位置调整
+    // MARK: - 内容区域（Posts）垂直位置调整（使用响应式）
     // 正值向下移动，负值向上移动
-    private let contentSectionVerticalOffset: CGFloat = -40
+    private var contentSectionVerticalOffset: CGFloat { (-40).h }
 
-    // MARK: - 用户信息布局配置（可调整位置）
+    // MARK: - 用户信息布局配置（可调整位置，使用响应式）
     private var userInfoLayout: UserProfileUserInfoLayout {
         UserProfileUserInfoLayout(
             topPadding: 0,              // 与 Profile 一致
-            bottomPadding: 10,          // 与 Profile 一致
-            avatarOuterSize: 108,
-            avatarInnerSize: 100,
-            usernameFontSize: 20,
-            usernameTopPadding: 9,      // 与 Profile 一致
-            locationFontSize: 12,
-            locationTopPadding: 4,
-            professionFontSize: 12,
-            professionTopPadding: 7,    // 与 Profile 一致
-            statsTopPadding: 8,         // 与 Profile 一致
-            statsItemWidth: 132,        // 与 Profile 一致
-            statsFontSize: 16,
-            statsDividerHeight: 24      // 与 Profile 一致
+            bottomPadding: 10.h,        // 与 Profile 一致
+            avatarOuterSize: 108.s,
+            avatarInnerSize: 100.s,
+            usernameFontSize: 20.f,
+            usernameTopPadding: 9.h,    // 与 Profile 一致
+            locationFontSize: 12.f,
+            locationTopPadding: 4.h,
+            professionFontSize: 12.f,
+            professionTopPadding: 7.h,  // 与 Profile 一致
+            statsTopPadding: 8.h,       // 与 Profile 一致
+            statsItemWidth: 132.w,      // 与 Profile 一致
+            statsFontSize: 16.f,
+            statsDividerHeight: 24.h    // 与 Profile 一致
         )
     }
 
+    // MARK: - Posts 内容栏固定高度（基于设计稿 375x812，使用响应式）
+    // 与 Profile 页面对齐：用户信息区结束于 300pt 处，下方内容占据剩余空间
+    private var postsContentHeight: CGFloat { 424.h }
+
     var body: some View {
-        ZStack(alignment: .top) {
-            // MARK: - 背景层（贴紧屏幕边缘）
-            VStack(spacing: 0) {
-                // 头部背景 - 完全贴边
-                Image("UserProfile-background")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(height: 520)
-                    .frame(maxWidth: .infinity)
-                    .clipped()
-                    .blur(radius: 15)
-                    .overlay(Color.black.opacity(0.2))
+        GeometryReader { geometry in
+            // 计算 Posts 背景板距离顶部的距离
+            let postsTopOffset = geometry.size.height - postsContentHeight
+            
+            ZStack {
+                // MARK: - 背景层（响应式设计）
+                Group {
+                    ZStack {
+                        // 背景图片
+                        Image("UserProfile-background")
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                            .clipped()
+                        
+                        // 颜色叠加层
+                        Rectangle()
+                            .foregroundColor(.clear)
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                            .background(Color(red: 0, green: 0, blue: 0).opacity(0))
+                        
+                        Rectangle()
+                            .foregroundColor(.clear)
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                            .background(Color(red: 0, green: 0, blue: 0).opacity(0.30))
+                    }
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                }
 
-                // 内容区域背景 - 填充剩余空间
-                contentBackgroundColor
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .ignoresSafeArea()
+                // MARK: - 白色背景模块（紧贴底部）
+                VStack {
+                    Spacer()
+                    Rectangle()
+                        .fill(.white)
+                        .frame(height: 424.h)
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height)
 
-            // MARK: - 内容层（居中对齐）
+                // MARK: - 灰色背景模块（紧贴底部）
+                VStack {
+                    Spacer()
+                    Rectangle()
+                        .fill(Color(red: 0.96, green: 0.96, blue: 0.96))
+                        .frame(height: 376.h)
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height)
+
+                // MARK: - 用户信息层（距离按钮栏12pt）
+                VStack {
+                    Spacer()
+                    VStack(spacing: 8.h) {
+                        // 头像和基本信息
+                        VStack(spacing: 8.h) {
+                            // 头像
+                            HStack(spacing: 8.s) {
+                                if let avatarUrl = userData.avatarUrl, let url = URL(string: avatarUrl) {
+                                    AsyncImage(url: url) { image in
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                    } placeholder: {
+                                        Ellipse()
+                                            .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                    }
+                                    .frame(width: 100.s, height: 100.s)
+                                    .clipShape(Ellipse())
+                                } else {
+                                    Ellipse()
+                                        .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                        .frame(width: 100.s, height: 100.s)
+                                }
+                            }
+                            .padding(4.s)
+                            .frame(width: 108.s, height: 108.s)
+                            .cornerRadius(54.s)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 54.s)
+                                    .inset(by: 1)
+                                    .stroke(.white, lineWidth: 1)
+                            )
+
+                            // 用户名
+                            Text(userData.username)
+                                .font(.system(size: 16.f, weight: .semibold))
+                                .foregroundColor(.white)
+
+                            // 地区（保留固定位置）
+                            Text(userData.location ?? " ")
+                                .font(.system(size: 14.f, weight: .light))
+                                .foregroundColor(.white)
+                                .frame(height: 17.h) // 固定高度
+                        }
+                        .frame(width: 130.w, height: 158.h)
+
+                        // 职业（保留固定位置，带蓝标认证图标在文字后面）
+                        HStack(spacing: 4.s) {
+                            Text(userData.profession ?? " ")
+                                .font(.system(size: 14.f, weight: .light))
+                                .foregroundColor(.white)
+                            if userData.profession != nil {
+                                Image("Blue-v")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 14.s, height: 14.s)
+                            }
+                        }
+                        .frame(height: 17.h) // 固定高度
+
+                        // 统计数据
+                        HStack(spacing: -24) {
+                            // Following
+                            VStack(spacing: 1.h) {
+                                Text("\(userData.followingCount)")
+                                    .font(.system(size: 16.f, weight: .semibold))
+                                    .foregroundColor(.white)
+                                Text("Following")
+                                    .font(.system(size: 14.f, weight: .light))
+                                    .foregroundColor(.white)
+                            }
+                            .frame(width: 125.w, height: 40.h)
+
+                            // 分隔线
+                            Rectangle()
+                                .foregroundColor(.clear)
+                                .frame(width: 24.s, height: 0)
+                                .overlay(
+                                    Rectangle()
+                                        .stroke(.white, lineWidth: 0.5)
+                                        .frame(width: 0.5, height: 24.h)
+                                )
+
+                            // Followers
+                            VStack(spacing: 1.h) {
+                                Text("\(userData.followersCount)")
+                                    .font(.system(size: 16.f, weight: .semibold))
+                                    .foregroundColor(.white)
+                                Text("Followers")
+                                    .font(.system(size: 14.f, weight: .light))
+                                    .foregroundColor(.white)
+                            }
+                            .frame(width: 132.w, height: 40.h)
+
+                            // 分隔线
+                            Rectangle()
+                                .foregroundColor(.clear)
+                                .frame(width: 24.s, height: 0)
+                                .overlay(
+                                    Rectangle()
+                                        .stroke(.white, lineWidth: 0.5)
+                                        .frame(width: 0.5, height: 24.h)
+                                )
+
+                            // Halo
+                            VStack(spacing: 1.h) {
+                                Text("\(userData.likesCount)")
+                                    .font(.system(size: 16.f, weight: .semibold))
+                                    .foregroundColor(.white)
+                                Text("Halo")
+                                    .font(.system(size: 14.f, weight: .light))
+                                    .foregroundColor(.white)
+                            }
+                            .frame(width: 118.w, height: 40.h)
+                        }
+                        .frame(height: 40.h)
+                    }
+                    .frame(width: 375.w, height: 240.h)
+
+                    Spacer()
+                        .frame(height: 493.h) // 让头像顶部距离屏幕顶部 79pt（812 - 79 - 240 = 493）
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .zIndex(4)
+
+                // MARK: - 操作按钮层（距离白色背景顶部12pt）
+                VStack {
+                    Spacer()
+                    HStack(spacing: 10.w) {
+                        // Follow 按钮
+                        Button(action: {
+                            isFollowing.toggle()
+                        }) {
+                            Text(isFollowing ? "Following" : "Follow")
+                                .font(Font.custom("SF Pro Display", size: 12.f))
+                                .tracking(0.24)
+                                .foregroundColor(.white)
+                        }
+                        .frame(width: 105.w, height: 34.h)
+                        .background(Color(red: 0.87, green: 0.11, blue: 0.26))
+                        .cornerRadius(57.s)
+
+                        // Add friends 按钮
+                        Button(action: {
+                            // 添加好友操作
+                        }) {
+                            Text("Add friends")
+                                .font(Font.custom("SF Pro Display", size: 12.f))
+                                .tracking(0.24)
+                                .foregroundColor(.white)
+                        }
+                        .frame(width: 105.w, height: 34.h)
+                        .cornerRadius(57.s)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 57.s)
+                                .inset(by: 0.50)
+                                .stroke(.white, lineWidth: 0.50)
+                        )
+
+                        // Message 按钮
+                        Button(action: {
+                            // 消息操作
+                        }) {
+                            Text("Message")
+                                .font(Font.custom("SF Pro Display", size: 12.f))
+                                .tracking(0.24)
+                                .foregroundColor(.white)
+                        }
+                        .frame(width: 105.w, height: 34.h)
+                        .cornerRadius(57.s)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 57.s)
+                                .inset(by: 0.50)
+                                .stroke(.white, lineWidth: 0.50)
+                        )
+                    }
+                    Spacer()
+                        .frame(height: 445.h) // 白色背景高度424 + 间距21 = 445.h（按钮距离Posts区域21pt）
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .zIndex(3)
+
+                // MARK: - Posts内容区域（标签栏 + 帖子网格，参考Profile页结构）
+                VStack {
+                    Spacer()
+                        .frame(height: postsTopOffset)
+                    
+                    // 标签栏和帖子网格在同一个VStack中
+                    VStack(spacing: 0) {
+                        // 标签栏
+                        HStack(spacing: 40.s) {
+                            Button(action: {
+                                selectedTab = .posts
+                            }) {
+                                Text("Posts")
+                                    .font(.system(size: 16.f, weight: .semibold))
+                                    .foregroundColor(selectedTab == .posts ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                            }
+
+                            Button(action: {
+                                // Saved tab action
+                            }) {
+                                Text("Saved")
+                                    .font(.system(size: 16.f, weight: .semibold))
+                                    .foregroundColor(.black)
+                            }
+
+                            Button(action: {
+                                // Liked tab action
+                            }) {
+                                Text("Liked")
+                                    .font(.system(size: 16.f, weight: .semibold))
+                                    .foregroundColor(.black)
+                            }
+                        }
+                        .frame(height: 24.h)
+                        .padding(.top, 12.h)
+                        .padding(.bottom, 16.h)
+                        .frame(maxWidth: .infinity)
+                        
+                        // 分隔线
+                        Rectangle()
+                            .fill(Color(red: 0.74, green: 0.74, blue: 0.74))
+                            .frame(height: 0.5)
+                        
+                        // 帖子网格
+                        ScrollView(.vertical, showsIndicators: false) {
+                            LazyVGrid(
+                                columns: [
+                                    GridItem(.flexible(), spacing: 5.w),
+                                    GridItem(.flexible(), spacing: 5.w)
+                                ],
+                                spacing: 5.h
+                            ) {
+                                // 使用真实帖子数据
+                                ForEach(userData.posts) { post in
+                                    PostCard(
+                                        imageUrl: post.imageUrl,
+                                        imageName: "PostCardImage",
+                                        title: "\(post.username) \(post.content)",
+                                        authorName: post.username,
+                                        authorAvatarUrl: post.avatarUrl,
+                                        likeCount: post.likeCount,
+                                        onTap: {
+                                            // 点击帖子
+                                        }
+                                    )
+                                }
+                            }
+                            .padding(.horizontal, 5.w)
+                            .padding(.top, 5.h)
+                            .padding(.bottom, 100.h)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipped()  // 裁剪超出内容，防止截断效果
+                    }
+                    .background(Color(red: 0.96, green: 0.96, blue: 0.96))
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .ignoresSafeArea(.all, edges: .bottom)
+                .zIndex(2)
+
+            // MARK: - 导航栏层（仅导航栏，帖子内容已移至正确位置的网格层）
             VStack(spacing: 0) {
                 // 顶部导航栏（使用组件）
                 UserProfileTopNavigationBar(
@@ -160,63 +455,12 @@ struct UserProfileView: View {
                         showBlockReportSheet = true
                     }
                 )
-
-                // 用户信息区域（使用组件）- 居中
-                UserProfileUserInfoSection(
-                    avatarUrl: userData.avatarUrl,
-                    username: userData.username,
-                    location: userData.location,
-                    profession: userData.profession,
-                    followingCount: userData.followingCount,
-                    followersCount: userData.followersCount,
-                    likesCount: userData.likesCount,
-                    isAlias: userData.isAlias,
-                    aliasName: userData.aliasName,
-                    layout: userInfoLayout,
-                    onFollowingTapped: {
-                        // 点击 Following
-                    },
-                    onFollowersTapped: {
-                        // 点击 Followers
-                    },
-                    onLikesTapped: {
-                        // 点击 Likes
-                    }
-                )
-                .frame(maxWidth: .infinity)  // 确保居中
-                .offset(y: userInfoBlockVerticalOffset)  // 应用垂直偏移（与 Profile 一致）
-
-                // 操作按钮（使用组件）- 居中
-                UserProfileActionButtons(
-                    isFollowing: $isFollowing,
-                    onFollowTapped: {
-                        // 关注操作
-                    },
-                    onAddFriendsTapped: {
-                        // 添加好友操作
-                    },
-                    onMessageTapped: {
-                        // 消息操作
-                    }
-                )
-                .frame(maxWidth: .infinity)  // 确保居中
-                .offset(y: actionButtonsVerticalOffset)  // 第 36 行调整
-
-                // 内容区域（使用组件）
-                UserProfileContentSection(
-                    posts: userData.posts,
-                    onSearchTapped: {
-                        // 搜索操作
-                    },
-                    onPostTapped: { postId in
-                        // 点击帖子
-                    }
-                )
-                .padding(.top, contentSectionVerticalOffset)  // 使用 padding 代替 offset，不会产生布局空白
+                Spacer()
             }
-            .frame(maxWidth: .infinity)  // 整体居中
-            .ignoresSafeArea(edges: .bottom)  // 内容层延伸到底部
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+            }
         }
+        .ignoresSafeArea(edges: [.top, .bottom])  // 忽略上下安全区域（与 Profile 一致）
         .task {
             await loadUserData()
         }

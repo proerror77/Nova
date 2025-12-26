@@ -39,9 +39,9 @@ struct LoginView: View {
                 Image("Login-BG")
                     .resizable()
                     .scaledToFill()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .frame(minWidth: geometry.size.width, minHeight: geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom)
                     .clipped()
-                    .ignoresSafeArea(.all)
+                    .ignoresSafeArea(.all, edges: .all)
 
                 // Main Content
                 VStack(spacing: 0) {
@@ -70,39 +70,42 @@ struct LoginView: View {
                         inputFieldsSection
 
                         Spacer()
-                            .frame(height: 32)
+                            .frame(height: 65.s)
 
                         // Login Button
                         loginButton
                             .padding(.horizontal, 38.w)
 
                         Spacer()
-                            .frame(height: 24)
+                            .frame(height: 28.s)
 
-                        // "or" separator
+                        // Or Separator
                         Text("or")
                             .font(Font.custom("SF Pro Display", size: 16.f))
                             .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
 
                         Spacer()
-                            .frame(height: 12.s)
-
-                        // Social Login Buttons
-                        socialLoginButtons
-                            .padding(.horizontal, 38.w)
-
-                        Spacer()
-                            .frame(height: 40)
-
-                        // Create Account Link
-                        createAccountLink
-
-                        Spacer()
-
-                        // Terms and Privacy Links
-                        termsAndPrivacyLinks
-                            .padding(.bottom, 28.h)
                     }
+                }
+
+                // Social Login Buttons + Create Account Link (距离底部 98pt)
+                VStack(spacing: 0) {
+                    Spacer()
+                    socialLoginButtons
+                        .frame(maxWidth: .infinity)
+                        .padding(.bottom, 45)
+                    createAccountLink
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 79.w)
+                        .padding(.bottom, 98)
+                }
+
+                // Terms and Privacy Links (固定在底部 28pt)
+                VStack {
+                    Spacer()
+                    termsAndPrivacyLinks
+                        .padding(.bottom, 28)
                 }
             }
             .contentShape(Rectangle())
@@ -292,151 +295,95 @@ struct LoginView: View {
             .background(.white)
             .cornerRadius(31.5.s)
         }
-        .disabled(isLoading || isGoogleLoading || isAppleLoading)
+        .disabled(isLoading)
         .accessibilityIdentifier("signInButton")
     }
 
     // MARK: - Social Login Buttons
     private var socialLoginButtons: some View {
-        VStack(spacing: 10.s) {
-            // Continue with Passkey
+        ZStack {
+            // Google Button
+            Button(action: {
+                Task {
+                    await handleGoogleSignIn()
+                }
+            }) {
+                VStack(spacing: 0) {
+                    ZStack {
+                        Circle()
+                            .stroke(.white, lineWidth: 0.5)
+                            .frame(width: 50.s, height: 50.s)
+                        Image("Google-logo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 24.s, height: 24.s)
+                    }
+                    Text("Google")
+                        .font(Font.custom("SF Pro Display", size: 10.f))
+                        .foregroundColor(.white)
+                        .padding(.top, 8.s)
+                }
+            }
+            .disabled(isLoading || isGoogleLoading || isAppleLoading || isPasskeyLoading)
+            .offset(x: -78.w, y: 0)
+            .accessibilityIdentifier("googleSignInButton")
+
+            // Apple Button
+            Button(action: {
+                Task {
+                    await handleAppleSignIn()
+                }
+            }) {
+                VStack(spacing: 0) {
+                    ZStack {
+                        Circle()
+                            .stroke(.white, lineWidth: 0.5)
+                            .frame(width: 50.s, height: 50.s)
+                        Image(systemName: "apple.logo")
+                            .resizable()
+                            .scaledToFit()
+                            .foregroundColor(.white)
+                            .frame(width: 24.s, height: 24.s)
+                    }
+                    Text("Apple")
+                        .font(Font.custom("SF Pro Display", size: 10.f))
+                        .foregroundColor(.white)
+                        .padding(.top, 8.s)
+                }
+            }
+            .disabled(isLoading || isGoogleLoading || isAppleLoading || isPasskeyLoading)
+            .offset(x: 0, y: 0)
+            .accessibilityIdentifier("appleSignInButton")
+
+            // Passkey Button
             if #available(iOS 16.0, *) {
                 Button(action: {
                     Task {
                         await handlePasskeySignIn()
                     }
                 }) {
-                    ZStack {
-                        // 文字居中
-                        HStack(spacing: 8.s) {
-                            if isPasskeyLoading {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(0.8)
-                            }
-                            Text("Continue with Passkey")
-                                .font(.system(size: 16.f, weight: .heavy, design: .default))
-                                .tracking(0.32)
-                                .foregroundColor(.white)
+                    VStack(spacing: 0) {
+                        ZStack {
+                            Circle()
+                                .stroke(.white, lineWidth: 0.5)
+                                .frame(width: 50.s, height: 50.s)
+                            Image("Passkey-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 24.s, height: 24.s)
                         }
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        
-                        // 图标固定在左侧
-                        HStack {
-                            ZStack {
-                                Image("Passkey-icon")
-                                    .resizable()
-                                    .scaledToFit()
-                            }
-                            .frame(width: 24.s, height: 24.s)
-                            Spacer()
-                        }
-                        .padding(.leading, 22.w)
+                        Text("Passkey")
+                            .font(Font.custom("SF Pro Display", size: 10.f))
+                            .foregroundColor(.white)
+                            .padding(.top, 8.s)
                     }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 48.h)
-                    .background(Color.clear)
-                    .cornerRadius(31.5.s)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 31.5.s)
-                            .stroke(.white, lineWidth: 0.5)
-                    )
                 }
                 .disabled(isLoading || isGoogleLoading || isAppleLoading || isPasskeyLoading)
+                .offset(x: 78.w, y: 0)
                 .accessibilityIdentifier("passkeySignInButton")
             }
-
-            // Continue with Google
-            Button(action: {
-                Task {
-                    await handleGoogleSignIn()
-                }
-            }) {
-                ZStack {
-                    // 文字居中
-                    HStack(spacing: 8.s) {
-                        if isGoogleLoading {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .scaleEffect(0.8)
-                        }
-                        Text("Continue with Google")
-                            .font(.system(size: 16.f, weight: .heavy, design: .default))
-                            .tracking(0.32)
-                            .foregroundColor(.white)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    
-                    // 图标固定在左侧
-                    HStack {
-                        ZStack {
-                            Image("Google-logo")
-                                .resizable()
-                                .scaledToFit()
-                        }
-                        .frame(width: 24.s, height: 24.s)
-                        Spacer()
-                    }
-                    .padding(.leading, 22.w)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 48.h)
-                .background(Color.clear)
-                .cornerRadius(31.5.s)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 31.5.s)
-                        .stroke(.white, lineWidth: 0.5)
-                )
-            }
-            .disabled(isLoading || isGoogleLoading || isAppleLoading || isPasskeyLoading)
-            .accessibilityIdentifier("googleSignInButton")
-
-            // Continue with Apple
-            Button(action: {
-                Task {
-                    await handleAppleSignIn()
-                }
-            }) {
-                ZStack {
-                    // 文字居中
-                    HStack(spacing: 8.s) {
-                        if isAppleLoading {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .scaleEffect(0.8)
-                        }
-                        Text("Continue with Apple")
-                            .font(.system(size: 16.f, weight: .heavy, design: .default))
-                            .tracking(0.32)
-                            .foregroundColor(.white)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    
-                    // 图标固定在左侧
-                    HStack {
-                        ZStack {
-                            Image(systemName: "apple.logo")
-                                .resizable()
-                                .scaledToFit()
-                                .foregroundColor(.white)
-                        }
-                        .frame(width: 24.s, height: 24.s)
-                        Spacer()
-                    }
-                    .padding(.leading, 22.w)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 48.h)
-                .background(Color.clear)
-                .cornerRadius(31.5.s)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 31.5.s)
-                        .stroke(.white, lineWidth: 0.5)
-                )
-            }
-            .disabled(isLoading || isGoogleLoading || isAppleLoading || isPasskeyLoading)
-            .accessibilityIdentifier("appleSignInButton")
         }
+        .frame(width: 206.w, height: 70.h)
     }
 
     // MARK: - Create Account Link
@@ -458,33 +405,33 @@ struct LoginView: View {
             }
             .accessibilityIdentifier("createAccountButton")
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     // MARK: - Terms and Privacy Links
     private var termsAndPrivacyLinks: some View {
-        HStack(spacing: 5.w) {
+        ZStack {
             Button(action: {
                 // TODO: Show Terms and Conditions
             }) {
                 Text("Terms and Conditions")
-                    .font(Typography.thin11)
-                    .tracking(LetterSpacing.thin11)
+                    .font(Font.custom("SF Pro Display", size: 10))
                     .underline()
                     .foregroundColor(.white)
             }
+            .offset(x: -45, y: 0)
 
             Button(action: {
                 // TODO: Show Privacy Statement
             }) {
                 Text("Privacy Statement")
-                    .font(Typography.thin11)
-                    .tracking(LetterSpacing.thin11)
+                    .font(Font.custom("SF Pro Display", size: 10))
                     .underline()
                     .foregroundColor(.white)
             }
+            .offset(x: 52.50, y: 0)
         }
-        .padding(.leading, 94.w)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: 181, height: 12)
     }
 
     // MARK: - Actions
@@ -521,6 +468,12 @@ struct LoginView: View {
 
         isLoading = false
     }
+
+
+
+
+
+
 
     private func handleGoogleSignIn() async {
         isGoogleLoading = true

@@ -56,7 +56,7 @@ struct ProfileUserInfoLayout {
         locationFontSize: CGFloat = 12,
         locationSpacing: CGFloat = 4,
         professionFontSize: CGFloat = 12,
-        blueVIconSize: CGFloat = 20,
+        blueVIconSize: CGFloat = 14,
         professionIconSpacing: CGFloat = 10,
         professionSpacing: CGFloat = 7,
         statsTopPadding: CGFloat = 16,
@@ -205,18 +205,18 @@ struct ProfileUserInfoSection: View {
 
             // MARK: - 职业/身份信息 - 始终显示，未填写时显示占位符
             HStack(spacing: layout.professionIconSpacing) {
-                // 蓝标认证图标（仅在已设置职业时显示）
+                Text(displayProfession)
+                    .font(.system(size: layout.professionFontSize, weight: .light))
+                    .lineSpacing(19)
+                    .foregroundColor(hasProfession ? layout.secondaryTextColor : layout.secondaryTextColor.opacity(0.5))
+
+                // 蓝标认证图标（仅在已设置职业时显示，在文字后面）
                 if hasProfession {
                     Image("Blue-v")
                         .resizable()
                         .scaledToFit()
                         .frame(width: layout.blueVIconSize, height: layout.blueVIconSize)
                 }
-
-                Text(displayProfession)
-                    .font(.system(size: layout.professionFontSize, weight: .light))
-                    .lineSpacing(19)
-                    .foregroundColor(hasProfession ? layout.secondaryTextColor : layout.secondaryTextColor.opacity(0.5))
             }
             .padding(.top, layout.professionSpacing)  // ← 单独调整职业栏垂直位置
 

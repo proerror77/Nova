@@ -552,7 +552,7 @@ struct MessageView: View {
 
     // MARK: - 消息页面内容
     private var messageContent: some View {
-        ZStack {
+        ZStack(alignment: .bottom) {
             // MARK: - 背景色
             DesignTokens.backgroundColor
                 .ignoresSafeArea()
@@ -783,10 +783,11 @@ struct MessageView: View {
                 }
                 } // End of else (non-searching state)
             }
-            .safeAreaInset(edge: .bottom) {
-                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)
-            }
+
+            // MARK: - 底部导航栏（覆盖在内容上方）
+            BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)
         }
+        .ignoresSafeArea(edges: .bottom)
     }
 
     // MARK: - 添加选项菜单弹窗
