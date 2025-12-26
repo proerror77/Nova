@@ -351,13 +351,18 @@ actor FeedCacheService {
         var diskFiles = 0
         var diskSize: Int64 = 0
 
-        if let cacheDir = cacheDirectory,
-           let enumerator = fileManager.enumerator(at: cacheDir, includingPropertiesForKeys: [.fileSizeKey]) {
-            for case let file as URL in enumerator {
-                diskFiles += 1
-                if let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize {
-                    diskSize += Int64(size)
-                }
+        // Collect files synchronously to avoid Swift 6 makeIterator() issue in async context
+        let files: [URL] = {
+            guard let cacheDir = cacheDirectory,
+                  let enumerator = fileManager.enumerator(at: cacheDir, includingPropertiesForKeys: [.fileSizeKey])
+            else { return [] }
+            return enumerator.compactMap { $0 as? URL }
+        }()
+
+        for file in files {
+            diskFiles += 1
+            if let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                diskSize += Int64(size)
             }
         }
 

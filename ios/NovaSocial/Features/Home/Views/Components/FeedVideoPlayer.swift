@@ -259,8 +259,8 @@ final class FeedVideoPlayerViewModel: ObservableObject {
     private var loopObserver: NSObjectProtocol?  // NotificationCenter observer for video loop
 
     // Network monitoring for prefetch priority (nonisolated for cross-actor access)
-    private static let networkMonitor = NWPathMonitor()
-    private static let networkQueue = DispatchQueue(label: "com.icered.networkMonitor")
+    nonisolated(unsafe) private static let networkMonitor = NWPathMonitor()
+    nonisolated(unsafe) private static let networkQueue = DispatchQueue(label: "com.icered.networkMonitor")
     nonisolated(unsafe) private static var _isOnWiFi: Bool = true
     nonisolated(unsafe) private static var networkMonitorStarted = false
 

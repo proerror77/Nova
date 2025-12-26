@@ -17,6 +17,13 @@ struct NewChatView: View {
     @State private var createdConversationName: String = ""
     @State private var isPrivateChat = false  // E2EE encrypted private chat toggle
 
+    // Group selection
+    @State private var showGroupSelection = false
+    @State private var showGroupChat = false
+    @State private var selectedGroupId = ""
+    @State private var selectedGroupName = ""
+    @State private var selectedGroupMemberCount = 0
+
     @State private var isPreviewMode = false  // 追踪预览模式状态
 
     // MARK: - 预览模式配置 (开发调试用)
@@ -81,6 +88,13 @@ struct NewChatView: View {
                     conversationId: createdConversationId,
                     userName: createdConversationName
                 )
+            } else if showGroupChat {
+                GroupChatView(
+                    showGroupChat: $showGroupChat,
+                    conversationId: selectedGroupId,
+                    groupName: selectedGroupName,
+                    memberCount: selectedGroupMemberCount
+                )
             } else {
                 mainContent
             }
@@ -89,6 +103,20 @@ struct NewChatView: View {
             if !newValue {
                 // Return to message list when chat is closed
                 currentPage = .message
+            }
+        }
+        .onChange(of: showGroupChat) { _, newValue in
+            if !newValue {
+                // Return to message list when group chat is closed
+                currentPage = .message
+            }
+        }
+        .sheet(isPresented: $showGroupSelection) {
+            GroupSelectionView(isPresented: $showGroupSelection) { groupId, groupName, memberCount in
+                selectedGroupId = groupId
+                selectedGroupName = groupName
+                selectedGroupMemberCount = memberCount
+                showGroupChat = true
             }
         }
     }
@@ -246,7 +274,7 @@ struct NewChatView: View {
                         } else {
                             // MARK: - Select an existing group
                             Button(action: {
-                                // TODO: Navigate to group selection
+                                showGroupSelection = true
                             }) {
                                 HStack {
                                     Text("Select an existing group")

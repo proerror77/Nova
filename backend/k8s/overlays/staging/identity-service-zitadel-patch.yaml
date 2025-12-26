@@ -8,5 +8,9 @@ spec:
       containers:
         - name: identity-service
           envFrom:
+            - configMapRef:
+                name: nova-backend-config
+            - secretRef:
+                name: nova-backend-secrets
             - secretRef:
                 name: identity-service-zitadel

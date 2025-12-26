@@ -6,10 +6,12 @@ struct IceredApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     // App 持有全局认证状态，并下发 EnvironmentObject
-    @StateObject private var authManager = AuthenticationManager.shared
-    @StateObject private var themeManager = ThemeManager.shared
-    @StateObject private var pushManager = PushNotificationManager.shared
-    @StateObject private var uploadManager = BackgroundUploadManager.shared
+    // Note: Using @ObservedObject for singletons to avoid lifecycle issues
+    // @StateObject is designed for objects created by the view, not pre-existing singletons
+    @ObservedObject private var authManager = AuthenticationManager.shared
+    @ObservedObject private var themeManager = ThemeManager.shared
+    @ObservedObject private var pushManager = PushNotificationManager.shared
+    @ObservedObject private var uploadManager = BackgroundUploadManager.shared
     @State private var currentPage: AppPage
 
     // State restoration - persist selected tab across app launches
@@ -36,14 +38,18 @@ struct IceredApp: App {
         #if DEBUG
         Typography.validateFonts()
         #endif
-        
+
         // Reset auth state and skip to login when running UI tests
         if ProcessInfo.processInfo.arguments.contains("--uitesting") {
-            // CRITICAL: Clear isAuthenticated synchronously to prevent race condition
-            // The view renders before async logout() completes, so we must set this first
-            AuthenticationManager.shared.isAuthenticated = false
+            // Use MainActor.assumeIsolated for safe access to @MainActor singleton
+            // App init() runs on main thread but isn't automatically MainActor isolated
+            MainActor.assumeIsolated {
+                AuthenticationManager.shared.isAuthenticated = false
+            }
             // Then run full async cleanup (clears keychain, tokens, etc.)
-            Task { await AuthenticationManager.shared.logout() }
+            Task { @MainActor in
+                await AuthenticationManager.shared.logout()
+            }
             // Start directly on login page for UI tests
             _currentPage = State(initialValue: .login)
         } else {
@@ -123,6 +129,9 @@ struct IceredApp: App {
                             .transition(.identity)
                     case .addFriends:
                         AddFriendsView(currentPage: $currentPage)
+                            .transition(.identity)
+                    case .friendRequests:
+                        FriendRequestsView(currentPage: $currentPage)
                             .transition(.identity)
                     case .newChat:
                         NewChatView(currentPage: $currentPage)
@@ -211,13 +220,16 @@ struct IceredApp: App {
                 handleDeepLink(url)
             }
             .onChange(of: scenePhase) { oldPhase, newPhase in
-                // 当 App 进入后台时，记录时间戳
+                // 当 App 进入后台时，记录时间戳并暂停同步
                 if newPhase == .background {
                     backgroundEntryTime = Date()
                     // Save coordinator state for restoration
                     coordinator.saveState()
                     selectedTabRaw = coordinator.selectedTab.rawValue
                     print("[App] 📱 App entered background")
+
+                    // Pause Matrix sync to save resources
+                    MatrixBridgeService.shared.pauseSync()
                 }
                 // 当 App 从后台返回到活跃状态时
                 if newPhase == .active, let entryTime = backgroundEntryTime {
@@ -236,6 +248,19 @@ struct IceredApp: App {
 
                     // 重置时间戳
                     backgroundEntryTime = nil
+
+                    // Resume Matrix sync to fetch any offline messages
+                    // This is critical for users to receive messages sent while app was in background
+                    if authManager.isAuthenticated && !authManager.isGuestMode {
+                        Task {
+                            do {
+                                try await MatrixBridgeService.shared.resumeSync()
+                                print("[App] ✅ Matrix sync resumed after returning from background")
+                            } catch {
+                                print("[App] ❌ Failed to resume Matrix sync: \(error)")
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -257,20 +282,25 @@ struct IceredApp: App {
         switch type {
         case "like", "comment", "mention", "share", "reply":
             // Navigate to the related post if available
-            if userInfo["post_id"] != nil {
-                // TODO: Navigate to post detail view
-                // For now, just go to home
+            if let postId = userInfo["post_id"] as? String {
+                coordinator.navigate(to: .post(id: postId))
+            } else {
                 currentPage = .home
             }
         case "follow":
             // Navigate to the follower's profile
-            if userInfo["user_id"] != nil {
-                // TODO: Navigate to user profile view
+            if let userId = userInfo["user_id"] as? String {
+                coordinator.navigate(to: .profile(userId: userId))
+            } else {
                 currentPage = .home
             }
         case "message":
             // Navigate to messages
-            currentPage = .message
+            if let roomId = userInfo["room_id"] as? String {
+                coordinator.navigate(to: .chat(roomId: roomId))
+            } else {
+                currentPage = .message
+            }
         default:
             // Default to home
             currentPage = .home

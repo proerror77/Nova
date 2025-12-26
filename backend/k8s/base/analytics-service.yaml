@@ -42,11 +42,15 @@ spec:
         - name: RUST_LOG
           value: "info"
         - name: GRPC_SERVER_CERT_PATH
-          value: "/etc/nova/certs/tls.crt"
+          value: "/etc/nova/certs/server.crt"
         - name: GRPC_SERVER_KEY_PATH
-          value: "/etc/nova/certs/tls.key"
+          value: "/etc/nova/certs/server.key"
         - name: GRPC_TLS_CA_CERT_PATH
           value: "/etc/nova/certs/ca.crt"
+        - name: APP_ENV
+          value: "development"
+        - name: GRPC_TLS_ENABLED
+          value: "false"
         envFrom:
         - configMapRef:
             name: nova-backend-config

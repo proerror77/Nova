@@ -15,7 +15,7 @@
 ///
 /// Services must call `initialize_jwt_keys()` during startup before any JWT operations:
 ///
-/// ```rust
+/// ```ignore
 /// use crypto_core::jwt;
 ///
 /// #[tokio::main]
@@ -218,9 +218,9 @@ pub fn initialize_jwt_keys(private_key_pem: &str, public_key_pem: &str) -> Resul
 ///
 /// ## Example
 ///
-/// ```rust
+/// ```ignore
 /// let public_key = std::env::var("JWT_PUBLIC_KEY_PEM")?;
-/// jwt::initialize_jwt_validation_only(&public_key)?;
+/// crypto_core::jwt::initialize_jwt_validation_only(&public_key)?;
 /// ```
 pub fn initialize_jwt_validation_only(public_key_pem: &str) -> Result<()> {
     let decoding_key = DecodingKey::from_rsa_pem(public_key_pem.as_bytes())

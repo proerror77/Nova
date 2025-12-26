@@ -41,6 +41,7 @@ enum AppRoute: Hashable, Codable {
     // MARK: - Social Routes
     case inviteFriends
     case addFriends
+    case friendRequests
     case myChannels
     case newChat
     case groupChat
@@ -109,6 +110,7 @@ enum AppRoute: Hashable, Codable {
         case "notification": self = .notification
         case "inviteFriends": self = .inviteFriends
         case "addFriends": self = .addFriends
+        case "friendRequests": self = .friendRequests
         case "myChannels": self = .myChannels
         case "newChat": self = .newChat
         case "groupChat": self = .groupChat
@@ -166,6 +168,7 @@ enum AppRoute: Hashable, Codable {
         case .notification: try container.encode("notification", forKey: .type)
         case .inviteFriends: try container.encode("inviteFriends", forKey: .type)
         case .addFriends: try container.encode("addFriends", forKey: .type)
+        case .friendRequests: try container.encode("friendRequests", forKey: .type)
         case .myChannels: try container.encode("myChannels", forKey: .type)
         case .newChat: try container.encode("newChat", forKey: .type)
         case .groupChat: try container.encode("groupChat", forKey: .type)
@@ -209,6 +212,7 @@ extension AppRoute {
         case .notification: return .home
         case .inviteFriends: return .inviteFriends
         case .addFriends: return .addFriends
+        case .friendRequests: return .friendRequests
         case .myChannels: return .myChannels
         case .newChat: return .newChat
         case .groupChat: return .groupChat

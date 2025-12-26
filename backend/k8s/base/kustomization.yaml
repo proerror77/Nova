@@ -20,6 +20,7 @@ resources:
   - social-service.yaml
   - analytics-service.yaml
   - trust-safety-service.yaml
+  - feature-store.yaml
   - graphql-gateway.yaml
   - matrix-synapse.yaml
   - zitadel.yaml

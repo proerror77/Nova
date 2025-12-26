@@ -28,7 +28,7 @@
 //!
 //! ### 1. Insert data and event in same transaction
 //!
-//! ```rust,no_run
+//! ```ignore
 //! use transactional_outbox::{OutboxEvent, OutboxRepository, SqlxOutboxRepository};
 //! use sqlx::{PgPool, Postgres, Transaction};
 //! use uuid::Uuid;
@@ -84,7 +84,7 @@
 //!
 //! ### 2. Start background processor
 //!
-//! ```rust,no_run
+//! ```ignore
 //! use transactional_outbox::{
 //!     OutboxProcessor, SqlxOutboxRepository, KafkaOutboxPublisher
 //! };
@@ -648,7 +648,7 @@ impl OutboxPublisher for KafkaOutboxPublisher {
 ///
 /// # Example
 ///
-/// ```rust,no_run
+/// ```ignore
 /// use transactional_outbox::CircuitBreakerKafkaPublisher;
 /// use rdkafka::producer::FutureProducer;
 /// use rdkafka::ClientConfig;

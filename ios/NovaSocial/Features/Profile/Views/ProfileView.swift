@@ -236,24 +236,24 @@ struct ProfileView: View {
 
     // MARK: - Profile 主内容
     private var profileContent: some View {
-        ZStack {
-            DesignTokens.backgroundColor
-                .ignoresSafeArea()
-
+        ZStack(alignment: .bottom) {
+            // 主内容区域
             VStack(spacing: 0) {
                 // MARK: - 区域1：用户信息头部（自适应高度）
                 userHeaderSection
 
                 // MARK: - 区域2：内容区域
                 contentSection
+                    .frame(maxHeight: .infinity)  // 填满剩余空间
                     .offset(y: contentSectionVerticalOffset)  // 应用垂直偏移
             }
-            .safeAreaInset(edge: .bottom) {
-                // MARK: - 底部导航栏
-                bottomNavigationBar
-            }
 
-            // MARK: - 照片选项弹窗
+            // MARK: - 底部导航栏（覆盖在内容上方，忽略安全区域）
+            bottomNavigationBar
+        }
+        .ignoresSafeArea(edges: [.top, .bottom])
+        // MARK: - 照片选项弹窗
+        .overlay {
             if activeSheet == .photoOptions {
                 PhotoOptionsModal(
                     isPresented: Binding(
@@ -274,8 +274,9 @@ struct ProfileView: View {
                     }
                 )
             }
-
-            // MARK: - 账户切换弹窗
+        }
+        // MARK: - 账户切换弹窗
+        .overlay {
             if activeSheet == .accountSwitcher {
                 AccountSwitcherSheet(
                     isPresented: Binding(
@@ -383,61 +384,23 @@ struct ProfileView: View {
         }
     }
 
-    // ==================== 布局配置（可在此调整） ====================
-    // 顶部导航栏布局
-    private var navBarLayout: ProfileNavBarLayout {
-        ProfileNavBarLayout(
-            horizontalPadding: 20.s,      // 左右边距
-            topPadding: 60.h,             // 顶部边距
-            bottomPadding: 40.h,          // 底部边距
-            usernameFontSize: 20.f,       // 用户名字体大小
-            chevronSize: 12.s,            // 下拉箭头大小
-            usernameChevronSpacing: 6.s,  // 用户名和箭头间距
-            iconSize: 24.s,               // 图标大小
-            iconSpacing: 18.s             // 图标间距
-        )
-    }
-
-    // 用户信息区域布局
-    private var userInfoLayout: ProfileUserInfoLayout {
-        ProfileUserInfoLayout(
-            containerWidth: 365.w,        // 容器宽度
-            verticalSpacing: 7.h,         // 垂直间距
-            bottomPadding: 10.h,          // 底部边距
-            avatarOuterSize: 108.s,       // 头像外圈大小
-            avatarInnerSize: 100.s,       // 头像内圈大小
-            avatarBorderWidth: 1,         // 边框宽度（保持1像素）
-            usernameFontSize: 20.f,       // 用户名字体大小
-            usernameSpacingFromAvatar: 9.h,  // 与头像间距
-            locationFontSize: 12.f,       // 位置字体大小
-            professionFontSize: 12.f,     // 职业字体大小
-            blueVIconSize: 20.s,          // 蓝标大小
-            professionIconSpacing: 10.s,  // 蓝标与文字间距
-            statsTopPadding: 8.h,         // 统计区顶部间距
-            statsLabelFontSize: 16.f,     // 统计标签字体
-            statsValueFontSize: 16.f,     // 统计数值字体
-            statsItemWidth: 132.w,        // 统计项宽度
-            statsItemSpacing: -16.w,      // 统计项间距
-            statsDividerHeight: 24.h      // 分隔线高度
-        )
-    }
-
     // ==================== 用户信息区块垂直位置调整 ====================
     // 调整此值可单独控制头像、用户名、位置、职业、粉丝统计区块的垂直位置
     // 正值向下移动，负值向上移动
-    private let userInfoBlockVerticalOffset: CGFloat = -60  // ← 在此调整垂直偏移量
+    private let userInfoBlockVerticalOffset: CGFloat = 0  // ← 在此调整垂直偏移量
 
     // ==================== 内容区域（标签栏+帖子）垂直位置调整 ====================
     // 调整此值可控制 Posts/Saved/Liked 标签栏及下方内容的垂直位置
     // 正值向下移动，负值向上移动
-    private let contentSectionVerticalOffset: CGFloat = -60  // ← 在此调整垂直偏移量
+    private let contentSectionVerticalOffset: CGFloat = 20  // ← 向下偏移 8pt，与用户信息区域保持 8pt 间距
 
     // MARK: - 用户信息头部区域
     private var userHeaderSection: some View {
         ZStack(alignment: .top) {
             // 背景图片 - 只通过右上角按钮更换（移除整体点击）
-            ZStack(alignment: .topTrailing) {
-                // 背景圖片內容
+            // 背景圖片內容 - 带双层遮罩效果
+            ZStack {
+                // 背景图片
                 Group {
                     if let bgImage = localBackgroundImage {
                         Image(uiImage: bgImage)
@@ -449,274 +412,338 @@ struct ProfileView: View {
                             .scaledToFill()
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: 980)  // 调整高度
-                .clipped()
-                .blur(radius: 20.s)
-                .overlay(Color.black.opacity(0.3))
-                .ignoresSafeArea(edges: .top)
-                // 移除 onTapGesture - 避免误触跳转到照片选择器
 
-                // 背景編輯圖標 - 唯一的背景更换入口
-                Button(action: { activeSheet = .backgroundPicker }) {
-                    Circle()
-                        .fill(Color.black.opacity(0.5))
-                        .frame(width: 36.s, height: 36.s)
-                        .overlay(
-                            Image(systemName: "photo.fill")
-                                .font(.system(size: 16.f))
-                                .foregroundColor(.white)
-                        )
-                }
-                .padding(.top, 70.h)
-                .padding(.trailing, 16.w)
+                // 第一层遮罩 - 暖色调
+                Rectangle()
+                    .foregroundColor(.clear)
+                    .background(Color(red: 0, green: 0, blue: 0).opacity(0))
+
+                // 第二层遮罩 - 黑色
+                Rectangle()
+                    .foregroundColor(.clear)
+                    .background(Color(red: 0, green: 0, blue: 0).opacity(0.20))
             }
-            .frame(height: 380.h)  // 调整背景區域高度
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .ignoresSafeArea()
+            .frame(height: 331.h)  // 距离屏幕顶部 331px
 
             VStack(spacing: 0) {
-                // MARK: - 顶部导航栏（独立组件）
-                ProfileTopNavigationBar(
-                    username: displayUsername,
-                    layout: navBarLayout,
-                    onShareTapped: { activeSheet = .shareSheet },
-                    onSettingsTapped: { currentPage = .setting },
-                    onUsernameTapped: {
+                // MARK: - 顶部导航栏
+                HStack {
+                    // 左侧：用户名 + 下拉箭头
+                    Button(action: {
                         withAnimation(.easeOut(duration: 0.25)) {
                             activeSheet = .accountSwitcher
                         }
+                    }) {
+                        HStack(spacing: 4.s) {
+                            Text(displayUsername)
+                                .font(.system(size: 16.f, weight: .semibold))
+                                .foregroundColor(.white)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 12.f))
+                                .foregroundColor(.white)
+                        }
                     }
-                )
 
-                // MARK: - 用户信息区域（独立组件）
-                // 注意：当用户未填写信息时，组件会自动处理默认显示状态
-                ProfileUserInfoSection(
-                    avatarImage: avatarManager.pendingAvatar ?? localAvatarImage,
-                    avatarUrl: displayUser?.avatarUrl,  // 使用 displayUser 确保与 authManager 同步
-                    username: displayUser?.displayName ?? displayUser?.username,  // 未填写时组件显示 "User"
-                    location: displayUser?.location,                               // 未填写时不显示
-                    profession: displayUser?.bio,                                  // 未填写时不显示
-                    isVerified: displayUser?.safeIsVerified ?? false,
-                    followingCount: displayUser?.safeFollowingCount ?? 0,
-                    followersCount: displayUser?.safeFollowerCount ?? 0,
-                    likesCount: userPostsManager.postCount,
-                    layout: userInfoLayout,
-                    onAvatarTapped: {
-                        activeSheet = .avatarPicker  // 點擊頭像更換
-                    },
-                    onFollowingTapped: {
-                        activeSheet = .following  // 点击 Following 跳转
-                    },
-                    onFollowersTapped: {
-                        activeSheet = .followers  // 点击 Followers 跳转
+                    Spacer()
+
+                    // 右侧：分享 + 设置图标
+                    HStack(spacing: 18.s) {
+                        Button(action: { activeSheet = .shareSheet }) {
+                            Image("share")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 24.s, height: 24.s)
+                        }
+
+                        Button(action: { currentPage = .setting }) {
+                            Image("Setting(white)")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 24.s, height: 24.s)
+                        }
                     }
-                )
-                .offset(y: userInfoBlockVerticalOffset)  // 应用垂直偏移
+                }
+                .padding(.horizontal, 17.w)
+                .padding(.top, 64.h)  // 距离手机顶部 64pt（忽略安全区域后）
+
+                // MARK: - 用户信息区域
+                VStack(spacing: 8.h) {
+                    VStack(spacing: 8.h) {
+                        // 头像（距离导航栏 16px）
+                        Button(action: { activeSheet = .avatarPicker }) {
+                            ZStack {
+                                // 头像图片
+                                if let avatarImage = avatarManager.pendingAvatar ?? localAvatarImage {
+                                    Image(uiImage: avatarImage)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 100.s, height: 100.s)
+                                        .clipShape(Circle())
+                                } else if let avatarUrl = displayUser?.avatarUrl, let url = URL(string: avatarUrl) {
+                                    AsyncImage(url: url) { image in
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                    } placeholder: {
+                                        Circle()
+                                            .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                    }
+                                    .frame(width: 100.s, height: 100.s)
+                                    .clipShape(Circle())
+                                } else {
+                                    Circle()
+                                        .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                        .frame(width: 100.s, height: 100.s)
+                                }
+                            }
+                            .frame(width: 108.s, height: 108.s)
+                            .overlay(
+                                Circle()
+                                    .inset(by: 1)
+                                    .stroke(.white, lineWidth: 2)
+                            )
+                            .overlay(
+                                // 添加头像图标 - 在白线前层
+                                Image("AddAvatar")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 24.s, height: 24.s)
+                                    .offset(x: 38.s, y: 38.s)
+                            )
+                        }
+
+                        // 用户名
+                        Text(displayUser?.displayName ?? displayUser?.username ?? "User")
+                            .font(.system(size: 16.f, weight: .semibold))
+                            .foregroundColor(.white)
+
+                        // 位置（未填写时显示空白，保留位置）
+                        Text(displayUser?.location?.isEmpty == false ? displayUser!.location! : " ")
+                            .font(Font.custom("SF Pro Display", size: 14.f).weight(.light))
+                            .foregroundColor(.white)
+                    }
+                    .frame(width: 130.w)
+
+                    // 职业 + 认证图标（未填写时显示空白，保留位置）
+                    HStack(spacing: 10.s) {
+                        Text(displayUser?.bio?.isEmpty == false ? displayUser!.bio! : " ")
+                            .font(Font.custom("SF Pro Display", size: 14.f).weight(.light))
+                            .foregroundColor(.white)
+                        if displayUser?.safeIsVerified == true {
+                            Image("BlueV")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 24.s, height: 24.s)
+                        }
+                    }
+
+                    // Following / Followers / Halo
+                    HStack(spacing: -2) {
+                        // Following
+                        Button(action: { activeSheet = .following }) {
+                            VStack(spacing: 1.h) {
+                                Text("\(displayUser?.safeFollowingCount ?? 0)")
+                                    .font(.system(size: 16.f, weight: .semibold))
+                                    .foregroundColor(.white)
+                                Text("Following")
+                                    .font(.system(size: 14.f, weight: .light))
+                                    .foregroundColor(.white)
+                            }
+                            .frame(width: 125.w, height: 40.h)
+                        }
+
+                        // 分隔线
+                        Rectangle()
+                            .fill(.white.opacity(0.5))
+                            .frame(width: 1, height: 24.h)
+
+                        // Followers
+                        Button(action: { activeSheet = .followers }) {
+                            VStack(spacing: 1.h) {
+                                Text("\(displayUser?.safeFollowerCount ?? 0)")
+                                    .font(.system(size: 16.f, weight: .semibold))
+                                    .foregroundColor(.white)
+                                Text("Followers")
+                                    .font(.system(size: 14.f, weight: .light))
+                                    .foregroundColor(.white)
+                            }
+                            .frame(width: 132.w, height: 40.h)
+                        }
+
+                        // 分隔线
+                        Rectangle()
+                            .fill(.white.opacity(0.5))
+                            .frame(width: 1, height: 24.h)
+
+                        // Halo
+                        VStack(spacing: 1.h) {
+                            Text("\(userPostsManager.postCount)")
+                                .font(.system(size: 16.f, weight: .semibold))
+                                .foregroundColor(.white)
+                            Text("Halo")
+                                .font(.system(size: 14.f, weight: .light))
+                                .foregroundColor(.white)
+                        }
+                        .frame(width: 118.w, height: 40.h)
+                    }
+                    .frame(height: 40.h)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 240.h)
+                .padding(.top, 0)
             }
         }
+        .frame(height: 300.h)  // 整个头部区域高度，Posts栏紧随其后（间距8px）
     }
 
     // MARK: - 内容区域
     private var contentSection: some View {
         VStack(spacing: 0) {
-            // MARK: - 标签栏（标签独立居中，搜索图标右对齐）
-            VStack(spacing: 0) {
-                    ZStack {
-                        // 标签按钮 - 完全居中
-                        HStack(spacing: 40.s) {
-                            Button(action: {
-                                profileData.selectedTab = .posts
-                                Task {
-                                    await profileData.loadContent(for: .posts)
-                                }
-                            }) {
-                                Text(LocalizedStringKey("Posts_tab"))
-                                    .font(.system(size: 16.f, weight: .bold))
-                                    .foregroundColor(profileData.selectedTab == .posts ? DesignTokens.accentColor : DesignTokens.textPrimary)
-                            }
+            // 顶部分隔线
+            Rectangle()
+                .fill(Color(red: 0.74, green: 0.74, blue: 0.74))
+                .frame(height: 0.5)
 
-                            Button(action: {
-                                profileData.selectedTab = .saved
-                                Task {
-                                    await profileData.loadContent(for: .saved)
-                                }
-                            }) {
-                                Text(LocalizedStringKey("Saved_tab"))
-                                    .font(.system(size: 16.f, weight: .bold))
-                                    .foregroundColor(profileData.selectedTab == .saved ? DesignTokens.accentColor : DesignTokens.textPrimary)
-                            }
-
-                            Button(action: {
-                                profileData.selectedTab = .liked
-                                Task {
-                                    await profileData.loadContent(for: .liked)
-                                }
-                            }) {
-                                Text(LocalizedStringKey("Liked_tab"))
-                                    .font(.system(size: 16.f, weight: .bold))
-                                    .foregroundColor(profileData.selectedTab == .liked ? DesignTokens.accentColor : DesignTokens.textPrimary)
-                            }
+            // MARK: - 标签栏
+            HStack(spacing: 42.s) {
+                // 标签按钮
+                HStack(spacing: 40.s) {
+                    Button(action: {
+                        profileData.selectedTab = .posts
+                        Task {
+                            await profileData.loadContent(for: .posts)
                         }
-                        .frame(maxWidth: .infinity)
-
-                        // 搜索图标 - 右对齐，使用 Symbol Effect
-                        HStack {
-                            Spacer()
-                            Button(action: {
-                                let wasShowingSearch = showSearchBar
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    showSearchBar.toggle()
-                                }
-                                if wasShowingSearch {
-                                    searchText = ""
-                                    profileData.searchQuery = ""
-                                    profileData.isSearching = false
-                                }
-                            }) {
-                                Image(systemName: showSearchBar ? "xmark.circle.fill" : "magnifyingglass")
-                                    .font(.system(size: 20.f))
-                                    .foregroundColor(DesignTokens.textPrimary)
-                                    .contentTransition(.symbolEffect(.replace))
-                            }
-                            .padding(.trailing, 20.w)
-                        }
+                    }) {
+                        Text("Posts")
+                            .font(.system(size: 16.f, weight: .semibold))
+                            .foregroundColor(profileData.selectedTab == .posts ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
                     }
-                    .padding(.vertical, 16.h)
-                    .background(.white)
-                    
-                    // MARK: - 搜索框
+
+                    Button(action: {
+                        profileData.selectedTab = .saved
+                        Task {
+                            await profileData.loadContent(for: .saved)
+                        }
+                    }) {
+                        Text("Saved")
+                            .font(.system(size: 16.f, weight: .semibold))
+                            .foregroundColor(profileData.selectedTab == .saved ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                    }
+
+                    Button(action: {
+                        profileData.selectedTab = .liked
+                        Task {
+                            await profileData.loadContent(for: .liked)
+                        }
+                    }) {
+                        Text("Liked")
+                            .font(.system(size: 16.f, weight: .semibold))
+                            .foregroundColor(profileData.selectedTab == .liked ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                    }
+                }
+                .frame(width: 211.w, height: 24.h)
+
+                // 搜索图标
+                Button(action: {
+                    let wasShowingSearch = showSearchBar
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showSearchBar.toggle()
+                    }
+                    if wasShowingSearch {
+                        searchText = ""
+                        profileData.searchQuery = ""
+                        profileData.isSearching = false
+                    }
+                }) {
                     if showSearchBar {
-                        HStack(spacing: 10.s) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 14.f))
-                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
-
-                            TextField("搜索帖子內容...", text: $searchText)
-                                .font(.system(size: 14.f))
-                                .foregroundColor(.black)
-                                .textFieldStyle(.plain)
-                                .onChange(of: searchText) { _, newValue in
-                                    // 性能優化：添加 300ms 防抖動避免每次按鍵都觸發搜索
-                                    searchDebounceTask?.cancel()
-                                    searchDebounceTask = Task {
-                                        try? await Task.sleep(for: .milliseconds(300))
-                                        guard !Task.isCancelled else { return }
-                                        await profileData.searchInProfile(query: newValue)
-                                    }
-                                }
-
-                            if !searchText.isEmpty {
-                                Button(action: {
-                                    searchText = ""
-                                    profileData.searchQuery = ""
-                                    profileData.isSearching = false
-                                }) {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 14.f))
-                                        .foregroundColor(.gray)
-                                }
-                            }
-                        }
-                        .padding(EdgeInsets(top: 8.h, leading: 12.w, bottom: 8.h, trailing: 12.w))
-                        .background(Color(red: 0.95, green: 0.95, blue: 0.95))
-                        .cornerRadius(10.s)
-                        .padding(.horizontal, 16.w)
-                        .padding(.bottom, 8.h)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                    }
-
-                    // 分隔线
-                    Rectangle()
-                        .fill(DesignTokens.borderColor)
-                        .frame(height: 0.5)
-                }
-
-                // MARK: - 帖子网格
-                ScrollView {
-                    if profileData.selectedTab == .posts {
-                        // Posts 标签 - 使用 UserPostsManager 实时同步（支持分页）
-                        if userPostsManager.isLoading && userPostsManager.userPosts.isEmpty {
-                            ProgressView()
-                                .padding(.top, 40)
-                        } else if userPostsManager.hasPosts {
-                            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8.s), GridItem(.flexible(), spacing: 8.s)], spacing: 8.s) {
-                                ForEach(filteredUserPosts) { post in
-                                    ProfilePostCard(
-                                        post: post,
-                                        username: displayUser?.displayName ?? displayUser?.username ?? "User",
-                                        avatarUrl: displayUser?.avatarUrl,
-                                        isOwnPost: true,  // Posts tab 都是自己的帖子
-                                        onTap: {
-                                            activeSheet = .postDetail(post: post)
-                                        },
-                                        onDelete: {
-                                            postToDelete = post
-                                            showDeleteConfirmation = true
-                                        }
-                                    )
-                                    .onAppear {
-                                        // 无限滚动：当最后几个帖子出现时，加载更多
-                                        if let lastPost = userPostsManager.userPosts.suffix(3).first,
-                                           post.id == lastPost.id,
-                                           userPostsManager.hasMore,
-                                           !userPostsManager.isLoadingMore {
-                                            Task {
-                                                await userPostsManager.loadMorePosts()
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 8.w)
-                            .padding(.top, 8.h)
-                            
-                            // 加载更多指示器
-                            if userPostsManager.isLoadingMore {
-                                ProgressView()
-                                    .padding(.vertical, 16.h)
-                            }
-                        } else if !searchText.isEmpty && userPostsManager.hasPosts {
-                            // 搜索无结果
-                            searchEmptyStateView
-                        } else {
-                            emptyStateView
-                        }
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 20.f))
+                            .foregroundColor(.black)
                     } else {
-                        // Saved/Liked 标签 - 使用 profileData (支持搜索过滤)
-                        if profileData.isLoading {
-                            ProgressView()
-                                .padding(.top, 40)
-                        } else if profileData.hasContent {
-                            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8.s), GridItem(.flexible(), spacing: 8.s)], spacing: 8.s) {
-                                ForEach(filteredProfilePosts) { post in
-                                    ProfilePostCard(
-                                        post: post,
-                                        username: displayUser?.displayName ?? displayUser?.username ?? "User",
-                                        avatarUrl: displayUser?.avatarUrl,
-                                        isOwnPost: post.authorId == authManager.currentUser?.id,
-                                        onTap: {
-                                            activeSheet = .postDetail(post: post)
-                                        },
-                                        onDelete: {
-                                            postToDelete = post
-                                            showDeleteConfirmation = true
-                                        }
-                                    )
-                                }
+                        Image("search(gray)")
+                            .resizable()
+                            .scaledToFit()
+                    }
+                }
+                .frame(width: 24.s, height: 24.s)
+            }
+            .padding(.top, 12.h)
+            .padding(.bottom, 16.h)
+            .padding(.leading, 82.w)
+            .padding(.trailing, 16.w)
+            .frame(maxWidth: .infinity)
+
+            // MARK: - 搜索框
+            if showSearchBar {
+                HStack(spacing: 10.s) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 14.f))
+                        .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+
+                    TextField("搜索帖子內容...", text: $searchText)
+                        .font(.system(size: 14.f))
+                        .foregroundColor(.black)
+                        .textFieldStyle(.plain)
+                        .onChange(of: searchText) { _, newValue in
+                            searchDebounceTask?.cancel()
+                            searchDebounceTask = Task {
+                                try? await Task.sleep(for: .milliseconds(300))
+                                guard !Task.isCancelled else { return }
+                                await profileData.searchInProfile(query: newValue)
                             }
-                            .padding(.horizontal, 8.w)
-                            .padding(.top, 8.h)
-                        } else if !searchText.isEmpty && profileData.hasContent {
-                            // 搜索无结果
-                            searchEmptyStateView
-                        } else {
-                            emptyStateView
+                        }
+
+                    if !searchText.isEmpty {
+                        Button(action: {
+                            searchText = ""
+                            profileData.searchQuery = ""
+                            profileData.isSearching = false
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 14.f))
+                                .foregroundColor(.gray)
                         }
                     }
-
-                    Color.clear
-                        .frame(height: 100.h)
                 }
-                .background(DesignTokens.backgroundColor)
+                .padding(EdgeInsets(top: 8.h, leading: 12.w, bottom: 8.h, trailing: 12.w))
+                .background(Color(red: 0.95, green: 0.95, blue: 0.95))
+                .cornerRadius(10.s)
+                .padding(.horizontal, 16.w)
+                .padding(.bottom, 8.h)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
+            // 分隔线
+            Rectangle()
+                .fill(DesignTokens.borderColor)
+                .frame(height: 0.5)
+
+            // MARK: - 帖子网格 (纯UI展示)
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 5.s), GridItem(.flexible(), spacing: 5.s)], spacing: 5.s) {
+                    ForEach(0..<6, id: \.self) { _ in
+                        PostCard(
+                            imageUrl: nil,
+                            imageName: "PostCardImage",
+                            title: "kyleegigstead Cyborg dreams...",
+                            authorName: "Bruce Li",
+                            authorAvatarUrl: nil,
+                            likeCount: 2234,
+                            onTap: nil
+                        )
+                    }
+                }
+                .padding(.horizontal, 5.w)
+                .padding(.top, 5.h)
+                .padding(.bottom, 100.h)  // 底部留出足够空间给导航栏
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()  // 裁剪超出内容
         }
+        .background(Color(red: 0.96, green: 0.96, blue: 0.96))  // 整个内容区域灰色背景
     }
 
     // MARK: - 空状态视图
@@ -970,13 +997,7 @@ struct PostGridCard: View {
 
 // MARK: - Previews
 
-#Preview("Profile - Default") {
+#Preview("Profile") {
     ProfileView(currentPage: .constant(.account))
         .environmentObject(AuthenticationManager.shared)
-}
-
-#Preview("Profile - Light Mode") {
-    ProfileView(currentPage: .constant(.account))
-        .environmentObject(AuthenticationManager.shared)
-        .preferredColorScheme(.light)
 }

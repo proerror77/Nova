@@ -10,11 +10,12 @@ pub use metrics::{
 };
 
 use sqlx::postgres::{PgPool, PgPoolOptions};
+use std::fmt;
 use std::time::Duration;
 use tracing::{debug, error, info};
 
 /// Database connection pool configuration
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct DbConfig {
     /// Service name for metrics labeling
     pub service_name: String,
@@ -32,6 +33,21 @@ pub struct DbConfig {
     pub idle_timeout_secs: u64,
     /// Connection maximum lifetime
     pub max_lifetime_secs: u64,
+}
+
+impl fmt::Debug for DbConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DbConfig")
+            .field("service_name", &self.service_name)
+            .field("database_url", &"[REDACTED]")
+            .field("max_connections", &self.max_connections)
+            .field("min_connections", &self.min_connections)
+            .field("connect_timeout_secs", &self.connect_timeout_secs)
+            .field("acquire_timeout_secs", &self.acquire_timeout_secs)
+            .field("idle_timeout_secs", &self.idle_timeout_secs)
+            .field("max_lifetime_secs", &self.max_lifetime_secs)
+            .finish()
+    }
 }
 
 impl Default for DbConfig {

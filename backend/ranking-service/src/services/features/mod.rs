@@ -2,7 +2,11 @@
 // Feature Client Module
 // ============================================
 // Provides real-time feature retrieval for ranking
-// from Redis cache and PostgreSQL fallback
+// from Redis cache, feature-store gRPC, or PostgreSQL fallback
+
+pub mod grpc_client;
+
+pub use grpc_client::{FeatureSource, GrpcFeatureClient, PostFeatureSet, UserFeatureSet};
 
 use anyhow::Result;
 use redis::AsyncCommands;

@@ -332,11 +332,18 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         guard let location = locations.last else { return }
         self.location = location
 
-        // 反向地理编码获取地址
-        let geocoder = CLGeocoder()
-        geocoder.reverseGeocodeLocation(location) { [weak self] placemarks, error in
-            if let placemark = placemarks?.first {
-                self?.currentPlacemark = placemark
+        // 反向地理编码获取地址 (使用 async/await API)
+        Task { @MainActor [weak self] in
+            do {
+                let geocoder = CLGeocoder()
+                let placemarks = try await geocoder.reverseGeocodeLocation(location)
+                if let placemark = placemarks.first {
+                    self?.currentPlacemark = placemark
+                }
+            } catch {
+                #if DEBUG
+                print("[LocationManager] Reverse geocode error: \(error)")
+                #endif
             }
         }
     }

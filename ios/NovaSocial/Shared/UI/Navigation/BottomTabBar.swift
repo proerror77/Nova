@@ -27,19 +27,22 @@ struct BottomTabBar: View {
     }
 
     var body: some View {
-        HStack(spacing: -20) {
-            // Home
-            VStack(spacing: 3) {
+        ZStack {
+            // Home Tab
+            ZStack {
                 Image(isHome ? "home-icon" : "home-icon-black")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 33, height: 23)
+                    .frame(width: 24.s, height: 24.s)
+                    .offset(y: -6.h)
                 Text("Home")
-                    .font(.system(size: DesignTokens.fontCaption, weight: .medium))
-                    .foregroundColor(isHome ? DesignTokens.accentColor : .black)
-                    .offset(x: 0)
+                    .font(Font.custom("SF Pro", size: 9.f))
+                    .foregroundColor(isHome ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                    .offset(y: 11.50.h)
             }
-            .frame(maxWidth: .infinity)
+            .frame(width: 50.s, height: 50.s)
+            .contentShape(Rectangle())
+            .offset(x: -135.36.w, y: -7.h)
             .onTapGesture {
                 selectTab(.home, tab: .home)
             }
@@ -48,17 +51,21 @@ struct BottomTabBar: View {
             .accessibilityHint("Navigate to home feed")
             .accessibilityAddTraits(isHome ? [.isButton, .isSelected] : .isButton)
 
-            // Message
-            VStack(spacing: DesignTokens.spacing4) {
+            // Message Tab
+            ZStack {
                 Image(isMessage ? "Message-icon-red" : "Message-icon-black")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 22, height: 22)
+                    .frame(width: 18.s, height: 18.s)
+                    .offset(y: -6.h)
                 Text("Message")
-                    .font(.system(size: DesignTokens.fontCaption))
-                    .foregroundColor(isMessage ? DesignTokens.accentColor : .black)
+                    .font(Font.custom("SF Pro", size: 9.f))
+                    .foregroundColor(isMessage ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                    .offset(y: 11.50.h)
             }
-            .frame(maxWidth: .infinity)
+            .frame(width: 50.s, height: 50.s)
+            .contentShape(Rectangle())
+            .offset(x: -69.18.w, y: -7.h)
             .onTapGesture {
                 selectTab(.message, tab: .message)
             }
@@ -67,27 +74,42 @@ struct BottomTabBar: View {
             .accessibilityHint("View your messages and conversations")
             .accessibilityAddTraits(isMessage ? [.isButton, .isSelected] : .isButton)
 
-            // New Post
-            NewPostButtonComponent(
-                showNewPost: $showPhotoOptions,
-                onTapWithDraft: {
-                    showNewPost = true  // 有草稿，直接打开 NewPost
-                },
-                onTapNoDraft: {
-                    showPhotoOptions = true  // 无草稿，显示选项弹窗
+            // New Post Button (Center)
+            ZStack {
+                Rectangle()
+                    .foregroundColor(.clear)
+                    .frame(width: 44.s, height: 32.s)
+                    .background(Color(red: 0.81, green: 0.13, blue: 0.25))
+                    .cornerRadius(11.s)
+                Image(systemName: "plus")
+                    .font(.system(size: 18.f, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            .frame(width: 50.s, height: 50.s)
+            .contentShape(Rectangle())
+            .offset(x: 0.56.w, y: -7.h)
+            .onTapGesture {
+                if DraftManager.hasDraft() {
+                    showNewPost = true
+                } else {
+                    showPhotoOptions = true
                 }
-            )
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Create new post")
+            .accessibilityHint("Create a new post with photos or text")
+            .accessibilityAddTraits(.isButton)
 
-            // Alice
-            VStack(spacing: -12) {
+            // Alice Tab
+            ZStack {
                 Image(isAlice ? "alice-button-on" : "alice-button-off")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 44, height: 44)
-                Text("")
-                    .font(.system(size: DesignTokens.fontCaption))
+                    .frame(width: 36.s, height: 36.s)
             }
-            .frame(maxWidth: .infinity)
+            .frame(width: 50.s, height: 50.s)
+            .contentShape(Rectangle())
+            .offset(x: 71.19.w, y: -7.h)
             .onTapGesture {
                 selectTab(.alice, tab: .alice)
             }
@@ -96,52 +118,58 @@ struct BottomTabBar: View {
             .accessibilityHint("Chat with Alice AI assistant")
             .accessibilityAddTraits(isAlice ? [.isButton, .isSelected] : .isButton)
 
-            // Account
-            VStack(spacing: 0) {
-                ZStack {
-                    // 背景圆圈
-                    Circle()
-                        .fill(isAccount ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color.clear)
-                        .frame(width: 32, height: 32)
+            // Account Tab
+            ZStack {
+                // 头像边框圆圈
+                Ellipse()
+                    .foregroundColor(.clear)
+                    .frame(width: 24.06.s, height: 24.06.s)
+                    .overlay(
+                        Ellipse()
+                            .inset(by: 0.50)
+                            .stroke(isAccount ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color.gray.opacity(0.3), lineWidth: 0.50)
+                    )
+                    .offset(y: -6.h)
 
-                    // 头像 - 使用统一的默认头像组件
+                // 头像内容
+                ZStack {
                     if let pendingAvatar = avatarManager.pendingAvatar {
-                        // 优先显示待上传的头像
                         Image(uiImage: pendingAvatar)
                             .resizable()
                             .scaledToFill()
-                            .frame(width: 26, height: 26)
+                            .frame(width: 20.s, height: 20.s)
                             .clipShape(Circle())
                     } else if let avatarUrl = authManager.currentUser?.avatarUrl,
                               let url = URL(string: avatarUrl) {
-                        // 显示服务器头像
                         AsyncImage(url: url) { phase in
                             switch phase {
                             case .success(let image):
                                 image
                                     .resizable()
                                     .scaledToFill()
-                                    .frame(width: 26, height: 26)
+                                    .frame(width: 20.s, height: 20.s)
                                     .clipShape(Circle())
                             case .failure(_), .empty:
-                                // 加载失败或空状态，显示默认头像
-                                DefaultAvatarView(size: 26)
+                                DefaultAvatarView(size: 20.s)
                             @unknown default:
-                                DefaultAvatarView(size: 26)
+                                DefaultAvatarView(size: 20.s)
                             }
                         }
                     } else {
-                        // 默认头像
-                        DefaultAvatarView(size: 26)
+                        DefaultAvatarView(size: 20.s)
                     }
                 }
+                .frame(width: 20.s, height: 20.s)
+                .offset(y: -6.h)
 
                 Text("Account")
-                    .font(.system(size: DesignTokens.fontCaption))
-                    .foregroundColor(isAccount ? DesignTokens.accentColor : .black)
+                    .font(Font.custom("SF Pro", size: 9.f))
+                    .foregroundColor(isAccount ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                    .offset(y: 11.50.h)
             }
-            .frame(maxWidth: .infinity)
-            .offset(y: 0)
+            .frame(width: 50.s, height: 50.s)
+            .contentShape(Rectangle())
+            .offset(x: 136.37.w, y: -7.h)
             .onTapGesture {
                 selectTab(.account, tab: .account)
             }
@@ -150,14 +178,9 @@ struct BottomTabBar: View {
             .accessibilityHint("View your profile and account settings")
             .accessibilityAddTraits(isAccount ? [.isButton, .isSelected] : .isButton)
         }
-        .frame(height: DesignTokens.bottomBarHeight)
-        .padding(.bottom, 30.h) // ← 调整底部留白（响应式）
-        .background(
-            DesignTokens.cardBackground
-                .ignoresSafeArea(edges: .bottom)
-        )
-        .border(DesignTokens.borderColor, width: 0.5)
-        .offset(y: 40.h) // ← 调整整体垂直位置（响应式）
+        .frame(width: 375.w, height: 72.h)
+        .background(DesignTokens.cardBackground)
+        .ignoresSafeArea(edges: .bottom)
     }
 }
 

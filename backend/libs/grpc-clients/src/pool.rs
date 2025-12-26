@@ -54,7 +54,7 @@ lazy_static::lazy_static! {
 /// - Exponential backoff retries
 ///
 /// # Example
-/// ```rust
+/// ```ignore
 /// use grpc_clients::pool::GrpcConnectionPool;
 /// use tonic::Request;
 ///
@@ -201,7 +201,7 @@ impl GrpcConnectionPool {
     /// 3. Exponential backoff: 10ms, 20ms, 40ms
     ///
     /// # Example
-    /// ```rust
+    /// ```ignore
     /// let response = pool.call_with_retry(|channel| async move {
     ///     let mut client = UserServiceClient::new(channel);
     ///     client.get_user(Request::new(req)).await

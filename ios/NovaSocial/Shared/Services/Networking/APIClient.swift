@@ -48,8 +48,28 @@ class APIClient {
     private let baseURL = APIConfig.current.baseURL
 
     /// Shared URLSession for all API requests - use this instead of creating new sessions
-    let session: URLSession
+    private(set) var session: URLSession
     private var authToken: String?
+
+    #if DEBUG
+    /// Configure session for testing with custom protocol classes
+    /// - Parameter protocolClasses: Array of URLProtocol subclasses to intercept requests
+    func configureForTesting(protocolClasses: [AnyClass]) {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = protocolClasses
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 60
+        self.session = URLSession(configuration: config)
+    }
+
+    /// Reset session to default configuration after testing
+    func resetSessionToDefault() {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = APIConfig.current.timeout
+        config.timeoutIntervalForResource = APIConfig.current.resourceTimeout
+        self.session = URLSession(configuration: config)
+    }
+    #endif
 
     // MARK: - Request Deduplication (請求去重) - Actor-based for Swift 6 compatibility
     private let deduplicationStore = RequestDeduplicationStore()

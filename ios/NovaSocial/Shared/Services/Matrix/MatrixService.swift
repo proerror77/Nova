@@ -657,38 +657,38 @@ final class MatrixService: MatrixServiceProtocol {
         getOrCreateDeviceId()
     }
 
-    // MARK: - Private Properties
+    // MARK: - Internal Properties (accessible from extensions)
 
     /// Matrix client instance (from MatrixRustSDK)
-    private var client: Client?
+    var client: Client?
 
     /// Sync service for background updates
-    private var syncService: SyncService?
+    var syncService: SyncService?
 
     /// Room list service for efficient room updates
-    private var roomListService: RoomListService?
+    var roomListService: RoomListService?
 
     /// Keep room list objects alive to prevent crash (Issue #4774)
     /// These must be stored as properties, not local variables
-    private var roomListEntriesStreamHandle: TaskHandle?
-    private var roomList: RoomList?
-    private var roomListController: RoomListDynamicEntriesControllerProtocol?
+    var roomListEntriesStreamHandle: TaskHandle?
+    var roomList: RoomList?
+    var roomListController: RoomListDynamicEntriesControllerProtocol?
 
     /// Session storage path
-    private var sessionPath: String?
+    var sessionPath: String?
 
     /// Homeserver URL
-    private var homeserverURL: String?
+    var homeserverURL: String?
 
     /// Room cache
-    private var roomCache: [String: MatrixRoom] = [:]
+    var roomCache: [String: MatrixRoom] = [:]
 
     /// Timeline listeners cache (room_id -> listener)
-    private var timelineListeners: [String: TaskHandle] = [:]
-    private var roomTimelines: [String: Timeline] = [:]
+    var timelineListeners: [String: TaskHandle] = [:]
+    var roomTimelines: [String: Timeline] = [:]
 
     /// De-duplication cache for timeline events (roomId -> eventIds)
-    private var seenTimelineEventIdsByRoom: [String: Set<String>] = [:]
+    var seenTimelineEventIdsByRoom: [String: Set<String>] = [:]
 
     /// Cancellables for Combine subscriptions
     private var cancellables = Set<AnyCancellable>()
@@ -1301,7 +1301,7 @@ final class MatrixService: MatrixServiceProtocol {
         seenTimelineEventIdsByRoom.removeValue(forKey: roomId)
     }
 
-    private func handleRoomTimelineDiff(roomId: String, diffs: [TimelineDiff]) {
+    func handleRoomTimelineDiff(roomId: String, diffs: [TimelineDiff]) {
         for diff in diffs {
             switch diff {
             case .append(let values):
@@ -1320,7 +1320,7 @@ final class MatrixService: MatrixServiceProtocol {
         }
     }
 
-    private func emitTimelineItem(_ item: TimelineItem, roomId: String) {
+    func emitTimelineItem(_ item: TimelineItem, roomId: String) {
         guard let message = convertTimelineItemToMessage(item, roomId: roomId) else { return }
 
         var seen = seenTimelineEventIdsByRoom[roomId] ?? Set()
@@ -1750,12 +1750,12 @@ final class MatrixService: MatrixServiceProtocol {
         return []
     }
 
-    // MARK: - Helper Methods
+    // MARK: - Helper Methods (internal for extension access)
 
     /// Convert Nova user ID (UUID) to Matrix user ID format
     /// Nova UUID: "b19b767d-59e5-4122-8388-a51670705ce6" -> Matrix: @nova-b19b767d-59e5-4122-8388-a51670705ce6:staging.gcp.icered.com
     /// If already Matrix format (@nova-...), returns as-is
-    private func convertToMatrixUserId(novaUserId: String) -> String {
+    func convertToMatrixUserId(novaUserId: String) -> String {
         // If already in Matrix format, return as-is
         if novaUserId.hasPrefix("@nova-") {
             return novaUserId
@@ -1792,7 +1792,7 @@ final class MatrixService: MatrixServiceProtocol {
         return String(withoutPrefix.prefix(upTo: colonIndex))
     }
 
-    private func updateConnectionState(_ state: MatrixConnectionState) {
+    func updateConnectionState(_ state: MatrixConnectionState) {
         self.connectionState = state
         connectionStateSubject.send(state)
     }
@@ -1978,7 +1978,7 @@ final class MatrixService: MatrixServiceProtocol {
         }
     }
 
-    private func convertSDKRoomToMatrixRoom(_ room: Room) async -> MatrixRoom? {
+    func convertSDKRoomToMatrixRoom(_ room: Room) async -> MatrixRoom? {
         let roomId = room.id()
         guard let info = try? await room.roomInfo() else {
             return nil
@@ -2001,7 +2001,7 @@ final class MatrixService: MatrixServiceProtocol {
         )
     }
 
-    private func convertTimelineItemToMessage(_ item: TimelineItem, roomId: String) -> MatrixMessage? {
+    func convertTimelineItemToMessage(_ item: TimelineItem, roomId: String) -> MatrixMessage? {
         guard let eventItem = item.asEvent() else { return nil }
 
         // Extract event ID from EventOrTransactionId enum
@@ -2090,7 +2090,7 @@ final class MatrixService: MatrixServiceProtocol {
     private var sessionDelegate: MatrixSessionDelegateImpl?
 
     // Matrix session storage key for UserDefaults (not sensitive enough for Keychain)
-    private nonisolated(unsafe) static let matrixSessionKey = "matrix_session_data"
+    private static let matrixSessionKey = "matrix_session_data"
 
     private func storeSessionCredentials(userId: String, accessToken: String, deviceId: String, refreshToken: String? = nil, homeserverUrl: String? = nil) {
         let credentials = StoredCredentials(

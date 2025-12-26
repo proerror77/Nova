@@ -18,7 +18,7 @@ class FeedService {
     /// - Returns: FeedResponse containing post IDs and pagination info
     func getFeed(algo: FeedAlgorithm = .chronological, limit: Int = 20, cursor: String? = nil, channelId: String? = nil) async throws -> FeedResponse {
         var queryParams: [String: String] = [
-            "algo": algo.rawValue,
+            "algorithm": algo.rawValue,  // Backend expects "algorithm", not "algo"
             "limit": String(min(max(limit, 1), 100))
         ]
 
@@ -812,13 +812,3 @@ struct FeedChannel: Codable, Identifiable, Hashable {
     ]
 }
 
-/// AI-powered channel suggestion for post classification
-struct ChannelSuggestion: Codable, Identifiable {
-    let id: String
-    let name: String
-    let slug: String
-    /// Confidence score (0.0 - 1.0)
-    let confidence: Float
-    /// Keywords that matched the post content
-    let matchedKeywords: [String]
-}

@@ -85,7 +85,7 @@ pub(crate) fn update_pool_metrics(pool: &PgPool, service: &str) {
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// # let pool = create_pool(DbConfig::for_service("test")).await?;
-/// let conn = acquire_with_metrics(&pool, "my-service").await?;
+/// let mut conn = acquire_with_metrics(&pool, "my-service").await?;
 /// sqlx::query("SELECT 1").execute(&mut *conn).await?;
 /// # Ok(())
 /// # }
@@ -187,7 +187,7 @@ impl std::error::Error for PoolExhaustedError {}
 /// # let pool = create_pool(DbConfig::for_service("test")).await?;
 /// let config = BackpressureConfig::default(); // 0.85 threshold
 /// match acquire_with_backpressure(&pool, "my-service", config).await {
-///     Ok(conn) => {
+///     Ok(mut conn) => {
 ///         // Use connection
 ///         sqlx::query("SELECT 1").execute(&mut *conn).await?;
 ///     }

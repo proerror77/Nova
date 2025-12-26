@@ -95,8 +95,18 @@ final class XAIService {
 
     struct ErrorResponse: Codable {
         let status: String?
+        let errorCode: String?
         let message: String?
+        let messageZh: String?
         let details: String?
+
+        enum CodingKeys: String, CodingKey {
+            case status
+            case errorCode = "error_code"
+            case message
+            case messageZh = "message_zh"
+            case details
+        }
     }
 
     // MARK: - Initialization
@@ -199,7 +209,15 @@ final class XAIService {
 
         guard (200...299).contains(httpResponse.statusCode) else {
             if let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
-                throw XAIError.apiError(httpResponse.statusCode, errorResponse.message ?? "Unknown error")
+                // Check for specific error codes
+                if errorResponse.errorCode == "QUOTA_EXCEEDED" {
+                    throw XAIError.quotaExceeded(errorResponse.messageZh ?? errorResponse.message ?? "AI 服務配額已用完")
+                } else if errorResponse.errorCode == "AUTH_ERROR" {
+                    throw XAIError.authError(errorResponse.messageZh ?? errorResponse.message ?? "AI 服務認證失敗")
+                }
+                // Use Chinese message if available
+                let errorMessage = errorResponse.messageZh ?? errorResponse.message ?? "Unknown error"
+                throw XAIError.apiError(httpResponse.statusCode, errorMessage)
             }
             throw XAIError.httpError(httpResponse.statusCode)
         }
@@ -276,6 +294,8 @@ enum XAIError: LocalizedError {
     case httpError(Int)
     case apiError(Int, String)
     case emptyResponse
+    case quotaExceeded(String)
+    case authError(String)
 
     var errorDescription: String? {
         switch self {
@@ -288,9 +308,19 @@ enum XAIError: LocalizedError {
         case .httpError(let code):
             return "HTTP error: \(code)"
         case .apiError(_, let message):
-            return "API error: \(message)"
+            return message
         case .emptyResponse:
             return "Empty API response"
+        case .quotaExceeded(let message):
+            return message
+        case .authError(let message):
+            return message
         }
+    }
+
+    /// Whether this error indicates a quota/billing issue
+    var isQuotaError: Bool {
+        if case .quotaExceeded = self { return true }
+        return false
     }
 }

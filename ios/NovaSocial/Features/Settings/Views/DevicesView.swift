@@ -448,8 +448,8 @@ struct RoundedCorners: Shape {
     }
 }
 
-// MARK: - Device Identifiable Extension
-extension Device: @retroactive Hashable {
+// MARK: - Device Hashable Extension
+extension Device: Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }

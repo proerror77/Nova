@@ -20,35 +20,7 @@ enum ChatServiceError: LocalizedError {
     }
 }
 
-// MARK: - WebSocket State Actor (Thread-safe WebSocket management)
 
-/// Actor for thread-safe WebSocket state management
-private actor WebSocketStateManager {
-    private var webSocketTask: URLSessionWebSocketTask?
-    private var isConnected: Bool = false
-
-    func getTask() -> URLSessionWebSocketTask? {
-        return webSocketTask
-    }
-
-    func setTask(_ task: URLSessionWebSocketTask?) {
-        webSocketTask = task
-    }
-
-    func getIsConnected() -> Bool {
-        return isConnected
-    }
-
-    func setIsConnected(_ connected: Bool) {
-        isConnected = connected
-    }
-
-    func cancelTask() {
-        webSocketTask?.cancel(with: .goingAway, reason: nil)
-        webSocketTask = nil
-        isConnected = false
-    }
-}
 
 // MARK: - Chat Service
 
@@ -59,8 +31,13 @@ private actor WebSocketStateManager {
 /// - 消息历史管理
 /// - 会话管理
 /// - Matrix E2EE integration (when enabled)
+@MainActor
 @Observable
 final class ChatService {
+    // MARK: - Singleton
+
+    static let shared = ChatService()
+
     // MARK: - Properties
 
     private let client = APIClient.shared
@@ -85,6 +62,12 @@ final class ChatService {
     /// Feature flag: Use Matrix for E2EE messaging
     /// When enabled, messages are routed through Matrix Rust SDK for true E2EE
     private var useMatrixE2EE: Bool = false
+
+    // MARK: - Delegated Services
+    @ObservationIgnored private lazy var reactionsService = ChatReactionsService()
+    @ObservationIgnored private lazy var groupService = ChatGroupService()
+    @ObservationIgnored private lazy var callService = ChatCallService()
+    @ObservationIgnored private lazy var locationService = ChatLocationService()
 
     // MARK: - Initialization
 
@@ -1239,494 +1222,99 @@ final class ChatService {
         }
     }
 
-    // MARK: - Message Reactions
+    // MARK: - Message Reactions (delegated to ChatReactionsService)
 
-    /// 添加表情回应到消息 - 優先使用 Matrix SDK
-    /// - Parameters:
-    ///   - conversationId: 會話 ID
-    ///   - messageId: 消息ID
-    ///   - emoji: 表情符号（如 "👍", "❤️", "😂"）
     @MainActor
     func addReaction(conversationId: String, messageId: String, emoji: String) async throws {
-        // 優先使用 Matrix SDK
-        if MatrixBridgeService.shared.isInitialized {
-            do {
-                try await MatrixBridgeService.shared.addReaction(
-                    conversationId: conversationId,
-                    messageId: messageId,
-                    emoji: emoji
-                )
-                #if DEBUG
-                print("[ChatService] ✅ Reaction added via Matrix SDK: \(emoji) to message \(messageId)")
-                #endif
-                return
-            } catch {
-                #if DEBUG
-                print("[ChatService] Matrix addReaction failed, falling back to REST API: \(error)")
-                #endif
-            }
-        }
-
-        // Fallback: REST API
-        let request = AddReactionRequest(emoji: emoji)
-        let _: MessageReaction = try await client.request(
-            endpoint: APIConfig.Chat.addReaction(messageId),
-            method: "POST",
-            body: request
-        )
-
-        #if DEBUG
-        print("[ChatService] Reaction added via REST API: \(emoji) to message \(messageId)")
-        #endif
+        try await reactionsService.addReaction(conversationId: conversationId, messageId: messageId, emoji: emoji)
     }
 
-    /// 切換表情回應（如果已存在則移除，否則添加）- 優先使用 Matrix SDK
-    /// - Parameters:
-    ///   - conversationId: 會話 ID
-    ///   - messageId: 消息ID
-    ///   - emoji: 表情符号
     @MainActor
     func toggleReaction(conversationId: String, messageId: String, emoji: String) async throws {
-        // 優先使用 Matrix SDK
-        if MatrixBridgeService.shared.isInitialized {
-            do {
-                try await MatrixBridgeService.shared.toggleReaction(
-                    conversationId: conversationId,
-                    messageId: messageId,
-                    emoji: emoji
-                )
-                #if DEBUG
-                print("[ChatService] ✅ Reaction toggled via Matrix SDK: \(emoji) for message \(messageId)")
-                #endif
-                return
-            } catch {
-                #if DEBUG
-                print("[ChatService] Matrix toggleReaction failed, falling back to REST API: \(error)")
-                #endif
-            }
-        }
-
-        // Fallback: REST API - 先獲取現有 reactions，判斷是否已存在
-        let existingReactions = try await getReactions(conversationId: conversationId, messageId: messageId)
-        let userId = KeychainService.shared.get(.userId) ?? ""
-
-        if let existingReaction = existingReactions.reactions.first(where: { $0.emoji == emoji && $0.userId == userId }) {
-            // 已存在，刪除它
-            try await deleteReaction(conversationId: conversationId, messageId: messageId, reactionId: existingReaction.id)
-        } else {
-            // 不存在，添加它
-            try await addReaction(conversationId: conversationId, messageId: messageId, emoji: emoji)
-        }
+        try await reactionsService.toggleReaction(conversationId: conversationId, messageId: messageId, emoji: emoji)
     }
 
-    /// 获取消息的所有表情回应 - 優先使用 Matrix SDK
-    /// - Parameters:
-    ///   - conversationId: 會話 ID
-    ///   - messageId: 消息ID
-    /// - Returns: 表情回应列表响应
     @MainActor
     func getReactions(conversationId: String, messageId: String) async throws -> GetReactionsResponse {
-        // 優先使用 Matrix SDK
-        if MatrixBridgeService.shared.isInitialized {
-            do {
-                let matrixReactions = try await MatrixBridgeService.shared.getReactions(
-                    conversationId: conversationId,
-                    messageId: messageId
-                )
-
-                // 轉換 MatrixReaction 到 MessageReaction
-                let reactions = matrixReactions.map { matrixReaction in
-                    MessageReaction(
-                        id: matrixReaction.id,
-                        messageId: messageId,
-                        userId: matrixReaction.senderId,
-                        emoji: matrixReaction.emoji,
-                        createdAt: matrixReaction.timestamp
-                    )
-                }
-
-                #if DEBUG
-                print("[ChatService] ✅ Fetched \(reactions.count) reactions via Matrix SDK for message \(messageId)")
-                #endif
-
-                return GetReactionsResponse(reactions: reactions, totalCount: reactions.count)
-            } catch {
-                #if DEBUG
-                print("[ChatService] Matrix getReactions failed, falling back to REST API: \(error)")
-                #endif
-            }
-        }
-
-        // Fallback: REST API
-        let response: GetReactionsResponse = try await client.get(
-            endpoint: APIConfig.Chat.getReactions(messageId)
-        )
-
-        #if DEBUG
-        print("[ChatService] Fetched \(response.reactions.count) reactions via REST API for message \(messageId)")
-        #endif
-
-        return response
+        try await reactionsService.getReactions(conversationId: conversationId, messageId: messageId)
     }
 
-    /// 删除表情回应 - 優先使用 Matrix SDK
-    /// - Parameters:
-    ///   - conversationId: 會話 ID
-    ///   - messageId: 消息ID
-    ///   - reactionId: 表情回应ID（或 emoji 符號）
     @MainActor
     func deleteReaction(conversationId: String, messageId: String, reactionId: String) async throws {
-        // 優先使用 Matrix SDK（使用 emoji 作為 key）
-        if MatrixBridgeService.shared.isInitialized {
-            do {
-                // 在 Matrix 中，我們使用 emoji 來識別 reaction，而不是 reactionId
-                // 嘗試將 reactionId 解析為 emoji，或直接使用它
-                try await MatrixBridgeService.shared.removeReaction(
-                    conversationId: conversationId,
-                    messageId: messageId,
-                    emoji: reactionId
-                )
-                #if DEBUG
-                print("[ChatService] ✅ Reaction removed via Matrix SDK: \(reactionId)")
-                #endif
-                return
-            } catch {
-                #if DEBUG
-                print("[ChatService] Matrix removeReaction failed, falling back to REST API: \(error)")
-                #endif
-            }
-        }
-
-        // Fallback: REST API
-        struct EmptyResponse: Codable {}
-
-        let _: EmptyResponse = try await client.request(
-            endpoint: APIConfig.Chat.deleteReaction(messageId: messageId, reactionId: reactionId),
-            method: "DELETE"
-        )
-
-        #if DEBUG
-        print("[ChatService] Reaction deleted via REST API: \(reactionId)")
-        #endif
+        try await reactionsService.deleteReaction(conversationId: conversationId, messageId: messageId, reactionId: reactionId)
     }
 
-    // MARK: - Deprecated Reaction Methods (向後兼容)
+    // MARK: - Deprecated Reaction Methods (delegated)
 
-    /// 添加表情回应到消息（已棄用，請使用包含 conversationId 的版本）
     @available(*, deprecated, message: "Use addReaction(conversationId:messageId:emoji:) instead")
     @MainActor
     func addReaction(messageId: String, emoji: String) async throws -> MessageReaction {
-        let request = AddReactionRequest(emoji: emoji)
-
-        let reaction: MessageReaction = try await client.request(
-            endpoint: APIConfig.Chat.addReaction(messageId),
-            method: "POST",
-            body: request
-        )
-
-        return reaction
+        try await reactionsService.addReaction(messageId: messageId, emoji: emoji)
     }
 
-    /// 获取消息的所有表情回应（已棄用，請使用包含 conversationId 的版本）
     @available(*, deprecated, message: "Use getReactions(conversationId:messageId:) instead")
     @MainActor
     func getReactions(messageId: String) async throws -> GetReactionsResponse {
-        let response: GetReactionsResponse = try await client.get(
-            endpoint: APIConfig.Chat.getReactions(messageId)
-        )
-        return response
+        try await reactionsService.getReactions(messageId: messageId)
     }
 
-    /// 删除表情回应（已棄用，請使用包含 conversationId 的版本）
     @available(*, deprecated, message: "Use deleteReaction(conversationId:messageId:reactionId:) instead")
     @MainActor
     func deleteReaction(messageId: String, reactionId: String) async throws {
-        struct EmptyResponse: Codable {}
-
-        let _: EmptyResponse = try await client.request(
-            endpoint: APIConfig.Chat.deleteReaction(messageId: messageId, reactionId: reactionId),
-            method: "DELETE"
-        )
+        try await reactionsService.deleteReaction(messageId: messageId, reactionId: reactionId)
     }
 
-    // MARK: - Group Management
+    // MARK: - Group Management (delegated to ChatGroupService)
 
-    /// 添加成员到群组会话 - 優先使用 Matrix SDK
-    /// - Parameters:
-    ///   - conversationId: 会话ID
-    ///   - userIds: 要添加的用户ID列表
     @MainActor
     func addGroupMembers(conversationId: String, userIds: [String]) async throws {
-        // 優先使用 Matrix SDK
-        if MatrixBridgeService.shared.isInitialized {
-            var successCount = 0
-            var errors: [Error] = []
-
-            for userId in userIds {
-                do {
-                    try await MatrixBridgeService.shared.inviteUser(
-                        conversationId: conversationId,
-                        userId: userId
-                    )
-                    successCount += 1
-                } catch {
-                    errors.append(error)
-                    #if DEBUG
-                    print("[ChatService] Matrix invite failed for user \(userId): \(error)")
-                    #endif
-                }
-            }
-
-            if successCount == userIds.count {
-                #if DEBUG
-                print("[ChatService] ✅ Added \(successCount) members via Matrix SDK to conversation \(conversationId)")
-                #endif
-                return
-            } else if successCount > 0 {
-                // 部分成功，不 fallback
-                #if DEBUG
-                print("[ChatService] ⚠️ Partially added \(successCount)/\(userIds.count) members via Matrix SDK")
-                #endif
-                return
-            }
-            // 全部失敗，fallback 到 REST API
-            #if DEBUG
-            print("[ChatService] Matrix addGroupMembers failed, falling back to REST API")
-            #endif
-        }
-
-        // Fallback: REST API
-        struct Response: Codable {
-            let success: Bool
-        }
-
-        let request = AddGroupMembersRequest(userIds: userIds)
-
-        let _: Response = try await client.request(
-            endpoint: APIConfig.Chat.addGroupMembers(conversationId),
-            method: "POST",
-            body: request
-        )
-
-        #if DEBUG
-        print("[ChatService] Added \(userIds.count) members via REST API to conversation \(conversationId)")
-        #endif
+        try await groupService.addGroupMembers(conversationId: conversationId, userIds: userIds)
     }
 
-    /// 从群组会话中移除成员 - 優先使用 Matrix SDK
-    /// - Parameters:
-    ///   - conversationId: 会话ID
-    ///   - userId: 要移除的用户ID
-    ///   - reason: 移除原因（可選）
     @MainActor
     func removeGroupMember(conversationId: String, userId: String, reason: String? = nil) async throws {
-        // 優先使用 Matrix SDK
-        if MatrixBridgeService.shared.isInitialized {
-            do {
-                try await MatrixBridgeService.shared.removeUser(
-                    conversationId: conversationId,
-                    userId: userId,
-                    reason: reason
-                )
-                #if DEBUG
-                print("[ChatService] ✅ Removed member \(userId) via Matrix SDK from conversation \(conversationId)")
-                #endif
-                return
-            } catch {
-                #if DEBUG
-                print("[ChatService] Matrix removeUser failed, falling back to REST API: \(error)")
-                #endif
-            }
-        }
-
-        // Fallback: REST API
-        struct EmptyResponse: Codable {}
-
-        let _: EmptyResponse = try await client.request(
-            endpoint: APIConfig.Chat.removeGroupMember(conversationId: conversationId, userId: userId),
-            method: "DELETE"
-        )
-
-        #if DEBUG
-        print("[ChatService] Removed member \(userId) via REST API from conversation \(conversationId)")
-        #endif
+        try await groupService.removeGroupMember(conversationId: conversationId, userId: userId, reason: reason)
     }
 
-    /// 更新群组成员角色
-    /// - Parameters:
-    ///   - conversationId: 会话ID
-    ///   - userId: 用户ID
-    ///   - role: 新角色（owner/admin/member）
-    /// - Note: 此方法目前僅使用 REST API，Matrix power levels 功能將在未來版本中實現
     @MainActor
     func updateMemberRole(conversationId: String, userId: String, role: GroupMemberRole) async throws {
-        // TODO: 未來可通過 Matrix power levels 實現角色管理
-        // 目前僅使用 REST API
-        struct Response: Codable {
-            let success: Bool
-        }
-
-        let request = UpdateMemberRoleRequest(role: role)
-
-        let _: Response = try await client.request(
-            endpoint: APIConfig.Chat.updateMemberRole(conversationId: conversationId, userId: userId),
-            method: "PUT",
-            body: request
-        )
-
-        #if DEBUG
-        print("[ChatService] Updated role for user \(userId) to \(role.rawValue)")
-        #endif
+        try await groupService.updateMemberRole(conversationId: conversationId, userId: userId, role: role)
     }
 
-    // MARK: - Voice/Video Calls (WebRTC)
+    // MARK: - Voice/Video Calls (delegated to ChatCallService)
 
-    /// 发起语音或视频通话
-    /// - Parameters:
-    ///   - conversationId: 会话ID
-    ///   - isVideo: 是否为视频通话
-    /// - Returns: 通话ID和相关信息
     @MainActor
     func initiateCall(conversationId: String, isVideo: Bool) async throws -> CallResponse {
-        struct Request: Codable {
-            let isVideo: Bool
-
-            enum CodingKeys: String, CodingKey {
-                case isVideo = "is_video"
-            }
-        }
-
-        let request = Request(isVideo: isVideo)
-
-        let response: CallResponse = try await client.request(
-            endpoint: APIConfig.Chat.initiateCall(conversationId),
-            method: "POST",
-            body: request
-        )
-
-        #if DEBUG
-        print("[ChatService] Call initiated: \(response.callId), video: \(isVideo)")
-        #endif
-
-        return response
+        try await callService.initiateCall(conversationId: conversationId, isVideo: isVideo)
     }
 
-    /// 接听通话
-    /// - Parameter callId: 通话ID
     @MainActor
     func answerCall(callId: String) async throws {
-        struct EmptyRequest: Codable {}
-        struct Response: Codable {
-            let success: Bool
-        }
-
-        let _: Response = try await client.request(
-            endpoint: APIConfig.Chat.answerCall(callId),
-            method: "POST",
-            body: EmptyRequest()
-        )
-
-        #if DEBUG
-        print("[ChatService] Call answered: \(callId)")
-        #endif
+        try await callService.answerCall(callId: callId)
     }
 
-    /// 拒绝通话
-    /// - Parameter callId: 通话ID
     @MainActor
     func rejectCall(callId: String) async throws {
-        struct EmptyRequest: Codable {}
-        struct Response: Codable {
-            let success: Bool
-        }
-
-        let _: Response = try await client.request(
-            endpoint: APIConfig.Chat.rejectCall(callId),
-            method: "POST",
-            body: EmptyRequest()
-        )
-
-        #if DEBUG
-        print("[ChatService] Call rejected: \(callId)")
-        #endif
+        try await callService.rejectCall(callId: callId)
     }
 
-    /// 结束通话
-    /// - Parameter callId: 通话ID
     @MainActor
     func endCall(callId: String) async throws {
-        struct EmptyRequest: Codable {}
-        struct Response: Codable {
-            let success: Bool
-        }
-
-        let _: Response = try await client.request(
-            endpoint: APIConfig.Chat.endCall(callId),
-            method: "POST",
-            body: EmptyRequest()
-        )
-
-        #if DEBUG
-        print("[ChatService] Call ended: \(callId)")
-        #endif
+        try await callService.endCall(callId: callId)
     }
 
-    /// 发送 ICE candidate（WebRTC连接建立）
-    /// - Parameters:
-    ///   - callId: 通话ID
-    ///   - candidate: ICE candidate 数据
     @MainActor
     func sendIceCandidate(callId: String, candidate: String) async throws {
-        struct Request: Codable {
-            let callId: String
-            let candidate: String
-
-            enum CodingKeys: String, CodingKey {
-                case callId = "call_id"
-                case candidate
-            }
-        }
-
-        struct Response: Codable {
-            let success: Bool
-        }
-
-        let request = Request(callId: callId, candidate: candidate)
-
-        let _: Response = try await client.request(
-            endpoint: APIConfig.Chat.sendIceCandidate,
-            method: "POST",
-            body: request
-        )
-
-        #if DEBUG
-        print("[ChatService] ICE candidate sent for call \(callId)")
-        #endif
+        try await callService.sendIceCandidate(callId: callId, candidate: candidate)
     }
 
-    /// 获取 TURN/STUN 服务器配置（用于 WebRTC）
-    /// - Returns: ICE 服务器配置列表
     @MainActor
     func getIceServers() async throws -> IceServersResponse {
-        let response: IceServersResponse = try await client.get(
-            endpoint: APIConfig.Chat.getIceServers
-        )
-
-        #if DEBUG
-        print("[ChatService] Fetched \(response.iceServers.count) ICE servers")
-        #endif
-
-        return response
+        try await callService.getIceServers()
     }
 
-    // MARK: - Location Sharing
+    // MARK: - Location Sharing (delegated to ChatLocationService)
 
-    /// 分享当前位置到会话
-    /// - Parameters:
-    ///   - conversationId: 会话ID
-    ///   - latitude: 纬度
-    ///   - longitude: 经度
-    ///   - accuracy: 精度（米）
     @MainActor
     func shareLocation(
         conversationId: String,
@@ -1734,71 +1322,21 @@ final class ChatService {
         longitude: Double,
         accuracy: Double? = nil
     ) async throws {
-        struct Request: Codable {
-            let latitude: Double
-            let longitude: Double
-            let accuracy: Double?
-        }
-
-        struct Response: Codable {
-            let success: Bool
-        }
-
-        let request = Request(latitude: latitude, longitude: longitude, accuracy: accuracy)
-
-        let _: Response = try await client.request(
-            endpoint: APIConfig.Chat.shareLocation(conversationId),
-            method: "POST",
-            body: request
-        )
-
-        #if DEBUG
-        print("[ChatService] Location shared: \(latitude), \(longitude)")
-        #endif
+        try await locationService.shareLocation(conversationId: conversationId, latitude: latitude, longitude: longitude, accuracy: accuracy)
     }
 
-    /// 停止分享位置
-    /// - Parameter conversationId: 会话ID
     @MainActor
     func stopSharingLocation(conversationId: String) async throws {
-        struct EmptyResponse: Codable {}
-
-        let _: EmptyResponse = try await client.request(
-            endpoint: APIConfig.Chat.stopSharingLocation(conversationId),
-            method: "DELETE"
-        )
-
-        #if DEBUG
-        print("[ChatService] Stopped sharing location for conversation \(conversationId)")
-        #endif
+        try await locationService.stopSharingLocation(conversationId: conversationId)
     }
 
-    /// 获取附近的用户
-    /// - Parameters:
-    ///   - latitude: 当前纬度
-    ///   - longitude: 当前经度
-    ///   - radius: 搜索半径（米，默认1000米）
-    /// - Returns: 附近用户列表
     @MainActor
     func getNearbyUsers(
         latitude: Double,
         longitude: Double,
         radius: Int = 1000
     ) async throws -> NearbyUsersResponse {
-        let response: NearbyUsersResponse = try await client.get(
-            endpoint: APIConfig.Chat.getNearbyUsers,
-            queryParams: [
-                "latitude": String(latitude),
-                "longitude": String(longitude),
-                "radius": String(radius)
-            ]
-        )
-
-        #if DEBUG
-        print("[ChatService] Found \(response.users.count) nearby users")
-        #endif
-
-        return response
+        try await locationService.getNearbyUsers(latitude: latitude, longitude: longitude, radius: radius)
     }
 
     // MARK: - Cleanup
@@ -1810,78 +1348,3 @@ final class ChatService {
     }
 }
 
-// MARK: - Call Response Models
-
-/// Response from initiating a call
-struct CallResponse: Codable, Sendable {
-    let callId: String
-    let conversationId: String
-    let initiatorId: String
-    let isVideo: Bool
-    let createdAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case callId = "call_id"
-        case conversationId = "conversation_id"
-        case initiatorId = "initiator_id"
-        case isVideo = "is_video"
-        case createdAt = "created_at"
-    }
-}
-
-/// ICE server configuration for WebRTC
-struct IceServer: Codable, Sendable {
-    let urls: [String]
-    let username: String?
-    let credential: String?
-}
-
-/// Response containing ICE servers configuration
-struct IceServersResponse: Codable, Sendable {
-    let iceServers: [IceServer]
-
-    enum CodingKeys: String, CodingKey {
-        case iceServers = "ice_servers"
-    }
-}
-
-// MARK: - Location Response Models
-
-/// Nearby user information
-struct NearbyUser: Codable, Sendable {
-    let userId: String
-    let username: String
-    let displayName: String
-    let avatarUrl: String?
-    let distance: Double  // Distance in meters
-
-    enum CodingKeys: String, CodingKey {
-        case userId = "user_id"
-        case username
-        case displayName = "display_name"
-        case avatarUrl = "avatar_url"
-        case distance
-    }
-}
-
-/// Response containing nearby users
-struct NearbyUsersResponse: Codable, Sendable {
-    let users: [NearbyUser]
-    let totalCount: Int
-
-    enum CodingKeys: String, CodingKey {
-        case users
-        case totalCount = "total_count"
-    }
-}
-
-// MARK: - Helper Types
-
-/// Wrapper for decoding DeviceIdentity from keychain
-/// Matches the DeviceIdentity struct stored by E2EEService
-private struct DeviceIdentityWrapper: Codable {
-    let deviceId: String
-    let publicKey: Data
-    let secretKey: Data
-    let createdAt: Date
-}

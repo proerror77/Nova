@@ -50,7 +50,6 @@ targets:
           - "Gemfile.lock"
           - "build_test"
           - "Docs"
-          - "Features/Profile/Components（Profile）/ProfileData.swift"
           - "Features/Settings/Views/DeviceVerificationView.swift"
           - "Features/Settings/Views/KeyBackupSettingsView.swift"
           - "Features/Auth/Views/ResetPasswordView.swift"
