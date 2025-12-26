@@ -132,9 +132,12 @@ final class FeedSocialActionsHandler {
         
         let wasBookmarked = currentPost.isBookmarked
         
-        // Optimistic update
+        // Optimistic update - update both isBookmarked and bookmarkCount
         onPostUpdate?(postId) { post in
-            post.copying(isBookmarked: !wasBookmarked)
+            post.copying(
+                bookmarkCount: wasBookmarked ? post.bookmarkCount - 1 : post.bookmarkCount + 1,
+                isBookmarked: !wasBookmarked
+            )
         }
         
         do {

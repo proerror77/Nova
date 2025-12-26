@@ -159,6 +159,8 @@ final class FeedViewModel {
             guard let self = self,
                   let index = self.posts.firstIndex(where: { $0.id == postId }) else { return }
             self.posts[index] = transform(self.posts[index])
+            // Manually invalidate cache since array element mutation doesn't trigger didSet
+            self._cachedFeedItems = nil
         }
 
         socialActionsHandler.onError = { [weak self] (message: String) in
