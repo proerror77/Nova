@@ -44,45 +44,23 @@ struct UserProfileTopNavigationBar: View {
     var onMoreTapped: () -> Void = {}
 
     var body: some View {
-        ZStack {
-            // MARK: - 中间：认证徽章（居中）
-            if isVerified {
-                HStack(spacing: layout.badgeSpacing) {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: layout.badgeIconSize))
-                        .foregroundColor(layout.badgeIconColor)
-
-                    Text(verifiedText)
-                        .font(.system(size: layout.badgeFontSize))
-                        .foregroundColor(layout.iconColor)
-                }
-            }
-
-            // MARK: - 左右按钮
-            HStack {
+        // MARK: - 左右按钮
+        HStack(alignment: .top) {
                 Button(action: onBackTapped) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: layout.backButtonSize, weight: layout.backButtonWeight))
-                        .foregroundColor(.black)
-                        .frame(width: layout.backButtonTapAreaSize, height: layout.backButtonTapAreaSize)
+                    Image("back-white")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: layout.backButtonSize, height: layout.backButtonSize)
+                        .frame(width: layout.backButtonTapAreaSize, height: layout.backButtonTapAreaSize, alignment: .top)
                 }
 
                 Spacer()
 
-                HStack(spacing: layout.rightButtonsSpacing) {
-                    Button(action: onShareTapped) {
-                        Image("share")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: layout.shareIconSize, height: layout.shareIconSize)
-                    }
-
-                    Button(action: onMoreTapped) {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: layout.moreIconSize, weight: .medium))
-                            .foregroundColor(layout.iconColor)
-                    }
-                }
+            Button(action: onShareTapped) {
+                Image("share")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: layout.shareIconSize, height: layout.shareIconSize)
             }
         }
         .padding(.horizontal, layout.horizontalPadding)
