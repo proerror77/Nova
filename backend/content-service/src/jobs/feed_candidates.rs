@@ -141,11 +141,11 @@ INNER JOIN (
 ) AS f
     ON f.followee_id = p.user_id
 LEFT JOIN (
-    SELECT post_id, sum(like_count) AS likes_count
+    SELECT post_id, sum(likes_count) AS likes_count
     FROM likes_cdc
     WHERE created_at >= now() - INTERVAL 30 DAY
     GROUP BY post_id
-    HAVING sum(like_count) > 0
+    HAVING sum(likes_count) > 0
 ) AS likes ON likes.post_id = p.id
 LEFT JOIN (
     SELECT post_id, count() AS comments_count
@@ -169,7 +169,7 @@ LEFT JOIN (
             ON p2.id = l.post_id
         WHERE l.created_at >= now() - INTERVAL 90 DAY
         GROUP BY l.user_id, p2.user_id, l.post_id
-        HAVING sum(l.like_count) > 0
+        HAVING sum(l.likes_count) > 0
         UNION ALL
         SELECT
             c.user_id AS viewer_id,
@@ -212,11 +212,11 @@ SELECT
     now()
 FROM posts_cdc AS p
 LEFT JOIN (
-    SELECT post_id, sum(like_count) AS likes_count
+    SELECT post_id, sum(likes_count) AS likes_count
     FROM likes_cdc
     WHERE created_at >= now() - INTERVAL 14 DAY
     GROUP BY post_id
-    HAVING sum(like_count) > 0
+    HAVING sum(likes_count) > 0
 ) AS likes ON likes.post_id = p.id
 LEFT JOIN (
     SELECT post_id, count() AS comments_count
@@ -267,7 +267,7 @@ INNER JOIN (
             ON p2.id = l.post_id
         WHERE l.created_at >= now() - INTERVAL 90 DAY
         GROUP BY l.user_id, p2.user_id, l.post_id
-        HAVING sum(l.like_count) > 0
+        HAVING sum(l.likes_count) > 0
         UNION ALL
         SELECT
             c.user_id AS viewer_id,
@@ -284,11 +284,11 @@ INNER JOIN (
 ) AS affinity
     ON affinity.author_id = p.user_id
 LEFT JOIN (
-    SELECT post_id, sum(like_count) AS likes_count
+    SELECT post_id, sum(likes_count) AS likes_count
     FROM likes_cdc
     WHERE created_at >= now() - INTERVAL 30 DAY
     GROUP BY post_id
-    HAVING sum(like_count) > 0
+    HAVING sum(likes_count) > 0
 ) AS likes ON likes.post_id = p.id
 LEFT JOIN (
     SELECT post_id, count() AS comments_count

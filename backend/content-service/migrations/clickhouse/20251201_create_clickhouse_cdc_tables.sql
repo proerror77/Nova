@@ -32,10 +32,10 @@ CREATE TABLE IF NOT EXISTS likes_cdc (
     cdc_operation Enum8('INSERT' = 1, 'DELETE' = 2),
     cdc_timestamp DateTime64(3) DEFAULT now64(3),
     -- For SummingMergeTree: +1 for INSERT, -1 for DELETE
-    like_count Int8,
+    likes_count Int8,
     INDEX idx_post_id (post_id) TYPE bloom_filter GRANULARITY 1,
     INDEX idx_user_id (user_id) TYPE bloom_filter GRANULARITY 1
-) ENGINE = SummingMergeTree((like_count))
+) ENGINE = SummingMergeTree((likes_count))
 PARTITION BY toYYYYMM(created_at)
 ORDER BY (post_id, user_id, cdc_timestamp)
 TTL created_at + INTERVAL 365 DAY;
@@ -118,7 +118,7 @@ GROUP BY followee_id, day;
 
 -- Sample queries:
 -- 1. Get total likes for a post:
---    SELECT post_id, sum(like_count) as total_likes FROM likes_cdc
+--    SELECT post_id, sum(likes_count) as total_likes FROM likes_cdc
 --    WHERE post_id = 'uuid' GROUP BY post_id
 
 -- 2. Get user's post count by day:
