@@ -119,8 +119,85 @@ pub async fn start_google_oauth(
     }
 }
 
+/// Query parameters for OAuth callback (GET request from Google)
+#[derive(Debug, Deserialize)]
+pub struct OAuthCallbackQuery {
+    pub code: String,
+    pub state: String,
+    #[serde(default)]
+    pub scope: Option<String>,
+    #[serde(default)]
+    pub authuser: Option<String>,
+    #[serde(default)]
+    pub prompt: Option<String>,
+}
+
+/// GET /api/v2/auth/oauth/google/callback
+/// Handle Google OAuth redirect - exchange code for tokens and redirect to iOS app
+pub async fn google_oauth_callback_get(
+    query: web::Query<OAuthCallbackQuery>,
+    clients: web::Data<ServiceClients>,
+) -> Result<HttpResponse> {
+    info!(state = %query.state, "GET /api/v2/auth/oauth/google/callback");
+
+    let mut auth_client = clients.auth_client();
+
+    // Use the same redirect_uri that was used in the start flow
+    let redirect_uri = "https://staging-api.icered.com/api/v2/auth/oauth/google/callback".to_string();
+
+    let grpc_request = tonic::Request::new(GrpcCompleteOAuthFlowRequest {
+        state: query.state.clone(),
+        code: query.code.clone(),
+        redirect_uri,
+        invite_code: None,
+    });
+
+    match auth_client.complete_o_auth_flow(grpc_request).await {
+        Ok(response) => {
+            let inner = response.into_inner();
+            info!(
+                user_id = %inner.user_id,
+                is_new_user = inner.is_new_user,
+                "Google OAuth completed, redirecting to iOS app"
+            );
+
+            // Build redirect URL for iOS app
+            let mut redirect_url = format!(
+                "icered://oauth?user_id={}&token={}&expires_in={}&is_new_user={}&username={}&email={}",
+                urlencoding::encode(&inner.user_id),
+                urlencoding::encode(&inner.token),
+                inner.expires_in,
+                inner.is_new_user,
+                urlencoding::encode(&inner.username),
+                urlencoding::encode(&inner.email)
+            );
+
+            if !inner.refresh_token.is_empty() {
+                redirect_url.push_str(&format!("&refresh_token={}", urlencoding::encode(&inner.refresh_token)));
+            }
+
+            Ok(HttpResponse::Found()
+                .append_header(("Location", redirect_url))
+                .finish())
+        }
+        Err(status) => {
+            error!(error = %status, "Failed to complete Google OAuth flow");
+
+            // Redirect to iOS app with error
+            let error_url = format!(
+                "icered://oauth?error=oauth_failed&message={}",
+                urlencoding::encode(status.message())
+            );
+
+            Ok(HttpResponse::Found()
+                .append_header(("Location", error_url))
+                .finish())
+        }
+    }
+}
+
 /// POST /api/v2/auth/oauth/google/callback
-/// Complete Google OAuth flow - exchange code for tokens
+/// Complete Google OAuth flow - exchange code for tokens (for direct API calls)
 pub async fn complete_google_oauth(
     req: web::Json<CompleteOAuthRequest>,
     clients: web::Data<ServiceClients>,

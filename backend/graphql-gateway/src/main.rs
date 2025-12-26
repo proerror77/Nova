@@ -350,6 +350,10 @@ async fn main() -> std::io::Result<()> {
             )
             .route(
                 "/api/v2/auth/oauth/google/callback",
+                web::get().to(rest_api::oauth::google_oauth_callback_get),
+            )
+            .route(
+                "/api/v2/auth/oauth/google/callback",
                 web::post().to(rest_api::oauth::complete_google_oauth),
             )
             .route(
