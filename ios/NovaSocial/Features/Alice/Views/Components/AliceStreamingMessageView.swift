@@ -10,9 +10,6 @@ struct AliceStreamingMessageView: View {
     @Bindable var message: AliceChatMessage
     var onToolCallComplete: (() -> Void)?
 
-    @State private var showToolCallIndicator = false
-    @State private var toolCallName: String?
-
     // MARK: - Body
 
     var body: some View {
@@ -50,10 +47,10 @@ struct AliceStreamingMessageView: View {
     private var aiMessageView: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Tool call indicator (if applicable)
-            if showToolCallIndicator, let toolName = toolCallName {
+            if let toolName = message.toolCallName {
                 AliceToolCallIndicator(
                     toolName: toolName,
-                    isExecuting: message.isStreaming
+                    isExecuting: message.isToolExecuting
                 )
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -73,6 +70,7 @@ struct AliceStreamingMessageView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeInOut(duration: 0.2), value: message.isStreaming)
         .animation(.easeInOut(duration: 0.2), value: message.content)
+        .animation(.easeInOut(duration: 0.2), value: message.toolCallName)
     }
 
     private var thinkingState: some View {
@@ -96,25 +94,6 @@ struct AliceStreamingMessageView: View {
     private var streamingIndicator: some View {
         StreamingIndicator(style: .dots, color: DesignTokens.accentColor, size: 5)
             .padding(.top, 4)
-    }
-
-    // MARK: - Tool Call Handling
-
-    /// Show tool call indicator
-    func showToolCall(name: String) {
-        withAnimation {
-            toolCallName = name
-            showToolCallIndicator = true
-        }
-    }
-
-    /// Hide tool call indicator
-    func hideToolCall() {
-        withAnimation {
-            showToolCallIndicator = false
-            toolCallName = nil
-        }
-        onToolCallComplete?()
     }
 }
 
