@@ -67,8 +67,9 @@ fn calculate_post_score(post: &CachedFeedPost, now: DateTime<Utc>) -> f64 {
 
     // Engagement boost using logarithmic scale to prevent viral posts from dominating
     // Weight: likes = 1, comments = 2 (comments are more valuable)
+    // Add 1.0 after ln() to ensure minimum boost of 1.0 when engagement is 0
     let engagement_count = post.like_count as f64 + (post.comment_count as f64 * 2.0);
-    let engagement_boost = (1.0 + engagement_count).ln();
+    let engagement_boost = 1.0 + (1.0 + engagement_count).ln();
 
     // Final score
     let total_score = time_score * engagement_boost;
