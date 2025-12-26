@@ -270,7 +270,8 @@ struct HomeView: View {
     }
 
     var homeContent: some View {
-        ZStack(alignment: .top) {
+        ZStack(alignment: .bottom) {
+            ZStack(alignment: .top) {
             // 背景色
             DesignTokens.backgroundColor
                 .ignoresSafeArea()
@@ -479,13 +480,14 @@ struct HomeView: View {
 
                 // MARK: - ScrollView 下方间距
                 Color.clear
-                    .frame(height: 0)
+                    .frame(height: 100)  // 为底部导航栏预留空间
             }
-            .safeAreaInset(edge: .bottom) {
-                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)
-                    .padding(.top, 80)
             }
+
+            // MARK: - 底部导航栏（覆盖在内容上方）
+            BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)
         }
+        .ignoresSafeArea(edges: .bottom)
     }
 
     // MARK: - Channel Bar

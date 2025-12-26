@@ -394,7 +394,222 @@ struct ProfileView: View {
     // 正值向下移动，负值向上移动
     private let contentSectionVerticalOffset: CGFloat = 20  // ← 向下偏移 8pt，与用户信息区域保持 8pt 间距
 
-    // MARK: - 用户信息头部区域
+    // MARK: - 背景层（与 UserProfile 结构一致）
+    private var profileBackgroundSection: some View {
+        ZStack {
+            // 背景图片
+            Group {
+                if let bgImage = localBackgroundImage {
+                    Image(uiImage: bgImage)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Image("Profile-background")
+                        .resizable()
+                        .scaledToFill()
+                }
+            }
+
+            // 第一层遮罩 - 暖色调
+            Rectangle()
+                .foregroundColor(.clear)
+                .background(Color(red: 0, green: 0, blue: 0).opacity(0))
+
+            // 第二层遮罩 - 黑色
+            Rectangle()
+                .foregroundColor(.clear)
+                .background(Color(red: 0, green: 0, blue: 0).opacity(0.20))
+        }
+        .clipped()
+    }
+
+    // MARK: - 顶部导航栏（与 UserProfile 结构一致）
+    private var profileNavigationBar: some View {
+        HStack {
+            // 左侧：用户名 + 下拉箭头
+            Button(action: {
+                withAnimation(.easeOut(duration: 0.25)) {
+                    activeSheet = .accountSwitcher
+                }
+            }) {
+                HStack(spacing: 4.s) {
+                    Text(displayUsername)
+                        .font(.system(size: 16.f, weight: .semibold))
+                        .foregroundColor(.white)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12.f))
+                        .foregroundColor(.white)
+                }
+            }
+
+            Spacer()
+
+            // 右侧：分享 + 设置图标
+            HStack(spacing: 18.s) {
+                Button(action: { activeSheet = .shareSheet }) {
+                    Image("share")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24.s, height: 24.s)
+                }
+
+                Button(action: { currentPage = .setting }) {
+                    Image("Setting(white)")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24.s, height: 24.s)
+                }
+            }
+        }
+        .padding(.horizontal, 17.w)
+        .padding(.top, 64.h)  // 距离手机绝对顶部 64pt（与 UserProfile 一致）
+    }
+
+    // MARK: - 用户信息区域（与 UserProfile 结构一致）
+    private var userInfoSection: some View {
+        VStack(spacing: 8.h) {
+            VStack(spacing: 8.h) {
+                // 头像
+                Button(action: { activeSheet = .avatarPicker }) {
+                    ZStack {
+                        // 头像图片
+                        if let avatarImage = avatarManager.pendingAvatar ?? localAvatarImage {
+                            Image(uiImage: avatarImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 100.s, height: 100.s)
+                                .clipShape(Circle())
+                        } else if let avatarUrl = displayUser?.avatarUrl, let url = URL(string: avatarUrl) {
+                            AsyncImage(url: url) { image in
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                            } placeholder: {
+                                Circle()
+                                    .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                            }
+                            .frame(width: 100.s, height: 100.s)
+                            .clipShape(Circle())
+                        } else {
+                            Circle()
+                                .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                .frame(width: 100.s, height: 100.s)
+                        }
+                    }
+                    .frame(width: 108.s, height: 108.s)
+                    .overlay(
+                        Circle()
+                            .inset(by: 1)
+                            .stroke(.white, lineWidth: 2)
+                    )
+                    .overlay(
+                        // 添加头像图标
+                        Image("AddAvatar")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 24.s, height: 24.s)
+                            .offset(x: 38.s, y: 38.s)
+                    )
+                }
+
+                // 用户名
+                Text(displayUser?.displayName ?? displayUser?.username ?? "User")
+                    .font(.system(size: 16.f, weight: .semibold))
+                    .foregroundColor(.white)
+
+                // 地区
+                Text(displayUser?.location ?? " ")
+                    .font(.system(size: 14.f, weight: .light))
+                    .foregroundColor(.white)
+                    .frame(height: 17.h)
+            }
+            .frame(width: 130.w, height: 158.h)
+
+            // 职业 + 蓝标
+            HStack(spacing: 4.s) {
+                Text(displayUser?.bio ?? " ")
+                    .font(.system(size: 14.f, weight: .light))
+                    .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
+
+                if displayUser?.bio != nil && !displayUser!.bio!.isEmpty {
+                    Image("Blue-v")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 14.s, height: 14.s)
+                }
+            }
+            .frame(height: 17.h)
+
+            // 统计数据
+            HStack(spacing: -16.s) {
+                // Following
+                VStack(spacing: 1.h) {
+                    Text("\(displayUser?.safeFollowingCount ?? 0)")
+                        .font(.system(size: 16.f, weight: .semibold))
+                        .foregroundColor(.white)
+                    Text("Following")
+                        .font(.system(size: 14.f, weight: .light))
+                        .foregroundColor(.white)
+                }
+                .frame(width: 132.w, height: 40.h)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    activeSheet = .following
+                }
+
+                // 分隔线
+                Rectangle()
+                    .foregroundColor(.clear)
+                    .frame(width: 24.s, height: 0)
+                    .overlay(
+                        Rectangle()
+                            .stroke(.white, lineWidth: 0.5)
+                            .frame(width: 0.5, height: 24.h)
+                    )
+
+                // Followers
+                VStack(spacing: 1.h) {
+                    Text("\(displayUser?.safeFollowerCount ?? 0)")
+                        .font(.system(size: 16.f, weight: .semibold))
+                        .foregroundColor(.white)
+                    Text("Followers")
+                        .font(.system(size: 14.f, weight: .light))
+                        .foregroundColor(.white)
+                }
+                .frame(width: 132.w, height: 40.h)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    activeSheet = .followers
+                }
+
+                // 分隔线
+                Rectangle()
+                    .foregroundColor(.clear)
+                    .frame(width: 24.s, height: 0)
+                    .overlay(
+                        Rectangle()
+                            .stroke(.white, lineWidth: 0.5)
+                            .frame(width: 0.5, height: 24.h)
+                    )
+
+                // Halo
+                VStack(spacing: 1.h) {
+                    Text("\(displayUser?.safePostCount ?? 0)")
+                        .font(.system(size: 16.f, weight: .semibold))
+                        .foregroundColor(.white)
+                    Text("Halo")
+                        .font(.system(size: 14.f, weight: .light))
+                        .foregroundColor(.white)
+                }
+                .frame(width: 118.w, height: 40.h)
+            }
+            .frame(height: 40.h)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 240.h)
+    }
+
+    // MARK: - 用户信息头部区域（保留供旧代码兼容，但不再使用）
     private var userHeaderSection: some View {
         ZStack(alignment: .top) {
             // 背景图片 - 只通过右上角按钮更换（移除整体点击）
@@ -595,6 +810,7 @@ struct ProfileView: View {
                 .frame(height: 240.h)
                 .padding(.top, 0)
             }
+            .ignoresSafeArea(edges: .top)  // 让导航栏从屏幕绝对顶部开始计算
         }
         .frame(height: 300.h)  // 整个头部区域高度，Posts栏紧随其后（间距8px）
     }
