@@ -11,9 +11,9 @@ class GraphService {
 
     func getFollowers(userId: String, limit: Int = 20, offset: Int = 0) async throws -> (userIds: [String], totalCount: Int, hasMore: Bool) {
         struct Response: Codable {
-            let user_ids: [String]
-            let total_count: Int
-            let has_more: Bool
+            let userIds: [String]
+            let totalCount: Int
+            let hasMore: Bool
         }
 
         // Backend expects GET request with query parameters
@@ -27,14 +27,14 @@ class GraphService {
             ]
         )
 
-        return (response.user_ids, response.total_count, response.has_more)
+        return (response.userIds, response.totalCount, response.hasMore)
     }
 
     func getFollowing(userId: String, limit: Int = 20, offset: Int = 0) async throws -> (userIds: [String], totalCount: Int, hasMore: Bool) {
         struct Response: Codable {
-            let user_ids: [String]
-            let total_count: Int
-            let has_more: Bool
+            let userIds: [String]
+            let totalCount: Int
+            let hasMore: Bool
         }
 
         // Backend expects GET request with query parameters
@@ -48,7 +48,7 @@ class GraphService {
             ]
         )
 
-        return (response.user_ids, response.total_count, response.has_more)
+        return (response.userIds, response.totalCount, response.hasMore)
     }
 
     // MARK: - Modify Relationships
@@ -57,14 +57,14 @@ class GraphService {
         // Backend expects only user_id (the person to follow)
         // The follower_id is automatically extracted from the JWT token
         struct Request: Codable {
-            let user_id: String
+            let userId: String
         }
 
         struct Response: Codable {
             let success: Bool
         }
 
-        let request = Request(user_id: followeeId)
+        let request = Request(userId: followeeId)
         let _: Response = try await client.request(
             endpoint: APIConfig.Graph.follow,
             body: request
@@ -90,14 +90,14 @@ class GraphService {
         // Backend uses GET /api/v2/graph/is-following/{user_id}
         // The follower_id is automatically extracted from the JWT token
         struct Response: Codable {
-            let is_following: Bool
+            let isFollowing: Bool
         }
 
         let response: Response = try await client.get(
             endpoint: APIConfig.Graph.isFollowing(followeeId)
         )
 
-        return response.is_following
+        return response.isFollowing
     }
 
     /// Check if two users are mutual followers

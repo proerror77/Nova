@@ -282,13 +282,23 @@ struct ProfileFollowingView: View {
                 try await graphService.followUser(followerId: currentUserId, followeeId: user.id)
             }
 
-            // 更新本地状态
+            // 更新本地状态 - 使用 map 创建新数组以确保 SwiftUI 检测到变化
             await MainActor.run {
-                if let index = followingUsers.firstIndex(where: { $0.id == user.id }) {
-                    followingUsers[index].isFollowedByMe.toggle()
+                followingUsers = followingUsers.map { followingUser in
+                    if followingUser.id == user.id {
+                        var updated = followingUser
+                        updated.isFollowedByMe.toggle()
+                        return updated
+                    }
+                    return followingUser
                 }
-                if let index = followerUsers.firstIndex(where: { $0.id == user.id }) {
-                    followerUsers[index].isFollowedByMe.toggle()
+                followerUsers = followerUsers.map { followerUser in
+                    if followerUser.id == user.id {
+                        var updated = followerUser
+                        updated.isFollowedByMe.toggle()
+                        return updated
+                    }
+                    return followerUser
                 }
             }
 
@@ -298,6 +308,10 @@ struct ProfileFollowingView: View {
                     followingUsers.removeAll { $0.id == user.id }
                 }
             }
+
+            #if DEBUG
+            print("[ProfileFollowing] Successfully toggled follow for user: \(user.id), new state: \(!user.isFollowedByMe)")
+            #endif
 
         } catch {
             #if DEBUG
@@ -441,7 +455,7 @@ struct ProfileFollowingView: View {
                 ForEach(filteredFollowing) { user in
                     UserRowView(
                         user: user,
-                        showFollowButton: false,
+                        showFollowButton: true,
                         onMessageTap: {
                             // TODO: Navigate to chat
                         },
@@ -568,19 +582,36 @@ struct UserRowView: View {
             Spacer()
 
             // 按钮区域
-            if showFollowButton && !user.isFollowedByMe {
-                // Follow Back 按钮
-                Button(action: onFollowTap) {
-                    Text("Follow back")
-                        .font(.system(size: 12))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Color(red: 0.87, green: 0.11, blue: 0.26))
-                        .cornerRadius(46)
+            if showFollowButton {
+                if user.isFollowedByMe {
+                    // Following 按钮 - 点击可取消关注
+                    Button(action: onFollowTap) {
+                        Text("Following")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color.white)
+                            .cornerRadius(100)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 100)
+                                    .stroke(Color(red: 0.53, green: 0.53, blue: 0.53), lineWidth: 0.5)
+                            )
+                    }
+                } else {
+                    // Follow Back 按钮
+                    Button(action: onFollowTap) {
+                        Text("Follow back")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color(red: 0.87, green: 0.11, blue: 0.26))
+                            .cornerRadius(46)
+                    }
                 }
             } else {
-                // Message Button
+                // Message Button (在 Following 列表中显示)
                 Button(action: onMessageTap) {
                     Text("Message")
                         .font(.system(size: 12, weight: .medium))

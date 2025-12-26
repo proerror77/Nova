@@ -235,15 +235,29 @@ struct UserProfileFollowingView: View {
                 try await graphService.followUser(followerId: currentUserId, followeeId: user.id)
             }
 
-            // 更新本地状态
+            // 更新本地状态 - 使用 map 创建新数组以确保 SwiftUI 检测到变化
             await MainActor.run {
-                if let index = followingUsers.firstIndex(where: { $0.id == user.id }) {
-                    followingUsers[index].isFollowedByMe.toggle()
+                followingUsers = followingUsers.map { followingUser in
+                    if followingUser.id == user.id {
+                        var updated = followingUser
+                        updated.isFollowedByMe.toggle()
+                        return updated
+                    }
+                    return followingUser
                 }
-                if let index = followerUsers.firstIndex(where: { $0.id == user.id }) {
-                    followerUsers[index].isFollowedByMe.toggle()
+                followerUsers = followerUsers.map { followerUser in
+                    if followerUser.id == user.id {
+                        var updated = followerUser
+                        updated.isFollowedByMe.toggle()
+                        return updated
+                    }
+                    return followerUser
                 }
             }
+
+            #if DEBUG
+            print("[UserProfileFollowing] Successfully toggled follow for user: \(user.id), new state: \(!user.isFollowedByMe)")
+            #endif
 
         } catch {
             #if DEBUG

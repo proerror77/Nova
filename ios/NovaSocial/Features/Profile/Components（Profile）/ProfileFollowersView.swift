@@ -19,6 +19,10 @@ struct ProfileFollowersView: View {
     @State private var followingHasMore = false
     @State private var followersError: String? = nil
     @State private var followingError: String? = nil
+    
+    // MARK: - 取消关注确认
+    @State private var showUnfollowConfirmation = false
+    @State private var userToUnfollow: FollowerUser? = nil
 
     // MARK: - Services
     private let graphService = GraphService()
@@ -73,8 +77,28 @@ struct ProfileFollowersView: View {
             }
         }
         .background(Color.white)
-        .task {
-            await loadInitialData()
+        .onAppear {
+            // 每次视图出现时刷新数据，确保从其他页面返回后数据同步
+            Task {
+                await loadInitialData()
+            }
+        }
+        .alert("Unfollow", isPresented: $showUnfollowConfirmation) {
+            Button("Cancel", role: .cancel) {
+                userToUnfollow = nil
+            }
+            Button("Unfollow", role: .destructive) {
+                if let user = userToUnfollow {
+                    Task {
+                        await performUnfollow(user: user)
+                    }
+                }
+                userToUnfollow = nil
+            }
+        } message: {
+            if let user = userToUnfollow {
+                Text("Are you sure you want to unfollow \(user.name)?")
+            }
         }
     }
 
@@ -109,15 +133,35 @@ struct ProfileFollowersView: View {
             let users = await fetchUserProfiles(userIds: result.userIds)
 
             // 3. 检查当前用户是否关注了这些用户（用于显示 "Follow back"）
-            let followingStatus = try? await graphService.batchCheckFollowing(
-                followerId: currentUserId,
-                followeeIds: result.userIds
-            )
+            // 使用并行请求检查每个用户的关注状态
+            var followingStatus: [String: Bool] = [:]
+            await withTaskGroup(of: (String, Bool).self) { group in
+                for userId in result.userIds {
+                    group.addTask {
+                        let isFollowing = (try? await self.graphService.isFollowing(
+                            followerId: currentUserId,
+                            followeeId: userId
+                        )) ?? false
+                        return (userId, isFollowing)
+                    }
+                }
+                
+                for await (userId, isFollowing) in group {
+                    followingStatus[userId] = isFollowing
+                }
+            }
+            
+            #if DEBUG
+            print("[ProfileFollowers] followingStatus result: \(followingStatus)")
+            #endif
 
             // 4. 转换为 FollowerUser 模型
             await MainActor.run {
                 followers = users.map { user in
-                    let isFollowingThem = followingStatus?[user.id] ?? false
+                    let isFollowingThem = followingStatus[user.id] ?? false
+                    #if DEBUG
+                    print("[ProfileFollowers] User \(user.displayName ?? user.username) (id: \(user.id)) - youAreFollowing: \(isFollowingThem)")
+                    #endif
                     return FollowerUser(
                         id: user.id,
                         name: user.displayName ?? user.username,
@@ -231,18 +275,83 @@ struct ProfileFollowersView: View {
                 try await graphService.followUser(followerId: currentUserId, followeeId: user.id)
             }
 
-            // 更新本地状态
+            // 更新本地状态 - 使用显式数组重建确保 SwiftUI 检测到变化
             await MainActor.run {
-                if let index = followers.firstIndex(where: { $0.id == user.id }) {
-                    followers[index].youAreFollowing.toggle()
+                followers = followers.map { follower in
+                    if follower.id == user.id {
+                        var updated = follower
+                        updated.youAreFollowing.toggle()
+                        return updated
+                    }
+                    return follower
                 }
-                if let index = following.firstIndex(where: { $0.id == user.id }) {
-                    following[index].youAreFollowing.toggle()
+                following = following.map { followingUser in
+                    if followingUser.id == user.id {
+                        var updated = followingUser
+                        updated.youAreFollowing.toggle()
+                        return updated
+                    }
+                    return followingUser
                 }
             }
+
+            #if DEBUG
+            print("[ProfileFollowers] Successfully toggled follow for user: \(user.id), new state: \(!user.youAreFollowing)")
+            #endif
         } catch {
             #if DEBUG
             print("[ProfileFollowers] Failed to toggle follow: \(error)")
+            #endif
+        }
+    }
+    
+    // MARK: - 处理关注/取消关注按钮点击
+    private func handleFollowButtonTap(user: FollowerUser) {
+        if user.youAreFollowing {
+            // 如果已关注，显示确认弹窗
+            userToUnfollow = user
+            showUnfollowConfirmation = true
+        } else {
+            // 如果未关注，直接关注
+            Task {
+                await toggleFollow(user: user)
+            }
+        }
+    }
+    
+    // MARK: - 执行取消关注
+    private func performUnfollow(user: FollowerUser) async {
+        guard let currentUserId = authManager.currentUser?.id else { return }
+        
+        do {
+            try await graphService.unfollowUser(followerId: currentUserId, followeeId: user.id)
+            
+            // 更新本地状态
+            await MainActor.run {
+                followers = followers.map { follower in
+                    if follower.id == user.id {
+                        var updated = follower
+                        updated.youAreFollowing = false
+                        return updated
+                    }
+                    return follower
+                }
+                following = following.map { followingUser in
+                    if followingUser.id == user.id {
+                        var updated = followingUser
+                        updated.youAreFollowing = false
+                        return updated
+                    }
+                    return followingUser
+                }
+            }
+            
+            #if DEBUG
+            print("[ProfileFollowers] Successfully unfollowed user: \(user.id)")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[ProfileFollowers] Failed to unfollow: \(error)")
             #endif
         }
     }
@@ -383,11 +492,9 @@ struct ProfileFollowersView: View {
                 ForEach(filteredFollowers) { user in
                     FollowerRow(
                         user: user,
-                        buttonType: user.youAreFollowing ? .following : .followBack,
+                        buttonType: user.youAreFollowing ? .friend : .followBack,
                         onFollowTapped: {
-                            Task {
-                                await toggleFollow(user: user)
-                            }
+                            handleFollowButtonTap(user: user)
                         }
                     )
                 }
@@ -487,11 +594,9 @@ struct ProfileFollowersView: View {
                 ForEach(filteredFollowing) { user in
                     FollowerRow(
                         user: user,
-                        buttonType: .following,
+                        buttonType: user.isFollowingYou ? .friend : .following,
                         onFollowTapped: {
-                            Task {
-                                await toggleFollow(user: user)
-                            }
+                            handleFollowButtonTap(user: user)
                         }
                     )
                 }
@@ -526,9 +631,10 @@ struct FollowerRow: View {
     var onFollowTapped: () -> Void = {}
 
     enum ButtonType {
-        case follow      // 关注（红色描边）
-        case followBack  // 回关（红色实心）
-        case following   // 已关注（灰色描边）
+        case follow      // 关注（红色描边）- 陌生人
+        case followBack  // 回关（红色实心）- 对方关注你，你未关注对方
+        case following   // 已关注（灰色描边）- 你关注对方，对方未关注你
+        case friend      // 互关/好友（灰色描边带特殊标记）- 双向关注
     }
 
     var body: some View {
@@ -606,6 +712,19 @@ struct FollowerRow: View {
                         .overlay(
                             RoundedRectangle(cornerRadius: 100)
                                 .stroke(Color(red: 0.87, green: 0.11, blue: 0.26), lineWidth: 0.5)
+                        )
+                        
+                case .friend:
+                    Text("Friend")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.white)
+                        .cornerRadius(100)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 100)
+                                .stroke(Color(red: 0.53, green: 0.53, blue: 0.53), lineWidth: 0.5)
                         )
                 }
             }

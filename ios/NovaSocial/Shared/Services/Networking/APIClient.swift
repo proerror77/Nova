@@ -247,7 +247,10 @@ class APIClient {
 
         if let body = body {
             do {
-                request.httpBody = try JSONEncoder().encode(body)
+                let encoder = JSONEncoder()
+                encoder.keyEncodingStrategy = .convertToSnakeCase
+                encoder.dateEncodingStrategy = .iso8601
+                request.httpBody = try encoder.encode(body)
             } catch {
                 throw APIError.decodingError(error)
             }
@@ -498,6 +501,14 @@ class APIClient {
             let decoder = JSONDecoder()
             decoder.keyDecodingStrategy = .convertFromSnakeCase
             decoder.dateDecodingStrategy = .iso8601
+
+            #if DEBUG
+            // Log raw JSON for feed responses to debug count issues
+            if String(describing: T.self).contains("FeedResponse"), let jsonString = String(data: data, encoding: .utf8) {
+                print("[API] Feed raw JSON (first 1000 chars): \(jsonString.prefix(1000))")
+            }
+            #endif
+
             return try decoder.decode(T.self, from: data)
         } catch {
             #if DEBUG
