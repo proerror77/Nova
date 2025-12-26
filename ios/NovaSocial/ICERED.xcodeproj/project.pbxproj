@@ -60,7 +60,6 @@
 		2C0024816F931D698E7F32CD /* GroupChatMessageSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27C4B110C1EBA5A18F0F396D /* GroupChatMessageSender.swift */; };
 		2D2BA42223E9AD31575F81A1 /* FeedChannelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F02A7B24316B9AFA8E6B7FD6 /* FeedChannelManager.swift */; };
 		2E624DCA569236BB8D921711 /* XAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC10E2956B60DCEAD154ABCA /* XAIService.swift */; };
-		2ECBC94B6C58360F74F1CED5 /* PostCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62323644395C3A7DAD2F1A9E /* PostCard.swift */; };
 		30B4DE5EEC65B15F44D5A916 /* ConversationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D513935D933B49861CE3742D /* ConversationModels.swift */; };
 		30B8FED56BD2FC15EA847F3C /* MatrixServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB2AAE37D1FD1B67346E7E8E /* MatrixServiceTests.swift */; };
 		31A02BCB67566E60E88E3CC0 /* FriendRequestsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18EBCDEC4F561F630331FD33 /* FriendRequestsView.swift */; };
@@ -134,7 +133,6 @@
 		77979D4F17E2F19A5520790D /* ActivitySummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5503545C3989A9F1C64F7C8B /* ActivitySummaryView.swift */; };
 		781EDB8A8203F62A09DD815E /* ChatServiceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA28EE2106A9A257E91DEBFF /* ChatServiceModels.swift */; };
 		79D3B98307F3B7BCE51E29BC /* MediaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FF0A921465A0341D2137D47 /* MediaService.swift */; };
-		7A33D2EFB285FE2E5B811BA4 /* ICERED.app.dSYM.zip in Resources */ = {isa = PBXBuildFile; fileRef = "TEMP_3F20CE71-21CF-457C-9EEC-BCAECEBD4533" /* ICERED.app.dSYM.zip */; };
 		7D07D0A8323FC0B5A6F06038 /* ChatLocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7A4B72A5D1FB0A7A4DF5196 /* ChatLocationService.swift */; };
 		7E83F8E47D13BC77F1E43BF5 /* GraphService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE6D2432D55B7E9FEE4622C /* GraphService.swift */; };
 		7F0B6D561E24238202ABCB55 /* LocationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E7A9645F230A1DF8AD452F2 /* LocationView.swift */; };
@@ -214,6 +212,7 @@
 		C2347F45927717021592D93D /* MatrixBridgeService+Rooms.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE89604C02BCA2069066DC13 /* MatrixBridgeService+Rooms.swift */; };
 		C27F7C438F9F5C93DF910E2C /* CallKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07F045B08B19F18541A30F45 /* CallKitManager.swift */; };
 		C370DD1F40E4BF46E686250C /* ProfilePostCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D768AA6E0FC3664769BDC8D0 /* ProfilePostCard.swift */; };
+		32492EF32EFCC3ED00B6CC5C /* PostCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32492EF22EFCC3ED00B6CC5C /* PostCard.swift */; };
 		C53D8FF338F3965B7DA3FE06 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B4358221460091EE5EECF1 /* ChatViewModel.swift */; };
 		C5BCFFB06545187FF2579AA3 /* DevicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20DAD625E4C0EF4A01010AE7 /* DevicesView.swift */; };
 		C6D562180DEC83593F48A910 /* NameSelectorModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = E26FCF7308D047749F56999C /* NameSelectorModal.swift */; };
@@ -251,7 +250,6 @@
 		EB0FE1C0C133317FDCEF80FE /* DateExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = E35DC62777A5472A407CC9A8 /* DateExtension.swift */; };
 		EB19EDA9D356D4E627C1F597 /* PasskeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4D1D77C525B03021C70AE0D /* PasskeyService.swift */; };
 		EB34418FAB25322C97951C65 /* DraftManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4064B6162320BA2946731EC5 /* DraftManager.swift */; };
-		EBFB5A7C3B35C6CE96C461DE /* ICERED.ipa in Resources */ = {isa = PBXBuildFile; fileRef = "TEMP_31EB803B-7427-4179-B77A-243B54F6D8DF" /* ICERED.ipa */; };
 		EEBF79C69078D7BD5A9E44DB /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BA9A27686FBAD37E301363D /* ShareSheet.swift */; };
 		EED93F21E48D6F32F5E2EABD /* code_style.md in Resources */ = {isa = PBXBuildFile; fileRef = 26417BF2F6F8AAC78621DCD9 /* code_style.md */; };
 		F0EAAD979FE6C4CF5333E288 /* ICEREDWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4D39F35A0F59326A1235BEF7 /* ICEREDWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -412,7 +410,6 @@
 		60F5C35AAB0D88AE0B2AB108 /* DeviceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceModels.swift; sourceTree = "<group>"; };
 		612ACD95D18565FB20AF7B5E /* AliceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AliceView.swift; sourceTree = "<group>"; };
 		61659F2EF9479DDEDE7D4A9C /* ChatReactionsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatReactionsService.swift; sourceTree = "<group>"; };
-		62323644395C3A7DAD2F1A9E /* PostCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostCard.swift; sourceTree = "<group>"; };
 		6425CFA20477B3C4908E3A44 /* AccountSwitcherSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSwitcherSheet.swift; sourceTree = "<group>"; };
 		66066E784C2D3BB33ABE8F2D /* EmptyFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyFeedView.swift; sourceTree = "<group>"; };
 		666C1CC1B615DC9DCDD053FA /* SearchModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchModels.swift; sourceTree = "<group>"; };
@@ -578,8 +575,6 @@
 		FBBFF77645A4CF02AAB9B2E4 /* CryptoCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoCore.swift; sourceTree = "<group>"; };
 		"TEMP_25B0D7C6-3769-471B-84B3-CE50ACAF2569" /* .gitattributes */ = {isa = PBXFileReference; path = .gitattributes; sourceTree = "<group>"; };
 		"TEMP_2CBB1054-3AB5-4D7B-B657-88323D6D1917" /* AppPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPage.swift; sourceTree = "<group>"; };
-		"TEMP_31EB803B-7427-4179-B77A-243B54F6D8DF" /* ICERED.ipa */ = {isa = PBXFileReference; path = ICERED.ipa; sourceTree = "<group>"; };
-		"TEMP_3F20CE71-21CF-457C-9EEC-BCAECEBD4533" /* ICERED.app.dSYM.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = ICERED.app.dSYM.zip; sourceTree = "<group>"; };
 		"TEMP_4413F4EC-2D42-4507-8CBD-3F1A3916E4BB" /* ICERED.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ICERED.entitlements; sourceTree = "<group>"; };
 		"TEMP_4DCB2B22-81AB-46AE-BD60-CCC52248E8B9" /* fastlane.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = fastlane.sh; sourceTree = "<group>"; };
 		"TEMP_50693462-959E-4411-8E72-4755CC5043C9" /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
@@ -1182,7 +1177,6 @@
 			children = (
 				32492EF22EFCC3ED00B6CC5C /* PostCard.swift */,
 				6425CFA20477B3C4908E3A44 /* AccountSwitcherSheet.swift */,
-				62323644395C3A7DAD2F1A9E /* PostCard.swift */,
 				CA6E010BF6D46CFA1A1EFE44 /* ProfileFollowersView.swift */,
 				DB01B9922C10E2E33C2A6A99 /* ProfileFollowingView.swift */,
 				D768AA6E0FC3664769BDC8D0 /* ProfilePostCard.swift */,
@@ -1758,10 +1752,8 @@
 				"TEMP_799C3F3E-6486-4427-B17D-FC161CAE08F1" /* .swiftlint.yml */,
 				"TEMP_578DCB4E-0965-4E3B-88DD-19DF08FAED2F" /* Assets.xcassets */,
 				"TEMP_4DCB2B22-81AB-46AE-BD60-CCC52248E8B9" /* fastlane.sh */,
-				"TEMP_3F20CE71-21CF-457C-9EEC-BCAECEBD4533" /* ICERED.app.dSYM.zip */,
 				"TEMP_5769E825-005E-4BFC-8797-4FBDC5162E72" /* ExportOptions.plist */,
 				"TEMP_AC11082D-BE00-42AD-97BB-8D56D912B960" /* .gitignore */,
-				"TEMP_31EB803B-7427-4179-B77A-243B54F6D8DF" /* ICERED.ipa */,
 				"TEMP_B5A50FAB-9A6A-40B6-B3F5-0CAB64AEBB33" /* PrivacyInfo.xcprivacy */,
 				"TEMP_25B0D7C6-3769-471B-84B3-CE50ACAF2569" /* .gitattributes */,
 				"TEMP_2CBB1054-3AB5-4D7B-B657-88323D6D1917" /* AppPage.swift */,
@@ -1912,8 +1904,6 @@
 				72A46D2AB4ECBC6FFB62B4A1 /* Assets.xcassets in Resources */,
 				0F0010BED425353EB1C13AAC /* ExportOptions.plist in Resources */,
 				4F1AD2005C8C5210ECF30FD9 /* Fonts in Resources */,
-				7A33D2EFB285FE2E5B811BA4 /* ICERED.app.dSYM.zip in Resources */,
-				EBFB5A7C3B35C6CE96C461DE /* ICERED.ipa in Resources */,
 				4679E194ED83C34FB4DCCDAE /* INTEGRATION_GUIDE.md in Resources */,
 				8405394CF3366E9189366A72 /* Localizable.strings in Resources */,
 				BB79B10B3BE7445C0AF5E3A8 /* MATRIX_INTEGRATION_COMPLETE.md in Resources */,
@@ -2108,7 +2098,6 @@
 				FD4C5DDD8A3C9BA4399AA522 /* PhotoAnalysisService.swift in Sources */,
 				872EE38FD80234144C2CC601 /* PhotoOptionsModal.swift in Sources */,
 				124E367C3D6397C95405BDAF /* PostAsSelectionPanel.swift in Sources */,
-				2ECBC94B6C58360F74F1CED5 /* PostCard.swift in Sources */,
 				AADB75CA6895A4DC39ED2104 /* PostCardView.swift in Sources */,
 				9389F156C98CF196FEB04813 /* PostDetailView.swift in Sources */,
 				3EB383CEAC141B90B188A5B0 /* PostImagePicker.swift in Sources */,

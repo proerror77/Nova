@@ -469,12 +469,6 @@ struct LoginView: View {
         isLoading = false
     }
 
-
-
-
-
-
-
     private func handleGoogleSignIn() async {
         isGoogleLoading = true
         errorMessage = nil
