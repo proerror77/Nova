@@ -4,7 +4,7 @@
 //! Enables request tracing across all Nova microservices.
 //!
 //! ## Architecture
-//! ```
+//! ```text
 //! Client HTTP Request
 //!   ↓ (X-Correlation-ID header)
 //! API Gateway / Load Balancer
