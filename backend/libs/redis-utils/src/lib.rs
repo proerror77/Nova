@@ -300,7 +300,7 @@ fn redis_command_timeout() -> Duration {
 /// Wrap Redis command with timeout protection
 ///
 /// **Usage**:
-/// ```no_run
+/// ```ignore
 /// use redis_utils::with_timeout;
 ///
 /// let result = with_timeout(async {

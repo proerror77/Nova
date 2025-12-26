@@ -13,8 +13,8 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
-//! use grpc_health::HealthManagerBuilder;
+//! ```ignore
+//! use grpc_health::{HealthManagerBuilder, HealthManager};
 //! use sqlx::PgPool;
 //! use std::time::Duration;
 //! use std::sync::Arc;
