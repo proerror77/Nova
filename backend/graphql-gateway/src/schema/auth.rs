@@ -48,8 +48,16 @@ impl AuthMutation {
 
         let mut client = clients.auth_client();
 
-        let request =
-            tonic::Request::new(crate::clients::proto::auth::LoginRequest { email, password });
+        let request = tonic::Request::new(crate::clients::proto::auth::LoginRequest {
+            email,
+            password,
+            // Device fields - empty for GraphQL endpoint (used by REST API with device info)
+            device_id: String::new(),
+            device_name: String::new(),
+            device_type: String::new(),
+            os_version: String::new(),
+            user_agent: String::new(),
+        });
 
         let response = client
             .login(request)
