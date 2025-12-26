@@ -1050,28 +1050,19 @@ final class MatrixService: MatrixServiceProtocol {
             // Start sync
             try await syncService?.start()
 
-            // DISABLED: Room list service and observer causes crash in MatrixRustSDK
-            // The SDK's internal rooms_stream method crashes with EXC_BAD_ACCESS (null pointer)
-            // in imbl::vector::GenericVector::from_iter even with delays
-            //
-            // Impact: No real-time room updates. Users must manually refresh room list.
-            // TODO: Re-enable after MatrixRustSDK fixes the internal crash
-            //
-            // self.roomListService = syncService?.roomListService()
-            // setupRoomListObserver()
+            // Room list service and observer for real-time room updates
+            self.roomListService = syncService?.roomListService()
+            setupRoomListObserver()
 
             #if DEBUG
-            print("[MatrixService] Sync started successfully (room list observer disabled)")
+            print("[MatrixService] Sync started successfully (room list observer enabled)")
             #endif
 
-            // DISABLED: acceptPendingDMInvites may trigger rooms_stream internally
-            // when iterating client.rooms() during SDK initialization
-            // TODO: Re-enable after MatrixRustSDK fix
-            //
-            // Task {
-            //     try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
-            //     await self.acceptPendingDMInvites()
-            // }
+            // Auto-accept pending DM invites after a delay to ensure SDK is ready
+            Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+                await self.acceptPendingDMInvites()
+            }
         } catch {
             updateConnectionState(.error(error.localizedDescription))
             throw MatrixError.syncFailed(error.localizedDescription)
