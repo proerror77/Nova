@@ -141,16 +141,16 @@ INNER JOIN (
 ) AS f
     ON f.followee_id = p.user_id
 LEFT JOIN (
-    SELECT post_id, sum(likes_count) AS likes_count
+    SELECT post_id, countIf(is_deleted = 0) AS likes_count
     FROM likes_cdc
     WHERE created_at >= now() - INTERVAL 30 DAY
     GROUP BY post_id
-    HAVING sum(likes_count) > 0
+    HAVING likes_count > 0
 ) AS likes ON likes.post_id = p.id
 LEFT JOIN (
     SELECT post_id, count() AS comments_count
     FROM comments_cdc
-    WHERE soft_delete IS NULL
+    WHERE is_deleted = 0
       AND created_at >= now() - INTERVAL 30 DAY
     GROUP BY post_id
 ) AS comments ON comments.post_id = p.id
@@ -167,9 +167,9 @@ LEFT JOIN (
         FROM likes_cdc AS l
         INNER JOIN posts_cdc AS p2
             ON p2.id = l.post_id
-        WHERE l.created_at >= now() - INTERVAL 90 DAY
+        WHERE l.is_deleted = 0
+          AND l.created_at >= now() - INTERVAL 90 DAY
         GROUP BY l.user_id, p2.user_id, l.post_id
-        HAVING sum(l.likes_count) > 0
         UNION ALL
         SELECT
             c.user_id AS viewer_id,
@@ -178,14 +178,14 @@ LEFT JOIN (
         FROM comments_cdc AS c
         INNER JOIN posts_cdc AS p2
             ON p2.id = c.post_id
-        WHERE c.soft_delete IS NULL
+        WHERE c.is_deleted = 0
           AND c.created_at >= now() - INTERVAL 90 DAY
     ) AS interactions
     GROUP BY interactions.viewer_id, interactions.author_id
 ) AS affinity
     ON affinity.user_id = f.follower_id
     AND affinity.author_id = p.user_id
-WHERE p.deleted_at IS NULL
+WHERE p.is_deleted = 0
   AND p.created_at >= now() - INTERVAL 30 DAY
 ORDER BY user_id, combined_score DESC
 LIMIT 500 BY user_id
@@ -212,20 +212,20 @@ SELECT
     now()
 FROM posts_cdc AS p
 LEFT JOIN (
-    SELECT post_id, sum(likes_count) AS likes_count
+    SELECT post_id, countIf(is_deleted = 0) AS likes_count
     FROM likes_cdc
     WHERE created_at >= now() - INTERVAL 14 DAY
     GROUP BY post_id
-    HAVING sum(likes_count) > 0
+    HAVING likes_count > 0
 ) AS likes ON likes.post_id = p.id
 LEFT JOIN (
     SELECT post_id, count() AS comments_count
     FROM comments_cdc
-    WHERE soft_delete IS NULL
+    WHERE is_deleted = 0
       AND created_at >= now() - INTERVAL 14 DAY
     GROUP BY post_id
 ) AS comments ON comments.post_id = p.id
-WHERE p.deleted_at IS NULL
+WHERE p.is_deleted = 0
   AND p.created_at >= now() - INTERVAL 14 DAY
 ORDER BY combined_score DESC
 LIMIT 1000
@@ -265,9 +265,9 @@ INNER JOIN (
         FROM likes_cdc AS l
         INNER JOIN posts_cdc AS p2
             ON p2.id = l.post_id
-        WHERE l.created_at >= now() - INTERVAL 90 DAY
+        WHERE l.is_deleted = 0
+          AND l.created_at >= now() - INTERVAL 90 DAY
         GROUP BY l.user_id, p2.user_id, l.post_id
-        HAVING sum(l.likes_count) > 0
         UNION ALL
         SELECT
             c.user_id AS viewer_id,
@@ -276,7 +276,7 @@ INNER JOIN (
         FROM comments_cdc AS c
         INNER JOIN posts_cdc AS p2
             ON p2.id = c.post_id
-        WHERE c.soft_delete IS NULL
+        WHERE c.is_deleted = 0
           AND c.created_at >= now() - INTERVAL 90 DAY
     ) AS interactions
     GROUP BY interactions.viewer_id, interactions.author_id
@@ -284,20 +284,20 @@ INNER JOIN (
 ) AS affinity
     ON affinity.author_id = p.user_id
 LEFT JOIN (
-    SELECT post_id, sum(likes_count) AS likes_count
+    SELECT post_id, countIf(is_deleted = 0) AS likes_count
     FROM likes_cdc
     WHERE created_at >= now() - INTERVAL 30 DAY
     GROUP BY post_id
-    HAVING sum(likes_count) > 0
+    HAVING likes_count > 0
 ) AS likes ON likes.post_id = p.id
 LEFT JOIN (
     SELECT post_id, count() AS comments_count
     FROM comments_cdc
-    WHERE soft_delete IS NULL
+    WHERE is_deleted = 0
       AND created_at >= now() - INTERVAL 30 DAY
     GROUP BY post_id
 ) AS comments ON comments.post_id = p.id
-WHERE p.deleted_at IS NULL
+WHERE p.is_deleted = 0
   AND p.created_at >= now() - INTERVAL 30 DAY
 ORDER BY user_id, combined_score DESC
 LIMIT 300 BY user_id
