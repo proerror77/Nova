@@ -168,6 +168,9 @@ struct HomeView: View {
                     onAvatarTapped: { userId in
                         selectedUserId = userId
                         showUserProfile = true
+                    },
+                    onCommentCountUpdated: { postId, actualCount in
+                        feedViewModel.updateCommentCount(postId: postId, count: actualCount)
                     }
                 )
             }

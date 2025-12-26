@@ -161,23 +161,27 @@ struct FeedPostCard: View {
                     }
                     .accessibilityLabel("Comments, \(post.commentCount)")
 
-                    // Bookmark/Star button - 使用 SF Symbol 和 bounce 动画
+                    // Collect/Star button - 使用项目 collect/collect-fill 图标
                     Button {
                         bookmarkAnimationTrigger.toggle()
                         onBookmark()
                     } label: {
                         HStack(spacing: 6) {
-                            Image(systemName: post.isBookmarked ? "bookmark.fill" : "bookmark")
-                                .font(.system(size: 18))
+                            Image(post.isBookmarked ? "collect-fill" : "collect")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 18, height: 18)
                                 .foregroundColor(post.isBookmarked ? .orange : Color(red: 0.38, green: 0.37, blue: 0.37))
-                                .symbolEffect(.bounce, value: bookmarkAnimationTrigger)
+                                .scaleEffect(bookmarkAnimationTrigger ? 1.2 : 1.0)
+                                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: bookmarkAnimationTrigger)
                             Text("\(post.bookmarkCount)")
                                 .font(Typography.regular10)
                                 .lineSpacing(20)
                                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
                         }
                     }
-                    .accessibilityLabel("Bookmark, \(post.bookmarkCount)")
+                    .accessibilityLabel("Collect, \(post.bookmarkCount)")
 
                     Spacer()
                 }

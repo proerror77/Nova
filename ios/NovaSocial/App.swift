@@ -6,10 +6,12 @@ struct IceredApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     // App 持有全局认证状态，并下发 EnvironmentObject
-    @StateObject private var authManager = AuthenticationManager.shared
-    @StateObject private var themeManager = ThemeManager.shared
-    @StateObject private var pushManager = PushNotificationManager.shared
-    @StateObject private var uploadManager = BackgroundUploadManager.shared
+    // Note: Using @ObservedObject for singletons to avoid lifecycle issues
+    // @StateObject is designed for objects created by the view, not pre-existing singletons
+    @ObservedObject private var authManager = AuthenticationManager.shared
+    @ObservedObject private var themeManager = ThemeManager.shared
+    @ObservedObject private var pushManager = PushNotificationManager.shared
+    @ObservedObject private var uploadManager = BackgroundUploadManager.shared
     @State private var currentPage: AppPage
 
     // State restoration - persist selected tab across app launches
@@ -36,14 +38,18 @@ struct IceredApp: App {
         #if DEBUG
         Typography.validateFonts()
         #endif
-        
+
         // Reset auth state and skip to login when running UI tests
         if ProcessInfo.processInfo.arguments.contains("--uitesting") {
-            // CRITICAL: Clear isAuthenticated synchronously to prevent race condition
-            // The view renders before async logout() completes, so we must set this first
-            AuthenticationManager.shared.isAuthenticated = false
+            // Use MainActor.assumeIsolated for safe access to @MainActor singleton
+            // App init() runs on main thread but isn't automatically MainActor isolated
+            MainActor.assumeIsolated {
+                AuthenticationManager.shared.isAuthenticated = false
+            }
             // Then run full async cleanup (clears keychain, tokens, etc.)
-            Task { await AuthenticationManager.shared.logout() }
+            Task { @MainActor in
+                await AuthenticationManager.shared.logout()
+            }
             // Start directly on login page for UI tests
             _currentPage = State(initialValue: .login)
         } else {
@@ -108,6 +114,9 @@ struct IceredApp: App {
                             .transition(.identity)
                     case .profileSetting:
                         ProfileSettingView(currentPage: $currentPage)
+                            .transition(.identity)
+                    case .aliasName:
+                        AliasNameView(currentPage: $currentPage)
                             .transition(.identity)
                     case .devices:
                         DevicesView(currentPage: $currentPage)

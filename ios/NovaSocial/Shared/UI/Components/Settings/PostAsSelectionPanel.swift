@@ -13,6 +13,10 @@ enum PostAsType {
 /// Simple data structure for displaying account in UI
 /// Used to decouple UI from the Account model
 struct AccountDisplayData: Identifiable {
+    // MARK: - Constants
+    static let placeholderAliasID = "placeholder-alias"
+    static let loadingAliasID = "loading-alias"
+
     let id: String
     let displayName: String
     let subtitle: String
@@ -44,7 +48,18 @@ struct AccountDisplayData: Identifiable {
     init(from account: Account) {
         self.id = account.id
         self.displayName = account.effectiveDisplayName
-        self.subtitle = account.isAlias ? "Alias name" : "@\(account.username)"
+        // For alias accounts, show profession or location as subtitle
+        if account.isAlias {
+            if let profession = account.profession, !profession.isEmpty {
+                self.subtitle = profession
+            } else if let location = account.location, !location.isEmpty {
+                self.subtitle = location
+            } else {
+                self.subtitle = "Alias name"
+            }
+        } else {
+            self.subtitle = "@\(account.username)"
+        }
         self.avatarUrl = account.avatarUrl
         self.isAlias = account.isAlias
         self.isPrimary = account.isPrimary
@@ -65,9 +80,22 @@ struct AccountDisplayData: Identifiable {
     /// Create placeholder for alias when none exists
     static var placeholderAlias: AccountDisplayData {
         AccountDisplayData(
-            id: "placeholder-alias",
+            id: placeholderAliasID,
             displayName: "Create Alias",
             subtitle: "Set up your alias name",
+            avatarUrl: nil,
+            isAlias: true,
+            isPrimary: false,
+            isActive: false
+        )
+    }
+
+    /// Create loading placeholder for alias while fetching from API
+    static var loadingAlias: AccountDisplayData {
+        AccountDisplayData(
+            id: loadingAliasID,
+            displayName: "Loading...",
+            subtitle: "Checking alias account",
             avatarUrl: nil,
             isAlias: true,
             isPrimary: false,

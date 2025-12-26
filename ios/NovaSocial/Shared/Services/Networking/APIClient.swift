@@ -189,6 +189,44 @@ class APIClient {
         #endif
     }
 
+    /// Simple DELETE request (for operations that don't return a response body)
+    func delete(endpoint: String, body: Encodable? = nil) async throws {
+        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+            throw APIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        if let token = authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        if let body = body {
+            let encoder = JSONEncoder()
+            encoder.keyEncodingStrategy = .convertToSnakeCase
+            encoder.dateEncodingStrategy = .iso8601
+            request.httpBody = try encoder.encode(body)
+        }
+
+        let (_, response) = try await session.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            #if DEBUG
+            print("[API] DELETE \(endpoint) failed")
+            #endif
+            throw APIError.serverError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 500, message: "DELETE failed")
+        }
+
+        #if DEBUG
+        if APIFeatureFlags.enableRequestLogging {
+            print("[API] DELETE \(endpoint) -> \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+        }
+        #endif
+    }
+
     /// POST/PUT/DELETE request with JSON body
     func request<T: Decodable>(
         endpoint: String,
