@@ -78,9 +78,15 @@ jobs:
       - name: Determine build context
         id: context
         run: |
+          # Services with self-contained Dockerfiles (context = service directory)
           INDEPENDENT="realtime-chat-service"
+          # Services that need repo root as context (Dockerfile uses COPY backend ./backend)
+          REPO_ROOT_CONTEXT="graphql-gateway identity-service content-service social-service"
+
           if echo "$INDEPENDENT" | grep -qw "${{ inputs.service }}"; then
             echo "context=./backend/${{ inputs.service }}" >> "$GITHUB_OUTPUT"
+          elif echo "$REPO_ROOT_CONTEXT" | grep -qw "${{ inputs.service }}"; then
+            echo "context=." >> "$GITHUB_OUTPUT"
           else
             echo "context=./backend" >> "$GITHUB_OUTPUT"
           fi
