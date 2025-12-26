@@ -37,7 +37,7 @@
 //!     publisher.invalidate_pattern("feed:*").await?;
 //!
 //!     // Batch invalidation
-//!     publisher.invalidate_batch(vec!["user:1", "user:2"]).await?;
+//!     publisher.invalidate_batch(vec!["user:1".to_string(), "user:2".to_string()]).await?;
 //!
 //!     Ok(())
 //! }
