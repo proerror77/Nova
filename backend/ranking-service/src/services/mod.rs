@@ -16,7 +16,7 @@ pub use content_classifier::{
 };
 pub use diversity::DiversityLayer;
 pub use exploration::{NewContentEntry, NewContentPool, UCBExplorer};
-pub use features::FeatureClient;
+pub use features::{FeatureClient, FeatureSource, GrpcFeatureClient};
 pub use profile_builder::{
     BehaviorBuilder, BehaviorPattern, InterestBuilder, InterestTag, ProfileDatabase,
     ProfileUpdater, StubProfileDatabase, UserProfile,

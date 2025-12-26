@@ -3,10 +3,11 @@
 /// Orchestrates feature extraction, model inference, and batch scoring for feed ranking.
 
 use super::{RankingError, RankingModel, Result};
+use crate::services::features::GrpcFeatureClient;
 use ndarray::Array2;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 /// Maximum batch size for scoring (to prevent memory issues)
@@ -64,14 +65,33 @@ impl CandidateFeatures {
 /// Integrates with feature-store to extract features and score candidates using ML model.
 pub struct RankingScorer {
     model: Arc<RankingModel>,
-    // Note: Feature store client will be injected here once grpc-clients is updated
-    // feature_store_client: Arc<FeatureStoreClient>,
+    /// Optional feature-store gRPC client for ML feature retrieval
+    feature_store_client: Option<Arc<GrpcFeatureClient>>,
 }
 
 impl RankingScorer {
-    /// Create new scorer with model
+    /// Create new scorer with model (no feature-store integration)
     pub fn new(model: Arc<RankingModel>) -> Self {
-        Self { model }
+        Self {
+            model,
+            feature_store_client: None,
+        }
+    }
+
+    /// Create scorer with feature-store gRPC client
+    pub fn with_feature_store(
+        model: Arc<RankingModel>,
+        feature_store_client: Arc<GrpcFeatureClient>,
+    ) -> Self {
+        Self {
+            model,
+            feature_store_client: Some(feature_store_client),
+        }
+    }
+
+    /// Check if feature-store is available
+    pub fn has_feature_store(&self) -> bool {
+        self.feature_store_client.is_some()
     }
 
     /// Score a batch of candidate posts for a user
@@ -213,23 +233,110 @@ impl RankingScorer {
             .collect()
     }
 
-    /// Score candidates using feature-store client (placeholder for future integration)
+    /// Score candidates using feature-store gRPC client
     ///
-    /// This will be implemented once feature-store client is added to grpc-clients.
-    #[allow(dead_code)]
-    async fn score_with_feature_store(
+    /// Fetches features from the feature-store service instead of requiring
+    /// pre-fetched data. This is the recommended method when feature-store is deployed.
+    ///
+    /// # Arguments
+    /// * `user_id` - Target user ID
+    /// * `candidates` - List of candidate posts
+    /// * `following_set` - Set of author_ids that user follows (from graph-service)
+    /// * `interaction_history` - Map of author_id → interaction count (from analytics)
+    pub async fn score_with_feature_store(
         &self,
         user_id: Uuid,
         candidates: Vec<CandidatePost>,
+        following_set: HashSet<Uuid>,
+        interaction_history: HashMap<Uuid, u32>,
     ) -> Result<Vec<ScoredCandidate>> {
-        // TODO: Implement after feature-store client is available
-        // 1. Batch fetch user features: feature_store.get_features(user_id, ["follower_count", ...])
-        // 2. Batch fetch post features: feature_store.batch_get_features(post_ids, ["like_count", ...])
-        // 3. Fetch following graph: graph_service.get_following(user_id)
-        // 4. Fetch interaction history: analytics_service.get_interactions(user_id)
-        // 5. Call score_candidates() with fetched data
+        let feature_client = self.feature_store_client.as_ref().ok_or_else(|| {
+            RankingError::FeatureExtractionError(
+                "Feature-store client not configured".to_string(),
+            )
+        })?;
 
-        unimplemented!("Feature store integration pending")
+        if candidates.is_empty() {
+            return Ok(vec![]);
+        }
+
+        if candidates.len() > MAX_BATCH_SIZE {
+            warn!(
+                "Batch size {} exceeds limit {}, truncating",
+                candidates.len(),
+                MAX_BATCH_SIZE
+            );
+        }
+
+        let candidates = &candidates[..candidates.len().min(MAX_BATCH_SIZE)];
+
+        info!(
+            user_id = %user_id,
+            candidate_count = candidates.len(),
+            "Scoring candidates with feature-store"
+        );
+
+        // 1. Fetch user features from feature-store
+        let user_features = match feature_client.get_user_features(&user_id.to_string()).await {
+            Ok(features) => UserFeatures {
+                follower_count: features.follower_count,
+                post_count: features.post_count,
+                engagement_rate: features.engagement_rate,
+            },
+            Err(e) => {
+                warn!("Failed to fetch user features from feature-store: {}", e);
+                // Fallback to defaults
+                UserFeatures {
+                    follower_count: 100,
+                    post_count: 50,
+                    engagement_rate: 0.5,
+                }
+            }
+        };
+
+        // 2. Batch fetch post features from feature-store
+        let post_ids: Vec<String> = candidates.iter().map(|c| c.post_id.to_string()).collect();
+        let post_features_result = feature_client.batch_get_post_features(&post_ids).await;
+
+        let post_features_map: HashMap<Uuid, PostFeatures> = match post_features_result {
+            Ok(features) => features
+                .into_iter()
+                .filter_map(|(id, f)| {
+                    Uuid::parse_str(&id).ok().map(|uuid| {
+                        (
+                            uuid,
+                            PostFeatures {
+                                like_count: f.like_count,
+                                comment_count: f.comment_count,
+                                share_count: f.share_count,
+                            },
+                        )
+                    })
+                })
+                .collect(),
+            Err(e) => {
+                warn!("Failed to fetch post features from feature-store: {}", e);
+                HashMap::new()
+            }
+        };
+
+        debug!(
+            user_id = %user_id,
+            user_follower_count = user_features.follower_count,
+            post_features_count = post_features_map.len(),
+            "Features fetched from feature-store"
+        );
+
+        // 3. Call the existing score_candidates with fetched data
+        self.score_candidates(
+            user_id,
+            candidates.to_vec(),
+            user_features,
+            post_features_map,
+            following_set,
+            interaction_history,
+        )
+        .await
     }
 }
 

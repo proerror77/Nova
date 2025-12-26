@@ -63,6 +63,7 @@ data:
   GRPC_RANKING_SERVICE_URL: "http://ranking-service:9092"
   GRPC_TRUST_SAFETY_SERVICE_URL: "http://trust-safety-service:9095"
   GRPC_ANALYTICS_SERVICE_URL: "http://analytics-service:9000"
+  GRPC_FEATURE_STORE_URL: "http://feature-store:9010"
 
   # Chat service HTTP URL (for Matrix API proxy in graphql-gateway)
   CHAT_SERVICE_HTTP_URL: "http://realtime-chat-service:8086"
@@ -88,6 +89,7 @@ data:
   GRPC_NOTIFICATION_SERVICE_TIER: "1"
   GRPC_RANKING_SERVICE_TIER: "1"
   GRPC_ANALYTICS_SERVICE_TIER: "1"
+  GRPC_FEATURE_STORE_TIER: "1"
 
   # Matrix (E2EE messaging) - backend/realtime-chat-service consumes these.
   # Set MATRIX_ENABLED=true only after homeserver is reachable.
