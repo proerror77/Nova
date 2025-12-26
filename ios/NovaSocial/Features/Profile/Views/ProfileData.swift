@@ -1,5 +1,8 @@
 import Foundation
 import SwiftUI
+import os.log
+
+private let logger = Logger(subsystem: "com.app.icered.pro", category: "ProfileData")
 
 @Observable
 @MainActor
@@ -137,10 +140,17 @@ class ProfileData {
     }
 
     func loadContent(for tab: ContentTab, forceRefresh: Bool = false) async {
-        guard let userId = userProfile?.id else { return }
+        guard let userId = userProfile?.id else {
+            logger.warning("loadContent SKIPPED - userProfile?.id is nil")
+            return
+        }
+
+        logger.info("loadContent START for tab=\(String(describing: tab)), userId=\(userId), forceRefresh=\(forceRefresh)")
+        logger.debug("Cache check: hasCachedContent=\(self.hasCachedContent(for: tab)), shouldRefresh=\(self.shouldRefreshTab(tab))")
 
         // Skip loading if we have valid cached content
         if !forceRefresh && hasCachedContent(for: tab) && !shouldRefreshTab(tab) {
+            logger.info("loadContent SKIPPED - using cached content for \(String(describing: tab))")
             return
         }
 
@@ -158,22 +168,28 @@ class ProfileData {
 
             case .saved:
                 // Use SQL JOIN optimized endpoint (single query)
+                logger.info("Fetching SAVED posts for userId=\(userId)")
                 savedPostsOffset = 0
                 let response = try await contentService.getUserSavedPosts(userId: userId, limit: pageSize, offset: 0)
+                logger.info("SAVED response: \(response.posts.count) posts, totalCount=\(response.totalCount)")
                 savedPosts = await enrichPostsWithAuthorInfo(response.posts)
                 totalSavedPosts = response.totalCount
 
             case .liked:
                 // Use SQL JOIN optimized endpoint (single query)
+                logger.info("Fetching LIKED posts for userId=\(userId)")
                 likedPostsOffset = 0
                 let response = try await contentService.getUserLikedPosts(userId: userId, limit: pageSize, offset: 0)
+                logger.info("LIKED response: \(response.posts.count) posts, totalCount=\(response.totalCount)")
                 likedPosts = await enrichPostsWithAuthorInfo(response.posts)
                 totalLikedPosts = response.totalCount
             }
 
             // Update cache timestamp
             lastLoadTime[tab] = Date()
+            logger.info("loadContent COMPLETED for tab=\(String(describing: tab))")
         } catch {
+            logger.error("loadContent ERROR for tab=\(String(describing: tab)): \(error.localizedDescription)")
             handleError(error)
         }
 

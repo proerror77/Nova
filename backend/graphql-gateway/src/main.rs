@@ -456,6 +456,16 @@ async fn main() -> std::io::Result<()> {
                 web::delete().to(rest_api::content::delete_post),
             )
             // SQL JOIN optimized endpoints for user's liked/saved posts
+            // Note: v2 routes use /api/v2/content/user/{user_id}/liked format for ingress compatibility
+            .route(
+                "/api/v2/content/user/{user_id}/liked",
+                web::get().to(rest_api::content::get_user_liked_posts),
+            )
+            .route(
+                "/api/v2/content/user/{user_id}/saved",
+                web::get().to(rest_api::content::get_user_saved_posts),
+            )
+            // Legacy v1 routes (kept for backwards compatibility)
             .route(
                 "/api/v1/posts/user/{user_id}/liked",
                 web::get().to(rest_api::content::get_user_liked_posts),
