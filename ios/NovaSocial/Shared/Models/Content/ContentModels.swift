@@ -44,6 +44,32 @@ struct Post: Codable, Identifiable {
         // Fallback to truncated authorId
         return "User \(authorId.prefix(8))"
     }
+
+    /// Create a copy with author information filled in
+    func withAuthorInfo(username: String?, displayName: String?, avatarUrl: String?) -> Post {
+        Post(
+            id: id,
+            authorId: authorId,
+            content: content,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            status: status,
+            mediaUrls: mediaUrls,
+            mediaType: mediaType,
+            likeCount: likeCount,
+            commentCount: commentCount,
+            shareCount: shareCount,
+            bookmarkCount: bookmarkCount,
+            authorUsername: self.authorUsername ?? username,
+            authorDisplayName: self.authorDisplayName ?? displayName,
+            authorAvatarUrl: self.authorAvatarUrl ?? avatarUrl
+        )
+    }
+
+    /// Check if author info is missing
+    var needsAuthorEnrichment: Bool {
+        authorDisplayName == nil && authorUsername == nil
+    }
 }
 
 struct Comment: Codable, Identifiable {

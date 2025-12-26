@@ -378,7 +378,9 @@ struct DeviceDetailSheet: View {
                 // 活动信息
                 Section {
                     LabeledContent("Last Active", value: device.formattedLastActive)
-                    LabeledContent("First Login", value: formatDate(device.createdAt))
+                    if let createdAt = device.createdAt {
+                        LabeledContent("First Login", value: formatDate(createdAt))
+                    }
                 }
 
                 // 登出按钮

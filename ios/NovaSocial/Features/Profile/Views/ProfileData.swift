@@ -47,6 +47,7 @@ class ProfileData {
     private let socialService = SocialService()
     private let contentService = ContentService()
     private let mediaService = MediaService()
+    private let userService = UserService.shared
 
     // MARK: - Current User ID
     // TODO: Get from authentication service
@@ -126,7 +127,9 @@ class ProfileData {
                 if !bookmarksResponse.postIds.isEmpty {
                     // Only fetch first page worth of saved posts
                     let idsToFetch = Array(bookmarksResponse.postIds.prefix(pageSize))
-                    savedPosts = try await contentService.getPostsByIds(idsToFetch)
+                    let fetchedPosts = try await contentService.getPostsByIds(idsToFetch)
+                    // Enrich posts with author info if missing
+                    savedPosts = await enrichPostsWithAuthorInfo(fetchedPosts)
                 } else {
                     savedPosts = []
                 }
@@ -136,7 +139,9 @@ class ProfileData {
                 let (postIds, total) = try await socialService.getUserLikedPosts(userId: userId, limit: pageSize, offset: 0)
                 totalLikedPosts = total
                 if !postIds.isEmpty {
-                    likedPosts = try await contentService.getPostsByIds(postIds)
+                    let fetchedPosts = try await contentService.getPostsByIds(postIds)
+                    // Enrich posts with author info if missing
+                    likedPosts = await enrichPostsWithAuthorInfo(fetchedPosts)
                 } else {
                     likedPosts = []
                 }
@@ -172,7 +177,8 @@ class ProfileData {
                 if newOffset < bookmarksResponse.postIds.count {
                     let idsToFetch = Array(bookmarksResponse.postIds.dropFirst(newOffset).prefix(pageSize))
                     let morePosts = try await contentService.getPostsByIds(idsToFetch)
-                    savedPosts.append(contentsOf: morePosts)
+                    let enrichedPosts = await enrichPostsWithAuthorInfo(morePosts)
+                    savedPosts.append(contentsOf: enrichedPosts)
                     savedPostsOffset = newOffset
                 }
 
@@ -182,7 +188,8 @@ class ProfileData {
                 let (postIds, _) = try await socialService.getUserLikedPosts(userId: userId, limit: pageSize, offset: newOffset)
                 if !postIds.isEmpty {
                     let morePosts = try await contentService.getPostsByIds(postIds)
-                    likedPosts.append(contentsOf: morePosts)
+                    let enrichedPosts = await enrichPostsWithAuthorInfo(morePosts)
+                    likedPosts.append(contentsOf: enrichedPosts)
                     likedPostsOffset = newOffset
                 }
             }
@@ -281,6 +288,43 @@ class ProfileData {
     func searchInProfile(query: String) async {
         // TODO: Implement profile content search
         print("Searching for: \(query)")
+    }
+
+    // MARK: - Author Enrichment
+
+    /// Enrich posts with author information for those missing it
+    private func enrichPostsWithAuthorInfo(_ posts: [Post]) async -> [Post] {
+        // Find posts that need author info
+        let postsNeedingEnrichment = posts.filter { $0.needsAuthorEnrichment }
+        guard !postsNeedingEnrichment.isEmpty else { return posts }
+
+        // Get unique author IDs
+        let authorIds = Set(postsNeedingEnrichment.map { $0.authorId })
+
+        // Fetch author profiles
+        var authorProfiles: [String: UserProfile] = [:]
+        for authorId in authorIds {
+            do {
+                let profile = try await userService.getUser(userId: authorId)
+                authorProfiles[authorId] = profile
+            } catch {
+                #if DEBUG
+                print("[ProfileData] Failed to fetch author \(authorId): \(error)")
+                #endif
+            }
+        }
+
+        // Enrich posts with author info
+        return posts.map { post in
+            if post.needsAuthorEnrichment, let author = authorProfiles[post.authorId] {
+                return post.withAuthorInfo(
+                    username: author.username,
+                    displayName: author.displayName,
+                    avatarUrl: author.avatarUrl
+                )
+            }
+            return post
+        }
     }
 
     // MARK: - Error Handling

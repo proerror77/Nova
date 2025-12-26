@@ -26,12 +26,16 @@ final class AliceChatMessage: Identifiable {
     let isUser: Bool
     let timestamp: Date
     var isStreaming: Bool
+    var toolCallName: String?
+    var isToolExecuting: Bool
 
-    init(content: String, isUser: Bool, isStreaming: Bool = false) {
+    init(content: String, isUser: Bool, isStreaming: Bool = false, toolCallName: String? = nil) {
         self.content = content
         self.isUser = isUser
         self.timestamp = Date()
         self.isStreaming = isStreaming
+        self.toolCallName = toolCallName
+        self.isToolExecuting = false
     }
 }
 
@@ -226,14 +230,18 @@ struct AliceView: View {
                         ScrollView {
                             LazyVStack(spacing: 16) {
                                 ForEach(messages) { message in
-                                    AliceChatMessageView(message: message)
+                                    AliceStreamingMessageView(message: message)
                                         .id(message.id)
                                 }
 
                                 if isWaitingForResponse {
                                     HStack {
-                                        ProgressView()
-                                            .padding(.leading, 16)
+                                        StreamingIndicator(
+                                            style: .thinking,
+                                            color: DesignTokens.accentColor,
+                                            size: 8
+                                        )
+                                        .padding(.leading, 16)
                                         Spacer()
                                     }
                                 }
@@ -249,6 +257,14 @@ struct AliceView: View {
                         .onChange(of: messages.count) { _, _ in
                             if let lastMessage = messages.last {
                                 withAnimation {
+                                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                                }
+                            }
+                        }
+                        // Auto-scroll when streaming content updates
+                        .onChange(of: messages.last?.content) { _, _ in
+                            if let lastMessage = messages.last, lastMessage.isStreaming {
+                                withAnimation(.easeOut(duration: 0.1)) {
                                     proxy.scrollTo(lastMessage.id, anchor: .bottom)
                                 }
                             }
@@ -412,7 +428,7 @@ struct AliceView: View {
         }
     }
 
-    // MARK: - Streaming Message (On-Device)
+    // MARK: - Streaming Message (On-Device with Tools)
     private func sendMessageWithStreaming(_ text: String) {
         // 創建空的 AI 回應訊息（用於流式更新）
         let aiMessage = AliceChatMessage(content: "", isUser: false, isStreaming: true)
@@ -420,20 +436,32 @@ struct AliceView: View {
 
         Task {
             do {
-                let stream = aiRouter.streamChat(text)
+                // Use tool-enabled streaming for richer responses
+                let stream = aiRouter.streamChatWithTools(text)
 
                 for try await chunk in stream {
                     await MainActor.run {
-                        aiMessage.content += chunk
+                        // Check if this is a tool call indicator
+                        if chunk.hasPrefix("[TOOL:") && chunk.hasSuffix("]") {
+                            let toolName = String(chunk.dropFirst(6).dropLast(1))
+                            aiMessage.toolCallName = toolName
+                            aiMessage.isToolExecuting = true
+                        } else if chunk == "[TOOL_COMPLETE]" {
+                            aiMessage.isToolExecuting = false
+                        } else {
+                            aiMessage.content += chunk
+                        }
                     }
                 }
 
                 await MainActor.run {
                     aiMessage.isStreaming = false
+                    aiMessage.isToolExecuting = false
                 }
             } catch {
                 await MainActor.run {
                     aiMessage.isStreaming = false
+                    aiMessage.isToolExecuting = false
                     if aiMessage.content.isEmpty {
                         aiMessage.content = "抱歉，發生錯誤：\(error.localizedDescription)"
                     }
@@ -542,6 +570,7 @@ struct AliceView: View {
     private func clearChat() {
         messages.removeAll()
         aiRouter.resetChatSession()
+        aiRouter.resetToolSession()
         xaiService.resetConversation()
     }
 
@@ -590,65 +619,6 @@ struct AliceView: View {
         }
     }
 
-}
-
-// MARK: - Alice Chat Message View Component
-struct AliceChatMessageView: View {
-    @Bindable var message: AliceChatMessage
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            if message.isUser {
-                Spacer()
-                // 用户消息气泡
-                Text(message.content)
-                    .font(.system(size: 14))
-                    .foregroundColor(DesignTokens.textPrimary)
-                    .padding(EdgeInsets(top: 10, leading: 13, bottom: 10, trailing: 13))
-                    .background(DesignTokens.surface)
-                    .cornerRadius(43)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 43)
-                            .inset(by: 0.50)
-                            .stroke(DesignTokens.borderColor, lineWidth: 0.50)
-                    )
-                    .frame(maxWidth: 249, alignment: .trailing)
-            } else {
-                // AI响应消息
-                VStack(alignment: .leading, spacing: 8) {
-                    if message.content.isEmpty && message.isStreaming {
-                        // 流式載入中
-                        HStack(spacing: 4) {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                            Text("思考中...")
-                                .font(.system(size: 12))
-                                .foregroundColor(DesignTokens.textSecondary)
-                        }
-                    } else {
-                        Text(message.content)
-                            .font(.system(size: 14))
-                            .foregroundColor(DesignTokens.textPrimary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        // 流式指示器
-                        if message.isStreaming {
-                            HStack(spacing: 2) {
-                                ForEach(0..<3, id: \.self) { index in
-                                    Circle()
-                                        .fill(DesignTokens.accentColor)
-                                        .frame(width: 4, height: 4)
-                                        .opacity(0.6)
-                                }
-                            }
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Spacer()
-            }
-        }
-    }
 }
 
 // MARK: - Model Row Component

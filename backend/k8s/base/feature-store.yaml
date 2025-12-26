@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
       - name: feature-store
-        image: nova-feature-store:latest
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/feature-store:latest
         imagePullPolicy: Always
         ports:
         - name: http

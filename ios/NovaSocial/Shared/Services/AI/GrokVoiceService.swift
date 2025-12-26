@@ -74,6 +74,12 @@ final class GrokVoiceService: NSObject {
     private var isPlaybackSetup = false
     private var pendingAudioBuffers: Int = 0  // 追蹤待播放的音訊緩衝區數量
 
+    // 輸出預緩衝 - 防止網路抖動導致音頻斷斷續續
+    private var outputBuffer: Data = Data()
+    private var isPreBuffering: Bool = true
+    private let preBufferThreshold: Int = 4800  // 200ms @ 24kHz (24000 * 0.2 * 2 bytes)
+    private let minScheduleSize: Int = 2400     // 最小排程大小 100ms，合併小 buffer
+
     // Barge-in (語音中斷) support
     private var currentResponseItemId: String?  // 追蹤當前回應的 item ID
     private var playedAudioSamples: Int = 0     // 已播放的音訊樣本數
@@ -433,6 +439,15 @@ final class GrokVoiceService: NSObject {
             voiceNSLog("✅ Response done: status=\(status), pendingBuffers=\(pendingAudioBuffers)")
 
             if status == "completed" || status == "cancelled" {
+                // 刷新任何剩餘的緩衝音頻（確保最後的音頻不會丟失）
+                if !outputBuffer.isEmpty {
+                    voiceNSLog("🎵 Flushing remaining \(outputBuffer.count) bytes of audio")
+                    scheduleBufferedAudio()
+                }
+
+                // 重置預緩衝狀態，為下一個回應做準備
+                isPreBuffering = true
+
                 // 清空回應，準備下一輪
                 aiResponse = ""
                 currentResponseItemId = nil
@@ -490,6 +505,10 @@ final class GrokVoiceService: NSObject {
         // 停止並重置 player node
         playerNode?.stop()
         pendingAudioBuffers = 0
+
+        // 重置預緩衝狀態，為下一個回應做準備
+        outputBuffer = Data()
+        isPreBuffering = true
 
         // 重新開始 player 以準備新的音訊
         playerNode?.play()
@@ -863,10 +882,36 @@ final class GrokVoiceService: NSObject {
             ensurePlaybackReady()
         }
 
-        // 將 PCM16 數據轉換為 AVAudioPCMBuffer 並排程播放
-        scheduleAudioBuffer(audioData)
+        // 累積音頻數據到輸出緩衝區
+        outputBuffer.append(audioData)
+
+        if isPreBuffering {
+            // 預緩衝階段：累積足夠數據後才開始播放，防止網路抖動
+            if outputBuffer.count >= preBufferThreshold {
+                isPreBuffering = false
+                voiceNSLog("🎵 Pre-buffer complete (\(outputBuffer.count) bytes), starting playback")
+                scheduleBufferedAudio()
+            }
+        } else {
+            // 已開始播放：當累積達到最小排程大小時排程
+            if outputBuffer.count >= minScheduleSize {
+                scheduleBufferedAudio()
+            }
+        }
 
         delegate?.grokVoiceDidReceiveAudio(audioData)
+    }
+
+    /// 排程累積的音頻緩衝區
+    private func scheduleBufferedAudio() {
+        guard !outputBuffer.isEmpty else { return }
+
+        // 取出所有累積的數據
+        let dataToSchedule = outputBuffer
+        outputBuffer = Data()
+
+        // 排程播放
+        scheduleAudioBuffer(dataToSchedule)
     }
 
     private func scheduleAudioBuffer(_ data: Data) {
@@ -931,6 +976,11 @@ final class GrokVoiceService: NSObject {
         playerNode = nil
         isPlaybackSetup = false
         pendingAudioBuffers = 0
+
+        // 重置預緩衝狀態
+        outputBuffer = Data()
+        isPreBuffering = true
+
         voiceNSLog("🔇 Playback stopped")
     }
 

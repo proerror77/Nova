@@ -415,6 +415,268 @@ final class FoundationModelsService {
         #endif
     }
 
+    // MARK: - Tool-Enabled Chat
+
+    /// Chat with tool access for dynamic data fetching
+    /// - Parameter message: User's message
+    /// - Returns: AI response with potential tool usage
+    func chatWithTools(message: String) async throws -> String {
+        guard isAvailable && isReady else {
+            throw AIServiceError.foundationModelsUnavailable
+        }
+
+        #if canImport(FoundationModels)
+        let sessionManager = AISessionManager.shared
+
+        // Register tools if not already done
+        let toolsRegistry = AIToolsRegistry.shared
+        sessionManager.registerTools(toolsRegistry.allTools)
+
+        let toolSession = sessionManager.session(for: .toolEnabled)
+
+        isProcessing = true
+        defer { isProcessing = false }
+
+        return try await withRetry(maxAttempts: maxRetries) {
+            let response = try await toolSession.respond(to: message)
+            return response.content
+        }
+        #else
+        throw AIServiceError.foundationModelsUnavailable
+        #endif
+    }
+
+    /// Stream chat with tools
+    /// - Parameter message: User's message
+    /// - Returns: Async stream of response chunks
+    func streamChatWithTools(message: String) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            Task {
+                guard self.isAvailable && self.isReady else {
+                    continuation.finish(throwing: AIServiceError.foundationModelsUnavailable)
+                    return
+                }
+
+                #if canImport(FoundationModels)
+                let sessionManager = AISessionManager.shared
+                let toolsRegistry = AIToolsRegistry.shared
+                sessionManager.registerTools(toolsRegistry.allTools)
+
+                let toolSession = sessionManager.session(for: .toolEnabled)
+
+                await MainActor.run { self.isProcessing = true }
+                defer {
+                    Task { @MainActor in self.isProcessing = false }
+                }
+
+                do {
+                    for try await partial in toolSession.streamResponse(to: message) {
+                        continuation.yield(partial.content)
+                    }
+                    continuation.finish()
+                } catch {
+                    #if DEBUG
+                    print("[FoundationModelsService] Stream chat with tools failed: \(error)")
+                    #endif
+                    continuation.finish(throwing: error)
+                }
+                #else
+                continuation.finish(throwing: AIServiceError.foundationModelsUnavailable)
+                #endif
+            }
+        }
+    }
+
+    // MARK: - Structured Output Generation
+
+    /// Generate post suggestions
+    /// - Parameters:
+    ///   - topic: Topic for the post
+    ///   - style: Style of the post (casual, professional, etc.)
+    /// - Returns: Structured post suggestion
+    func generatePostSuggestion(topic: String, style: String = "casual") async throws -> PostSuggestion {
+        guard isAvailable && isReady else {
+            throw AIServiceError.foundationModelsUnavailable
+        }
+
+        #if canImport(FoundationModels)
+        guard let session = session else {
+            throw AIServiceError.modelNotReady
+        }
+
+        isProcessing = true
+        defer { isProcessing = false }
+
+        let prompt = """
+            Generate a social media post suggestion about "\(topic)"
+            in a \(style) style for the ICERED platform.
+            Make it engaging and include relevant hashtags.
+            """
+
+        return try await withRetry(maxAttempts: maxRetries) {
+            let response = try await session.respond(
+                to: prompt,
+                generating: PostSuggestion.self
+            )
+            return response.content
+        }
+        #else
+        throw AIServiceError.foundationModelsUnavailable
+        #endif
+    }
+
+    /// Classify content
+    /// - Parameter content: Content to classify
+    /// - Returns: Structured classification result
+    func classifyContent(_ content: String) async throws -> ContentClassification {
+        guard isAvailable && isReady else {
+            throw AIServiceError.foundationModelsUnavailable
+        }
+
+        #if canImport(FoundationModels)
+        guard let session = session else {
+            throw AIServiceError.modelNotReady
+        }
+
+        isProcessing = true
+        defer { isProcessing = false }
+
+        return try await withRetry(maxAttempts: maxRetries) {
+            let response = try await session.respond(
+                to: "Classify this social media content for category, tone, and audience: \"\(content)\"",
+                generating: ContentClassification.self
+            )
+            return response.content
+        }
+        #else
+        throw AIServiceError.foundationModelsUnavailable
+        #endif
+    }
+
+    /// Generate hashtag recommendations
+    /// - Parameter content: Content to analyze for hashtags
+    /// - Returns: Structured hashtag recommendation
+    func recommendHashtags(for content: String) async throws -> HashtagRecommendation {
+        guard isAvailable && isReady else {
+            throw AIServiceError.foundationModelsUnavailable
+        }
+
+        #if canImport(FoundationModels)
+        guard let session = session else {
+            throw AIServiceError.modelNotReady
+        }
+
+        isProcessing = true
+        defer { isProcessing = false }
+
+        return try await withRetry(maxAttempts: maxRetries) {
+            let response = try await session.respond(
+                to: "Recommend hashtags for this social media post on ICERED: \"\(content)\"",
+                generating: HashtagRecommendation.self
+            )
+            return response.content
+        }
+        #else
+        throw AIServiceError.foundationModelsUnavailable
+        #endif
+    }
+
+    /// Enhance post content
+    /// - Parameter content: Original post content
+    /// - Returns: Structured enhancement result
+    func enhancePost(_ content: String) async throws -> PostEnhancementResult {
+        guard isAvailable && isReady else {
+            throw AIServiceError.foundationModelsUnavailable
+        }
+
+        #if canImport(FoundationModels)
+        guard let session = session else {
+            throw AIServiceError.modelNotReady
+        }
+
+        isProcessing = true
+        defer { isProcessing = false }
+
+        return try await withRetry(maxAttempts: maxRetries) {
+            let response = try await session.respond(
+                to: """
+                    Enhance this social media post for better engagement.
+                    Fix any errors and suggest improvements: "\(content)"
+                    """,
+                generating: PostEnhancementResult.self
+            )
+            return response.content
+        }
+        #else
+        throw AIServiceError.foundationModelsUnavailable
+        #endif
+    }
+
+    /// Generate reply suggestions
+    /// - Parameters:
+    ///   - message: Message to reply to
+    ///   - context: Optional context about the conversation
+    /// - Returns: Structured reply suggestions
+    func suggestReplies(to message: String, context: String? = nil) async throws -> ReplySuggestion {
+        guard isAvailable && isReady else {
+            throw AIServiceError.foundationModelsUnavailable
+        }
+
+        #if canImport(FoundationModels)
+        guard let session = session else {
+            throw AIServiceError.modelNotReady
+        }
+
+        isProcessing = true
+        defer { isProcessing = false }
+
+        var prompt = "Suggest replies to this message: \"\(message)\""
+        if let context = context {
+            prompt += "\nContext: \(context)"
+        }
+
+        return try await withRetry(maxAttempts: maxRetries) {
+            let response = try await session.respond(
+                to: prompt,
+                generating: ReplySuggestion.self
+            )
+            return response.content
+        }
+        #else
+        throw AIServiceError.foundationModelsUnavailable
+        #endif
+    }
+
+    /// Generate caption suggestions for media
+    /// - Parameters:
+    ///   - description: Description of the media content
+    ///   - mediaType: Type of media (image, video)
+    /// - Returns: Structured caption suggestions
+    func generateCaption(for description: String, mediaType: String = "image") async throws -> CaptionSuggestion {
+        guard isAvailable && isReady else {
+            throw AIServiceError.foundationModelsUnavailable
+        }
+
+        #if canImport(FoundationModels)
+        guard let session = session else {
+            throw AIServiceError.modelNotReady
+        }
+
+        isProcessing = true
+        defer { isProcessing = false }
+
+        return try await withRetry(maxAttempts: maxRetries) {
+            let response = try await session.respond(
+                to: "Generate caption options for a \(mediaType) that shows: \"\(description)\"",
+                generating: CaptionSuggestion.self
+            )
+            return response.content
+        }
+        #else
+        throw AIServiceError.foundationModelsUnavailable
+        #endif
+    }
+
     // MARK: - Retry Helper
 
     /// Execute an async operation with retry logic

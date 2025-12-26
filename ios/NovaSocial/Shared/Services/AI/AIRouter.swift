@@ -451,4 +451,116 @@ extension AIRouter {
             return String(text[range])
         }
     }
+
+    // MARK: - Tool-Enabled Chat
+
+    /// Chat with tool access for dynamic data fetching
+    /// Falls back to regular chat if tools unavailable
+    /// - Parameter message: User's message
+    /// - Returns: AI response text
+    func chatWithTools(_ message: String) async throws -> String {
+        if #available(iOS 26.0, *), isOnDeviceAvailable && isOnDeviceReady {
+            return try await FoundationModelsService.shared.chatWithTools(message: message)
+        }
+
+        // Fallback to regular remote chat
+        return try await chat(message)
+    }
+
+    /// Stream chat with tools
+    /// - Parameter message: User's message
+    /// - Returns: Async stream of response chunks
+    func streamChatWithTools(_ message: String) -> AsyncThrowingStream<String, Error> {
+        if #available(iOS 26.0, *), isOnDeviceAvailable && isOnDeviceReady {
+            return FoundationModelsService.shared.streamChatWithTools(message: message)
+        }
+
+        // Fallback to regular stream
+        return streamChat(message)
+    }
+
+    // MARK: - Structured Output Methods
+
+    /// Generate post suggestions using on-device AI
+    /// - Parameters:
+    ///   - topic: Topic for the post
+    ///   - style: Style of the post
+    /// - Returns: Structured post suggestion
+    func generatePostSuggestion(topic: String, style: String = "casual") async throws -> PostSuggestion {
+        guard #available(iOS 26.0, *), isOnDeviceAvailable && isOnDeviceReady else {
+            throw AIServiceError.foundationModelsUnavailable
+        }
+        return try await FoundationModelsService.shared.generatePostSuggestion(topic: topic, style: style)
+    }
+
+    /// Classify content using on-device AI
+    /// - Parameter content: Content to classify
+    /// - Returns: Structured classification result
+    func classifyContent(_ content: String) async throws -> ContentClassification {
+        guard #available(iOS 26.0, *), isOnDeviceAvailable && isOnDeviceReady else {
+            throw AIServiceError.foundationModelsUnavailable
+        }
+        return try await FoundationModelsService.shared.classifyContent(content)
+    }
+
+    /// Recommend hashtags using on-device AI
+    /// - Parameter content: Content to analyze
+    /// - Returns: Structured hashtag recommendations
+    func recommendHashtags(for content: String) async throws -> HashtagRecommendation {
+        guard #available(iOS 26.0, *), isOnDeviceAvailable && isOnDeviceReady else {
+            throw AIServiceError.foundationModelsUnavailable
+        }
+        return try await FoundationModelsService.shared.recommendHashtags(for: content)
+    }
+
+    /// Enhance post using on-device AI
+    /// - Parameter content: Original post content
+    /// - Returns: Structured enhancement result
+    func enhancePostOnDevice(_ content: String) async throws -> PostEnhancementResult {
+        guard #available(iOS 26.0, *), isOnDeviceAvailable && isOnDeviceReady else {
+            throw AIServiceError.foundationModelsUnavailable
+        }
+        return try await FoundationModelsService.shared.enhancePost(content)
+    }
+
+    /// Suggest replies using on-device AI
+    /// - Parameters:
+    ///   - message: Message to reply to
+    ///   - context: Optional context
+    /// - Returns: Structured reply suggestions
+    func suggestReplies(to message: String, context: String? = nil) async throws -> ReplySuggestion {
+        guard #available(iOS 26.0, *), isOnDeviceAvailable && isOnDeviceReady else {
+            throw AIServiceError.foundationModelsUnavailable
+        }
+        return try await FoundationModelsService.shared.suggestReplies(to: message, context: context)
+    }
+
+    /// Generate captions using on-device AI
+    /// - Parameters:
+    ///   - description: Description of the media
+    ///   - mediaType: Type of media
+    /// - Returns: Structured caption suggestions
+    func generateCaption(for description: String, mediaType: String = "image") async throws -> CaptionSuggestion {
+        guard #available(iOS 26.0, *), isOnDeviceAvailable && isOnDeviceReady else {
+            throw AIServiceError.foundationModelsUnavailable
+        }
+        return try await FoundationModelsService.shared.generateCaption(for: description, mediaType: mediaType)
+    }
+
+    // MARK: - Session Management
+
+    /// Reset the tool-enabled session
+    func resetToolSession() {
+        if #available(iOS 26.0, *) {
+            AISessionManager.shared.resetSession(.toolEnabled)
+        }
+    }
+
+    /// Reset all AI sessions
+    func resetAllSessions() {
+        if #available(iOS 26.0, *) {
+            AISessionManager.shared.resetAllSessions()
+        }
+        resetChatSession()
+    }
 }
