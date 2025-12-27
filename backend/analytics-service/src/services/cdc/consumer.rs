@@ -214,13 +214,14 @@ pub struct PostsCdcRow {
 
 /// Row struct for follows_cdc table - used for type-safe ClickHouse inserts
 /// Note: Uses `followee_id` to match ClickHouse schema (PostgreSQL uses `following_id`)
+/// Uses String for UUIDs to avoid clickhouse-rs serialization issues with Uuid type
 #[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct FollowsCdcRow {
-    pub follower_id: Uuid,
-    pub followee_id: Uuid,
-    pub created_at: DateTime<Utc>,
+    pub follower_id: String,
+    pub followee_id: String,
+    pub created_at: u32,        // Unix timestamp for ClickHouse DateTime
     pub cdc_operation: i8,
-    pub cdc_timestamp: DateTime<Utc>,
+    pub cdc_timestamp: u32,     // Unix timestamp for ClickHouse DateTime
     pub follow_count: i8,
 }
 
@@ -640,9 +641,10 @@ impl CdcConsumer {
         let follower_raw: String = Self::extract_field(data, "follower_id")?;
         // PostgreSQL table uses "following_id", ClickHouse uses "followee_id"
         let following_raw: String = Self::extract_field(data, "following_id")?;
-        let follower_id = Uuid::parse_str(&follower_raw)
+        // Validate UUIDs but keep as strings for ClickHouse compatibility
+        let _ = Uuid::parse_str(&follower_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid follower UUID: {}", e)))?;
-        let followee_id = Uuid::parse_str(&following_raw)
+        let _ = Uuid::parse_str(&following_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid followee UUID: {}", e)))?;
         let created_at_raw: String = Self::extract_field(data, "created_at")?;
         let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
@@ -655,12 +657,13 @@ impl CdcConsumer {
         let cdc_timestamp = msg.timestamp();
 
         // Use type-safe parameterized insert to prevent SQL injection
+        // Convert DateTime to unix timestamp (u32) for ClickHouse DateTime compatibility
         let row = FollowsCdcRow {
-            follower_id,
-            followee_id,
-            created_at,
+            follower_id: follower_raw.clone(),
+            followee_id: following_raw.clone(),
+            created_at: created_at.timestamp() as u32,
             cdc_operation,
-            cdc_timestamp,
+            cdc_timestamp: cdc_timestamp.timestamp() as u32,
             follow_count,
         };
 
@@ -681,7 +684,7 @@ impl CdcConsumer {
 
         debug!(
             "Inserted follows CDC: follower={}, followee={}, op={:?}",
-            follower_id, followee_id, op
+            follower_raw, following_raw, op
         );
         Ok(())
     }
