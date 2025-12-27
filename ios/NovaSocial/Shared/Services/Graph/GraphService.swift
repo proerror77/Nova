@@ -80,14 +80,14 @@ class GraphService {
         // Backend uses GET /api/v2/graph/is-following/{user_id}
         // The follower_id is automatically extracted from the JWT token
         struct Response: Codable {
-            let is_following: Bool
+            let isFollowing: Bool
         }
 
         let response: Response = try await client.get(
             endpoint: APIConfig.Graph.isFollowing(followeeId)
         )
 
-        return response.is_following
+        return response.isFollowing
     }
 
     /// Check if two users are mutual followers
@@ -324,31 +324,20 @@ class GraphService {
 // MARK: - Response Models
 
 /// User info with relationship status returned from followers/following endpoints
+/// Note: No CodingKeys needed - APIClient uses .convertFromSnakeCase automatically
 struct FollowUserInfo: Codable {
     let userId: String
     let youAreFollowing: Bool
     let followsYou: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case userId = "user_id"
-        case youAreFollowing = "you_are_following"
-        case followsYou = "follows_you"
-    }
 }
 
 /// Response for getFollowers and getFollowing endpoints
+/// Note: No CodingKeys needed - APIClient uses .convertFromSnakeCase automatically
 struct FollowListResponse: Codable {
     let userIds: [String]
     let totalCount: Int
     let hasMore: Bool
     let users: [FollowUserInfo]?  // Optional for backward compatibility
-
-    enum CodingKeys: String, CodingKey {
-        case userIds = "user_ids"
-        case totalCount = "total_count"
-        case hasMore = "has_more"
-        case users
-    }
 
     /// Convenience: get relationship status by user ID
     func relationshipStatus(for userId: String) -> (youAreFollowing: Bool, followsYou: Bool)? {

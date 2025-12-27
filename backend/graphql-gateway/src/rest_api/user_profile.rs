@@ -15,6 +15,9 @@ use crate::clients::proto::auth::{
     auth_service_client::AuthServiceClient, Gender, GetUserByUsernameRequest,
     GetUserProfilesByIdsRequest, UpdateUserProfileRequest,
 };
+use crate::clients::proto::graph::{
+    graph_service_client::GraphServiceClient, GetFollowersRequest, GetFollowingRequest,
+};
 use crate::clients::proto::media::{
     media_service_client::MediaServiceClient, InitiateUploadRequest, MediaType,
 };
@@ -210,6 +213,43 @@ pub async fn get_profile(
                     _ => None,
                 });
 
+        // Fetch follower/following counts from graph-service
+        let mut graph_client: GraphServiceClient<_> = clients.graph_client();
+
+        // Get follower count (limit=1 to just get the total_count)
+        let follower_count = match graph_client
+            .get_followers(tonic::Request::new(GetFollowersRequest {
+                user_id: user_id.to_string(),
+                limit: 1,
+                offset: 0,
+                viewer_id: String::new(),
+            }))
+            .await
+        {
+            Ok(resp) => resp.into_inner().total_count,
+            Err(e) => {
+                tracing::warn!("Failed to get follower count: {}", e);
+                0
+            }
+        };
+
+        // Get following count (limit=1 to just get the total_count)
+        let following_count = match graph_client
+            .get_following(tonic::Request::new(GetFollowingRequest {
+                user_id: user_id.to_string(),
+                limit: 1,
+                offset: 0,
+                viewer_id: String::new(),
+            }))
+            .await
+        {
+            Ok(resp) => resp.into_inner().total_count,
+            Err(e) => {
+                tracing::warn!("Failed to get following count: {}", e);
+                0
+            }
+        };
+
         let profile = UserProfileResponse {
             id: p.user_id,
             username: p.username,
@@ -226,9 +266,9 @@ pub async fn get_profile(
             website: None,
             is_verified: false,
             is_private: p.is_private,
-            follower_count: 0,
-            following_count: 0,
-            post_count: 0,
+            follower_count,
+            following_count,
+            post_count: 0, // TODO: Fetch from content-service
             created_at: p.created_at,
             updated_at: p.updated_at,
         };
@@ -316,6 +356,43 @@ pub async fn get_profile_by_username(
                     _ => None,
                 });
 
+        // Fetch follower/following counts from graph-service
+        let mut graph_client: GraphServiceClient<_> = clients.graph_client();
+
+        // Get follower count (limit=1 to just get the total_count)
+        let follower_count = match graph_client
+            .get_followers(tonic::Request::new(GetFollowersRequest {
+                user_id: user_id.clone(),
+                limit: 1,
+                offset: 0,
+                viewer_id: String::new(),
+            }))
+            .await
+        {
+            Ok(resp) => resp.into_inner().total_count,
+            Err(e) => {
+                tracing::warn!("Failed to get follower count: {}", e);
+                0
+            }
+        };
+
+        // Get following count (limit=1 to just get the total_count)
+        let following_count = match graph_client
+            .get_following(tonic::Request::new(GetFollowingRequest {
+                user_id: user_id.clone(),
+                limit: 1,
+                offset: 0,
+                viewer_id: String::new(),
+            }))
+            .await
+        {
+            Ok(resp) => resp.into_inner().total_count,
+            Err(e) => {
+                tracing::warn!("Failed to get following count: {}", e);
+                0
+            }
+        };
+
         let profile = UserProfileResponse {
             id: p.user_id,
             username: p.username,
@@ -332,9 +409,9 @@ pub async fn get_profile_by_username(
             website: None,
             is_verified: false,
             is_private: p.is_private,
-            follower_count: 0,
-            following_count: 0,
-            post_count: 0,
+            follower_count,
+            following_count,
+            post_count: 0, // TODO: Fetch from content-service
             created_at: p.created_at,
             updated_at: p.updated_at,
         };
