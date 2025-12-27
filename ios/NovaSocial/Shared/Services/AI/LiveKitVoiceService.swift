@@ -159,13 +159,22 @@ final class LiveKitVoiceService: NSObject {
             // - .voiceChat: optimized for voice conversations with echo cancellation
             // - .defaultToSpeaker: output to speaker by default
             // - .allowBluetoothHFP: support Bluetooth headsets
+            // - .mixWithOthers: 允許與其他音訊混合（可選）
             try audioSession.setCategory(
                 .playAndRecord,
                 mode: .voiceChat,
-                options: [.defaultToSpeaker, .allowBluetoothHFP]
+                options: [.defaultToSpeaker, .allowBluetoothHFP, .allowBluetooth]
             )
+
+            // 設置較低的緩衝區持續時間以降低延遲
+            // 預設約 23ms (1024 samples @ 44.1kHz)，設為 0.005 (5ms) 可降低延遲
+            try audioSession.setPreferredIOBufferDuration(0.005)
+
+            // 設置較高的採樣率以提高音質
+            try audioSession.setPreferredSampleRate(48000)
+
             try audioSession.setActive(true)
-            liveKitLog("Audio session configured successfully")
+            liveKitLog("Audio session configured: bufferDuration=\(audioSession.ioBufferDuration), sampleRate=\(audioSession.sampleRate)")
         } catch {
             liveKitLog("Failed to configure audio session: \(error.localizedDescription)")
             updateState(.error("無法配置音訊: \(error.localizedDescription)"))
@@ -298,17 +307,22 @@ final class LiveKitVoiceService: NSObject {
         liveKitLog("Connecting to LiveKit room at \(url)...")
 
         // 創建 RoomOptions 配置音訊
+        // 注意: DTX, adaptiveStream, dynacast 設為 false 以避免語音斷斷續續
+        // - DTX (Discontinuous Transmission): 靜音時停止傳輸，可能造成語音檢測不穩定
+        // - adaptiveStream: 自適應串流可能導致質量波動
+        // - dynacast: 動態廣播可能影響即時性
         let roomOptions = RoomOptions(
             defaultAudioCaptureOptions: AudioCaptureOptions(
                 echoCancellation: true,
                 autoGainControl: true,
-                noiseSuppression: true
+                noiseSuppression: true,
+                highpassFilter: true  // 過濾低頻噪音
             ),
             defaultAudioPublishOptions: AudioPublishOptions(
-                dtx: true  // 啟用不連續傳輸以節省帶寬
+                dtx: false  // 禁用不連續傳輸，保持穩定的音訊流
             ),
-            adaptiveStream: true,  // 自適應串流
-            dynacast: true  // 動態廣播
+            adaptiveStream: false,  // 禁用自適應串流，避免質量波動
+            dynacast: false  // 禁用動態廣播，確保即時性
         )
 
         // 創建 Room 並設置 delegate
