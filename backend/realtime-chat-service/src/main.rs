@@ -209,12 +209,33 @@ async fn main() -> Result<(), error::AppError> {
                     if !recovery_key.is_empty() {
                         match client.recover_keys(recovery_key).await {
                             Ok(()) => tracing::info!("✅ Matrix E2EE keys recovered from backup"),
-                            Err(e) => tracing::warn!(error = %e, "Failed to recover Matrix E2EE keys (may be first run)"),
+                            Err(e) => {
+                                tracing::warn!(error = %e, "Failed to recover Matrix E2EE keys, enabling new backup...");
+                                // Recovery failed - enable new backup and log the new key
+                                match client.enable_key_backup().await {
+                                    Ok(new_key) if !new_key.is_empty() => {
+                                        tracing::error!("🔑 NEW RECOVERY KEY GENERATED - UPDATE MATRIX_RECOVERY_KEY SECRET:");
+                                        tracing::error!("🔑 {}", new_key);
+                                        tracing::info!("✅ Matrix E2EE key backup enabled (update secret with new key)");
+                                    }
+                                    Ok(_) => tracing::info!("Matrix key backup was already enabled"),
+                                    Err(backup_err) => tracing::error!(error = %backup_err, "Failed to enable key backup"),
+                                }
+                            }
                         }
                     }
                 } else {
                     tracing::info!("Matrix E2EE key backup not configured (MATRIX_RECOVERY_KEY not set)");
-                    tracing::info!("  To enable: call enable_key_backup() and store the returned recovery key");
+                    // Auto-enable backup when no key is configured
+                    match client.enable_key_backup().await {
+                        Ok(new_key) if !new_key.is_empty() => {
+                            tracing::error!("🔑 RECOVERY KEY GENERATED - SET MATRIX_RECOVERY_KEY SECRET:");
+                            tracing::error!("🔑 {}", new_key);
+                            tracing::info!("✅ Matrix E2EE key backup enabled (set MATRIX_RECOVERY_KEY secret)");
+                        }
+                        Ok(_) => tracing::info!("Matrix key backup was already enabled"),
+                        Err(e) => tracing::warn!(error = %e, "Failed to enable key backup"),
+                    }
                 }
 
                 Some(Arc::new(client))
