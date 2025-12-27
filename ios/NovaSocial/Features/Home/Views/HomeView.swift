@@ -75,10 +75,9 @@ struct HomeView: View {
     @State private var showWrite = false
     @State private var selectedPostForDetail: FeedPost?
     @State private var showPostDetail = false
-    @State private var showChannelBar = true
-    @State private var lastScrollOffset: CGFloat = 0
+    @State private var channelBarOffset: CGFloat = 0  // 0 = 显示, -30 = 隐藏
+    @State private var lastDragValue: CGFloat = 0  // 追踪上一次拖动位置
     @State private var selectedTab: FeedTab = .forYou
-    @State private var scrollDebounceTask: Task<Void, Never>?  // 滾動防抖任務
     @State private var showUserProfile = false  // 用户主页跳转
     @State private var selectedUserId: String?  // 选中的用户ID
 
@@ -314,17 +313,17 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 50.h)
                 
-                // MARK: - 顶部分隔线（距离顶部 98pt）
+                // MARK: - 顶部分隔线（始终可见）
                 Rectangle()
                     .fill(Color(red: 0.75, green: 0.75, blue: 0.75))
                     .frame(width: 375.w, height: 0.5)
                     .frame(maxWidth: .infinity)
 
-                // MARK: - Channel 栏
-                if showChannelBar {
-                    channelBar
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
+                // MARK: - Channel 栏容器（可滑动隐藏）
+                channelBar
+                    .offset(y: channelBarOffset)
+                    .frame(height: max(0, 30.h + channelBarOffset))
+                    .clipped()
 
                 // MARK: - 内容区域（固定背景 + 滚动内容）
                 ZStack(alignment: .top) {
@@ -341,12 +340,6 @@ struct HomeView: View {
                     // 可滚动内容区
                     ScrollView {
                         VStack(spacing: 0) {
-                            // 滚动位置检测
-                            GeometryReader { geometry in
-                                Color.clear
-                                    .preference(key: ScrollOffsetPreferenceKey.self, value: geometry.frame(in: .named("scroll")).minY)
-                            }
-                            .frame(height: 0)
                             // MARK: - Promo Banner 内容 (Icon + 文字，距离 Channel 栏 45pt)
                             VStack(spacing: 21.h) {
                                 Image("home-icon")
@@ -355,7 +348,7 @@ struct HomeView: View {
                                     .frame(width: 54.s, height: 27.s)
                                 
                                 Text("This is Icered.")
-                                    .font(.custom("SF Pro Display", size: 24.f))
+                                    .font(.system(size: 24.f))
                                     .tracking(0.72)
                                     .lineSpacing(20)
                                     .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
@@ -454,32 +447,35 @@ struct HomeView: View {
                             .background(DesignTokens.backgroundColor)
                         }
                     }
+                    .scrollIndicators(.hidden)
                     .refreshable {
                         await feedViewModel.refresh()
                     }
-                    .coordinateSpace(name: "scroll")
-                    .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
-                        // 性能優化：添加防抖避免每幀都觸發動畫計算
-                        scrollDebounceTask?.cancel()
-                        scrollDebounceTask = Task { @MainActor in
-                            try? await Task.sleep(for: .milliseconds(16)) // ~1 frame
-                            guard !Task.isCancelled else { return }
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 1)
+                            .onChanged { value in
+                                let currentY = value.translation.height
+                                let delta = currentY - lastDragValue
 
-                            let delta = offset - lastScrollOffset
-                            // 向上滚动 (offset 变小，delta < 0) 隐藏 Channel 栏
-                            // 向下滚动/下拉 (offset 变大，delta > 0) 显示 Channel 栏
-                            if abs(delta) > 10 {
-                                withAnimation(.easeInOut(duration: 0.25)) {
-                                    if delta < -10 {
-                                        showChannelBar = false
-                                    } else if delta > 10 || offset > -50 {
-                                        showChannelBar = true
+                                // 向上滑动 (delta < 0) 隐藏 Channel 栏
+                                // 向下滑动 (delta > 0) 显示 Channel 栏
+                                // 使用极短动画让过渡更自然但不拖慢响应
+                                if delta < -2 && channelBarOffset == 0 {
+                                    withAnimation(.easeOut(duration: 0.1)) {
+                                        channelBarOffset = -30.h  // 隐藏
                                     }
+                                    lastDragValue = currentY
+                                } else if delta > 2 && channelBarOffset < 0 {
+                                    withAnimation(.easeOut(duration: 0.1)) {
+                                        channelBarOffset = 0  // 显示
+                                    }
+                                    lastDragValue = currentY
                                 }
-                                lastScrollOffset = offset
                             }
-                        }
-                    }
+                            .onEnded { _ in
+                                lastDragValue = 0
+                            }
+                    )
                 }
 
 
@@ -502,20 +498,7 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 30.h)
                 .background(.white)
-                // 只在底部添加阴影
-                .overlay(alignment: .bottom) {
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.black.opacity(0),
-                            Color.black.opacity(0.10)
-                        ]),
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 4)
-                    .offset(y: 4)
-                }
-            
+
             // 可滚动的 Tab 列表
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 20.w) {
@@ -524,7 +507,7 @@ struct HomeView: View {
                             selectTab(tab)
                         }) {
                             Text(tab.displayName)
-                                .font(.custom("SF Pro Display", size: 10.f))
+                                .font(.system(size: 10.f))
                                 .foregroundColor(selectedTab == tab ? .black : Color(red: 0.53, green: 0.53, blue: 0.53))
                         }
                     }
@@ -534,6 +517,7 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 30.h)
+        .background(.white)
     }
 
     // MARK: - Tab Selection Handler
@@ -581,14 +565,6 @@ struct HomeView: View {
                 selectedPhotos = []
             }
         }
-    }
-}
-
-// MARK: - Scroll Offset Preference Key
-struct ScrollOffsetPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
     }
 }
 

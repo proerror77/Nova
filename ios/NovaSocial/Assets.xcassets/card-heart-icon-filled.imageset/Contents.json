@@ -1,17 +1,17 @@
 {
   "images" : [
     {
-      "filename" : "chat.png",
+      "filename" : "card-heart-icon-filled.png",
       "idiom" : "universal",
       "scale" : "1x"
     },
     {
-      "filename" : "chat@2x.png",
+      "filename" : "card-heart-icon-filled@2x.png",
       "idiom" : "universal",
       "scale" : "2x"
     },
     {
-      "filename" : "chat@3x.png",
+      "filename" : "card-heart-icon-filled@3x.png",
       "idiom" : "universal",
       "scale" : "3x"
     }

@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -63,6 +63,8 @@
 		30B4DE5EEC65B15F44D5A916 /* ConversationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D513935D933B49861CE3742D /* ConversationModels.swift */; };
 		30B8FED56BD2FC15EA847F3C /* MatrixServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB2AAE37D1FD1B67346E7E8E /* MatrixServiceTests.swift */; };
 		31A02BCB67566E60E88E3CC0 /* FriendRequestsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18EBCDEC4F561F630331FD33 /* FriendRequestsView.swift */; };
+		32492EF32EFCC3ED00B6CC5C /* PostCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32492EF22EFCC3ED00B6CC5C /* PostCard.swift */; };
+		3286B4652EFFCC390048C116 /* MatrixRustSDK in Embed Frameworks */ = {isa = PBXBuildFile; productRef = 89B16F3BD122ECA55FE121C5 /* MatrixRustSDK */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		3553BB6E62A9D150C65FA109 /* GenerateImage01View.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F361F5818CDB8EEB87330CB /* GenerateImage01View.swift */; };
 		36197AA754ED191DC4253E52 /* FeedPostCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CF9EE837EC3996A27E70749 /* FeedPostCard.swift */; };
 		36C8F0814D8325B15798C3C0 /* project.yml in Resources */ = {isa = PBXBuildFile; fileRef = F17E22FD89284D78C7FE808A /* project.yml */; };
@@ -212,7 +214,6 @@
 		C2347F45927717021592D93D /* MatrixBridgeService+Rooms.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE89604C02BCA2069066DC13 /* MatrixBridgeService+Rooms.swift */; };
 		C27F7C438F9F5C93DF910E2C /* CallKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07F045B08B19F18541A30F45 /* CallKitManager.swift */; };
 		C370DD1F40E4BF46E686250C /* ProfilePostCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D768AA6E0FC3664769BDC8D0 /* ProfilePostCard.swift */; };
-		32492EF32EFCC3ED00B6CC5C /* PostCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32492EF22EFCC3ED00B6CC5C /* PostCard.swift */; };
 		C53D8FF338F3965B7DA3FE06 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B4358221460091EE5EECF1 /* ChatViewModel.swift */; };
 		C5BCFFB06545187FF2579AA3 /* DevicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20DAD625E4C0EF4A01010AE7 /* DevicesView.swift */; };
 		C6D562180DEC83593F48A910 /* NameSelectorModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = E26FCF7308D047749F56999C /* NameSelectorModal.swift */; };
@@ -271,8 +272,6 @@
 		FD4C5DDD8A3C9BA4399AA522 /* PhotoAnalysisService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3737976AD8AA33408751C99 /* PhotoAnalysisService.swift */; };
 		FD818F27CF9C6EEC3142F5E2 /* UserProfileFollowingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0170221498A2E6B8DF35A25 /* UserProfileFollowingView.swift */; };
 		FE5A7851F73E4DAE93743284 /* MyChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7716AC8A2A67A629B5AA6D /* MyChannelsView.swift */; };
-		LK0001C2F493FFF2281781676 /* LiveKitVoiceChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = LK0007B62C70CB46565FFBC30D /* LiveKitVoiceChatView.swift */; };
-		LK04D3A5848B6B6B39935CF0 /* LiveKitVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = LK0E222AADC0282302AC0298 /* LiveKitVoiceService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -300,6 +299,17 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		3286B4662EFFCC390048C116 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				3286B4652EFFCC390048C116 /* MatrixRustSDK in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		964DAE8E9C23F4949A45561E /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -364,7 +374,7 @@
 		31C506816FBC6DA8C0428370 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		32492EF22EFCC3ED00B6CC5C /* PostCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostCard.swift; sourceTree = "<group>"; };
 		332251B7AC761742A3FD05B9 /* TrendingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendingService.swift; sourceTree = "<group>"; };
-		333022523C822B72F1B62A65 /* raw_document_symbols.pkl */ = {isa = PBXFileReference; path = raw_document_symbols.pkl; sourceTree = "<group>"; };
+		333022523C822B72F1B62A65 /* raw_document_symbols.pkl */ = {isa = PBXFileReference; lastKnownFileType = file; path = raw_document_symbols.pkl; sourceTree = "<group>"; };
 		33C571AB47F91627A45BC417 /* BottomTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottomTabBar.swift; sourceTree = "<group>"; };
 		35CDD0F078823EDEB9C2867F /* ImageCompressor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCompressor.swift; sourceTree = "<group>"; };
 		36A22EF01EE6C23DBFD7BBE2 /* CreateAccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateAccountView.swift; sourceTree = "<group>"; };
@@ -424,7 +434,7 @@
 		6CFAEF2BEA59A56A0916439F /* UnreadMessagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnreadMessagesView.swift; sourceTree = "<group>"; };
 		6D34F87E7DE783C7F956B76F /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		6EC248FD24BCF6177F84307C /* CameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraView.swift; sourceTree = "<group>"; };
-		6FE503B433803D526D38998A /* document_symbols.pkl */ = {isa = PBXFileReference; path = document_symbols.pkl; sourceTree = "<group>"; };
+		6FE503B433803D526D38998A /* document_symbols.pkl */ = {isa = PBXFileReference; lastKnownFileType = file; path = document_symbols.pkl; sourceTree = "<group>"; };
 		706CF6489A01C5EA02A4547E /* FeedPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedPostProcessor.swift; sourceTree = "<group>"; };
 		70B4789BECA285CAAE483BDA /* MatrixSSOManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatrixSSOManager.swift; sourceTree = "<group>"; };
 		712BA1842DBC03D66DB2611F /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
@@ -510,7 +520,7 @@
 		C65C59A952DAAFCAFE219CAD /* ErrorStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorStateView.swift; sourceTree = "<group>"; };
 		C6B7EF0FCF06C5477C18E6F9 /* ICERED.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ICERED.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C73FD45286EFDA3DC3C27C34 /* VideoCompressor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoCompressor.swift; sourceTree = "<group>"; };
-		C769A84F96229832BDBCB964 /* .gitignore */ = {isa = PBXFileReference; path = .gitignore; sourceTree = "<group>"; };
+		C769A84F96229832BDBCB964 /* .gitignore */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitignore; sourceTree = "<group>"; };
 		C793C66FA2BEB9095768AB8E /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		C8E479E517FAEE1DD67A4149 /* FeedErrorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedErrorView.swift; sourceTree = "<group>"; };
 		CA6E010BF6D46CFA1A1EFE44 /* ProfileFollowersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileFollowersView.swift; sourceTree = "<group>"; };
@@ -573,9 +583,7 @@
 		FB2C61556A6B4DAA297DFC3F /* AIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIModels.swift; sourceTree = "<group>"; };
 		FB630AEE7228BE7CEAE9E794 /* QRCodeScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeScannerView.swift; sourceTree = "<group>"; };
 		FBBFF77645A4CF02AAB9B2E4 /* CryptoCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoCore.swift; sourceTree = "<group>"; };
-		"TEMP_25B0D7C6-3769-471B-84B3-CE50ACAF2569" /* .gitattributes */ = {isa = PBXFileReference; path = .gitattributes; sourceTree = "<group>"; };
 		"TEMP_2CBB1054-3AB5-4D7B-B657-88323D6D1917" /* AppPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPage.swift; sourceTree = "<group>"; };
-		"TEMP_4413F4EC-2D42-4507-8CBD-3F1A3916E4BB" /* ICERED.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ICERED.entitlements; sourceTree = "<group>"; };
 		"TEMP_4DCB2B22-81AB-46AE-BD60-CCC52248E8B9" /* fastlane.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = fastlane.sh; sourceTree = "<group>"; };
 		"TEMP_50693462-959E-4411-8E72-4755CC5043C9" /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
 		"TEMP_5769E825-005E-4BFC-8797-4FBDC5162E72" /* ExportOptions.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = ExportOptions.plist; sourceTree = "<group>"; };
@@ -583,8 +591,7 @@
 		"TEMP_799C3F3E-6486-4427-B17D-FC161CAE08F1" /* .swiftlint.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = .swiftlint.yml; sourceTree = "<group>"; };
 		"TEMP_90F4D401-4DEB-4EBE-A6B7-E9B219C75029" /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		"TEMP_A2564447-6861-4B92-9039-170CCB068E26" /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
-		"TEMP_AC11082D-BE00-42AD-97BB-8D56D912B960" /* .gitignore */ = {isa = PBXFileReference; path = .gitignore; sourceTree = "<group>"; };
-		"TEMP_B5A50FAB-9A6A-40B6-B3F5-0CAB64AEBB33" /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		"TEMP_B5A50FAB-9A6A-40B6-B3F5-0CAB64AEBB33" /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -592,7 +599,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				32492EF12EFCC04200B6CC5C /* LiveKit in Frameworks */,
 				CEF622E0D705BAA70D0C2009 /* MatrixRustSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -796,6 +802,7 @@
 				B5C695DC3E63B0D8F4D8BEDA /* Shared */,
 				F7468F493F2DDF5BF6349EBA /* Tests */,
 				A8928B707E71735FE0470B84 /* Products */,
+				3286B4642EFEA6990048C116 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -849,6 +856,22 @@
 				8D2FF599D8F2CEFBB0C88D1B /* FeatureFlags.swift */,
 			);
 			path = Config;
+			sourceTree = "<group>";
+		};
+		3286B4642EFEA6990048C116 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				"TEMP_50693462-959E-4411-8E72-4755CC5043C9" /* App.swift */,
+				"TEMP_A2564447-6861-4B92-9039-170CCB068E26" /* AppDelegate.swift */,
+				"TEMP_2CBB1054-3AB5-4D7B-B657-88323D6D1917" /* AppPage.swift */,
+				"TEMP_799C3F3E-6486-4427-B17D-FC161CAE08F1" /* .swiftlint.yml */,
+				"TEMP_578DCB4E-0965-4E3B-88DD-19DF08FAED2F" /* Assets.xcassets */,
+				"TEMP_5769E825-005E-4BFC-8797-4FBDC5162E72" /* ExportOptions.plist */,
+				"TEMP_A49D2D61-D797-4BBF-BB36-63A23FFBE4A3" /* Localizable.strings */,
+				"TEMP_B5A50FAB-9A6A-40B6-B3F5-0CAB64AEBB33" /* PrivacyInfo.xcprivacy */,
+				"TEMP_4DCB2B22-81AB-46AE-BD60-CCC52248E8B9" /* fastlane.sh */,
+			);
+			name = "Recovered References";
 			sourceTree = "<group>";
 		};
 		3639645BC60AEEF8F6A61480 /* Services */ = {
@@ -1745,29 +1768,6 @@
 			path = Networking;
 			sourceTree = "<group>";
 		};
-		"TEMP_83769770-8BA1-45EB-874B-A64CD6E596D1" /* NovaSocial */ = {
-			isa = PBXGroup;
-			children = (
-				"TEMP_4413F4EC-2D42-4507-8CBD-3F1A3916E4BB" /* ICERED.entitlements */,
-				"TEMP_799C3F3E-6486-4427-B17D-FC161CAE08F1" /* .swiftlint.yml */,
-				"TEMP_578DCB4E-0965-4E3B-88DD-19DF08FAED2F" /* Assets.xcassets */,
-				"TEMP_4DCB2B22-81AB-46AE-BD60-CCC52248E8B9" /* fastlane.sh */,
-				"TEMP_5769E825-005E-4BFC-8797-4FBDC5162E72" /* ExportOptions.plist */,
-				"TEMP_AC11082D-BE00-42AD-97BB-8D56D912B960" /* .gitignore */,
-				"TEMP_B5A50FAB-9A6A-40B6-B3F5-0CAB64AEBB33" /* PrivacyInfo.xcprivacy */,
-				"TEMP_25B0D7C6-3769-471B-84B3-CE50ACAF2569" /* .gitattributes */,
-				"TEMP_2CBB1054-3AB5-4D7B-B657-88323D6D1917" /* AppPage.swift */,
-				"TEMP_A2564447-6861-4B92-9039-170CCB068E26" /* AppDelegate.swift */,
-				"TEMP_50693462-959E-4411-8E72-4755CC5043C9" /* App.swift */,
-				B4E7F1AC29BBBC2246E01491 /* .serena */,
-				3A2A516A81467921E0E7441B /* Features */,
-				B5C695DC3E63B0D8F4D8BEDA /* Shared */,
-				6E7717AD84CE7D95370C8D86 /* Infrastructure */,
-				"TEMP_A49D2D61-D797-4BBF-BB36-63A23FFBE4A3" /* Localizable.strings */,
-			);
-			path = NovaSocial;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -1797,6 +1797,7 @@
 				F3358EDED8BB0EA4BB7DC824 /* Resources */,
 				9AD301B5E184293F220D88B9 /* Frameworks */,
 				964DAE8E9C23F4949A45561E /* Embed Foundation Extensions */,
+				3286B4662EFFCC390048C116 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -1883,7 +1884,6 @@
 			packageReferences = (
 				51265FCDDB4D71991880F8D2 /* XCRemoteSwiftPackageReference "matrix-rust-components-swift" */,
 			);
-			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -2245,9 +2245,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
-					DEBUG,
-				);
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.9;
@@ -2329,15 +2327,10 @@
 					"@executable_path/Frameworks",
 				);
 				NSMicrophoneUsageDescription = "Alice needs microphone access for voice chat";
-				OTHER_LDFLAGS = (
-					"-ObjC",
-				);
+				OTHER_LDFLAGS = "-ObjC";
 				PRODUCT_BUNDLE_IDENTIFIER = com.app.icered.pro;
 				SDKROOT = iphoneos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
-					DEBUG,
-					MATRIX_SDK_ENABLED,
-				);
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG MATRIX_SDK_ENABLED";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -2359,10 +2352,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.app.icered.pro.tests;
 				SDKROOT = iphoneos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
-					DEBUG,
-					MATRIX_SDK_ENABLED,
-				);
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG MATRIX_SDK_ENABLED";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ICERED.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ICERED";
@@ -2385,14 +2375,10 @@
 					"@executable_path/Frameworks",
 				);
 				NSMicrophoneUsageDescription = "Alice needs microphone access for voice chat";
-				OTHER_LDFLAGS = (
-					"-ObjC",
-				);
+				OTHER_LDFLAGS = "-ObjC";
 				PRODUCT_BUNDLE_IDENTIFIER = com.app.icered.pro;
 				SDKROOT = iphoneos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
-					MATRIX_SDK_ENABLED,
-				);
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = MATRIX_SDK_ENABLED;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -2479,8 +2465,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.app.icered.pro.uitests;
 				SDKROOT = iphoneos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
-				);
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = ICERED;
@@ -2502,9 +2487,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.app.icered.pro.tests;
 				SDKROOT = iphoneos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
-					MATRIX_SDK_ENABLED,
-				);
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = MATRIX_SDK_ENABLED;
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ICERED.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ICERED";
@@ -2550,9 +2533,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.app.icered.pro.uitests;
 				SDKROOT = iphoneos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
-					DEBUG,
-				);
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = ICERED;

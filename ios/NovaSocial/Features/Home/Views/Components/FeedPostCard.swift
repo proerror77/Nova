@@ -28,6 +28,8 @@ struct FeedPostCard: View {
     /// 雙擊點讚動畫 (Instagram 風格愛心動畫)
     @State private var showDoubleTapHeart = false
     @State private var doubleTapHeartPosition: CGPoint = .zero
+    /// 文本展开/收起状态
+    @State private var isTextExpanded = false
     /// 觸覺回饋生成器
     private let hapticFeedback = UIImpactFeedbackGenerator(style: .medium)
     private let hapticLight = UIImpactFeedbackGenerator(style: .light)
@@ -63,36 +65,36 @@ struct FeedPostCard: View {
 
     // MARK: - Main Content View
     private var mainContent: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 8.h) {
             // MARK: - User Info Header
             HStack {
-                HStack(spacing: 10) {
+                HStack(spacing: 10.w) {
                     // Avatar - 显示用户头像或默认头像
-                    AvatarView(image: nil, url: post.authorAvatar, size: 30)
+                    AvatarView(image: nil, url: post.authorAvatar, size: 30.s)
 
                     // User Info
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 4) {
+                    VStack(alignment: .leading, spacing: 2.h) {
+                        HStack(spacing: 4.w) {
                             Text(post.authorName)
-                                .font(Typography.semibold14)
-                                .foregroundColor(Color(red: 0.02, green: 0, blue: 0))
+                                .font(.system(size: 12.f))
+                                .tracking(0.24)
+                                .foregroundColor(.black)
 
                             // 认证标记 (可选)
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(Typography.regular10)
-                                .foregroundColor(Color(red: 0.20, green: 0.60, blue: 1.0))
+                            Image("Blue-v")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 14.s, height: 14.s)
                         }
 
-                        HStack(spacing: 9) {
+                        HStack(spacing: 9.w) {
                             Text(post.createdAt.timeAgoDisplay())
-                                .font(Typography.regular10)
-                                .lineSpacing(13)
-                                .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
+                                .font(.system(size: 10.f))
+                                .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
 
                             Text("Location")
-                                .font(Typography.regular10)
-                                .lineSpacing(13)
-                                .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
+                                .font(.system(size: 10.f))
+                                .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                         }
                     }
                 }
@@ -104,11 +106,12 @@ struct FeedPostCard: View {
                     Image("card-share-icon")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 24, height: 24)
+                        .frame(width: 20.s, height: 20.s)
                 }
                 .accessibilityLabel("Share")
             }
-            .padding(.horizontal, 16)
+            .frame(width: 343.w)
+            .padding(.horizontal, 16.w)
 
             // MARK: - Post Media (Images/Video/Live Photo) - Instagram Style
             if !post.displayMediaUrls.isEmpty {
@@ -116,76 +119,82 @@ struct FeedPostCard: View {
             }
 
             // MARK: - Post Content & Interaction
-            VStack(alignment: .leading, spacing: 10) {
-                // Post Content Text
+            VStack(alignment: .leading, spacing: 10.h) {
+                // Post Content Text with expandable "more/less"
                 if !post.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(post.content)
-                        .font(Typography.semibold16)
-                        .lineSpacing(20)
-                        .foregroundColor(.black)
+                    ExpandableTextView(
+                        text: post.content,
+                        isExpanded: $isTextExpanded,
+                        lineLimit: 1
+                    )
+                    .frame(width: 343.w, alignment: .leading)
                 }
 
-                // Interaction Buttons with iOS 17+ Symbol Effects
-                HStack(spacing: 20) {
-                    // Like button - 使用 SF Symbol 和 bounce 动画
+                // Interaction Buttons - 三个按钮始终保持20pt间距
+                HStack(spacing: 20.w) {
+                    // Like button
                     Button {
                         likeAnimationTrigger.toggle()
                         onLike()
                     } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: post.isLiked ? "heart.fill" : "heart")
-                                .font(.system(size: 18))
-                                .foregroundColor(post.isLiked ? .red : Color(red: 0.38, green: 0.37, blue: 0.37))
-                                .symbolEffect(.bounce, value: likeAnimationTrigger)
+                        HStack(spacing: 6.w) {
+                            Image(post.isLiked ? "card-heart-icon-filled" : "card-heart-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20.s, height: 20.s)
                             Text("\(post.likeCount)")
-                                .font(Typography.regular10)
-                                .lineSpacing(20)
-                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                .font(.system(size: 10.f))
+                                .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                                 .contentTransition(.numericText())
                         }
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     .accessibilityLabel("Like, \(post.likeCount) likes")
 
                     // Comment button
                     Button(action: onComment) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "bubble.right")
-                                .font(.system(size: 18))
-                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        HStack(spacing: 6.w) {
+                            Image("card-comment-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20.s, height: 20.s)
                             Text("\(post.commentCount)")
-                                .font(Typography.regular10)
-                                .lineSpacing(20)
-                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                .font(.system(size: 10.f))
+                                .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                                 .contentTransition(.numericText())
                         }
                     }
                     .accessibilityLabel("Comments, \(post.commentCount)")
 
-                    // Bookmark/Star button - 使用 SF Symbol 和 bounce 动画
+                    // Bookmark/Star button
                     Button {
                         bookmarkAnimationTrigger.toggle()
                         onBookmark()
                     } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: post.isBookmarked ? "bookmark.fill" : "bookmark")
-                                .font(.system(size: 18))
-                                .foregroundColor(post.isBookmarked ? .orange : Color(red: 0.38, green: 0.37, blue: 0.37))
-                                .symbolEffect(.bounce, value: bookmarkAnimationTrigger)
+                        HStack(spacing: 6.w) {
+                            Image(post.isBookmarked ? "card-star-icon-filled" : "card-star-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20.s, height: 20.s)
                             Text("\(post.bookmarkCount)")
-                                .font(Typography.regular10)
-                                .lineSpacing(20)
-                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                .font(.system(size: 10.f))
+                                .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                         }
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     .accessibilityLabel("Bookmark, \(post.bookmarkCount)")
 
                     Spacer()
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 14)
+            .padding(.top, 2.h)  // 与分页指示器总间距 10pt (8 + 2)
+            .padding(.horizontal, 16.w)
+            .padding(.bottom, 20.h)
         }
-        .padding(.top, 14)
+        .padding(.top, 20.h)
+        .frame(width: 375.w)
         .background(.white)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Post by \(post.authorName)")
@@ -205,7 +214,7 @@ struct FeedPostCard: View {
     @ViewBuilder
     private var mediaContent: some View {
         ZStack {
-            VStack(spacing: 8) {
+            VStack(spacing: 8.h) {
                 switch post.mediaType {
                 case .video:
                     // Video post - show video player
@@ -260,7 +269,7 @@ struct FeedPostCard: View {
                 thumbnailUrl: thumbnailUrl,
                 autoPlay: true,
                 isMuted: true,
-                height: 500
+                height: 500.h
             )
         }
     }
@@ -288,8 +297,7 @@ struct FeedPostCard: View {
                                 .tint(.white)
                         )
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 500)
+                .frame(width: 375.w, height: 500.h)
                 .clipped()
 
                 // Live Photo badge
@@ -323,7 +331,8 @@ struct FeedPostCard: View {
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
-        .frame(height: 500)
+        .frame(width: 375.w, height: 500.h)
+        .clipped()
         .onChange(of: currentPage) { _, newPage in
             // Prefetch adjacent images when page changes
             prefetchAdjacentImages(around: newPage)
@@ -396,7 +405,7 @@ struct FeedPostCard: View {
                 thumbnailUrl: thumbnailUrl,
                 autoPlay: true,
                 isMuted: true,
-                height: 500
+                height: 500.h
             )
             // Instagram style: double-tap to like on video
             .onTapGesture(count: 2) {
@@ -466,13 +475,13 @@ struct FeedPostCard: View {
     // MARK: - Page Indicator
 
     private var pageIndicator: some View {
-        HStack(spacing: 11) {
+        HStack(spacing: 5.w) {
             ForEach(0..<mediaItemCount, id: \.self) { index in
                 Circle()
                     .fill(index == currentImageIndex ?
-                          Color(red: 0.81, green: 0.13, blue: 0.25) :
-                          Color(red: 0.85, green: 0.85, blue: 0.85))
-                    .frame(width: 6, height: 6)
+                          Color(red: 0.87, green: 0.11, blue: 0.26) :
+                          Color(red: 0.90, green: 0.90, blue: 0.90))
+                    .frame(width: 6.s, height: 6.s)
             }
         }
     }
@@ -523,12 +532,6 @@ struct FeedPostCard: View {
                 post: FeedPost.preview,
                 showReportView: $showReport
             )
-
-            // 纯文字帖子
-            FeedPostCard(
-                post: FeedPost.previewTextOnly,
-                showReportView: $showReport
-            )
         }
         .padding(.horizontal, 16)
     }
@@ -543,7 +546,7 @@ extension FeedPost {
             authorId: "user-123",
             authorName: "Simone Carter",
             authorAvatar: "https://picsum.photos/100/100",
-            content: "This is a sample post with images.",
+            content: "I will come again next time to visit and experience the beautiful scenery that this place has to offer.",
             mediaUrls: [
                 "https://picsum.photos/400/533",
                 "https://picsum.photos/401/534",
@@ -575,6 +578,101 @@ extension FeedPost {
             isLiked: false,
             isBookmarked: true
         )
+    }
+}
+
+// MARK: - Expandable Text View
+/// 可展开/收起的文本视图，文本超过指定行数时显示 "more"，展开后显示 "less"
+struct ExpandableTextView: View {
+    let text: String
+    @Binding var isExpanded: Bool
+    let lineLimit: Int
+    
+    @State private var isTruncated: Bool = false
+    
+    // "more" 按钮的预留宽度
+    private let moreButtonWidth: CGFloat = 32.w
+    // 可用宽度 (343pt - more按钮宽度)
+    private var textMaxWidth: CGFloat { 343.w - moreButtonWidth }
+    
+    var body: some View {
+        if isExpanded {
+            // 展开状态：显示完整文本 + " less"
+            (Text(text)
+                .font(.system(size: 12.f))
+                .tracking(0.24)
+                .foregroundColor(.black)
+            + Text(" less")
+                .font(.system(size: 12.f))
+                .tracking(0.24)
+                .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64)))
+            .fixedSize(horizontal: false, vertical: true)
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded = false
+                }
+            }
+        } else {
+            // 收起状态
+            HStack(alignment: .bottom, spacing: 0) {
+                // 文本区域
+                Text(text)
+                    .font(.system(size: 12.f))
+                    .tracking(0.24)
+                    .foregroundColor(.black)
+                    .lineLimit(lineLimit)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: isTruncated ? textMaxWidth : .infinity, alignment: .leading)
+                
+                // more 按钮（仅在截断时显示）
+                if isTruncated {
+                    Text("more")
+                        .font(.system(size: 12.f))
+                        .tracking(0.24)
+                        .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64))
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isExpanded = true
+                            }
+                        }
+                }
+            }
+            .background(
+                // 隐藏测量：比较单行高度和完整文本高度
+                ZStack {
+                    // 完整文本（不限行数）
+                    Text(text)
+                        .font(.system(size: 12.f))
+                        .tracking(0.24)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(width: 343.w, alignment: .leading)
+                        .background(GeometryReader { geo in
+                            Color.clear.onAppear {
+                                // 如果完整文本高度超过约 18pt（单行高度），则需要截断
+                                if geo.size.height > 18 {
+                                    isTruncated = true
+                                }
+                            }
+                            .onChange(of: text) { _, _ in
+                                if geo.size.height > 18 {
+                                    isTruncated = true
+                                } else {
+                                    isTruncated = false
+                                }
+                            }
+                        })
+                }
+                .hidden()
+            )
+        }
+    }
+}
+
+// Preference Keys for size measurement
+private struct IntrinsicSizePreferenceKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        value = nextValue()
     }
 }
 
