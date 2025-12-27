@@ -166,8 +166,9 @@ async fn main() -> Result<()> {
             }
             Err(e) => {
                 tracing::warn!("mTLS disabled - TLS config not found: {}. Using development mode for testing only.", e);
-                if cfg!(debug_assertions) {
-                    tracing::info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
+                let app_env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
+                if app_env != "production" {
+                    tracing::info!("Development/Staging mode: Starting without TLS (NOT FOR PRODUCTION)");
                     None
                 } else {
                     tracing::error!("Production requires mTLS - GRPC_SERVER_CERT_PATH must be set");
