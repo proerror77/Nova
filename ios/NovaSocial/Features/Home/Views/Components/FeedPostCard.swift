@@ -532,7 +532,7 @@ struct FeedPostCard: View {
         }
         .padding(.horizontal, 16)
     }
-    .background(Color(red: 0.97, green: 0.97, blue: 0.97))
+    .background(Color(red: 0.24, green: 0.24, blue: 0.24))
 }
 
 // MARK: - Preview Data

@@ -274,42 +274,51 @@ struct HomeView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // MARK: - 顶部导航栏（延伸到安全区域顶部）
+                // MARK: - 顶部导航栏（忽略安全区域，紧贴顶部）
                 ZStack(alignment: .bottom) {
-                    // 白色背景延伸到顶部（覆盖Dynamic Island区域）
-                    Rectangle()
-                        .fill(.white)
+                    // 白色背景 - 延伸到安全区域顶部
+                    Color.white
                         .ignoresSafeArea(edges: .top)
-
-                    // 导航内容（在安全区域内）
+                    
+                    // 导航图标 - 左: 搜索, 中: ICERED logo, 右: 通知
                     HStack {
                         Button(action: { showSearch = true }) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 22, weight: .regular))
-                                .foregroundColor(DesignTokens.textPrimary)
-                                .frame(width: 44, height: 44)
+                            Image("search(black)")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 24.s, height: 24.s)
                                 .contentShape(Rectangle())
                         }
+                        
                         Spacer()
-                        Image("Icered-icon")
-                            .renderingMode(.template)
+                        
+                        // 中间 ICERED logo
+                        Image("ICERED-icon")
                             .resizable()
                             .scaledToFit()
-                            .frame(height: 20)
-                            .foregroundColor(.black)
+                            .frame(width: 102.w, height: 16.s)
+                        
                         Spacer()
+                        
                         Button(action: { showNotification = true }) {
-                            Image(systemName: "bell")
-                                .font(.system(size: 22, weight: .regular))
-                                .foregroundColor(DesignTokens.textPrimary)
-                                .frame(width: 44, height: 44)
+                            Image("bell")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 24.s, height: 24.s)
                                 .contentShape(Rectangle())
                         }
                     }
-                    .frame(width: 343)
-                    .padding(.bottom, 10)
+                    .frame(width: 343.w, height: 24.s)
+                    .padding(.bottom, 12.h)
                 }
-                .frame(height: 50)
+                .frame(maxWidth: .infinity)
+                .frame(height: 50.h)
+                
+                // MARK: - 顶部分隔线（距离顶部 98pt）
+                Rectangle()
+                    .fill(Color(red: 0.75, green: 0.75, blue: 0.75))
+                    .frame(width: 375.w, height: 0.5)
+                    .frame(maxWidth: .infinity)
 
                 // MARK: - Channel 栏
                 if showChannelBar {
@@ -319,12 +328,13 @@ struct HomeView: View {
 
                 // MARK: - 内容区域（固定背景 + 滚动内容）
                 ZStack(alignment: .top) {
-                    // 固定背景图片 - disable hit testing to allow touches to pass through
+                    // 固定背景图片 - 填满屏幕宽度，从顶部对齐
                     Image("promo-banner-bg")
                         .resizable()
                         .scaledToFill()
-                        .frame(height: 220)
-                        .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity, alignment: .top)
+                        .frame(height: 400.h, alignment: .top)
+                        .offset(y: -100.h)  // 调整垂直位置：正数向下，负数向上
                         .clipped()
                         .allowsHitTesting(false)
 
@@ -337,30 +347,30 @@ struct HomeView: View {
                                     .preference(key: ScrollOffsetPreferenceKey.self, value: geometry.frame(in: .named("scroll")).minY)
                             }
                             .frame(height: 0)
-                            // MARK: - Promo Banner 内容 (Icon + 文字，随滚动移动)
-                            VStack(spacing: 8) {
+                            // MARK: - Promo Banner 内容 (Icon + 文字，距离 Channel 栏 45pt)
+                            VStack(spacing: 21.h) {
                                 Image("home-icon")
                                     .resizable()
                                     .scaledToFit()
-                                    .frame(width: 50, height: 40)
-
-                                Text("This is ICERED.")
-                                    .font(.custom("SF Pro Display", size: 24))
-                                    .tracking(0.24)
+                                    .frame(width: 54.s, height: 27.s)
+                                
+                                Text("This is Icered.")
+                                    .font(.custom("SF Pro Display", size: 24.f))
+                                    .tracking(0.72)
+                                    .lineSpacing(20)
                                     .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
+                                    .fixedSize(horizontal: true, vertical: false)
                             }
-                            .frame(height: 180)
+                            .padding(.top, 45.h)
                             .frame(maxWidth: .infinity)
+                            
+                            // 距离 Post 卡片 68pt 的间距
+                            Spacer()
+                                .frame(height: 68.h)
 
                             // Feed 内容区域（白色背景，覆盖背景图）
                             // 使用 LazyVStack 优化长列表性能 - 只渲染可见区域
-                            LazyVStack(spacing: DesignTokens.spacing20) {
-                                // MARK: - Loading State
-                                if feedViewModel.isLoading && feedViewModel.posts.isEmpty {
-                                    ProgressView("Loading feed...")
-                                        .padding()
-                                }
-
+                            LazyVStack(spacing: 0) {
                                 // MARK: - Error State
                                 if let error = feedViewModel.error, feedViewModel.posts.isEmpty {
                                     FeedErrorView(
@@ -443,7 +453,6 @@ struct HomeView: View {
 
                             }
                             .padding(.vertical, DesignTokens.spacing16)
-                            .padding(.horizontal)
                             .background(DesignTokens.backgroundColor)
                         }
                     }
@@ -489,69 +498,46 @@ struct HomeView: View {
 
     // MARK: - Channel Bar
     private var channelBar: some View {
-        // Scrollable tabs with background and gradient overlay
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 24) {
-                ForEach(allTabs) { tab in
-                    Button(action: {
-                        selectTab(tab)
-                    }) {
-                        Text(tab.displayName)
-                            .font(.custom("SF Pro Display", size: 14))
-                            .foregroundColor(selectedTab == tab ? .black : Color(red: 0.53, green: 0.53, blue: 0.53))
-                            .fontWeight(selectedTab == tab ? .semibold : .regular)
-                    }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.trailing, 60) // Space for gradient + button
-        }
-        .frame(height: 36)
-        .background(.white)
-        // Gradient overlay on the right side (doesn't block scroll/tap)
-        .overlay(alignment: .trailing) {
-            HStack(spacing: 0) {
-                // Gradient fade
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color.white.opacity(0),
-                        Color.white.opacity(0.8),
-                        Color.white
-                    ]),
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .frame(width: 60)
-                .allowsHitTesting(false)
-
-                // Arrow button
-                Button(action: {
-                    // TODO: 展开更多 channels
-                }) {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                }
-                .frame(width: 30)
-                .background(.white)
-            }
-        }
-        // 只在底部添加阴影
-        .overlay(alignment: .bottom) {
+        // Channel 栏 - 响应式布局，保留 tab 切换功能
+        ZStack {
+            // 白色背景
             Rectangle()
-                .fill(
+                .foregroundColor(.clear)
+                .frame(maxWidth: .infinity)
+                .frame(height: 30.h)
+                .background(.white)
+                // 只在底部添加阴影
+                .overlay(alignment: .bottom) {
                     LinearGradient(
                         gradient: Gradient(colors: [
                             Color.black.opacity(0),
-                            Color.black.opacity(0.08)
+                            Color.black.opacity(0.10)
                         ]),
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                )
-                .frame(height: 4)
-                .offset(y: 4)
+                    .frame(height: 4)
+                    .offset(y: 4)
+                }
+            
+            // 可滚动的 Tab 列表
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 20.w) {
+                    ForEach(allTabs) { tab in
+                        Button(action: {
+                            selectTab(tab)
+                        }) {
+                            Text(tab.displayName)
+                                .font(.custom("SF Pro Display", size: 10.f))
+                                .foregroundColor(selectedTab == tab ? .black : Color(red: 0.53, green: 0.53, blue: 0.53))
+                        }
+                    }
+                }
+                .padding(.horizontal, 16.w)
+            }
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 30.h)
     }
 
     // MARK: - Tab Selection Handler
