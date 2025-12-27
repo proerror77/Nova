@@ -469,24 +469,25 @@ struct HomeView: View {
                         await feedViewModel.refresh()
                     }
                     .simultaneousGesture(
-                        DragGesture(minimumDistance: 1)
+                        DragGesture(minimumDistance: 10)
                             .onChanged { value in
                                 let currentY = value.translation.height
                                 let delta = currentY - lastDragValue
 
+                                // 始终更新 lastDragValue 以保持准确的 delta 计算
+                                lastDragValue = currentY
+
                                 // 向上滑动 (delta < 0) 隐藏 Channel 栏
                                 // 向下滑动 (delta > 0) 显示 Channel 栏
-                                // 使用极短动画让过渡更自然但不拖慢响应
-                                if delta < -2 && channelBarOffset == 0 {
-                                    withAnimation(.easeOut(duration: 0.1)) {
+                                // 使用较大阈值 (15pt) 避免与 ScrollView 滚动冲突
+                                if delta < -15 && channelBarOffset == 0 {
+                                    withAnimation(.easeOut(duration: 0.15)) {
                                         channelBarOffset = -30.h  // 隐藏
                                     }
-                                    lastDragValue = currentY
-                                } else if delta > 2 && channelBarOffset < 0 {
-                                    withAnimation(.easeOut(duration: 0.1)) {
+                                } else if delta > 15 && channelBarOffset < 0 {
+                                    withAnimation(.easeOut(duration: 0.15)) {
                                         channelBarOffset = 0  // 显示
                                     }
-                                    lastDragValue = currentY
                                 }
                             }
                             .onEnded { _ in
