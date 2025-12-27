@@ -55,7 +55,7 @@ struct PromoBannerView: View {
 
                     // 标语文字
                     Text("This is ICERED.")
-                        .font(.custom("SF Pro Display", size: 24))
+                        .font(.system(size: 24))
                         .tracking(0.24)
                         .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                 }

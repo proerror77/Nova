@@ -497,7 +497,7 @@ struct PostDetailView: View {
                             .font(.system(size: 18))
                             .foregroundColor(isPostLiked ? .red : Color(red: 0.27, green: 0.27, blue: 0.27))
                         Text("\(postLikeCount)")
-                            .font(Font.custom("Helvetica Neue", size: 14))
+                            .font(.system(size: 14))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                     }
@@ -512,7 +512,7 @@ struct PostDetailView: View {
                             .font(.system(size: 18))
                             .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                         Text("\(displayCommentCount)")
-                            .font(Font.custom("Helvetica Neue", size: 14))
+                            .font(.system(size: 14))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                     }
@@ -528,7 +528,7 @@ struct PostDetailView: View {
                             .font(.system(size: 18))
                             .foregroundColor(isPostSaved ? .yellow : Color(red: 0.27, green: 0.27, blue: 0.27))
                         Text("\(postSaveCount)")
-                            .font(Font.custom("Helvetica Neue", size: 14))
+                            .font(.system(size: 14))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                     }
@@ -708,7 +708,7 @@ struct SocialCommentItemView: View {
                                         .scaledToFit()
                                         .frame(width: 12, height: 12)
                                     Text("\(likeCount)")
-                                        .font(Font.custom("Helvetica Neue", size: 12))
+                                        .font(.system(size: 12))
                                         .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                                 }
                             }
@@ -724,7 +724,7 @@ struct SocialCommentItemView: View {
                                         .scaledToFit()
                                         .frame(width: 12, height: 12)
                                     Text("\(saveCount)")
-                                        .font(Font.custom("Helvetica Neue", size: 12))
+                                        .font(.system(size: 12))
                                         .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                                 }
                             }
