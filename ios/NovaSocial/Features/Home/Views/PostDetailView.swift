@@ -493,10 +493,9 @@ struct PostDetailView: View {
                     postLikeCount += isPostLiked ? 1 : -1
                 }) {
                     HStack(spacing: 6) {
-                        Image(isPostLiked ? "Like-on" : "Like-off")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
+                        Image(systemName: isPostLiked ? "heart.fill" : "heart")
+                            .font(.system(size: 18))
+                            .foregroundColor(isPostLiked ? .red : Color(red: 0.27, green: 0.27, blue: 0.27))
                         Text("\(postLikeCount)")
                             .font(Font.custom("Helvetica Neue", size: 14))
                             .lineSpacing(20)
@@ -509,10 +508,9 @@ struct PostDetailView: View {
                     isCommentInputFocused = true
                 }) {
                     HStack(spacing: 6) {
-                        Image("card-comment-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
+                        Image(systemName: "bubble.left")
+                            .font(.system(size: 18))
+                            .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                         Text("\(displayCommentCount)")
                             .font(Font.custom("Helvetica Neue", size: 14))
                             .lineSpacing(20)
@@ -526,10 +524,9 @@ struct PostDetailView: View {
                     postSaveCount += isPostSaved ? 1 : -1
                 }) {
                     HStack(spacing: 6) {
-                        Image(isPostSaved ? "Save-on" : "Save-off")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
+                        Image(systemName: isPostSaved ? "bookmark.fill" : "bookmark")
+                            .font(.system(size: 18))
+                            .foregroundColor(isPostSaved ? .yellow : Color(red: 0.27, green: 0.27, blue: 0.27))
                         Text("\(postSaveCount)")
                             .font(Font.custom("Helvetica Neue", size: 14))
                             .lineSpacing(20)
