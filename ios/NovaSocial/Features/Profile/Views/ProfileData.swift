@@ -172,8 +172,17 @@ class ProfileData {
                 savedPostsOffset = 0
                 let response = try await contentService.getUserSavedPosts(userId: userId, limit: pageSize, offset: 0)
                 logger.info("SAVED response: \(response.posts.count) posts, totalCount=\(response.totalCount)")
+                #if DEBUG
+                print("[ProfileData] SAVED posts received: \(response.posts.count)")
+                for (i, post) in response.posts.prefix(3).enumerated() {
+                    print("[ProfileData]   [\(i)] id=\(post.id), content=\(post.content.prefix(30))...")
+                }
+                #endif
                 savedPosts = await enrichPostsWithAuthorInfo(response.posts)
                 totalSavedPosts = response.totalCount
+                #if DEBUG
+                print("[ProfileData] savedPosts assigned: \(savedPosts.count)")
+                #endif
 
             case .liked:
                 // Use SQL JOIN optimized endpoint (single query)
@@ -181,8 +190,17 @@ class ProfileData {
                 likedPostsOffset = 0
                 let response = try await contentService.getUserLikedPosts(userId: userId, limit: pageSize, offset: 0)
                 logger.info("LIKED response: \(response.posts.count) posts, totalCount=\(response.totalCount)")
+                #if DEBUG
+                print("[ProfileData] LIKED posts received: \(response.posts.count)")
+                for (i, post) in response.posts.prefix(3).enumerated() {
+                    print("[ProfileData]   [\(i)] id=\(post.id), content=\(post.content.prefix(30))...")
+                }
+                #endif
                 likedPosts = await enrichPostsWithAuthorInfo(response.posts)
                 totalLikedPosts = response.totalCount
+                #if DEBUG
+                print("[ProfileData] likedPosts assigned: \(likedPosts.count)")
+                #endif
             }
 
             // Update cache timestamp

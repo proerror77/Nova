@@ -330,16 +330,12 @@ class ContentService {
 }
 
 /// Response type for SQL JOIN optimized user posts endpoints
+/// Note: CodingKeys removed - APIClient uses .convertFromSnakeCase which automatically
+/// converts JSON "total_count" to Swift "totalCount", "has_more" to "hasMore"
 struct UserPostsResponse: Codable {
     let posts: [Post]
     let totalCount: Int
     let hasMore: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case posts
-        case totalCount = "total_count"
-        case hasMore = "has_more"
-    }
 }
 
 // MARK: - Supporting Types
