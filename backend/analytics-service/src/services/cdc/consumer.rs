@@ -226,28 +226,30 @@ pub struct FollowsCdcRow {
 }
 
 /// Row struct for comments_cdc table - used for type-safe ClickHouse inserts
+/// Uses String for UUIDs and u32 for DateTime to avoid clickhouse-rs serialization issues
 #[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct CommentsCdcRow {
-    pub id: Uuid,
-    pub post_id: Uuid,
-    pub user_id: Uuid,
+    pub id: String,
+    pub post_id: String,
+    pub user_id: String,
     pub content: String,
-    pub parent_comment_id: Option<Uuid>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub soft_delete: Option<DateTime<Utc>>,
+    pub parent_comment_id: String,  // Empty string for None
+    pub created_at: u32,
+    pub updated_at: u32,
+    pub soft_delete: u32,  // 0 for None
     pub cdc_operation: i8,
-    pub cdc_timestamp: DateTime<Utc>,
+    pub cdc_timestamp: u32,
 }
 
 /// Row struct for likes_cdc table - used for type-safe ClickHouse inserts
+/// Uses String for UUIDs and u32 for DateTime to avoid clickhouse-rs serialization issues
 #[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct LikesCdcRow {
-    pub post_id: Uuid,
-    pub user_id: Uuid,
-    pub created_at: DateTime<Utc>,
+    pub post_id: String,
+    pub user_id: String,
+    pub created_at: u32,
     pub cdc_operation: i8,
-    pub cdc_timestamp: DateTime<Utc>,
+    pub cdc_timestamp: u32,
     pub like_count: i8,
 }
 
@@ -701,19 +703,20 @@ impl CdcConsumer {
         let id_raw: String = Self::extract_field(data, "id")?;
         let post_raw: String = Self::extract_field(data, "post_id")?;
         let user_raw: String = Self::extract_field(data, "user_id")?;
-        let comment_id = Uuid::parse_str(&id_raw)
+        // Validate UUIDs but keep as strings for ClickHouse compatibility
+        let _ = Uuid::parse_str(&id_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid comment UUID: {}", e)))?;
-        let post_id = Uuid::parse_str(&post_raw)
+        let _ = Uuid::parse_str(&post_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid post UUID: {}", e)))?;
-        let user_id = Uuid::parse_str(&user_raw)
+        let _ = Uuid::parse_str(&user_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid user UUID: {}", e)))?;
         let content: String = Self::extract_field(data, "content")?;
         let parent_comment_id_raw: Option<String> = Self::extract_optional_field(data, "parent_comment_id");
-        let parent_comment_id = parent_comment_id_raw
-            .as_deref()
-            .map(Uuid::parse_str)
-            .transpose()
-            .map_err(|e| AnalyticsError::Validation(format!("Invalid parent_comment_id UUID: {}", e)))?;
+        // Validate parent_comment_id if present
+        if let Some(ref parent_id) = parent_comment_id_raw {
+            let _ = Uuid::parse_str(parent_id)
+                .map_err(|e| AnalyticsError::Validation(format!("Invalid parent_comment_id UUID: {}", e)))?;
+        }
         let created_at_raw: String = Self::extract_field(data, "created_at")?;
         let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
         let updated_at_raw: String = Self::extract_field(data, "updated_at")?;
@@ -732,17 +735,18 @@ impl CdcConsumer {
         let cdc_timestamp = msg.timestamp();
 
         // Use type-safe parameterized insert to prevent SQL injection
+        // Convert DateTime to unix timestamp (u32) for ClickHouse DateTime compatibility
         let row = CommentsCdcRow {
-            id: comment_id,
-            post_id,
-            user_id,
+            id: id_raw.clone(),
+            post_id: post_raw,
+            user_id: user_raw,
             content,
-            parent_comment_id,
-            created_at,
-            updated_at,
-            soft_delete,
+            parent_comment_id: parent_comment_id_raw.unwrap_or_default(),
+            created_at: created_at.timestamp() as u32,
+            updated_at: updated_at.timestamp() as u32,
+            soft_delete: soft_delete.map(|dt| dt.timestamp() as u32).unwrap_or(0),
             cdc_operation,
-            cdc_timestamp,
+            cdc_timestamp: cdc_timestamp.timestamp() as u32,
         };
 
         let mut insert = self.ch_client.insert("comments_cdc").map_err(|e| {
@@ -760,7 +764,7 @@ impl CdcConsumer {
             AnalyticsError::ClickHouse(e.to_string())
         })?;
 
-        debug!("Inserted comments CDC: id={}, op={:?}", comment_id, op);
+        debug!("Inserted comments CDC: id={}, op={:?}", id_raw, op);
         Ok(())
     }
 
@@ -775,9 +779,10 @@ impl CdcConsumer {
 
         let user_raw: String = Self::extract_field(data, "user_id")?;
         let post_raw: String = Self::extract_field(data, "post_id")?;
-        let user_id = Uuid::parse_str(&user_raw)
+        // Validate UUIDs but store as strings for clickhouse-rs compatibility
+        Uuid::parse_str(&user_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid user UUID: {}", e)))?;
-        let post_id = Uuid::parse_str(&post_raw)
+        Uuid::parse_str(&post_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid post UUID: {}", e)))?;
         let created_at_raw: String = Self::extract_field(data, "created_at")?;
         let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
@@ -790,12 +795,13 @@ impl CdcConsumer {
         let cdc_timestamp = msg.timestamp();
 
         // Use type-safe parameterized insert to prevent SQL injection
+        // Uses String for UUIDs and u32 for DateTime to avoid clickhouse-rs serialization issues
         let row = LikesCdcRow {
-            post_id,
-            user_id,
-            created_at,
+            post_id: post_raw.clone(),
+            user_id: user_raw.clone(),
+            created_at: created_at.timestamp() as u32,
             cdc_operation,
-            cdc_timestamp,
+            cdc_timestamp: cdc_timestamp.timestamp() as u32,
             like_count,
         };
 
@@ -816,7 +822,7 @@ impl CdcConsumer {
 
         debug!(
             "Inserted likes CDC: user={}, post={}, op={:?}",
-            user_id, post_id, op
+            user_raw, post_raw, op
         );
         Ok(())
     }
