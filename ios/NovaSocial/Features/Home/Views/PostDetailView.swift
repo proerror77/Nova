@@ -144,8 +144,12 @@ struct PostDetailView: View {
     var onDismiss: (() -> Void)?
     var onAvatarTapped: ((String) -> Void)?  // 点击头像回调，传入 authorId
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var authManager: AuthenticationManager
     @State private var currentImageIndex = 0
     @State private var isFollowing = false
+    @State private var isFollowLoading = false
+
+    private let graphService = GraphService()
 
     // MARK: - Comment State
     @State private var commentViewModel = CommentViewModel()
@@ -208,6 +212,7 @@ struct PostDetailView: View {
         .navigationBarBackButtonHidden(true)
         .task {
             await commentViewModel.loadComments(postId: post.id)
+            await checkFollowStatus()
         }
         .onAppear {
             // 初始化点赞和收藏数量
@@ -261,22 +266,26 @@ struct PostDetailView: View {
 
                 // Follow Button
                 Button(action: {
-                    var transaction = Transaction()
-                    transaction.disablesAnimations = true
-                    withTransaction(transaction) {
-                        isFollowing.toggle()
+                    Task {
+                        await toggleFollow()
                     }
                 }) {
-                    Text(isFollowing ? "Following" : "Follow")
-                        .font(.system(size: 12))
-                        .foregroundColor(isFollowing ? DesignTokens.textSecondary : DesignTokens.accentColor)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 100)
-                                .stroke(isFollowing ? DesignTokens.textSecondary : DesignTokens.accentColor, lineWidth: 0.5)
-                        )
+                    if isFollowLoading {
+                        ProgressView()
+                            .frame(width: 60, height: 24)
+                    } else {
+                        Text(isFollowing ? "Following" : "Follow")
+                            .font(.system(size: 12))
+                            .foregroundColor(isFollowing ? DesignTokens.textSecondary : DesignTokens.accentColor)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 100)
+                                    .stroke(isFollowing ? DesignTokens.textSecondary : DesignTokens.accentColor, lineWidth: 0.5)
+                            )
+                    }
                 }
+                .disabled(isFollowLoading)
 
                 // Share Button
                 Button(action: {}) {
@@ -589,7 +598,42 @@ struct PostDetailView: View {
         }
     }
 
-    
+    // MARK: - Follow Actions
+
+    private func toggleFollow() async {
+        guard let currentUserId = authManager.currentUser?.id else { return }
+        guard !isFollowLoading else { return }
+
+        isFollowLoading = true
+
+        do {
+            if isFollowing {
+                try await graphService.unfollowUser(followerId: currentUserId, followeeId: post.authorId)
+            } else {
+                try await graphService.followUser(followerId: currentUserId, followeeId: post.authorId)
+            }
+            isFollowing.toggle()
+        } catch {
+            #if DEBUG
+            print("[PostDetailView] Failed to toggle follow: \(error)")
+            #endif
+        }
+
+        isFollowLoading = false
+    }
+
+    private func checkFollowStatus() async {
+        guard let currentUserId = authManager.currentUser?.id else { return }
+
+        do {
+            isFollowing = try await graphService.isFollowing(followerId: currentUserId, followeeId: post.authorId)
+        } catch {
+            #if DEBUG
+            print("[PostDetailView] Failed to check follow status: \(error)")
+            #endif
+        }
+    }
+
     /// Check if URL points to a video file
     private func isVideoUrl(_ url: String) -> Bool {
         let lowercased = url.lowercased()
