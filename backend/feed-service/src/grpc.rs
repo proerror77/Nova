@@ -654,8 +654,14 @@ impl RecommendationServiceImpl {
         let followed_user_ids = following_response.user_ids;
 
         if followed_user_ids.is_empty() {
-            info!("User {} follows no one, returning empty personalized feed", user_id);
-            return Ok(vec![]);
+            info!(
+                "User {} follows no one, falling back to trending posts",
+                user_id
+            );
+            // Fallback to global/trending posts instead of returning empty
+            return self
+                .fetch_posts_from_content_service(limit, user_id, _channel_id)
+                .await;
         }
 
         info!(

@@ -126,7 +126,7 @@ struct ProfileFollowersView: View {
             }
 
             #if DEBUG
-            print("[ProfileFollowers] Loaded \(followers.count) followers (enriched: \(result.users.count))")
+            print("[ProfileFollowers] Loaded \(followers.count) followers (enriched: \(result.users?.count ?? 0))")
             #endif
 
         } catch {
@@ -180,7 +180,7 @@ struct ProfileFollowersView: View {
             }
 
             #if DEBUG
-            print("[ProfileFollowers] Loaded \(following.count) following (enriched: \(result.users.count))")
+            print("[ProfileFollowers] Loaded \(following.count) following (enriched: \(result.users?.count ?? 0))")
             #endif
 
         } catch {

@@ -47,6 +47,11 @@ final class FeedViewModel {
     var isRefreshing = false
     var lastRefreshedAt: Date?
 
+    // MARK: - Suggested Creators (for Following tab fallback)
+    var suggestedCreators: [RecommendedCreator] = []
+    var isLoadingSuggestedCreators = false
+    var showSuggestedCreators = false  // True when Following tab has no followed users' posts
+
     // MARK: - Cached Feed Items
 
     private var _cachedFeedItems: [FeedItemType]?
@@ -323,6 +328,44 @@ final class FeedViewModel {
 
     func selectChannel(_ channelId: String?) async {
         await channelManager.selectChannel(channelId)
+    }
+
+    // MARK: - Suggested Creators
+
+    /// Load suggested creators for the Following tab
+    /// Called when user is on Following tab to show recommendations
+    func loadSuggestedCreators() async {
+        guard !isLoadingSuggestedCreators else { return }
+
+        isLoadingSuggestedCreators = true
+
+        do {
+            suggestedCreators = try await feedService.getRecommendedCreators(limit: 10)
+            FeedLogger.debug("Loaded \(suggestedCreators.count) suggested creators")
+        } catch {
+            FeedLogger.error("Failed to load suggested creators", error: error)
+            // Don't show error to user, just hide the section
+            suggestedCreators = []
+        }
+
+        isLoadingSuggestedCreators = false
+    }
+
+    /// Follow a suggested creator
+    func followSuggestedCreator(userId: String) async {
+        guard let currentUserId = currentUserId else { return }
+
+        do {
+            let graphService = GraphService()
+            try await graphService.followUser(followerId: currentUserId, followeeId: userId)
+            FeedLogger.debug("Followed suggested creator: \(userId)")
+
+            // Invalidate feed cache after following someone
+            try? await feedService.invalidateFeedCache(userId: currentUserId, eventType: "new_follow")
+        } catch {
+            FeedLogger.error("Failed to follow creator", error: error)
+            toastError = "Failed to follow"
+        }
     }
 
     // MARK: - Social Actions (Delegated)
