@@ -427,6 +427,7 @@ spec:
             "ranking-updates:3:1"
             "trust-safety-events:3:1"
             "realtime-chat:3:1"
+            "identity-events:3:1"
           )
 
           echo "Creating topics on $BOOTSTRAP_SERVER..."

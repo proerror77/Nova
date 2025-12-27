@@ -32,6 +32,6 @@ data:
   MATRIX_DEVICE_NAME: "nova-realtime-chat-service"
   # Kafka for identity event sync
   KAFKA_ENABLED: "true"
-  KAFKA_BROKERS: "kafka-broker-0.kafka-headless.nova-staging:9092"
+  KAFKA_BROKERS: "kafka.nova-staging.svc.cluster.local:9092"
   KAFKA_CONSUMER_GROUP_ID: "realtime-chat-service"
   KAFKA_IDENTITY_EVENTS_TOPIC: "identity-events"
