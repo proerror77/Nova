@@ -203,12 +203,21 @@ message GetFollowersRequest {
   string user_id = 1;
   int32 limit = 2;   // Default 50, max 1000
   int32 offset = 3;
+  string viewer_id = 4;  // Optional: current user viewing the list (for relationship status)
+}
+
+// User info with relationship status
+message FollowUserInfo {
+  string user_id = 1;
+  bool you_are_following = 2;  // Whether the viewer follows this user
+  bool follows_you = 3;        // Whether this user follows the viewer
 }
 
 message GetFollowersResponse {
   repeated string user_ids = 1;
   int32 total_count = 2;
   bool has_more = 3;
+  repeated FollowUserInfo users = 4;  // Enriched user list with relationship status
 }
 
 // Query following list
@@ -216,12 +225,14 @@ message GetFollowingRequest {
   string user_id = 1;
   int32 limit = 2;
   int32 offset = 3;
+  string viewer_id = 4;  // Optional: current user viewing the list (for relationship status)
 }
 
 message GetFollowingResponse {
   repeated string user_ids = 1;
   int32 total_count = 2;
   bool has_more = 3;
+  repeated FollowUserInfo users = 4;  // Enriched user list with relationship status
 }
 
 // Check if following

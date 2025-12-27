@@ -90,8 +90,10 @@ struct ProfileView: View {
 
 
     // Computed property for user display
+    // 優先使用 profileData.userProfile（從 API 載入的最新數據）
+    // 回退到 authManager.currentUser（登入時的緩存數據）
     private var displayUser: UserProfile? {
-        authManager.currentUser ?? profileData.userProfile
+        profileData.userProfile ?? authManager.currentUser
     }
     
     // Computed property for filtered user posts (搜索过滤 - Posts tab)
@@ -291,9 +293,18 @@ struct ProfileView: View {
         .task {
             // Use current user from AuthenticationManager
             if let userId = authManager.currentUser?.id {
+                #if DEBUG
+                print("[ProfileView] Loading profile for userId: \(userId)")
+                #endif
                 await profileData.loadUserProfile(userId: userId)
-                // 同时加载用户帖子到 UserPostsManager
                 await userPostsManager.loadUserPosts(userId: userId)
+                #if DEBUG
+                print("[ProfileView] Profile loaded: posts=\(profileData.posts.count), userProfile=\(profileData.userProfile?.username ?? "nil")")
+                #endif
+            } else {
+                #if DEBUG
+                print("[ProfileView] No userId found in authManager.currentUser")
+                #endif
             }
         }
         .sheet(isPresented: Binding(
@@ -472,29 +483,13 @@ struct ProfileView: View {
                 // 头像
                 Button(action: { activeSheet = .avatarPicker }) {
                     ZStack {
-                        // 头像图片
-                        if let avatarImage = avatarManager.pendingAvatar ?? localAvatarImage {
-                            Image(uiImage: avatarImage)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 100.s, height: 100.s)
-                                .clipShape(Circle())
-                        } else if let avatarUrl = displayUser?.avatarUrl, let url = URL(string: avatarUrl) {
-                            AsyncImage(url: url) { image in
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                            } placeholder: {
-                                Circle()
-                                    .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                            }
-                            .frame(width: 100.s, height: 100.s)
-                            .clipShape(Circle())
-                        } else {
-                            Circle()
-                                .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                .frame(width: 100.s, height: 100.s)
-                        }
+                        // 头像图片 - 使用 AvatarView 组件统一处理
+                        AvatarView(
+                            image: avatarManager.pendingAvatar ?? localAvatarImage,
+                            url: displayUser?.avatarUrl,
+                            size: 100.s,
+                            name: displayUser?.displayName ?? displayUser?.username
+                        )
                     }
                     .frame(width: 108.s, height: 108.s)
                     .overlay(
@@ -690,29 +685,13 @@ struct ProfileView: View {
                         // 头像（距离导航栏 16px）
                         Button(action: { activeSheet = .avatarPicker }) {
                             ZStack {
-                                // 头像图片
-                                if let avatarImage = avatarManager.pendingAvatar ?? localAvatarImage {
-                                    Image(uiImage: avatarImage)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 100.s, height: 100.s)
-                                        .clipShape(Circle())
-                                } else if let avatarUrl = displayUser?.avatarUrl, let url = URL(string: avatarUrl) {
-                                    AsyncImage(url: url) { image in
-                                        image
-                                            .resizable()
-                                            .scaledToFill()
-                                    } placeholder: {
-                                        Circle()
-                                            .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                    }
-                                    .frame(width: 100.s, height: 100.s)
-                                    .clipShape(Circle())
-                                } else {
-                                    Circle()
-                                        .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                        .frame(width: 100.s, height: 100.s)
-                                }
+                                // 头像图片 - 使用 AvatarView 组件统一处理
+                                AvatarView(
+                                    image: avatarManager.pendingAvatar ?? localAvatarImage,
+                                    url: displayUser?.avatarUrl,
+                                    size: 100.s,
+                                    name: displayUser?.displayName ?? displayUser?.username
+                                )
                             }
                             .frame(width: 108.s, height: 108.s)
                             .overlay(
@@ -937,27 +916,54 @@ struct ProfileView: View {
                 .fill(DesignTokens.borderColor)
                 .frame(height: 0.5)
 
-            // MARK: - 帖子网格 (纯UI展示)
-            ScrollView {
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 5.s), GridItem(.flexible(), spacing: 5.s)], spacing: 5.s) {
-                    ForEach(0..<6, id: \.self) { _ in
-                        PostCard(
-                            imageUrl: nil,
-                            imageName: "PostCardImage",
-                            title: "kyleegigstead Cyborg dreams...",
-                            authorName: "Bruce Li",
-                            authorAvatarUrl: nil,
-                            likeCount: 2234,
-                            onTap: nil
-                        )
-                    }
+            // MARK: - 帖子网格
+            // Posts: 用户发布的帖子 | Saved: 收藏的帖子 | Liked: 点赞的帖子
+            if profileData.isLoading && filteredProfilePosts.isEmpty {
+                VStack {
+                    Spacer()
+                    ProgressView()
+                        .scaleEffect(1.2)
+                    Spacer()
                 }
-                .padding(.horizontal, 5.w)
-                .padding(.top, 5.h)
-                .padding(.bottom, 100.h)  // 底部留出足够空间给导航栏
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if filteredProfilePosts.isEmpty {
+                if !searchText.isEmpty {
+                    searchEmptyStateView
+                } else {
+                    emptyStateView
+                }
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 5.s), GridItem(.flexible(), spacing: 5.s)], spacing: 5.s) {
+                        ForEach(filteredProfilePosts) { post in
+                            // Posts tab: 使用当前用户信息（因为是自己的帖子）
+                            // Saved/Liked tabs: 使用帖子的作者信息（带后备）
+                            let isOwnPost = profileData.selectedTab == .posts
+                            let authorName = isOwnPost
+                                ? (displayUser?.displayName ?? displayUser?.username ?? "Me")
+                                : post.displayAuthorName  // 使用 Post 的 displayAuthorName 属性
+                            let authorAvatar = isOwnPost
+                                ? displayUser?.avatarUrl
+                                : post.authorAvatarUrl
+
+                            PostCard(
+                                imageUrl: post.mediaUrls?.first,
+                                imageName: "PostCardImage",
+                                title: "\(authorName) \(post.content)",
+                                authorName: authorName,
+                                authorAvatarUrl: authorAvatar,
+                                likeCount: post.likeCount ?? 0,
+                                onTap: nil
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 5.w)
+                    .padding(.top, 5.h)
+                    .padding(.bottom, 100.h)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()  // 裁剪超出内容
         }
         .background(Color(red: 0.96, green: 0.96, blue: 0.96))  // 整个内容区域灰色背景
     }

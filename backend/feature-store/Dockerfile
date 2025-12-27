@@ -13,11 +13,8 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy backend workspace files (Cargo.toml, Cargo.lock, all services, libs, proto)
-COPY backend ./backend
-
-# Change to backend directory for workspace build
-WORKDIR /app/backend
+# Copy backend workspace files (build context is ./backend in GitHub Actions)
+COPY . ./
 
 # Build feature-store
 RUN cargo build --release -p feature-store --bin feature-store
@@ -37,7 +34,7 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 WORKDIR /app
 
 # Copy binary
-COPY --from=builder /app/backend/target/release/feature-store /app/feature-store
+COPY --from=builder /app/target/release/feature-store /app/feature-store
 
 # Adjust ownership
 RUN chown -R appuser:appuser /app

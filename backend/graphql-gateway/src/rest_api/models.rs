@@ -23,6 +23,12 @@ pub struct RegisterRequest {
 pub struct LoginRequest {
     pub username: String,
     pub password: String,
+    // Device information for session tracking
+    pub device_id: Option<String>,
+    pub device_name: Option<String>,
+    pub device_type: Option<String>,
+    pub os_version: Option<String>,
+    pub user_agent: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

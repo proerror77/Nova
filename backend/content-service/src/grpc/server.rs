@@ -11,12 +11,13 @@ use grpc_clients::nova::content_service::v2::content_service_server::{
 use grpc_clients::nova::content_service::v2::{
     Channel, ContentStatus, CreatePostRequest, CreatePostResponse, DeletePostRequest,
     DeletePostResponse, GetChannelRequest, GetChannelResponse, GetPostRequest, GetPostResponse,
-    GetPostsByIdsRequest, GetPostsByIdsResponse, GetUserPostsRequest, GetUserPostsResponse,
-    ListChannelsRequest, ListChannelsResponse, ListPostsByChannelRequest,
-    ListPostsByChannelResponse, ListPostsByUsersRequest, ListPostsByUsersResponse,
-    ListRecentPostsRequest, ListRecentPostsResponse, ListTrendingPostsRequest,
-    ListTrendingPostsResponse, Post, PostWithTimestamp, UpdatePostRequest, UpdatePostResponse,
-    Visibility,
+    GetPostsByIdsRequest, GetPostsByIdsResponse, GetUserLikedPostsRequest,
+    GetUserLikedPostsResponse, GetUserPostsRequest, GetUserPostsResponse,
+    GetUserSavedPostsRequest, GetUserSavedPostsResponse, ListChannelsRequest,
+    ListChannelsResponse, ListPostsByChannelRequest, ListPostsByChannelResponse,
+    ListPostsByUsersRequest, ListPostsByUsersResponse, ListRecentPostsRequest,
+    ListRecentPostsResponse, ListTrendingPostsRequest, ListTrendingPostsResponse, Post,
+    PostWithTimestamp, UpdatePostRequest, UpdatePostResponse, Visibility,
 };
 use grpc_metrics::layer::RequestGuard;
 use sqlx::{PgPool, QueryBuilder, Row};
@@ -848,6 +849,132 @@ impl ContentService for ContentServiceImpl {
                 found: false,
             })),
         }
+    }
+
+    /// Get posts liked by a user using SQL JOIN for single-query efficiency
+    async fn get_user_liked_posts(
+        &self,
+        request: Request<GetUserLikedPostsRequest>,
+    ) -> Result<Response<GetUserLikedPostsResponse>, Status> {
+        let guard = RequestGuard::new("content-service", "GetUserLikedPosts");
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("invalid user_id"))?;
+
+        let limit = req.limit.clamp(1, 100) as i64;
+        let offset = req.offset.max(0) as i64;
+
+        // SQL JOIN: posts INNER JOIN likes - single query for efficiency
+        let posts = sqlx::query_as::<_, DbPost>(
+            r#"
+            SELECT p.id, p.user_id, p.content, p.caption, p.media_key, p.media_type,
+                   p.media_urls, p.status, p.created_at, p.updated_at, p.deleted_at,
+                   p.soft_delete::text AS soft_delete
+            FROM posts p
+            INNER JOIN likes l ON p.id = l.post_id
+            WHERE l.user_id = $1 AND p.deleted_at IS NULL
+            ORDER BY l.created_at DESC
+            LIMIT $2 OFFSET $3
+            "#,
+        )
+        .bind(user_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.db_pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("get_user_liked_posts db error: {}", e);
+            Status::internal("failed to fetch liked posts")
+        })?;
+
+        // Get total count for pagination
+        let total = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM likes l INNER JOIN posts p ON p.id = l.post_id WHERE l.user_id = $1 AND p.deleted_at IS NULL",
+        )
+        .bind(user_id)
+        .fetch_one(&self.db_pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("get_user_liked_posts count error: {}", e);
+            Status::internal("failed to count liked posts")
+        })?;
+
+        let has_more = (offset + limit) < total;
+
+        tracing::info!(
+            "get_user_liked_posts: user={}, returned {} posts, total={}, has_more={}",
+            user_id, posts.len(), total, has_more
+        );
+
+        guard.complete("0");
+        Ok(Response::new(GetUserLikedPostsResponse {
+            posts: posts.iter().map(convert_post_to_proto).collect(),
+            total_count: i32::try_from(total).unwrap_or(i32::MAX),
+            has_more,
+        }))
+    }
+
+    /// Get posts saved/bookmarked by a user using SQL JOIN for single-query efficiency
+    async fn get_user_saved_posts(
+        &self,
+        request: Request<GetUserSavedPostsRequest>,
+    ) -> Result<Response<GetUserSavedPostsResponse>, Status> {
+        let guard = RequestGuard::new("content-service", "GetUserSavedPosts");
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("invalid user_id"))?;
+
+        let limit = req.limit.clamp(1, 100) as i64;
+        let offset = req.offset.max(0) as i64;
+
+        // SQL JOIN: posts INNER JOIN bookmarks - single query for efficiency
+        let posts = sqlx::query_as::<_, DbPost>(
+            r#"
+            SELECT p.id, p.user_id, p.content, p.caption, p.media_key, p.media_type,
+                   p.media_urls, p.status, p.created_at, p.updated_at, p.deleted_at,
+                   p.soft_delete::text AS soft_delete
+            FROM posts p
+            INNER JOIN bookmarks b ON p.id = b.post_id
+            WHERE b.user_id = $1 AND p.deleted_at IS NULL
+            ORDER BY b.created_at DESC
+            LIMIT $2 OFFSET $3
+            "#,
+        )
+        .bind(user_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.db_pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("get_user_saved_posts db error: {}", e);
+            Status::internal("failed to fetch saved posts")
+        })?;
+
+        // Get total count for pagination
+        let total = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM bookmarks b INNER JOIN posts p ON p.id = b.post_id WHERE b.user_id = $1 AND p.deleted_at IS NULL",
+        )
+        .bind(user_id)
+        .fetch_one(&self.db_pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("get_user_saved_posts count error: {}", e);
+            Status::internal("failed to count saved posts")
+        })?;
+
+        let has_more = (offset + limit) < total;
+
+        tracing::info!(
+            "get_user_saved_posts: user={}, returned {} posts, total={}, has_more={}",
+            user_id, posts.len(), total, has_more
+        );
+
+        guard.complete("0");
+        Ok(Response::new(GetUserSavedPostsResponse {
+            posts: posts.iter().map(convert_post_to_proto).collect(),
+            total_count: i32::try_from(total).unwrap_or(i32::MAX),
+            has_more,
+        }))
     }
 }
 

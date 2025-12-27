@@ -1,0 +1,25 @@
+# Include .gitignore entries
+#!include:.gitignore
+
+# Large build directories
+target/
+**/target/
+node_modules/
+
+# IDE and local files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git files (not needed for build)
+.git/
+
+# Documentation
+docs/
+*.md
+
+# Test fixtures
+fixtures/
+testdata/

@@ -22,12 +22,22 @@ use crate::clients::proto::graph::{
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
 
+/// User info with relationship status
+#[derive(Debug, Serialize)]
+pub struct FollowUserInfo {
+    pub user_id: String,
+    pub you_are_following: bool,
+    pub follows_you: bool,
+}
+
 /// REST API response for user list
 #[derive(Debug, Serialize)]
 pub struct UserListResponse {
     pub user_ids: Vec<String>,
     pub total_count: i32,
     pub has_more: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub users: Vec<FollowUserInfo>,
 }
 
 #[derive(Debug, Serialize)]
@@ -65,22 +75,30 @@ pub async fn get_my_following(
         None => return Ok(HttpResponse::Unauthorized().finish()),
     };
 
-    get_following_impl(&user_id, &clients, &query).await
+    // When viewing own following list, use self as viewer for relationship status
+    get_following_impl(&user_id, Some(&user_id), &clients, &query).await
 }
 
 /// GET /api/v2/graph/following/{user_id}
 /// Returns users a specific user is following
 pub async fn get_user_following(
+    req: HttpRequest,
     path: web::Path<String>,
     clients: web::Data<ServiceClients>,
     query: web::Query<GraphQueryParams>,
 ) -> Result<HttpResponse> {
     let user_id = path.into_inner();
-    get_following_impl(&user_id, &clients, &query).await
+    // Use JWT user as viewer if authenticated
+    let viewer_id = req
+        .extensions()
+        .get::<AuthenticatedUser>()
+        .map(|auth| auth.0.to_string());
+    get_following_impl(&user_id, viewer_id.as_deref(), &clients, &query).await
 }
 
 async fn get_following_impl(
     user_id: &str,
+    viewer_id: Option<&str>,
     clients: &web::Data<ServiceClients>,
     query: &web::Query<GraphQueryParams>,
 ) -> Result<HttpResponse> {
@@ -89,6 +107,7 @@ async fn get_following_impl(
 
     info!(
         user_id = %user_id,
+        viewer_id = ?viewer_id,
         limit = %limit,
         offset = %offset,
         "GET /api/v2/graph/following"
@@ -100,6 +119,7 @@ async fn get_following_impl(
         user_id: user_id.to_string(),
         limit,
         offset,
+        viewer_id: viewer_id.unwrap_or_default().to_string(),
     });
 
     match graph_client.get_following(grpc_request).await {
@@ -109,13 +129,26 @@ async fn get_following_impl(
             info!(
                 user_id = %user_id,
                 total_count = grpc_response.total_count,
+                enriched = grpc_response.users.len(),
                 "Following list retrieved"
             );
+
+            // Convert gRPC users to REST response
+            let users: Vec<FollowUserInfo> = grpc_response
+                .users
+                .into_iter()
+                .map(|u| FollowUserInfo {
+                    user_id: u.user_id,
+                    you_are_following: u.you_are_following,
+                    follows_you: u.follows_you,
+                })
+                .collect();
 
             Ok(HttpResponse::Ok().json(UserListResponse {
                 user_ids: grpc_response.user_ids,
                 total_count: grpc_response.total_count,
                 has_more: grpc_response.has_more,
+                users,
             }))
         }
         Err(status) => {
@@ -147,22 +180,30 @@ pub async fn get_my_followers(
         None => return Ok(HttpResponse::Unauthorized().finish()),
     };
 
-    get_followers_impl(&user_id, &clients, &query).await
+    // When viewing own followers list, use self as viewer for relationship status
+    get_followers_impl(&user_id, Some(&user_id), &clients, &query).await
 }
 
 /// GET /api/v2/graph/followers/{user_id}
 /// Returns users following a specific user
 pub async fn get_user_followers(
+    req: HttpRequest,
     path: web::Path<String>,
     clients: web::Data<ServiceClients>,
     query: web::Query<GraphQueryParams>,
 ) -> Result<HttpResponse> {
     let user_id = path.into_inner();
-    get_followers_impl(&user_id, &clients, &query).await
+    // Use JWT user as viewer if authenticated
+    let viewer_id = req
+        .extensions()
+        .get::<AuthenticatedUser>()
+        .map(|auth| auth.0.to_string());
+    get_followers_impl(&user_id, viewer_id.as_deref(), &clients, &query).await
 }
 
 async fn get_followers_impl(
     user_id: &str,
+    viewer_id: Option<&str>,
     clients: &web::Data<ServiceClients>,
     query: &web::Query<GraphQueryParams>,
 ) -> Result<HttpResponse> {
@@ -171,6 +212,7 @@ async fn get_followers_impl(
 
     info!(
         user_id = %user_id,
+        viewer_id = ?viewer_id,
         limit = %limit,
         offset = %offset,
         "GET /api/v2/graph/followers"
@@ -182,6 +224,7 @@ async fn get_followers_impl(
         user_id: user_id.to_string(),
         limit,
         offset,
+        viewer_id: viewer_id.unwrap_or_default().to_string(),
     });
 
     match graph_client.get_followers(grpc_request).await {
@@ -191,13 +234,26 @@ async fn get_followers_impl(
             info!(
                 user_id = %user_id,
                 total_count = grpc_response.total_count,
+                enriched = grpc_response.users.len(),
                 "Followers list retrieved"
             );
+
+            // Convert gRPC users to REST response
+            let users: Vec<FollowUserInfo> = grpc_response
+                .users
+                .into_iter()
+                .map(|u| FollowUserInfo {
+                    user_id: u.user_id,
+                    you_are_following: u.you_are_following,
+                    follows_you: u.follows_you,
+                })
+                .collect();
 
             Ok(HttpResponse::Ok().json(UserListResponse {
                 user_ids: grpc_response.user_ids,
                 total_count: grpc_response.total_count,
                 has_more: grpc_response.has_more,
+                users,
             }))
         }
         Err(status) => {

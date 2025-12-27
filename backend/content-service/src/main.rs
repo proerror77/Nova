@@ -595,6 +595,10 @@ async fn main() -> io::Result<()> {
                         web::scope("/posts")
                             .service(web::resource("").route(web::post().to(handlers::create_post)))
                             .service(
+                                web::resource("/batch")
+                                    .route(web::post().to(handlers::get_posts_batch)),
+                            )
+                            .service(
                                 web::resource("/{post_id}")
                                     .route(web::get().to(handlers::get_post))
                                     .route(web::patch().to(handlers::update_post_status))
@@ -603,6 +607,14 @@ async fn main() -> io::Result<()> {
                             .service(
                                 web::resource("/user/{user_id}")
                                     .route(web::get().to(handlers::get_user_posts)),
+                            )
+                            .service(
+                                web::resource("/user/{user_id}/liked")
+                                    .route(web::get().to(handlers::get_user_liked_posts)),
+                            )
+                            .service(
+                                web::resource("/user/{user_id}/saved")
+                                    .route(web::get().to(handlers::get_user_saved_posts)),
                             ),
                     )
                     .service(

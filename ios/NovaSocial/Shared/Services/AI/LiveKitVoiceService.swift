@@ -159,13 +159,22 @@ final class LiveKitVoiceService: NSObject {
             // - .voiceChat: optimized for voice conversations with echo cancellation
             // - .defaultToSpeaker: output to speaker by default
             // - .allowBluetoothHFP: support Bluetooth headsets
+            // - .mixWithOthers: 允許與其他音訊混合（可選）
             try audioSession.setCategory(
                 .playAndRecord,
                 mode: .voiceChat,
-                options: [.defaultToSpeaker, .allowBluetoothHFP]
+                options: [.defaultToSpeaker, .allowBluetoothHFP, .allowBluetooth]
             )
+
+            // 設置較低的緩衝區持續時間以降低延遲
+            // 預設約 23ms (1024 samples @ 44.1kHz)，設為 0.005 (5ms) 可降低延遲
+            try audioSession.setPreferredIOBufferDuration(0.005)
+
+            // 設置較高的採樣率以提高音質
+            try audioSession.setPreferredSampleRate(48000)
+
             try audioSession.setActive(true)
-            liveKitLog("Audio session configured successfully")
+            liveKitLog("Audio session configured: bufferDuration=\(audioSession.ioBufferDuration), sampleRate=\(audioSession.sampleRate)")
         } catch {
             liveKitLog("Failed to configure audio session: \(error.localizedDescription)")
             updateState(.error("無法配置音訊: \(error.localizedDescription)"))
@@ -297,11 +306,30 @@ final class LiveKitVoiceService: NSObject {
     private func connectToRoom(url: String, token: String) async throws {
         liveKitLog("Connecting to LiveKit room at \(url)...")
 
+        // 創建 RoomOptions 配置音訊
+        // 注意: DTX, adaptiveStream, dynacast 設為 false 以避免語音斷斷續續
+        // - DTX (Discontinuous Transmission): 靜音時停止傳輸，可能造成語音檢測不穩定
+        // - adaptiveStream: 自適應串流可能導致質量波動
+        // - dynacast: 動態廣播可能影響即時性
+        let roomOptions = RoomOptions(
+            defaultAudioCaptureOptions: AudioCaptureOptions(
+                echoCancellation: true,
+                autoGainControl: true,
+                noiseSuppression: true,
+                highpassFilter: true  // 過濾低頻噪音
+            ),
+            defaultAudioPublishOptions: AudioPublishOptions(
+                dtx: false  // 禁用不連續傳輸，保持穩定的音訊流
+            ),
+            adaptiveStream: false,  // 禁用自適應串流，避免質量波動
+            dynacast: false  // 禁用動態廣播，確保即時性
+        )
+
         // 創建 Room 並設置 delegate
-        room = Room()
+        room = Room(roomOptions: roomOptions)
         room?.add(delegate: self)
 
-        // 使用 ConnectOptions 連接並自動啟用麥克風
+        // 使用 ConnectOptions 連接
         let connectOptions = ConnectOptions(
             autoSubscribe: true  // 自動訂閱遠端 tracks
         )
@@ -309,12 +337,23 @@ final class LiveKitVoiceService: NSObject {
         // 連接到 LiveKit 服務器
         try await room?.connect(url: url, token: token, connectOptions: connectOptions)
 
-        // 連接後啟用麥克風
-        try await room?.localParticipant.setMicrophone(enabled: true)
-
         isConnected = true
         updateState(.connected)
-        liveKitLog("Connected and publishing audio")
+        liveKitLog("Connected to room successfully")
+
+        // 延遲啟用麥克風，確保音訊引擎已初始化
+        try await Task.sleep(nanoseconds: 500_000_000)  // 0.5 秒延遲
+
+        do {
+            try await room?.localParticipant.setMicrophone(enabled: true)
+            liveKitLog("Microphone enabled successfully")
+        } catch {
+            // 如果麥克風啟用失敗，記錄但不中斷連接
+            // 在模擬器上這是常見的，用戶仍可接收音訊
+            liveKitLog("⚠️ Failed to enable microphone: \(error.localizedDescription)")
+            liveKitLog("Note: Microphone may not work on iOS Simulator")
+            // 不拋出錯誤，讓連接保持活躍
+        }
     }
 
     #endif

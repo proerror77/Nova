@@ -11,6 +11,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var currentAccountId: String?
     @Published var isLoadingAccounts = false
     @Published var isSwitchingAccount = false
+    @Published var hasLoadedAccounts = false  // 标记是否已完成首次加载
 
     // MARK: - General State
     @Published var isLoading = false
@@ -44,6 +45,11 @@ final class SettingsViewModel: ObservableObject {
     /// Check if user has any alias accounts
     var hasAliasAccount: Bool {
         !aliasAccounts.isEmpty
+    }
+
+    /// Current logged-in user profile (for display purposes)
+    var currentUser: UserProfile? {
+        authManager.currentUser
     }
 
     // MARK: - Initialization
@@ -102,6 +108,7 @@ final class SettingsViewModel: ObservableObject {
             accounts = []
         }
 
+        hasLoadedAccounts = true  // 标记已完成加载（无论成功或失败）
         isLoadingAccounts = false
     }
 

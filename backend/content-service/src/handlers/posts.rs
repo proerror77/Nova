@@ -201,3 +201,93 @@ pub struct PaginationParams {
     pub limit: i64,
     pub offset: i64,
 }
+
+/// Request body for batch post fetching
+#[derive(Debug, Deserialize)]
+pub struct BatchPostsRequest {
+    pub post_ids: Vec<Uuid>,
+}
+
+/// Response for batch post fetching
+#[derive(Debug, Serialize)]
+pub struct BatchPostsResponse {
+    pub posts: Vec<crate::models::Post>,
+    pub requested: usize,
+    pub found: usize,
+}
+
+/// Get multiple posts by IDs in a single request
+/// POST /api/v1/posts/batch
+pub async fn get_posts_batch(
+    pool: web::Data<PgPool>,
+    cache: web::Data<Arc<ContentCache>>,
+    req: web::Json<BatchPostsRequest>,
+) -> Result<HttpResponse> {
+    let service = PostService::with_cache((**pool).clone(), cache.get_ref().clone());
+
+    let requested = req.post_ids.len();
+    let posts = service.get_posts_batch(&req.post_ids).await?;
+    let found = posts.len();
+
+    Ok(HttpResponse::Ok().json(BatchPostsResponse {
+        posts,
+        requested,
+        found,
+    }))
+}
+
+/// Response for user liked/saved posts
+#[derive(Debug, Serialize)]
+pub struct UserPostsResponse {
+    pub posts: Vec<crate::models::Post>,
+    pub total_count: i64,
+    pub has_more: bool,
+}
+
+/// Get posts liked by a user using SQL JOIN
+/// GET /api/v1/posts/user/{user_id}/liked
+pub async fn get_user_liked_posts(
+    pool: web::Data<PgPool>,
+    cache: web::Data<Arc<ContentCache>>,
+    path: web::Path<Uuid>,
+    query: web::Query<PaginationParams>,
+) -> Result<HttpResponse> {
+    let user_id = path.into_inner();
+    let service = PostService::with_cache((**pool).clone(), cache.get_ref().clone());
+
+    let (posts, total) = service
+        .get_user_liked_posts(user_id, query.limit, query.offset)
+        .await?;
+
+    let has_more = (query.offset + query.limit) < total;
+
+    Ok(HttpResponse::Ok().json(UserPostsResponse {
+        posts,
+        total_count: total,
+        has_more,
+    }))
+}
+
+/// Get posts saved/bookmarked by a user using SQL JOIN
+/// GET /api/v1/posts/user/{user_id}/saved
+pub async fn get_user_saved_posts(
+    pool: web::Data<PgPool>,
+    cache: web::Data<Arc<ContentCache>>,
+    path: web::Path<Uuid>,
+    query: web::Query<PaginationParams>,
+) -> Result<HttpResponse> {
+    let user_id = path.into_inner();
+    let service = PostService::with_cache((**pool).clone(), cache.get_ref().clone());
+
+    let (posts, total) = service
+        .get_user_saved_posts(user_id, query.limit, query.offset)
+        .await?;
+
+    let has_more = (query.offset + query.limit) < total;
+
+    Ok(HttpResponse::Ok().json(UserPostsResponse {
+        posts,
+        total_count: total,
+        has_more,
+    }))
+}

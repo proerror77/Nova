@@ -12,13 +12,33 @@ struct PostCard: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // 图片区域 (272 - 55 = 217)
-            Image(imageName)
-                .resizable()
-                .scaledToFill()
+            // 图片区域 (272 - 55 = 217) - 使用 CachedAsyncImage 提供缓存和更好的性能
+            if let imageUrl = imageUrl, let url = URL(string: imageUrl) {
+                CachedAsyncImage(
+                    url: url,
+                    targetSize: CGSize(width: 360, height: 434),  // 2x for Retina
+                    priority: .normal
+                ) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .overlay(ProgressView())
+                }
                 .frame(width: 180.w, height: 217.h)
                 .clipped()
                 .clipShape(UnevenRoundedRectangle(topLeadingRadius: 6.s, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 6.s))
+            } else {
+                // 使用本地图片作为后备
+                Image(imageName)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 180.w, height: 217.h)
+                    .clipped()
+                    .clipShape(UnevenRoundedRectangle(topLeadingRadius: 6.s, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 6.s))
+            }
 
             // 底部内容区域 (55px)
             VStack(alignment: .leading, spacing: 6.s) {
@@ -32,23 +52,13 @@ struct PostCard: View {
                 HStack {
                     // 作者信息
                     HStack(spacing: 5.s) {
-                        // 头像
-                        if let avatarUrl = authorAvatarUrl, let url = URL(string: avatarUrl) {
-                            AsyncImage(url: url) { image in
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                            } placeholder: {
-                                Ellipse()
-                                    .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                            }
-                            .frame(width: 17.s, height: 17.s)
-                            .clipShape(Ellipse())
-                        } else {
-                            Ellipse()
-                                .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                .frame(width: 17.s, height: 17.s)
-                        }
+                        // 头像 - 使用 AvatarView 组件，无头像时显示首字母
+                        AvatarView(
+                            image: nil,
+                            url: authorAvatarUrl,
+                            size: 17.s,
+                            name: authorName
+                        )
 
                         Text(authorName)
                             .font(Font.custom("SF Pro Display", size: 10.f))

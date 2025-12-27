@@ -35,13 +35,13 @@ final class ProfileSettingViewModel: ObservableObject {
         validationError == nil
     }
 
-    /// Save 按钮可用条件：First name、Last name、Username 都必须填写
+    /// Save 按钮可用条件：Username 必填，First name 和 Last name 可选
     var canSave: Bool {
-        let trimmedFirstName = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedLastName = lastName.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return !trimmedFirstName.isEmpty && !trimmedLastName.isEmpty && !trimmedUsername.isEmpty && isValid
+        
+        // 只要求 Username 必填，其他字段可选
+        // 这样用户可以只更改头像而不必填写所有字段
+        return !trimmedUsername.isEmpty && isValid
     }
 
     private let authManager: AuthenticationManager
@@ -108,7 +108,7 @@ final class ProfileSettingViewModel: ObservableObject {
     func saveProfile() async -> Bool {
         guard let userId = authManager.currentUser?.id else { return false }
         guard canSave else {
-            errorMessage = NSLocalizedString("Please fill in First name, Last name and Username", comment: "")
+            errorMessage = NSLocalizedString("Please fill in Username", comment: "")
             return false
         }
 

@@ -131,6 +131,7 @@ impl GraphServiceClient {
                     user_id: user_id.to_string(),
                     limit: 1000,
                     offset: 0,
+                    viewer_id: String::new(),
                 })
                 .await?
                 .into_inner();
@@ -152,6 +153,7 @@ impl GraphServiceClient {
                     user_id: followed_id.clone(),
                     limit: 1000,
                     offset: 0,
+                    viewer_id: String::new(),
                 })
                 .await
             {

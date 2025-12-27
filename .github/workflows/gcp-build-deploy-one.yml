@@ -78,9 +78,15 @@ jobs:
       - name: Determine build context
         id: context
         run: |
+          # Services with self-contained Dockerfiles (context = service directory)
           INDEPENDENT="realtime-chat-service"
+          # Services that need repo root as context (Dockerfile uses COPY backend ./backend)
+          REPO_ROOT_CONTEXT="graphql-gateway identity-service content-service social-service graph-service"
+
           if echo "$INDEPENDENT" | grep -qw "${{ inputs.service }}"; then
             echo "context=./backend/${{ inputs.service }}" >> "$GITHUB_OUTPUT"
+          elif echo "$REPO_ROOT_CONTEXT" | grep -qw "${{ inputs.service }}"; then
+            echo "context=." >> "$GITHUB_OUTPUT"
           else
             echo "context=./backend" >> "$GITHUB_OUTPUT"
           fi
@@ -99,9 +105,10 @@ jobs:
 
       - name: Output image
         run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           echo "### Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "- Service: ${{ inputs.service }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Image: ${{ env.REGISTRY }}/${{ inputs.service }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Image: ${{ env.REGISTRY }}/${{ inputs.service }}:${SHORT_SHA}" >> $GITHUB_STEP_SUMMARY
 
   deploy:
     name: Deploy ${{ inputs.service }}
@@ -132,7 +139,8 @@ jobs:
 
       - name: Update deployment image
         run: |
-          IMAGE="${{ env.REGISTRY }}/${{ inputs.service }}:${{ github.sha }}"
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          IMAGE="${{ env.REGISTRY }}/${{ inputs.service }}:${SHORT_SHA}"
           echo "Updating ${{ inputs.service }} to image: ${IMAGE}"
           kubectl set image deployment/${{ inputs.service }} \
             ${{ inputs.service }}=${IMAGE} \

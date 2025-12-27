@@ -167,13 +167,13 @@ struct FeedPostCard: View {
                     }
                     .accessibilityLabel("Comments, \(post.commentCount)")
 
-                    // Bookmark/Star button
+                    // Collect/Star button - 使用项目 collect/collect-fill 图标
                     Button {
                         bookmarkAnimationTrigger.toggle()
                         onBookmark()
                     } label: {
                         HStack(spacing: 6.w) {
-                            Image(post.isBookmarked ? "card-star-icon-filled" : "card-star-icon")
+                            Image(post.isBookmarked ? "collect-fill" : "collect")
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 20.s, height: 20.s)
@@ -184,7 +184,7 @@ struct FeedPostCard: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Bookmark, \(post.bookmarkCount)")
+                    .accessibilityLabel("Collect, \(post.bookmarkCount)")
 
                     Spacer()
                 }

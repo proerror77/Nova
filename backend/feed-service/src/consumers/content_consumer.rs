@@ -110,6 +110,7 @@ async fn fan_out_invalidate_followers(
                 user_id: author_id.to_string(),
                 limit: page_size,
                 offset,
+                viewer_id: String::new(),
             })
             .await
             .map_err(|e| crate::error::AppError::Internal(format!("gRPC error: {}", e)))?

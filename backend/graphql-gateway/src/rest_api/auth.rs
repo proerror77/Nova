@@ -112,6 +112,12 @@ pub async fn login(
     let request = tonic::Request::new(GrpcLoginRequest {
         email: req.username.clone(), // REST API uses "username" but gRPC expects "email"
         password: req.password.clone(),
+        // Pass device info for session tracking
+        device_id: req.device_id.clone().unwrap_or_default(),
+        device_name: req.device_name.clone().unwrap_or_default(),
+        device_type: req.device_type.clone().unwrap_or_default(),
+        os_version: req.os_version.clone().unwrap_or_default(),
+        user_agent: req.user_agent.clone().unwrap_or_default(),
     });
 
     match auth_client.login(request).await {

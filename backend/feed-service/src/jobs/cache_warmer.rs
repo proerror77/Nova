@@ -181,6 +181,7 @@ async fn warm_user_cache(
             user_id: user_id.to_string(),
             limit: 100,
             offset: 0,
+            viewer_id: String::new(),
         })
         .await?;
 

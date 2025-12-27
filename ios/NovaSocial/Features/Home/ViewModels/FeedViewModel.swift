@@ -47,6 +47,11 @@ final class FeedViewModel {
     var isRefreshing = false
     var lastRefreshedAt: Date?
 
+    // MARK: - Suggested Creators (for Following tab fallback)
+    var suggestedCreators: [RecommendedCreator] = []
+    var isLoadingSuggestedCreators = false
+    var showSuggestedCreators = false  // True when Following tab has no followed users' posts
+
     // MARK: - Cached Feed Items
 
     private var _cachedFeedItems: [FeedItemType]?
@@ -159,6 +164,8 @@ final class FeedViewModel {
             guard let self = self,
                   let index = self.posts.firstIndex(where: { $0.id == postId }) else { return }
             self.posts[index] = transform(self.posts[index])
+            // Manually invalidate cache since array element mutation doesn't trigger didSet
+            self._cachedFeedItems = nil
         }
 
         socialActionsHandler.onError = { [weak self] (message: String) in
@@ -323,6 +330,44 @@ final class FeedViewModel {
         await channelManager.selectChannel(channelId)
     }
 
+    // MARK: - Suggested Creators
+
+    /// Load suggested creators for the Following tab
+    /// Called when user is on Following tab to show recommendations
+    func loadSuggestedCreators() async {
+        guard !isLoadingSuggestedCreators else { return }
+
+        isLoadingSuggestedCreators = true
+
+        do {
+            suggestedCreators = try await feedService.getRecommendedCreators(limit: 10)
+            FeedLogger.debug("Loaded \(suggestedCreators.count) suggested creators")
+        } catch {
+            FeedLogger.error("Failed to load suggested creators", error: error)
+            // Don't show error to user, just hide the section
+            suggestedCreators = []
+        }
+
+        isLoadingSuggestedCreators = false
+    }
+
+    /// Follow a suggested creator
+    func followSuggestedCreator(userId: String) async {
+        guard let currentUserId = currentUserId else { return }
+
+        do {
+            let graphService = GraphService()
+            try await graphService.followUser(followerId: currentUserId, followeeId: userId)
+            FeedLogger.debug("Followed suggested creator: \(userId)")
+
+            // Invalidate feed cache after following someone
+            try? await feedService.invalidateFeedCache(userId: currentUserId, eventType: "new_follow")
+        } catch {
+            FeedLogger.error("Failed to follow creator", error: error)
+            toastError = "Failed to follow"
+        }
+    }
+
     // MARK: - Social Actions (Delegated)
 
     func toggleLike(postId: String) async {
@@ -441,6 +486,29 @@ final class FeedViewModel {
             loadAsyncEnrichments(for: posts)
         } else {
             performanceMonitor.recordCacheAccess(hit: false)
+        }
+    }
+
+    /// Update comment count for a post to a specific value (called when actual count is fetched from API)
+    func updateCommentCount(postId: String, count: Int) {
+        #if DEBUG
+        print("[Feed] 📝 updateCommentCount called - postId: \(postId), newCount: \(count)")
+        #endif
+        guard let index = posts.firstIndex(where: { $0.id == postId }) else {
+            #if DEBUG
+            print("[Feed] ❌ updateCommentCount - post not found in array")
+            #endif
+            return
+        }
+        let post = posts[index]
+        #if DEBUG
+        print("[Feed] 📝 updateCommentCount - oldCount: \(post.commentCount), newCount: \(count)")
+        #endif
+        if post.commentCount != count {
+            posts[index] = post.copying(commentCount: count)
+            #if DEBUG
+            print("[Feed] ✅ updateCommentCount - count updated successfully")
+            #endif
         }
     }
 

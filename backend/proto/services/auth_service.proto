@@ -277,6 +277,12 @@ message RegisterResponse {
 message LoginRequest {
   string email = 1;      // User email address
   string password = 2;   // User password (plain text - validated against hash)
+  // Device information for session tracking
+  string device_id = 3;      // Optional: unique device identifier
+  string device_name = 4;    // Optional: device name (e.g., "iPhone 15 Pro")
+  string device_type = 5;    // Optional: device type (iOS, macOS, Android, Web)
+  string os_version = 6;     // Optional: OS version (e.g., "iOS 18.0")
+  string user_agent = 7;     // Optional: user agent string
 }
 
 message LoginResponse {

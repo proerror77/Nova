@@ -37,30 +37,8 @@ struct UserProfile: Codable, Identifiable {
     var safeFollowingCount: Int { followingCount ?? 0 }
     var safePostCount: Int { postCount ?? 0 }
 
-    enum CodingKeys: String, CodingKey {
-        case id
-        case username
-        case email
-        case displayName = "display_name"
-        case bio
-        case avatarUrl = "avatar_url"
-        case coverUrl = "cover_url"
-        case website
-        case location
-        case isVerified = "is_verified"
-        case isPrivate = "is_private"
-        case isBanned = "is_banned"
-        case followerCount = "follower_count"
-        case followingCount = "following_count"
-        case postCount = "post_count"
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
-        case deletedAt = "deleted_at"
-        case firstName = "first_name"
-        case lastName = "last_name"
-        case dateOfBirth = "date_of_birth"
-        case gender
-    }
+    // Note: No CodingKeys needed - APIClient uses .convertFromSnakeCase automatically
+    // All property names are already in camelCase which matches the automatic conversion
 }
 
 // MARK: - Gender Enum

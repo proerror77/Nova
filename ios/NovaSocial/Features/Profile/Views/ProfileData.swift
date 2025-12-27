@@ -1,5 +1,8 @@
 import Foundation
 import SwiftUI
+import os.log
+
+private let logger = Logger(subsystem: "com.app.icered.pro", category: "ProfileData")
 
 @Observable
 @MainActor
@@ -47,6 +50,7 @@ class ProfileData {
     private let socialService = SocialService()
     private let contentService = ContentService()
     private let mediaService = MediaService()
+    private let userService = UserService.shared
 
     // MARK: - Current User ID
     // TODO: Get from authentication service
@@ -85,13 +89,32 @@ class ProfileData {
         isLoading = true
         errorMessage = nil
 
+        #if DEBUG
+        print("[ProfileData] loadUserProfile started for userId: \(userId)")
+        #endif
+
         do {
             // Fetch user profile from IdentityService
             userProfile = try await identityService.getUser(userId: userId)
+            #if DEBUG
+            print("[ProfileData] userProfile loaded: \(userProfile?.username ?? "nil"), postCount=\(userProfile?.postCount ?? 0)")
+            #endif
 
             // Load initial content based on selected tab
             await loadContent(for: selectedTab)
+            #if DEBUG
+            print("[ProfileData] loadContent completed: posts.count=\(posts.count)")
+            #endif
+
+            // 背景預載入其他 tabs（提高切換速度）
+            Task.detached(priority: .utility) { [weak self] in
+                guard let self = self else { return }
+                await self.preloadOtherTabs()
+            }
         } catch {
+            #if DEBUG
+            print("[ProfileData] loadUserProfile error: \(error)")
+            #endif
             handleError(error)
             userProfile = nil
         }
@@ -99,11 +122,35 @@ class ProfileData {
         isLoading = false
     }
 
+    /// 背景預載入 Saved 和 Liked tabs
+    private func preloadOtherTabs() async {
+        let tabsToPreload: [ContentTab] = [.saved, .liked].filter { $0 != selectedTab }
+
+        await withTaskGroup(of: Void.self) { group in
+            for tab in tabsToPreload {
+                group.addTask {
+                    await self.loadContent(for: tab)
+                }
+            }
+        }
+
+        #if DEBUG
+        print("[ProfileData] Preloaded tabs: saved=\(savedPosts.count), liked=\(likedPosts.count)")
+        #endif
+    }
+
     func loadContent(for tab: ContentTab, forceRefresh: Bool = false) async {
-        guard let userId = userProfile?.id else { return }
+        guard let userId = userProfile?.id else {
+            logger.warning("loadContent SKIPPED - userProfile?.id is nil")
+            return
+        }
+
+        logger.info("loadContent START for tab=\(String(describing: tab)), userId=\(userId), forceRefresh=\(forceRefresh)")
+        logger.debug("Cache check: hasCachedContent=\(self.hasCachedContent(for: tab)), shouldRefresh=\(self.shouldRefreshTab(tab))")
 
         // Skip loading if we have valid cached content
         if !forceRefresh && hasCachedContent(for: tab) && !shouldRefreshTab(tab) {
+            logger.info("loadContent SKIPPED - using cached content for \(String(describing: tab))")
             return
         }
 
@@ -120,31 +167,47 @@ class ProfileData {
                 totalPosts = response.totalCount
 
             case .saved:
+                // Use SQL JOIN optimized endpoint (single query)
+                logger.info("Fetching SAVED posts for userId=\(userId)")
                 savedPostsOffset = 0
-                let bookmarksResponse = try await contentService.getUserBookmarks(userId: userId)
-                totalSavedPosts = bookmarksResponse.totalCount
-                if !bookmarksResponse.postIds.isEmpty {
-                    // Only fetch first page worth of saved posts
-                    let idsToFetch = Array(bookmarksResponse.postIds.prefix(pageSize))
-                    savedPosts = try await contentService.getPostsByIds(idsToFetch)
-                } else {
-                    savedPosts = []
+                let response = try await contentService.getUserSavedPosts(userId: userId, limit: pageSize, offset: 0)
+                logger.info("SAVED response: \(response.posts.count) posts, totalCount=\(response.totalCount)")
+                #if DEBUG
+                print("[ProfileData] SAVED posts received: \(response.posts.count)")
+                for (i, post) in response.posts.prefix(3).enumerated() {
+                    print("[ProfileData]   [\(i)] id=\(post.id), content=\(post.content.prefix(30))...")
                 }
+                #endif
+                savedPosts = await enrichPostsWithAuthorInfo(response.posts)
+                totalSavedPosts = response.totalCount
+                #if DEBUG
+                print("[ProfileData] savedPosts assigned: \(savedPosts.count)")
+                #endif
 
             case .liked:
+                // Use SQL JOIN optimized endpoint (single query)
+                logger.info("Fetching LIKED posts for userId=\(userId)")
                 likedPostsOffset = 0
-                let (postIds, total) = try await socialService.getUserLikedPosts(userId: userId, limit: pageSize, offset: 0)
-                totalLikedPosts = total
-                if !postIds.isEmpty {
-                    likedPosts = try await contentService.getPostsByIds(postIds)
-                } else {
-                    likedPosts = []
+                let response = try await contentService.getUserLikedPosts(userId: userId, limit: pageSize, offset: 0)
+                logger.info("LIKED response: \(response.posts.count) posts, totalCount=\(response.totalCount)")
+                #if DEBUG
+                print("[ProfileData] LIKED posts received: \(response.posts.count)")
+                for (i, post) in response.posts.prefix(3).enumerated() {
+                    print("[ProfileData]   [\(i)] id=\(post.id), content=\(post.content.prefix(30))...")
                 }
+                #endif
+                likedPosts = await enrichPostsWithAuthorInfo(response.posts)
+                totalLikedPosts = response.totalCount
+                #if DEBUG
+                print("[ProfileData] likedPosts assigned: \(likedPosts.count)")
+                #endif
             }
 
             // Update cache timestamp
             lastLoadTime[tab] = Date()
+            logger.info("loadContent COMPLETED for tab=\(String(describing: tab))")
         } catch {
+            logger.error("loadContent ERROR for tab=\(String(describing: tab)): \(error.localizedDescription)")
             handleError(error)
         }
 
@@ -166,25 +229,22 @@ class ProfileData {
                 postsOffset = newOffset
 
             case .saved:
+                // Use SQL JOIN optimized endpoint for pagination
                 guard hasMoreSavedPosts else { isLoadingMore = false; return }
-                let bookmarksResponse = try await contentService.getUserBookmarks(userId: userId)
                 let newOffset = savedPosts.count
-                if newOffset < bookmarksResponse.postIds.count {
-                    let idsToFetch = Array(bookmarksResponse.postIds.dropFirst(newOffset).prefix(pageSize))
-                    let morePosts = try await contentService.getPostsByIds(idsToFetch)
-                    savedPosts.append(contentsOf: morePosts)
-                    savedPostsOffset = newOffset
-                }
+                let response = try await contentService.getUserSavedPosts(userId: userId, limit: pageSize, offset: newOffset)
+                let enrichedPosts = await enrichPostsWithAuthorInfo(response.posts)
+                savedPosts.append(contentsOf: enrichedPosts)
+                savedPostsOffset = newOffset
 
             case .liked:
+                // Use SQL JOIN optimized endpoint for pagination
                 guard hasMoreLikedPosts else { isLoadingMore = false; return }
                 let newOffset = likedPosts.count
-                let (postIds, _) = try await socialService.getUserLikedPosts(userId: userId, limit: pageSize, offset: newOffset)
-                if !postIds.isEmpty {
-                    let morePosts = try await contentService.getPostsByIds(postIds)
-                    likedPosts.append(contentsOf: morePosts)
-                    likedPostsOffset = newOffset
-                }
+                let response = try await contentService.getUserLikedPosts(userId: userId, limit: pageSize, offset: newOffset)
+                let enrichedPosts = await enrichPostsWithAuthorInfo(response.posts)
+                likedPosts.append(contentsOf: enrichedPosts)
+                likedPostsOffset = newOffset
             }
         } catch {
             handleError(error)
@@ -281,6 +341,56 @@ class ProfileData {
     func searchInProfile(query: String) async {
         // TODO: Implement profile content search
         print("Searching for: \(query)")
+    }
+
+    // MARK: - Author Enrichment
+
+    /// Enrich posts with author information for those missing it
+    private func enrichPostsWithAuthorInfo(_ posts: [Post]) async -> [Post] {
+        // Find posts that need author info
+        let postsNeedingEnrichment = posts.filter { $0.needsAuthorEnrichment }
+        guard !postsNeedingEnrichment.isEmpty else { return posts }
+
+        // Get unique author IDs
+        let authorIds = Array(Set(postsNeedingEnrichment.map { $0.authorId }))
+
+        // Fetch author profiles IN PARALLEL for better performance
+        var authorProfiles: [String: UserProfile] = [:]
+
+        await withTaskGroup(of: (String, UserProfile?).self) { group in
+            for authorId in authorIds {
+                group.addTask {
+                    do {
+                        let profile = try await self.userService.getUser(userId: authorId)
+                        return (authorId, profile)
+                    } catch {
+                        #if DEBUG
+                        print("[ProfileData] Failed to fetch author \(authorId): \(error)")
+                        #endif
+                        return (authorId, nil)
+                    }
+                }
+            }
+
+            // Collect results
+            for await (authorId, profile) in group {
+                if let profile = profile {
+                    authorProfiles[authorId] = profile
+                }
+            }
+        }
+
+        // Enrich posts with author info
+        return posts.map { post in
+            if post.needsAuthorEnrichment, let author = authorProfiles[post.authorId] {
+                return post.withAuthorInfo(
+                    username: author.username,
+                    displayName: author.displayName,
+                    avatarUrl: author.avatarUrl
+                )
+            }
+            return post
+        }
     }
 
     // MARK: - Error Handling

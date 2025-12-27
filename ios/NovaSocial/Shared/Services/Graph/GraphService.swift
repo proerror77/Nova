@@ -9,17 +9,12 @@ class GraphService {
 
     // MARK: - Get Relationships
 
-    func getFollowers(userId: String, limit: Int = 20, offset: Int = 0) async throws -> (userIds: [String], totalCount: Int, hasMore: Bool) {
-        struct Response: Codable {
-            let user_ids: [String]
-            let total_count: Int
-            let has_more: Bool
-        }
-
+    func getFollowers(userId: String, limit: Int = 20, offset: Int = 0) async throws -> FollowListResponse {
         // Backend expects GET request with query parameters
         // Use /api/v2/graph/followers/{user_id} for specific user
+        // Backend automatically uses JWT viewer_id for relationship status enrichment
         let endpoint = "\(APIConfig.Graph.followers)/\(userId)"
-        let response: Response = try await client.get(
+        let response: FollowListResponse = try await client.get(
             endpoint: endpoint,
             queryParams: [
                 "limit": String(limit),
@@ -27,20 +22,15 @@ class GraphService {
             ]
         )
 
-        return (response.user_ids, response.total_count, response.has_more)
+        return response
     }
 
-    func getFollowing(userId: String, limit: Int = 20, offset: Int = 0) async throws -> (userIds: [String], totalCount: Int, hasMore: Bool) {
-        struct Response: Codable {
-            let user_ids: [String]
-            let total_count: Int
-            let has_more: Bool
-        }
-
+    func getFollowing(userId: String, limit: Int = 20, offset: Int = 0) async throws -> FollowListResponse {
         // Backend expects GET request with query parameters
         // Use /api/v2/graph/following/{user_id} for specific user
+        // Backend automatically uses JWT viewer_id for relationship status enrichment
         let endpoint = "\(APIConfig.Graph.following)/\(userId)"
-        let response: Response = try await client.get(
+        let response: FollowListResponse = try await client.get(
             endpoint: endpoint,
             queryParams: [
                 "limit": String(limit),
@@ -48,7 +38,7 @@ class GraphService {
             ]
         )
 
-        return (response.user_ids, response.total_count, response.has_more)
+        return response
     }
 
     // MARK: - Modify Relationships
@@ -90,14 +80,14 @@ class GraphService {
         // Backend uses GET /api/v2/graph/is-following/{user_id}
         // The follower_id is automatically extracted from the JWT token
         struct Response: Codable {
-            let is_following: Bool
+            let isFollowing: Bool
         }
 
         let response: Response = try await client.get(
             endpoint: APIConfig.Graph.isFollowing(followeeId)
         )
 
-        return response.is_following
+        return response.isFollowing
     }
 
     /// Check if two users are mutual followers
@@ -332,6 +322,30 @@ class GraphService {
 }
 
 // MARK: - Response Models
+
+/// User info with relationship status returned from followers/following endpoints
+/// Note: No CodingKeys needed - APIClient uses .convertFromSnakeCase automatically
+struct FollowUserInfo: Codable {
+    let userId: String
+    let youAreFollowing: Bool
+    let followsYou: Bool
+}
+
+/// Response for getFollowers and getFollowing endpoints
+/// Note: No CodingKeys needed - APIClient uses .convertFromSnakeCase automatically
+struct FollowListResponse: Codable {
+    let userIds: [String]
+    let totalCount: Int
+    let hasMore: Bool
+    let users: [FollowUserInfo]?  // Optional for backward compatibility
+
+    /// Convenience: get relationship status by user ID
+    func relationshipStatus(for userId: String) -> (youAreFollowing: Bool, followsYou: Bool)? {
+        guard let users = users,
+              let user = users.first(where: { $0.userId == userId }) else { return nil }
+        return (user.youAreFollowing, user.followsYou)
+    }
+}
 
 struct GetBlockedUsersResponse: Codable {
     let blockedUsers: [BlockedUser]

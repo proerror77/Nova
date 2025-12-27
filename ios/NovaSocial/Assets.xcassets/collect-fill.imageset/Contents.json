@@ -1,0 +1,35 @@
+{
+  "images" : [
+    {
+<<<<<<<< HEAD:ios/NovaSocial/Assets.xcassets/card-star-icon-filled.imageset/Contents.json
+      "filename" : "card-star-icon-filled.png",
+========
+      "filename" : "collect-fill.png",
+>>>>>>>> origin/main:ios/NovaSocial/Assets.xcassets/collect-fill.imageset/Contents.json
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
+<<<<<<<< HEAD:ios/NovaSocial/Assets.xcassets/card-star-icon-filled.imageset/Contents.json
+      "filename" : "card-star-icon-filled@2x.png",
+========
+      "filename" : "collect-fill@2x.png",
+>>>>>>>> origin/main:ios/NovaSocial/Assets.xcassets/collect-fill.imageset/Contents.json
+      "idiom" : "universal",
+      "scale" : "2x"
+    },
+    {
+<<<<<<<< HEAD:ios/NovaSocial/Assets.xcassets/card-star-icon-filled.imageset/Contents.json
+      "filename" : "card-star-icon-filled@3x.png",
+========
+      "filename" : "collect-fill@3x.png",
+>>>>>>>> origin/main:ios/NovaSocial/Assets.xcassets/collect-fill.imageset/Contents.json
+      "idiom" : "universal",
+      "scale" : "3x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

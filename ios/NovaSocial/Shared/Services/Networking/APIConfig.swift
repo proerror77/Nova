@@ -93,7 +93,7 @@ struct APIConfig {
         /// GET /api/v2/social/users/{user_id}/liked-posts 獲取用戶點讚的帖子
         static func getUserLikedPosts(_ userId: String) -> String { "/api/v2/social/users/\(userId)/liked-posts" }
         static let createComment = "/api/v2/social/comment"
-        static func deleteComment(_ commentId: String) -> String { "/api/v2/social/comment/\(commentId)" }
+        static let deleteComment = "/api/v2/social/comment"  // comment_id goes in body
         static let getComments = "/api/v2/social/comments"
         static let createShare = "/api/v2/social/share"
         static func getShareCount(_ postId: String) -> String { "/api/v2/social/shares/count/\(postId)" }
@@ -118,6 +118,12 @@ struct APIConfig {
         static func updatePost(_ id: String) -> String { "/api/v2/content/\(id)" }
         /// DELETE /api/v2/content/{id} - Delete post
         static func deletePost(_ id: String) -> String { "/api/v2/content/\(id)" }
+        /// POST /api/v1/posts/batch - Batch fetch posts by IDs (single request)
+        static let batchPosts = "/api/v1/posts/batch"
+        /// GET /api/v2/content/user/{user_id}/liked - Get posts liked by user (SQL JOIN)
+        static func userLikedPosts(_ userId: String) -> String { "/api/v2/content/user/\(userId)/liked" }
+        /// GET /api/v2/content/user/{user_id}/saved - Get posts saved by user (SQL JOIN)
+        static func userSavedPosts(_ userId: String) -> String { "/api/v2/content/user/\(userId)/saved" }
         /// GET /api/v2/posts/recent - Get recent posts
         static let recentPosts = "/api/v2/posts/recent"
         /// GET /api/v2/posts/trending - Get trending posts

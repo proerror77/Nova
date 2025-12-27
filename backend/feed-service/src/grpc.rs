@@ -366,20 +366,75 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
         let guard = RequestGuard::new("feed-service", "GetRecommendedCreators");
 
         let req = request.into_inner();
+        let limit = if req.limit == 0 { 10 } else { req.limit.min(50) };
         info!(
             "Getting recommended creators for user: {} (limit: {})",
-            req.user_id, req.limit
+            req.user_id, limit
         );
 
-        // Recommendation logic:
-        // 1. Find creators user doesn't follow
-        // 2. Score by follower count, engagement rate, content relevance
-        // 3. Apply diversity (different content types/niches)
-        // 4. Return top N creators
+        // Get users the current user already follows (to exclude them)
+        let following_ids: std::collections::HashSet<String> = {
+            let mut graph_client = self.grpc_pool.graph();
+            match graph_client
+                .get_following(grpc_clients::nova::graph_service::v2::GetFollowingRequest {
+                    user_id: req.user_id.clone(),
+                    limit: 1000,
+                    offset: 0,
+                    viewer_id: String::new(),
+                })
+                .await
+            {
+                Ok(resp) => resp.into_inner().user_ids.into_iter().collect(),
+                Err(e) => {
+                    warn!("Failed to get following list: {}", e);
+                    std::collections::HashSet::new()
+                }
+            }
+        };
 
-        guard.complete("0");
+        // Get recent posts to find active creators
+        let recent_posts = self
+            .fetch_posts_from_content_service(100, &req.user_id, "")
+            .await
+            .unwrap_or_default();
+
+        // Extract unique authors, excluding self and already-followed users
+        let mut author_post_counts: std::collections::HashMap<String, u32> =
+            std::collections::HashMap::new();
+
+        for post in &recent_posts {
+            if post.user_id != req.user_id && !following_ids.contains(&post.user_id) {
+                *author_post_counts.entry(post.user_id.clone()).or_insert(0) += 1;
+            }
+        }
+
+        // Sort by post count (most active creators first)
+        let mut creators: Vec<_> = author_post_counts.into_iter().collect();
+        creators.sort_by(|a, b| b.1.cmp(&a.1));
+
+        // Convert to RecommendedCreator (user profiles will be enriched by graphql-gateway)
+        let recommended_creators: Vec<RecommendedCreator> = creators
+            .into_iter()
+            .take(limit as usize)
+            .map(|(id, post_count)| RecommendedCreator {
+                id,
+                name: String::new(),       // Enriched by gateway
+                avatar: String::new(),     // Enriched by gateway
+                relevance_score: (post_count as f64) / 10.0,
+                follower_count: 0,         // Enriched by gateway
+                reason: format!("{} recent posts", post_count),
+            })
+            .collect();
+
+        info!(
+            "Returning {} recommended creators for user {}",
+            recommended_creators.len(),
+            req.user_id
+        );
+
+        guard.complete(&recommended_creators.len().to_string());
         Ok(Response::new(GetRecommendedCreatorsResponse {
-            creators: vec![],
+            creators: recommended_creators,
         }))
     }
 
@@ -643,6 +698,7 @@ impl RecommendationServiceImpl {
                 user_id: user_id.to_string(),
                 limit: 500, // Get up to 500 followed users
                 offset: 0,
+                viewer_id: String::new(), // Not needed for feed - only fetching user IDs
             })
             .await
             .map_err(|e| {
@@ -654,8 +710,14 @@ impl RecommendationServiceImpl {
         let followed_user_ids = following_response.user_ids;
 
         if followed_user_ids.is_empty() {
-            info!("User {} follows no one, returning empty personalized feed", user_id);
-            return Ok(vec![]);
+            info!(
+                "User {} follows no one, falling back to trending posts",
+                user_id
+            );
+            // Fallback to global/trending posts instead of returning empty
+            return self
+                .fetch_posts_from_content_service(limit, user_id, _channel_id)
+                .await;
         }
 
         info!(

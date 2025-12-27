@@ -129,7 +129,7 @@ data:
   DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/nova"
   REDIS_URL: "redis://redis:6379"
   CLICKHOUSE_URL: "http://clickhouse:8123"
-  KAFKA_BROKERS: "kafka:9092"
+  KAFKA_BROKERS: "kafka.nova-staging.svc.cluster.local:9092"
   ELASTICSEARCH_URL: "http://elasticsearch:9200"
 
   # GCS (Google Cloud Storage) - for media storage
