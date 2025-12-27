@@ -101,37 +101,32 @@ struct ProfileFollowersView: View {
         }
 
         do {
-            // 1. 获取关注当前用户的用户 ID 列表
+            // 1. 获取关注当前用户的用户 ID 列表（包含关系状态）
             let result = try await graphService.getFollowers(userId: currentUserId, limit: 50, offset: 0)
             followersHasMore = result.hasMore
 
             // 2. 批量获取用户详细信息（並行處理提升速度）
             let users = await fetchUserProfiles(userIds: result.userIds)
 
-            // 3. 检查当前用户是否关注了这些用户（用于显示 "Follow back"）
-            let followingStatus = try? await graphService.batchCheckFollowing(
-                followerId: currentUserId,
-                followeeIds: result.userIds
-            )
-
-            // 4. 转换为 FollowerUser 模型
+            // 3. 使用后端返回的关系状态（无需额外 API 调用）
             await MainActor.run {
                 followers = users.map { user in
-                    let isFollowingThem = followingStatus?[user.id] ?? false
+                    // 从后端返回的 users 数组中获取关系状态
+                    let status = result.relationshipStatus(for: user.id)
                     return FollowerUser(
                         id: user.id,
                         name: user.displayName ?? user.username,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
-                        isFollowingYou: true, // 他们关注了你
-                        youAreFollowing: isFollowingThem // 你是否关注了他们
+                        isFollowingYou: true, // 他们关注了你（这是 followers 列表）
+                        youAreFollowing: status?.youAreFollowing ?? false // 你是否关注了他们
                     )
                 }
                 isLoadingFollowers = false
             }
 
             #if DEBUG
-            print("[ProfileFollowers] Loaded \(followers.count) followers")
+            print("[ProfileFollowers] Loaded \(followers.count) followers (enriched: \(result.users.count))")
             #endif
 
         } catch {
@@ -160,30 +155,32 @@ struct ProfileFollowersView: View {
         }
 
         do {
-            // 1. 获取当前用户关注的用户 ID 列表
+            // 1. 获取当前用户关注的用户 ID 列表（包含关系状态）
             let result = try await graphService.getFollowing(userId: currentUserId, limit: 50, offset: 0)
             followingHasMore = result.hasMore
 
             // 2. 批量获取用户详细信息（並行處理提升速度）
             let users = await fetchUserProfiles(userIds: result.userIds)
 
-            // 3. 转换为 FollowerUser 模型
+            // 3. 使用后端返回的关系状态（无需额外 API 调用）
             await MainActor.run {
                 following = users.map { user in
-                    FollowerUser(
+                    // 从后端返回的 users 数组中获取关系状态
+                    let status = result.relationshipStatus(for: user.id)
+                    return FollowerUser(
                         id: user.id,
                         name: user.displayName ?? user.username,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
-                        isFollowingYou: false, // 这里需要额外查询，暂时设为 false
-                        youAreFollowing: true // 你关注了他们
+                        isFollowingYou: status?.followsYou ?? false, // 他们是否关注你
+                        youAreFollowing: true // 你关注了他们（这是 following 列表）
                     )
                 }
                 isLoadingFollowing = false
             }
 
             #if DEBUG
-            print("[ProfileFollowers] Loaded \(following.count) following")
+            print("[ProfileFollowers] Loaded \(following.count) following (enriched: \(result.users.count))")
             #endif
 
         } catch {

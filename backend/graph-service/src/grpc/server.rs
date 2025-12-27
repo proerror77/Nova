@@ -244,22 +244,81 @@ impl GraphService for GraphServiceImpl {
         };
         let offset = req.offset;
 
+        // Parse optional viewer_id for relationship enrichment
+        let viewer_id = if req.viewer_id.is_empty() {
+            None
+        } else {
+            Some(
+                Uuid::parse_str(&req.viewer_id)
+                    .map_err(|e| Status::invalid_argument(format!("Invalid viewer_id: {}", e)))?,
+            )
+        };
+
         match self.repo.get_followers(user_id, limit, offset).await {
             Ok((followers, total_count, has_more)) => {
                 let user_ids: Vec<String> = followers.iter().map(|id| id.to_string()).collect();
 
+                // Build enriched users list if viewer_id is provided
+                let users = if let Some(viewer) = viewer_id {
+                    // Batch check: does viewer follow each follower?
+                    let you_are_following_map = self
+                        .repo
+                        .batch_check_following(viewer, followers.clone())
+                        .await
+                        .unwrap_or_default();
+
+                    // Batch check: does each follower follow viewer?
+                    let follows_you_map = self
+                        .repo
+                        .batch_check_following(user_id, vec![viewer])
+                        .await
+                        .ok()
+                        .and_then(|m| m.get(&viewer.to_string()).copied())
+                        .unwrap_or(false);
+
+                    // For followers list: each user in the list already follows the target user
+                    // We need to check if they also follow the viewer
+                    let mut follows_you_results = std::collections::HashMap::new();
+                    for follower in &followers {
+                        let follows_viewer = self
+                            .repo
+                            .is_following(*follower, viewer)
+                            .await
+                            .unwrap_or(false);
+                        follows_you_results.insert(follower.to_string(), follows_viewer);
+                    }
+
+                    followers
+                        .iter()
+                        .map(|id| {
+                            let id_str = id.to_string();
+                            FollowUserInfo {
+                                user_id: id_str.clone(),
+                                you_are_following: *you_are_following_map
+                                    .get(&id_str)
+                                    .unwrap_or(&false),
+                                follows_you: *follows_you_results.get(&id_str).unwrap_or(&false),
+                            }
+                        })
+                        .collect()
+                } else {
+                    vec![]
+                };
+
                 info!(
-                    "Get followers for {}: {} results (offset: {}, has_more: {})",
+                    "Get followers for {}: {} results (offset: {}, has_more: {}, enriched: {})",
                     user_id,
                     user_ids.len(),
                     offset,
-                    has_more
+                    has_more,
+                    !users.is_empty()
                 );
 
                 Ok(Response::new(GetFollowersResponse {
                     user_ids,
                     total_count,
                     has_more,
+                    users,
                 }))
             }
             Err(e) => {
@@ -281,22 +340,71 @@ impl GraphService for GraphServiceImpl {
         let limit = if req.limit > 0 { req.limit } else { 1000 };
         let offset = req.offset;
 
+        // Parse optional viewer_id for relationship enrichment
+        let viewer_id = if req.viewer_id.is_empty() {
+            None
+        } else {
+            Some(
+                Uuid::parse_str(&req.viewer_id)
+                    .map_err(|e| Status::invalid_argument(format!("Invalid viewer_id: {}", e)))?,
+            )
+        };
+
         match self.repo.get_following(user_id, limit, offset).await {
             Ok((following, total_count, has_more)) => {
                 let user_ids: Vec<String> = following.iter().map(|id| id.to_string()).collect();
 
+                // Build enriched users list if viewer_id is provided
+                let users = if let Some(viewer) = viewer_id {
+                    // Batch check: does viewer follow each user in the following list?
+                    let you_are_following_map = self
+                        .repo
+                        .batch_check_following(viewer, following.clone())
+                        .await
+                        .unwrap_or_default();
+
+                    // For each user in the following list, check if they follow the viewer
+                    let mut follows_you_results = std::collections::HashMap::new();
+                    for followee in &following {
+                        let follows_viewer = self
+                            .repo
+                            .is_following(*followee, viewer)
+                            .await
+                            .unwrap_or(false);
+                        follows_you_results.insert(followee.to_string(), follows_viewer);
+                    }
+
+                    following
+                        .iter()
+                        .map(|id| {
+                            let id_str = id.to_string();
+                            FollowUserInfo {
+                                user_id: id_str.clone(),
+                                you_are_following: *you_are_following_map
+                                    .get(&id_str)
+                                    .unwrap_or(&false),
+                                follows_you: *follows_you_results.get(&id_str).unwrap_or(&false),
+                            }
+                        })
+                        .collect()
+                } else {
+                    vec![]
+                };
+
                 info!(
-                    "Get following for {}: {} results (offset: {}, has_more: {})",
+                    "Get following for {}: {} results (offset: {}, has_more: {}, enriched: {})",
                     user_id,
                     user_ids.len(),
                     offset,
-                    has_more
+                    has_more,
+                    !users.is_empty()
                 );
 
                 Ok(Response::new(GetFollowingResponse {
                     user_ids,
                     total_count,
                     has_more,
+                    users,
                 }))
             }
             Err(e) => {

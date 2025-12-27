@@ -89,39 +89,31 @@ struct UserProfileFollowersView: View {
         isLoadingFollowers = true
 
         do {
-            // 1. 获取关注目标用户的用户 ID 列表
+            // 1. 获取关注目标用户的用户 ID 列表（包含关系状态）
             let result = try await graphService.getFollowers(userId: targetUserId, limit: 50, offset: 0)
             followersHasMore = result.hasMore
 
             // 2. 批量获取用户详细信息
             let users = await fetchUserProfiles(userIds: result.userIds)
 
-            // 3. 检查当前用户是否关注了这些用户
-            var followingStatus: [String: Bool] = [:]
-            if let currentUserId = authManager.currentUser?.id {
-                followingStatus = (try? await graphService.batchCheckFollowing(
-                    followerId: currentUserId,
-                    followeeIds: result.userIds
-                )) ?? [:]
-            }
-
-            // 4. 转换为 UserProfileFollowerUser 模型
+            // 3. 使用后端返回的关系状态（无需额外 API 调用）
             await MainActor.run {
                 followers = users.map { user in
-                    let isFollowingThem = followingStatus[user.id] ?? false
+                    // 从后端返回的 users 数组中获取关系状态
+                    let status = result.relationshipStatus(for: user.id)
                     return UserProfileFollowerUser(
                         id: user.id,
                         name: user.displayName ?? user.username,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
-                        isFollowedByMe: isFollowingThem
+                        isFollowedByMe: status?.youAreFollowing ?? false
                     )
                 }
                 isLoadingFollowers = false
             }
 
             #if DEBUG
-            print("[UserProfileFollowers] Loaded \(followers.count) followers for user: \(targetUserId)")
+            print("[UserProfileFollowers] Loaded \(followers.count) followers for user: \(targetUserId) (enriched: \(result.users.count))")
             #endif
 
         } catch {
@@ -139,39 +131,31 @@ struct UserProfileFollowersView: View {
         isLoadingFollowing = true
 
         do {
-            // 1. 获取目标用户关注的用户 ID 列表
+            // 1. 获取目标用户关注的用户 ID 列表（包含关系状态）
             let result = try await graphService.getFollowing(userId: targetUserId, limit: 50, offset: 0)
             followingHasMore = result.hasMore
 
             // 2. 批量获取用户详细信息
             let users = await fetchUserProfiles(userIds: result.userIds)
 
-            // 3. 检查当前用户是否关注了这些用户
-            var followingStatus: [String: Bool] = [:]
-            if let currentUserId = authManager.currentUser?.id {
-                followingStatus = (try? await graphService.batchCheckFollowing(
-                    followerId: currentUserId,
-                    followeeIds: result.userIds
-                )) ?? [:]
-            }
-
-            // 4. 转换为 UserProfileFollowerUser 模型
+            // 3. 使用后端返回的关系状态（无需额外 API 调用）
             await MainActor.run {
                 following = users.map { user in
-                    let isFollowingThem = followingStatus[user.id] ?? false
+                    // 从后端返回的 users 数组中获取关系状态
+                    let status = result.relationshipStatus(for: user.id)
                     return UserProfileFollowerUser(
                         id: user.id,
                         name: user.displayName ?? user.username,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
-                        isFollowedByMe: isFollowingThem
+                        isFollowedByMe: status?.youAreFollowing ?? false
                     )
                 }
                 isLoadingFollowing = false
             }
 
             #if DEBUG
-            print("[UserProfileFollowers] Loaded \(following.count) following for user: \(targetUserId)")
+            print("[UserProfileFollowers] Loaded \(following.count) following for user: \(targetUserId) (enriched: \(result.users.count))")
             #endif
 
         } catch {
