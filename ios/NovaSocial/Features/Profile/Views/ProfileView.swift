@@ -12,7 +12,7 @@ enum ProfileActiveSheet: Equatable {
     case settings
     case following
     case followers
-    case postDetail(post: Post)
+    case postDetail(post: Post, authorName: String, authorAvatar: String?)
     case imagePicker
     case camera
     case photoOptions
@@ -41,7 +41,7 @@ enum ProfileActiveSheet: Equatable {
             return true
         case (.newPost(let img1), .newPost(let img2)):
             return img1 === img2
-        case (.postDetail(let p1), .postDetail(let p2)):
+        case (.postDetail(let p1, _, _), .postDetail(let p2, _, _)):
             return p1.id == p2.id
         default:
             return false
@@ -197,12 +197,12 @@ struct ProfileView: View {
                 .transition(.identity)
                 .environmentObject(authManager)
 
-            case .postDetail(let post):
+            case .postDetail(let post, let authorName, let authorAvatar):
                 PostDetailView(
                     post: FeedPost(
                         from: post,
-                        authorName: displayUser?.displayName ?? displayUser?.username ?? "User",
-                        authorAvatar: displayUser?.avatarUrl
+                        authorName: authorName,
+                        authorAvatar: authorAvatar
                     ),
                     onDismiss: {
                         activeSheet = .none
@@ -953,7 +953,9 @@ struct ProfileView: View {
                                 authorName: authorName,
                                 authorAvatarUrl: authorAvatar,
                                 likeCount: post.likeCount ?? 0,
-                                onTap: nil
+                                onTap: {
+                                    activeSheet = .postDetail(post: post, authorName: authorName, authorAvatar: authorAvatar)
+                                }
                             )
                         }
                     }
