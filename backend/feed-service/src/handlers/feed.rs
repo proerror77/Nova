@@ -139,6 +139,7 @@ pub async fn get_feed(
             user_id: user_id.to_string(),
             limit: 1000,
             offset: 0,
+            viewer_id: String::new(), // Not needed for feed
         })
         .await;
 

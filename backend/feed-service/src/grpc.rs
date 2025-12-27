@@ -643,6 +643,7 @@ impl RecommendationServiceImpl {
                 user_id: user_id.to_string(),
                 limit: 500, // Get up to 500 followed users
                 offset: 0,
+                viewer_id: String::new(), // Not needed for feed - only fetching user IDs
             })
             .await
             .map_err(|e| {
