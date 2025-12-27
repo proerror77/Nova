@@ -421,9 +421,8 @@ struct HomeView: View {
                                             }
 
                                         case .carousel:
-                                            HottestBankerSection(onSeeAllTapped: {
-                                                currentPage = .rankingList
-                                            })
+                                            // HottestBankerSection 已隐藏，组件保留在 Components 文件夹中
+                                            EmptyView()
                                         }
                                     }
                                 }
@@ -452,7 +451,6 @@ struct HomeView: View {
                                 }
 
                             }
-                            .padding(.vertical, DesignTokens.spacing16)
                             .background(DesignTokens.backgroundColor)
                         }
                     }
@@ -484,9 +482,7 @@ struct HomeView: View {
                     }
                 }
 
-                // MARK: - ScrollView 下方间距
-                Color.clear
-                    .frame(height: 100)  // 为底部导航栏预留空间
+
             }
             }
 
