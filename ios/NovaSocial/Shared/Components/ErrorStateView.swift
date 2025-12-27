@@ -8,6 +8,7 @@ struct ErrorStateView: View {
     let errorMessage: String
     var onRetry: (() async -> Void)?
     var onLogin: (() -> Void)?
+    var onDismiss: (() -> Void)?
 
     // Detect if error requires login
     private var requiresLogin: Bool {
@@ -75,6 +76,17 @@ struct ErrorStateView: View {
                     }
                     .padding(.top, DesignTokens.spacing8)
                 }
+            }
+
+            // Dismiss/Go Back button
+            if let onDismiss = onDismiss {
+                Button(action: onDismiss) {
+                    Text("Go Back")
+                        .font(.system(size: DesignTokens.fontMedium, weight: .medium))
+                        .foregroundColor(.white.opacity(0.8))
+                        .underline()
+                }
+                .padding(.top, DesignTokens.spacing12)
             }
         }
         .frame(maxWidth: .infinity)

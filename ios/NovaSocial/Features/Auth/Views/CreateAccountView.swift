@@ -71,6 +71,10 @@ struct CreateAccountView: View {
                                 showErrorView = false
                                 errorMessage = nil
                                 await handleRegister()
+                            },
+                            onDismiss: {
+                                showErrorView = false
+                                errorMessage = nil
                             }
                         )
                         Spacer()

@@ -55,6 +55,10 @@ struct LoginView: View {
                                     showErrorView = false
                                     errorMessage = nil
                                     await handleLogin()
+                                },
+                                onDismiss: {
+                                    showErrorView = false
+                                    errorMessage = nil
                                 }
                             )
                             Spacer()
