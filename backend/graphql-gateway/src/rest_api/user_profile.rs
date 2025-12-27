@@ -250,6 +250,13 @@ pub async fn get_profile(
             }
         };
 
+        info!(
+            user_id = %user_id,
+            follower_count = follower_count,
+            following_count = following_count,
+            "Profile counts fetched from graph-service"
+        );
+
         let profile = UserProfileResponse {
             id: p.user_id,
             username: p.username,
