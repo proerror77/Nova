@@ -32,7 +32,7 @@ data:
     ;; Per-service databases with optimized pool sizes
     ;; Uses forced user/password to handle backend SCRAM-SHA-256 auth
     ;; NOTE: Services using sqlx with prepared statements MUST use pool_mode=session
-    nova = host=postgres port=5432 dbname=nova user=nova password=nova pool_size=25
+    nova = host=postgres port=5432 dbname=nova user=nova password=nova pool_size=25 pool_mode=session
     nova_auth = host=postgres port=5432 dbname=nova_auth user=nova password=nova pool_size=15
     nova_identity = host=postgres port=5432 dbname=nova_identity user=nova password=nova pool_size=15 pool_mode=session
     nova_content = host=postgres port=5432 dbname=nova_content user=nova password=nova pool_size=20 pool_mode=session
