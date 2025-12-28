@@ -6,6 +6,7 @@ use uuid::Uuid;
 use tracing::{error, info, warn};
 
 use crate::domain::events::IdentityEvent;
+use crate::services::OutboxConsumerConfig;
 
 /// Outbox entry for reliable event publishing
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -14,12 +15,11 @@ pub struct OutboxEntry {
     pub aggregate_id: String,
     pub aggregate_type: String,
     pub event_type: String,
-    pub event_data: serde_json::Value,
+    pub payload: serde_json::Value,
     pub created_at: DateTime<Utc>,
-    pub processed_at: Option<DateTime<Utc>>,
+    pub published_at: Option<DateTime<Utc>>,
     pub retry_count: i32,
-    pub max_retries: i32,
-    pub error_message: Option<String>,
+    pub last_error: Option<String>,
 }
 
 /// Transactional Outbox for guaranteed event delivery
@@ -44,29 +44,27 @@ impl TransactionalOutbox {
                 aggregate_id: event.aggregate_id(),
                 aggregate_type: "User".to_string(),
                 event_type: event.event_type(),
-                event_data: serde_json::to_value(&event)?,
+                payload: serde_json::to_value(&event)?,
                 created_at: Utc::now(),
-                processed_at: None,
+                published_at: None,
                 retry_count: 0,
-                max_retries: 3,
-                error_message: None,
+                last_error: None,
             };
 
             sqlx::query!(
                 r#"
                 INSERT INTO outbox_events (
                     id, aggregate_id, aggregate_type, event_type,
-                    event_data, created_at, retry_count, max_retries
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    payload, created_at, retry_count
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
                 "#,
                 entry.id,
                 entry.aggregate_id,
                 entry.aggregate_type,
                 entry.event_type,
-                entry.event_data,
+                entry.payload,
                 entry.created_at,
-                entry.retry_count,
-                entry.max_retries
+                entry.retry_count
             )
             .execute(&mut **tx)
             .await?;
@@ -76,22 +74,23 @@ impl TransactionalOutbox {
     }
 
     /// Poll for unprocessed events
-    pub async fn poll_unprocessed(&self, batch_size: i64) -> Result<Vec<OutboxEntry>> {
+    pub async fn poll_unprocessed(&self, batch_size: i64, max_retries: i32) -> Result<Vec<OutboxEntry>> {
         let entries = sqlx::query_as!(
             OutboxEntry,
             r#"
             SELECT
                 id, aggregate_id, aggregate_type, event_type,
-                event_data, created_at, processed_at,
-                retry_count, max_retries, error_message
+                payload, created_at, published_at,
+                retry_count, last_error
             FROM outbox_events
-            WHERE processed_at IS NULL
-                AND retry_count < max_retries
+            WHERE published_at IS NULL
+                AND retry_count < $2
             ORDER BY created_at ASC
             LIMIT $1
             FOR UPDATE SKIP LOCKED
             "#,
-            batch_size
+            batch_size,
+            max_retries
         )
         .fetch_all(&self.pool)
         .await?;
@@ -104,7 +103,7 @@ impl TransactionalOutbox {
         sqlx::query!(
             r#"
             UPDATE outbox_events
-            SET processed_at = $1
+            SET published_at = $1
             WHERE id = $2
             "#,
             Utc::now(),
@@ -122,7 +121,7 @@ impl TransactionalOutbox {
             r#"
             UPDATE outbox_events
             SET retry_count = retry_count + 1,
-                error_message = $1
+                last_error = $1
             WHERE id = $2
             "#,
             error,
@@ -141,8 +140,8 @@ impl TransactionalOutbox {
         let result = sqlx::query!(
             r#"
             DELETE FROM outbox_events
-            WHERE processed_at IS NOT NULL
-                AND processed_at < $1
+            WHERE published_at IS NOT NULL
+                AND published_at < $1
             "#,
             cutoff
         )
@@ -182,7 +181,8 @@ impl OutboxProcessor {
     }
 
     async fn process_batch(&self) -> Result<()> {
-        let entries = self.outbox.poll_unprocessed(100).await?;
+        let max_retries = OutboxConsumerConfig::default().max_retries;
+        let entries = self.outbox.poll_unprocessed(100, max_retries).await?;
 
         for entry in entries {
             match self.process_entry(&entry).await {
@@ -202,7 +202,7 @@ impl OutboxProcessor {
 
     async fn process_entry(&self, entry: &OutboxEntry) -> Result<()> {
         // Deserialize event
-        let event: IdentityEvent = serde_json::from_value(entry.event_data.clone())?;
+        let event: IdentityEvent = serde_json::from_value(entry.payload.clone())?;
 
         // Publish to Kafka
         self.event_publisher.publish(event).await?;

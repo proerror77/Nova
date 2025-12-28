@@ -35,10 +35,17 @@ impl Default for OutboxConsumerConfig {
             .filter(|value| !value.is_empty())
             .or_else(|| Some("identity-events.dlq".to_string()));
 
+        let max_retries = env::var("IDENTITY_OUTBOX_MAX_RETRIES")
+            .or_else(|_| env::var("OUTBOX_MAX_RETRIES"))
+            .ok()
+            .and_then(|value| value.trim().parse::<i32>().ok())
+            .filter(|value| *value > 0)
+            .unwrap_or(5);
+
         Self {
             poll_interval: Duration::from_millis(1500),
             batch_size: 50,
-            max_retries: 5,
+            max_retries,
             retry_backoff: Duration::from_millis(500),
             max_backoff: Duration::from_secs(30),
             dlq_topic,

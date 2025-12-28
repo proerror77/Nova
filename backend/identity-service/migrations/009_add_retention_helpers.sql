@@ -26,17 +26,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Cleanup function for processed outbox events
+-- Cleanup function for published outbox events
 -- Usage example:
---   SELECT cleanup_processed_outbox_events(30);  -- keep last 30 days of processed events
+--   SELECT cleanup_processed_outbox_events(30);  -- keep last 30 days of published events
 CREATE OR REPLACE FUNCTION cleanup_processed_outbox_events(retention_days INTEGER)
 RETURNS INTEGER AS $$
 DECLARE
     deleted INTEGER;
 BEGIN
     DELETE FROM outbox_events
-    WHERE processed_at IS NOT NULL
-      AND processed_at < NOW() - make_interval(days => retention_days);
+    WHERE published_at IS NOT NULL
+      AND published_at < NOW() - make_interval(days => retention_days);
 
     GET DIAGNOSTICS deleted = ROW_COUNT;
     RETURN deleted;
@@ -71,4 +71,3 @@ BEGIN
     RETURN deleted;
 END;
 $$ LANGUAGE plpgsql;
-
