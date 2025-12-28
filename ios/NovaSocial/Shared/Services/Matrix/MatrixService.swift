@@ -488,6 +488,12 @@ protocol MatrixServiceProtocol: AnyObject {
     /// Clear stored credentials without full logout (for session expiry recovery)
     func clearCredentials()
 
+    /// Store Matrix credentials (for token refresh)
+    func storeCredentials(userId: String, accessToken: String, deviceId: String, homeserverUrl: String?, expiresAt: Int64?)
+
+    /// Reinitialize Matrix session with new credentials (for token refresh)
+    func reinitializeSession(accessToken: String, deviceId: String) async throws
+
     /// Start background sync
     func startSync() async throws
 
@@ -1073,6 +1079,66 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService] Clearing stored credentials for session recovery")
         #endif
         clearSessionCredentials()
+    }
+
+    /// Store Matrix credentials (for token refresh)
+    /// - Parameters:
+    ///   - userId: Matrix user ID
+    ///   - accessToken: Access token
+    ///   - deviceId: Device ID
+    ///   - homeserverUrl: Optional homeserver URL
+    ///   - expiresAt: Optional token expiry timestamp (Unix seconds)
+    func storeCredentials(userId: String, accessToken: String, deviceId: String, homeserverUrl: String?, expiresAt: Int64?) {
+        storeSessionCredentials(
+            userId: userId,
+            accessToken: accessToken,
+            deviceId: deviceId,
+            homeserverUrl: homeserverUrl,
+            expiresAt: expiresAt
+        )
+    }
+
+    /// Reinitialize Matrix session with new credentials
+    /// Used for token refresh to update the SDK session without full logout/login
+    /// - Parameters:
+    ///   - accessToken: New access token
+    ///   - deviceId: Device ID (should remain the same)
+    func reinitializeSession(accessToken: String, deviceId: String) async throws {
+        #if DEBUG
+        print("[MatrixService] Reinitializing session with refreshed token...")
+        #endif
+
+        guard let matrixClient = client else {
+            throw MatrixError.notInitialized
+        }
+
+        // Stop current sync first
+        stopSync()
+
+        // Load stored credentials to get user ID
+        guard let stored = loadSessionCredentials() else {
+            throw MatrixError.sessionRestoreFailed
+        }
+
+        // Create new session with refreshed token
+        let session = Session(
+            accessToken: accessToken,
+            refreshToken: nil,
+            userId: stored.userId,
+            deviceId: deviceId,
+            homeserverUrl: homeserverURL,
+            slidingSyncVersion: slidingSyncVersion
+        )
+
+        // Restore the session with the client
+        try await matrixClient.restoreSession(session: session)
+
+        // Restart sync
+        try await startSync()
+
+        #if DEBUG
+        print("[MatrixService] Session reinitialized successfully with new token")
+        #endif
     }
 
     /// Stop sync and wait for cleanup to complete
@@ -2494,13 +2560,16 @@ final class MatrixService: MatrixServiceProtocol {
         let deviceId: String
         let refreshToken: String?
         let homeserverUrl: String?
+        /// Token expiry timestamp (Unix seconds)
+        let expiresAt: Int64?
 
-        init(userId: String, accessToken: String, deviceId: String, refreshToken: String? = nil, homeserverUrl: String? = nil) {
+        init(userId: String, accessToken: String, deviceId: String, refreshToken: String? = nil, homeserverUrl: String? = nil, expiresAt: Int64? = nil) {
             self.userId = userId
             self.accessToken = accessToken
             self.deviceId = deviceId
             self.refreshToken = refreshToken
             self.homeserverUrl = homeserverUrl
+            self.expiresAt = expiresAt
         }
     }
 
@@ -2510,19 +2579,21 @@ final class MatrixService: MatrixServiceProtocol {
     // Matrix session storage key for UserDefaults (not sensitive enough for Keychain)
     private static let matrixSessionKey = "matrix_session_data"
 
-    private func storeSessionCredentials(userId: String, accessToken: String, deviceId: String, refreshToken: String? = nil, homeserverUrl: String? = nil) {
+    private func storeSessionCredentials(userId: String, accessToken: String, deviceId: String, refreshToken: String? = nil, homeserverUrl: String? = nil, expiresAt: Int64? = nil) {
         let credentials = StoredCredentials(
             userId: userId,
             accessToken: accessToken,
             deviceId: deviceId,
             refreshToken: refreshToken,
-            homeserverUrl: homeserverUrl ?? homeserverURL
+            homeserverUrl: homeserverUrl ?? homeserverURL,
+            expiresAt: expiresAt
         )
 
         if let data = try? JSONEncoder().encode(credentials) {
             UserDefaults.standard.set(data, forKey: Self.matrixSessionKey)
             #if DEBUG
-            print("[MatrixService] Session credentials stored (refreshToken: \(refreshToken != nil ? "yes" : "no"))")
+            let expiryInfo = expiresAt.map { "expires at \($0)" } ?? "no expiry"
+            print("[MatrixService] Session credentials stored (refreshToken: \(refreshToken != nil ? "yes" : "no"), \(expiryInfo))")
             #endif
         }
     }

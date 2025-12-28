@@ -1,7 +1,6 @@
 /// Feed API Integration Tests
 ///
 /// Tests for the /api/v2/feed endpoints including bookmark_count field validation.
-
 use serde::Deserialize;
 
 /// FeedPost response model for testing

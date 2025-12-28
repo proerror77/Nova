@@ -145,7 +145,10 @@ async fn main() -> Result<()> {
             *health_state_clone.redis_healthy.write().await = redis_ok;
 
             // Check ClickHouse
-            let clickhouse_ok = near_line_service_clone.health_check().await.unwrap_or(false);
+            let clickhouse_ok = near_line_service_clone
+                .health_check()
+                .await
+                .unwrap_or(false);
             *health_state_clone.clickhouse_healthy.write().await = clickhouse_ok;
 
             // Check PostgreSQL
@@ -195,7 +198,8 @@ async fn main() -> Result<()> {
                     "mTLS disabled - TLS config not found: {}. Using development mode for testing only.",
                     e
                 );
-                let app_env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
+                let app_env =
+                    std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
                 if app_env != "production" {
                     info!("Development/Staging mode: Starting without TLS (NOT FOR PRODUCTION)");
                     None

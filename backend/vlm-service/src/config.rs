@@ -58,7 +58,6 @@ pub struct Config {
     // ============================================
     // Backfill mode configuration
     // ============================================
-
     /// Batch size for backfill processing
     #[serde(default = "default_backfill_batch_size")]
     pub backfill_batch_size: u32,

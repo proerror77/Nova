@@ -5,6 +5,6 @@ metadata:
 data:
   APP_ENV: staging
   CLICKHOUSE_URL: "http://clickhouse:8123"
-  CLICKHOUSE_DATABASE: "default"
+  CLICKHOUSE_DATABASE: "nova_feed"
   # Use GCS public URL until Cloud CDN is deployed
   CLOUDFRONT_URL: "https://storage.googleapis.com/nova-media-staging"

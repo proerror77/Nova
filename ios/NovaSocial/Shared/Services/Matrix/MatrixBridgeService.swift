@@ -354,6 +354,20 @@ final class MatrixBridgeService: @unchecked Sendable {
             #if DEBUG
             print("[MatrixBridge] ✅ matrixService.login() succeeded")
             #endif
+
+            // Store credentials with expiry info
+            if let expiresAt = credentials.expiresAt {
+                matrixService.storeCredentials(
+                    userId: credentials.matrixUserId,
+                    accessToken: credentials.accessToken,
+                    deviceId: credentials.deviceId,
+                    homeserverUrl: credentials.homeserverUrl,
+                    expiresAt: expiresAt
+                )
+
+                // Start proactive token refresh
+                MatrixTokenRefreshManager.shared.startProactiveRefresh(tokenExpiresAt: expiresAt)
+            }
         } catch {
             #if DEBUG
             print("[MatrixBridge] ❌ matrixService.login() failed: \(error)")
@@ -426,6 +440,9 @@ final class MatrixBridgeService: @unchecked Sendable {
         #if DEBUG
         print("[MatrixBridge] Shutting down... (clearCredentials: \(clearCredentials))")
         #endif
+
+        // Stop proactive token refresh
+        MatrixTokenRefreshManager.shared.stopProactiveRefresh()
 
         matrixService.stopSync()
 
@@ -586,6 +603,43 @@ final class MatrixBridgeService: @unchecked Sendable {
         }
 
         return false
+    }
+
+    // MARK: - Token Refresh Wrapper
+
+    /// Execute an operation with automatic token refresh on failure
+    /// If the operation fails with a token error, attempts to refresh the token and retry once
+    /// - Parameter operation: The async operation to execute
+    /// - Returns: The result of the operation
+    func withTokenRefresh<T>(_ operation: () async throws -> T) async throws -> T {
+        do {
+            return try await operation()
+        } catch {
+            // Check if this is a token error
+            if isUnknownTokenError(error) {
+                #if DEBUG
+                print("[MatrixBridge] 🔄 Token error detected, attempting refresh and retry...")
+                #endif
+
+                // Attempt to refresh the token
+                let refreshManager = MatrixTokenRefreshManager.shared
+                let refreshed = await refreshManager.handleTokenError(error)
+
+                if refreshed {
+                    #if DEBUG
+                    print("[MatrixBridge] ✅ Token refreshed, retrying operation...")
+                    #endif
+                    // Retry the operation once
+                    return try await operation()
+                } else {
+                    #if DEBUG
+                    print("[MatrixBridge] ❌ Token refresh failed, re-throwing original error")
+                    #endif
+                }
+            }
+
+            throw error
+        }
     }
 
     // MARK: - Conversation Mapping

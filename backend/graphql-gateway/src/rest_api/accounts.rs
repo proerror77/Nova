@@ -208,10 +208,9 @@ pub async fn list_accounts(
             error!(user_id = %user_id, error = %status, "Failed to list accounts");
 
             let response = match status.code() {
-                tonic::Code::NotFound => HttpResponse::NotFound().json(ErrorResponse::with_message(
-                    "User not found",
-                    status.message(),
-                )),
+                tonic::Code::NotFound => HttpResponse::NotFound().json(
+                    ErrorResponse::with_message("User not found", status.message()),
+                ),
                 _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
                     "Failed to list accounts",
                     status.message(),
@@ -267,26 +266,24 @@ pub async fn switch_account(
                     account: proto_account_to_response(&account),
                 }))
             } else {
-                Ok(HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                    "Account switch failed",
-                    "No account returned from service",
-                )))
+                Ok(
+                    HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                        "Account switch failed",
+                        "No account returned from service",
+                    )),
+                )
             }
         }
         Err(status) => {
             error!(user_id = %user_id, error = %status, "Failed to switch account");
 
             let response = match status.code() {
-                tonic::Code::NotFound => HttpResponse::NotFound().json(ErrorResponse::with_message(
-                    "Account not found",
-                    status.message(),
-                )),
-                tonic::Code::InvalidArgument => {
-                    HttpResponse::BadRequest().json(ErrorResponse::with_message(
-                        "Invalid request",
-                        status.message(),
-                    ))
-                }
+                tonic::Code::NotFound => HttpResponse::NotFound().json(
+                    ErrorResponse::with_message("Account not found", status.message()),
+                ),
+                tonic::Code::InvalidArgument => HttpResponse::BadRequest().json(
+                    ErrorResponse::with_message("Invalid request", status.message()),
+                ),
                 _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
                     "Failed to switch account",
                     status.message(),
@@ -359,26 +356,24 @@ pub async fn create_alias_account(
                     "account": proto_account_to_response(&account)
                 })))
             } else {
-                Ok(HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                    "Failed to create alias",
-                    "No account returned from service",
-                )))
+                Ok(
+                    HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                        "Failed to create alias",
+                        "No account returned from service",
+                    )),
+                )
             }
         }
         Err(status) => {
             error!(user_id = %user_id, error = %status, "Failed to create alias account");
 
             let response = match status.code() {
-                tonic::Code::InvalidArgument => {
-                    HttpResponse::BadRequest().json(ErrorResponse::with_message(
-                        "Invalid request",
-                        status.message(),
-                    ))
-                }
-                tonic::Code::NotFound => HttpResponse::NotFound().json(ErrorResponse::with_message(
-                    "User not found",
-                    status.message(),
-                )),
+                tonic::Code::InvalidArgument => HttpResponse::BadRequest().json(
+                    ErrorResponse::with_message("Invalid request", status.message()),
+                ),
+                tonic::Code::NotFound => HttpResponse::NotFound().json(
+                    ErrorResponse::with_message("User not found", status.message()),
+                ),
                 _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
                     "Failed to create alias account",
                     status.message(),
@@ -445,26 +440,24 @@ pub async fn update_alias_account(
                     "account": proto_account_to_response(&account)
                 })))
             } else {
-                Ok(HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                    "Failed to update alias",
-                    "No account returned from service",
-                )))
+                Ok(
+                    HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                        "Failed to update alias",
+                        "No account returned from service",
+                    )),
+                )
             }
         }
         Err(status) => {
             error!(user_id = %user_id, error = %status, "Failed to update alias account");
 
             let response = match status.code() {
-                tonic::Code::NotFound => HttpResponse::NotFound().json(ErrorResponse::with_message(
-                    "Alias account not found",
-                    status.message(),
-                )),
-                tonic::Code::InvalidArgument => {
-                    HttpResponse::BadRequest().json(ErrorResponse::with_message(
-                        "Invalid request",
-                        status.message(),
-                    ))
-                }
+                tonic::Code::NotFound => HttpResponse::NotFound().json(
+                    ErrorResponse::with_message("Alias account not found", status.message()),
+                ),
+                tonic::Code::InvalidArgument => HttpResponse::BadRequest().json(
+                    ErrorResponse::with_message("Invalid request", status.message()),
+                ),
                 _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
                     "Failed to update alias account",
                     status.message(),
@@ -520,10 +513,9 @@ pub async fn get_alias_account(
             error!(user_id = %user_id, error = %status, "Failed to get alias account");
 
             let response = match status.code() {
-                tonic::Code::NotFound => HttpResponse::NotFound().json(ErrorResponse::with_message(
-                    "Alias account not found",
-                    status.message(),
-                )),
+                tonic::Code::NotFound => HttpResponse::NotFound().json(
+                    ErrorResponse::with_message("Alias account not found", status.message()),
+                ),
                 _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
                     "Failed to get alias account",
                     status.message(),
@@ -579,10 +571,9 @@ pub async fn delete_alias_account(
             error!(user_id = %user_id, error = %status, "Failed to delete alias account");
 
             let response = match status.code() {
-                tonic::Code::NotFound => HttpResponse::NotFound().json(ErrorResponse::with_message(
-                    "Alias account not found",
-                    status.message(),
-                )),
+                tonic::Code::NotFound => HttpResponse::NotFound().json(
+                    ErrorResponse::with_message("Alias account not found", status.message()),
+                ),
                 _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
                     "Failed to delete alias account",
                     status.message(),

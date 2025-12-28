@@ -264,7 +264,10 @@ impl NearLineFeatureService {
 
         let mut insert = self.clickhouse_client.insert("features")?;
         insert.write(&row).await?;
-        insert.end().await.context("Failed to insert feature into ClickHouse")?;
+        insert
+            .end()
+            .await
+            .context("Failed to insert feature into ClickHouse")?;
 
         info!(
             entity_id = %entity_id,
@@ -305,7 +308,10 @@ impl NearLineFeatureService {
             insert.write(&row).await?;
         }
 
-        insert.end().await.context("Failed to batch insert features into ClickHouse")?;
+        insert
+            .end()
+            .await
+            .context("Failed to batch insert features into ClickHouse")?;
 
         let count = features.len();
         info!(
@@ -534,7 +540,8 @@ mod tests {
 
     #[test]
     fn test_serialize_feature_value() {
-        let (s, t) = NearLineFeatureService::serialize_feature_value(&FeatureValueData::Double(3.14));
+        let (s, t) =
+            NearLineFeatureService::serialize_feature_value(&FeatureValueData::Double(3.14));
         assert_eq!(s, "3.14");
         assert_eq!(t, 1);
 

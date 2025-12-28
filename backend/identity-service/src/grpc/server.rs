@@ -24,8 +24,8 @@ use tonic::{Request, Response, Status};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use std::collections::HashSet;
 use prost_types;
+use std::collections::HashSet;
 
 // Import generated protobuf types
 pub mod nova {
@@ -307,14 +307,22 @@ impl AuthService for IdentityServiceServer {
                 &self.db,
                 user.id,
                 &req.device_id,
-                if req.device_name.is_empty() { None } else { Some(&req.device_name) },
+                if req.device_name.is_empty() {
+                    None
+                } else {
+                    Some(&req.device_name)
+                },
                 device_type,
                 os_name,
                 os_version,
                 None, // browser_name (not applicable for mobile)
                 None, // browser_version
                 None, // ip_address (could be extracted from request metadata)
-                if req.user_agent.is_empty() { None } else { Some(&req.user_agent) },
+                if req.user_agent.is_empty() {
+                    None
+                } else {
+                    Some(&req.user_agent)
+                },
                 None, // location_country
                 None, // location_city
             )
@@ -747,12 +755,15 @@ impl AuthService for IdentityServiceServer {
                 first_name: user.first_name.clone(),
                 last_name: user.last_name.clone(),
                 date_of_birth: user.date_of_birth.map(|d| d.format("%Y-%m-%d").to_string()),
-                gender: user.gender.map(|g| match g {
-                    crate::models::user::Gender::Male => 1,           // GENDER_MALE
-                    crate::models::user::Gender::Female => 2,         // GENDER_FEMALE
-                    crate::models::user::Gender::Other => 3,          // GENDER_OTHER
-                    crate::models::user::Gender::PreferNotToSay => 4, // GENDER_PREFER_NOT_TO_SAY
-                }).unwrap_or(0), // GENDER_UNSPECIFIED
+                gender: user
+                    .gender
+                    .map(|g| match g {
+                        crate::models::user::Gender::Male => 1,   // GENDER_MALE
+                        crate::models::user::Gender::Female => 2, // GENDER_FEMALE
+                        crate::models::user::Gender::Other => 3,  // GENDER_OTHER
+                        crate::models::user::Gender::PreferNotToSay => 4, // GENDER_PREFER_NOT_TO_SAY
+                    })
+                    .unwrap_or(0), // GENDER_UNSPECIFIED
             })
             .collect();
 
@@ -960,11 +971,11 @@ impl AuthService for IdentityServiceServer {
 
         // Parse gender from proto enum (i32) if provided
         let gender = match req.gender {
-            1 => Some(crate::models::user::Gender::Male),           // GENDER_MALE
-            2 => Some(crate::models::user::Gender::Female),         // GENDER_FEMALE
-            3 => Some(crate::models::user::Gender::Other),          // GENDER_OTHER
+            1 => Some(crate::models::user::Gender::Male), // GENDER_MALE
+            2 => Some(crate::models::user::Gender::Female), // GENDER_FEMALE
+            3 => Some(crate::models::user::Gender::Other), // GENDER_OTHER
             4 => Some(crate::models::user::Gender::PreferNotToSay), // GENDER_PREFER_NOT_TO_SAY
-            _ => None, // GENDER_UNSPECIFIED or invalid
+            _ => None,                                    // GENDER_UNSPECIFIED or invalid
         };
 
         // Update profile fields
@@ -1031,12 +1042,15 @@ impl AuthService for IdentityServiceServer {
                 first_name: user.first_name.clone(),
                 last_name: user.last_name.clone(),
                 date_of_birth: user.date_of_birth.map(|d| d.format("%Y-%m-%d").to_string()),
-                gender: user.gender.map(|g| match g {
-                    crate::models::user::Gender::Male => 1,           // GENDER_MALE
-                    crate::models::user::Gender::Female => 2,         // GENDER_FEMALE
-                    crate::models::user::Gender::Other => 3,          // GENDER_OTHER
-                    crate::models::user::Gender::PreferNotToSay => 4, // GENDER_PREFER_NOT_TO_SAY
-                }).unwrap_or(0), // GENDER_UNSPECIFIED
+                gender: user
+                    .gender
+                    .map(|g| match g {
+                        crate::models::user::Gender::Male => 1,   // GENDER_MALE
+                        crate::models::user::Gender::Female => 2, // GENDER_FEMALE
+                        crate::models::user::Gender::Other => 3,  // GENDER_OTHER
+                        crate::models::user::Gender::PreferNotToSay => 4, // GENDER_PREFER_NOT_TO_SAY
+                    })
+                    .unwrap_or(0), // GENDER_UNSPECIFIED
             }),
             error: None,
         }))
@@ -1951,13 +1965,18 @@ impl AuthService for IdentityServiceServer {
         db::accounts::set_active_alias(&self.db, target_account_id, user_id)
             .await
             .map_err(to_status)?;
-        db::accounts::update_user_current_account(&self.db, user_id, Some(target_account_id), "alias")
-            .await
-            .map_err(to_status)?;
+        db::accounts::update_user_current_account(
+            &self.db,
+            user_id,
+            Some(target_account_id),
+            "alias",
+        )
+        .await
+        .map_err(to_status)?;
 
         // Generate new tokens (still using primary user credentials)
-        let tokens = generate_token_pair(user.id, &user.email, &user.username)
-            .map_err(anyhow_to_status)?;
+        let tokens =
+            generate_token_pair(user.id, &user.email, &user.username).map_err(anyhow_to_status)?;
 
         info!(
             user_id = %user_id,
@@ -2011,11 +2030,23 @@ impl AuthService for IdentityServiceServer {
         let fields = db::accounts::CreateAliasAccountFields {
             user_id,
             alias_name: req.alias_name.trim().to_string(),
-            avatar_url: if req.avatar_url.is_empty() { None } else { Some(req.avatar_url) },
+            avatar_url: if req.avatar_url.is_empty() {
+                None
+            } else {
+                Some(req.avatar_url)
+            },
             date_of_birth,
             gender,
-            profession: if req.profession.is_empty() { None } else { Some(req.profession) },
-            location: if req.location.is_empty() { None } else { Some(req.location) },
+            profession: if req.profession.is_empty() {
+                None
+            } else {
+                Some(req.profession)
+            },
+            location: if req.location.is_empty() {
+                None
+            } else {
+                Some(req.location)
+            },
         };
 
         let alias = db::accounts::create_alias_account(&self.db, fields)
@@ -2066,12 +2097,28 @@ impl AuthService for IdentityServiceServer {
 
         // Build update fields
         let fields = db::accounts::UpdateAliasAccountFields {
-            alias_name: if req.alias_name.is_empty() { None } else { Some(req.alias_name) },
-            avatar_url: if req.avatar_url.is_empty() { None } else { Some(req.avatar_url) },
+            alias_name: if req.alias_name.is_empty() {
+                None
+            } else {
+                Some(req.alias_name)
+            },
+            avatar_url: if req.avatar_url.is_empty() {
+                None
+            } else {
+                Some(req.avatar_url)
+            },
             date_of_birth,
             gender,
-            profession: if req.profession.is_empty() { None } else { Some(req.profession) },
-            location: if req.location.is_empty() { None } else { Some(req.location) },
+            profession: if req.profession.is_empty() {
+                None
+            } else {
+                Some(req.profession)
+            },
+            location: if req.location.is_empty() {
+                None
+            } else {
+                Some(req.location)
+            },
         };
 
         let alias = db::accounts::update_alias_account(&self.db, account_id, user_id, fields)
@@ -2168,9 +2215,21 @@ impl AuthService for IdentityServiceServer {
             .passkey
             .start_registration(
                 &user,
-                if req.credential_name.is_empty() { None } else { Some(req.credential_name) },
-                if req.device_type.is_empty() { None } else { Some(req.device_type) },
-                if req.os_version.is_empty() { None } else { Some(req.os_version) },
+                if req.credential_name.is_empty() {
+                    None
+                } else {
+                    Some(req.credential_name)
+                },
+                if req.device_type.is_empty() {
+                    None
+                } else {
+                    Some(req.device_type)
+                },
+                if req.os_version.is_empty() {
+                    None
+                } else {
+                    Some(req.os_version)
+                },
             )
             .await
             .map_err(to_status)?;
@@ -2193,8 +2252,9 @@ impl AuthService for IdentityServiceServer {
 
         // Parse attestation response
         let attestation: webauthn_rs::prelude::RegisterPublicKeyCredential =
-            serde_json::from_str(&req.attestation_json)
-                .map_err(|e| Status::invalid_argument(format!("Invalid attestation JSON: {}", e)))?;
+            serde_json::from_str(&req.attestation_json).map_err(|e| {
+                Status::invalid_argument(format!("Invalid attestation JSON: {}", e))
+            })?;
 
         // Complete registration
         let result = self
@@ -2326,7 +2386,11 @@ impl AuthService for IdentityServiceServer {
             .revoke_credential(
                 credential_id,
                 user_id,
-                if req.reason.is_empty() { None } else { Some(&req.reason) },
+                if req.reason.is_empty() {
+                    None
+                } else {
+                    Some(&req.reason)
+                },
             )
             .await
             .map_err(to_status)?;
@@ -2395,7 +2459,9 @@ fn to_status(err: IdentityError) -> Status {
         }
         IdentityError::NotFoundError(msg) => Status::not_found(msg),
         IdentityError::Internal(msg) => Status::internal(msg),
-        IdentityError::Configuration(msg) => Status::internal(format!("Configuration error: {}", msg)),
+        IdentityError::Configuration(msg) => {
+            Status::internal(format!("Configuration error: {}", msg))
+        }
         // Passkey errors
         IdentityError::PasskeyRegistrationFailed(msg) => {
             Status::internal(format!("Passkey registration failed: {}", msg))
@@ -2403,11 +2469,19 @@ fn to_status(err: IdentityError) -> Status {
         IdentityError::PasskeyAuthenticationFailed(msg) => {
             Status::unauthenticated(format!("Passkey authentication failed: {}", msg))
         }
-        IdentityError::PasskeyChallengeExpired => Status::invalid_argument("Passkey challenge expired"),
-        IdentityError::InvalidPasskeyChallenge => Status::invalid_argument("Invalid passkey challenge"),
-        IdentityError::PasskeyAlreadyRegistered => Status::already_exists("Passkey already registered"),
+        IdentityError::PasskeyChallengeExpired => {
+            Status::invalid_argument("Passkey challenge expired")
+        }
+        IdentityError::InvalidPasskeyChallenge => {
+            Status::invalid_argument("Invalid passkey challenge")
+        }
+        IdentityError::PasskeyAlreadyRegistered => {
+            Status::already_exists("Passkey already registered")
+        }
         IdentityError::NoPasskeyCredentials => Status::not_found("No passkey credentials found"),
-        IdentityError::PasskeyCredentialNotFound => Status::not_found("Passkey credential not found"),
+        IdentityError::PasskeyCredentialNotFound => {
+            Status::not_found("Passkey credential not found")
+        }
         // Zitadel errors
         IdentityError::ZitadelError(msg) => Status::internal(format!("Zitadel error: {}", msg)),
     }
@@ -2443,11 +2517,11 @@ fn user_model_to_proto(user: &crate::models::User) -> User {
 fn settings_to_proto(settings: &db::user_settings::UserSettingsRecord) -> UserSettings {
     // Convert dm_permission from database string to proto enum (i32)
     let dm_permission_i32 = match settings.dm_permission.to_lowercase().as_str() {
-        "anyone" => 1,       // DM_PERMISSION_ANYONE
-        "followers" => 2,    // DM_PERMISSION_FOLLOWERS
-        "mutuals" => 3,      // DM_PERMISSION_MUTUALS
-        "nobody" => 4,       // DM_PERMISSION_NOBODY
-        _ => 1,              // Default to anyone (open messaging)
+        "anyone" => 1,    // DM_PERMISSION_ANYONE
+        "followers" => 2, // DM_PERMISSION_FOLLOWERS
+        "mutuals" => 3,   // DM_PERMISSION_MUTUALS
+        "nobody" => 4,    // DM_PERMISSION_NOBODY
+        _ => 1,           // Default to anyone (open messaging)
     };
 
     // Convert privacy_level from database string to proto enum (i32)

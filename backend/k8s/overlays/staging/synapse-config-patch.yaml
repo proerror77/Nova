@@ -12,6 +12,15 @@ data:
 
     server_name: "staging.gcp.icered.com"
     pid_file: /data/homeserver.pid
+    report_stats: false
+    public_baseurl: "https://matrix.staging.gcp.icered.com/"
+
+    # TURN (WebRTC) configuration
+    turn_uris:
+      - "turn:turn.staging.gcp.icered.com:3478?transport=udp"
+      - "turn:turn.staging.gcp.icered.com:443?transport=tcp"
+    turn_shared_secret_path: "/secrets/turn_shared_secret"
+    turn_user_lifetime: "1h"
 
     # Listeners
     listeners:
@@ -28,10 +37,9 @@ data:
       name: psycopg2
       args:
         user: synapse
-        password: "synapse_staging_pwd"
+        password: "POSTGRES_PASSWORD_PLACEHOLDER"
         database: synapse
-        # Cross-namespace reference to PostgreSQL in nova-staging
-        host: postgres.nova-staging.svc.cluster.local
+        host: postgres
         port: 5432
         cp_min: 5
         cp_max: 10
@@ -43,27 +51,38 @@ data:
     media_store_path: /data/media_store
     max_upload_size: 50M
 
-    # Registration (temporarily enabled for testing without OIDC)
-    enable_registration: true
-    enable_registration_without_verification: true
+    # Registration (disabled - use OIDC SSO)
+    enable_registration: false
+    enable_registration_without_verification: false
     registration_shared_secret_path: "/secrets/registration_shared_secret"
 
-    # OIDC SSO Configuration - disabled until DNS is configured
-    # TODO: Re-enable OIDC once id.staging.gcp.icered.com DNS is configured
-    # oidc_providers:
-    #   - idp_id: nova
-    #     idp_name: "Nova"
-    #     issuer: "https://id.staging.gcp.icered.com/"
-    #     ...
+    # OIDC SSO Configuration - Zitadel integration (public client)
+    oidc_providers:
+      - idp_id: zitadel
+        idp_name: "Nova Login"
+        issuer: "https://id.staging.gcp.icered.com"
+        client_id: "synapse-nova-staging"
+        client_secret_path: "/secrets/oidc_client_secret"
+        client_auth_method: client_secret_basic
+        scopes: ["openid", "profile", "email"]
+        authorization_endpoint: "https://id.staging.gcp.icered.com/oauth/v2/authorize"
+        token_endpoint: "https://id.staging.gcp.icered.com/oauth/v2/token"
+        userinfo_endpoint: "https://id.staging.gcp.icered.com/oidc/v1/userinfo"
+        jwks_uri: "https://id.staging.gcp.icered.com/oauth/v2/keys"
+        user_mapping_provider:
+          config:
+            localpart_template: "{{ user.preferred_username | default(user.sub) }}"
+            display_name_template: "{{ user.name | default(user.preferred_username) }}"
+        backchannel_logout_enabled: false
 
-    # SSO settings (disabled without OIDC)
-    # sso:
-    #   client_whitelist:
-    #     - "https://matrix.staging.gcp.icered.com/"
-    #     - "nova-staging://"
+    # SSO settings
+    sso:
+      client_whitelist:
+        - "https://matrix.staging.gcp.icered.com/"
+        - "nova-staging://"
+        - "icered://"
 
     # Session configuration for OIDC users
-    # Note: refresh_token_lifetime cannot exceed session_lifetime
     session_lifetime: 90d
     refresh_token_lifetime: 90d
     refreshable_access_token_lifetime: 10m

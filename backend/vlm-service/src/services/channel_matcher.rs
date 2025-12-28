@@ -194,10 +194,7 @@ mod tests {
 
     #[test]
     fn test_no_match_below_threshold() {
-        let channels = vec![create_test_channel(
-            "Fashion",
-            vec![("fashion", 1.0)],
-        )];
+        let channels = vec![create_test_channel("Fashion", vec![("fashion", 1.0)])];
 
         let tags = vec![("nature".to_string(), 0.9)];
         let matches = match_channels(&tags, &channels, 3, 0.25);

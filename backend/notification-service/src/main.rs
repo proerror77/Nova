@@ -8,7 +8,9 @@ use notification_service::{
         websocket::register_routes as register_websocket,
     },
     metrics,
-    services::{APNsClient, FCMClient, KafkaNotificationConsumer, RedisDeduplicator, ServiceAccountKey},
+    services::{
+        APNsClient, FCMClient, KafkaNotificationConsumer, RedisDeduplicator, ServiceAccountKey,
+    },
     ConnectionManager, NotificationService,
 };
 use std::io;
@@ -145,8 +147,8 @@ async fn main() -> io::Result<()> {
     };
 
     // Initialize Redis pool for distributed deduplication
-    let redis_url = std::env::var("REDIS_URL")
-        .unwrap_or_else(|_| "redis://localhost:6379".to_string());
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
     let redis_dedup_ttl_secs: u64 = std::env::var("REDIS_DEDUP_TTL_SECS")
         .unwrap_or_else(|_| "120".to_string())
         .parse()
@@ -154,7 +156,10 @@ async fn main() -> io::Result<()> {
 
     let redis_pool = match redis_utils::RedisPool::connect(&redis_url, None).await {
         Ok(pool) => {
-            tracing::info!("Redis pool connected for deduplication (TTL: {}s)", redis_dedup_ttl_secs);
+            tracing::info!(
+                "Redis pool connected for deduplication (TTL: {}s)",
+                redis_dedup_ttl_secs
+            );
             Some(pool)
         }
         Err(e) => {
@@ -182,9 +187,9 @@ async fn main() -> io::Result<()> {
 
     if kafka_enabled {
         // Create deduplicator if Redis is available
-        let deduplicator = redis_pool.as_ref().map(|pool| {
-            RedisDeduplicator::new(pool.manager(), redis_dedup_ttl_secs)
-        });
+        let deduplicator = redis_pool
+            .as_ref()
+            .map(|pool| RedisDeduplicator::new(pool.manager(), redis_dedup_ttl_secs));
 
         tokio::spawn(async move {
             let mut consumer =

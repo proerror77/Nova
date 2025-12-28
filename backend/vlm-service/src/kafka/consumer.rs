@@ -116,7 +116,10 @@ impl VLMConsumer {
                     }
 
                     // Commit offset after processing
-                    if let Err(e) = self.consumer.commit_message(&message, rdkafka::consumer::CommitMode::Async) {
+                    if let Err(e) = self
+                        .consumer
+                        .commit_message(&message, rdkafka::consumer::CommitMode::Async)
+                    {
                         warn!("Failed to commit offset: {}", e);
                     }
                 }
@@ -146,9 +149,10 @@ impl VLMConsumer {
         );
 
         // Analyze first image (primary image for tagging)
-        let image_url = event.image_urls.first().ok_or_else(|| {
-            VLMConsumerError::Processing("No images in event".to_string())
-        })?;
+        let image_url = event
+            .image_urls
+            .first()
+            .ok_or_else(|| VLMConsumerError::Processing("No images in event".to_string()))?;
 
         // Call Vision API
         let analysis_result = self

@@ -133,7 +133,8 @@ impl EmailService {
             ios_link, web_link
         );
 
-        self.send_html_email(recipient, subject, &html_body, &text_body).await
+        self.send_html_email(recipient, subject, &html_body, &text_body)
+            .await
     }
 
     /// Generate random backup verification code

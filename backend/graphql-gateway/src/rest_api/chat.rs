@@ -4,12 +4,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use tracing::{error, warn};
 
+use crate::clients::proto::auth::{GetUserProfilesByIdsRequest, UserProfile as AuthUserProfile};
 use crate::clients::proto::chat::ConversationType;
 use crate::clients::proto::chat::{
     CreateConversationRequest, GetConversationRequest, GetMessagesRequest,
     ListConversationsRequest, SendMessageRequest,
 };
-use crate::clients::proto::auth::{GetUserProfilesByIdsRequest, UserProfile as AuthUserProfile};
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
 
@@ -236,13 +236,8 @@ pub async fn get_conversation_by_id(
             let Some(conv) = resp.conversation else {
                 return HttpResponse::NotFound().finish();
             };
-            let profiles =
-                fetch_user_profiles(&clients, conv.participant_ids.clone()).await;
-            HttpResponse::Ok().json(RestConversation::from_proto(
-                conv,
-                &profiles,
-                &user_id,
-            ))
+            let profiles = fetch_user_profiles(&clients, conv.participant_ids.clone()).await;
+            HttpResponse::Ok().json(RestConversation::from_proto(conv, &profiles, &user_id))
         }
         Err(e) => {
             error!("get_conversation failed: {}", e);
@@ -384,7 +379,7 @@ pub struct RestConversationMember {
     pub username: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub avatar_url: Option<String>,
-    pub role: String, // "owner", "admin", "member"
+    pub role: String,      // "owner", "admin", "member"
     pub joined_at: String, // ISO8601
 }
 
@@ -488,7 +483,11 @@ impl RestConversation {
                     })
                     .unwrap_or_default(),
                 avatar_url: profiles.get(user_id).and_then(|p| p.avatar_url.clone()),
-                role: if idx == 0 { "owner".to_string() } else { "member".to_string() },
+                role: if idx == 0 {
+                    "owner".to_string()
+                } else {
+                    "member".to_string()
+                },
                 joined_at: timestamp_to_iso8601(created_ts),
             })
             .collect();
@@ -513,7 +512,11 @@ impl RestConversation {
             (name, avatar)
         } else {
             (
-                if conv.name.is_empty() { None } else { Some(conv.name.clone()) },
+                if conv.name.is_empty() {
+                    None
+                } else {
+                    Some(conv.name.clone())
+                },
                 None,
             )
         };
@@ -526,8 +529,8 @@ impl RestConversation {
             last_message,
             created_at: timestamp_to_iso8601(created_ts),
             updated_at: timestamp_to_iso8601(updated_ts),
-            avatar_url,            // Derived from the other participant (direct chats)
-            unread_count: 0,       // Not present in this proto version
+            avatar_url,      // Derived from the other participant (direct chats)
+            unread_count: 0, // Not present in this proto version
             is_muted: false,
             is_archived: false,
             is_encrypted: false,

@@ -407,12 +407,9 @@ pub struct PasskeySettings {
 impl PasskeySettings {
     fn from_env() -> Result<Self> {
         Ok(Self {
-            rp_id: env::var("PASSKEY_RP_ID")
-                .unwrap_or_else(|_| "icered.com".to_string()),
-            rp_name: env::var("PASSKEY_RP_NAME")
-                .unwrap_or_else(|_| "ICERED".to_string()),
-            origin: env::var("PASSKEY_ORIGIN")
-                .unwrap_or_else(|_| "https://icered.com".to_string()),
+            rp_id: env::var("PASSKEY_RP_ID").unwrap_or_else(|_| "icered.com".to_string()),
+            rp_name: env::var("PASSKEY_RP_NAME").unwrap_or_else(|_| "ICERED".to_string()),
+            origin: env::var("PASSKEY_ORIGIN").unwrap_or_else(|_| "https://icered.com".to_string()),
             challenge_ttl_secs: env::var("PASSKEY_CHALLENGE_TTL_SECS")
                 .unwrap_or_else(|_| "300".to_string())
                 .parse()

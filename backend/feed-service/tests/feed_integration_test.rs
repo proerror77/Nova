@@ -109,8 +109,10 @@ async fn test_feed_error_handling() {
     // The error handling block logs the error but doesn't break the loop,
     // which means it continues fetching other users' posts
     assert!(
-        source.contains(r#"Err(e) => {
-                                    debug!("Failed to fetch posts from user"#),
+        source.contains(
+            r#"Err(e) => {
+                                    debug!("Failed to fetch posts from user"#
+        ),
         "Handler should continue on partial failure by logging and not breaking"
     );
 

@@ -11,7 +11,7 @@ data:
     # Listening ports
     listening-port=3478
     listening-ip=0.0.0.0
-    alt-listening-port=3479
+    alt-listening-port=443
 
     # External IP for clients to connect to
     external-ip=${EXTERNAL_IP}
@@ -24,8 +24,13 @@ data:
     # Credentials
     realm=${REALM}
 
-    # Authentication
-    user=${TURN_USER}:${TURN_PASSWORD}
+    # Authentication (Matrix-compatible short-term credentials)
+    use-auth-secret
+    static-auth-secret=${TURN_SHARED_SECRET}
+    fingerprint
+    lt-cred-mech
+    no-loopback-peers
+    no-multicast-peers
 
     # Verbose logging
     log-file=/var/log/turn/turn.log
@@ -49,8 +54,7 @@ metadata:
   name: turn-server-secret
 type: Opaque
 stringData:
-  TURN_USER: "nova"
-  TURN_PASSWORD: "changeme-in-production"  # TODO: Change in production
+  TURN_SHARED_SECRET: "changeme-in-production"  # TODO: Change in production
   REALM: "turn.nova.local"
   EXTERNAL_IP: "your-server-ip"  # TODO: Set to your server's public IP
 
@@ -75,14 +79,14 @@ spec:
       port: 3478
       targetPort: 3478
       protocol: UDP
-    - name: turn-udp-alt
-      port: 3479
-      targetPort: 3479
-      protocol: UDP
     # TURN TCP ports
     - name: turn-tcp
       port: 3478
       targetPort: 3478
+      protocol: TCP
+    - name: turn-tcp-alt
+      port: 443
+      targetPort: 443
       protocol: TCP
   selector:
     app: nova
@@ -124,13 +128,12 @@ spec:
             - name: stun-udp
               containerPort: 3478
               protocol: UDP
-            # TURN UDP alt port
-            - name: turn-udp-alt
-              containerPort: 3479
-              protocol: UDP
             # TURN TCP
             - name: turn-tcp
               containerPort: 3478
+              protocol: TCP
+            - name: turn-tcp-alt
+              containerPort: 443
               protocol: TCP
 
           env:
@@ -139,16 +142,11 @@ spec:
                 secretKeyRef:
                   name: turn-server-secret
                   key: EXTERNAL_IP
-            - name: TURN_USER
+            - name: TURN_SHARED_SECRET
               valueFrom:
                 secretKeyRef:
                   name: turn-server-secret
-                  key: TURN_USER
-            - name: TURN_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: turn-server-secret
-                  key: TURN_PASSWORD
+                  key: TURN_SHARED_SECRET
             - name: REALM
               valueFrom:
                 secretKeyRef:

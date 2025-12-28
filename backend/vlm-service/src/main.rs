@@ -12,7 +12,9 @@ use std::env;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use vlm_service::{BackfillJob, Config, GoogleVisionClient, VLMConsumer, VLMConsumerConfig, VLMProducer};
+use vlm_service::{
+    BackfillJob, Config, GoogleVisionClient, VLMConsumer, VLMConsumerConfig, VLMProducer,
+};
 
 /// Service run mode
 #[derive(Debug, Clone, PartialEq)]
@@ -54,9 +56,10 @@ async fn main() -> Result<()> {
 
     // Initialize tracing
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-            "vlm_service=debug,tower_http=debug,rdkafka=warn,info".into()
-        }))
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "vlm_service=debug,tower_http=debug,rdkafka=warn,info".into()),
+        )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
@@ -82,14 +85,19 @@ async fn main() -> Result<()> {
         Arc::new(GoogleVisionClient::with_adc())
     } else if !config.google_vision_api_key.is_empty() {
         info!("Using API key for Vision API");
-        Arc::new(GoogleVisionClient::new(config.google_vision_api_key.clone()))
+        Arc::new(GoogleVisionClient::new(
+            config.google_vision_api_key.clone(),
+        ))
     } else {
         // Default to ADC if no API key is provided
         info!("No API key provided, using Application Default Credentials");
         Arc::new(GoogleVisionClient::with_adc())
     };
 
-    info!("Google Vision client initialized (auth: {:?})", vision_client.auth_mode());
+    info!(
+        "Google Vision client initialized (auth: {:?})",
+        vision_client.auth_mode()
+    );
 
     // Run based on mode
     match mode {
@@ -111,10 +119,12 @@ async fn run_backfill_mode(config: Config, vision_client: Arc<GoogleVisionClient
         anyhow::bail!("DATABASE_URL environment variable is required for backfill mode");
     }
 
-    let db_pool = sqlx::PgPool::connect(&config.database_url).await.map_err(|e| {
-        error!("Failed to connect to database: {}", e);
-        anyhow::anyhow!("Database connection error: {}", e)
-    })?;
+    let db_pool = sqlx::PgPool::connect(&config.database_url)
+        .await
+        .map_err(|e| {
+            error!("Failed to connect to database: {}", e);
+            anyhow::anyhow!("Database connection error: {}", e)
+        })?;
 
     info!("Database connection pool initialized");
 
@@ -162,12 +172,10 @@ async fn run_consumer_mode(config: Config, vision_client: Arc<GoogleVisionClient
     };
 
     // Initialize Kafka producer
-    let producer = Arc::new(
-        VLMProducer::new(&config.kafka_brokers).map_err(|e| {
-            error!("Failed to create Kafka producer: {}", e);
-            anyhow::anyhow!("Kafka producer error: {}", e)
-        })?,
-    );
+    let producer = Arc::new(VLMProducer::new(&config.kafka_brokers).map_err(|e| {
+        error!("Failed to create Kafka producer: {}", e);
+        anyhow::anyhow!("Kafka producer error: {}", e)
+    })?);
 
     info!("Kafka producer initialized");
 

@@ -46,22 +46,29 @@ data:
       sleep 2
     done
 
-    # 初始化数据库
-    for db in nova_auth nova_user nova_content nova_messaging; do
+    apply_sql() {
+      local db="$1"
+      local sql="$2"
+
+      if [[ ! -f "$sql" ]]; then
+        echo "  Skipping missing seed file: $sql"
+        return 0
+      fi
+
       echo "Seeding database: $db"
-      for sql in /seed-data/*.sql; do
-        if [[ -f "$sql" && "$sql" == *.sql ]]; then
-          echo "  Executing: $(basename $sql)"
-          PGPASSWORD="$DB_PASSWORD" psql \
-            -h "$DB_HOST" \
-            -p "$DB_PORT" \
-            -U "$DB_USER" \
-            -d "$db" \
-            -f "$sql" \
-            -q || echo "  Warning: Some inserts may have been skipped (ON CONFLICT)"
-        fi
-      done
-    done
+      echo "  Executing: $(basename "$sql")"
+      PGPASSWORD="$DB_PASSWORD" psql \
+        -h "$DB_HOST" \
+        -p "$DB_PORT" \
+        -U "$DB_USER" \
+        -d "$db" \
+        -f "$sql" \
+        -q || echo "  Warning: Some inserts may have been skipped (ON CONFLICT)"
+    }
+
+    # Seed per-service databases with matching SQL
+    apply_sql nova_auth /seed-data/01_seed_auth_users.sql
+    apply_sql nova_user /seed-data/02_seed_user_profiles.sql
     echo "✓ Seed data initialization complete"
 ---
 apiVersion: batch/v1

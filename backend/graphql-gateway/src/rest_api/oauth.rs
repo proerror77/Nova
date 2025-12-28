@@ -144,7 +144,8 @@ pub async fn google_oauth_callback_get(
     let mut auth_client = clients.auth_client();
 
     // Use the same redirect_uri that was used in the start flow
-    let redirect_uri = "https://staging-api.icered.com/api/v2/auth/oauth/google/callback".to_string();
+    let redirect_uri =
+        "https://staging-api.icered.com/api/v2/auth/oauth/google/callback".to_string();
 
     let grpc_request = tonic::Request::new(GrpcCompleteOAuthFlowRequest {
         state: query.state.clone(),
@@ -174,7 +175,10 @@ pub async fn google_oauth_callback_get(
             );
 
             if !inner.refresh_token.is_empty() {
-                redirect_url.push_str(&format!("&refresh_token={}", urlencoding::encode(&inner.refresh_token)));
+                redirect_url.push_str(&format!(
+                    "&refresh_token={}",
+                    urlencoding::encode(&inner.refresh_token)
+                ));
             }
 
             Ok(HttpResponse::Found()
@@ -426,8 +430,10 @@ pub async fn apple_native_sign_in(
                 tonic::Code::Unauthenticated => HttpResponse::Unauthorized().json(
                     ErrorResponse::with_message("Apple sign-in failed", status.message()),
                 ),
-                _ => HttpResponse::InternalServerError()
-                    .json(ErrorResponse::with_message("Apple sign-in error", status.message())),
+                _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                    "Apple sign-in error",
+                    status.message(),
+                )),
             };
 
             Ok(error_response)

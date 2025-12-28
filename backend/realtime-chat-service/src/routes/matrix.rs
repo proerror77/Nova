@@ -7,6 +7,7 @@
 // - Encryption status
 
 use actix_web::{web, HttpRequest, HttpResponse};
+use chrono::Utc;
 use db_pool::PgPool;
 use matrix_sdk::ruma::RoomId;
 use serde::{Deserialize, Serialize};
@@ -46,6 +47,8 @@ pub struct MatrixTokenResponse {
     pub matrix_user_id: String,
     pub device_id: String,
     pub homeserver_url: Option<String>,
+    /// Unix timestamp (seconds) when the token expires
+    pub expires_at: i64,
 }
 
 /// Response for room mapping query
@@ -173,11 +176,14 @@ pub async fn get_matrix_token(
             let client_url = matrix_config.public_url.clone()
                 .unwrap_or_else(|| matrix_config.homeserver_url.clone());
 
+            // Token expires in 1 hour (3600 seconds)
+            let expires_at = Utc::now().timestamp() + 3600;
             return Ok(HttpResponse::Ok().json(MatrixTokenResponse {
                 access_token,
                 matrix_user_id,
                 device_id,
                 homeserver_url: Some(client_url),
+                expires_at,
             }));
         }
     };
@@ -194,10 +200,10 @@ pub async fn get_matrix_token(
 
     // Pass device_id to provision_user to get a device-bound access token
     match matrix_admin.provision_user(nova_user_id, Some(displayname), Some(device_id.clone())).await {
-        Ok((matrix_user_id, access_token)) => {
+        Ok((matrix_user_id, access_token, expires_at)) => {
             tracing::info!(
-                "Successfully provisioned Matrix user with device binding: nova_user_id={}, matrix_user_id={}, device_id={}",
-                nova_user_id, matrix_user_id, device_id
+                "Successfully provisioned Matrix user with device binding: nova_user_id={}, matrix_user_id={}, device_id={}, expires_at={}",
+                nova_user_id, matrix_user_id, device_id, expires_at
             );
 
             Ok(HttpResponse::Ok().json(MatrixTokenResponse {
@@ -205,6 +211,7 @@ pub async fn get_matrix_token(
                 matrix_user_id,
                 device_id,
                 homeserver_url: Some(client_url),
+                expires_at,
             }))
         }
         Err(e) => {
@@ -219,12 +226,15 @@ pub async fn get_matrix_token(
             let access_token = matrix_config.access_token.clone()
                 .unwrap_or_else(|| "not_configured".to_string());
             let matrix_user_id = format!("@nova-{}:{}", nova_user_id, matrix_config.server_name);
+            // Token expires in 1 hour (3600 seconds) for fallback too
+            let expires_at = Utc::now().timestamp() + 3600;
 
             Ok(HttpResponse::Ok().json(MatrixTokenResponse {
                 access_token,
                 matrix_user_id,
                 device_id,
                 homeserver_url: Some(client_url.clone()),
+                expires_at,
             }))
         }
     }

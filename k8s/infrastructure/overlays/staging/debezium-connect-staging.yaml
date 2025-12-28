@@ -208,7 +208,7 @@ spec:
 
       containers:
       - name: deploy-connector
-        image: curlimages/curl:latest
+        image: postgres:15-alpine
         env:
         - name: POSTGRES_USER
           valueFrom:
@@ -227,8 +227,38 @@ spec:
         - -c
         - |
           set -e
+          apk add --no-cache curl
 
           CONNECT_URL="http://kafka-connect.nova-staging.svc.cluster.local:8083"
+          DB_HOST="postgres.nova-staging.svc.cluster.local"
+
+          wait_for_table() {
+            local db="$1"
+            local table="$2"
+
+            echo "Waiting for ${db}.${table}..."
+            for i in $(seq 1 60); do
+              if PGPASSWORD="${POSTGRES_PASSWORD}" psql \
+                  -h "${DB_HOST}" \
+                  -U "${POSTGRES_USER}" \
+                  -d "${db}" \
+                  -tAc "SELECT to_regclass('public.${table}')" 2>/dev/null | grep -q "${table}"; then
+                echo "✓ ${db}.${table} is ready"
+                return 0
+              fi
+              sleep 5
+            done
+
+            echo "❌ Timed out waiting for ${db}.${table}"
+            return 1
+          }
+
+          # Ensure source tables exist before creating CDC connectors
+          wait_for_table "nova_content" "posts"
+          wait_for_table "nova_content" "comments"
+          wait_for_table "nova_content" "likes"
+          wait_for_table "nova_graph" "follows"
+          wait_for_table "nova_auth" "users"
 
           echo "=============================================="
           echo "  Debezium CDC Connectors Deployment"

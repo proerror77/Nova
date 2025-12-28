@@ -264,8 +264,14 @@ impl PostService {
             if media_type != "none" && !media_urls.is_empty() {
                 // Determine if channels should be auto-assigned (if none were manually specified)
                 let auto_assign = channel_ids.is_empty();
-                publish_post_created_for_vlm(&mut tx, outbox.as_ref(), &post, media_urls, auto_assign)
-                    .await?;
+                publish_post_created_for_vlm(
+                    &mut tx,
+                    outbox.as_ref(),
+                    &post,
+                    media_urls,
+                    auto_assign,
+                )
+                .await?;
                 tracing::debug!(
                     post_id = %post.id,
                     image_count = media_urls.len(),
@@ -457,7 +463,8 @@ impl PostService {
         };
 
         // Check cache first for any cached posts
-        let mut cached_posts: std::collections::HashMap<Uuid, Post> = std::collections::HashMap::new();
+        let mut cached_posts: std::collections::HashMap<Uuid, Post> =
+            std::collections::HashMap::new();
         let mut uncached_ids: Vec<Uuid> = Vec::new();
 
         if let Some(cache) = self.cache() {
@@ -504,11 +511,7 @@ impl PostService {
         // Build result in original order
         let result: Vec<Post> = ids_to_fetch
             .iter()
-            .filter_map(|id| {
-                cached_posts
-                    .remove(id)
-                    .or_else(|| db_posts.remove(id))
-            })
+            .filter_map(|id| cached_posts.remove(id).or_else(|| db_posts.remove(id)))
             .collect();
 
         tracing::debug!(

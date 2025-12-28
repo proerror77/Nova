@@ -160,7 +160,15 @@ validate_secrets() {
 validate_initialization_jobs() {
   print_header "Initialization Jobs Validation"
 
-  JOBS=("seed-data-job" "sqlx-migrate" "redis-cluster-init" "kafka-init-topics" "clickhouse-init" "proto-validate")
+  JOBS=(
+    "seed-data-init"
+    "redis-init"
+    "kafka-init-topics"
+    "kafka-cdc-topics-init"
+    "debezium-cdc-connector-init"
+    "clickhouse-schema-update"
+    "proto-validate"
+  )
 
   for job in "${JOBS[@]}"; do
     print_check "Checking $job"

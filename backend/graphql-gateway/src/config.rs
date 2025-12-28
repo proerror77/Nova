@@ -264,7 +264,11 @@ mod tests {
 
         // This will use defaults for missing env vars
         let config = Config::from_env().await;
-        assert!(config.is_ok(), "Config should load with defaults: {:?}", config.err());
+        assert!(
+            config.is_ok(),
+            "Config should load with defaults: {:?}",
+            config.err()
+        );
 
         // Clean up
         env::remove_var("JWT_SECRET");

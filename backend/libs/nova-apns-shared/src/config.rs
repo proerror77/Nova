@@ -56,7 +56,11 @@ impl ApnsConfig {
 
     /// Set certificate passphrase (only applies to Certificate auth mode)
     pub fn with_passphrase(mut self, pass: String) -> Self {
-        if let ApnsAuthMode::Certificate { passphrase: ref mut p, .. } = self.auth_mode {
+        if let ApnsAuthMode::Certificate {
+            passphrase: ref mut p,
+            ..
+        } = self.auth_mode
+        {
             *p = Some(pass);
         }
         self

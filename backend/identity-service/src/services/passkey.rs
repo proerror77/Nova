@@ -226,8 +226,8 @@ impl PasskeyService {
             credential_id_base64,
             public_key,
             credential_name: state.credential_name.clone(),
-            aaguid: None, // AAGUID not directly accessible in this API version
-            sign_count: 0, // Initial sign count
+            aaguid: None,           // AAGUID not directly accessible in this API version
+            sign_count: 0,          // Initial sign count
             backup_eligible: false, // Updated after first authentication
             backup_state: false,
             transports: None,
@@ -381,10 +381,16 @@ impl PasskeyService {
         // Update backup state if changed (webauthn-rs provides this in auth result)
         let backup_eligible = auth_result.backup_eligible();
         let backup_state = auth_result.backup_state();
-        if backup_eligible != stored_cred.backup_eligible || backup_state != stored_cred.backup_state
+        if backup_eligible != stored_cred.backup_eligible
+            || backup_state != stored_cred.backup_state
         {
-            db::passkey::update_backup_state(&self.db, stored_cred.id, backup_eligible, backup_state)
-                .await?;
+            db::passkey::update_backup_state(
+                &self.db,
+                stored_cred.id,
+                backup_eligible,
+                backup_state,
+            )
+            .await?;
         }
 
         // Keep passkey variable to avoid unused warning

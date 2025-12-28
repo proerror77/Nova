@@ -283,7 +283,10 @@ impl CounterService {
     }
 
     /// Batch get bookmark counts from PostgreSQL
-    async fn batch_get_bookmark_counts_from_pg(&self, post_ids: &[Uuid]) -> Result<HashMap<Uuid, i64>> {
+    async fn batch_get_bookmark_counts_from_pg(
+        &self,
+        post_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, i64>> {
         if post_ids.is_empty() {
             return Ok(HashMap::new());
         }

@@ -208,14 +208,12 @@ pub async fn revoke_credential(
 
 /// Delete a passkey credential (hard delete)
 pub async fn delete_credential(pool: &PgPool, credential_id: Uuid, user_id: Uuid) -> Result<()> {
-    let result = sqlx::query(
-        "DELETE FROM passkey_credentials WHERE id = $1 AND user_id = $2",
-    )
-    .bind(credential_id)
-    .bind(user_id)
-    .execute(pool)
-    .await
-    .map_err(|e| IdentityError::Database(e.to_string()))?;
+    let result = sqlx::query("DELETE FROM passkey_credentials WHERE id = $1 AND user_id = $2")
+        .bind(credential_id)
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| IdentityError::Database(e.to_string()))?;
 
     if result.rows_affected() == 0 {
         return Err(IdentityError::PasskeyCredentialNotFound);

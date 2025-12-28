@@ -7,8 +7,3 @@ data:
   APP_ENV: "staging"
   LOG_LEVEL: "info"
   CONTENT_SERVICE_PORT: "8080"
-  # Staging uses a dedicated sqlx-migrate Job; avoid double-running
-  # migrations inside the content-service Pod to prevent version drift
-  # errors (e.g. missing 20241108 in compiled migrations vs DB state).
-  # DO NOT copy this to production.
-  SKIP_MIGRATIONS: "true"

@@ -164,7 +164,11 @@ impl From<UserDocument> for UserProfileResult {
         Self {
             id: doc.user_id.to_string(),
             username: doc.username,
-            display_name: if doc.display_name.is_empty() { None } else { Some(doc.display_name) },
+            display_name: if doc.display_name.is_empty() {
+                None
+            } else {
+                Some(doc.display_name)
+            },
             bio: doc.bio,
             avatar_url: None, // Elasticsearch doesn't store avatar URLs
             is_verified: Some(doc.is_verified),
@@ -263,15 +267,17 @@ async fn search_users(
             .await
         {
             Ok(documents) => {
-                let users: Vec<UserProfileResult> = documents
-                    .into_iter()
-                    .map(UserProfileResult::from)
-                    .collect();
+                let users: Vec<UserProfileResult> =
+                    documents.into_iter().map(UserProfileResult::from).collect();
                 let total = users.len();
                 return Ok(Json(UserSearchResponse { users, total }));
             }
             Err(err) => {
-                tracing::warn!("Elasticsearch user search failed for '{}': {}", params.q, err);
+                tracing::warn!(
+                    "Elasticsearch user search failed for '{}': {}",
+                    params.q,
+                    err
+                );
             }
         }
     }

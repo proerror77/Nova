@@ -65,9 +65,9 @@ spec:
               name: nova-config
               key: KAFKA_BROKERS
         - name: CDC_TOPICS
-          value: 'cdc.posts,cdc.follows,cdc.comments,cdc.likes'
+          value: 'cdc.posts,cdc.follows,cdc.comments,cdc.likes,cdc.users'
         - name: CDC_CONSUMER_GROUP
-          value: 'analytics-cdc-consumer-v1'
+          value: 'nova-cdc-consumer-v1'
         - name: CLICKHOUSE_URL
           value: 'http://clickhouse:8123'
         - name: CLICKHOUSE_DATABASE

@@ -226,7 +226,8 @@ impl GcsClient {
 
     /// Upload an object to GCS
     pub async fn upload(&self, object_path: &str, data: Bytes, content_type: &str) -> Result<()> {
-        let signed_url = self.sign_put_url(object_path, Duration::from_secs(300), Some(content_type))?;
+        let signed_url =
+            self.sign_put_url(object_path, Duration::from_secs(300), Some(content_type))?;
 
         debug!(object_path = %object_path, size = data.len(), "Uploading to GCS");
 
@@ -254,7 +255,10 @@ impl GcsClient {
 
     /// Get the public URL for an object
     pub fn public_url(&self, object_path: &str) -> String {
-        format!("https://storage.googleapis.com/{}/{}", self.bucket, object_path)
+        format!(
+            "https://storage.googleapis.com/{}/{}",
+            self.bucket, object_path
+        )
     }
 
     /// Get the bucket name

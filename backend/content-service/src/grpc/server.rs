@@ -12,12 +12,12 @@ use grpc_clients::nova::content_service::v2::{
     Channel, ContentStatus, CreatePostRequest, CreatePostResponse, DeletePostRequest,
     DeletePostResponse, GetChannelRequest, GetChannelResponse, GetPostRequest, GetPostResponse,
     GetPostsByIdsRequest, GetPostsByIdsResponse, GetUserLikedPostsRequest,
-    GetUserLikedPostsResponse, GetUserPostsRequest, GetUserPostsResponse,
-    GetUserSavedPostsRequest, GetUserSavedPostsResponse, ListChannelsRequest,
-    ListChannelsResponse, ListPostsByChannelRequest, ListPostsByChannelResponse,
-    ListPostsByUsersRequest, ListPostsByUsersResponse, ListRecentPostsRequest,
-    ListRecentPostsResponse, ListTrendingPostsRequest, ListTrendingPostsResponse, Post,
-    PostWithTimestamp, UpdatePostRequest, UpdatePostResponse, Visibility,
+    GetUserLikedPostsResponse, GetUserPostsRequest, GetUserPostsResponse, GetUserSavedPostsRequest,
+    GetUserSavedPostsResponse, ListChannelsRequest, ListChannelsResponse,
+    ListPostsByChannelRequest, ListPostsByChannelResponse, ListPostsByUsersRequest,
+    ListPostsByUsersResponse, ListRecentPostsRequest, ListRecentPostsResponse,
+    ListTrendingPostsRequest, ListTrendingPostsResponse, Post, PostWithTimestamp,
+    UpdatePostRequest, UpdatePostResponse, Visibility,
 };
 use grpc_metrics::layer::RequestGuard;
 use sqlx::{PgPool, QueryBuilder, Row};
@@ -905,7 +905,10 @@ impl ContentService for ContentServiceImpl {
 
         tracing::info!(
             "get_user_liked_posts: user={}, returned {} posts, total={}, has_more={}",
-            user_id, posts.len(), total, has_more
+            user_id,
+            posts.len(),
+            total,
+            has_more
         );
 
         guard.complete("0");
@@ -968,7 +971,10 @@ impl ContentService for ContentServiceImpl {
 
         tracing::info!(
             "get_user_saved_posts: user={}, returned {} posts, total={}, has_more={}",
-            user_id, posts.len(), total, has_more
+            user_id,
+            posts.len(),
+            total,
+            has_more
         );
 
         guard.complete("0");

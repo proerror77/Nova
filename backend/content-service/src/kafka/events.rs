@@ -90,9 +90,9 @@ pub async fn publish_post_created_for_vlm(
     publish_event!(
         tx,
         outbox,
-        "vlm",  // aggregate type for vlm events
+        "vlm", // aggregate type for vlm events
         post.id,
-        "vlm.post.created",  // Topic: vlm.post.created
+        "vlm.post.created", // Topic: vlm.post.created
         json!({
             "event_id": Uuid::new_v4().to_string(),
             "post_id": post.id.to_string(),

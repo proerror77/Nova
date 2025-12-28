@@ -567,18 +567,29 @@ impl MatrixAdminClient {
     /// * `device_id` - Device ID to bind the session to (for seamless iOS login)
     ///
     /// # Returns
-    /// Ok((mxid, access_token)) if successful, Err otherwise
+    /// Ok((mxid, access_token, expires_at)) if successful, Err otherwise
+    /// - `expires_at` is Unix timestamp (seconds) when the token expires
     pub async fn provision_user(
         &self,
         user_id: Uuid,
         displayname: Option<String>,
         device_id: Option<String>,
-    ) -> Result<(String, String), AppError> {
+    ) -> Result<(String, String, i64), AppError> {
         // Step 1: Create or update the user
         let mxid = self.create_or_get_user(user_id, displayname).await?;
 
         // Step 2: Generate a device-bound access token for the user
-        // Token valid for 1 hour (3600000 ms)
+        // Token valid for 1 hour (3600000 ms = 3600 seconds)
+        let token_duration_ms: i64 = 3600000;
+        let token_duration_sec: i64 = 3600;
+
+        // Calculate expiry timestamp (Unix seconds)
+        let now_sec = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        let expires_at = now_sec + token_duration_sec;
+
         // Make device_id unique by appending timestamp to avoid Synapse duplicate key errors
         // when the same device requests a new token (e.g., after token expiry)
         let unique_device_id = device_id.map(|id| {
@@ -588,9 +599,9 @@ impl MatrixAdminClient {
                 .as_millis();
             format!("{}_{}", id, timestamp)
         });
-        let access_token = self.generate_user_login_token(user_id, Some(3600000), unique_device_id).await?;
+        let access_token = self.generate_user_login_token(user_id, Some(token_duration_ms), unique_device_id).await?;
 
-        Ok((mxid, access_token))
+        Ok((mxid, access_token, expires_at))
     }
 }
 

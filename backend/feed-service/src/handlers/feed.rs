@@ -71,8 +71,9 @@ impl FeedQueryParams {
 
                 // New format: "timestamp:post_id"
                 if let Some((ts_str, post_id)) = cursor_str.split_once(':') {
-                    let timestamp = ts_str.parse::<i64>()
-                        .map_err(|_| AppError::BadRequest("Invalid cursor timestamp".to_string()))?;
+                    let timestamp = ts_str.parse::<i64>().map_err(|_| {
+                        AppError::BadRequest("Invalid cursor timestamp".to_string())
+                    })?;
                     Ok(FeedCursor {
                         timestamp,
                         post_id: post_id.to_string(),
@@ -146,49 +147,52 @@ pub async fn get_feed(
     // Decode timestamp-based cursor for proper pagination
     let feed_cursor = query.decode_timestamp_cursor()?;
 
-    let (posts, posts_count, total_count, has_more, next_cursor_ts, next_cursor_post_id) = match following_result {
-        Ok(following_resp) => {
-            // Step 2: Get posts from followed users via batch gRPC call
-            let followed_user_ids: Vec<String> = following_resp
-                .into_inner()
-                .user_ids
-                .into_iter()
-                .take(100) // Limit to prevent huge batch requests
-                .collect();
+    let (posts, posts_count, total_count, has_more, next_cursor_ts, next_cursor_post_id) =
+        match following_result {
+            Ok(following_resp) => {
+                // Step 2: Get posts from followed users via batch gRPC call
+                let followed_user_ids: Vec<String> = following_resp
+                    .into_inner()
+                    .user_ids
+                    .into_iter()
+                    .take(100) // Limit to prevent huge batch requests
+                    .collect();
 
-            if followed_user_ids.is_empty() {
-                // User doesn't follow anyone - fall back to global feed
-                warn!(
-                    "User {} follows no one, falling back to global feed",
-                    user_id
-                );
-                let (posts, count, total, more) = fetch_global_posts(&state.content_client, user_id, limit, offset).await?;
-                (posts, count, total, more, 0i64, String::new())
-            } else {
-                // Use new ListPostsByUsers API with timestamp-based pagination
-                use grpc_clients::nova::content_service::v2::ListPostsByUsersRequest;
+                if followed_user_ids.is_empty() {
+                    // User doesn't follow anyone - fall back to global feed
+                    warn!(
+                        "User {} follows no one, falling back to global feed",
+                        user_id
+                    );
+                    let (posts, count, total, more) =
+                        fetch_global_posts(&state.content_client, user_id, limit, offset).await?;
+                    (posts, count, total, more, 0i64, String::new())
+                } else {
+                    // Use new ListPostsByUsers API with timestamp-based pagination
+                    use grpc_clients::nova::content_service::v2::ListPostsByUsersRequest;
 
-                let list_request = ListPostsByUsersRequest {
-                    user_ids: followed_user_ids.clone(),
-                    limit: limit as i32,
-                    before_timestamp: feed_cursor.timestamp,
-                    before_post_id: feed_cursor.post_id.clone(),
-                };
+                    let list_request = ListPostsByUsersRequest {
+                        user_ids: followed_user_ids.clone(),
+                        limit: limit as i32,
+                        before_timestamp: feed_cursor.timestamp,
+                        before_post_id: feed_cursor.post_id.clone(),
+                    };
 
-                match state.content_client.list_posts_by_users(list_request).await {
-                    Ok(resp) => {
-                        let posts: Vec<Uuid> = resp.posts
-                            .iter()
-                            .filter_map(|p| Uuid::parse_str(&p.post_id).ok())
-                            .collect();
+                    match state.content_client.list_posts_by_users(list_request).await {
+                        Ok(resp) => {
+                            let posts: Vec<Uuid> = resp
+                                .posts
+                                .iter()
+                                .filter_map(|p| Uuid::parse_str(&p.post_id).ok())
+                                .collect();
 
-                        let posts_count = posts.len();
-                        let total_count = posts_count; // Approximate
-                        let has_more = resp.has_more;
-                        let next_ts = resp.next_cursor_timestamp;
-                        let next_post_id = resp.next_cursor_post_id.clone();
+                            let posts_count = posts.len();
+                            let total_count = posts_count; // Approximate
+                            let has_more = resp.has_more;
+                            let next_ts = resp.next_cursor_timestamp;
+                            let next_post_id = resp.next_cursor_post_id.clone();
 
-                        info!(
+                            info!(
                             "Feed generated for user: {} (followers: {}, posts: {}, has_more: {})",
                             user_id,
                             followed_user_ids.len(),
@@ -196,80 +200,98 @@ pub async fn get_feed(
                             has_more
                         );
 
-                        (posts, posts_count, total_count, has_more, next_ts, next_post_id)
-                    }
-                    Err(e) => {
-                        // Fallback to legacy round-robin if new API fails
-                        warn!(
+                            (
+                                posts,
+                                posts_count,
+                                total_count,
+                                has_more,
+                                next_ts,
+                                next_post_id,
+                            )
+                        }
+                        Err(e) => {
+                            // Fallback to legacy round-robin if new API fails
+                            warn!(
                             "ListPostsByUsers failed ({}), falling back to round-robin for user {}",
                             e, user_id
                         );
 
-                        // Legacy round-robin logic for backward compatibility
-                        let mut posts: Vec<Uuid> = Vec::new();
-                        let mut skipped = offset;
-                        let mut remaining = limit as usize;
+                            // Legacy round-robin logic for backward compatibility
+                            let mut posts: Vec<Uuid> = Vec::new();
+                            let mut skipped = offset;
+                            let mut remaining = limit as usize;
 
-                        for uid in followed_user_ids.iter() {
-                            if remaining == 0 {
-                                break;
-                            }
+                            for uid in followed_user_ids.iter() {
+                                if remaining == 0 {
+                                    break;
+                                }
 
-                            match state
-                                .content_client
-                                .get_user_posts(GetUserPostsRequest {
-                                    user_id: uid.clone(),
-                                    limit: remaining as i32,
-                                    offset: 0,
-                                    status: ContentStatus::Published as i32,
-                                })
-                                .await
-                            {
-                                Ok(resp) => {
-                                    for post in resp.posts {
-                                        if remaining == 0 {
-                                            break;
-                                        }
-                                        if skipped > 0 {
-                                            skipped -= 1;
-                                            continue;
-                                        }
-                                        if let Ok(post_id) = Uuid::parse_str(&post.id) {
-                                            posts.push(post_id);
-                                            remaining -= 1;
+                                match state
+                                    .content_client
+                                    .get_user_posts(GetUserPostsRequest {
+                                        user_id: uid.clone(),
+                                        limit: remaining as i32,
+                                        offset: 0,
+                                        status: ContentStatus::Published as i32,
+                                    })
+                                    .await
+                                {
+                                    Ok(resp) => {
+                                        for post in resp.posts {
+                                            if remaining == 0 {
+                                                break;
+                                            }
+                                            if skipped > 0 {
+                                                skipped -= 1;
+                                                continue;
+                                            }
+                                            if let Ok(post_id) = Uuid::parse_str(&post.id) {
+                                                posts.push(post_id);
+                                                remaining -= 1;
+                                            }
                                         }
                                     }
-                                }
-                                Err(e) => {
-                                    debug!("Failed to fetch posts from user {}: {}", uid, e);
+                                    Err(e) => {
+                                        debug!("Failed to fetch posts from user {}: {}", uid, e);
+                                    }
                                 }
                             }
+
+                            let posts_count = posts.len();
+                            let total_count = offset + posts_count;
+                            let has_more = remaining == 0;
+
+                            (
+                                posts,
+                                posts_count,
+                                total_count,
+                                has_more,
+                                0i64,
+                                String::new(),
+                            )
                         }
-
-                        let posts_count = posts.len();
-                        let total_count = offset + posts_count;
-                        let has_more = remaining == 0;
-
-                        (posts, posts_count, total_count, has_more, 0i64, String::new())
                     }
                 }
             }
-        }
-        Err(e) => {
-            // Graph-service unavailable - graceful degradation to global feed
-            warn!(
-                "Graph-service unavailable ({}), falling back to global feed for user {}",
-                e, user_id
-            );
-            let (posts, count, total, more) = fetch_global_posts(&state.content_client, user_id, limit, offset).await?;
-            (posts, count, total, more, 0i64, String::new())
-        }
-    };
+            Err(e) => {
+                // Graph-service unavailable - graceful degradation to global feed
+                warn!(
+                    "Graph-service unavailable ({}), falling back to global feed for user {}",
+                    e, user_id
+                );
+                let (posts, count, total, more) =
+                    fetch_global_posts(&state.content_client, user_id, limit, offset).await?;
+                (posts, count, total, more, 0i64, String::new())
+            }
+        };
 
     // Use timestamp-based cursor if available, otherwise fall back to offset-based
     let cursor = if has_more {
         if next_cursor_ts > 0 && !next_cursor_post_id.is_empty() {
-            Some(FeedQueryParams::encode_timestamp_cursor(next_cursor_ts, &next_cursor_post_id))
+            Some(FeedQueryParams::encode_timestamp_cursor(
+                next_cursor_ts,
+                &next_cursor_post_id,
+            ))
         } else {
             Some(FeedQueryParams::encode_cursor(offset + posts_count))
         }
@@ -317,31 +339,32 @@ async fn fetch_full_posts(
         .into_iter()
         .collect();
 
-    let author_profiles: HashMap<String, grpc_clients::nova::identity_service::v2::UserProfile> = if author_ids.is_empty() {
-        HashMap::new()
-    } else {
-        let mut auth_client = state.grpc_pool.auth();
-        match auth_client
-            .get_user_profiles_by_ids(tonic::Request::new(GetUserProfilesByIdsRequest {
-                user_ids: author_ids,
-            }))
-            .await
-        {
-            Ok(resp) => resp
-                .into_inner()
-                .profiles
-                .into_iter()
-                .map(|p| (p.user_id.clone(), p))
-                .collect(),
-            Err(e) => {
-                warn!(
+    let author_profiles: HashMap<String, grpc_clients::nova::identity_service::v2::UserProfile> =
+        if author_ids.is_empty() {
+            HashMap::new()
+        } else {
+            let mut auth_client = state.grpc_pool.auth();
+            match auth_client
+                .get_user_profiles_by_ids(tonic::Request::new(GetUserProfilesByIdsRequest {
+                    user_ids: author_ids,
+                }))
+                .await
+            {
+                Ok(resp) => resp
+                    .into_inner()
+                    .profiles
+                    .into_iter()
+                    .map(|p| (p.user_id.clone(), p))
+                    .collect(),
+                Err(e) => {
+                    warn!(
                     "Failed to fetch author profiles from identity-service (continuing without author info): {}",
                     e
                 );
-                HashMap::new()
+                    HashMap::new()
+                }
             }
-        }
-    };
+        };
 
     // Fetch social stats from social-service (graceful degradation if unavailable)
     let mut social_client = state.grpc_pool.social();
@@ -353,7 +376,10 @@ async fn fetch_full_posts(
     {
         Ok(resp) => resp.into_inner().counts,
         Err(e) => {
-            warn!("Failed to fetch social counts (continuing with zeros): {}", e);
+            warn!(
+                "Failed to fetch social counts (continuing with zeros): {}",
+                e
+            );
             std::collections::HashMap::new()
         }
     };

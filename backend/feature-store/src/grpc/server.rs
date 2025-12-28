@@ -66,7 +66,10 @@ impl FeatureStoreImpl {
         if entity_type.is_empty() {
             return Err(Status::invalid_argument("entity_type cannot be empty"));
         }
-        if !matches!(entity_type, "user" | "post" | "video" | "creator" | "topic" | "comment") {
+        if !matches!(
+            entity_type,
+            "user" | "post" | "video" | "creator" | "topic" | "comment"
+        ) {
             return Err(Status::invalid_argument(format!(
                 "Invalid entity_type: {}. Must be one of: user, post, video, creator, topic, comment",
                 entity_type

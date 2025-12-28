@@ -338,6 +338,7 @@ patches:
     version: v1
 # search-service ports now defined in grpc-services.yaml (gRPC:50057, HTTP:8086)
 - path: configmap-patch.yaml
+- path: nova-db-credentials-patch.yaml
 - path: deployment-images-patch.yaml
 - path: postgres-deploy-patch.yaml
 - path: service-selectors-patch.yaml
@@ -349,6 +350,7 @@ patches:
 - path: content-service-probes-patch.yaml
 - path: content-service-ports-patch.yaml
 - path: runasuser-patch.yaml
+- path: graph-service-db-env-patch.yaml
 - path: search-service-env-patch.yaml
 - path: notification-service-env-port-patch.yaml
 - path: notification-service-probes-patch.yaml
@@ -411,13 +413,21 @@ patches:
           port: 3478
           targetPort: 3478
           protocol: UDP
+        - name: turn-udp
+          port: 3478
+          targetPort: 3478
+          protocol: UDP
         - name: turn-udp-alt
-          port: 3479
-          targetPort: 3479
+          port: 443
+          targetPort: 443
           protocol: UDP
         - name: turn-tcp
           port: 3478
           targetPort: 3478
+          protocol: TCP
+        - name: turn-tcp-alt
+          port: 443
+          targetPort: 443
           protocol: TCP
   target:
     version: v1
@@ -482,7 +492,7 @@ replicas:
   name: search-service
 
 # Disabled
-- count: 0
+- count: 1
   name: turn-server
 
 commonAnnotations:
@@ -549,13 +559,13 @@ resources:
 - resource-optimization-info.configmap.yaml
 - nova-clickhouse-credentials.yaml
 - seed-data-job.yaml
-- sqlx-migrate-job.yaml
 - postgres-multi-db-init.yaml
 - redis-cluster-statefulset.yaml
 - kafka-zookeeper-deployment.yaml
 - kafka-cdc-topics-init.yaml
 - debezium-connect-staging.yaml
 - clickhouse-schema-update-job.yaml
+- clickhouse-installation.yaml
 - clickhouse-statefulset.yaml
 - neo4j-statefulset.yaml
 - proto-management.yaml

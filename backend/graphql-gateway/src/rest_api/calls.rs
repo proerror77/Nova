@@ -57,7 +57,9 @@ pub async fn initiate_call(
 ) -> HttpResponse {
     let user_id = match req.extensions().get::<AuthenticatedUser>().copied() {
         Some(AuthenticatedUser(id)) => id.to_string(),
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let conversation_id = path.into_inner();
@@ -75,7 +77,9 @@ pub async fn initiate_call(
 pub async fn answer_call(req: HttpRequest, path: web::Path<String>) -> HttpResponse {
     let user_id = match req.extensions().get::<AuthenticatedUser>().copied() {
         Some(AuthenticatedUser(id)) => id.to_string(),
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let call_id = path.into_inner();
@@ -89,7 +93,9 @@ pub async fn answer_call(req: HttpRequest, path: web::Path<String>) -> HttpRespo
 pub async fn reject_call(req: HttpRequest, path: web::Path<String>) -> HttpResponse {
     let user_id = match req.extensions().get::<AuthenticatedUser>().copied() {
         Some(AuthenticatedUser(id)) => id.to_string(),
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let call_id = path.into_inner();
@@ -103,7 +109,9 @@ pub async fn reject_call(req: HttpRequest, path: web::Path<String>) -> HttpRespo
 pub async fn end_call(req: HttpRequest, path: web::Path<String>) -> HttpResponse {
     let user_id = match req.extensions().get::<AuthenticatedUser>().copied() {
         Some(AuthenticatedUser(id)) => id.to_string(),
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let call_id = path.into_inner();
@@ -120,7 +128,9 @@ pub async fn send_ice_candidate(
 ) -> HttpResponse {
     let user_id = match req.extensions().get::<AuthenticatedUser>().copied() {
         Some(AuthenticatedUser(id)) => id.to_string(),
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let url = format!("{}/calls/ice-candidate", chat_service_url());
@@ -133,7 +143,9 @@ pub async fn send_ice_candidate(
 pub async fn get_ice_servers(req: HttpRequest) -> HttpResponse {
     let user_id = match req.extensions().get::<AuthenticatedUser>().copied() {
         Some(AuthenticatedUser(id)) => id.to_string(),
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let url = format!("{}/calls/ice-servers", chat_service_url());
@@ -183,12 +195,7 @@ async fn proxy_post_request<T: Serialize>(url: &str, user_id: &str, body: &T) ->
 async fn proxy_get_request(url: &str, user_id: &str) -> HttpResponse {
     let client = get_client();
 
-    match client
-        .get(url)
-        .header("X-User-Id", user_id)
-        .send()
-        .await
-    {
+    match client.get(url).header("X-User-Id", user_id).send().await {
         Ok(resp) => {
             let status = resp.status();
             match resp.bytes().await {

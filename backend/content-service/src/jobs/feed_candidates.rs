@@ -116,8 +116,8 @@ const INSERT_FEED_CANDIDATES_FOLLOWEES: &str = r#"
 INSERT INTO {table}
 SELECT
     f.follower_id AS user_id,
-    p.id AS post_id,
-    p.user_id AS author_id,
+    toString(p.id) AS post_id,
+    toString(p.user_id) AS author_id,
     ifNull(likes.likes_count, 0) AS likes,
     ifNull(comments.comments_count, 0) AS comments,
     toUInt32(0) AS shares,
@@ -139,21 +139,31 @@ INNER JOIN (
     GROUP BY follower_id, followee_id
     HAVING sum(follow_count) > 0
 ) AS f
-    ON f.followee_id = p.user_id
+    ON f.followee_id = toString(p.user_id)
 LEFT JOIN (
-    SELECT post_id, countIf(is_deleted = 0) AS likes_count
+    SELECT post_id, sum(like_count) AS likes_count
     FROM likes_cdc
     WHERE created_at >= now() - INTERVAL 30 DAY
     GROUP BY post_id
     HAVING likes_count > 0
-) AS likes ON likes.post_id = p.id
+) AS likes ON likes.post_id = toString(p.id)
 LEFT JOIN (
-    SELECT post_id, count() AS comments_count
-    FROM comments_cdc
-    WHERE is_deleted = 0
-      AND created_at >= now() - INTERVAL 30 DAY
+    SELECT post_id, countIf(is_deleted = 0) AS comments_count
+    FROM (
+        SELECT
+            post_id,
+            id,
+            argMax(
+                if(cdc_operation = 3 OR soft_delete > toDateTime(0), 1, 0),
+                cdc_timestamp
+            ) AS is_deleted
+        FROM comments_cdc
+        WHERE created_at >= now() - INTERVAL 30 DAY
+        GROUP BY post_id, id
+    ) AS comment_state
     GROUP BY post_id
-) AS comments ON comments.post_id = p.id
+    HAVING comments_count > 0
+) AS comments ON comments.post_id = toString(p.id)
 LEFT JOIN (
     SELECT
         interactions.viewer_id AS user_id,
@@ -162,29 +172,43 @@ LEFT JOIN (
     FROM (
         SELECT
             l.user_id AS viewer_id,
-            p2.user_id AS author_id,
+            toString(p2.user_id) AS author_id,
             1.0 AS weight
-        FROM likes_cdc AS l
+        FROM (
+            SELECT user_id, post_id
+            FROM likes_cdc
+            WHERE created_at >= now() - INTERVAL 90 DAY
+            GROUP BY user_id, post_id
+            HAVING sum(like_count) > 0
+        ) AS l
         INNER JOIN posts_cdc AS p2
-            ON p2.id = l.post_id
-        WHERE l.is_deleted = 0
-          AND l.created_at >= now() - INTERVAL 90 DAY
-        GROUP BY l.user_id, p2.user_id, l.post_id
+            ON toString(p2.id) = l.post_id
         UNION ALL
         SELECT
             c.user_id AS viewer_id,
-            p2.user_id AS author_id,
+            toString(p2.user_id) AS author_id,
             1.5 AS weight
-        FROM comments_cdc AS c
+        FROM (
+            SELECT
+                user_id,
+                post_id,
+                id,
+                argMax(
+                    if(cdc_operation = 3 OR soft_delete > toDateTime(0), 1, 0),
+                    cdc_timestamp
+                ) AS is_deleted
+            FROM comments_cdc
+            WHERE created_at >= now() - INTERVAL 90 DAY
+            GROUP BY user_id, post_id, id
+        ) AS c
         INNER JOIN posts_cdc AS p2
-            ON p2.id = c.post_id
+            ON toString(p2.id) = c.post_id
         WHERE c.is_deleted = 0
-          AND c.created_at >= now() - INTERVAL 90 DAY
     ) AS interactions
     GROUP BY interactions.viewer_id, interactions.author_id
 ) AS affinity
     ON affinity.user_id = f.follower_id
-    AND affinity.author_id = p.user_id
+    AND affinity.author_id = toString(p.user_id)
 WHERE p.is_deleted = 0
   AND p.created_at >= now() - INTERVAL 30 DAY
 ORDER BY user_id, combined_score DESC
@@ -194,8 +218,8 @@ LIMIT 500 BY user_id
 const INSERT_FEED_CANDIDATES_TRENDING: &str = r#"
 INSERT INTO {table}
 SELECT
-    p.id AS post_id,
-    p.user_id AS author_id,
+    toString(p.id) AS post_id,
+    toString(p.user_id) AS author_id,
     ifNull(likes.likes_count, 0) AS likes,
     ifNull(comments.comments_count, 0) AS comments,
     toUInt32(0) AS shares,
@@ -212,19 +236,29 @@ SELECT
     now()
 FROM posts_cdc AS p
 LEFT JOIN (
-    SELECT post_id, countIf(is_deleted = 0) AS likes_count
+    SELECT post_id, sum(like_count) AS likes_count
     FROM likes_cdc
     WHERE created_at >= now() - INTERVAL 14 DAY
     GROUP BY post_id
     HAVING likes_count > 0
-) AS likes ON likes.post_id = p.id
+) AS likes ON likes.post_id = toString(p.id)
 LEFT JOIN (
-    SELECT post_id, count() AS comments_count
-    FROM comments_cdc
-    WHERE is_deleted = 0
-      AND created_at >= now() - INTERVAL 14 DAY
+    SELECT post_id, countIf(is_deleted = 0) AS comments_count
+    FROM (
+        SELECT
+            post_id,
+            id,
+            argMax(
+                if(cdc_operation = 3 OR soft_delete > toDateTime(0), 1, 0),
+                cdc_timestamp
+            ) AS is_deleted
+        FROM comments_cdc
+        WHERE created_at >= now() - INTERVAL 14 DAY
+        GROUP BY post_id, id
+    ) AS comment_state
     GROUP BY post_id
-) AS comments ON comments.post_id = p.id
+    HAVING comments_count > 0
+) AS comments ON comments.post_id = toString(p.id)
 WHERE p.is_deleted = 0
   AND p.created_at >= now() - INTERVAL 14 DAY
 ORDER BY combined_score DESC
@@ -235,8 +269,8 @@ const INSERT_FEED_CANDIDATES_AFFINITY: &str = r#"
 INSERT INTO {table}
 SELECT
     affinity.user_id AS user_id,
-    p.id AS post_id,
-    p.user_id AS author_id,
+    toString(p.id) AS post_id,
+    toString(p.user_id) AS author_id,
     ifNull(likes.likes_count, 0) AS likes,
     ifNull(comments.comments_count, 0) AS comments,
     toUInt32(0) AS shares,
@@ -260,43 +294,67 @@ INNER JOIN (
     FROM (
         SELECT
             l.user_id AS viewer_id,
-            p2.user_id AS author_id,
+            toString(p2.user_id) AS author_id,
             1.0 AS weight
-        FROM likes_cdc AS l
+        FROM (
+            SELECT user_id, post_id
+            FROM likes_cdc
+            WHERE created_at >= now() - INTERVAL 90 DAY
+            GROUP BY user_id, post_id
+            HAVING sum(like_count) > 0
+        ) AS l
         INNER JOIN posts_cdc AS p2
-            ON p2.id = l.post_id
-        WHERE l.is_deleted = 0
-          AND l.created_at >= now() - INTERVAL 90 DAY
-        GROUP BY l.user_id, p2.user_id, l.post_id
+            ON toString(p2.id) = l.post_id
         UNION ALL
         SELECT
             c.user_id AS viewer_id,
-            p2.user_id AS author_id,
+            toString(p2.user_id) AS author_id,
             1.5 AS weight
-        FROM comments_cdc AS c
+        FROM (
+            SELECT
+                user_id,
+                post_id,
+                id,
+                argMax(
+                    if(cdc_operation = 3 OR soft_delete > toDateTime(0), 1, 0),
+                    cdc_timestamp
+                ) AS is_deleted
+            FROM comments_cdc
+            WHERE created_at >= now() - INTERVAL 90 DAY
+            GROUP BY user_id, post_id, id
+        ) AS c
         INNER JOIN posts_cdc AS p2
-            ON p2.id = c.post_id
+            ON toString(p2.id) = c.post_id
         WHERE c.is_deleted = 0
-          AND c.created_at >= now() - INTERVAL 90 DAY
     ) AS interactions
     GROUP BY interactions.viewer_id, interactions.author_id
     HAVING affinity_score > 0
 ) AS affinity
-    ON affinity.author_id = p.user_id
+    ON affinity.author_id = toString(p.user_id)
 LEFT JOIN (
-    SELECT post_id, countIf(is_deleted = 0) AS likes_count
+    SELECT post_id, sum(like_count) AS likes_count
     FROM likes_cdc
     WHERE created_at >= now() - INTERVAL 30 DAY
     GROUP BY post_id
     HAVING likes_count > 0
-) AS likes ON likes.post_id = p.id
+) AS likes ON likes.post_id = toString(p.id)
 LEFT JOIN (
-    SELECT post_id, count() AS comments_count
-    FROM comments_cdc
-    WHERE is_deleted = 0
-      AND created_at >= now() - INTERVAL 30 DAY
+    SELECT post_id, countIf(is_deleted = 0) AS comments_count
+    FROM (
+        SELECT
+            post_id,
+            id,
+            argMax(
+                if(cdc_operation = 3 OR soft_delete > toDateTime(0), 1, 0),
+                cdc_timestamp
+            ) AS is_deleted
+        FROM comments_cdc
+        WHERE created_at >= now() - INTERVAL 30 DAY
+        GROUP BY post_id, id
+    ) AS comment_state
     GROUP BY post_id
-) AS comments ON comments.post_id = p.id
+    HAVING comments_count > 0
+) AS comments ON comments.post_id = toString(p.id)
 WHERE p.is_deleted = 0
   AND p.created_at >= now() - INTERVAL 30 DAY
 ORDER BY user_id, combined_score DESC

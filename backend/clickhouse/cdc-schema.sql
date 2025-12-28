@@ -11,8 +11,8 @@
 -- ============================================================================
 
 -- Ensure database exists
-CREATE DATABASE IF NOT EXISTS nova_analytics;
-USE nova_analytics;
+CREATE DATABASE IF NOT EXISTS nova_feed;
+USE nova_feed;
 
 -- ============================================================================
 -- POSTS CDC TABLE
@@ -26,12 +26,14 @@ CREATE TABLE IF NOT EXISTS posts_cdc (
     content String,
     media_key String DEFAULT '',
     media_type String DEFAULT '',
-    created_at DateTime64(3) DEFAULT now64(3),
-    updated_at DateTime64(3) DEFAULT now64(3),
-    deleted_at Nullable(DateTime64(3)),
+    created_at DateTime DEFAULT now(),
+    updated_at DateTime DEFAULT now(),
+    deleted_at Nullable(DateTime),
+    is_deleted UInt8 DEFAULT 0,
     -- CDC metadata
-    cdc_operation Enum8('INSERT' = 1, 'UPDATE' = 2, 'DELETE' = 3),
-    cdc_timestamp DateTime64(3) DEFAULT now64(3),
+    cdc_operation Int8,
+    cdc_timestamp DateTime DEFAULT now(),
+    media_url Nullable(String),
     -- Indexes
     INDEX idx_user_id (user_id) TYPE bloom_filter GRANULARITY 1,
     INDEX idx_created_at (created_at) TYPE minmax GRANULARITY 1
@@ -48,12 +50,12 @@ TTL created_at + INTERVAL 365 DAY;
 -- Note: PostgreSQL uses 'following_id', ClickHouse uses 'followee_id'
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS follows_cdc (
-    follower_id UUID,
-    followee_id UUID,  -- Maps from PostgreSQL following_id
-    created_at DateTime64(3) DEFAULT now64(3),
+    follower_id String,
+    followee_id String,  -- Maps from PostgreSQL following_id
+    created_at DateTime DEFAULT now(),
     -- CDC metadata
-    cdc_operation Enum8('INSERT' = 1, 'DELETE' = 2),
-    cdc_timestamp DateTime64(3) DEFAULT now64(3),
+    cdc_operation Int8,
+    cdc_timestamp DateTime DEFAULT now(),
     -- For SummingMergeTree: +1 for INSERT, -1 for DELETE
     follow_count Int8,
     -- Indexes
@@ -71,17 +73,17 @@ TTL created_at + INTERVAL 365 DAY;
 -- Engine: ReplacingMergeTree for deduplication by cdc_timestamp
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS comments_cdc (
-    id UUID,
-    post_id UUID,
-    user_id UUID,
+    id String,
+    post_id String,
+    user_id String,
     content String,
-    parent_comment_id Nullable(UUID),
-    created_at DateTime64(3) DEFAULT now64(3),
-    updated_at DateTime64(3) DEFAULT now64(3),
-    soft_delete Nullable(DateTime64(3)),
+    parent_comment_id String,
+    created_at DateTime DEFAULT now(),
+    updated_at DateTime DEFAULT now(),
+    soft_delete DateTime DEFAULT toDateTime(0),
     -- CDC metadata
-    cdc_operation Enum8('INSERT' = 1, 'UPDATE' = 2, 'DELETE' = 3),
-    cdc_timestamp DateTime64(3) DEFAULT now64(3),
+    cdc_operation Int8,
+    cdc_timestamp DateTime DEFAULT now(),
     -- Indexes
     INDEX idx_post_id (post_id) TYPE bloom_filter GRANULARITY 1,
     INDEX idx_user_id (user_id) TYPE bloom_filter GRANULARITY 1,
@@ -98,12 +100,12 @@ TTL created_at + INTERVAL 365 DAY;
 -- Engine: SummingMergeTree for aggregation (+1 like, -1 unlike)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS likes_cdc (
-    post_id UUID,
-    user_id UUID,
-    created_at DateTime64(3) DEFAULT now64(3),
+    post_id String,
+    user_id String,
+    created_at DateTime DEFAULT now(),
     -- CDC metadata
-    cdc_operation Enum8('INSERT' = 1, 'DELETE' = 2),
-    cdc_timestamp DateTime64(3) DEFAULT now64(3),
+    cdc_operation Int8,
+    cdc_timestamp DateTime DEFAULT now(),
     -- For SummingMergeTree: +1 for INSERT, -1 for DELETE
     like_count Int8,
     -- Indexes
@@ -127,12 +129,12 @@ CREATE TABLE IF NOT EXISTS users_cdc (
     email String DEFAULT '',
     avatar_url String DEFAULT '',
     bio String DEFAULT '',
-    created_at DateTime64(3) DEFAULT now64(3),
-    updated_at DateTime64(3) DEFAULT now64(3),
-    deleted_at Nullable(DateTime64(3)),
+    created_at DateTime DEFAULT now(),
+    updated_at DateTime DEFAULT now(),
+    deleted_at Nullable(DateTime),
     -- CDC metadata
-    cdc_operation Enum8('INSERT' = 1, 'UPDATE' = 2, 'DELETE' = 3),
-    cdc_timestamp DateTime64(3) DEFAULT now64(3),
+    cdc_operation Int8,
+    cdc_timestamp DateTime DEFAULT now(),
     -- Indexes
     INDEX idx_username (username) TYPE bloom_filter GRANULARITY 1,
     INDEX idx_created_at (created_at) TYPE minmax GRANULARITY 1
@@ -153,8 +155,8 @@ ORDER BY (post_id, hour)
 AS SELECT
     post_id,
     toStartOfHour(cdc_timestamp) AS hour,
-    countIf(cdc_operation = 'INSERT') AS new_likes,
-    countIf(cdc_operation = 'DELETE') AS removed_likes
+    countIf(cdc_operation = 1) AS new_likes,
+    countIf(cdc_operation = 2) AS removed_likes
 FROM likes_cdc
 GROUP BY post_id, hour;
 
@@ -168,7 +170,7 @@ AS SELECT
     toStartOfDay(created_at) AS day,
     count() AS posts_count
 FROM posts_cdc
-WHERE cdc_operation = 'INSERT'
+WHERE cdc_operation = 1
 GROUP BY user_id, day;
 
 -- Follower growth daily tracking

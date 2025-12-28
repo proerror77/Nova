@@ -103,8 +103,118 @@ spec:
             --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
             --query="CREATE DATABASE IF NOT EXISTS nova_feed"
 
+          echo ""
+          echo "Creating CDC tables..."
+
+          clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
+            --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
+            --multiquery --query="
+          CREATE TABLE IF NOT EXISTS nova_feed.posts_cdc (
+            id UUID,
+            user_id UUID,
+            content String,
+            media_key String,
+            media_type String,
+            created_at DateTime DEFAULT now(),
+            updated_at DateTime DEFAULT now(),
+            deleted_at Nullable(DateTime),
+            is_deleted UInt8 DEFAULT 0,
+            cdc_operation Int8,
+            cdc_timestamp DateTime DEFAULT now(),
+            media_url Nullable(String)
+          ) ENGINE = ReplacingMergeTree(cdc_timestamp)
+          PARTITION BY toYYYYMM(created_at)
+          ORDER BY (user_id, id, cdc_timestamp)
+          TTL created_at + INTERVAL 365 DAY;
+
+          CREATE TABLE IF NOT EXISTS nova_feed.comments_cdc (
+            id String,
+            post_id String,
+            user_id String,
+            content String,
+            parent_comment_id String,
+            created_at DateTime DEFAULT now(),
+            updated_at DateTime DEFAULT now(),
+            soft_delete DateTime DEFAULT toDateTime(0),
+            cdc_operation Int8,
+            cdc_timestamp DateTime DEFAULT now()
+          ) ENGINE = ReplacingMergeTree(cdc_timestamp)
+          PARTITION BY toYYYYMM(created_at)
+          ORDER BY (post_id, id, cdc_timestamp)
+          TTL created_at + INTERVAL 365 DAY;
+
+          CREATE TABLE IF NOT EXISTS nova_feed.likes_cdc (
+            post_id String,
+            user_id String,
+            created_at DateTime DEFAULT now(),
+            cdc_operation Int8,
+            cdc_timestamp DateTime DEFAULT now(),
+            like_count Int8
+          ) ENGINE = SummingMergeTree(like_count)
+          PARTITION BY toYYYYMM(created_at)
+          ORDER BY (post_id, user_id, cdc_timestamp)
+          TTL created_at + INTERVAL 365 DAY;
+
+          CREATE TABLE IF NOT EXISTS nova_feed.follows_cdc (
+            follower_id String,
+            followee_id String,
+            created_at DateTime DEFAULT now(),
+            cdc_operation Int8,
+            cdc_timestamp DateTime DEFAULT now(),
+            follow_count Int8
+          ) ENGINE = SummingMergeTree(follow_count)
+          PARTITION BY toYYYYMM(created_at)
+          ORDER BY (followee_id, follower_id, cdc_timestamp)
+          TTL created_at + INTERVAL 365 DAY;
+
+          CREATE TABLE IF NOT EXISTS nova_feed.users_cdc (
+            id UUID,
+            username String,
+            display_name String,
+            email String,
+            avatar_url String,
+            bio String,
+            created_at DateTime DEFAULT now(),
+            updated_at DateTime DEFAULT now(),
+            deleted_at Nullable(DateTime),
+            cdc_operation Int8,
+            cdc_timestamp DateTime DEFAULT now()
+          ) ENGINE = ReplacingMergeTree(cdc_timestamp)
+          PARTITION BY toYYYYMM(created_at)
+          ORDER BY (id, cdc_timestamp)
+          TTL created_at + INTERVAL 730 DAY;
+
+          CREATE TABLE IF NOT EXISTS nova_feed.post_likes_hourly (
+            metric_hour DateTime,
+            post_id String,
+            likes_delta Int32,
+            updated_at DateTime
+          ) ENGINE = SummingMergeTree(likes_delta)
+          PARTITION BY toYYYYMM(metric_hour)
+          ORDER BY (metric_hour, post_id);
+
+          CREATE TABLE IF NOT EXISTS nova_feed.post_comments_hourly (
+            metric_hour DateTime,
+            post_id String,
+            comments_delta Int32,
+            updated_at DateTime
+          ) ENGINE = SummingMergeTree(comments_delta)
+          PARTITION BY toYYYYMM(metric_hour)
+          ORDER BY (metric_hour, post_id);
+
+          CREATE TABLE IF NOT EXISTS nova_feed.user_author_affinity (
+            user_id String,
+            author_id String,
+            affinity_delta Float32,
+            event_time DateTime,
+            updated_at DateTime
+          ) ENGINE = SummingMergeTree(affinity_delta)
+          PARTITION BY toYYYYMM(event_time)
+          ORDER BY (user_id, author_id, event_time);
+          "
+
           # Apply TTL to existing CDC tables (ALTER TABLE)
-          # Note: Using toDate() to cast DateTime64 to Date for TTL compatibility
+          # Note: Using toDate() for TTL compatibility
           echo "Adding TTL policies to existing tables..."
 
           clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
@@ -135,7 +245,7 @@ spec:
           SELECT
             toStartOfHour(created_at) AS metric_hour,
             toString(post_id) AS post_id,
-            if(cdc_operation = 'DELETE', -1, 1) AS likes_delta,
+            if(cdc_operation = 2, -1, 1) AS likes_delta,
             now() AS updated_at
           FROM nova_feed.likes_cdc"
 
@@ -150,7 +260,7 @@ spec:
           SELECT
             toStartOfHour(created_at) AS metric_hour,
             toString(post_id) AS post_id,
-            if(cdc_operation = 'DELETE', -1, 1) AS comments_delta,
+            if(cdc_operation = 3, -1, if(cdc_operation = 1, 1, 0)) AS comments_delta,
             now() AS updated_at
           FROM nova_feed.comments_cdc"
 
@@ -165,11 +275,11 @@ spec:
           SELECT
             toString(l.user_id) AS user_id,
             toString(p.user_id) AS author_id,
-            if(l.cdc_operation = 'DELETE', -1.0, 1.0) AS affinity_delta,
+            if(l.cdc_operation = 2, -1.0, 1.0) AS affinity_delta,
             toDateTime(l.created_at) AS event_time,
             now() AS updated_at
           FROM nova_feed.likes_cdc l
-          INNER JOIN nova_feed.posts_cdc p ON p.id = l.post_id"
+          INNER JOIN nova_feed.posts_cdc p ON toString(p.id) = l.post_id"
 
           echo "Created mv_user_author_likes"
 
@@ -182,11 +292,11 @@ spec:
           SELECT
             toString(c.user_id) AS user_id,
             toString(p.user_id) AS author_id,
-            if(c.cdc_operation = 'DELETE', -2.0, 2.0) AS affinity_delta,
+            if(c.cdc_operation = 3, -2.0, if(c.cdc_operation = 1, 2.0, 0.0)) AS affinity_delta,
             toDateTime(c.created_at) AS event_time,
             now() AS updated_at
           FROM nova_feed.comments_cdc c
-          INNER JOIN nova_feed.posts_cdc p ON p.id = c.post_id"
+          INNER JOIN nova_feed.posts_cdc p ON toString(p.id) = c.post_id"
 
           echo "Created mv_user_author_comments"
 

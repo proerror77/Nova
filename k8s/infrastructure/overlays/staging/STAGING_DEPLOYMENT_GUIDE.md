@@ -146,20 +146,23 @@ Monitor the initialization sequence (runs in dependency order):
 # Watch initialization progress
 kubectl get jobs -n nova-staging -w
 
-# Check PostgreSQL initialization
-kubectl logs -n nova-staging job/seed-data-job -f
-
-# Check SQLx migrations
-kubectl logs -n nova-staging job/sqlx-migrate -f
+# Check PostgreSQL seed data (optional)
+kubectl logs -n nova-staging job/seed-data-init -f
 
 # Check Redis cluster init
-kubectl logs -n nova-staging job/redis-cluster-init -f
+kubectl logs -n nova-staging job/redis-init -f
 
 # Check Kafka topics
 kubectl logs -n nova-staging job/kafka-init-topics -f
 
-# Check ClickHouse initialization
-kubectl logs -n nova-staging job/clickhouse-init -f
+# Check CDC topics
+kubectl logs -n nova-staging job/kafka-cdc-topics-init -f
+
+# Check Debezium connectors
+kubectl logs -n nova-staging job/debezium-cdc-connector-init -f
+
+# Check ClickHouse schema
+kubectl logs -n nova-staging job/clickhouse-schema-update -f
 
 # Check proto validation
 kubectl logs -n nova-staging job/proto-validate -f
@@ -202,12 +205,13 @@ kubectl run -it --rm --image=grpcurl/grpcurl --restart=Never \
 
 ```bash
 # PostgreSQL: Connect and verify databases
-PGPASSWORD=$(kubectl get secret nova-db-credentials -n nova-staging -o jsonpath='{.data.password}' | base64 -d)
+DB_USER=$(kubectl get secret nova-db-credentials -n nova-staging -o jsonpath='{.data.DB_USER}' | base64 -d)
+PGPASSWORD=$(kubectl get secret nova-db-credentials -n nova-staging -o jsonpath='{.data.DB_PASSWORD}' | base64 -d)
 
 kubectl run -it --rm --image=postgres:15 --restart=Never \
   -n nova-staging \
   -e PGPASSWORD=$PGPASSWORD \
-  -- psql -h postgres -U postgres -d postgres -c "\l" | grep nova_
+  -- psql -h postgres -U "$DB_USER" -d postgres -c "\l" | grep nova_
 
 # Redis: Check cluster topology
 kubectl exec -it redis-cluster-0 -n nova-staging -- redis-cli cluster info
@@ -231,11 +235,9 @@ kubectl exec -it nova-clickhouse-0 -n nova-staging -- \
 - Enables DNS-based service discovery
 - Headless service for internal discovery
 
-**sqlx-migrate-job.yaml**
-- Creates 15 PostgreSQL databases
-- Runs SQLx migrations for each service
-- Ensures schema initialization before services start
-- Runs automatically as Job with automatic cleanup
+**service migrations (built-in)**
+- content-service, identity-service, analytics-service, social-service, trust-safety-service run migrations on startup
+- Graph/search base tables are initialized via postgres-multi-db-init.yaml
 
 **postgres-multi-db-init.yaml**
 - ConfigMaps with SQL initialization scripts
@@ -390,11 +392,13 @@ kubectl get pods -n nova-staging | grep user-service
 
 ### Database initialization failed
 
-**Symptoms**: sqlx-migrate job failing
+**Symptoms**: service migrations failing on startup
 
 ```bash
-# Check job logs
-kubectl logs -n nova-staging job/sqlx-migrate
+# Check service logs (migrations run on startup)
+kubectl logs -n nova-staging deploy/content-service --tail=200
+kubectl logs -n nova-staging deploy/identity-service --tail=200
+kubectl logs -n nova-staging deploy/analytics-service --tail=200
 
 # Verify PostgreSQL is running
 kubectl exec -it postgres-0 -n nova-staging -- pg_isready

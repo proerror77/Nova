@@ -67,10 +67,7 @@ pub struct ThumbnailService {
 
 impl ThumbnailService {
     /// Create a new thumbnail service
-    pub async fn new(
-        gcs_client: Arc<GcsClient>,
-        config: ThumbnailServiceConfig,
-    ) -> Result<Self> {
+    pub async fn new(gcs_client: Arc<GcsClient>, config: ThumbnailServiceConfig) -> Result<Self> {
         let media_pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(5)
             .connect(&config.content_db_url)
@@ -104,17 +101,20 @@ impl ThumbnailService {
         .await
         .map_err(|e| AppError::Internal(format!("DB query failed: {e}")))?;
 
-        let upload = upload.ok_or_else(|| {
-            AppError::NotFound(format!("Upload not found: {}", upload_id))
-        })?;
+        let upload =
+            upload.ok_or_else(|| AppError::NotFound(format!("Upload not found: {}", upload_id)))?;
 
         // Get storage path - construct from upload if not present
         let storage_path = upload.storage_path.clone().unwrap_or_else(|| {
-            let file_name = upload.file_name.clone().unwrap_or_else(|| format!("{}.jpg", upload_id));
+            let file_name = upload
+                .file_name
+                .clone()
+                .unwrap_or_else(|| format!("{}.jpg", upload_id));
             format!("uploads/{}/{}", upload_id, file_name)
         });
 
-        self.generate_thumbnail_for_upload(&upload, &storage_path).await
+        self.generate_thumbnail_for_upload(&upload, &storage_path)
+            .await
     }
 
     /// Process all images that are missing thumbnails
@@ -140,7 +140,10 @@ impl ThumbnailService {
             .map_err(|e| AppError::Internal(format!("DB query failed: {e}")))?;
 
             if media_files.is_empty() {
-                info!(total_processed = processed, "No more images pending thumbnails");
+                info!(
+                    total_processed = processed,
+                    "No more images pending thumbnails"
+                );
                 break;
             }
 
@@ -155,7 +158,10 @@ impl ThumbnailService {
                     }
                 };
 
-                match self.generate_thumbnail_for_media(&media, &storage_path).await {
+                match self
+                    .generate_thumbnail_for_media(&media, &storage_path)
+                    .await
+                {
                     Ok(()) => {
                         processed += 1;
                         debug!(media_id = %media.id, "Thumbnail generated successfully");
@@ -179,7 +185,11 @@ impl ThumbnailService {
     }
 
     /// Generate thumbnail for an upload (from Kafka event)
-    async fn generate_thumbnail_for_upload(&self, upload: &MediaUpload, storage_path: &str) -> Result<()> {
+    async fn generate_thumbnail_for_upload(
+        &self,
+        upload: &MediaUpload,
+        storage_path: &str,
+    ) -> Result<()> {
         info!(
             upload_id = %upload.id,
             storage_path = %storage_path,
@@ -219,7 +229,11 @@ impl ThumbnailService {
     }
 
     /// Generate thumbnail for a media file (from batch processing)
-    async fn generate_thumbnail_for_media(&self, media: &MediaFile, storage_path: &str) -> Result<()> {
+    async fn generate_thumbnail_for_media(
+        &self,
+        media: &MediaFile,
+        storage_path: &str,
+    ) -> Result<()> {
         info!(
             media_id = %media.id,
             storage_path = %storage_path,

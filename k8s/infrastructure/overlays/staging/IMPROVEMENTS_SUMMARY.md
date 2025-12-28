@@ -54,23 +54,14 @@ Implemented a complete, production-ready staging environment supporting Nova's a
 
 ---
 
-#### 2. **SQLx Database Migrations** (`sqlx-migrate-job.yaml`)
-**What**: Automated database schema initialization Job
-**Why**: Ensures database schema is consistent across all services before they start
+#### 2. **Service Migrations (Built-in)**
+**What**: Service-level SQLx migrations on startup
+**Why**: Keeps schema aligned with the service binary in staging
 **How**:
-- Kubernetes Job that runs once at deployment
-- Waits for PostgreSQL readiness (30 retries)
-- Creates 15 databases via ConfigMap scripts
-- Runs SQLx migrations for each service
-- Auto-cleanup after 1 hour (ttlSecondsAfterFinished: 3600)
+- content-service, identity-service, analytics-service, social-service, trust-safety-service run migrations on boot
+- Graph/search base tables are initialized in `postgres-multi-db-init.yaml`
 
-**Key Features**:
-- Parameterized credentials via External Secrets
-- Comprehensive logging with progress indicators
-- Idempotent operations (can be run multiple times)
-- 3 retry attempts before failing
-
-**Impact**: Database initialization is now decoupled from service startup, reducing deployment time and improving reliability
+**Impact**: Schema stays consistent with deployed binaries while keeping CDC prerequisites ready
 
 ---
 
@@ -297,12 +288,11 @@ analytics.service_metrics     → Service health metrics (30-day TTL)
 
 ### Kustomization Integration
 
-Updated `kustomization.yaml` to include all 8 improvements with clear priority organization:
+Updated `kustomization.yaml` to include core improvements with clear priority organization:
 
 ```yaml
 # P0: Core Service Infrastructure
 - grpc-services.yaml
-- sqlx-migrate-job.yaml
 - postgres-multi-db-init.yaml
 
 # P1: Service Startup Orchestration
@@ -323,13 +313,12 @@ Updated `kustomization.yaml` to include all 8 improvements with clear priority o
 
 ### Configuration Files
 1. **grpc-services.yaml** - 15 service definitions (356 lines)
-2. **sqlx-migrate-job.yaml** - Migration orchestration (265 lines)
-3. **postgres-multi-db-init.yaml** - 15-database initialization (252 lines)
-4. **service-init-containers-patch.yaml** - 8 services + dependency config (423 lines)
-5. **redis-cluster-statefulset.yaml** - 3-node cluster (354 lines)
-6. **kafka-zookeeper-deployment.yaml** - Event streaming (448 lines)
-7. **clickhouse-installation.yaml** - Analytics platform (435 lines)
-8. **proto-management.yaml** - API contracts (524 lines)
+2. **postgres-multi-db-init.yaml** - 15-database initialization (252 lines)
+3. **service-init-containers-patch.yaml** - 8 services + dependency config (423 lines)
+4. **redis-cluster-statefulset.yaml** - 3-node cluster (354 lines)
+5. **kafka-zookeeper-deployment.yaml** - Event streaming (448 lines)
+6. **clickhouse-installation.yaml** - Analytics platform (435 lines)
+7. **proto-management.yaml** - API contracts (524 lines)
 
 ### Documentation & Scripts
 1. **STAGING_DEPLOYMENT_GUIDE.md** - Comprehensive deployment guide (500+ lines)
@@ -383,8 +372,7 @@ The complete initialization follows this order:
    │
 3. PostgreSQL StatefulSet + PVC
    ├─ postgres-multi-db-init ConfigMap
-   ├─ seed-data-job (creates databases/users/extensions)
-   └─ sqlx-migrate Job (runs migrations)
+   └─ seed-data-init Job (optional seed data)
        │
 4. gRPC Services (all service definitions)
    │
@@ -398,6 +386,7 @@ The complete initialization follows this order:
    │
 8. Microservices (via deployments in base)
    ├─ Init Containers wait for dependencies
+   ├─ Service migrations run on startup
    ├─ livenessProbe validates readiness
    └─ readinessProbe signals traffic readiness
        │

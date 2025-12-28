@@ -211,7 +211,11 @@ pub async fn upload_onboarding_interests(
     // Call ranking-service via gRPC with circuit breaker
     let mut client = clients.ranking_client();
     match clients
-        .call_ranking(|| async { client.upload_onboarding_interests(grpc_request.clone()).await })
+        .call_ranking(|| async {
+            client
+                .upload_onboarding_interests(grpc_request.clone())
+                .await
+        })
         .await
     {
         Ok(response) => {
@@ -221,15 +225,17 @@ pub async fn upload_onboarding_interests(
                 "Onboarding interests uploaded successfully"
             );
 
-            Ok(HttpResponse::Ok().json(UploadOnboardingInterestsHttpResponse {
-                success: response.success,
-                interests_created: response.interests_created,
-                error_message: if response.error_message.is_empty() {
-                    None
-                } else {
-                    Some(response.error_message)
-                },
-            }))
+            Ok(
+                HttpResponse::Ok().json(UploadOnboardingInterestsHttpResponse {
+                    success: response.success,
+                    interests_created: response.interests_created,
+                    error_message: if response.error_message.is_empty() {
+                        None
+                    } else {
+                        Some(response.error_message)
+                    },
+                }),
+            )
         }
         Err(e) => {
             error!(
