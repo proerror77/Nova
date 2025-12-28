@@ -122,8 +122,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("thumb_worker=info".parse().unwrap())
-                .add_directive("media_service=info".parse().unwrap()),
+                .add_directive("thumb_worker=info".parse().expect("valid directive"))
+                .add_directive("media_service=info".parse().expect("valid directive")),
         )
         .init();
 

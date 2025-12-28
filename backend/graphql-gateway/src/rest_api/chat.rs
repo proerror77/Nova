@@ -265,13 +265,13 @@ pub async fn create_conversation(
     }
 
     // Determine conversation type: direct (1:1) if only 2 participants, otherwise group
-    let conv_type = if payload.conversation_type.is_some() {
-        payload.conversation_type.unwrap()
-    } else if participants.len() == 2 {
-        ConversationType::Direct as i32
-    } else {
-        ConversationType::Group as i32
-    };
+    let conv_type = payload.conversation_type.unwrap_or_else(|| {
+        if participants.len() == 2 {
+            ConversationType::Direct as i32
+        } else {
+            ConversationType::Group as i32
+        }
+    });
 
     let req = CreateConversationRequest {
         name: payload.name.clone().unwrap_or_default(),
