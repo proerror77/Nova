@@ -40,7 +40,7 @@ spec:
     spec:
       containers:
       - name: search-service
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/search-service@sha256:018d8a99fce3f86924fa68d5a17d9d54a9d4c60b257f6cc785acd908fd97a8ba
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/search-service@sha256:23aa41686854d6e0f39a8b52aca59dd32633615f9157d61d3ab9ee27781b3352
 ---
 apiVersion: apps/v1
 kind: Deployment
