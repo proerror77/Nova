@@ -399,7 +399,7 @@ struct UserProfileView: View {
                         
                         // 分隔线
                         Rectangle()
-                            .fill(Color(red: 0.74, green: 0.74, blue: 0.74))
+                            .fill(DesignTokens.borderColor)
                             .frame(height: 0.5)
                         
                         // 帖子网格

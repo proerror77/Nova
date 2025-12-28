@@ -270,59 +270,61 @@ struct HomeView: View {
 
     var homeContent: some View {
         ZStack(alignment: .bottom) {
-            ZStack(alignment: .top) {
-            // 背景色
-            DesignTokens.backgroundColor
-                .ignoresSafeArea()
-
+            // 整体内容区域（使用统一的 ignoresSafeArea 避免间隙）
             VStack(spacing: 0) {
-                // MARK: - 顶部导航栏（忽略安全区域，紧贴顶部）
-                ZStack(alignment: .bottom) {
-                    // 白色背景 - 延伸到安全区域顶部
-                    Color.white
-                        .ignoresSafeArea(edges: .top)
-                    
+                // MARK: - 导航栏内容区域（98pt 高度）
+                ZStack {
                     // 导航图标 - 左: 搜索, 中: ICERED logo, 右: 通知
-                    HStack {
-                        Button(action: { showSearch = true }) {
-                            Image("search(black)")
+                    // 距离顶部 56pt，距离底部 18pt（与 MessageView title 一致）
+                    VStack {
+                        Spacer()
+                            .frame(height: 56.h)
+                        
+                        HStack {
+                            Button(action: { showSearch = true }) {
+                                Image("search(black)")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 24.s, height: 24.s)
+                                    .contentShape(Rectangle())
+                            }
+                            
+                            Spacer()
+                            
+                            // 中间 ICERED logo
+                            Image("ICERED-icon")
                                 .resizable()
                                 .scaledToFit()
-                                .frame(width: 24.s, height: 24.s)
-                                .contentShape(Rectangle())
+                                .frame(width: 102.w, height: 16.s)
+                            
+                            Spacer()
+                            
+                            Button(action: { showNotification = true }) {
+                                Image("bell")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 24.s, height: 24.s)
+                                    .contentShape(Rectangle())
+                            }
                         }
+                        .frame(width: 343.w, height: 24.s)
                         
                         Spacer()
-                        
-                        // 中间 ICERED logo
-                        Image("ICERED-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 102.w, height: 16.s)
-                        
-                        Spacer()
-                        
-                        Button(action: { showNotification = true }) {
-                            Image("bell")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 24.s, height: 24.s)
-                                .contentShape(Rectangle())
-                        }
+                            .frame(height: 18.h)
                     }
-                    .frame(width: 343.w, height: 24.s)
-                    .padding(.bottom, 12.h)
+                    
+                    // 顶部分隔线 - 在底部
+                    VStack {
+                        Spacer()
+                        Rectangle()
+                            .fill(DesignTokens.borderColor)
+                            .frame(height: 0.5)
+                    }
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: 50.h)
+                .frame(height: 98.h)
                 
-                // MARK: - 顶部分隔线（始终可见）
-                Rectangle()
-                    .fill(Color(red: 0.75, green: 0.75, blue: 0.75))
-                    .frame(width: 375.w, height: 0.5)
-                    .frame(maxWidth: .infinity)
-
-                // MARK: - Channel 栏容器（可滑动隐藏）
+                // MARK: - Channel 栏（紧贴导航栏底部）
                 channelBar
                     .offset(y: channelBarOffset)
                     .frame(height: max(0, 30.h + channelBarOffset))
@@ -343,7 +345,7 @@ struct HomeView: View {
                     // 可滚动内容区
                     ScrollView {
                         VStack(spacing: 0) {
-                            // MARK: - Promo Banner 内容 (Icon + 文字，距离 Channel 栏 45pt)
+                            // MARK: - Promo Banner 内容 (Icon + 文字，紧贴顶部)
                             VStack(spacing: 21.h) {
                                 Image("home-icon")
                                     .resizable()
@@ -357,7 +359,7 @@ struct HomeView: View {
                                     .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                                     .fixedSize(horizontal: true, vertical: false)
                             }
-                            .padding(.top, 45.h)
+                            .padding(.top, 12.h)  // 与 Channel 栏保持适当间距
                             .frame(maxWidth: .infinity)
                             
                             // 距离 Post 卡片 68pt 的间距
@@ -496,7 +498,8 @@ struct HomeView: View {
                     )
                 }
             }
-            }
+            .background(Color.white)
+            .ignoresSafeArea(edges: .top)
 
             // MARK: - 底部导航栏（覆盖在内容上方）
             BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)

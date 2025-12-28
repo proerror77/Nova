@@ -642,99 +642,107 @@ struct MessageView: View {
     // MARK: - 消息页面内容
     private var messageContent: some View {
         ZStack(alignment: .bottom) {
-            // MARK: - 背景色
-            DesignTokens.backgroundColor
+            // MARK: - 背景色（改为白色）
+            Color.white
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // MARK: - 顶部导航栏
-                HStack {
-                    // 左侧占位，保持标题居中
-                    Color.clear
-                        .frame(width: 24)
-
-                    Spacer()
-
-                    Text(LocalizedStringKey("Message"))
-                        .font(.system(size: 24, weight: .medium))
-                        .foregroundColor(DesignTokens.textPrimary)
-
-                    Spacer()
-
-                    // 右侧添加按钮 (圆圈加号)
-                    Button(action: {
-                        showAddOptionsMenu = true
-                    }) {
-                        Image(systemName: "plus.circle")
-                            .frame(width: 24, height: 24)
-                            .foregroundColor(DesignTokens.textPrimary)
+                // MARK: - 顶部区域（导航栏 + 搜索框）
+                VStack(spacing: 0) {
+                    // 标题和按钮
+                    ZStack {
+                        // 标题文本 - 居中
+                        Text(LocalizedStringKey("Message"))
+                            .font(.system(size: 18.f, weight: .semibold))
+                            .foregroundColor(.black)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                        
+                        // 右侧添加按钮
+                        HStack {
+                            Spacer()
+                            Button(action: {
+                                showAddOptionsMenu = true
+                            }) {
+                                Image("Add")
+                                    .resizable()
+                                    .frame(width: 24.s, height: 24.s)
+                            }
+                            .padding(.trailing, 16.w)
+                        }
                     }
-                }
-                .frame(height: DesignTokens.topBarHeight)
-                .padding(.horizontal, 16)
-                .background(DesignTokens.surface)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 24.h)
+                    .padding(.bottom, 18.h)
+                    
+                    // 分割线 - 使用统一的 borderColor
+                    Rectangle()
+                        .fill(DesignTokens.borderColor)
+                        .frame(height: 0.5)
+                    
+                    // 搜索框 - 距离分割线10pt
+                    HStack(spacing: 10.s) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 15.f))
+                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
 
-                // MARK: - 顶部分割线
-                Divider()
-                    .frame(height: 0.5)
-                    .background(DesignTokens.dividerColor)
-
-                // MARK: - 搜索框
-                HStack(spacing: 10) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 15))
-                        .foregroundColor(DesignTokens.textSecondary)
-
-                    TextField("Search", text: $searchText)
-                        .font(.system(size: 14))
-                        .foregroundColor(DesignTokens.textSecondary)
-                        .focused($isSearchFocused)
-                        .onChange(of: searchText) { _, newValue in
-                            isSearching = !newValue.isEmpty
-                            if !newValue.isEmpty {
-                                Task {
-                                    await performSearch(query: newValue)
+                        TextField("Search", text: $searchText)
+                            .font(.system(size: 14.f))
+                            .tracking(0.28)
+                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                            .focused($isSearchFocused)
+                            .onChange(of: searchText) { _, newValue in
+                                isSearching = !newValue.isEmpty
+                                if !newValue.isEmpty {
+                                    Task {
+                                        await performSearch(query: newValue)
+                                    }
+                                } else {
+                                    searchResults = []
                                 }
-                            } else {
+                            }
+
+                        if !searchText.isEmpty {
+                            Button(action: {
+                                searchText = ""
+                                isSearching = false
                                 searchResults = []
+                                isSearchFocused = false
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 14.f))
+                                    .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                             }
                         }
-
-                    if !searchText.isEmpty {
-                        Button(action: {
-                            searchText = ""
-                            isSearching = false
-                            searchResults = []
-                            isSearchFocused = false
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 14))
-                                .foregroundColor(DesignTokens.textSecondary)
-                        }
                     }
+                    .padding(EdgeInsets(top: 6.h, leading: 12.w, bottom: 6.h, trailing: 12.w))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 32.h)
+                    .background(Color(red: 0.91, green: 0.91, blue: 0.91))
+                    .cornerRadius(32.s)
+                    .padding(.top, 10.h)
+                    .padding(.horizontal, 16.w)
+                    .padding(.bottom, 10.h)
                 }
-                .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
-                .frame(height: 32)
-                .background(DesignTokens.searchBarBackground)
-                .cornerRadius(32)
-                .padding(EdgeInsets(top: 12, leading: 18, bottom: 16, trailing: 18))
+                .padding(.top, 56.h)
+                .background(Color.white)
 
-                // MARK: - 预览模式提示（仅在DEBUG模式显示）
-                #if DEBUG
-                if isPreviewMode {
-                    HStack(spacing: 8) {
-                        Image(systemName: "eye.fill")
-                            .font(.system(size: 12))
-                        Text("Preview Mode - Mock Data (Simulator)")
-                            .font(.system(size: 12, weight: .medium))
-                        Spacer()
-                    }
-                    .foregroundColor(.orange)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.orange.opacity(0.1))
-                }
-                #endif
+                // MARK: - 预览模式提示（暂时隐藏）
+                // #if DEBUG
+                // if isPreviewMode {
+                //     HStack(spacing: 8) {
+                //         Image(systemName: "eye.fill")
+                //             .font(.system(size: 12))
+                //         Text("Preview Mode - Mock Data (Simulator)")
+                //             .font(.system(size: 12, weight: .medium))
+                //         Spacer()
+                //     }
+                //     .foregroundColor(.orange)
+                //     .padding(.horizontal, 16)
+                //     .padding(.vertical, 8)
+                //     .background(Color.orange.opacity(0.1))
+                // }
+                // #endif
 
                 // MARK: - 搜索结果 / 消息列表
                 if isSearching {
@@ -872,10 +880,10 @@ struct MessageView: View {
                         // 下拉刷新對話列表
                         await loadConversationsFromMatrix()
                     }
-                    .padding(.bottom, DesignTokens.bottomBarHeight + DesignTokens.spacing12 + 40)
                 }
                 } // End of else (non-searching state)
             }
+            .ignoresSafeArea(edges: .top)
 
             // MARK: - 底部导航栏（覆盖在内容上方）
             BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)
@@ -902,8 +910,8 @@ struct MessageView: View {
                         // 背景
                         Rectangle()
                             .foregroundColor(DesignTokens.surface)
-                            .frame(width: 180, height: 151)
-                            .cornerRadius(8)
+                            .frame(width: 160.w, height: 132.h)
+                            .cornerRadius(8.s)
                             .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
 
                         VStack(spacing: 0) {
@@ -912,76 +920,79 @@ struct MessageView: View {
                                 showAddOptionsMenu = false
                                 currentPage = .addFriends
                             }) {
-                                HStack(alignment: .center, spacing: 16) {
+                                HStack(alignment: .center, spacing: 12.w) {
                                     Image("AddFriends")
                                         .resizable()
                                         .scaledToFit()
-                                        .frame(width: 28, height: 28)
+                                        .frame(width: 24.s, height: 24.s)
                                     Text(LocalizedStringKey("Add Friends"))
-                                        .font(.system(size: 14))
+                                        .font(.system(size: 12.f))
+                                        .tracking(0.24)
                                         .foregroundColor(DesignTokens.textPrimary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .frame(height: 50)
+                                .padding(.horizontal, 14.w)
+                                .padding(.vertical, 10.h)
+                                .frame(height: 44.h)
                             }
 
                             Divider()
-                                .frame(height: 0.20)
-                                .background(DesignTokens.textMuted)
-                                .padding(.horizontal, 16)
+                                .frame(height: 0.5)
+                                .background(DesignTokens.borderColor)
+                                .padding(.horizontal, 14.w)
 
                             // New Chat
                             Button(action: {
                                 showAddOptionsMenu = false
                                 currentPage = .newChat
                             }) {
-                                HStack(alignment: .center, spacing: 16) {
+                                HStack(alignment: .center, spacing: 12.w) {
                                     Image("GroupChat")
                                         .resizable()
                                         .scaledToFit()
-                                        .frame(width: 28, height: 28)
+                                        .frame(width: 24.s, height: 24.s)
                                     Text(LocalizedStringKey("New Chat"))
-                                        .font(.system(size: 14))
+                                        .font(.system(size: 12.f))
+                                        .tracking(0.24)
                                         .foregroundColor(DesignTokens.textPrimary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .frame(height: 50)
+                                .padding(.horizontal, 14.w)
+                                .padding(.vertical, 10.h)
+                                .frame(height: 44.h)
                             }
 
                             Divider()
-                                .frame(height: 0.20)
-                                .background(DesignTokens.textMuted)
-                                .padding(.horizontal, 16)
+                                .frame(height: 0.5)
+                                .background(DesignTokens.borderColor)
+                                .padding(.horizontal, 14.w)
 
                             // Scan QR Code
                             Button(action: {
                                 showAddOptionsMenu = false
                                 showQRScanner = true
                             }) {
-                                HStack(alignment: .center, spacing: 16) {
+                                HStack(alignment: .center, spacing: 12.w) {
                                     Image("Scan")
                                         .resizable()
                                         .scaledToFit()
-                                        .frame(width: 28, height: 28)
+                                        .frame(width: 24.s, height: 24.s)
                                     Text(LocalizedStringKey("Scan QR Code"))
-                                        .font(.system(size: 14))
+                                        .font(.system(size: 12.f))
+                                        .tracking(0.24)
                                         .foregroundColor(DesignTokens.textPrimary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .frame(height: 50)
+                                .padding(.horizontal, 14.w)
+                                .padding(.vertical, 10.h)
+                                .frame(height: 44.h)
                             }
                         }
-                        .frame(width: 180, height: 151)
+                        .frame(width: 160.w, height: 132.h)
                     }
-                    .padding(.trailing, 16)
+                    .padding(.trailing, 16.w)
                 }
-                .padding(.top, 72) // 从顶部安全区域下方开始
+                .padding(.top, 92.h) // 弹窗顶部距离手机顶部边缘92pt
 
                 Spacer()
             }
@@ -1003,17 +1014,17 @@ struct MessageListItem: View {
     var onAvatarTapped: ((String) -> Void)?  // 点击头像回调
 
     var body: some View {
-        HStack(spacing: 12) {
-            // 头像 - alice 使用自定义图片，其他用户使用 AvatarView 加载真实头像（支持首字母占位）
+        HStack(spacing: 10.s) {
+            // 头像 50x50
             Group {
                 if name.lowercased() == "alice" {
                     Image("alice-avatar")
                         .resizable()
                         .scaledToFill()
-                        .frame(width: 50, height: 50)
+                        .frame(width: 50.s, height: 50.s)
                         .clipShape(Circle())
                 } else {
-                    AvatarView(image: nil, url: avatarUrl, size: 50, name: name)
+                    AvatarView(image: nil, url: avatarUrl, size: 50.s, name: name)
                 }
             }
             .onTapGesture {
@@ -1021,57 +1032,61 @@ struct MessageListItem: View {
             }
 
             // 消息内容
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: 5.h) {
+                HStack(spacing: 4.w) {
                     Text(name)
-                        .font(.system(size: 19, weight: .bold))
-                        .foregroundColor(DesignTokens.textPrimary)
+                        .font(.system(size: 16.f, weight: .heavy))
+                        .tracking(0.32)
+                        .foregroundColor(.black)
 
-                    // E2EE indicator - show lock icon for encrypted conversations
+                    // E2EE indicator
                     if isEncrypted {
                         Image(systemName: "lock.fill")
-                            .font(.system(size: 12))
+                            .font(.system(size: 12.f))
                             .foregroundColor(.green)
                     }
                 }
 
-                // 消息预览 - 使用动态消息（限制單行並截斷）
-                Text(messagePreview)
-                    .font(.system(size: 15))
-                    .foregroundColor(DesignTokens.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .opacity(showMessagePreview ? 1 : 0)
+                // 消息预览
+                if showMessagePreview {
+                    Text(messagePreview)
+                        .font(.system(size: 14.f))
+                        .tracking(0.28)
+                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer()
-
-            // 时间和未读标记 - 可隐藏
+            // 时间和未读标记
             if showTimeAndBadge {
-                VStack(alignment: .trailing, spacing: 6) {
+                VStack(alignment: .trailing, spacing: 6.h) {
                     Text(time)
-                        .font(.system(size: 13))
-                        .foregroundColor(DesignTokens.textMuted)
+                        .font(.system(size: 12.f))
+                        .tracking(0.24)
+                        .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64))
 
-                    // 未讀徽章：超過 9 顯示 "9+"
-                    let badgeText = unreadCount > 9 ? "9+" : "\(unreadCount)"
-                    let badgeWidth: CGFloat = unreadCount > 9 ? 22 : 17
-                    
-                    ZStack {
-                        Capsule()
-                            .fill(DesignTokens.accentColor)
-                            .frame(width: badgeWidth, height: 17)
-
+                    // 未读徽章
+                    if unreadCount > 0 {
+                        let badgeText = unreadCount > 9 ? "9+" : "\(unreadCount)"
+                        let badgeWidth: CGFloat = unreadCount > 9 ? 22.s : 17.s
+                        
                         Text(badgeText)
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 12.f))
+                            .tracking(0.24)
                             .foregroundColor(.white)
+                            .frame(width: badgeWidth, height: 17.s)
+                            .background(Color(red: 0.82, green: 0.11, blue: 0.26))
+                            .cornerRadius(8.5.s)
                     }
                 }
             }
         }
-        .padding(EdgeInsets(top: 13, leading: 18, bottom: 13, trailing: 18))
-        .frame(height: 80)
-        .background(DesignTokens.backgroundColor)
+        .padding(.horizontal, 16.w)
+        .frame(maxWidth: .infinity)
+        .frame(height: 80.h)
+        .background(Color.white)
     }
 }
 
