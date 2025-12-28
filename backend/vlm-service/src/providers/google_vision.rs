@@ -189,7 +189,8 @@ impl GoogleVisionClient {
             *provider_guard = Some(provider);
         }
 
-        let provider = provider_guard.as_ref().unwrap();
+        // Safety: we just initialized it above if it was None
+        let provider = provider_guard.as_ref().expect("provider initialized above");
         let token = provider
             .token(VISION_API_SCOPES)
             .await
