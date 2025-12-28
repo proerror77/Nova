@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 // MARK: - Voice Message Options View
 
@@ -41,6 +42,10 @@ struct VoiceMessageOptionsView: View {
     // MARK: - State
 
     @State private var showTextPreview = false
+    @State private var isPlaying = false
+    @State private var isEditingText = false
+    @State private var editableText = ""
+    @StateObject private var audioPlayer = VoicePreviewPlayer()
 
     // MARK: - Body
 
@@ -69,18 +74,31 @@ struct VoiceMessageOptionsView: View {
                     Spacer()
 
                     // 播放預覽按鈕
-                    Button(action: {}) {
-                        Image(systemName: "play.circle.fill")
+                    Button(action: {
+                        togglePlayback()
+                    }) {
+                        Image(systemName: audioPlayer.isPlaying ? "stop.circle.fill" : "play.circle.fill")
                             .font(.system(size: 32))
                             .foregroundColor(DesignTokens.accentColor)
                     }
                 }
                 .padding(.horizontal, 20)
+
+                // 播放進度條
+                if audioPlayer.isPlaying || audioPlayer.currentTime > 0 {
+                    ProgressView(value: audioPlayer.currentTime, total: duration)
+                        .progressViewStyle(LinearProgressViewStyle(tint: DesignTokens.accentColor))
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
+                }
             }
             .padding(.vertical, 16)
             .background(DesignTokens.surface)
             .cornerRadius(12)
             .padding(.horizontal, 16)
+            .onDisappear {
+                audioPlayer.stop()
+            }
 
             // 轉文字結果預覽
             if showTextPreview {
@@ -152,17 +170,25 @@ struct VoiceMessageOptionsView: View {
     private var textPreviewSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("識別結果")
+                Text(isEditingText ? "編輯文字" : "識別結果")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(DesignTokens.textSecondary)
 
                 Spacer()
 
-                if !recognizedText.isEmpty {
-                    Button("編輯") {
-                        // TODO: 允許編輯文字
+                if !recognizedText.isEmpty && !isConverting {
+                    Button(isEditingText ? "完成" : "編輯") {
+                        if isEditingText {
+                            // 完成編輯，保存文字
+                            recognizedText = editableText
+                            isEditingText = false
+                        } else {
+                            // 開始編輯
+                            editableText = recognizedText
+                            isEditingText = true
+                        }
                     }
-                    .font(.system(size: 13))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundColor(DesignTokens.accentColor)
                 }
             }
@@ -176,11 +202,24 @@ struct VoiceMessageOptionsView: View {
                         .foregroundColor(DesignTokens.textSecondary)
                 }
                 .padding(.vertical, 8)
-            } else if recognizedText.isEmpty {
+            } else if recognizedText.isEmpty && !isEditingText {
                 Text("無法識別語音內容")
                     .font(.system(size: 14))
                     .foregroundColor(.orange)
                     .padding(.vertical, 8)
+            } else if isEditingText {
+                // 編輯模式
+                TextEditor(text: $editableText)
+                    .font(.system(size: 15))
+                    .foregroundColor(DesignTokens.textPrimary)
+                    .frame(minHeight: 60, maxHeight: 120)
+                    .padding(8)
+                    .background(DesignTokens.backgroundColor)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(DesignTokens.accentColor, lineWidth: 1)
+                    )
             } else {
                 Text(recognizedText)
                     .font(.system(size: 15))
@@ -202,6 +241,89 @@ struct VoiceMessageOptionsView: View {
         let mins = Int(seconds) / 60
         let secs = Int(seconds) % 60
         return String(format: "%d:%02d", mins, secs)
+    }
+
+    private func togglePlayback() {
+        if audioPlayer.isPlaying {
+            audioPlayer.stop()
+        } else {
+            audioPlayer.play(url: audioURL)
+        }
+    }
+}
+
+// MARK: - Voice Preview Player
+
+/// 語音預覽播放器
+final class VoicePreviewPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
+    @Published var isPlaying = false
+    @Published var currentTime: TimeInterval = 0
+
+    private var player: AVAudioPlayer?
+    private var timer: Timer?
+
+    func play(url: URL) {
+        do {
+            // 配置音頻會話
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default)
+            try session.setActive(true)
+
+            // 創建播放器
+            player = try AVAudioPlayer(contentsOf: url)
+            player?.delegate = self
+            player?.prepareToPlay()
+            player?.play()
+
+            isPlaying = true
+            currentTime = 0
+
+            // 啟動進度更新計時器
+            timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+                self?.updateProgress()
+            }
+
+            #if DEBUG
+            print("[VoicePreviewPlayer] 開始播放: \(url.lastPathComponent)")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[VoicePreviewPlayer] 播放失敗: \(error)")
+            #endif
+        }
+    }
+
+    func stop() {
+        player?.stop()
+        player = nil
+        timer?.invalidate()
+        timer = nil
+        isPlaying = false
+        currentTime = 0
+    }
+
+    private func updateProgress() {
+        guard let player = player else { return }
+        currentTime = player.currentTime
+    }
+
+    // MARK: - AVAudioPlayerDelegate
+
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        DispatchQueue.main.async {
+            self.stop()
+        }
+    }
+
+    func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+        DispatchQueue.main.async {
+            self.stop()
+        }
+        #if DEBUG
+        if let error = error {
+            print("[VoicePreviewPlayer] 解碼錯誤: \(error)")
+        }
+        #endif
     }
 }
 
