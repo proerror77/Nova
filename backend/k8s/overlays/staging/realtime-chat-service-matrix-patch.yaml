@@ -1,0 +1,20 @@
+# Patch to mount Synapse Admin API secret for Matrix user provisioning
+# This enables user-specific Matrix tokens instead of shared service account token
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: realtime-chat-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: realtime-chat-service
+        env:
+        # Map SYNAPSE_ADMIN_TOKEN from secret to MATRIX_ADMIN_TOKEN env var
+        # that realtime-chat-service expects
+        - name: MATRIX_ADMIN_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: synapse-admin-api
+              key: SYNAPSE_ADMIN_TOKEN
+              optional: true
