@@ -722,8 +722,9 @@ impl ContentService for ContentServiceImpl {
             .collect();
 
         // Build next cursor from last post
+        // Safety: we just checked !posts.is_empty() above
         let (next_cursor_timestamp, next_cursor_post_id) = if has_more && !posts.is_empty() {
-            let last = posts.last().unwrap();
+            let last = posts.last().expect("posts is not empty");
             (last.created_at, last.post_id.clone())
         } else {
             (0, String::new())
@@ -800,9 +801,10 @@ impl ContentService for ContentServiceImpl {
         })?;
 
         // Build next cursor from last post if there are more results
+        // Safety: we just checked !post_ids.is_empty() above
         let next_cursor = if has_more && !post_ids.is_empty() {
             // Get the last post's created_at for cursor
-            let last_post_id = post_ids.last().unwrap();
+            let last_post_id = post_ids.last().expect("post_ids is not empty");
             let last_created_at = sqlx::query_scalar::<_, i64>(
                 "SELECT EXTRACT(EPOCH FROM created_at)::bigint FROM posts WHERE id = $1",
             )

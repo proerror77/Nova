@@ -662,7 +662,9 @@ async fn fetch_apple_jwks(http: &Client) -> Result<Vec<AppleJwk>> {
 async fn get_apple_public_key(http: &Client, kid: &str) -> Result<AppleJwk> {
     // Check cache first
     {
-        let cache = APPLE_JWKS_CACHE.read().unwrap();
+        let cache = APPLE_JWKS_CACHE
+            .read()
+            .expect("APPLE_JWKS_CACHE RwLock poisoned");
         if !cache.is_expired() {
             if let Some(key) = cache.keys.get(kid) {
                 debug!("Using cached Apple public key for kid={}", kid);
@@ -676,7 +678,9 @@ async fn get_apple_public_key(http: &Client, kid: &str) -> Result<AppleJwk> {
 
     // Update cache
     {
-        let mut cache = APPLE_JWKS_CACHE.write().unwrap();
+        let mut cache = APPLE_JWKS_CACHE
+            .write()
+            .expect("APPLE_JWKS_CACHE RwLock poisoned");
         cache.keys.clear();
         for key in &keys {
             cache.keys.insert(key.kid.clone(), key.clone());
@@ -685,7 +689,9 @@ async fn get_apple_public_key(http: &Client, kid: &str) -> Result<AppleJwk> {
     }
 
     // Find the requested key
-    let cache = APPLE_JWKS_CACHE.read().unwrap();
+    let cache = APPLE_JWKS_CACHE
+        .read()
+        .expect("APPLE_JWKS_CACHE RwLock poisoned");
     cache.keys.get(kid).cloned().ok_or_else(|| {
         error!("Apple public key not found for kid={}", kid);
         IdentityError::OAuthError(format!("Apple public key not found for kid={}", kid))

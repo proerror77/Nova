@@ -40,8 +40,9 @@ impl ZitadelService {
             return None;
         }
 
+        // Safety: is_configured() already verified api_url is Some
         info!(
-            api_url = %config.api_url.as_ref().unwrap(),
+            api_url = %config.api_url.as_ref().expect("api_url verified by is_configured"),
             "Zitadel user sync service initialized"
         );
 
