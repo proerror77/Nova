@@ -10,7 +10,7 @@ struct UserProfileContentSectionLayout {
 
     // ==================== 分隔线 ====================
     var dividerHeight: CGFloat = 0.5
-    var dividerColor: Color = Color(red: 0.74, green: 0.74, blue: 0.74)
+    var dividerColor: Color = DesignTokens.borderColor
 
     // ==================== 网格 ====================
     var gridSpacing: CGFloat = 8

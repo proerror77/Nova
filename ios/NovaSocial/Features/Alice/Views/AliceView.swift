@@ -66,21 +66,22 @@ struct AliceView: View {
     private let xaiService = XAIService.shared
 
     // MARK: - Model Data
+    // UI 显示 "alice + 版本"，实际功能通过 name 判断使用哪个 API
     private var aliceModels: [AliceModel] {
         var models: [AliceModel] = []
 
         // Grok 4 - X.AI 最新模型（推薦）
         models.append(AliceModel(
-            name: "grok-4",
-            displayName: "Grok 4",
-            description: "X.AI 最新模型 ⭐️ 推薦"
+            name: "grok-4",  // 功能：使用 Grok API
+            displayName: "alice 5.1",  // UI 显示
+            description: "最新模型 ⭐️ 推薦"
         ))
 
         // 本地模型（如果可用）
         if aiRouter.isOnDeviceAvailable {
             models.append(AliceModel(
-                name: "on-device",
-                displayName: "On-Device AI",
+                name: "on-device",  // 功能：使用本地模型
+                displayName: "alice Local",  // UI 显示
                 description: "隱私優先・離線可用",
                 isOnDevice: true
             ))
@@ -88,10 +89,10 @@ struct AliceView: View {
 
         // 遠端模型（Nova 後端）
         models.append(contentsOf: [
-            AliceModel(name: "gpt-4o-all", description: "Most capable model"),
-            AliceModel(name: "gpt-4o", description: "GPT-4 optimized"),
-            AliceModel(name: "gpt-4", description: "GPT-4 standard"),
-            AliceModel(name: "gpt-3.5-turbo", description: "Fast and efficient")
+            AliceModel(name: "gpt-4o-all", displayName: "alice Pro", description: "最強大模型"),
+            AliceModel(name: "gpt-4o", displayName: "alice Plus", description: "進階優化"),
+            AliceModel(name: "gpt-4", displayName: "alice 4.0", description: "標準版本"),
+            AliceModel(name: "gpt-3.5-turbo", displayName: "alice Fast", description: "快速高效")
         ])
 
         return models
@@ -155,59 +156,54 @@ struct AliceView: View {
 
             VStack(spacing: 0) {
                 // MARK: - 顶部导航栏
-                HStack {
-                    // 清除對話按鈕
-                    Button(action: clearChat) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 18))
-                            .foregroundColor(messages.isEmpty ? DesignTokens.textSecondary : DesignTokens.textPrimary)
-                    }
-                    .disabled(messages.isEmpty)
-                    .padding(.leading, 16)
-
+                VStack(spacing: 0) {
                     Spacer()
-
-                    // 模型選擇器
-                    HStack(spacing: 5) {
-                        // 模型圖標
-                        if isUsingGrok {
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [.purple, .blue],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                        } else if isUsingOnDevice {
-                            Image(systemName: "cpu")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.green)
+                    
+                    HStack {
+                        // 清除對話按鈕（左侧）
+                        Button(action: clearChat) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 18.f))
+                                .foregroundColor(messages.isEmpty ? DesignTokens.textSecondary : DesignTokens.textPrimary)
                         }
-
-                        Text(aliceModels.first { $0.name == selectedModel }?.displayName ?? selectedModel)
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(DesignTokens.textPrimary)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(DesignTokens.textPrimary)
+                        .disabled(messages.isEmpty)
+                        .padding(.leading, 16.w)
+                        
+                        Spacer()
+                        
+                        // 模型選擇器（中间）- 显示选中模型的 displayName
+                        HStack(spacing: 6.s) {
+                            Text(aliceModels.first { $0.name == selectedModel }?.displayName ?? "alice")
+                                .font(.system(size: 18.f, weight: .semibold))
+                                .foregroundColor(DesignTokens.textPrimary)
+                                .lineLimit(1)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 14.f, weight: .semibold))
+                                .foregroundColor(DesignTokens.textPrimary)
+                        }
+                        .onTapGesture {
+                            showModelSelector.toggle()
+                        }
+                        
+                        Spacer()
+                        
+                        // 右侧占位符保持对称
+                        Color.clear
+                            .frame(width: 34.w, height: 18.h)
+                            .padding(.trailing, 16.w)
                     }
-                    .onTapGesture {
-                        showModelSelector.toggle()
-                    }
-
+                    .frame(height: 24.h)
+                    
                     Spacer()
-
-                    // 佔位符保持對稱
-                    Color.clear
-                        .frame(width: 34, height: 18)
-                        .padding(.trailing, 16)
+                        .frame(height: 18.h)
+                    
+                    Rectangle()
+                        .fill(DesignTokens.borderColor)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 0.5)
                 }
-                .frame(height: 56)
-                .background(DesignTokens.surface)
-
-                Divider()
+                .frame(maxWidth: .infinity)
+                .frame(height: 98.h)
 
                 // MARK: - 聊天消息区域
                 if messages.isEmpty {
@@ -273,76 +269,84 @@ struct AliceView: View {
                 }
 
                 // MARK: - 底部固定区域（按钮组 + 输入框）
-                VStack(spacing: 6) {
+                VStack(spacing: 10.h) {
                     // 功能按钮组
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            // Get Super alice 按钮
-                            HStack(spacing: 8) {
-                                Image(systemName: "sparkles")
-                                    .font(.system(size: 18))
-                                    .foregroundColor(DesignTokens.textPrimary)
-                                Text("Get Super alice")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(DesignTokens.textPrimary)
-                            }
-                            .padding(.horizontal, 16)
-                            .frame(height: 42)
-                            .background(DesignTokens.surface)
-                            .cornerRadius(21)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 21)
-                                    .inset(by: 0.50)
-                                    .stroke(DesignTokens.borderColor, lineWidth: 0.50)
-                            )
-
-                            // Voice Mode 按钮
-                            Button(action: {
-                                showVoiceChat = true
-                            }) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "waveform")
-                                        .font(.system(size: 16))
-                                    Text("Voice Mode")
-                                        .font(.system(size: 16, weight: .medium))
-                                }
+                    HStack(spacing: 10.s) {
+                        // Get Super alice 按钮
+                        HStack(spacing: 10.s) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 16.f))
                                 .foregroundColor(DesignTokens.textPrimary)
-                                .frame(width: 140, height: 42)
-                                .background(
-                                    LinearGradient(
-                                        colors: [.purple.opacity(0.3), .blue.opacity(0.2)],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .cornerRadius(21)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 21)
-                                        .inset(by: 0.50)
-                                        .stroke(
-                                            LinearGradient(
-                                                colors: [.purple.opacity(0.5), .blue.opacity(0.3)],
-                                                startPoint: .leading,
-                                                endPoint: .trailing
-                                            ),
-                                            lineWidth: 1
-                                        )
-                                )
-                            }
+                            Text("Get Super alice")
+                                .font(.system(size: 12.f))
+                                .tracking(0.24)
+                                .foregroundColor(.black)
                         }
-                        .padding(.horizontal, 16)
+                        .padding(EdgeInsets(top: 10.h, leading: 16.w, bottom: 10.h, trailing: 16.w))
+                        .background(DesignTokens.surface)
+                        .cornerRadius(21.s)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 21.s)
+                                .inset(by: 0.20)
+                                .stroke(Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.20)
+                        )
+
+                        // Voice Mode 按钮
+                        Button(action: {
+                            showVoiceChat = true
+                        }) {
+                            HStack(spacing: 10.s) {
+                                Image(systemName: "waveform")
+                                    .font(.system(size: 16.f))
+                                    .foregroundColor(.black)
+                                Text("Voice Mode")
+                                    .font(.system(size: 12.f))
+                                    .tracking(0.24)
+                                    .foregroundColor(.black)
+                            }
+                            .padding(EdgeInsets(top: 10.h, leading: 16.w, bottom: 10.h, trailing: 16.w))
+                            .background(
+                                LinearGradient(
+                                    colors: [
+                                        Color(red: 0.86, green: 0.56, blue: 0.84).opacity(0.76),
+                                        Color(red: 0.73, green: 0.58, blue: 0.87).opacity(0.52),
+                                        Color(red: 0.45, green: 0.79, blue: 0.91).opacity(0.60)
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .cornerRadius(21.s)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 21.s)
+                                    .inset(by: 0.20)
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: [
+                                                Color(red: 0.82, green: 0.33, blue: 0.80),
+                                                Color(red: 0.38, green: 0.71, blue: 0.84)
+                                            ],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        ),
+                                        lineWidth: 0.20
+                                    )
+                            )
+                        }
                     }
-                    .frame(height: 50)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16.w)
 
                     // 输入框区域
-                    HStack(spacing: 12) {
+                    HStack(spacing: 10.s) {
                         Image(systemName: "plus")
-                            .font(.system(size: 20, weight: .medium))
+                            .font(.system(size: 16.f, weight: .medium))
                             .foregroundColor(DesignTokens.textPrimary)
 
                         TextField("Ask any questions", text: $inputText)
-                            .font(.system(size: 16))
-                            .foregroundColor(DesignTokens.textPrimary)
+                            .font(.system(size: 12.f))
+                            .tracking(0.24)
+                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                             .submitLabel(.send)
                             .onSubmit {
                                 sendMessage()
@@ -353,24 +357,27 @@ struct AliceView: View {
                                 Image("Send-Icon")
                                     .resizable()
                                     .scaledToFit()
-                                    .frame(width: 24, height: 24)
+                                    .frame(width: 24.s, height: 24.s)
                             }
                         }
                     }
-                    .padding(.horizontal, 20)
-                    .frame(height: 52)
+                    .padding(EdgeInsets(top: 12.h, leading: 16.w, bottom: 12.h, trailing: 16.w))
+                    .frame(maxWidth: .infinity)
                     .background(DesignTokens.surface)
-                    .cornerRadius(26)
+                    .cornerRadius(45.s)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 26)
-                            .inset(by: 0.50)
-                            .stroke(DesignTokens.borderColor, lineWidth: 0.50)
+                        RoundedRectangle(cornerRadius: 45.s)
+                            .inset(by: 0.20)
+                            .stroke(Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.20)
                     )
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 16.w)
                 }
-                .padding(.bottom, 60)  // 为底部导航栏预留空间
+                .padding(.bottom, 82.h)  // 距离手机底部边缘 82pt
             }
+            .background(DesignTokens.surface)
+            .ignoresSafeArea(edges: .top)  // 统一处理顶部安全区域
             .ignoresSafeArea(.keyboard, edges: .bottom)
+            .ignoresSafeArea(edges: .bottom)
 
             // MARK: - 模型选择器弹窗
             if showModelSelector {
@@ -594,7 +601,7 @@ struct AliceView: View {
             // 模型选择器 - 使用结构化数据
             VStack {
                 Spacer()
-                    .frame(height: 140)
+                    .frame(height: 88.h)  // 距离顶部 88pt
 
                 VStack(spacing: 4) {
                     ForEach(aliceModels) { model in
@@ -609,13 +616,14 @@ struct AliceView: View {
                     }
                 }
                 .padding(.vertical, 8)
-                .frame(width: 280)
+                .frame(width: 280.w)  // 响应式宽度
                 .background(DesignTokens.surface)
-                .cornerRadius(20)
+                .cornerRadius(20.s)
                 .shadow(color: Color(red: 0, green: 0, blue: 0, opacity: 0.15), radius: 12, x: 0, y: 4)
 
                 Spacer()
             }
+            .frame(maxWidth: .infinity)  // 水平居中
         }
     }
 
