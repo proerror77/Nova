@@ -141,19 +141,20 @@ struct BottomTabBar: View {
                             .clipShape(Circle())
                     } else if let avatarUrl = authManager.currentUser?.avatarUrl,
                               let url = URL(string: avatarUrl) {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 20.s, height: 20.s)
-                                    .clipShape(Circle())
-                            case .failure(_), .empty:
-                                DefaultAvatarView(size: 20.s)
-                            @unknown default:
-                                DefaultAvatarView(size: 20.s)
-                            }
+                        // 使用 CachedAsyncImage 避免每次切換 Tab 時重新載入
+                        CachedAsyncImage(
+                            url: url,
+                            targetSize: CGSize(width: 40, height: 40), // 2x for Retina
+                            enableProgressiveLoading: false, // 小圖片不需要漸進式載入
+                            priority: .high
+                        ) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 20.s, height: 20.s)
+                                .clipShape(Circle())
+                        } placeholder: {
+                            DefaultAvatarView(size: 20.s)
                         }
                     } else {
                         DefaultAvatarView(size: 20.s)

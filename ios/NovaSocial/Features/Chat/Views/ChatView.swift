@@ -108,6 +108,30 @@ struct ChatView: View {
                 }
             )
         }
+        .sheet(isPresented: $viewModel.showVoiceOptions) {
+            VoiceMessageOptionsView(
+                isPresented: $viewModel.showVoiceOptions,
+                duration: viewModel.pendingVoiceDuration,
+                audioURL: viewModel.pendingVoiceURL ?? URL(fileURLWithPath: "/tmp"),
+                audioData: viewModel.pendingVoiceData ?? Data(),
+                recognizedText: $viewModel.recognizedVoiceText,
+                isConverting: $viewModel.isConvertingVoiceToText,
+                onSendVoice: {
+                    viewModel.sendPendingVoiceMessage()
+                },
+                onSendText: { text in
+                    viewModel.sendVoiceAsText(text)
+                },
+                onCancel: {
+                    viewModel.cancelPendingVoice()
+                },
+                onConvertToText: {
+                    viewModel.convertVoiceToText()
+                }
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
         .onChange(of: viewModel.selectedPhotoItem) { _, newItem in
             viewModel.handlePhotoSelection(newItem)
         }

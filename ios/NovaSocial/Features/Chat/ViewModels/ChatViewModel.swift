@@ -79,6 +79,23 @@ final class ChatViewModel {
     var voiceRecordDragOffset: CGFloat = 0
     let voiceCancelThreshold: CGFloat = -60
 
+    // MARK: - WeChat-Style Voice Options
+
+    /// 顯示語音選項面板（發送語音/轉文字/取消）
+    var showVoiceOptions = false
+    /// 待發送的語音數據
+    var pendingVoiceData: Data?
+    /// 待發送的語音文件 URL
+    var pendingVoiceURL: URL?
+    /// 待發送的語音時長
+    var pendingVoiceDuration: TimeInterval = 0
+    /// 語音識別結果
+    var recognizedVoiceText: String = ""
+    /// 是否正在轉換語音為文字
+    var isConvertingVoiceToText = false
+    /// 語音識別服務
+    private let speechRecognitionService = SpeechRecognitionService.shared
+
     // MARK: - Internal State
 
     private var matrixMessageHandlerSetup = false
@@ -574,9 +591,120 @@ final class ChatViewModel {
         if voiceRecordDragOffset < voiceCancelThreshold {
             cancelVoiceRecording()
         } else if isRecordingVoice {
-            stopAndSendVoiceMessage()
+            // 微信風格：顯示選項面板而不是直接發送
+            stopAndShowVoiceOptions()
         }
         voiceRecordDragOffset = 0
+    }
+
+    // MARK: - WeChat-Style Voice Options
+
+    /// 停止錄音並顯示選項面板
+    func stopAndShowVoiceOptions() {
+        guard let result = audioRecorder.stopRecording() else {
+            isRecordingVoice = false
+            error = "無法保存錄音"
+            return
+        }
+
+        isRecordingVoice = false
+
+        guard result.duration >= 1.0 else {
+            #if DEBUG
+            print("[ChatViewModel] 錄音時間太短: \(result.duration)秒")
+            #endif
+            error = "錄音時間太短"
+            audioRecorder.cleanupTempFiles()
+            return
+        }
+
+        // 保存待處理的語音數據
+        pendingVoiceData = result.data
+        pendingVoiceURL = result.url
+        pendingVoiceDuration = result.duration
+        recognizedVoiceText = ""
+        isConvertingVoiceToText = false
+
+        // 顯示選項面板
+        showVoiceOptions = true
+
+        #if DEBUG
+        print("[ChatViewModel] 顯示語音選項面板，時長: \(result.duration)秒")
+        #endif
+    }
+
+    /// 發送待處理的語音訊息
+    func sendPendingVoiceMessage() {
+        guard let data = pendingVoiceData,
+              let url = pendingVoiceURL else {
+            error = "語音數據不存在"
+            return
+        }
+
+        sendVoiceMessage(audioData: data, duration: pendingVoiceDuration, url: url)
+        clearPendingVoice()
+    }
+
+    /// 將語音轉換為文字
+    func convertVoiceToText() {
+        guard let url = pendingVoiceURL else {
+            error = "語音文件不存在"
+            return
+        }
+
+        isConvertingVoiceToText = true
+
+        Task {
+            do {
+                let text = try await speechRecognitionService.recognizeFromFile(url: url)
+                recognizedVoiceText = text
+                isConvertingVoiceToText = false
+
+                #if DEBUG
+                print("[ChatViewModel] 語音識別結果: \(text)")
+                #endif
+            } catch {
+                isConvertingVoiceToText = false
+                self.error = error.localizedDescription
+
+                #if DEBUG
+                print("[ChatViewModel] 語音識別失敗: \(error)")
+                #endif
+            }
+        }
+    }
+
+    /// 將語音識別結果作為文字訊息發送
+    func sendVoiceAsText(_ text: String) {
+        guard !text.isEmpty else {
+            error = "文字內容為空"
+            return
+        }
+
+        // 發送文字訊息
+        messageText = text
+        sendMessage()
+        clearPendingVoice()
+    }
+
+    /// 取消待處理的語音
+    func cancelPendingVoice() {
+        clearPendingVoice()
+        audioRecorder.cleanupTempFiles()
+
+        #if DEBUG
+        print("[ChatViewModel] 取消語音訊息")
+        #endif
+    }
+
+    /// 清理待處理的語音數據
+    private func clearPendingVoice() {
+        showVoiceOptions = false
+        pendingVoiceData = nil
+        pendingVoiceURL = nil
+        pendingVoiceDuration = 0
+        recognizedVoiceText = ""
+        isConvertingVoiceToText = false
     }
 
     // MARK: - File Handling

@@ -42,6 +42,8 @@
 		18CB186E9A47D1322F9492F3 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D661B4DD0C4067F3F4F871A5 /* WelcomeView.swift */; };
 		1929BB2F4F32DA7B21CF2BE9 /* ChatCallService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C673284E0443E48AF1AFBC /* ChatCallService.swift */; };
 		1998987BB31CAA5C9AB84774 /* AudioRecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF8FF5474ACC090E1F95421 /* AudioRecorderService.swift */; };
+		SPEECH001AAC9FD82BA47891 /* SpeechRecognitionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPEECH002FFD9A31E8C42ABC /* SpeechRecognitionService.swift */; };
+		VOICE001BBA7CF52E9A84321 /* VoiceMessageOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = VOICE002CCD8B63F1AB95432 /* VoiceMessageOptionsView.swift */; };
 		19D072F0EA3EBFD7BBFFE131 /* UserProfileFollowersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22D1A9F18BA528BC3C6BF6EB /* UserProfileFollowersView.swift */; };
 		1BEA350B4023946C5D463F95 /* ActivitySummaryProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D67BEF6CA96F7C0C8C41137A /* ActivitySummaryProvider.swift */; };
 		1DCE8D99AD8E4F66BAC4676F /* ICEREDUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D17047071DD0A4EAD3243A9 /* ICEREDUITests.swift */; };
@@ -556,6 +558,8 @@
 		CE44BE89D96953ABCAA2E34E /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		CE645708E87093F3BFFD2B7A /* ICEREDUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ICEREDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CEF8FF5474ACC090E1F95421 /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
+		SPEECH002FFD9A31E8C42ABC /* SpeechRecognitionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognitionService.swift; sourceTree = "<group>"; };
+		VOICE002CCD8B63F1AB95432 /* VoiceMessageOptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceMessageOptionsView.swift; sourceTree = "<group>"; };
 		D040E1C8EF2FF6D6CBAAA5E3 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		D121644B7F1277C322CA6A51 /* LocationPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPickerView.swift; sourceTree = "<group>"; };
 		D24DB2F8DFC6CEDA35F99370 /* FeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
@@ -1167,6 +1171,7 @@
 				7B28922F1D6A77C8AB489921 /* MessageBubbleView.swift */,
 				2C4102217CF0F3A8D85CEE13 /* TypingDotsView.swift */,
 				299D0BEAA0C7E55276F44D77 /* VoiceMessageView.swift */,
+				VOICE002CCD8B63F1AB95432 /* VoiceMessageOptionsView.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -1787,6 +1792,7 @@
 			isa = PBXGroup;
 			children = (
 				CEF8FF5474ACC090E1F95421 /* AudioRecorderService.swift */,
+				SPEECH002FFD9A31E8C42ABC /* SpeechRecognitionService.swift */,
 				D2BAA081BD695A0ADA562F9F /* ImageCacheService.swift */,
 				35CDD0F078823EDEB9C2867F /* ImageCompressor.swift */,
 				F0CEAA8A405BB702DA178841 /* LivePhotoManager.swift */,
@@ -2062,6 +2068,8 @@
 				9824FCB8B180ACFF53DAEB49 /* AppRoute.swift in Sources */,
 				B9F793C84C76822E1494A59A /* AttachmentOptionButton.swift in Sources */,
 				1998987BB31CAA5C9AB84774 /* AudioRecorderService.swift in Sources */,
+				SPEECH001AAC9FD82BA47891 /* SpeechRecognitionService.swift in Sources */,
+				VOICE001BBA7CF52E9A84321 /* VoiceMessageOptionsView.swift in Sources */,
 				E3C3EA86F619CE1A0DDF83AF /* AuthenticationManager.swift in Sources */,
 				4CDCF12D671ED706F990A390 /* AvatarManager.swift in Sources */,
 				F992BBA74E2D16A5D14D0A7B /* BackgroundUploadManager.swift in Sources */,
