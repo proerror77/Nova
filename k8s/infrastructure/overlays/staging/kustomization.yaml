@@ -402,17 +402,11 @@ patches:
     version: v1
     kind: ClusterIssuer
     name: nova-ca-issuer
+# turn-server Service: Use JSON 6902 patch to avoid port ordering issues with same port/different protocol
 - patch: |-
-    apiVersion: v1
-    kind: Service
-    metadata:
-      name: turn-server
-    spec:
-      ports:
-        - name: stun-udp
-          port: 3478
-          targetPort: 3478
-          protocol: UDP
+    - op: replace
+      path: /spec/ports
+      value:
         - name: turn-udp
           port: 3478
           targetPort: 3478
@@ -421,18 +415,24 @@ patches:
           port: 443
           targetPort: 443
           protocol: UDP
-        - name: turn-tcp
-          port: 3478
-          targetPort: 3478
-          protocol: TCP
-        - name: turn-tcp-alt
-          port: 443
-          targetPort: 443
-          protocol: TCP
+    - op: add
+      path: /spec/loadBalancerIP
+      value: "34.84.3.228"
   target:
     version: v1
     kind: Service
     name: turn-server
+- patch: |-
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: turn-server-tcp
+    spec:
+      loadBalancerIP: 34.84.3.228
+  target:
+    version: v1
+    kind: Service
+    name: turn-server-tcp
 
 # (migrated to strategic merge patches per service to avoid jsonpatch parent missing)
 
