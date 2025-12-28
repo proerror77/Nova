@@ -81,7 +81,7 @@ jobs:
           # Services with self-contained Dockerfiles (context = service directory)
           INDEPENDENT="realtime-chat-service"
           # Services that need repo root as context (Dockerfile uses COPY backend ./backend)
-          REPO_ROOT_CONTEXT="graphql-gateway identity-service content-service social-service graph-service"
+          REPO_ROOT_CONTEXT="content-service graph-service graphql-gateway identity-service media-service notification-service ranking-service search-service social-service streaming-service trust-safety-service"
 
           if echo "$INDEPENDENT" | grep -qw "${{ inputs.service }}"; then
             echo "context=./backend/${{ inputs.service }}" >> "$GITHUB_OUTPUT"
