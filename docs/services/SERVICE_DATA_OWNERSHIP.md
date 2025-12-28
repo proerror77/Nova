@@ -1,10 +1,14 @@
 # Service Data Ownership - Nova Architecture Phase 0
 
-**Version**: 1.1
+**Version**: 1.2
 **Date**: 2025-12-28
 **Status**: Phase 0 Task 0.2 Deliverable (Updated)
 
-> **Update 2025-12-28**: Clarified per-service outbox pattern (not centralized).
+> **Update 2025-12-28 (v1.2)**: Fixed E2EE documentation - removed non-existent
+> encryption tables from Auth, added detailed Olm/Megolm table documentation
+> for Messaging Service with vodozemac encryption strategy.
+>
+> **Update 2025-12-28 (v1.1)**: Clarified per-service outbox pattern (not centralized).
 > Each service owns its own outbox_events table and processor.
 
 ---
@@ -33,10 +37,11 @@ This document maps each table in the current `nova_content` PostgreSQL database 
 | `two_fa_backup_codes` | 2FA backup codes | Auth Service | Auth Service | Account recovery |
 | `jwt_signing_keys` | JWT key rotation | Auth Service | Auth Service | Token signing |
 | `auth_logs` | Login attempt logs | Auth Service | Auth Service | Security audit |
-| `device_keys` | Device encryption keys | Auth Service | Auth Service | Device-specific keys |
-| `key_exchanges` | Key exchange records | Auth Service | Auth Service | Encryption setup |
-| `encryption_keys` | General encryption keys | Auth Service | Auth Service | Data encryption |
-| `encryption_audit_log` | Encryption audit trail | Auth Service | Auth Service | Security compliance |
+| `user_settings` | User preferences | Auth Service | Auth Service | App settings |
+| `invite_codes` | Invite system | Auth Service | Auth Service | User invitations |
+| `oauth_connections` | OAuth provider links | Auth Service | Auth Service | Social login |
+| `passkey_credentials` | WebAuthn passkeys | Auth Service | Auth Service | Passwordless auth |
+| `outbox_events` | Transactional outbox | Auth Service | Auth Service | Event publishing |
 
 **Dependencies**: None (Auth Service is foundational)
 
@@ -67,27 +72,56 @@ This document maps each table in the current `nova_content` PostgreSQL database 
 ---
 
 ### 3. **Messaging Service** 💬
-**Owned Tables**: Direct messages and conversations
+**Owned Tables**: Direct messages, conversations, and E2EE infrastructure
+
+#### Core Messaging Tables
 
 | Table | Purpose | Read By | Write By | Notes |
 |-------|---------|---------|----------|-------|
 | `conversations` | Direct message threads | Messaging/Notification Services | Messaging Service | 1:1 and group chats |
 | `conversation_members` | Conversation participants | Messaging Service | Messaging Service | Member list |
-| `conversation_counters` | Unread message counts | Messaging Service | Messaging Service | Unread tracking |
-| `messages` | Message content | Messaging/Notification Services | Messaging Service | Plaintext + encrypted |
+| `conversation_counters` | Sequence number tracking | Messaging Service | Messaging Service | Message ordering |
+| `messages` | Message content | Messaging/Notification Services | Messaging Service | Supports E2EE via Megolm |
 | `message_reactions` | Message emoji reactions | Messaging Service | Messaging Service | User reactions |
 | `message_attachments` | Files/media in messages | Messaging Service | Messaging Service | File references |
 | `message_edit_history` | Message edit tracking | Messaging Service | Messaging Service | Audit trail |
 | `message_recalls` | Recalled messages | Messaging Service | Messaging Service | Message deletion |
-| `message_search_index` | Message FTS index | Messaging/Search Services | Messaging Service | Search optimization |
+
+#### E2EE Tables (vodozemac Olm/Megolm)
+
+| Table | Purpose | Read By | Write By | Notes |
+|-------|---------|---------|----------|-------|
+| `user_devices` | Multi-device key management | Messaging Service | Messaging Service | Curve25519 + Ed25519 keys |
+| `olm_accounts` | Pickled Olm accounts | Messaging Service | Messaging Service | Per-device encrypted state |
+| `olm_one_time_keys` | Forward secrecy OTKs | Messaging Service | Messaging Service | Ephemeral session keys |
+| `olm_sessions` | 1:1 encrypted channels | Messaging Service | Messaging Service | Device-to-device Olm |
+| `megolm_outbound_sessions` | Room encryption (send) | Messaging Service | Messaging Service | Group session keys |
+| `megolm_inbound_sessions` | Room decryption (recv) | Messaging Service | Messaging Service | Imported room keys |
+| `to_device_messages` | Key sharing queue | Messaging Service | Messaging Service | Olm-encrypted key delivery |
+| `room_key_history` | Late-joiner key access | Messaging Service | Messaging Service | Historical key export |
+
+#### Other Messaging Tables
+
+| Table | Purpose | Read By | Write By | Notes |
+|-------|---------|---------|----------|-------|
+| `call_sessions` | Video/audio calls | Messaging Service | Messaging Service | WebRTC call state |
+| `call_participants` | Call participants | Messaging Service | Messaging Service | Active call members |
+| `user_locations` | Location sharing | Messaging Service | Messaging Service | Real-time location |
+| `blocks` | User blocks | Messaging Service | Messaging Service | Block relationships |
+| `message_requests` | DM permissions | Messaging Service | Messaging Service | Request-based DMs |
+
+**Encryption Strategy**: Uses vodozemac library implementing Matrix Olm/Megolm protocols.
+- **Olm**: Double Ratchet for 1:1 device sessions (key exchange)
+- **Megolm**: Efficient group encryption for rooms (message encryption)
+- Server stores encrypted pickles; **cannot decrypt message content**
 
 **Dependencies**:
 - `users` table (Auth Service) - read via `GetUser()` RPC
-- `media` (implied, via Media Service)
+- `media` (via Media Service) - for attachments
 
 **Read Access Required From**:
 - Notification Service - to send message notifications
-- Search Service - for message search
+- Search Service - for message search (encrypted content not searchable)
 
 ---
 
@@ -448,9 +482,9 @@ Target (Jan 2026 - Phase 1 Complete):
 
 | Service | Tables Owned | Count | Dependencies |
 |---------|-------------|-------|--------------|
-| Auth (identity-service) | users, sessions, tokens, keys, auth_logs, outbox_events | 14 | None (foundational) |
+| Auth (identity-service) | users, sessions, tokens, settings, oauth, passkeys, outbox_events | 15 | None (foundational) |
 | User (graph-service) | follows, social_metadata, outbox_events | 3 | Auth (read via gRPC) |
-| Messaging (realtime-chat-service) | conversations, messages, reactions, E2EE tables | 26 | Auth (read via gRPC) |
+| Messaging (realtime-chat-service) | conversations, messages, Olm/Megolm E2EE (8 tables), calls, locations | 22 | Auth (read via gRPC) |
 | Content | posts, comments, likes, bookmarks, outbox_events | 10 | Auth, Video (read) |
 | Video | videos, reels, variants, pipelines, etc. | 8 | Auth (read) |
 | Streaming | streams, viewers, metrics, quality | 5 | Auth (read) |
@@ -461,10 +495,12 @@ Target (Jan 2026 - Phase 1 Complete):
 | Search | (none - read-only) | 0 | All services (read replicas) |
 | CDN | (none - external) | 0 | None |
 
-**Total**: ~74 tables, clear ownership boundaries ✅
+**Total**: ~71 tables, clear ownership boundaries ✅
 
-**Note**: Each service with outbox_events has its **own** table in its **own** database.
-The `transactional-outbox` library provides a shared implementation.
+**Notes**:
+- Each service with outbox_events has its **own** table in its **own** database
+- The `transactional-outbox` library provides a shared implementation
+- Messaging E2EE uses vodozemac (Olm/Megolm) - server cannot decrypt messages
 
 ---
 

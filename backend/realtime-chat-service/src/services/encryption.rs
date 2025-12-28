@@ -1,10 +1,48 @@
+//! # ⚠️ DEPRECATED: Server-Side Encryption Service
+//!
+//! This service implements `encryption_version = 1` (server-managed symmetric encryption).
+//!
+//! ## Current Architecture
+//!
+//! Nova now uses a dual-path encryption model:
+//!
+//! | Version | Description | Service | Server Can Decrypt |
+//! |---------|-------------|---------|-------------------|
+//! | 0 | Plaintext + PostgreSQL TDE | `message_service.rs` | Yes (TDE at rest) |
+//! | 1 | Server-side encryption | `encryption.rs` | Yes (**DEPRECATED**) |
+//! | 2 | Megolm E2EE (vodozemac) | `megolm_service.rs` | **No** |
+//!
+//! ## Migration Path
+//!
+//! - New messages should use either plaintext (v0) or Megolm E2EE (v2)
+//! - This service is kept for backward compatibility with existing v1 messages
+//! - Do NOT use this service for new message encryption
+//!
+//! ## Recommended Alternative
+//!
+//! Use `MegolmService` for true E2EE where server cannot decrypt content.
+//! See `megolm_service.rs` and `e2ee_message_service.rs`.
+
 use crate::error::AppError;
 use crypto_core::{decrypt_at_rest, encrypt_at_rest, generate_nonce};
 use hkdf::Hkdf;
 use sha2::Sha256;
 use uuid::Uuid;
 
-/// Handles server-managed symmetric encryption derived from a master key.
+/// Server-managed symmetric encryption derived from a master key.
+///
+/// # ⚠️ DEPRECATED
+///
+/// This corresponds to `encryption_version = 1` which is no longer used for new messages.
+/// Kept for backward compatibility with existing encrypted messages.
+///
+/// For new messages, use:
+/// - `encryption_version = 0`: Plaintext with PostgreSQL TDE (searchable)
+/// - `encryption_version = 2`: Megolm E2EE via `MegolmService` (true E2EE)
+#[deprecated(
+    since = "0.9.0",
+    note = "Use MegolmService for E2EE or plaintext with TDE. See encryption.rs module docs."
+)]
 #[derive(Clone)]
 pub struct EncryptionService {
     master_key: [u8; 32],

@@ -1,3 +1,25 @@
+//! # ⚠️ DEPRECATED: Legacy ECDH E2EE Service
+//!
+//! This module provides X25519 ECDH-based encryption, which was an early E2EE approach.
+//!
+//! ## Current Architecture
+//!
+//! Nova now uses **vodozemac Olm/Megolm** for E2EE (Matrix protocol):
+//!
+//! | Service | Protocol | Purpose |
+//! |---------|----------|---------|
+//! | `OlmService` | Olm (Double Ratchet) | 1:1 device key exchange |
+//! | `MegolmService` | Megolm | Efficient group/room encryption |
+//! | `E2eeService` | X25519 ECDH | **DEPRECATED** - legacy approach |
+//!
+//! ## Migration
+//!
+//! - Use `OlmService` for device registration and key exchange
+//! - Use `MegolmService` for message encryption (encryption_version=2)
+//! - See `handlers/e2ee.rs` for the current API implementation
+//!
+//! This service is kept for reference but is NOT used in production.
+
 /// End-to-End Encryption (E2EE) Service
 ///
 /// This service provides true E2EE using X25519 ECDH key exchange and authenticated encryption.
@@ -16,7 +38,20 @@ use uuid::Uuid;
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// E2EE service for X25519 ECDH key exchange and message encryption
+/// Legacy E2EE service for X25519 ECDH key exchange
+///
+/// # ⚠️ DEPRECATED
+///
+/// This service is superseded by `OlmService` + `MegolmService` (vodozemac).
+/// Kept for reference only - not used in production.
+///
+/// For new E2EE implementation, use:
+/// - `OlmService` for device key management
+/// - `MegolmService` for message encryption (encryption_version=2)
+#[deprecated(
+    since = "0.9.0",
+    note = "Use OlmService + MegolmService (vodozemac) for E2EE. See olm_service.rs and megolm_service.rs."
+)]
 #[derive(Clone)]
 pub struct E2eeService {
     master_key: [u8; 32], // Used for encrypting private keys at rest in DB
