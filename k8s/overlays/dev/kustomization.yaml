@@ -171,7 +171,7 @@ secretGenerator:
     literals:
       - JWT_SECRET=dev-secret-key-change-in-production
       - DATABASE_URL=postgresql://nova_dev:dev_password@postgres:5432/nova_dev
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://redis-cluster:6379/0
       - OAUTH_GITHUB_CLIENT_SECRET=dev-github-secret
       - OAUTH_GOOGLE_CLIENT_SECRET=dev-google-secret
       - AWS_REGION=us-east-1

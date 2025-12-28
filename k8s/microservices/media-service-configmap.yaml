@@ -11,7 +11,7 @@ data:
   MEDIA_SERVICE_HOST: 0.0.0.0
   MEDIA_SERVICE_PORT: "8082"
   DATABASE_MAX_CONNECTIONS: "5"
-  REDIS_URL: redis://redis:6379
+  REDIS_URL: redis://redis-cluster:6379
   KAFKA_BROKERS: kafka:9092
   KAFKA_EVENTS_TOPIC: media_events
   # GCS S3-compatible settings
