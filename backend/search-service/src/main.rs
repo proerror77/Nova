@@ -11,7 +11,7 @@ use search_service::events::kafka::{spawn_message_consumer, KafkaConsumerConfig}
 use search_service::openapi::ApiDoc;
 use search_service::search_suggestions::SearchSuggestionsService;
 use search_service::services::elasticsearch::{
-    ElasticsearchClient, ElasticsearchError, PostDocument,
+    ElasticsearchClient, ElasticsearchError, PostDocument, UserDocument,
 };
 use search_service::services::{ClickHouseClient, RedisCache};
 use serde::{Deserialize, Serialize};
@@ -141,6 +141,45 @@ struct UserResult {
     created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+/// User search result matching iOS UserProfile expectations
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UserProfileResult {
+    id: String,
+    username: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bio: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    avatar_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    is_verified: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    follower_count: Option<i32>,
+}
+
+impl From<UserDocument> for UserProfileResult {
+    fn from(doc: UserDocument) -> Self {
+        Self {
+            id: doc.user_id.to_string(),
+            username: doc.username,
+            display_name: if doc.display_name.is_empty() { None } else { Some(doc.display_name) },
+            bio: doc.bio,
+            avatar_url: None, // Elasticsearch doesn't store avatar URLs
+            is_verified: Some(doc.is_verified),
+            follower_count: Some(doc.follower_count),
+        }
+    }
+}
+
+/// Response format matching iOS FriendsService expectations
+#[derive(Debug, Serialize)]
+struct UserSearchResponse {
+    users: Vec<UserProfileResult>,
+    total: usize,
+}
+
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 struct PostResult {
     id: Uuid,
@@ -208,30 +247,40 @@ async fn health_handler() -> impl Responder {
 async fn search_users(
     state: Data<AppState>,
     params: Query<SearchParams>,
-) -> Result<Json<SearchResponse<UserResult>>, AppError> {
-    let search_pattern = format!("%{}%", params.q);
+) -> Result<Json<UserSearchResponse>, AppError> {
+    // Skip empty queries
+    if params.q.trim().is_empty() {
+        return Ok(Json(UserSearchResponse {
+            users: vec![],
+            total: 0,
+        }));
+    }
 
-    let users = sqlx::query_as::<_, UserResult>(
-        r#"
-        SELECT id, username, email, created_at
-        FROM users
-        WHERE (username ILIKE $1 OR email ILIKE $1)
-          AND deleted_at IS NULL
-          AND is_active = true
-        ORDER BY created_at DESC
-        LIMIT $2
-        "#,
-    )
-    .bind(&search_pattern)
-    .bind(params.limit)
-    .fetch_all(&state.db)
-    .await?;
+    // Use Elasticsearch for user search
+    if let Some(search_backend) = &state.search_backend {
+        match search_backend
+            .search_users(&params.q, params.limit, params.offset, false)
+            .await
+        {
+            Ok(documents) => {
+                let users: Vec<UserProfileResult> = documents
+                    .into_iter()
+                    .map(UserProfileResult::from)
+                    .collect();
+                let total = users.len();
+                return Ok(Json(UserSearchResponse { users, total }));
+            }
+            Err(err) => {
+                tracing::warn!("Elasticsearch user search failed for '{}': {}", params.q, err);
+            }
+        }
+    }
 
-    let count = users.len();
-    Ok(Json(SearchResponse {
-        query: params.q.clone(),
-        results: users,
-        count,
+    // Fallback: return empty result (PostgreSQL users table doesn't exist)
+    tracing::warn!("No Elasticsearch backend available for user search");
+    Ok(Json(UserSearchResponse {
+        users: vec![],
+        total: 0,
     }))
 }
 
