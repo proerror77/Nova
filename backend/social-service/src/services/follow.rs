@@ -52,6 +52,7 @@ impl FollowService {
             user_id: user_id.to_string(),
             limit: limit as i32,
             offset: offset as i32,
+            viewer_id: String::new(), // Optional: not needed for basic list retrieval
         });
 
         let response = client.get_followers(request).await?;
@@ -78,6 +79,7 @@ impl FollowService {
             user_id: user_id.to_string(),
             limit: limit as i32,
             offset: offset as i32,
+            viewer_id: String::new(), // Optional: not needed for basic list retrieval
         });
 
         let response = client.get_following(request).await?;
