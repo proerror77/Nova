@@ -297,6 +297,11 @@ mod identity_service_grpc_tests {
         let login_req = Request::new(LoginRequest {
             email: email.clone(),
             password: password.to_string(),
+            device_id: String::new(),
+            device_name: String::new(),
+            device_type: String::new(),
+            os_version: String::new(),
+            user_agent: String::new(),
         });
 
         match client.login(login_req).await {
@@ -369,6 +374,11 @@ mod identity_service_grpc_tests {
         let login_req = Request::new(LoginRequest {
             email: email.clone(),
             password: "WrongPassword123!".to_string(),
+            device_id: String::new(),
+            device_name: String::new(),
+            device_type: String::new(),
+            os_version: String::new(),
+            user_agent: String::new(),
         });
 
         match client.login(login_req).await {
@@ -416,6 +426,11 @@ mod identity_service_grpc_tests {
         let login_req = Request::new(LoginRequest {
             email: format!("nonexistent_{}@example.com", timestamp),
             password: "SomePassword123!".to_string(),
+            device_id: String::new(),
+            device_name: String::new(),
+            device_type: String::new(),
+            os_version: String::new(),
+            user_agent: String::new(),
         });
 
         match client.login(login_req).await {
