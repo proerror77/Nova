@@ -101,6 +101,24 @@ extension MatrixBridgeService {
         try await matrixService.kickUser(roomId: roomId, userId: userId, reason: reason)
     }
 
+    /// Update user power level in conversation's Matrix room
+    /// - Parameters:
+    ///   - conversationId: Conversation ID
+    ///   - userId: User ID to update
+    ///   - powerLevel: New power level (0=member, 50=moderator/admin, 100=owner)
+    func updateMemberPowerLevel(conversationId: String, userId: String, powerLevel: Int) async throws {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        let roomId = try await resolveRoomId(for: conversationId)
+        try await matrixService.updatePowerLevel(roomId: roomId, userId: userId, powerLevel: powerLevel)
+
+        #if DEBUG
+        print("[MatrixBridge] ✅ Updated power level for user \(userId) to \(powerLevel)")
+        #endif
+    }
+
     // MARK: - Room Queries
 
     /// Get all Matrix rooms as conversations
@@ -159,9 +177,18 @@ extension MatrixBridgeService {
         let displayName: String?
         let avatarUrl: String?
         let powerLevel: Int
+        let isAdmin: Bool
+
+        init(userId: String, displayName: String?, avatarUrl: String?, powerLevel: Int, isAdmin: Bool = false) {
+            self.userId = userId
+            self.displayName = displayName
+            self.avatarUrl = avatarUrl
+            self.powerLevel = powerLevel
+            self.isAdmin = isAdmin
+        }
     }
 
-    /// Get members of a room
+    /// Get members of a room using Matrix SDK
     func getRoomMembers(roomId: String) async throws -> [RoomMember] {
         guard isInitialized else {
             throw MatrixBridgeError.notInitialized
@@ -174,56 +201,67 @@ extension MatrixBridgeService {
         print("[MatrixBridgeService] Getting members for room: \(resolvedRoomId)")
         #endif
 
-        // Get rooms to find the matching one
-        let rooms = try await matrixService.getJoinedRooms()
+        // Use Matrix SDK to get real members
+        do {
+            let matrixMembers = try await matrixService.getRoomMembers(roomId: resolvedRoomId)
 
-        guard let room = rooms.first(where: { $0.id == resolvedRoomId }) else {
-            throw MatrixBridgeError.roomNotFound
-        }
+            let members = matrixMembers.map { member in
+                RoomMember(
+                    userId: member.userId,
+                    displayName: member.displayName,
+                    avatarUrl: member.avatarUrl,
+                    powerLevel: member.powerLevel,
+                    isAdmin: member.isAdmin
+                )
+            }
 
-        // For now, return members based on room's participant info
-        // The full Matrix SDK provides room.members() but our wrapper might not expose it
-        // Return basic info that we can derive
-        var members: [RoomMember] = []
+            #if DEBUG
+            print("[MatrixBridgeService] Found \(members.count) real members in room")
+            #endif
 
-        // Add current user as a member
-        if let userId = matrixService.userId {
-            members.append(RoomMember(
-                userId: userId,
-                displayName: nil,
-                avatarUrl: nil,
-                powerLevel: 100  // Owner/creator
-            ))
-        }
+            return members
+        } catch {
+            #if DEBUG
+            print("[MatrixBridgeService] Failed to get members from Matrix SDK: \(error), using fallback")
+            #endif
 
-        // For group chats, we can estimate member count
-        // but can't get individual members without SDK support
-        if !room.isDirect && room.memberCount > 1 {
-            // Add placeholder members based on count
+            // Fallback: try to get room info
+            let rooms = try await matrixService.getJoinedRooms()
+            guard let room = rooms.first(where: { $0.id == resolvedRoomId }) else {
+                throw MatrixBridgeError.roomNotFound
+            }
+
+            var members: [RoomMember] = []
+
+            // Add current user
+            if let userId = matrixService.userId {
+                members.append(RoomMember(
+                    userId: userId,
+                    displayName: nil,
+                    avatarUrl: nil,
+                    powerLevel: 100,
+                    isAdmin: true
+                ))
+            }
+
+            // Add placeholder for other members
             for i in 1..<room.memberCount {
                 members.append(RoomMember(
                     userId: "member_\(i)",
                     displayName: "Member \(i)",
                     avatarUrl: nil,
-                    powerLevel: 0
+                    powerLevel: 0,
+                    isAdmin: false
                 ))
             }
+
+            return members
         }
+    }
 
-        // If it's a direct chat, use room info
-        if room.isDirect {
-            members.append(RoomMember(
-                userId: "direct_user",
-                displayName: room.name,
-                avatarUrl: room.avatarURL,
-                powerLevel: 0
-            ))
-        }
-
-        #if DEBUG
-        print("[MatrixBridgeService] Found \(members.count) members in room")
-        #endif
-
-        return members
+    /// Get members of a conversation by conversation ID
+    func getConversationMembers(conversationId: String) async throws -> [RoomMember] {
+        let roomId = try await resolveRoomId(for: conversationId)
+        return try await getRoomMembers(roomId: roomId)
     }
 }

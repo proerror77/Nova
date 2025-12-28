@@ -150,9 +150,31 @@ struct QueryKeysResponse: Codable {
 /// Stored device identity (private keys)
 struct DeviceIdentity: Codable {
     let deviceId: String
-    let publicKey: Data      // X25519 public key (32 bytes)
-    let secretKey: Data      // X25519 secret key (32 bytes)
+    let publicKey: Data            // X25519 public key (32 bytes) - for key exchange
+    let secretKey: Data            // X25519 secret key (32 bytes) - for key exchange
+    let signingPublicKey: Data     // Ed25519 public key (32 bytes) - for signatures
+    let signingPrivateKey: Data    // Ed25519 private key (32 bytes) - for signatures
     let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case deviceId = "device_id"
+        case publicKey = "public_key"
+        case secretKey = "secret_key"
+        case signingPublicKey = "signing_public_key"
+        case signingPrivateKey = "signing_private_key"
+        case createdAt = "created_at"
+    }
+
+    /// Initialize with optional signing keys (for backward compatibility)
+    init(deviceId: String, publicKey: Data, secretKey: Data, signingPublicKey: Data? = nil, signingPrivateKey: Data? = nil, createdAt: Date) {
+        self.deviceId = deviceId
+        self.publicKey = publicKey
+        self.secretKey = secretKey
+        // Use provided signing keys or generate placeholder (will be regenerated properly)
+        self.signingPublicKey = signingPublicKey ?? Data(count: 32)
+        self.signingPrivateKey = signingPrivateKey ?? Data(count: 32)
+        self.createdAt = createdAt
+    }
 }
 
 /// Session cache for active E2EE sessions
@@ -163,6 +185,94 @@ struct SessionCache: Codable {
     init() {
         self.sessions = [:]
         self.lastCleanup = Date()
+    }
+}
+
+// MARK: - Megolm Session Models
+
+/// Megolm outbound session for encrypting messages in a conversation
+/// Each session has a ratchet that advances with each message
+struct MegolmOutboundSession: Codable {
+    let sessionId: String           // Unique session identifier
+    let conversationId: String      // Associated conversation
+    var ratchetKey: Data            // Current ratchet key (32 bytes)
+    var messageIndex: UInt32        // Current message index (increments per message)
+    let createdAt: Date
+    var lastUsedAt: Date
+
+    /// Maximum number of messages before session rotation
+    static let maxMessages: UInt32 = 100
+
+    /// Check if session needs rotation
+    var needsRotation: Bool {
+        messageIndex >= MegolmOutboundSession.maxMessages
+    }
+}
+
+/// Megolm inbound session for decrypting messages from other users
+struct MegolmInboundSession: Codable {
+    let sessionId: String           // Session ID (matches outbound session)
+    let senderDeviceId: String      // Device that created this session
+    let conversationId: String      // Associated conversation
+    var ratchetKey: Data            // Current ratchet key
+    var messageIndex: UInt32        // Current message index
+    let createdAt: Date
+    var lastUsedAt: Date
+}
+
+/// Storage for all Megolm sessions
+struct MegolmSessionStore: Codable {
+    /// Outbound sessions: conversationId -> session
+    var outboundSessions: [String: MegolmOutboundSession]
+
+    /// Inbound sessions: "sessionId:senderDeviceId" -> session
+    var inboundSessions: [String: MegolmInboundSession]
+
+    var lastCleanup: Date
+
+    init() {
+        self.outboundSessions = [:]
+        self.inboundSessions = [:]
+        self.lastCleanup = Date()
+    }
+
+    /// Get inbound session key
+    static func inboundSessionKey(sessionId: String, senderDeviceId: String) -> String {
+        return "\(sessionId):\(senderDeviceId)"
+    }
+}
+
+/// Session key share for distributing session to other devices
+struct MegolmSessionKey: Codable, Sendable {
+    let sessionId: String
+    let conversationId: String
+    let ratchetKey: String          // Base64 encoded
+    let messageIndex: UInt32
+    let senderDeviceId: String
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case conversationId = "conversation_id"
+        case ratchetKey = "ratchet_key"
+        case messageIndex = "message_index"
+        case senderDeviceId = "sender_device_id"
+    }
+}
+
+/// Encrypted message with Megolm session info
+struct MegolmEncryptedMessage: Codable, Sendable {
+    let ciphertext: String          // Base64 encoded
+    let nonce: String               // Base64 encoded (12 bytes)
+    let sessionId: String           // Megolm session ID
+    let messageIndex: UInt32        // Message index in session
+    let senderDeviceId: String
+
+    enum CodingKeys: String, CodingKey {
+        case ciphertext
+        case nonce
+        case sessionId = "session_id"
+        case messageIndex = "message_index"
+        case senderDeviceId = "sender_device_id"
     }
 }
 
@@ -177,6 +287,10 @@ enum E2EEError: LocalizedError {
     case invalidKey(String)
     case networkError(APIError)
     case sessionNotFound(userId: String, deviceId: String)
+    case megolmSessionNotFound(conversationId: String)
+    case megolmInboundSessionNotFound(sessionId: String, deviceId: String)
+    case megolmSessionExpired(sessionId: String)
+    case megolmRatchetFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -196,6 +310,14 @@ enum E2EEError: LocalizedError {
             return "Network error: \(error.userMessage)"
         case .sessionNotFound(let userId, let deviceId):
             return "No session found for user \(userId), device \(deviceId)"
+        case .megolmSessionNotFound(let conversationId):
+            return "No Megolm session found for conversation \(conversationId)"
+        case .megolmInboundSessionNotFound(let sessionId, let deviceId):
+            return "No inbound Megolm session found: \(sessionId) from device \(deviceId)"
+        case .megolmSessionExpired(let sessionId):
+            return "Megolm session expired: \(sessionId)"
+        case .megolmRatchetFailed(let msg):
+            return "Megolm ratchet failed: \(msg)"
         }
     }
 }

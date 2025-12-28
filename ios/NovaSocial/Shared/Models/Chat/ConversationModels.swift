@@ -192,6 +192,12 @@ struct Message: Identifiable, Codable, Sendable {
     var nonce: String?  // Base64-encoded nonce (12 bytes for ChaCha20-Poly1305)
     var sessionId: String?
     var senderDeviceId: String?
+    var messageIndex: Int?  // Megolm message index
+
+    // Message pinning
+    var isPinned: Bool = false
+    var pinnedAt: Date?
+    var pinnedBy: String?  // User ID who pinned the message
 
     // Local-only fields (not from backend)
     var status: MessageStatus = .sent
@@ -212,6 +218,10 @@ struct Message: Identifiable, Codable, Sendable {
         case nonce
         case sessionId = "session_id"
         case senderDeviceId = "sender_device_id"
+        case messageIndex = "message_index"
+        case isPinned = "is_pinned"
+        case pinnedAt = "pinned_at"
+        case pinnedBy = "pinned_by"
     }
 
     init(from decoder: Decoder) throws {
@@ -248,6 +258,10 @@ struct Message: Identifiable, Codable, Sendable {
         nonce = try container.decodeIfPresent(String.self, forKey: .nonce)
         sessionId = try container.decodeIfPresent(String.self, forKey: .sessionId)
         senderDeviceId = try container.decodeIfPresent(String.self, forKey: .senderDeviceId)
+        messageIndex = try container.decodeIfPresent(Int.self, forKey: .messageIndex)
+        isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        pinnedAt = try container.decodeIfPresent(Date.self, forKey: .pinnedAt)
+        pinnedBy = try container.decodeIfPresent(String.self, forKey: .pinnedBy)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -267,6 +281,10 @@ struct Message: Identifiable, Codable, Sendable {
         try container.encodeIfPresent(nonce, forKey: .nonce)
         try container.encodeIfPresent(sessionId, forKey: .sessionId)
         try container.encodeIfPresent(senderDeviceId, forKey: .senderDeviceId)
+        try container.encodeIfPresent(messageIndex, forKey: .messageIndex)
+        try container.encode(isPinned, forKey: .isPinned)
+        try container.encodeIfPresent(pinnedAt, forKey: .pinnedAt)
+        try container.encodeIfPresent(pinnedBy, forKey: .pinnedBy)
     }
 
     /// Convenience initializer for creating E2EE messages locally
@@ -284,7 +302,11 @@ struct Message: Identifiable, Codable, Sendable {
         nonce: String? = nil,
         sessionId: String? = nil,
         senderDeviceId: String? = nil,
-        encryptionVersion: Int? = nil
+        messageIndex: Int? = nil,
+        encryptionVersion: Int? = nil,
+        isPinned: Bool = false,
+        pinnedAt: Date? = nil,
+        pinnedBy: String? = nil
     ) {
         self.id = id
         self.conversationId = conversationId
@@ -301,7 +323,11 @@ struct Message: Identifiable, Codable, Sendable {
         self.nonce = nonce
         self.sessionId = sessionId
         self.senderDeviceId = senderDeviceId
+        self.messageIndex = messageIndex
         self.encryptionVersion = encryptionVersion
+        self.isPinned = isPinned
+        self.pinnedAt = pinnedAt
+        self.pinnedBy = pinnedBy
     }
 }
 

@@ -478,6 +478,19 @@ struct APIConfig {
             "/api/v2/chat/conversations/\(conversationId)/messages/\(messageId)/recall"
         }
 
+        // Message Search
+        /// GET /api/v2/chat/messages/search 搜尋訊息
+        /// Query params: conversation_id (optional), query, limit, offset
+        static let searchMessages = "/api/v2/chat/messages/search"
+
+        // Message Pinning
+        /// POST /api/v2/chat/messages/{id}/pin 釘選訊息
+        static func pinMessage(_ messageId: String) -> String { "/api/v2/chat/messages/\(messageId)/pin" }
+        /// DELETE /api/v2/chat/messages/{id}/pin 取消釘選
+        static func unpinMessage(_ messageId: String) -> String { "/api/v2/chat/messages/\(messageId)/pin" }
+        /// GET /api/v2/chat/conversations/{id}/pinned 獲取釘選的訊息
+        static func getPinnedMessages(_ conversationId: String) -> String { "/api/v2/chat/conversations/\(conversationId)/pinned" }
+
         // Reactions
         /// POST /messages/{id}/reactions 添加表情回應
         static func addReaction(_ messageId: String) -> String { "/messages/\(messageId)/reactions" }

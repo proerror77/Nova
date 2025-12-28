@@ -32,4 +32,6 @@ enum AppPage: Equatable {
     case getVerified
     case groupChat
     case passkeys
+    case chatBackup
+    case callRecordings
 }

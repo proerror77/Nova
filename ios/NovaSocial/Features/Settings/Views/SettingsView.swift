@@ -265,6 +265,44 @@ struct SettingsView: View {
                             isPushEnabled = newValue
                         }
 
+                        // MARK: - Chat & Data Settings
+                        VStack(alignment: .leading, spacing: 0) {
+                            VStack(spacing: 0) {
+                                SettingsRow(
+                                    icon: "arrow.up.arrow.down.square",
+                                    title: "Chat Backup",
+                                    showChevron: true,
+                                    action: {
+                                        currentPage = .chatBackup
+                                    }
+                                )
+                                .accessibilityLabel("Chat Backup")
+                                .accessibilityHint("Export and import your chat conversations")
+
+                                Divider()
+                                    .padding(.leading, 60)
+
+                                SettingsRow(
+                                    icon: "waveform.circle",
+                                    title: "Call Recordings",
+                                    showChevron: true,
+                                    action: {
+                                        currentPage = .callRecordings
+                                    }
+                                )
+                                .accessibilityLabel("Call Recordings")
+                                .accessibilityHint("View and manage your saved call recordings")
+                            }
+                            .background(DesignTokens.surface)
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color(red: 0.68, green: 0.68, blue: 0.68).opacity(0.3), lineWidth: 0.5)
+                            )
+                            .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+                        }
+                        .padding(.horizontal, 12)
+
                         // MARK: - Actions
                         VStack(alignment: .leading, spacing: 0) {
                             Button(action: {

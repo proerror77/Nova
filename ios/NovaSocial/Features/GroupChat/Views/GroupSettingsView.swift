@@ -188,19 +188,32 @@ struct GroupSettingsView: View {
                 try await matrixBridge.initialize()
             }
 
-            // For now, show placeholder members based on count
-            // Full member list requires additional Matrix SDK integration
-            members = (0..<memberCount).map { index in
-                GroupMemberDisplayInfo(
-                    id: "member_\(index)",
-                    displayName: index == 0 ? "You" : "Member \(index)",
-                    avatarUrl: nil,
-                    isAdmin: index == 0
+            // Get real members from Matrix SDK
+            let roomMembers = try await matrixBridge.getConversationMembers(conversationId: conversationId)
+
+            // Convert to display info
+            members = roomMembers.map { member in
+                // Extract username from Matrix user ID (e.g., "@username:server" -> "username")
+                let displayName = member.displayName ?? extractUsername(from: member.userId)
+
+                return GroupMemberDisplayInfo(
+                    id: member.userId,
+                    displayName: displayName,
+                    avatarUrl: member.avatarUrl,
+                    isAdmin: member.isAdmin
                 )
             }
 
+            // Sort: admins first, then by display name
+            members.sort { first, second in
+                if first.isAdmin != second.isAdmin {
+                    return first.isAdmin
+                }
+                return first.displayName < second.displayName
+            }
+
             #if DEBUG
-            print("[GroupSettingsView] Showing \(members.count) members (placeholder)")
+            print("[GroupSettingsView] Loaded \(members.count) real members")
             #endif
 
         } catch {

@@ -18,6 +18,7 @@ struct ChatView: View {
     // MARK: - ViewModel
 
     @State private var viewModel = ChatViewModel()
+    @State private var showMessageSearch = false
 
     // MARK: - View Models & Handlers
 
@@ -94,6 +95,16 @@ struct ChatView: View {
                 },
                 onError: { error in
                     viewModel.error = "Cannot access file: \(error.localizedDescription)"
+                }
+            )
+        }
+        .sheet(isPresented: $showMessageSearch) {
+            MessageSearchView(
+                isPresented: $showMessageSearch,
+                conversationId: conversationId,
+                onMessageSelected: { message in
+                    viewModel.scrollToMessageId = message.id
+                    showMessageSearch = false
                 }
             )
         }
@@ -208,6 +219,15 @@ struct ChatView: View {
             }
 
             Spacer()
+
+            // Search button
+            Button(action: {
+                showMessageSearch = true
+            }) {
+                Image(systemName: "magnifyingglass")
+                    .frame(width: 24, height: 24)
+                    .foregroundColor(DesignTokens.textPrimary)
+            }
         }
         .frame(height: DesignTokens.topBarHeight)
         .padding(.horizontal, 16)
@@ -350,6 +370,17 @@ struct ChatView: View {
                 if let lastMessage = viewModel.messages.last {
                     withAnimation {
                         proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                    }
+                }
+            }
+            .onChange(of: viewModel.scrollToMessageId) { _, messageId in
+                if let messageId = messageId {
+                    withAnimation {
+                        proxy.scrollTo(messageId, anchor: .center)
+                    }
+                    // Clear the scroll target after scrolling
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        viewModel.scrollToMessageId = nil
                     }
                 }
             }

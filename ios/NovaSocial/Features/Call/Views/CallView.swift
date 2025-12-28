@@ -26,6 +26,12 @@ struct CallView: View {
     @State private var callDuration: TimeInterval = 0
     @State private var durationTimer: Timer?
 
+    // Recording state
+    @State private var isRecording = false
+    @State private var showRecordingAlert = false
+    @State private var recordingError: String?
+    private let recordingService = CallRecordingService.shared
+
     // MARK: - Body
 
     var body: some View {
@@ -78,6 +84,11 @@ struct CallView: View {
         } message: {
             Text(errorMessage ?? "An error occurred")
         }
+        .alert("錄音錯誤", isPresented: $showRecordingAlert) {
+            Button("確定", role: .cancel) {}
+        } message: {
+            Text(recordingError ?? "無法開始錄音")
+        }
         .statusBar(hidden: true)
     }
 
@@ -122,13 +133,23 @@ struct CallView: View {
             Spacer()
 
             // Bottom controls
-            HStack(spacing: 32) {
+            HStack(spacing: 24) {
                 // Mute button
                 CallControlButton(
                     systemImage: callService.activeCall?.audioMuted == true ? "mic.slash.fill" : "mic.fill",
                     isActive: callService.activeCall?.audioMuted != true,
                     action: {
                         callService.toggleMute()
+                    }
+                )
+
+                // Record button
+                CallControlButton(
+                    systemImage: isRecording ? "record.circle.fill" : "record.circle",
+                    isActive: isRecording,
+                    activeColor: .red,
+                    action: {
+                        toggleRecording()
                     }
                 )
 
@@ -152,6 +173,23 @@ struct CallView: View {
                 )
             }
             .padding(.bottom, 40)
+
+            // Recording indicator
+            if isRecording {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 10, height: 10)
+                    Text("錄音中")
+                        .font(.caption)
+                        .foregroundColor(.white)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.black.opacity(0.6))
+                .cornerRadius(16)
+                .padding(.bottom, 8)
+            }
         }
     }
 
@@ -197,6 +235,10 @@ struct CallView: View {
 
     private func endCall() {
         Task {
+            // Stop recording if active
+            if isRecording {
+                stopRecording()
+            }
             await callService.endCall()
             await MainActor.run {
                 dismiss()
@@ -206,10 +248,51 @@ struct CallView: View {
 
     private func handleCallEnded() {
         Task {
+            // Stop recording if active
+            if isRecording {
+                stopRecording()
+            }
             await callService.endCall()
             await MainActor.run {
                 dismiss()
             }
+        }
+    }
+
+    private func toggleRecording() {
+        if isRecording {
+            stopRecording()
+        } else {
+            startRecording()
+        }
+    }
+
+    private func startRecording() {
+        Task {
+            do {
+                try await recordingService.startRecording(callId: roomId)
+                await MainActor.run {
+                    isRecording = true
+                }
+            } catch {
+                await MainActor.run {
+                    recordingError = error.localizedDescription
+                    showRecordingAlert = true
+                }
+            }
+        }
+    }
+
+    private func stopRecording() {
+        do {
+            let result = try recordingService.stopRecording()
+            isRecording = false
+            #if DEBUG
+            print("[CallView] 錄音已保存: \(result.fileURL.path), 時長: \(result.duration)秒")
+            #endif
+        } catch {
+            recordingError = error.localizedDescription
+            isRecording = false
         }
     }
 
@@ -273,6 +356,7 @@ struct CallView: View {
 struct CallControlButton: View {
     let systemImage: String
     let isActive: Bool
+    var activeColor: Color = .gray
     let action: () -> Void
 
     var body: some View {
@@ -281,7 +365,7 @@ struct CallControlButton: View {
                 .font(.title2)
                 .foregroundColor(.white)
                 .padding(16)
-                .background(isActive ? Color.gray.opacity(0.3) : Color.red.opacity(0.8))
+                .background(isActive ? activeColor.opacity(0.8) : Color.gray.opacity(0.3))
                 .clipShape(Circle())
         }
     }

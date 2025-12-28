@@ -250,6 +250,160 @@ final class ChatService {
         return response
     }
 
+    // MARK: - Message Search
+
+    /// Search result containing matched message and context
+    struct MessageSearchResult {
+        let message: Message
+        let matchedText: String      // The matched portion of content
+        let conversationName: String? // For cross-conversation search
+    }
+
+    /// Search for messages containing the query text
+    /// - Parameters:
+    ///   - query: Search query string
+    ///   - conversationId: Optional conversation ID to limit search scope
+    ///   - limit: Maximum number of results
+    ///   - offset: Pagination offset
+    /// - Returns: Array of matching messages
+    @MainActor
+    func searchMessages(
+        query: String,
+        conversationId: String? = nil,
+        limit: Int = 50,
+        offset: Int = 0
+    ) async throws -> [Message] {
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return []
+        }
+
+        var queryParams: [String: String] = [
+            "query": query,
+            "limit": "\(limit)",
+            "offset": "\(offset)"
+        ]
+
+        if let conversationId = conversationId {
+            queryParams["conversation_id"] = conversationId
+        }
+
+        // Try REST API for server-side search
+        do {
+            let response: GetMessagesResponse = try await client.get(
+                endpoint: APIConfig.Chat.searchMessages,
+                queryParams: queryParams
+            )
+
+            #if DEBUG
+            print("[ChatService] Found \(response.messages.count) messages matching '\(query)'")
+            #endif
+
+            return response.messages
+        } catch {
+            #if DEBUG
+            print("[ChatService] Server search failed, using client-side fallback: \(error)")
+            #endif
+
+            // Fallback: Client-side search if server doesn't support search
+            if let conversationId = conversationId {
+                return try await searchMessagesLocally(
+                    query: query,
+                    conversationId: conversationId,
+                    limit: limit
+                )
+            }
+
+            // Re-throw if no fallback possible
+            throw error
+        }
+    }
+
+    /// Client-side message search fallback
+    /// Fetches messages and filters locally
+    private func searchMessagesLocally(
+        query: String,
+        conversationId: String,
+        limit: Int
+    ) async throws -> [Message] {
+        let lowercaseQuery = query.lowercased()
+
+        // Fetch recent messages (up to 500 for search)
+        let response = try await getMessages(
+            conversationId: conversationId,
+            limit: 500,
+            cursor: nil
+        )
+
+        // Filter messages containing the query
+        let matchedMessages = response.messages.filter { message in
+            message.content.lowercased().contains(lowercaseQuery)
+        }
+
+        #if DEBUG
+        print("[ChatService] Local search found \(matchedMessages.count) messages matching '\(query)'")
+        #endif
+
+        return Array(matchedMessages.prefix(limit))
+    }
+
+    // MARK: - Message Pinning
+
+    /// Pin a message in a conversation
+    /// - Parameters:
+    ///   - conversationId: Conversation ID
+    ///   - messageId: Message ID to pin
+    @MainActor
+    func pinMessage(conversationId: String, messageId: String) async throws {
+        struct EmptyRequest: Codable {}
+        struct PinResponse: Codable {
+            let success: Bool
+        }
+
+        let _: PinResponse = try await client.request(
+            endpoint: APIConfig.Chat.pinMessage(messageId),
+            method: "POST",
+            body: EmptyRequest()
+        )
+
+        #if DEBUG
+        print("[ChatService] Pinned message \(messageId) in conversation \(conversationId)")
+        #endif
+    }
+
+    /// Unpin a message in a conversation
+    /// - Parameters:
+    ///   - conversationId: Conversation ID
+    ///   - messageId: Message ID to unpin
+    @MainActor
+    func unpinMessage(conversationId: String, messageId: String) async throws {
+        struct EmptyResponse: Codable {}
+
+        let _: EmptyResponse = try await client.request(
+            endpoint: APIConfig.Chat.unpinMessage(messageId),
+            method: "DELETE"
+        )
+
+        #if DEBUG
+        print("[ChatService] Unpinned message \(messageId) in conversation \(conversationId)")
+        #endif
+    }
+
+    /// Get all pinned messages in a conversation
+    /// - Parameter conversationId: Conversation ID
+    /// - Returns: Array of pinned messages
+    @MainActor
+    func getPinnedMessages(conversationId: String) async throws -> [Message] {
+        let response: GetMessagesResponse = try await client.get(
+            endpoint: APIConfig.Chat.getPinnedMessages(conversationId)
+        )
+
+        #if DEBUG
+        print("[ChatService] Found \(response.messages.count) pinned messages in conversation \(conversationId)")
+        #endif
+
+        return response.messages
+    }
+
     /// 编辑消息 - 優先使用 Matrix SDK
     /// - Parameters:
     ///   - conversationId: 會話ID
@@ -796,15 +950,9 @@ final class ChatService {
 
         let deviceId = deviceIdentity.deviceId
 
-        // Convert conversationId to UUID
-        guard let conversationUUID = UUID(uuidString: conversationId) else {
-            throw ChatError.invalidConversationId
-        }
-
-        // Encrypt content using simple conversation-based encryption
-        // TODO: Replace with Megolm group encryption when vodozemac FFI is available
-        let encrypted = try await e2ee.encryptMessage(
-            for: conversationUUID,
+        // Encrypt content using Megolm group encryption
+        let megolmEncrypted = try await e2ee.encryptWithMegolm(
+            conversationId: conversationId,
             plaintext: content
         )
 
@@ -821,10 +969,10 @@ final class ChatService {
 
         let request = SendE2EEMessageRequest(
             conversationId: conversationId,
-            ciphertext: encrypted.ciphertext,
-            nonce: encrypted.nonce,
-            sessionId: "simple-session-\(conversationId)", // Temporary session ID
-            messageIndex: 0, // TODO: Implement proper message index tracking
+            ciphertext: megolmEncrypted.ciphertext,
+            nonce: megolmEncrypted.nonce,
+            sessionId: megolmEncrypted.sessionId,
+            messageIndex: megolmEncrypted.messageIndex,
             deviceId: deviceId,
             messageType: messageTypeInt,
             replyToMessageId: replyToId
@@ -856,11 +1004,12 @@ final class ChatService {
             createdAt: response.createdAt,
             status: .sent,
             // E2EE metadata
-            encryptedContent: encrypted.ciphertext,
-            nonce: encrypted.nonce,
-            sessionId: request.sessionId,
+            encryptedContent: megolmEncrypted.ciphertext,
+            nonce: megolmEncrypted.nonce,
+            sessionId: megolmEncrypted.sessionId,
             senderDeviceId: deviceId,
-            encryptionVersion: 2 // Client-side Megolm E2EE
+            messageIndex: Int(megolmEncrypted.messageIndex),
+            encryptionVersion: 3 // Megolm E2EE
         )
     }
 
@@ -870,10 +1019,9 @@ final class ChatService {
     func decryptMessage(_ message: Message) async throws -> String {
         // Check if message is encrypted
         guard let encryptionVersion = message.encryptionVersion,
-              encryptionVersion == 2,
               let encryptedContent = message.encryptedContent,
               let nonce = message.nonce,
-              let _ = message.sessionId else {
+              let sessionId = message.sessionId else {
             // Not an E2EE message, return plaintext
             return message.content
         }
@@ -882,29 +1030,56 @@ final class ChatService {
             throw ChatError.e2eeNotAvailable
         }
 
-        // Convert conversationId to UUID
-        guard let conversationUUID = UUID(uuidString: message.conversationId) else {
-            throw ChatError.invalidConversationId
+        // Handle different encryption versions
+        switch encryptionVersion {
+        case 3:
+            // Megolm E2EE - use session-based decryption
+            let megolmMessage = MegolmEncryptedMessage(
+                ciphertext: encryptedContent,
+                nonce: nonce,
+                sessionId: sessionId,
+                messageIndex: UInt32(message.messageIndex ?? 0),
+                senderDeviceId: message.senderDeviceId ?? ""
+            )
+
+            let plaintext = try await e2ee.decryptWithMegolm(
+                megolmMessage,
+                conversationId: message.conversationId
+            )
+
+            #if DEBUG
+            print("[ChatService] Decrypted Megolm message: \(message.id)")
+            #endif
+
+            return plaintext
+
+        case 2:
+            // Legacy simple E2EE - fallback to conversation-based decryption
+            guard let conversationUUID = UUID(uuidString: message.conversationId) else {
+                throw ChatError.invalidConversationId
+            }
+
+            let encryptedMessage = EncryptedMessage(
+                ciphertext: encryptedContent,
+                nonce: nonce,
+                deviceId: message.senderDeviceId ?? ""
+            )
+
+            let plaintext = try await e2ee.decryptMessage(
+                encryptedMessage,
+                conversationId: conversationUUID
+            )
+
+            #if DEBUG
+            print("[ChatService] Decrypted legacy E2EE message: \(message.id)")
+            #endif
+
+            return plaintext
+
+        default:
+            // Unknown encryption version
+            throw ChatError.e2eeNotAvailable
         }
-
-        // TODO: When Megolm is available, use proper session-based decryption
-        // For now, use simple conversation-based decryption
-        let encryptedMessage = EncryptedMessage(
-            ciphertext: encryptedContent,
-            nonce: nonce,
-            deviceId: message.senderDeviceId ?? ""
-        )
-
-        let plaintext = try await e2ee.decryptMessage(
-            encryptedMessage,
-            conversationId: conversationUUID
-        )
-
-        #if DEBUG
-        print("[ChatService] Decrypted message: \(message.id)")
-        #endif
-
-        return plaintext
     }
 
     /// Get device ID from keychain

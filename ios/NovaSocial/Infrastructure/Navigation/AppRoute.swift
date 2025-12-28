@@ -32,6 +32,8 @@ enum AppRoute: Hashable, Codable {
     case devices
     case passkeys
     case getVerified
+    case chatBackup
+    case callRecordings
 
     // MARK: - Discovery Routes
     case search(query: String?)
@@ -174,6 +176,8 @@ enum AppRoute: Hashable, Codable {
         case .groupChat: try container.encode("groupChat", forKey: .type)
         case .newPost: try container.encode("newPost", forKey: .type)
         case .write: try container.encode("write", forKey: .type)
+        case .chatBackup: try container.encode("chatBackup", forKey: .type)
+        case .callRecordings: try container.encode("callRecordings", forKey: .type)
         }
     }
 }
@@ -218,6 +222,8 @@ extension AppRoute {
         case .groupChat: return .groupChat
         case .newPost: return .home
         case .write: return .write
+        case .chatBackup: return .chatBackup
+        case .callRecordings: return .callRecordings
         }
     }
 }
@@ -234,7 +240,7 @@ extension AppRoute {
             return .message
         case .alice:
             return .alice
-        case .account, .profile, .settings, .profileSetting, .devices, .passkeys, .getVerified, .inviteFriends, .addFriends, .myChannels:
+        case .account, .profile, .settings, .profileSetting, .devices, .passkeys, .getVerified, .inviteFriends, .addFriends, .myChannels, .chatBackup, .callRecordings:
             return .account
         default:
             return nil

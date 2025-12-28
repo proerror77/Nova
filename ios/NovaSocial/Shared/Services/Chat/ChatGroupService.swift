@@ -122,11 +122,40 @@ final class ChatGroupService {
     ///   - conversationId: 会话ID
     ///   - userId: 用户ID
     ///   - role: 新角色（owner/admin/member）
-    /// - Note: 此方法目前僅使用 REST API，Matrix power levels 功能將在未來版本中實現
+    /// - Note: 優先使用 Matrix power levels，失敗時 fallback 到 REST API
     @MainActor
     func updateMemberRole(conversationId: String, userId: String, role: GroupMemberRole) async throws {
-        // TODO: 未來可通過 Matrix power levels 實現角色管理
-        // 目前僅使用 REST API
+        // Convert role to Matrix power level
+        let powerLevel: Int
+        switch role {
+        case .owner:
+            powerLevel = 100  // Full admin rights
+        case .admin:
+            powerLevel = 50   // Moderator rights
+        case .member:
+            powerLevel = 0    // Regular member
+        }
+
+        // 優先使用 Matrix SDK power levels
+        if matrixBridge.isInitialized {
+            do {
+                try await matrixBridge.updateMemberPowerLevel(
+                    conversationId: conversationId,
+                    userId: userId,
+                    powerLevel: powerLevel
+                )
+                #if DEBUG
+                print("[ChatGroupService] ✅ Updated role via Matrix power levels: \(role.rawValue) (PL:\(powerLevel))")
+                #endif
+                return
+            } catch {
+                #if DEBUG
+                print("[ChatGroupService] Matrix power level update failed, falling back to REST API: \(error)")
+                #endif
+            }
+        }
+
+        // Fallback: REST API
         struct Response: Codable {
             let success: Bool
         }
@@ -140,7 +169,7 @@ final class ChatGroupService {
         )
 
         #if DEBUG
-        print("[ChatGroupService] Updated role for user \(userId) to \(role.rawValue)")
+        print("[ChatGroupService] Updated role for user \(userId) to \(role.rawValue) via REST API")
         #endif
     }
 }

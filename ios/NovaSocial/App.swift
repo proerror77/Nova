@@ -148,6 +148,12 @@ struct IceredApp: App {
                             Text("Passkeys require iOS 16 or later")
                                 .transition(.identity)
                         }
+                    case .chatBackup:
+                        ChatBackupView(currentPage: $currentPage)
+                            .transition(.identity)
+                    case .callRecordings:
+                        CallRecordingsView(currentPage: $currentPage)
+                            .transition(.identity)
                     default:
                         HomeView(currentPage: $currentPage)
                             .transition(.identity)

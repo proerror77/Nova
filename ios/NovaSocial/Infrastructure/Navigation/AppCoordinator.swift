@@ -299,6 +299,8 @@ extension AppCoordinator {
         case .getVerified: return .getVerified
         case .groupChat: return .groupChat
         case .passkeys: return .passkeys
+        case .chatBackup: return .chatBackup
+        case .callRecordings: return .callRecordings
         }
     }
 }

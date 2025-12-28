@@ -45,6 +45,7 @@ final class ChatViewModel {
     var showLocationAlert = false
     var showCameraPermissionAlert = false
     var showMicrophonePermissionAlert = false
+    var scrollToMessageId: String?
 
     // MARK: - Media State
 

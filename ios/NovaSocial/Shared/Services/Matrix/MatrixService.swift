@@ -480,6 +480,9 @@ protocol MatrixServiceProtocol: AnyObject {
     /// Kick user from room
     func kickUser(roomId: String, userId: String, reason: String?) async throws
 
+    /// Update user power level in room
+    func updatePowerLevel(roomId: String, userId: String, powerLevel: Int) async throws
+
     /// Set typing indicator
     func setTyping(roomId: String, isTyping: Bool) async throws
 
@@ -491,6 +494,9 @@ protocol MatrixServiceProtocol: AnyObject {
 
     /// Get all joined rooms
     func getJoinedRooms() async throws -> [MatrixRoom]
+
+    /// Get room members
+    func getRoomMembers(roomId: String) async throws -> [MatrixRoomMember]
 
     // MARK: - Message Edit/Delete/Reactions
 
@@ -559,6 +565,27 @@ struct MatrixMessage: Identifiable, Equatable {
         let height: Int?
         let thumbnailURL: String?
     }
+}
+
+/// Room member information from Matrix
+struct MatrixRoomMember: Identifiable, Equatable {
+    let id: String  // User ID
+    let userId: String
+    let displayName: String?
+    let avatarUrl: String?
+    let powerLevel: Int
+    let isAdmin: Bool
+    let membership: MatrixMembershipState
+}
+
+/// Matrix membership state
+enum MatrixMembershipState: String, Equatable {
+    case join
+    case invite
+    case leave
+    case ban
+    case knock
+    case unknown
 }
 
 enum MatrixMessageType: String, Equatable {
@@ -1547,6 +1574,39 @@ final class MatrixService: MatrixServiceProtocol {
         }
     }
 
+    func updatePowerLevel(roomId: String, userId: String, powerLevel: Int) async throws {
+        #if DEBUG
+        print("[MatrixService] Updating power level for user \(userId) to \(powerLevel) in room \(roomId)")
+        #endif
+
+        guard let client = client, self.userId != nil else {
+            throw MatrixError.notLoggedIn
+        }
+
+        let matrixUserId = convertToMatrixUserId(novaUserId: userId)
+
+        do {
+            guard let room = try client.getRoom(roomId: roomId) else {
+                throw MatrixError.roomNotFound(roomId)
+            }
+
+            let update = UserPowerLevelUpdate(
+                userId: matrixUserId,
+                powerLevel: Int64(powerLevel)
+            )
+
+            try await room.updatePowerLevelsForUsers(updates: [update])
+
+            #if DEBUG
+            print("[MatrixService] ✅ Power level updated successfully")
+            #endif
+        } catch let error as MatrixError {
+            throw error
+        } catch {
+            throw MatrixError.sdkError(error.localizedDescription)
+        }
+    }
+
     func setTyping(roomId: String, isTyping: Bool) async throws {
         guard let client = client, self.userId != nil else {
             throw MatrixError.notLoggedIn
@@ -1605,6 +1665,75 @@ final class MatrixService: MatrixServiceProtocol {
         }
 
         return matrixRooms
+    }
+
+    func getRoomMembers(roomId: String) async throws -> [MatrixRoomMember] {
+        #if DEBUG
+        print("[MatrixService] Getting members for room: \(roomId)")
+        #endif
+
+        guard let client = client, userId != nil else {
+            throw MatrixError.notLoggedIn
+        }
+
+        do {
+            guard let room = try client.getRoom(roomId: roomId) else {
+                throw MatrixError.roomNotFound(roomId)
+            }
+
+            // Get room members iterator
+            let membersIterator = try await room.members()
+
+            var matrixMembers: [MatrixRoomMember] = []
+
+            // Iterate through all members
+            while let chunk = membersIterator.nextChunk(chunkSize: 100) {
+                for member in chunk {
+                    // Convert membership state
+                    let membershipState: MatrixMembershipState
+                    switch member.membership {
+                    case .join: membershipState = .join
+                    case .invite: membershipState = .invite
+                    case .leave: membershipState = .leave
+                    case .ban: membershipState = .ban
+                    case .knock: membershipState = .knock
+                    @unknown default: membershipState = .leave
+                    }
+
+                    // Only include joined members
+                    guard membershipState == .join else { continue }
+
+                    // Extract power level value from enum
+                    let powerLevelInt: Int
+                    switch member.powerLevel {
+                    case .infinite:
+                        powerLevelInt = Int.max
+                    case .value(let value):
+                        powerLevelInt = Int(value)
+                    }
+                    let matrixMember = MatrixRoomMember(
+                        id: member.userId,
+                        userId: member.userId,
+                        displayName: member.displayName,
+                        avatarUrl: member.avatarUrl,
+                        powerLevel: powerLevelInt,
+                        isAdmin: powerLevelInt >= 50,
+                        membership: membershipState
+                    )
+                    matrixMembers.append(matrixMember)
+                }
+            }
+
+            #if DEBUG
+            print("[MatrixService] Found \(matrixMembers.count) members in room")
+            #endif
+
+            return matrixMembers
+        } catch let error as MatrixError {
+            throw error
+        } catch {
+            throw MatrixError.sdkError(error.localizedDescription)
+        }
     }
 
     // MARK: - Message Edit/Delete/Reactions

@@ -19,6 +19,7 @@ final class KeychainService {
         case refreshToken = "refresh_token"
         case userId = "user_id"
         case e2eeDeviceIdentity = "e2ee_device_identity"
+        case megolmSessions = "megolm_sessions"
 
         // Matrix SSO credentials
         case matrixAccessToken = "matrix_access_token"
