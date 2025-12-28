@@ -34,14 +34,15 @@ ADD CONSTRAINT chk_messages_idempotency_provided
 CHECK (idempotency_key IS NOT NULL OR true);  -- This is always true, just for clarity
 
 -- Down: Revert to E2E fields (in case we need to rollback)
-
-ALTER TABLE messages
-DROP CONSTRAINT IF EXISTS chk_messages_idempotency_provided;
-
-ALTER TABLE messages
-ADD COLUMN content_encrypted BYTEA DEFAULT NULL,
-ADD COLUMN content_nonce BYTEA DEFAULT NULL,
-ADD COLUMN encryption_version INT NOT NULL DEFAULT 1;
-
-ALTER TABLE messages ALTER COLUMN content DROP NOT NULL;
-ALTER TABLE messages ALTER COLUMN content SET DEFAULT '';
+-- To rollback, run the following commands manually:
+--
+-- ALTER TABLE messages
+-- DROP CONSTRAINT IF EXISTS chk_messages_idempotency_provided;
+--
+-- ALTER TABLE messages
+-- ADD COLUMN content_encrypted BYTEA DEFAULT NULL,
+-- ADD COLUMN content_nonce BYTEA DEFAULT NULL,
+-- ADD COLUMN encryption_version INT NOT NULL DEFAULT 1;
+--
+-- ALTER TABLE messages ALTER COLUMN content DROP NOT NULL;
+-- ALTER TABLE messages ALTER COLUMN content SET DEFAULT '';

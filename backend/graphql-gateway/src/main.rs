@@ -510,6 +510,13 @@ async fn main() -> std::io::Result<()> {
                 "/api/v2/chat/conversations/{id}",
                 web::get().to(rest_api::chat::get_conversation_by_id),
             )
+            // ✅ Video/Voice Call API (proxy to realtime-chat-service)
+            .service(rest_api::calls::initiate_call)
+            .service(rest_api::calls::answer_call)
+            .service(rest_api::calls::reject_call)
+            .service(rest_api::calls::end_call)
+            .service(rest_api::calls::send_ice_candidate)
+            .service(rest_api::calls::get_ice_servers)
             // ✅ Alice AI Assistant API
             .route("/api/v2/alice/status", web::get().to(rest_api::get_status))
             .route("/api/v2/alice/chat", web::post().to(rest_api::send_message))
@@ -640,6 +647,13 @@ async fn main() -> std::io::Result<()> {
                 "/api/v2/chat/conversations/{id}",
                 web::get().to(rest_api::get_conversation_by_id),
             )
+            // ✅ Video/Voice Call API (proxy to realtime-chat-service)
+            .service(rest_api::calls::initiate_call)
+            .service(rest_api::calls::answer_call)
+            .service(rest_api::calls::reject_call)
+            .service(rest_api::calls::end_call)
+            .service(rest_api::calls::send_ice_candidate)
+            .service(rest_api::calls::get_ice_servers)
             // ✅ Poll API (投票榜单)
             .service(get_trending_polls)
             .service(get_active_polls)

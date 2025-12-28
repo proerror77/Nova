@@ -1,3 +1,8 @@
+-- ⚠️  DEPRECATED: Old monolith E2EE approach.
+-- E2EE is now handled by realtime-chat-service using vodozemac (Olm/Megolm).
+-- See: realtime-chat-service/migrations/0010_e2ee_vodozemac_tables.sql
+-- DO NOT MERGE this migration.
+
 -- Device key management table for ECDH key exchange
 CREATE TABLE device_keys (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

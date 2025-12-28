@@ -24,10 +24,10 @@ ALTER TABLE messages
   ADD CONSTRAINT chk_messages_version_positive
   CHECK (version_number > 0);
 
--- Down
-DROP INDEX IF EXISTS idx_messages_content_fulltext;
-DROP INDEX IF EXISTS idx_messages_conversation_created;
-ALTER TABLE messages DROP CONSTRAINT IF EXISTS chk_messages_version_positive;
-ALTER TABLE messages DROP COLUMN IF EXISTS recalled_at;
-ALTER TABLE messages DROP COLUMN IF EXISTS version_number;
-ALTER TABLE messages DROP COLUMN IF EXISTS content;
+-- Down (rollback commands - do not execute during forward migration)
+-- DROP INDEX IF EXISTS idx_messages_content_fulltext;
+-- DROP INDEX IF EXISTS idx_messages_conversation_created;
+-- ALTER TABLE messages DROP CONSTRAINT IF EXISTS chk_messages_version_positive;
+-- ALTER TABLE messages DROP COLUMN IF EXISTS recalled_at;
+-- ALTER TABLE messages DROP COLUMN IF EXISTS version_number;
+-- ALTER TABLE messages DROP COLUMN IF EXISTS content;

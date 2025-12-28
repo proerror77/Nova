@@ -27,5 +27,5 @@ CREATE INDEX IF NOT EXISTS idx_recalls_recalled_at
 CREATE INDEX IF NOT EXISTS idx_recalls_message_time
   ON message_recalls(message_id, recalled_at DESC);
 
--- Down
-DROP TABLE IF EXISTS message_recalls;
+-- Down (rollback commands - do not execute during forward migration)
+-- DROP TABLE IF EXISTS message_recalls;

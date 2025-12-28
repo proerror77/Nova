@@ -25,6 +25,12 @@ struct ChatView: View {
     @StateObject private var typingHandler: ChatTypingHandler
     @StateObject private var locationManager = ChatLocationManager()
 
+    // MARK: - Scroll State
+
+    @State private var isAtBottom = true
+    @State private var newMessageCount = 0
+    @Namespace private var bottomID
+
     // MARK: - Focus State (must stay in View)
 
     @FocusState private var isInputFocused: Bool
@@ -61,6 +67,43 @@ struct ChatView: View {
                 messageListView
 
                 inputAreaView
+            }
+
+            // 新消息浮動按鈕
+            if !isAtBottom && newMessageCount > 0 {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button {
+                            // 滾動到底部
+                            withAnimation {
+                                if let lastMessage = viewModel.messages.last {
+                                    // 需要透過 ScrollViewReader 來滾動
+                                    viewModel.scrollToMessageId = lastMessage.id
+                                }
+                            }
+                            newMessageCount = 0
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.down")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Text("\(newMessageCount) 則新訊息")
+                                    .font(.system(size: 13, weight: .medium))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(DesignTokens.accentColor)
+                            .clipShape(Capsule())
+                            .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                        }
+                        Spacer()
+                    }
+                    .padding(.bottom, 80)  // 在輸入欄上方
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: newMessageCount)
             }
         }
         .fullScreenCover(isPresented: $viewModel.showUserProfile) {
@@ -340,7 +383,23 @@ struct ChatView: View {
                             },
                             onRetry: { msg in
                                 viewModel.retryFailedMessage(msg)
-                            }
+                            },
+                            onReply: { msg in
+                                viewModel.startReply(to: msg)
+                            },
+                            onTapReply: { messageId in
+                                viewModel.scrollToMessageId = messageId
+                            },
+                            onEdit: { msg in
+                                viewModel.startEdit(message: msg)
+                            },
+                            onReaction: { msg, emoji in
+                                viewModel.toggleReaction(on: msg, emoji: emoji)
+                            },
+                            onRecall: { msg in
+                                viewModel.recallMessage(msg)
+                            },
+                            currentUserId: viewModel.currentUserId
                         )
                         .id(message.id)
                         .onAppear {
@@ -386,15 +445,29 @@ struct ChatView: View {
                         .padding(.horizontal, 16)
                         .transition(.opacity)
                     }
+
+                    // 底部錨點 - 用於檢測是否在底部
+                    Color.clear
+                        .frame(height: 1)
+                        .id("bottomAnchor")
+                        .onAppear { isAtBottom = true; newMessageCount = 0 }
+                        .onDisappear { isAtBottom = false }
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 10)
             }
-            .onChange(of: viewModel.messages.count) { _, _ in
-                if let lastMessage = viewModel.messages.last {
-                    withAnimation {
-                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+            .onChange(of: viewModel.messages.count) { oldCount, newCount in
+                if isAtBottom {
+                    // 在底部時自動滾動到最新消息
+                    if let lastMessage = viewModel.messages.last {
+                        withAnimation {
+                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                        }
                     }
+                    newMessageCount = 0
+                } else if newCount > oldCount {
+                    // 不在底部時累加新消息計數
+                    newMessageCount += (newCount - oldCount)
                 }
             }
             .onChange(of: viewModel.scrollToMessageId) { _, messageId in
@@ -415,6 +488,70 @@ struct ChatView: View {
 
     private var inputAreaView: some View {
         VStack(spacing: 0) {
+            // 回覆預覽
+            if let replyPreview = viewModel.replyingToMessage {
+                HStack {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(DesignTokens.accentColor)
+                        .frame(width: 3)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("回覆 \(replyPreview.senderName)")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(DesignTokens.accentColor)
+                        Text(replyPreview.content)
+                            .font(.system(size: 12))
+                            .foregroundColor(DesignTokens.textSecondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        viewModel.cancelReply()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(DesignTokens.textMuted)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(DesignTokens.surface)
+            }
+
+            // 編輯模式預覽
+            if let editingMsg = viewModel.editingMessage {
+                HStack {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Color.orange)
+                        .frame(width: 3)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("編輯消息")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.orange)
+                        Text(editingMsg.text)
+                            .font(.system(size: 12))
+                            .foregroundColor(DesignTokens.textSecondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        viewModel.cancelEdit()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(DesignTokens.textMuted)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(DesignTokens.surface)
+            }
+
             if viewModel.showAttachmentOptions {
                 attachmentOptionsView
             }
@@ -434,26 +571,39 @@ struct ChatView: View {
 
                 // Text input
                 HStack(spacing: 8) {
-                    TextField("Type a message...", text: $viewModel.messageText)
+                    TextField(viewModel.editingMessage != nil ? "編輯消息..." : "Type a message...", text: $viewModel.messageText)
                         .font(.system(size: 16))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .focused($isInputFocused)
                         .onChange(of: viewModel.messageText) { _, newValue in
-                            viewModel.sendTypingIndicator(isTyping: !newValue.isEmpty)
+                            if viewModel.editingMessage == nil {
+                                viewModel.sendTypingIndicator(isTyping: !newValue.isEmpty)
+                            }
                         }
 
-                    // Voice record / Send button
-                    if viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    // Voice record / Send / Save Edit button
+                    if viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && viewModel.editingMessage == nil {
                         voiceRecordButton
                     } else {
                         Button(action: {
-                            viewModel.sendMessage()
+                            if viewModel.editingMessage != nil {
+                                Task { await viewModel.saveEdit() }
+                            } else {
+                                viewModel.sendMessage()
+                            }
                         }) {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 28))
-                                .foregroundColor(DesignTokens.accentColor)
+                            if viewModel.isSavingEdit {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .frame(width: 28, height: 28)
+                            } else {
+                                Image(systemName: viewModel.editingMessage != nil ? "checkmark.circle.fill" : "arrow.up.circle.fill")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(viewModel.editingMessage != nil ? .orange : DesignTokens.accentColor)
+                            }
                         }
+                        .disabled(viewModel.isSavingEdit)
                     }
                 }
                 .background(DesignTokens.surface)

@@ -1,3 +1,6 @@
+-- Enable required extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 CREATE TYPE conversation_type AS ENUM ('direct', 'group');
 CREATE TYPE privacy_mode AS ENUM ('strict_e2e', 'search_enabled');
 

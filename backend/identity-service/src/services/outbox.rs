@@ -56,8 +56,8 @@ struct OutboxRecord {
     aggregate_id: String,
     /// Event type, e.g. "UserDeleted"
     event_type: String,
-    /// Raw event payload stored in the database (event_data column)
-    event_data: Value,
+    /// Raw event payload stored in the database (library-standard column name)
+    payload: Value,
     /// Number of times this event has been retried
     retry_count: i32,
     /// Creation timestamp of the event
@@ -124,18 +124,19 @@ async fn process_batch(
             aggregate_type,
             aggregate_id,
             event_type,
-            event_data,
+            payload,
             retry_count,
             created_at
         FROM outbox_events
-        WHERE processed_at IS NULL
-          AND retry_count < max_retries
+        WHERE published_at IS NULL
+          AND retry_count < $2
         ORDER BY created_at ASC
         LIMIT $1
         FOR UPDATE SKIP LOCKED
         "#,
     )
     .bind(config.batch_size)
+    .bind(config.max_retries)
     .fetch_all(db_pool)
     .await?;
 
@@ -290,7 +291,7 @@ async fn process_user_deleted(
     event: &OutboxRecord,
     producer: &KafkaEventProducer,
 ) -> Result<(), ProcessingFailure> {
-    let payload: UserDeletedPayload = serde_json::from_value(event.event_data.clone())
+    let payload: UserDeletedPayload = serde_json::from_value(event.payload.clone())
         .map_err(|err| ProcessingFailure::new("payload_error", err.to_string()))?;
 
     // aggregate_id is stored as text, usually a UUID
@@ -323,12 +324,12 @@ async fn send_to_dlq(
     event: &OutboxRecord,
     failure: &ProcessingFailure,
 ) -> Result<(), String> {
-    let payload = json!({
+    let dlq_payload = json!({
         "event_id": event.id,
         "aggregate_type": event.aggregate_type,
         "aggregate_id": event.aggregate_id,
         "event_type": event.event_type,
-        "payload": event.event_data,
+        "payload": event.payload,
         "retry_count": event.retry_count,
         "failed_at": Utc::now(),
         "reason": failure.reason(),
@@ -338,7 +339,7 @@ async fn send_to_dlq(
     let key = format!("outbox-dlq-{}", event.aggregate_id);
 
     producer
-        .publish_raw_to_topic(topic, &key, &payload.to_string())
+        .publish_raw_to_topic(topic, &key, &dlq_payload.to_string())
         .await
         .map_err(|err| err.to_string())
 }
@@ -347,7 +348,7 @@ async fn mark_published(db_pool: &PgPool, event_id: Uuid) -> Result<(), sqlx::Er
     sqlx::query(
         r#"
         UPDATE outbox_events
-        SET processed_at = NOW()
+        SET published_at = NOW()
         WHERE id = $1
         "#,
     )

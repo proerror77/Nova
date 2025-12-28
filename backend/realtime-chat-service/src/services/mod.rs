@@ -1,3 +1,67 @@
+//! # Realtime Chat Services
+//!
+//! This module contains all business logic services for the chat system.
+//!
+//! ## Message Encryption Architecture
+//!
+//! Nova supports a dual-path encryption model based on conversation privacy settings:
+//!
+//! ```text
+//! ┌─────────────────────────────────────────────────────────────────────┐
+//! │                    Message Encryption Paths                         │
+//! ├─────────────────────────────────────────────────────────────────────┤
+//! │                                                                     │
+//! │  encryption_version = 0 (Plaintext + TDE)                          │
+//! │  ├── Service: message_service.rs                                   │
+//! │  ├── Storage: content field (TEXT)                                 │
+//! │  ├── Server can read: YES                                          │
+//! │  ├── Searchable: YES (PostgreSQL FTS)                              │
+//! │  └── Use case: Search-enabled conversations                        │
+//! │                                                                     │
+//! │  encryption_version = 1 (Server-side encryption) ⚠️ DEPRECATED     │
+//! │  ├── Service: encryption.rs (EncryptionService)                    │
+//! │  ├── Status: Legacy, do not use for new messages                   │
+//! │  └── Kept for backward compatibility only                          │
+//! │                                                                     │
+//! │  encryption_version = 2 (Megolm E2EE) ✅ RECOMMENDED FOR E2EE      │
+//! │  ├── Services: olm_service.rs + megolm_service.rs                  │
+//! │  ├── Storage: megolm_ciphertext, megolm_session_id                 │
+//! │  ├── Server can read: NO (true E2EE)                               │
+//! │  ├── Searchable: NO                                                │
+//! │  ├── Protocol: Matrix Olm/Megolm via vodozemac                     │
+//! │  └── Use case: Privacy-first conversations                         │
+//! │                                                                     │
+//! └─────────────────────────────────────────────────────────────────────┘
+//! ```
+//!
+//! ## Privacy Mode Routing
+//!
+//! Conversations have a `privacy_mode` that determines encryption behavior:
+//!
+//! | Privacy Mode | encryption_version | FTS Search | Key Derivation |
+//! |--------------|-------------------|------------|----------------|
+//! | `strict_e2e` | 2 (Megolm) | Disabled | Client-side Megolm |
+//! | `search_enabled` | 0 (Plaintext) | Enabled | None (TDE only) |
+//!
+//! **Client Responsibility**: Clients choose which API endpoint to call based on
+//! conversation `privacy_mode`. The server enforces search restrictions but does
+//! not automatically route between encryption paths.
+//!
+//! **API Endpoints**:
+//! - `/api/v2/messages/*` - Plaintext path (MessageService)
+//! - `/api/v2/e2ee/*` - E2EE path (OlmService + MegolmService)
+//!
+//! ## Service Reference
+//!
+//! | Service | Status | Purpose |
+//! |---------|--------|---------|
+//! | `OlmService` | ✅ Active | Device registration, 1:1 key exchange |
+//! | `MegolmService` | ✅ Active | Room/group message encryption |
+//! | `E2eeMessageService` | ✅ Active | E2EE message storage/retrieval |
+//! | `MessageService` | ✅ Active | Plaintext message handling |
+//! | `EncryptionService` | ⚠️ Deprecated | Legacy server-side encryption |
+//! | `E2eeService` | ⚠️ Deprecated | Legacy ECDH approach |
+
 pub mod call_service;
 pub mod conversation_service;
 pub mod e2ee;

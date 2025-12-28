@@ -1,5 +1,10 @@
 -- Migration: 0011_add_megolm_message_columns
 -- Description: Add columns for Megolm E2EE message storage
+-- Note: Must re-add encryption_version since 0009 may have dropped it
+
+-- Re-add encryption_version if it was dropped by 0009
+-- This makes migration order-independent and idempotent
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS encryption_version INT DEFAULT 0;
 
 -- Add E2EE-specific columns to messages table
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_device_id TEXT;

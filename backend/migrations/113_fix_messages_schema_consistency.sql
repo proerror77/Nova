@@ -34,7 +34,7 @@ BEGIN
     -- When a message is edited, update its search index if it exists
     IF TG_OP = 'UPDATE' THEN
         UPDATE message_search_index
-        SET created_at = NEW.edited_at OR NEW.created_at
+        SET created_at = COALESCE(NEW.edited_at, NEW.created_at)
         WHERE message_id = NEW.id;
     -- When a message is deleted (soft delete), remove it from search index
     ELSIF TG_OP = 'DELETE' THEN

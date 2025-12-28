@@ -14,6 +14,7 @@
 pub mod accounts;
 pub mod alice;
 pub mod auth;
+pub mod calls; // Video/Voice call proxy to realtime-chat-service
 pub mod channels;
 pub mod chat;
 pub mod content;
@@ -42,6 +43,7 @@ pub mod user_profile;
 
 pub use alice::*;
 pub use auth::*;
+pub use calls::*;
 pub use channels::*;
 pub use chat::*;
 pub use feed::*;

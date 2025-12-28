@@ -1,5 +1,16 @@
 -- Migration 120: Device Key Management and ECDH Key Exchange
 --
+-- ⚠️  DEPRECATED: This migration is part of the old monolith architecture.
+-- E2EE is now handled by realtime-chat-service using vodozemac (Olm/Megolm).
+-- See: realtime-chat-service/migrations/0010_e2ee_vodozemac_tables.sql
+--
+-- This migration assumes users and conversations in the same database,
+-- which conflicts with the microservices architecture where:
+-- - users → identity-service database
+-- - conversations → realtime-chat-service database
+--
+-- DO NOT RUN this migration in the microservices deployment.
+--
 -- Dependencies:
 -- - users table (exists from migration 001)
 -- - conversations table (exists from migration 018)

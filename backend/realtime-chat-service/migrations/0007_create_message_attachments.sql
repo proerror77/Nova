@@ -38,5 +38,5 @@ ALTER TABLE message_attachments
   ADD CONSTRAINT chk_file_type_not_empty
   CHECK (length(trim(file_type)) > 0);
 
--- Down
-DROP TABLE IF EXISTS message_attachments;
+-- Down (rollback commands - do not execute during forward migration)
+-- DROP TABLE IF EXISTS message_attachments;

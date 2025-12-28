@@ -21,7 +21,8 @@
 DROP INDEX IF EXISTS idx_messages_conversation_id;
 
 -- Create composite index for sorted message queries
-CREATE INDEX CONCURRENTLY idx_messages_conv_created
+-- Note: Using regular CREATE INDEX for migration compatibility (CONCURRENTLY cannot run in transaction)
+CREATE INDEX IF NOT EXISTS idx_messages_conv_created
 ON messages(conversation_id, created_at DESC)
 WHERE deleted_at IS NULL;
 
@@ -47,7 +48,7 @@ WHERE deleted_at IS NULL;
 -- WHERE message_id IN (...)
 -- ORDER BY created_at ASC
 
-CREATE INDEX CONCURRENTLY idx_attachments_message_created
+CREATE INDEX IF NOT EXISTS idx_attachments_message_created
 ON message_attachments(message_id, created_at ASC);
 
 -- ============================================================================
@@ -60,9 +61,9 @@ ON message_attachments(message_id, created_at ASC);
 -- ORDER BY joined_at ASC
 
 -- Create composite index for member queries
-CREATE INDEX CONCURRENTLY idx_members_conv_joined
-ON conversation_members(conversation_id, joined_at ASC)
-WHERE left_at IS NULL;
+-- Note: conversation_members doesn't have left_at column, just index all active members
+CREATE INDEX IF NOT EXISTS idx_members_conv_joined
+ON conversation_members(conversation_id, joined_at ASC);
 
 -- ============================================================================
 -- 5. Message Recalls - Fix audit log queries
@@ -73,7 +74,7 @@ WHERE left_at IS NULL;
 -- WHERE message_id IN (...)
 -- ORDER BY recalled_at DESC
 
-CREATE INDEX CONCURRENTLY idx_recalls_message_time
+CREATE INDEX IF NOT EXISTS idx_recalls_message_time
 ON message_recalls(message_id, recalled_at DESC);
 
 -- ============================================================================

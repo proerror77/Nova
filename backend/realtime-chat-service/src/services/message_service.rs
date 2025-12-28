@@ -1,7 +1,25 @@
+//! # Message Service
+//!
+//! Handles plaintext message storage with PostgreSQL TDE (encryption_version=0).
+//!
+//! ## Note on EncryptionService Parameter
+//!
+//! Many functions accept `&EncryptionService` but don't use it. This is for API
+//! compatibility - callers pass `state.encryption` which is also used by
+//! `routes/conversations.rs` for legacy key derivation.
+//!
+//! The parameter is marked with `_encryption` to indicate it's unused.
+//! A future refactor could remove this parameter once the legacy key
+//! derivation endpoint is deprecated.
+//!
+//! ## For E2EE Messages
+//!
+//! Use `E2eeMessageService` with `MegolmService` for encryption_version=2 messages.
+
 use crate::models::message::Message as MessageRow;
 use crate::services::conversation_service::PrivacyMode;
+#[allow(deprecated)]
 use crate::services::encryption::EncryptionService;
-use base64::{engine::general_purpose, Engine as _};
 use chrono::Utc;
 use deadpool_postgres::Pool;
 use std::sync::Arc;
