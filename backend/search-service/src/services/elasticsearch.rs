@@ -369,14 +369,53 @@ impl ElasticsearchClient {
     ) -> Result<Vec<UserDocument>, ElasticsearchError> {
         let size = limit.clamp(1, 100);
         let from = offset.max(0);
+        let query_lower = query.to_lowercase();
+        let wildcard_pattern = format!("*{}*", query_lower);
 
-        let must_clauses = vec![json!({
-            "multi_match": {
-                "query": query,
-                "fields": ["username^2", "display_name^1.5", "bio"],
-                "type": "best_fields"
-            }
-        })];
+        // Use should clauses with different boost levels for flexible matching:
+        // 1. Exact username match (highest boost)
+        // 2. Multi-match for full word matches
+        // 3. Wildcard match for partial username matches
+        let should_clauses = vec![
+            // Exact username match (case-insensitive via keyword.lowercase)
+            json!({
+                "term": {
+                    "username.keyword": {
+                        "value": query,
+                        "boost": 10.0,
+                        "case_insensitive": true
+                    }
+                }
+            }),
+            // Full-text multi-match
+            json!({
+                "multi_match": {
+                    "query": query,
+                    "fields": ["username^3", "display_name^2", "bio"],
+                    "type": "best_fields"
+                }
+            }),
+            // Wildcard match for partial username
+            json!({
+                "wildcard": {
+                    "username": {
+                        "value": wildcard_pattern,
+                        "boost": 2.0,
+                        "case_insensitive": true
+                    }
+                }
+            }),
+            // Wildcard match for partial display_name
+            json!({
+                "wildcard": {
+                    "display_name": {
+                        "value": wildcard_pattern,
+                        "boost": 1.5,
+                        "case_insensitive": true
+                    }
+                }
+            })
+        ];
 
         let mut filter_clauses = vec![];
         if verified_only {
@@ -384,9 +423,16 @@ impl ElasticsearchClient {
         }
 
         let query_body = if filter_clauses.is_empty() {
-            json!({ "must": must_clauses })
+            json!({
+                "should": should_clauses,
+                "minimum_should_match": 1
+            })
         } else {
-            json!({ "must": must_clauses, "filter": filter_clauses })
+            json!({
+                "should": should_clauses,
+                "minimum_should_match": 1,
+                "filter": filter_clauses
+            })
         };
 
         let body = json!({
