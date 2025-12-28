@@ -99,9 +99,27 @@ jobs:
 
       - name: Apply to cluster
         run: |
-          set -e
           echo "🚀 Applying manifests to cluster..."
-          kubectl apply -f /tmp/staging.yaml
+          # Use server-side apply for better conflict resolution
+          # Continue on RBAC errors (service account may not have cluster admin)
+          kubectl apply -f /tmp/staging.yaml --server-side --force-conflicts 2>&1 | tee /tmp/apply-output.txt || true
+
+          # Check for critical failures (not RBAC)
+          if grep -q "error" /tmp/apply-output.txt; then
+            echo ""
+            echo "⚠️  Some resources had errors during apply:"
+            grep -i "error" /tmp/apply-output.txt | head -20
+            echo ""
+            # Only fail if there are non-RBAC errors
+            if grep -i "error" /tmp/apply-output.txt | grep -qv "rbac.authorization.k8s.io"; then
+              echo "❌ Critical (non-RBAC) errors found"
+              exit 1
+            else
+              echo "ℹ️  Only RBAC errors found - these require cluster-admin permissions"
+              echo "   RBAC resources should be applied manually by a cluster admin"
+            fi
+          fi
+
           echo ""
           echo "📊 Current pods in ${{ env.NAMESPACE }}:"
           kubectl get pods -n ${{ env.NAMESPACE }} -o wide
