@@ -1,0 +1,152 @@
+name: Staging GCP Kubectl Apply
+
+# Apply Kustomize overlays to GKE staging cluster
+# Triggered on k8s/ changes or manual dispatch
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'k8s/**'
+      - '.github/workflows/staging-gcp-kubectl-apply.yml'
+
+env:
+  GCP_REGION: asia-northeast1
+  GKE_CLUSTER: nova-staging-gke
+  NAMESPACE: nova-staging
+
+concurrency:
+  group: staging-gcp-kubectl-apply
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    name: Apply to GKE Staging
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Install gke-gcloud-auth-plugin
+        run: |
+          gcloud components install gke-gcloud-auth-plugin --quiet 2>/dev/null || \
+          sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} \
+            --region ${{ env.GCP_REGION }} \
+            --project ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Verify cluster connection
+        run: |
+          echo "🔍 Verifying cluster connection..."
+          kubectl cluster-info
+          kubectl get nodes -o wide
+
+      - name: Setup Helm (for ClickHouse)
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Install ClickHouse Operator
+        continue-on-error: true
+        run: |
+          set -e
+          # Check if CRDs already exist
+          if kubectl get crd clickhouseinstallations.clickhouse.altinity.com &>/dev/null; then
+            echo "✅ ClickHouse CRDs already installed"
+          else
+            echo "📦 Installing ClickHouse Operator via Helm..."
+            helm repo add altinity https://helm.clickhouse.tech || true
+            helm repo update
+            helm upgrade --install clickhouse-operator altinity/clickhouse-operator \
+              -n clickhouse-operator --create-namespace \
+              --set installCRDs=true --atomic --wait --timeout 5m || \
+            echo "⚠️ Helm install failed, trying raw bundle..."
+
+            # Fallback to raw bundle
+            BUNDLE=https://raw.githubusercontent.com/Altinity/clickhouse-operator/master/deploy/operator/clickhouse-operator-install-bundle.yaml
+            kubectl create namespace clickhouse-operator --dry-run=client -o yaml | kubectl apply -f - || true
+            kubectl apply -f "$BUNDLE" || true
+          fi
+
+      - name: Render Kustomize overlay (staging)
+        run: |
+          echo "📦 Rendering Kustomize overlay..."
+          kubectl kustomize k8s/infrastructure/overlays/staging > /tmp/staging.yaml
+          echo "📄 Generated manifest preview (first 50 lines):"
+          head -n 50 /tmp/staging.yaml
+          echo "..."
+          echo "📊 Total lines: $(wc -l < /tmp/staging.yaml)"
+
+      - name: Apply to cluster
+        run: |
+          set -e
+          echo "🚀 Applying manifests to cluster..."
+          kubectl apply -f /tmp/staging.yaml
+          echo ""
+          echo "📊 Current pods in ${{ env.NAMESPACE }}:"
+          kubectl get pods -n ${{ env.NAMESPACE }} -o wide
+
+      - name: Wait for deployments
+        run: |
+          set -e
+          NS=${{ env.NAMESPACE }}
+
+          echo "⏳ Waiting for deployments to be ready..."
+
+          # Wait for all deployments
+          for d in $(kubectl -n $NS get deploy -o jsonpath='{.items[*].metadata.name}'); do
+            echo "  Waiting for deployment/$d..."
+            kubectl -n $NS rollout status deploy/$d --timeout=300s || true
+          done
+
+          # Wait for statefulsets
+          for s in $(kubectl -n $NS get statefulset -o jsonpath='{.items[*].metadata.name}'); do
+            echo "  Waiting for statefulset/$s..."
+            kubectl -n $NS rollout status statefulset/$s --timeout=300s || true
+          done
+
+      - name: Summary
+        if: always()
+        run: |
+          NS=${{ env.NAMESPACE }}
+          echo ""
+          echo "════════════════════════════════════════════════════"
+          echo "📊 DEPLOYMENT SUMMARY"
+          echo "════════════════════════════════════════════════════"
+          echo ""
+          echo "🔹 Deployments:"
+          kubectl get deploy -n $NS -o wide 2>/dev/null || echo "  No deployments"
+          echo ""
+          echo "🔹 StatefulSets:"
+          kubectl get statefulset -n $NS -o wide 2>/dev/null || echo "  No statefulsets"
+          echo ""
+          echo "🔹 Services:"
+          kubectl get svc -n $NS 2>/dev/null || echo "  No services"
+          echo ""
+          echo "🔹 Pods:"
+          kubectl get pods -n $NS -o wide 2>/dev/null || echo "  No pods"
+          echo ""
+          echo "🔹 Non-ready pods:"
+          kubectl get pods -n $NS 2>/dev/null | awk 'NR==1 || !/Running/' || echo "  All pods running"
+          echo ""
+          echo "════════════════════════════════════════════════════"
