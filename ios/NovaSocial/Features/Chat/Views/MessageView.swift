@@ -642,8 +642,8 @@ struct MessageView: View {
     // MARK: - 消息页面内容
     private var messageContent: some View {
         ZStack(alignment: .bottom) {
-            // MARK: - 背景色（改为白色）
-            Color.white
+            // MARK: - 背景色
+            DesignTokens.surface
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -654,7 +654,7 @@ struct MessageView: View {
                         // 标题文本 - 居中
                         Text(LocalizedStringKey("Message"))
                             .font(.system(size: 18.f, weight: .semibold))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.textPrimary)
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
                         
@@ -684,12 +684,12 @@ struct MessageView: View {
                     HStack(spacing: 10.s) {
                         Image(systemName: "magnifyingglass")
                             .font(.system(size: 15.f))
-                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                            .foregroundColor(DesignTokens.textSecondary)
 
                         TextField("Search", text: $searchText)
                             .font(.system(size: 14.f))
                             .tracking(0.28)
-                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                            .foregroundColor(DesignTokens.textSecondary)
                             .focused($isSearchFocused)
                             .onChange(of: searchText) { _, newValue in
                                 isSearching = !newValue.isEmpty
@@ -711,38 +711,21 @@ struct MessageView: View {
                             }) {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.system(size: 14.f))
-                                    .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                                    .foregroundColor(DesignTokens.textSecondary)
                             }
                         }
                     }
                     .padding(EdgeInsets(top: 6.h, leading: 12.w, bottom: 6.h, trailing: 12.w))
                     .frame(maxWidth: .infinity)
                     .frame(height: 32.h)
-                    .background(Color(red: 0.91, green: 0.91, blue: 0.91))
+                    .background(DesignTokens.searchBarBackground)
                     .cornerRadius(32.s)
                     .padding(.top, 10.h)
                     .padding(.horizontal, 16.w)
                     .padding(.bottom, 10.h)
                 }
                 .padding(.top, 56.h)
-                .background(Color.white)
-
-                // MARK: - 预览模式提示（暂时隐藏）
-                // #if DEBUG
-                // if isPreviewMode {
-                //     HStack(spacing: 8) {
-                //         Image(systemName: "eye.fill")
-                //             .font(.system(size: 12))
-                //         Text("Preview Mode - Mock Data (Simulator)")
-                //             .font(.system(size: 12, weight: .medium))
-                //         Spacer()
-                //     }
-                //     .foregroundColor(.orange)
-                //     .padding(.horizontal, 16)
-                //     .padding(.vertical, 8)
-                //     .background(Color.orange.opacity(0.1))
-                // }
-                // #endif
+                .background(DesignTokens.surface)
 
                 // MARK: - 搜索结果 / 消息列表
                 if isSearching {
@@ -1051,7 +1034,7 @@ struct MessageListItem: View {
                     Text(name)
                         .font(.system(size: 16.f, weight: .heavy))
                         .tracking(0.32)
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
 
                     // E2EE indicator
                     if isEncrypted {
@@ -1066,7 +1049,7 @@ struct MessageListItem: View {
                     Text(messagePreview)
                         .font(.system(size: 14.f))
                         .tracking(0.28)
-                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                        .foregroundColor(DesignTokens.textSecondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -1079,19 +1062,19 @@ struct MessageListItem: View {
                     Text(time)
                         .font(.system(size: 12.f))
                         .tracking(0.24)
-                        .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64))
+                        .foregroundColor(DesignTokens.textMuted)
 
                     // 未读徽章
                     if unreadCount > 0 {
                         let badgeText = unreadCount > 9 ? "9+" : "\(unreadCount)"
                         let badgeWidth: CGFloat = unreadCount > 9 ? 22.s : 17.s
-                        
+
                         Text(badgeText)
                             .font(.system(size: 12.f))
                             .tracking(0.24)
                             .foregroundColor(.white)
                             .frame(width: badgeWidth, height: 17.s)
-                            .background(Color(red: 0.82, green: 0.11, blue: 0.26))
+                            .background(DesignTokens.accentColor)
                             .cornerRadius(8.5.s)
                     }
                 }
@@ -1100,7 +1083,7 @@ struct MessageListItem: View {
         .padding(.horizontal, 16.w)
         .frame(maxWidth: .infinity)
         .frame(height: 80.h)
-        .background(Color.white)
+        .background(DesignTokens.surface)
     }
 }
 
