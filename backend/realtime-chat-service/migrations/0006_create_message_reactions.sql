@@ -25,5 +25,5 @@ ALTER TABLE message_reactions
   ADD CONSTRAINT chk_reaction_not_empty
   CHECK (length(trim(reaction)) > 0);
 
--- Down
-DROP TABLE IF EXISTS message_reactions;
+-- Down (rollback commands - do not execute during forward migration)
+-- DROP TABLE IF EXISTS message_reactions;

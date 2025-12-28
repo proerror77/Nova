@@ -1,8 +1,11 @@
 # Service Data Ownership - Nova Architecture Phase 0
 
-**Version**: 1.0
-**Date**: 2025-11-04
-**Status**: Phase 0 Task 0.2 Deliverable
+**Version**: 1.1
+**Date**: 2025-12-28
+**Status**: Phase 0 Task 0.2 Deliverable (Updated)
+
+> **Update 2025-12-28**: Clarified per-service outbox pattern (not centralized).
+> Each service owns its own outbox_events table and processor.
 
 ---
 
@@ -255,21 +258,40 @@ This document maps each table in the current `nova_content` PostgreSQL database 
 
 ---
 
-### 12. **Events Service** 📡
-**Owned Tables**: Event streaming and outbox
+### 12. **Outbox Pattern** 📡
+**Architecture**: Per-service (Decentralized)
 
-| Table | Purpose | Read By | Write By | Notes |
-|-------|---------|---------|---------|-------|
-| `outbox_events` | Transactional event publishing | Events Service | ALL SERVICES | Outbox pattern |
+Each service owns its own `outbox_events` table in its database:
 
-**Dependencies**: None (central event hub)
+| Service | Outbox Table Location | Processor |
+|---------|----------------------|-----------|
+| identity-service | identity DB | `spawn_outbox_consumer()` |
+| content-service | content DB | `OutboxProcessor::start()` |
+| social-service | social DB | `OutboxProcessor` + circuit breaker |
+| graph-service | graph DB | `OutboxProcessor` |
 
-**Writes From**: All other services
+**Shared Library**: `transactional-outbox` in `backend/libs/transactional-outbox/`
+
+**Schema** (library standard):
+```sql
+outbox_events (
+  id UUID PRIMARY KEY,
+  aggregate_type VARCHAR(255),  -- e.g., "user", "content"
+  aggregate_id UUID,
+  event_type VARCHAR(255),      -- e.g., "user.created"
+  payload JSONB,                -- event data
+  metadata JSONB,               -- correlation_id, trace_id
+  published_at TIMESTAMPTZ,     -- NULL until published
+  retry_count INT,
+  last_error TEXT
+)
+```
 
 **Notes**:
-- ALL services write to `outbox_events` for their domain events
-- Events Service publishes these to Kafka
-- Enables transactional consistency (write to DB + outbox in same transaction)
+- Each service writes to its **own** outbox_events table (same transaction as business logic)
+- Each service runs its **own** background processor to publish to Kafka
+- No centralized "Events Service" - services produce directly to Kafka
+- Enables independent deployment and scaling per service
 
 ---
 
@@ -296,10 +318,10 @@ This document maps each table in the current `nova_content` PostgreSQL database 
 ### Write Patterns (Service Ownership)
 
 ```
-Auth Service:        users, sessions, refresh_tokens, ...
+Auth Service:        users, sessions, refresh_tokens, outbox_events (own DB)
 User Service:        follows, social_metadata
-Messaging Service:   conversations, messages, ...
-Content Service:     posts, comments, likes, bookmarks, ...
+Messaging Service:   conversations, messages, outbox_events (own DB)
+Content Service:     posts, comments, likes, bookmarks, outbox_events (own DB)
 Video Service:       videos, reels, reel_variants, ...
 Streaming Service:   streams, viewer_sessions, stream_metrics
 Media Service:       uploads, (metadata in S3)
@@ -307,7 +329,7 @@ Notification Service: (none - consumes events)
 Feed Service:        user_feed_preferences
 Search Service:      (none - read-only)
 CDN Service:         (none - external config)
-Events Service:      outbox_events (written by ALL)
+Graph Service:       follows, blocks, outbox_events (own DB)
 ```
 
 ### Read Patterns (Data Dependencies)
@@ -338,23 +360,29 @@ Events Service:      outbox_events (written by ALL)
 
 ## 🔄 Outbox Pattern for Consistency
 
-The **outbox_events** table is central to Phase 2 implementation:
+Each service has its **own** `outbox_events` table (per-service pattern):
 
-1. **When** a service writes to its tables, it also inserts an event into `outbox_events`
-2. **Events Service** polls `outbox_events` and publishes to Kafka
-3. **Other services** subscribe to events and update their read copies
+1. **When** a service writes to its tables, it also inserts an event into **its own** `outbox_events`
+2. **Background processor** (in same service) polls and publishes to Kafka
+3. **Other services** subscribe to Kafka topics and update their read copies
 4. **Advantages**:
    - Transactional consistency (write happens atomically)
-   - No data loss (guaranteed delivery)
-   - Event-driven architecture foundation
+   - No data loss (guaranteed delivery via retry + DLQ)
+   - Independent deployment (no central bottleneck)
+   - Service owns its events end-to-end
 
 **Example**: When Content Service creates a post:
 ```sql
+-- In content-service database
 BEGIN;
   INSERT INTO posts (...) VALUES (...);
-  INSERT INTO outbox_events (event_type, data) VALUES ('post.created', {...});
+  INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload)
+    VALUES ('post', post_id, 'post.created', {...});
 COMMIT;
+-- Content service's OutboxProcessor publishes to Kafka topic: nova.post.events
 ```
+
+**Shared Library**: All services use `transactional-outbox` library for consistent implementation.
 
 ---
 
@@ -420,21 +448,23 @@ Target (Jan 2026 - Phase 1 Complete):
 
 | Service | Tables Owned | Count | Dependencies |
 |---------|-------------|-------|--------------|
-| Auth | users, sessions, tokens, keys, auth_logs, etc. | 13 | None |
-| User | follows, social_metadata | 2 | Auth (read) |
-| Messaging | conversations, messages, reactions, etc. | 9 | Auth (read) |
-| Content | posts, comments, likes, bookmarks, etc. | 9 | Auth, Video (read) |
+| Auth (identity-service) | users, sessions, tokens, keys, auth_logs, outbox_events | 14 | None (foundational) |
+| User (graph-service) | follows, social_metadata, outbox_events | 3 | Auth (read via gRPC) |
+| Messaging (realtime-chat-service) | conversations, messages, reactions, E2EE tables | 26 | Auth (read via gRPC) |
+| Content | posts, comments, likes, bookmarks, outbox_events | 10 | Auth, Video (read) |
 | Video | videos, reels, variants, pipelines, etc. | 8 | Auth (read) |
 | Streaming | streams, viewers, metrics, quality | 5 | Auth (read) |
 | Media | uploads, sessions, chunks | 3 | Auth (read) |
 | Feed | user_feed_preferences | 1 | Content, User (read) |
-| Events | outbox_events | 1 | (all write) |
 | Experiments | experiments, variants, assignments | 4 | Auth (read) |
 | Notification | (none - stateless) | 0 | All services (read events) |
 | Search | (none - read-only) | 0 | All services (read replicas) |
 | CDN | (none - external) | 0 | None |
 
-**Total**: ~58 tables, clear ownership boundaries ✅
+**Total**: ~74 tables, clear ownership boundaries ✅
+
+**Note**: Each service with outbox_events has its **own** table in its **own** database.
+The `transactional-outbox` library provides a shared implementation.
 
 ---
 
