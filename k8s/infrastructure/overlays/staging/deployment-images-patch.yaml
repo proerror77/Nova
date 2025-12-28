@@ -29,7 +29,7 @@ spec:
     spec:
       containers:
       - name: identity-service
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/identity-service@sha256:2be63820cdf708c76678cf15803c9fc38897f06eccc16ab3ae6df5b751a59647
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/identity-service@sha256:8f4193f0fdff785c0616bc450feead3aa463cf7fd35225aadab1808dfa997c17
 ---
 apiVersion: apps/v1
 kind: Deployment
