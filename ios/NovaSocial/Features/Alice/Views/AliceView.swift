@@ -280,7 +280,7 @@ struct AliceView: View {
                             Text("Get Super alice")
                                 .font(.system(size: 12.f))
                                 .tracking(0.24)
-                                .foregroundColor(.black)
+                                .foregroundColor(DesignTokens.textPrimary)
                         }
                         .padding(EdgeInsets(top: 10.h, leading: 16.w, bottom: 10.h, trailing: 16.w))
                         .background(DesignTokens.surface)
@@ -288,7 +288,7 @@ struct AliceView: View {
                         .overlay(
                             RoundedRectangle(cornerRadius: 21.s)
                                 .inset(by: 0.20)
-                                .stroke(Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.20)
+                                .stroke(DesignTokens.borderColor, lineWidth: 0.20)
                         )
 
                         // Voice Mode 按钮
@@ -298,11 +298,11 @@ struct AliceView: View {
                             HStack(spacing: 10.s) {
                                 Image(systemName: "waveform")
                                     .font(.system(size: 16.f))
-                                    .foregroundColor(.black)
+                                    .foregroundColor(DesignTokens.textPrimary)
                                 Text("Voice Mode")
                                     .font(.system(size: 12.f))
                                     .tracking(0.24)
-                                    .foregroundColor(.black)
+                                    .foregroundColor(DesignTokens.textPrimary)
                             }
                             .padding(EdgeInsets(top: 10.h, leading: 16.w, bottom: 10.h, trailing: 16.w))
                             .background(
@@ -346,7 +346,7 @@ struct AliceView: View {
                         TextField("Ask any questions", text: $inputText)
                             .font(.system(size: 12.f))
                             .tracking(0.24)
-                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                            .foregroundColor(DesignTokens.textSecondary)
                             .submitLabel(.send)
                             .onSubmit {
                                 sendMessage()
@@ -368,16 +368,15 @@ struct AliceView: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: 45.s)
                             .inset(by: 0.20)
-                            .stroke(Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.20)
+                            .stroke(DesignTokens.borderColor, lineWidth: 0.20)
                     )
                     .padding(.horizontal, 16.w)
                 }
                 .padding(.bottom, 82.h)  // 距离手机底部边缘 82pt
             }
             .background(DesignTokens.surface)
-            .ignoresSafeArea(edges: .top)  // 统一处理顶部安全区域
+            .ignoresSafeArea(edges: [.top, .bottom])
             .ignoresSafeArea(.keyboard, edges: .bottom)
-            .ignoresSafeArea(edges: .bottom)
 
             // MARK: - 模型选择器弹窗
             if showModelSelector {
