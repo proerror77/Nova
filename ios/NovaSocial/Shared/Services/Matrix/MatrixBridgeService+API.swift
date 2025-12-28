@@ -112,12 +112,9 @@ extension MatrixBridgeService {
     // MARK: - Room Mapping API
 
     func queryRoomMapping(conversationId: String) async throws -> String? {
+        // APIClient uses .convertFromSnakeCase for decoding
         struct RoomMappingResponse: Codable {
             let roomId: String?
-
-            enum CodingKeys: String, CodingKey {
-                case roomId = "room_id"
-            }
         }
 
         do {
@@ -132,12 +129,9 @@ extension MatrixBridgeService {
     }
 
     func queryConversationMapping(roomId: String) async throws -> String? {
+        // APIClient uses .convertFromSnakeCase for decoding
         struct ConversationMappingResponse: Codable {
             let conversationId: String?
-
-            enum CodingKeys: String, CodingKey {
-                case conversationId = "conversation_id"
-            }
         }
 
         // URL encode room ID (!xxx:server contains special chars)
@@ -178,14 +172,11 @@ extension MatrixBridgeService {
         struct AllMappingsResponse: Codable {
             let mappings: [MappingEntry]
 
+            // Note: APIClient uses .convertFromSnakeCase which auto-converts
+            // conversation_id -> conversationId and room_id -> roomId
             struct MappingEntry: Codable {
                 let conversationId: String
                 let roomId: String
-
-                enum CodingKeys: String, CodingKey {
-                    case conversationId = "conversation_id"
-                    case roomId = "room_id"
-                }
             }
         }
 

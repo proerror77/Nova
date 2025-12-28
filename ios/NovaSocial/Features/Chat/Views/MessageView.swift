@@ -870,6 +870,20 @@ struct MessageView: View {
                     .scrollContentBackground(.hidden)
                     .refreshable {
                         // 下拉刷新對話列表
+                        // If we have very few conversations (< 5), try a force sync to fix stale cache
+                        // This helps recover from SDK cache staleness when rooms were joined elsewhere
+                        if conversations.count < 5 {
+                            #if DEBUG
+                            print("[MessageView] 🔄 Few conversations (\(conversations.count)) detected, attempting force sync...")
+                            #endif
+                            do {
+                                try await matrixBridge.forceFullSync()
+                            } catch {
+                                #if DEBUG
+                                print("[MessageView] ❌ Force sync failed: \(error)")
+                                #endif
+                            }
+                        }
                         await loadConversationsFromMatrix()
                     }
                     .padding(.bottom, DesignTokens.bottomBarHeight + DesignTokens.spacing12 + 40)

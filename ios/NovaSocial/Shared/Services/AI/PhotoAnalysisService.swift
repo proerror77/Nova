@@ -467,33 +467,21 @@ private struct VisionClassification {
 // MARK: - API Models (matching backend Rust structs)
 
 /// Result from photo analysis - matches backend PhotoAnalysisResult
+/// Note: APIClient uses .convertFromSnakeCase - no CodingKeys needed for responses
 struct PhotoAnalysisResult: Codable {
     let detectedThemes: [PhotoTheme]
     let analyzedAt: Date
     let photoCount: Int
     let source: PhotoAnalysisSource
-
-    enum CodingKeys: String, CodingKey {
-        case detectedThemes = "detected_themes"
-        case analyzedAt = "analyzed_at"
-        case photoCount = "photo_count"
-        case source
-    }
 }
 
 /// A theme detected from photos - matches backend PhotoTheme
+/// Note: APIClient uses .convertFromSnakeCase - no CodingKeys needed for responses
 struct PhotoTheme: Codable {
     let theme: String
     let confidence: Float
     let photoCount: Int
     let subCategories: [String]
-
-    enum CodingKeys: String, CodingKey {
-        case theme
-        case confidence
-        case photoCount = "photo_count"
-        case subCategories = "sub_categories"
-    }
 }
 
 /// Source of photo analysis - matches backend PhotoAnalysisSource
@@ -519,16 +507,11 @@ private struct PhotoAnalysisUploadRequest: Codable {
 }
 
 /// Response from photo analysis upload
+/// Note: APIClient uses .convertFromSnakeCase - no CodingKeys needed for responses
 struct PhotoAnalysisUploadResponse: Codable {
     let success: Bool
     let interestsCreated: Int
     let errorMessage: String?
-
-    enum CodingKeys: String, CodingKey {
-        case success
-        case interestsCreated = "interests_created"
-        case errorMessage = "error_message"
-    }
 }
 
 /// Request to upload onboarding interest selections
@@ -543,16 +526,11 @@ private struct OnboardingInterestsUploadRequest: Codable {
 }
 
 /// Response from onboarding interests upload
+/// Note: APIClient uses .convertFromSnakeCase - no CodingKeys needed for responses
 struct OnboardingInterestsUploadResponse: Codable {
     let success: Bool
     let interestsCreated: Int
     let errorMessage: String?
-
-    enum CodingKeys: String, CodingKey {
-        case success
-        case interestsCreated = "interests_created"
-        case errorMessage = "error_message"
-    }
 }
 
 // MARK: - Errors

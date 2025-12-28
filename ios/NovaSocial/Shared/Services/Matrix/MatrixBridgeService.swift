@@ -488,6 +488,59 @@ final class MatrixBridgeService: @unchecked Sendable {
         #endif
     }
 
+    /// Force a full sync by clearing the local session cache and re-initializing.
+    /// Use this when rooms are missing from the conversation list due to stale cache.
+    /// - Returns: True if the re-initialization was successful
+    @discardableResult
+    func forceFullSync() async throws -> Bool {
+        #if DEBUG
+        print("[MatrixBridge] 🔄 Force full sync requested - clearing session cache...")
+        #endif
+
+        // Stop current sync
+        matrixService.stopSync()
+
+        // Clear the session data to remove stale room cache
+        clearSessionData()
+
+        // Re-initialize with fresh sync
+        do {
+            try await initialize(requireLogin: true, retryOnMismatch: false)
+
+            // Wait for sync to receive initial room list (up to 10 seconds)
+            // The room list observer will populate rooms asynchronously after sync starts
+            #if DEBUG
+            print("[MatrixBridge] ⏳ Waiting for sync to receive rooms...")
+            #endif
+
+            var waitTime = 0
+            let maxWaitMs = 10000
+            let checkIntervalMs = 500
+
+            while waitTime < maxWaitMs {
+                let rooms = try await matrixService.getJoinedRooms()
+                if !rooms.isEmpty {
+                    #if DEBUG
+                    print("[MatrixBridge] ✅ Force full sync completed - received \(rooms.count) rooms")
+                    #endif
+                    return true
+                }
+                try await Task.sleep(nanoseconds: UInt64(checkIntervalMs) * 1_000_000)
+                waitTime += checkIntervalMs
+            }
+
+            #if DEBUG
+            print("[MatrixBridge] ⚠️ Force full sync timed out waiting for rooms (may still arrive)")
+            #endif
+            return true
+        } catch {
+            #if DEBUG
+            print("[MatrixBridge] ❌ Force full sync failed: \(error)")
+            #endif
+            throw error
+        }
+    }
+
     /// Check if error is a MismatchedAccount error
     private func isMismatchedAccountError(_ error: Error) -> Bool {
         let errorString = String(describing: error)
@@ -917,10 +970,66 @@ extension MatrixBridgeService {
         return sorted
     }
 
+    /// Find an existing direct room with a specific user
+    /// - Parameter userId: The Matrix user ID to search for
+    /// - Returns: The existing conversation info if found, nil otherwise
+    private func findExistingDirectRoom(withUserId userId: String) async throws -> MatrixConversationInfo? {
+        #if DEBUG
+        print("[MatrixBridge] 🔍 Searching for existing DM with: \(userId)")
+        #endif
+
+        // Get all rooms from Matrix
+        let rooms = try await matrixService.getJoinedRooms()
+
+        // Filter to find direct rooms that include this user
+        for room in rooms where room.isDirect {
+            // Get members of this room
+            do {
+                let members = try await matrixService.getRoomMembers(roomId: room.id)
+                let memberIds = members.map { $0.userId }
+
+                #if DEBUG
+                print("[MatrixBridge]   Checking DM room \(room.id) with members: \(memberIds)")
+                #endif
+
+                // Check if the target user is in this room
+                if memberIds.contains(userId) {
+                    #if DEBUG
+                    print("[MatrixBridge]   ✅ Found existing DM room: \(room.id)")
+                    #endif
+
+                    // Return the existing room as conversation info
+                    return MatrixConversationInfo(
+                        id: room.id,
+                        displayName: room.name ?? "Direct Message",
+                        lastMessage: room.lastMessage?.content,
+                        lastMessageTime: room.lastActivity,
+                        unreadCount: room.unreadCount,
+                        isEncrypted: room.isEncrypted,
+                        isDirect: true,
+                        avatarURL: room.avatarURL,
+                        memberCount: room.memberCount
+                    )
+                }
+            } catch {
+                #if DEBUG
+                print("[MatrixBridge]   ⚠️ Failed to get members for room \(room.id): \(error)")
+                #endif
+                continue
+            }
+        }
+
+        #if DEBUG
+        print("[MatrixBridge] 🔍 No existing DM found with user: \(userId)")
+        #endif
+
+        return nil
+    }
+
     /// Create a new direct conversation with a user via Matrix
     /// This creates a Matrix room and returns the conversation info
     /// - Parameters:
-    ///   - userId: The user ID to chat with
+    ///   - userId: The user ID to chat with (Matrix user ID)
     ///   - displayName: Display name for the conversation
     ///   - isPrivate: Whether this is a private (E2EE encrypted) chat. Default is false (plain text)
     func createDirectConversation(withUserId userId: String, displayName: String?, isPrivate: Bool = false) async throws -> MatrixConversationInfo {
@@ -929,7 +1038,19 @@ extension MatrixBridgeService {
         }
 
         #if DEBUG
-        print("[MatrixBridge] Creating \(isPrivate ? "private" : "regular") direct conversation with user: \(userId)")
+        print("[MatrixBridge] Looking for existing DM room with user: \(userId)")
+        #endif
+
+        // First, check if we already have a DM room with this user
+        if let existingRoom = try await findExistingDirectRoom(withUserId: userId) {
+            #if DEBUG
+            print("[MatrixBridge] ✅ Found existing DM room: \(existingRoom.id)")
+            #endif
+            return existingRoom
+        }
+
+        #if DEBUG
+        print("[MatrixBridge] No existing DM found, creating \(isPrivate ? "private" : "regular") direct conversation with user: \(userId)")
         #endif
 
         // Create a direct room in Matrix

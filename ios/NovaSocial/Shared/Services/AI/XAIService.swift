@@ -75,16 +75,11 @@ final class XAIService {
         let usage: UsageInfo?
     }
 
+    // APIClient uses .convertFromSnakeCase - no CodingKeys needed for responses
     struct UsageInfo: Codable {
         let promptTokens: Int
         let completionTokens: Int
         let totalTokens: Int
-
-        enum CodingKeys: String, CodingKey {
-            case promptTokens = "prompt_tokens"
-            case completionTokens = "completion_tokens"
-            case totalTokens = "total_tokens"
-        }
     }
 
     struct StatusResponse: Codable {
@@ -93,20 +88,13 @@ final class XAIService {
         let models: [String]?
     }
 
+    // APIClient uses .convertFromSnakeCase - no CodingKeys needed for responses
     struct ErrorResponse: Codable {
         let status: String?
         let errorCode: String?
         let message: String?
         let messageZh: String?
         let details: String?
-
-        enum CodingKeys: String, CodingKey {
-            case status
-            case errorCode = "error_code"
-            case message
-            case messageZh = "message_zh"
-            case details
-        }
     }
 
     // MARK: - Initialization
