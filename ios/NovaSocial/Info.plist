@@ -51,8 +51,10 @@
 	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
+		<string>audio</string>
 		<string>fetch</string>
 		<string>remote-notification</string>
+		<string>voip</string>
 	</array>
 	<key>NOVA_STAGING_URL</key>
 	<string>$(NOVA_STAGING_URL)</string>
@@ -98,6 +100,8 @@
 	<string>We need access to your microphone to enable voice chat with Alice AI.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>We need access to your photo library to select photos for your posts.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>We need permission to save photos and videos from chats to your photo library.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>We need speech recognition to convert your voice to text for Alice AI.</string>
 	<key>UIAppFonts</key>

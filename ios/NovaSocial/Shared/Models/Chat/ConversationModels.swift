@@ -557,6 +557,38 @@ struct MessageReaction: Identifiable, Codable, Sendable {
     }
 }
 
+/// Summary of reactions for UI display (aggregated by emoji)
+struct ReactionSummary: Identifiable, Equatable {
+    var id: String { emoji }
+    let emoji: String
+    var count: Int
+    var userIds: [String]  // 參與反應的用戶 ID 列表
+
+    /// 當前用戶是否已經反應過
+    func hasReacted(userId: String) -> Bool {
+        userIds.contains(userId)
+    }
+
+    /// 從 MessageReaction 列表創建摘要
+    static func from(reactions: [MessageReaction]) -> [ReactionSummary] {
+        var dict: [String: ReactionSummary] = [:]
+        for reaction in reactions {
+            if var summary = dict[reaction.emoji] {
+                summary.count += 1
+                summary.userIds.append(reaction.userId)
+                dict[reaction.emoji] = summary
+            } else {
+                dict[reaction.emoji] = ReactionSummary(
+                    emoji: reaction.emoji,
+                    count: 1,
+                    userIds: [reaction.userId]
+                )
+            }
+        }
+        return Array(dict.values).sorted { $0.count > $1.count }
+    }
+}
+
 // MARK: - Flexible Date Decoding Helper
 
 /// Allows decoding dates from either ISO8601 strings or Unix epoch (seconds)
@@ -886,6 +918,69 @@ enum ChatError: LocalizedError {
 }
 
 
+// MARK: - Reply Preview
+
+/// 回覆消息預覽 - 用於顯示被引用的消息摘要
+struct ReplyPreview: Equatable {
+    let messageId: String
+    let senderName: String
+    let content: String
+    let messageType: ChatMessageType
+
+    /// 從 Message 創建回覆預覽
+    init(from message: Message, senderName: String) {
+        self.messageId = message.id
+        self.senderName = senderName
+        self.messageType = message.type
+
+        // 根據消息類型生成預覽文字
+        switch message.type {
+        case .text:
+            self.content = message.content
+        case .image:
+            self.content = "[圖片]"
+        case .video:
+            self.content = "[視頻]"
+        case .audio:
+            self.content = "[語音消息]"
+        case .location:
+            self.content = "[位置]"
+        case .file:
+            self.content = "[文件]"
+        }
+    }
+
+    /// 從 ChatMessage 創建回覆預覽
+    init(from chatMessage: ChatMessage, senderName: String) {
+        self.messageId = chatMessage.id
+        self.senderName = senderName
+        self.messageType = chatMessage.messageType
+
+        switch chatMessage.messageType {
+        case .text:
+            self.content = chatMessage.text
+        case .image:
+            self.content = "[圖片]"
+        case .video:
+            self.content = "[視頻]"
+        case .audio:
+            self.content = "[語音消息]"
+        case .location:
+            self.content = "[位置]"
+        case .file:
+            self.content = "[文件]"
+        }
+    }
+
+    /// 直接初始化
+    init(messageId: String, senderName: String, content: String, messageType: ChatMessageType) {
+        self.messageId = messageId
+        self.senderName = senderName
+        self.content = content
+        self.messageType = messageType
+    }
+}
+
 // MARK: - Chat UI Models
 
 /// UI層的消息模型，包含後端Message + UI特定字段（圖片、位置、語音）
@@ -900,18 +995,41 @@ struct ChatMessage: Identifiable, Equatable {
     var audioData: Data?
     var audioDuration: TimeInterval?
     var audioUrl: URL?
-    
+
     // 新增：遠程媒體 URL 和消息元數據
     var mediaUrl: String?
     var messageType: ChatMessageType
     var status: MessageStatus
+
+    // 回覆功能
+    var replyToId: String?
+    var replyToMessage: ReplyPreview?
+
+    // 編輯功能
+    var isEdited: Bool
+
+    // 反應 (Emoji)
+    var reactions: [ReactionSummary] = []
+
+    // 撤回功能
+    var isRecalled: Bool = false
+
+    /// 撤回時限（秒）- 2分鐘內可撤回
+    static let recallTimeLimit: TimeInterval = 120
+
+    /// 檢查是否可以撤回
+    var canRecall: Bool {
+        guard isFromMe, !isRecalled else { return false }
+        let elapsed = Date().timeIntervalSince(timestamp)
+        return elapsed <= Self.recallTimeLimit
+    }
 
     static func == (lhs: ChatMessage, rhs: ChatMessage) -> Bool {
         lhs.id == rhs.id
     }
 
     /// 從後端Message創建ChatMessage
-    init(from message: Message, currentUserId: String) {
+    init(from message: Message, currentUserId: String, replyPreview: ReplyPreview? = nil) {
         self.id = message.id
         self.backendMessage = message
         self.text = message.content
@@ -921,19 +1039,26 @@ struct ChatMessage: Identifiable, Equatable {
         self.audioData = nil
         self.audioDuration = nil
         self.audioUrl = nil
-        
+
         // 傳遞媒體 URL 和消息類型
         self.mediaUrl = message.mediaUrl
         self.messageType = message.type
         self.status = message.status
-        
+
+        // 回覆功能
+        self.replyToId = message.replyToId
+        self.replyToMessage = replyPreview
+
+        // 編輯功能
+        self.isEdited = message.isEdited
+
         // 解析位置消息
         if message.type == .location {
             self.location = Self.parseLocationFromContent(message.content)
         } else {
             self.location = nil
         }
-        
+
         // 解析語音消息時長
         if message.type == .audio, let duration = Double(message.content) {
             self.audioDuration = duration
@@ -948,7 +1073,8 @@ struct ChatMessage: Identifiable, Equatable {
         location: CLLocationCoordinate2D? = nil,
         audioData: Data? = nil,
         audioDuration: TimeInterval? = nil,
-        audioUrl: URL? = nil
+        audioUrl: URL? = nil,
+        replyTo: ReplyPreview? = nil
     ) {
         self.id = UUID().uuidString
         self.backendMessage = nil
@@ -962,7 +1088,14 @@ struct ChatMessage: Identifiable, Equatable {
         self.audioUrl = audioUrl
         self.mediaUrl = nil
         self.status = .sending
-        
+
+        // 回覆功能
+        self.replyToId = replyTo?.messageId
+        self.replyToMessage = replyTo
+
+        // 編輯功能 - 新消息預設未編輯
+        self.isEdited = false
+
         // 根據內容推斷消息類型
         if image != nil {
             self.messageType = .image

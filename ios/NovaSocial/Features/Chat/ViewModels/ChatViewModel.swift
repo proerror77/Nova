@@ -79,6 +79,18 @@ final class ChatViewModel {
     var voiceRecordDragOffset: CGFloat = 0
     let voiceCancelThreshold: CGFloat = -60
 
+    // MARK: - Reply State
+
+    /// 正在回覆的消息
+    var replyingToMessage: ReplyPreview?
+
+    // MARK: - Edit State
+
+    /// 正在編輯的消息
+    var editingMessage: ChatMessage?
+    /// 是否正在保存編輯
+    var isSavingEdit = false
+
     // MARK: - WeChat-Style Voice Options
 
     /// 顯示語音選項面板（發送語音/轉文字/取消）
@@ -177,6 +189,7 @@ final class ChatViewModel {
         messageSender?.onMessageAdded = { [weak self] message in
             Task { @MainActor in
                 self?.messages.append(message)
+                self?.cleanupOldMessagesIfNeeded()
             }
         }
 
@@ -325,6 +338,7 @@ final class ChatViewModel {
                 }
 
                 self.messages.append(newChatMessage)
+                self.cleanupOldMessagesIfNeeded()
 
                 #if DEBUG
                 print("[ChatViewModel] ✅ Message added - ID: \(newChatMessage.id), Total: \(self.messages.count)")
@@ -354,6 +368,15 @@ final class ChatViewModel {
         #endif
     }
 
+    // MARK: - Pagination Configuration
+
+    /// 單頁消息數量
+    private let pageSize = 50
+    /// 最大保留消息數量（超過此數量將清理舊消息）
+    private let maxMessageCount = 200
+    /// 清理後保留的消息數量
+    private let cleanupRetainCount = 100
+
     // MARK: - Load More Messages
 
     func loadMoreMessages() async {
@@ -363,7 +386,7 @@ final class ChatViewModel {
         let previousCount = messages.count
 
         do {
-            let desiredLimit = messages.count + 50
+            let desiredLimit = messages.count + pageSize
             let matrixMessages = try await matrixBridge.getMessages(conversationId: conversationId, limit: desiredLimit)
             let sorted = matrixMessages.sorted { $0.timestamp < $1.timestamp }
 
@@ -386,17 +409,209 @@ final class ChatViewModel {
         isLoadingHistory = false
     }
 
+    // MARK: - Message List Cleanup
+
+    /// 清理過多的舊消息以節省記憶體
+    /// 當消息數量超過 maxMessageCount 時，保留最新的 cleanupRetainCount 條消息
+    func cleanupOldMessagesIfNeeded() {
+        guard messages.count > maxMessageCount else { return }
+
+        let removeCount = messages.count - cleanupRetainCount
+        messages.removeFirst(removeCount)
+        hasMoreMessages = true  // 清理後重新標記可載入更多
+
+        #if DEBUG
+        print("[ChatViewModel] 🧹 Cleaned up \(removeCount) old messages, retained \(messages.count)")
+        #endif
+    }
+
+    /// 強制清理消息列表（用於記憶體警告時）
+    func forceCleanupMessages() {
+        guard messages.count > cleanupRetainCount else { return }
+
+        let removeCount = messages.count - cleanupRetainCount
+        messages.removeFirst(removeCount)
+        hasMoreMessages = true
+
+        #if DEBUG
+        print("[ChatViewModel] ⚠️ Force cleaned up \(removeCount) messages due to memory pressure")
+        #endif
+    }
+
     // MARK: - Send Messages
 
     func sendMessage() {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
 
+        // 驗證消息長度
+        switch FileValidation.validateMessageText(trimmedText) {
+        case .success:
+            break
+        case .failure(let validationError):
+            error = validationError.localizedDescription
+            return
+        }
+
+        // 保存當前回覆狀態
+        let currentReply = replyingToMessage
+
         messageText = ""
         showAttachmentOptions = false
+        replyingToMessage = nil
 
         Task {
-            await messageSender?.sendTextMessage(trimmedText)
+            await messageSender?.sendTextMessage(trimmedText, replyTo: currentReply)
+        }
+    }
+
+    // MARK: - Reply Actions
+
+    /// 開始回覆消息
+    func startReply(to message: ChatMessage) {
+        let senderName = message.isFromMe ? "你" : userName
+        replyingToMessage = ReplyPreview(from: message, senderName: senderName)
+
+        #if DEBUG
+        print("[ChatViewModel] 開始回覆消息: \(message.id)")
+        #endif
+    }
+
+    /// 取消回覆
+    func cancelReply() {
+        replyingToMessage = nil
+
+        #if DEBUG
+        print("[ChatViewModel] 取消回覆")
+        #endif
+    }
+
+    // MARK: - Edit Actions
+
+    /// 開始編輯消息
+    func startEdit(message: ChatMessage) {
+        // 只有自己的文字消息可以編輯
+        guard message.isFromMe, message.messageType == .text else { return }
+
+        editingMessage = message
+        messageText = message.text
+
+        #if DEBUG
+        print("[ChatViewModel] 開始編輯消息: \(message.id)")
+        #endif
+    }
+
+    /// 取消編輯
+    func cancelEdit() {
+        editingMessage = nil
+        messageText = ""
+
+        #if DEBUG
+        print("[ChatViewModel] 取消編輯")
+        #endif
+    }
+
+    /// 保存編輯
+    func saveEdit() async {
+        guard let editingMsg = editingMessage else { return }
+
+        let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else {
+            error = "消息內容不能為空"
+            return
+        }
+
+        // 驗證文字長度
+        switch FileValidation.validateMessageText(trimmedText) {
+        case .success:
+            break
+        case .failure(let validationError):
+            error = validationError.localizedDescription
+            return
+        }
+
+        // 如果內容沒有變化，直接返回
+        guard trimmedText != editingMsg.text else {
+            cancelEdit()
+            return
+        }
+
+        isSavingEdit = true
+
+        do {
+            let updatedMessage = try await ChatService.shared.editMessage(
+                conversationId: conversationId,
+                messageId: editingMsg.id,
+                newContent: trimmedText
+            )
+
+            // 更新本地消息列表
+            if let index = messages.firstIndex(where: { $0.id == editingMsg.id }) {
+                var chatMessage = ChatMessage(from: updatedMessage, currentUserId: currentUserId)
+                chatMessage.isEdited = true
+                messages[index] = chatMessage
+            }
+
+            #if DEBUG
+            print("[ChatViewModel] ✅ 消息編輯成功: \(editingMsg.id)")
+            #endif
+
+            cancelEdit()
+        } catch {
+            self.error = "編輯失敗：\(error.localizedDescription)"
+            #if DEBUG
+            print("[ChatViewModel] ❌ 編輯消息失敗: \(error)")
+            #endif
+        }
+
+        isSavingEdit = false
+    }
+
+    // MARK: - Reaction Actions
+
+    private let reactionsService = ChatReactionsService()
+
+    /// Toggle reaction on a message
+    func toggleReaction(on message: ChatMessage, emoji: String) {
+        Task {
+            do {
+                try await reactionsService.toggleReaction(
+                    conversationId: conversationId,
+                    messageId: message.id,
+                    emoji: emoji
+                )
+
+                // Refresh reactions for this message
+                await refreshReactions(for: message.id)
+
+                #if DEBUG
+                print("[ChatViewModel] ✅ Toggled reaction \(emoji) on message \(message.id)")
+                #endif
+            } catch {
+                self.error = "無法添加反應"
+                #if DEBUG
+                print("[ChatViewModel] ❌ Failed to toggle reaction: \(error)")
+                #endif
+            }
+        }
+    }
+
+    /// Refresh reactions for a specific message
+    private func refreshReactions(for messageId: String) async {
+        do {
+            let response = try await reactionsService.getReactions(
+                conversationId: conversationId,
+                messageId: messageId
+            )
+
+            // Update local message with new reactions
+            if let index = messages.firstIndex(where: { $0.id == messageId }) {
+                messages[index].reactions = ReactionSummary.from(reactions: response.reactions)
+            }
+        } catch {
+            #if DEBUG
+            print("[ChatViewModel] Failed to refresh reactions: \(error)")
+            #endif
         }
     }
 
@@ -444,6 +659,39 @@ final class ChatViewModel {
                 print("[ChatViewModel] Failed to delete message: \(error)")
                 #endif
                 self.error = "無法刪除消息"
+            }
+        }
+    }
+
+    /// 撤回消息（2分鐘內可撤回）
+    /// 撤回後消息不會被刪除，而是顯示為「已撤回」
+    func recallMessage(_ message: ChatMessage) {
+        guard message.canRecall else {
+            self.error = "已超過撤回時限（2分鐘）"
+            return
+        }
+
+        Task {
+            do {
+                // 調用後端撤回 API
+                try await ChatService.shared.recallMessage(
+                    conversationId: conversationId,
+                    messageId: message.id
+                )
+
+                // 更新本地消息狀態為已撤回
+                if let index = messages.firstIndex(where: { $0.id == message.id }) {
+                    messages[index].isRecalled = true
+                }
+
+                #if DEBUG
+                print("[ChatViewModel] ✅ Message recalled: \(message.id)")
+                #endif
+            } catch {
+                #if DEBUG
+                print("[ChatViewModel] ❌ Failed to recall message: \(error)")
+                #endif
+                self.error = "撤回失敗，請稍後再試"
             }
         }
     }
@@ -710,6 +958,18 @@ final class ChatViewModel {
     // MARK: - File Handling
 
     func handleDocumentPicked(data: Data, filename: String, mimeType: String) {
+        // 驗證文件大小和類型
+        switch FileValidation.validate(data: data, mimeType: mimeType) {
+        case .success:
+            break
+        case .failure(let validationError):
+            error = validationError.localizedDescription
+            #if DEBUG
+            print("[ChatViewModel] ❌ File validation failed: \(validationError.localizedDescription)")
+            #endif
+            return
+        }
+
         Task {
             isUploadingFile = true
             isSending = true
@@ -720,7 +980,7 @@ final class ChatViewModel {
                 try data.write(to: tempFileURL)
 
                 #if DEBUG
-                print("[ChatViewModel] 📎 Sending file: \(filename) (\(data.count) bytes)")
+                print("[ChatViewModel] 📎 Sending file: \(filename) (\(FileValidation.formatBytes(Int64(data.count))))")
                 #endif
 
                 let eventId = try await MatrixBridgeService.shared.sendMessage(

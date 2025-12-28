@@ -10,6 +10,12 @@ struct MessageBubbleView: View {
     var myAvatarUrl: String? = nil  // 當前用戶頭像URL
     var onLongPress: ((ChatMessage) -> Void)? = nil  // 長按回調
     var onRetry: ((ChatMessage) -> Void)? = nil  // 重試回調（發送失敗時）
+    var onReply: ((ChatMessage) -> Void)? = nil  // 回覆回調
+    var onTapReply: ((String) -> Void)? = nil  // 點擊回覆預覽時跳轉到原消息
+    var onEdit: ((ChatMessage) -> Void)? = nil  // 編輯回調（僅限自己的文字消息）
+    var onReaction: ((ChatMessage, String) -> Void)? = nil  // Emoji 反應回調
+    var onRecall: ((ChatMessage) -> Void)? = nil  // 撤回回調（2分鐘內可撤回）
+    var currentUserId: String = ""  // 當前用戶 ID（用於反應顯示）
 
     private let myBubbleColor = Color(red: 0.91, green: 0.20, blue: 0.34)
     private let otherBubbleColor = Color(red: 0.92, green: 0.92, blue: 0.92)
@@ -36,8 +42,23 @@ struct MessageBubbleView: View {
             VStack(alignment: .trailing, spacing: 4) {
                 messageContent
                     .contextMenu { contextMenuItems }
+                // 反應顯示
+                if !message.reactions.isEmpty {
+                    MessageReactionsView(
+                        reactions: message.reactions,
+                        currentUserId: currentUserId,
+                        onTap: { emoji in
+                            onReaction?(message, emoji)
+                        }
+                    )
+                }
                 // 時間和狀態
                 HStack(spacing: 4) {
+                    if message.isEdited {
+                        Text("已編輯")
+                            .font(.system(size: 10))
+                            .foregroundColor(DesignTokens.textMuted)
+                    }
                     Text(formattedTime)
                         .font(.system(size: 11))
                         .foregroundColor(DesignTokens.textMuted)
@@ -54,10 +75,27 @@ struct MessageBubbleView: View {
             VStack(alignment: .leading, spacing: 4) {
                 otherMessageContent
                     .contextMenu { contextMenuItems }
+                // 反應顯示
+                if !message.reactions.isEmpty {
+                    MessageReactionsView(
+                        reactions: message.reactions,
+                        currentUserId: currentUserId,
+                        onTap: { emoji in
+                            onReaction?(message, emoji)
+                        }
+                    )
+                }
                 // 時間
-                Text(formattedTime)
-                    .font(.system(size: 11))
-                    .foregroundColor(DesignTokens.textMuted)
+                HStack(spacing: 4) {
+                    Text(formattedTime)
+                        .font(.system(size: 11))
+                        .foregroundColor(DesignTokens.textMuted)
+                    if message.isEdited {
+                        Text("已編輯")
+                            .font(.system(size: 10))
+                            .foregroundColor(DesignTokens.textMuted)
+                    }
+                }
             }
             Spacer()
         }.padding(.horizontal, 16)
@@ -68,21 +106,41 @@ struct MessageBubbleView: View {
     private var statusIcon: some View {
         switch message.status {
         case .sending:
-            ProgressView()
-                .scaleEffect(0.6)
-                .frame(width: 14, height: 14)
+            HStack(spacing: 2) {
+                ProgressView()
+                    .scaleEffect(0.6)
+                    .frame(width: 12, height: 12)
+                Text("傳送中")
+                    .font(.system(size: 9))
+                    .foregroundColor(DesignTokens.textMuted)
+            }
         case .sent:
-            Image(systemName: "checkmark")
-                .font(.system(size: 10))
-                .foregroundColor(DesignTokens.textMuted)
+            HStack(spacing: 2) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 9))
+                    .foregroundColor(DesignTokens.textMuted)
+                Text("已傳送")
+                    .font(.system(size: 9))
+                    .foregroundColor(DesignTokens.textMuted)
+            }
         case .delivered:
-            Image(systemName: "checkmark.circle")
-                .font(.system(size: 10))
-                .foregroundColor(DesignTokens.textMuted)
+            HStack(spacing: 2) {
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: 9))
+                    .foregroundColor(DesignTokens.textMuted)
+                Text("已送達")
+                    .font(.system(size: 9))
+                    .foregroundColor(DesignTokens.textMuted)
+            }
         case .read:
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 10))
-                .foregroundColor(.blue)
+            HStack(spacing: 2) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 9))
+                    .foregroundColor(.blue)
+                Text("已讀")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(.blue)
+            }
         case .failed:
             Button {
                 onRetry?(message)
@@ -91,7 +149,7 @@ struct MessageBubbleView: View {
                     Image(systemName: "exclamationmark.circle.fill")
                         .font(.system(size: 12))
                         .foregroundColor(.red)
-                    Text("Retry")
+                    Text("重試")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(.red)
                 }
@@ -103,6 +161,27 @@ struct MessageBubbleView: View {
     // MARK: - 長按菜單
     @ViewBuilder
     private var contextMenuItems: some View {
+        // 快速反應
+        Menu {
+            ForEach(["👍", "❤️", "😂", "😮", "😢", "🎉"], id: \.self) { emoji in
+                Button {
+                    onReaction?(message, emoji)
+                } label: {
+                    Text(emoji)
+                }
+            }
+        } label: {
+            Label("反應", systemImage: "face.smiling")
+        }
+
+        // 回覆
+        Button {
+            onReply?(message)
+        } label: {
+            Label("回覆", systemImage: "arrowshape.turn.up.left")
+        }
+
+        // 複製
         Button {
             UIPasteboard.general.string = message.text
         } label: {
@@ -110,10 +189,60 @@ struct MessageBubbleView: View {
         }
 
         if message.isFromMe {
+            // 編輯（僅限文字消息）
+            if message.messageType == .text && !message.isRecalled {
+                Button {
+                    onEdit?(message)
+                } label: {
+                    Label("編輯", systemImage: "pencil")
+                }
+            }
+
+            // 撤回（2分鐘內可撤回）
+            if message.canRecall {
+                Button {
+                    onRecall?(message)
+                } label: {
+                    Label("撤回", systemImage: "arrow.uturn.backward")
+                }
+            }
+
             Button(role: .destructive) {
                 onLongPress?(message)
             } label: {
                 Label("刪除", systemImage: "trash")
+            }
+        }
+    }
+
+    // MARK: - 回覆預覽（氣泡內）
+    @ViewBuilder
+    private func replyPreviewInBubble(isFromMe: Bool) -> some View {
+        if let reply = message.replyToMessage {
+            HStack(spacing: 6) {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(isFromMe ? Color.white.opacity(0.6) : DesignTokens.accentColor.opacity(0.8))
+                    .frame(width: 2)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(reply.senderName)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(isFromMe ? Color.white.opacity(0.9) : DesignTokens.accentColor)
+                        .lineLimit(1)
+
+                    Text(reply.content)
+                        .font(.system(size: 11))
+                        .foregroundColor(isFromMe ? Color.white.opacity(0.7) : DesignTokens.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(isFromMe ? Color.white.opacity(0.15) : Color.black.opacity(0.05))
+            .cornerRadius(6)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onTapReply?(reply.messageId)
             }
         }
     }
@@ -125,47 +254,49 @@ struct MessageBubbleView: View {
         let textColor = isFromMe ? Color.white : otherTextColor
         let alignment: Alignment = isFromMe ? .trailing : .leading
 
+        // 0. 已撤回消息
+        if message.isRecalled {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.uturn.backward.circle")
+                    .font(.system(size: 14))
+                    .foregroundColor(DesignTokens.textMuted)
+                Text(isFromMe ? "你撤回了一條消息" : "對方撤回了一條消息")
+                    .font(.system(size: 14))
+                    .foregroundColor(DesignTokens.textMuted)
+                    .italic()
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .background(Color.gray.opacity(0.1))
+            .cornerRadius(12)
+        }
         // 1. 本地圖片
-        if let image = message.image {
+        else if let image = message.image {
             Image(uiImage: image)
                 .resizable()
                 .scaledToFit()
                 .frame(maxWidth: 200, maxHeight: 200)
                 .cornerRadius(14)
         }
-        // 2. 遠程圖片 URL
+        // 2. 遠程圖片 URL - 使用 CachedAsyncImage 優化緩存
         else if message.messageType == .image, let urlString = message.mediaUrl, let url = URL(string: urlString) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(Color.gray.opacity(0.2))
-                            .frame(width: 150, height: 150)
-                        ProgressView()
-                    }
-                case .success(let loadedImage):
-                    loadedImage
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: 200, maxHeight: 200)
-                        .cornerRadius(14)
-                case .failure:
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(Color.gray.opacity(0.2))
-                            .frame(width: 150, height: 100)
-                        VStack(spacing: 4) {
-                            Image(systemName: "photo")
-                                .font(.system(size: 24))
-                                .foregroundColor(.gray)
-                            Text("載入失敗")
-                                .font(.system(size: 12))
-                                .foregroundColor(.gray)
-                        }
-                    }
-                @unknown default:
-                    EmptyView()
+            CachedAsyncImage(
+                url: url,
+                targetSize: CGSize(width: 400, height: 400),  // 聊天氣泡適當大小
+                enableProgressiveLoading: true,
+                priority: .normal
+            ) { image in
+                image
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 200, maxHeight: 200)
+                    .cornerRadius(14)
+            } placeholder: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 150, height: 150)
+                    ProgressView()
                 }
             }
         }
@@ -201,16 +332,22 @@ struct MessageBubbleView: View {
         }
         // 7. 文字消息
         else {
-            Text(message.text)
-                .font(Font.custom("Helvetica Neue", size: 16))
-                .lineSpacing(4)
-                .foregroundColor(textColor)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
-                .background(bubbleColor)
-                .cornerRadius(14)
-                .frame(maxWidth: 260, alignment: alignment)
+            VStack(alignment: .leading, spacing: 6) {
+                // 回覆預覽
+                replyPreviewInBubble(isFromMe: isFromMe)
+
+                // 消息內容
+                Text(message.text)
+                    .font(Font.custom("Helvetica Neue", size: 16))
+                    .lineSpacing(4)
+                    .foregroundColor(textColor)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
+            .background(bubbleColor)
+            .cornerRadius(14)
+            .frame(maxWidth: 260, alignment: alignment)
         }
     }
 

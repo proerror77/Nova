@@ -45,9 +45,10 @@ final class ChatMessageSender {
     /// 發送文字訊息 - 使用 Matrix E2EE（端到端加密）
     /// - Parameters:
     ///   - text: The message text to send
+    ///   - replyTo: Optional reply preview for quoted message
     /// - Returns: Whether sending was initiated successfully
     @discardableResult
-    func sendTextMessage(_ text: String) async -> Bool {
+    func sendTextMessage(_ text: String, replyTo: ReplyPreview? = nil) async -> Bool {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return false }
 
@@ -55,7 +56,7 @@ final class ChatMessageSender {
         chatService.sendTypingStop(conversationId: conversationId)
 
         // Add to UI immediately (optimistic update)
-        let localMessage = ChatMessage(localText: trimmedText, isFromMe: true)
+        let localMessage = ChatMessage(localText: trimmedText, isFromMe: true, replyTo: replyTo)
         onMessageAdded?(localMessage)
 
         // Send to server asynchronously
@@ -67,11 +68,13 @@ final class ChatMessageSender {
             let sentMessage = try await chatService.sendSecureMessage(
                 conversationId: conversationId,
                 content: trimmedText,
-                type: .text
+                type: .text,
+                replyToId: replyTo?.messageId
             )
 
             // Replace local message with server response
-            let confirmedMessage = ChatMessage(from: sentMessage, currentUserId: currentUserId())
+            var confirmedMessage = ChatMessage(from: sentMessage, currentUserId: currentUserId())
+            confirmedMessage.replyToMessage = replyTo  // 保留回覆預覽
             onMessageUpdated?(localMessage.id, confirmedMessage)
 
             #if DEBUG
@@ -93,12 +96,16 @@ final class ChatMessageSender {
 
     /// 發送圖片訊息 - 使用 Matrix SDK
     func sendImageMessage(_ image: UIImage) async {
-        // 壓縮圖片
-        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+        // 使用 FileValidation 驗證並壓縮圖片
+        let imageData: Data
+        switch FileValidation.validateImage(image, compressionQuality: 0.8) {
+        case .success(let data):
+            imageData = data
+        case .failure(let validationError):
             #if DEBUG
-            print("[ChatMessageSender] ❌ Failed to compress image")
+            print("[ChatMessageSender] ❌ Image validation failed: \(validationError.localizedDescription)")
             #endif
-            onError?("Failed to compress image")
+            onError?(validationError.localizedDescription)
             return
         }
 
