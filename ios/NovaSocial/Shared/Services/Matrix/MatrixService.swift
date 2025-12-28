@@ -1121,13 +1121,17 @@ final class MatrixService: MatrixServiceProtocol {
         }
 
         // Create new session with refreshed token
+        // Use detected sliding sync version from client
+        let syncVersion = matrixClient.slidingSyncVersion()
+
         let session = Session(
             accessToken: accessToken,
             refreshToken: nil,
             userId: stored.userId,
             deviceId: deviceId,
-            homeserverUrl: homeserverURL,
-            slidingSyncVersion: slidingSyncVersion
+            homeserverUrl: stored.homeserverUrl ?? self.homeserverURL ?? "",
+            oidcData: nil,
+            slidingSyncVersion: syncVersion
         )
 
         // Restore the session with the client
