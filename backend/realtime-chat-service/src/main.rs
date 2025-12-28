@@ -346,6 +346,59 @@ async fn main() -> Result<(), error::AppError> {
         });
 
         tracing::info!("✅ Matrix sync loop started in background");
+
+        // Initialize Matrix rooms for existing E2EE conversations that don't have rooms yet
+        let matrix_for_init = matrix.clone();
+        let db_for_init = db.clone();
+        tokio::spawn(async move {
+            // Wait a bit for sync to stabilize
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+            match realtime_chat_service::services::matrix_db::get_e2ee_conversations_without_rooms(&db_for_init).await {
+                Ok(conversations) => {
+                    if conversations.is_empty() {
+                        tracing::info!("All E2EE conversations already have Matrix rooms");
+                    } else {
+                        tracing::info!("Found {} E2EE conversations without Matrix rooms, creating...", conversations.len());
+                        for (conversation_id, participants) in conversations {
+                            match matrix_for_init.get_or_create_room(conversation_id, &participants).await {
+                                Ok(room_id) => {
+                                    // Save room mapping
+                                    if let Err(e) = realtime_chat_service::services::matrix_db::save_room_mapping(
+                                        &db_for_init,
+                                        conversation_id,
+                                        &room_id,
+                                    ).await {
+                                        tracing::warn!(
+                                            error = %e,
+                                            conversation_id = %conversation_id,
+                                            "Failed to save room mapping"
+                                        );
+                                    } else {
+                                        tracing::info!(
+                                            "✅ Created Matrix room {} for conversation {}",
+                                            room_id,
+                                            conversation_id
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::error!(
+                                        error = %e,
+                                        conversation_id = %conversation_id,
+                                        "Failed to create Matrix room for conversation"
+                                    );
+                                }
+                            }
+                        }
+                        tracing::info!("✅ Matrix room initialization completed");
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "Failed to get E2EE conversations without rooms");
+                }
+            }
+        });
     }
 
     // Initialize Kafka consumer for identity events (if Kafka is enabled)

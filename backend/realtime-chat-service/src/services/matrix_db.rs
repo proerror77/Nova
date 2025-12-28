@@ -143,6 +143,39 @@ pub async fn get_conversation_participants(
     Ok(participant_ids)
 }
 
+/// Get E2EE conversations that don't have Matrix rooms yet
+/// This is used during startup to ensure all strict_e2e conversations have Matrix rooms
+pub async fn get_e2ee_conversations_without_rooms(
+    db: &Pool,
+) -> Result<Vec<(Uuid, Vec<Uuid>)>, AppError> {
+    let client = db.get().await.map_err(|e| AppError::StartServer(format!("get e2ee conversations pool: {e}")))?;
+
+    // Find conversations with strict_e2e privacy that don't have Matrix room mappings
+    let rows = client.query(
+        r#"
+        SELECT c.id, ARRAY_AGG(cm.user_id) as participants
+        FROM conversations c
+        JOIN conversation_members cm ON c.id = cm.conversation_id
+        LEFT JOIN matrix_room_mapping mrm ON c.id = mrm.conversation_id
+        WHERE c.privacy_mode = 'strict_e2e'
+          AND mrm.conversation_id IS NULL
+        GROUP BY c.id
+        "#,
+        &[],
+    )
+    .await
+    .map_err(|e| AppError::StartServer(format!("get e2ee conversations: {e}")))?;
+
+    let mut results = Vec::new();
+    for row in rows {
+        let conversation_id: Uuid = row.get(0);
+        let participants: Vec<Uuid> = row.get(1);
+        results.push((conversation_id, participants));
+    }
+
+    Ok(results)
+}
+
 /// Load all room mappings into memory (for startup cache warming)
 pub async fn load_all_room_mappings(
     db: &Pool,
