@@ -77,6 +77,11 @@ spec:
             secretKeyRef:
               name: nova-db-credentials
               key: auth-db-url
+        - name: INTERNAL_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: identity-service-secret
+              key: INTERNAL_API_KEY
         # JWT configuration for local/dev and non-AWS environments:
         # use RSA keys from the Kubernetes Secret so that
         # crypto-core::jwt can initialize RS256 keys correctly.

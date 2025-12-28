@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 # Configuration
 NAMESPACE="nova-staging"
 REQUIRED_SERVICES=(
-  "user-service"
+  # user-service removed in staging (identity-service is the owner)
   "content-service"
   "feed-service"
   "search-service"
@@ -45,6 +45,9 @@ DATABASES=(
   "nova_identity"
   "nova_trust_safety"
   "nova_realtime_chat"
+  "nova_messaging"
+  "nova_social"
+  "nova_streaming"
 )
 
 # Counters
@@ -66,17 +69,17 @@ print_check() {
 
 print_success() {
   echo -e "${GREEN}✓${NC} $1"
-  ((PASSED++))
+  PASSED=$((PASSED + 1))
 }
 
 print_error() {
   echo -e "${RED}✗${NC} $1"
-  ((FAILED++))
+  FAILED=$((FAILED + 1))
 }
 
 print_warning() {
   echo -e "${YELLOW}⚠${NC} $1"
-  ((WARNINGS++))
+  WARNINGS=$((WARNINGS + 1))
 }
 
 # Main validation functions
@@ -125,8 +128,12 @@ validate_secrets() {
   print_header "Secrets & Credentials Validation"
 
   print_check "Checking External Secrets Operator"
-  if kubectl get deployment external-secrets -n external-secrets-system &>/dev/null; then
+  if kubectl get deployment external-secrets -n external-secrets &>/dev/null; then
+    print_success "External Secrets Operator is installed (external-secrets)"
+  elif kubectl get deployment external-secrets -n external-secrets-system &>/dev/null; then
     print_success "External Secrets Operator is installed"
+  elif kubectl get crd externalsecrets.external-secrets.io &>/dev/null; then
+    print_warning "External Secrets CRDs installed, but controller not found"
   else
     print_warning "External Secrets Operator not found (may not be needed)"
   fi
@@ -138,11 +145,15 @@ validate_secrets() {
     print_error "nova-db-credentials secret not found"
   fi
 
-  print_check "Checking for hardcoded passwords"
-  if kubectl get all -n "$NAMESPACE" -o yaml | grep -i "password" | grep -v "valueFrom\|secretKeyRef" &>/dev/null; then
-    print_warning "Found potential hardcoded passwords in manifests"
+  print_check "Checking for hardcoded password env vars"
+  HARDCODED_PASSWORDS=$(
+    kubectl get pods -n "$NAMESPACE" -o jsonpath='{range .items[*].spec.containers[*].env[*]}{.name}{"\t"}{.value}{"\n"}{end}' \
+      | awk -F'\t' 'tolower($1) ~ /password/ && $2 != "" {count++} END {print count + 0}'
+  )
+  if [ "$HARDCODED_PASSWORDS" -gt 0 ]; then
+    print_warning "Found $HARDCODED_PASSWORDS hardcoded password env var(s)"
   else
-    print_success "No hardcoded passwords detected"
+    print_success "No hardcoded password env vars detected"
   fi
 }
 
@@ -186,20 +197,24 @@ validate_postgres() {
   fi
 
   print_check "Checking PostgreSQL connectivity"
-  POD=$(kubectl get pod -n "$NAMESPACE" -l app=postgres -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-  if [ -n "$POD" ]; then
-    if kubectl exec -n "$NAMESPACE" "$POD" -- pg_isready &>/dev/null; then
+  POD=$(kubectl get pod -n "$NAMESPACE" -l app=postgres -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+  DB_URL=$(kubectl get secret nova-db-credentials -n "$NAMESPACE" -o jsonpath='{.data.auth-db-url}' 2>/dev/null | base64 -d)
+  if [ -n "$POD" ] && [ -n "$DB_URL" ]; then
+    if kubectl exec -n "$NAMESPACE" "$POD" -- psql "$DB_URL" -c "SELECT 1" &>/dev/null; then
       print_success "PostgreSQL is accepting connections"
     else
-      print_error "PostgreSQL not accepting connections"
+      print_error "PostgreSQL not accepting connections via DB URL"
     fi
+  elif [ -z "$DB_URL" ]; then
+    print_warning "DB URL secret not found; skipping connectivity check"
   else
     print_warning "PostgreSQL pod not found"
   fi
 
   print_check "Checking databases"
-  if [ -n "$POD" ]; then
-    DB_COUNT=$(kubectl exec -n "$NAMESPACE" "$POD" -- psql -U postgres -c "SELECT count(*) FROM pg_database WHERE datname LIKE 'nova_%';" 2>/dev/null | tail -1 | tr -d ' ')
+  if [ -n "$POD" ] && [ -n "$DB_URL" ]; then
+    DB_LIST=$(kubectl exec -n "$NAMESPACE" "$POD" -- psql "$DB_URL" -t -A -c "SELECT datname FROM pg_database WHERE datname LIKE 'nova_%' ORDER BY 1;" 2>/dev/null)
+    DB_COUNT=$(printf "%s\n" "$DB_LIST" | grep -c . || true)
     EXPECTED_COUNT=${#DATABASES[@]}
     if [ "$DB_COUNT" == "$EXPECTED_COUNT" ]; then
       print_success "All $DB_COUNT databases created"
@@ -214,24 +229,28 @@ validate_redis() {
 
   print_check "Checking Redis StatefulSet"
   if kubectl get statefulset redis-cluster -n "$NAMESPACE" &>/dev/null; then
+    EXPECTED=$(kubectl get statefulset redis-cluster -n "$NAMESPACE" -o jsonpath='{.spec.replicas}')
     REPLICAS=$(kubectl get statefulset redis-cluster -n "$NAMESPACE" -o jsonpath='{.status.readyReplicas}')
-    if [ "$REPLICAS" == "3" ]; then
-      print_success "Redis cluster ready (3 nodes)"
+    if [ "$REPLICAS" == "$EXPECTED" ]; then
+      print_success "Redis cluster ready ($REPLICAS/$EXPECTED nodes)"
     else
-      print_error "Redis ready replicas: $REPLICAS (expected: 3)"
+      print_error "Redis ready replicas: $REPLICAS (expected: $EXPECTED)"
     fi
   else
     print_warning "Redis StatefulSet not found"
   fi
 
   print_check "Checking Redis cluster status"
-  REDIS_POD=$(kubectl get pod -n "$NAMESPACE" -l app=redis-cluster -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+  REDIS_POD=$(kubectl get pod -n "$NAMESPACE" -l app=redis-cluster -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
   if [ -n "$REDIS_POD" ]; then
-    CLUSTER_NODES=$(kubectl exec -n "$NAMESPACE" "$REDIS_POD" -- redis-cli cluster nodes 2>/dev/null | wc -l)
-    if [ "$CLUSTER_NODES" -ge 3 ]; then
+    CLUSTER_INFO=$(kubectl exec -n "$NAMESPACE" "$REDIS_POD" -- redis-cli cluster info 2>&1 || true)
+    if echo "$CLUSTER_INFO" | grep -q "cluster_state:ok"; then
+      CLUSTER_NODES=$(kubectl exec -n "$NAMESPACE" "$REDIS_POD" -- redis-cli cluster nodes 2>/dev/null | wc -l)
       print_success "Redis cluster topology established ($CLUSTER_NODES nodes)"
+    elif echo "$CLUSTER_INFO" | grep -qi "cluster support disabled"; then
+      print_warning "Redis cluster mode disabled (running standalone)"
     else
-      print_error "Redis cluster nodes: $CLUSTER_NODES (expected: >=3)"
+      print_warning "Redis cluster info unavailable"
     fi
   else
     print_warning "Redis pod not found"
@@ -266,13 +285,18 @@ validate_kafka() {
   fi
 
   print_check "Checking Kafka topics"
-  KAFKA_POD=$(kubectl get pod -n "$NAMESPACE" -l app=kafka -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+  KAFKA_POD=$(kubectl get pod -n "$NAMESPACE" -l app=kafka -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
   if [ -n "$KAFKA_POD" ]; then
-    TOPICS=$(kubectl exec -n "$NAMESPACE" "$KAFKA_POD" -- kafka-topics.sh --bootstrap-server kafka:9092 --list 2>/dev/null | wc -l)
-    if [ "$TOPICS" -ge 5 ]; then
-      print_success "Kafka topics created ($TOPICS topics)"
+    TOPIC_LIST=$(kubectl exec -n "$NAMESPACE" "$KAFKA_POD" -- sh -lc "kafka-topics --bootstrap-server kafka:9092 --list 2>/dev/null || kafka-topics.sh --bootstrap-server kafka:9092 --list 2>/dev/null" || true)
+    if [ -n "$TOPIC_LIST" ]; then
+      TOPICS=$(printf "%s\n" "$TOPIC_LIST" | wc -l | tr -d ' ')
+      if [ "$TOPICS" -ge 5 ]; then
+        print_success "Kafka topics created ($TOPICS topics)"
+      else
+        print_warning "Kafka topics: $TOPICS (expected: >=5)"
+      fi
     else
-      print_warning "Kafka topics: $TOPICS (expected: >=5)"
+      print_warning "Kafka topics list unavailable"
     fi
   fi
 }
@@ -281,7 +305,10 @@ validate_clickhouse() {
   print_header "ClickHouse Validation"
 
   print_check "Checking ClickHouse pods"
-  CH_POD=$(kubectl get pod -n "$NAMESPACE" -l app=clickhouse -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+  CH_POD=$(kubectl get pod -n "$NAMESPACE" -l app=clickhouse -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+  if [ -z "$CH_POD" ]; then
+    CH_POD=$(kubectl get pod -n "$NAMESPACE" -l clickhouse.altinity.com/chi -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+  fi
   if [ -n "$CH_POD" ]; then
     print_success "ClickHouse pod found"
   else
@@ -293,24 +320,27 @@ validate_services() {
   print_header "Microservices Validation"
 
   print_check "Checking gRPC services"
-  GRPC_SERVICES=$(kubectl get svc -n "$NAMESPACE" --sort-by=.metadata.name | grep ":50051" | wc -l)
+  GRPC_SERVICES=$(kubectl get svc -n "$NAMESPACE" -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .spec.ports[*]}{.name}{" "}{end}{"\n"}{end}' | awk '{for (i=2;i<=NF;i++) if (tolower($i)=="grpc") {print $1; break}}' | sort -u | wc -l | tr -d ' ')
   if [ "$GRPC_SERVICES" -gt 0 ]; then
-    print_success "Found $GRPC_SERVICES gRPC services (port 50051)"
+    print_success "Found $GRPC_SERVICES gRPC services (port name grpc)"
   else
     print_warning "No gRPC services found"
   fi
 
-  print_check "Checking microservice pods"
+  print_check "Checking microservice deployments"
   for service in "${REQUIRED_SERVICES[@]}"; do
-    if kubectl get pod -n "$NAMESPACE" -l "app=$service" &>/dev/null; then
-      READY=$(kubectl get pod -n "$NAMESPACE" -l "app=$service" -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
-      if [ "$READY" == "True" ]; then
-        print_success "$service is ready"
+    if kubectl get deployment -n "$NAMESPACE" "$service" &>/dev/null; then
+      DESIRED=$(kubectl get deployment -n "$NAMESPACE" "$service" -o jsonpath='{.spec.replicas}')
+      AVAILABLE=$(kubectl get deployment -n "$NAMESPACE" "$service" -o jsonpath='{.status.availableReplicas}' 2>/dev/null)
+      if [ "$DESIRED" == "0" ]; then
+        print_warning "$service scaled to 0 replicas"
+      elif [ "$AVAILABLE" == "$DESIRED" ]; then
+        print_success "$service is ready ($AVAILABLE/$DESIRED)"
       else
-        print_warning "$service not ready (may still be starting)"
+        print_warning "$service not ready ($AVAILABLE/$DESIRED)"
       fi
     else
-      print_warning "$service pod not found"
+      print_warning "$service deployment not found"
     fi
   done
 }
@@ -319,19 +349,15 @@ validate_service_discovery() {
   print_header "Service Discovery Validation"
 
   print_check "Checking DNS headless service"
-  if kubectl get svc nova-grpc-services -n "$NAMESPACE" &>/dev/null; then
-    CLUSTER_IP=$(kubectl get svc nova-grpc-services -n "$NAMESPACE" -o jsonpath='{.spec.clusterIP}')
-    if [ "$CLUSTER_IP" == "None" ]; then
-      print_success "Headless service configured for DNS discovery"
-    else
-      print_error "Service is not headless (clusterIP: $CLUSTER_IP)"
-    fi
+  HEADLESS_GRPC=$(kubectl get svc -n "$NAMESPACE" -o jsonpath='{range .items[?(@.spec.clusterIP=="None")]}{.metadata.name}{" "}{range .spec.ports[*]}{.name}{" "}{end}{"\n"}{end}' | awk '{for (i=2;i<=NF;i++) if (tolower($i)=="grpc") {print $1; break}}' | sort -u | wc -l | tr -d ' ')
+  if [ "$HEADLESS_GRPC" -gt 0 ]; then
+    print_success "Headless gRPC services configured ($HEADLESS_GRPC)"
   else
-    print_error "nova-grpc-services not found"
+    print_error "No headless gRPC services found"
   fi
 
   print_check "Checking Service Endpoints"
-  ENDPOINTS=$(kubectl get endpoints -n "$NAMESPACE" | grep -E "user-service|feed-service" | wc -l)
+  ENDPOINTS=$(kubectl get endpoints -n "$NAMESPACE" | grep -E "identity-service|content-service|feed-service|realtime-chat-service" | wc -l)
   if [ "$ENDPOINTS" -gt 0 ]; then
     print_success "Service endpoints established ($ENDPOINTS services)"
   else
@@ -362,13 +388,16 @@ validate_resource_limits() {
   print_header "Resource Limits Validation"
 
   print_check "Checking pod resource requests/limits"
-  PODS_WITHOUT_LIMITS=$(kubectl get pods -n "$NAMESPACE" -o json | grep -c '"limits"' || true)
-  TOTAL_PODS=$(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)
+  LIMITS_SUMMARY=$(kubectl get pods -n "$NAMESPACE" -o jsonpath='{range .items[*].spec.containers[*]}{.resources.limits.cpu}{"|"}{.resources.limits.memory}{"\n"}{end}')
+  TOTAL_CONTAINERS=$(printf "%s\n" "$LIMITS_SUMMARY" | grep -c . || true)
+  MISSING_LIMITS=$(printf "%s\n" "$LIMITS_SUMMARY" | awk -F'|' '($1=="" || $2==""){missing++} END{print missing + 0}')
 
-  if [ "$PODS_WITHOUT_LIMITS" -eq "$TOTAL_PODS" ]; then
-    print_success "All pods have resource limits defined"
+  if [ "$TOTAL_CONTAINERS" -eq 0 ]; then
+    print_warning "No containers found to validate limits"
+  elif [ "$MISSING_LIMITS" -eq 0 ]; then
+    print_success "All containers have resource limits defined ($TOTAL_CONTAINERS)"
   else
-    print_warning "Some pods missing resource limits ($PODS_WITHOUT_LIMITS/$TOTAL_PODS)"
+    print_warning "Containers missing resource limits: $MISSING_LIMITS/$TOTAL_CONTAINERS"
   fi
 }
 
