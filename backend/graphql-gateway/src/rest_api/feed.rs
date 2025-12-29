@@ -87,6 +87,9 @@ async fn enrich_posts_with_authors(
                 bookmark_count: post.bookmark_count,
                 media_urls: post.media_urls,
                 media_type: post.media_type,
+                // User-specific engagement status (from feed-service gRPC)
+                is_liked: post.is_liked,
+                is_bookmarked: post.is_bookmarked,
                 // Author information
                 author_username: profile.map(|p| p.username.clone()),
                 author_display_name,
