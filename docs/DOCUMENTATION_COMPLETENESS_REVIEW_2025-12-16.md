@@ -373,9 +373,9 @@ message PostCreated {
 **Kafka Topics Documented**:
 | Topic | Partitions | Producers | Consumers |
 |-------|------------|-----------|-----------|
-| content-events | 6 | content-service | feed, search, analytics |
-| user-events | 3 | identity-service | analytics, ranking |
-| messaging-events | 3 | messaging-service | realtime-chat, notification |
+| nova.content.events | 6 | content-service | feed, search, analytics |
+| nova.identity.events | 3 | identity-service | analytics, ranking |
+| nova.message.events | 3 | messaging-service | realtime-chat, notification |
 
 **Minor Gaps**:
 1. No event versioning strategy

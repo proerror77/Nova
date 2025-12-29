@@ -46,6 +46,10 @@ struct ProfileFollowingView: View {
     @State private var followingError: String? = nil
     @State private var followersError: String? = nil
 
+    // MARK: - Navigation State
+    @State private var showUserProfile = false
+    @State private var selectedUserId: String? = nil
+
     // MARK: - Services
     private let graphService = GraphService()
     private let userService = UserService.shared
@@ -114,6 +118,11 @@ struct ProfileFollowingView: View {
         .background(Color.white)
         .task {
             await loadInitialData()
+        }
+        .fullScreenCover(isPresented: $showUserProfile) {
+            if let userId = selectedUserId {
+                UserProfileView(showUserProfile: $showUserProfile, userId: userId)
+            }
         }
     }
 
@@ -442,8 +451,9 @@ struct ProfileFollowingView: View {
                     UserRowView(
                         user: user,
                         showFollowButton: false,
-                        onMessageTap: {
-                            // TODO: Navigate to chat
+                        onAvatarTap: {
+                            selectedUserId = user.id
+                            showUserProfile = true
                         },
                         onFollowTap: {
                             Task {
@@ -506,8 +516,9 @@ struct ProfileFollowingView: View {
                     UserRowView(
                         user: user,
                         showFollowButton: true,
-                        onMessageTap: {
-                            // TODO: Navigate to chat
+                        onAvatarTap: {
+                            selectedUserId = user.id
+                            showUserProfile = true
                         },
                         onFollowTap: {
                             Task {
@@ -527,41 +538,45 @@ struct ProfileFollowingView: View {
 struct UserRowView: View {
     let user: FollowUser
     var showFollowButton: Bool = false
-    let onMessageTap: () -> Void
+    var onAvatarTap: () -> Void = {}
     var onFollowTap: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 12) {
-            // Avatar - 使用 CachedAsyncImage 优化性能
-            if let avatarUrl = user.avatarUrl, let url = URL(string: avatarUrl) {
-                CachedAsyncImage(
-                    url: url,
-                    targetSize: CGSize(width: 100, height: 100),  // 2x for retina
-                    enableProgressiveLoading: false,
-                    priority: .normal
-                ) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
+            // Avatar - 使用 CachedAsyncImage 优化性能，點擊可跳轉到用戶 profile
+            Button(action: onAvatarTap) {
+                if let avatarUrl = user.avatarUrl, let url = URL(string: avatarUrl) {
+                    CachedAsyncImage(
+                        url: url,
+                        targetSize: CGSize(width: 100, height: 100),  // 2x for retina
+                        enableProgressiveLoading: false,
+                        priority: .normal
+                    ) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        defaultAvatar
+                    }
+                    .frame(width: 50, height: 50)
+                    .clipShape(Circle())
+                } else {
                     defaultAvatar
                 }
-                .frame(width: 50, height: 50)
-                .clipShape(Circle())
-            } else {
-                defaultAvatar
             }
 
-            // Name and Verified Badge
-            HStack(spacing: 6) {
-                Text(user.displayName)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.black)
+            // Name and Verified Badge - 點擊可跳轉到用戶 profile
+            Button(action: onAvatarTap) {
+                HStack(spacing: 6) {
+                    Text(user.displayName)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.black)
 
-                if user.isVerified {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 14))
-                        .foregroundColor(Color(red: 0.2, green: 0.6, blue: 1.0))
+                    if user.isVerified {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(Color(red: 0.2, green: 0.6, blue: 1.0))
+                    }
                 }
             }
 
@@ -580,12 +595,12 @@ struct UserRowView: View {
                         .cornerRadius(46)
                 }
             } else {
-                // Message Button
-                Button(action: onMessageTap) {
-                    Text("Message")
+                // Following Button (已關注狀態)
+                Button(action: onFollowTap) {
+                    Text("Following")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.black)
-                        .padding(.horizontal, 24)
+                        .padding(.horizontal, 16)
                         .padding(.vertical, 8)
                         .overlay(
                             RoundedRectangle(cornerRadius: 66)

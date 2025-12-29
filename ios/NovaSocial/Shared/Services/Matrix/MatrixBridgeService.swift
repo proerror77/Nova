@@ -310,23 +310,28 @@ final class MatrixBridgeService: @unchecked Sendable {
     /// Login to Matrix using legacy token endpoint
     /// Gets fresh credentials from Nova backend for each login attempt
     private func loginWithLegacyToken() async throws {
-        guard let currentUser = AuthenticationManager.shared.currentUser else {
+        // Get user ID from currentUser or fall back to stored keychain value
+        // (currentUser may be nil early in app lifecycle before profile is fetched)
+        let userId = AuthenticationManager.shared.currentUser?.id
+            ?? AuthenticationManager.shared.storedUserId
+
+        guard let novaUserId = userId else {
             #if DEBUG
-            print("[MatrixBridge] ❌ loginWithLegacyToken failed: No current user")
+            print("[MatrixBridge] ❌ loginWithLegacyToken failed: No user ID (neither currentUser nor storedUserId)")
             #endif
             throw MatrixBridgeError.notAuthenticated
         }
 
         #if DEBUG
         print("[MatrixBridge] 🔐 loginWithLegacyToken starting...")
-        print("[MatrixBridge]   Nova User ID: \(currentUser.id)")
+        print("[MatrixBridge]   Nova User ID: \(novaUserId)")
         print("[MatrixBridge]   Getting Matrix credentials from Nova backend...")
         #endif
 
         // Get Matrix credentials from Nova backend
         let credentials: MatrixCredentials
         do {
-            credentials = try await getMatrixCredentials(novaUserId: currentUser.id)
+            credentials = try await getMatrixCredentials(novaUserId: novaUserId)
         } catch {
             #if DEBUG
             print("[MatrixBridge] ❌ Failed to get Matrix credentials: \(error)")

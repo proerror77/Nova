@@ -5,6 +5,10 @@ metadata:
 data:
   LOG_LEVEL: "info"
   ENVIRONMENT: "staging"
+  # Kafka for social + identity sync
+  KAFKA_ENABLED: "true"
+  KAFKA_BROKERS: "kafka.nova-staging.svc.cluster.local:9092"
+  KAFKA_TOPIC_PREFIX: "nova"
   # gRPC server configuration
   SERVER_GRPC_PORT: "9080"
   # Neo4j connection (non-sensitive endpoint only)

@@ -178,15 +178,15 @@ sequenceDiagram
     ContentService->>Postgres: INSERT INTO posts
     Postgres-->>ContentService: post_id=123
 
-    ContentService->>Kafka: PUBLISH content-events
-    Note over Kafka: Topic: content-events<br/>Partition: hash(user_id)<br/>Event: PostCreated
+    ContentService->>Kafka: PUBLISH nova.content.events
+    Note over Kafka: Topic: nova.content.events<br/>Partition: hash(user_id)<br/>Event: PostCreated
 
     ContentService-->>GraphQL: { post_id: 123 }
     GraphQL-->>User: 200 OK (响应时间: 50ms)
 
     Note over User,Postgres: 用户已收到成功响应，以下为异步处理
 
-    Kafka->>FeedService: CONSUME content-events
+    Kafka->>FeedService: CONSUME nova.content.events
     FeedService->>Postgres: SELECT followers WHERE user_id=X
     Postgres-->>FeedService: [follower1, follower2, ...]
 
@@ -225,15 +225,15 @@ sequenceDiagram
     MediaService->>Postgres: INSERT INTO media (url, post_id)
     Postgres-->>MediaService: media_id=456
 
-    MediaService->>Kafka: PUBLISH media-events
-    Note over Kafka: Topic: media-events<br/>Event: MediaUploaded<br/>{ post_id, media_url }
+    MediaService->>Kafka: PUBLISH nova.media.events
+    Note over Kafka: Topic: nova.media.events<br/>Event: media.upload.completed<br/>{ upload_id, user_id, file_name, size_bytes }
 
     MediaService-->>GraphQL: { media_id: 456, url }
     GraphQL-->>User: 200 OK (响应时间: 200ms)
 
     Note over User,Postgres: 异步关联到 post
 
-    Kafka->>ContentService: CONSUME media-events
+    Kafka->>ContentService: CONSUME nova.media.events
     ContentService->>Postgres: UPDATE posts SET media_ids=array_append(media_ids, 456)
     Postgres-->>ContentService: OK
 
@@ -266,15 +266,15 @@ sequenceDiagram
     MessagingService->>Postgres: INSERT INTO messages
     Postgres-->>MessagingService: message_id=789
 
-    MessagingService->>Kafka: PUBLISH messaging-events
-    Note over Kafka: Topic: messaging-events<br/>Event: MessageSent<br/>Partition: hash(conversation_id)
+    MessagingService->>Kafka: PUBLISH nova.message.events
+    Note over Kafka: Topic: nova.message.events<br/>Event: MessageSent<br/>Partition: hash(conversation_id)
 
     MessagingService-->>GraphQL: { message_id: 789 }
     GraphQL-->>UserA: 200 OK (响应时间: 30ms)
 
     Note over UserA,Redis: UserA 已收到确认，以下为实时推送
 
-    Kafka->>RealtimeChatService: CONSUME messaging-events
+    Kafka->>RealtimeChatService: CONSUME nova.message.events
     RealtimeChatService->>Redis: CHECK websocket:UserB
     Redis-->>RealtimeChatService: connection_id=ws_123
 
@@ -318,7 +318,7 @@ Alice 体验: 立即看到"发布成功"
 
 Step 2: Feed 更新 (异步)
 ─────────────────────────────────────────────────────
-[Kafka] content-events topic 接收到 PostCreated event
+[Kafka] nova.content.events topic 接收到 PostCreated event
     ↓ 50ms (Kafka 内部延迟)
 [feed-service] 消费事件
     - 查询 Alice 的粉丝列表 (50ms)
@@ -366,7 +366,7 @@ Bob 体验: 立即看到爱心变红
 
 Step 5: Alice 收到通知 (异步)
 ─────────────────────────────────────────────────────
-[Kafka] social-events topic 接收到 PostLiked event
+[Kafka] nova.social.events topic 接收到 PostLiked event
     ↓ 50ms
 [notification-service] 消费事件
     - 写入 Postgres notifications 表 (30ms)
@@ -560,7 +560,7 @@ feed-service (单实例) 消费速度: 100 QPS
 replicas: 5  # 5 个实例并行消费
 
 # Kafka topic 配置
-content-events:
+nova.content.events:
   partitions: 6  # 6 个分区，支持 6 个并发消费者
   replication: 1
 ```
@@ -618,7 +618,7 @@ Kafka 消费顺序:
 1. **Partition Key 保证顺序:**
 ```rust
 // content-service/src/kafka/producer.rs
-let record = FutureRecord::to("content-events")
+let record = FutureRecord::to("nova.content.events")
     .key(&event.post_id)  // 同一 post_id 的事件进入同一分区
     .payload(&payload);
 

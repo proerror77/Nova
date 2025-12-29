@@ -346,7 +346,7 @@ spec:
               key: DB_PASSWORD
 
 ---
-# media-service 依赖：postgres only (通过 Kafka media-events 与 content-service 解耦)
+# media-service 依赖：postgres only (通过 Kafka nova.media.events 与 content-service 解耦)
 apiVersion: apps/v1
 kind: Deployment
 metadata:

@@ -36,4 +36,4 @@ data:
   KAFKA_ENABLED: "true"
   KAFKA_BROKERS: "kafka.nova-staging.svc.cluster.local:9092"
   KAFKA_CONSUMER_GROUP_ID: "realtime-chat-service"
-  KAFKA_IDENTITY_EVENTS_TOPIC: "identity-events"
+  KAFKA_IDENTITY_EVENTS_TOPIC: "nova.identity.events"

@@ -18,6 +18,8 @@ data:
 
     # Relay ports
     relay-ip=0.0.0.0
+    min-port=49152
+    max-port=65535
 
     # Credentials
     realm=${REALM}
@@ -40,7 +42,7 @@ metadata:
 type: Opaque
 stringData:
   TURN_SHARED_SECRET: "changeme-in-production"  # TODO: Change in production
-  REALM: "turn.nova.local"
+  REALM: "turn.staging.gcp.icered.com"
   EXTERNAL_IP: "34.84.3.228"  # Staging LoadBalancer IP
 
 ---
@@ -119,6 +121,8 @@ spec:
         app: nova
         component: turn-server
     spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       initContainers:
         - name: config-envsubst
           image: busybox:1.36

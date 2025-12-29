@@ -200,10 +200,10 @@ nova_realtime_chat     → realtime-chat-service
 **How**:
 - Single-node Kafka (staging) + Zookeeper for coordination
 - Automatic topic creation for 9 key topics:
-  - user-events (3 partitions)
-  - content-events (3 partitions)
+  - nova.identity.events (3 partitions)
+  - nova.content.events (3 partitions)
   - feed-updates (3 partitions)
-  - messaging-events (3 partitions)
+  - nova.message.events (3 partitions)
   - notification-events (2 partitions)
   - analytics-events (6 partitions)
   - ranking-updates (3 partitions)

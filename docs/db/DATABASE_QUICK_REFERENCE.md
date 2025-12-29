@@ -39,30 +39,32 @@ post_shares                 ← 分享追踪
 comments                    ← 评论
 likes                       ← 点赞
 
-# Videos (8)
-videos                      ← 视频元数据
-video_embeddings            ← 视频向量嵌入（搜索用）
-video_engagement            ← 视频的观看/点赞
-video_pipeline_state        ← 转码进度
-video_webhooks              ← WebHook 回调
-reels                       ← 短视频
-reel_transcode_jobs         ← 短视频转码任务
-reel_variants               ← 短视频的分辨率变体
-
 # Stories (3)
 stories                     ← 限时故事
 story_close_friends         ← 特别关注列表
 story_views                 ← 故事浏览记录
 
-# Uploads (4)
+# Trending (3)
+trending_scores             ← 热度计算缓存
+trending_metadata           ← 热度计算元数据
+engagement_events           ← 参与度事件
+```
+
+### media-service (15+ 个表)
+```
+# Uploads (3)
 uploads                     ← 上传元数据
 upload_sessions             ← 上传会话（进度追踪）
 upload_chunks               ← 分片上传进度
-trending_metadata           ← 热门数据
 
-# Trending (2)
-trending_scores             ← 热度计算缓存
-engagement_events           ← 参与度事件
+# Videos (7)
+videos                      ← 视频元数据
+video_embeddings            ← 视频向量嵌入（搜索用）
+video_engagement            ← 视频的观看/点赞
+video_pipeline_state        ← 转码进度
+reels                       ← 短视频
+reel_transcode_jobs         ← 短视频转码任务
+reel_variants               ← 短视频的分辨率变体
 ```
 
 ### messaging-service (14 个表)
@@ -91,15 +93,18 @@ viewer_sessions             ← 观众会话
 quality_levels              ← 视频质量等级
 ```
 
-### notification-service (2 个表)
+### notification-service (5 个表)
 ```
-notification_jobs           ← 待发送通知
-webhook_deliveries          ← WebHook 投递日志
+notifications               ← 站内通知
+push_tokens                 ← 设备推送 token
+push_delivery_logs          ← 推送投递日志
+notification_preferences    ← 通知偏好
+notification_dedup          ← 通知去重窗口
 ```
 
-### events-service (1 个表)
+### outbox (per-service)
 ```
-outbox_events               ← 事件可靠发布（Outbox 模式）
+outbox_events               ← 事件可靠发布（每个服务独立 outbox）
 ```
 
 ### shared (1 个表)
@@ -121,8 +126,11 @@ auth-service
   ├─→ content-service
   │    ├─ posts.user_id → users.id
   │    ├─ comments.user_id → users.id
-  │    ├─ likes.user_id → users.id
-  │    └─ uploads.user_id → users.id
+  │    └─ likes.user_id → users.id
+  │
+  ├─→ media-service
+  │    ├─ uploads.user_id → users.id
+  │    └─ videos.creator_id → users.id
   │
   ├─→ messaging-service
   │    ├─ conversations.created_by → users.id
@@ -134,7 +142,7 @@ auth-service
   │    └─ viewer_sessions.viewer_id → users.id
   │
   └─→ notification-service
-       └─ notification_jobs.user_id → users.id
+       └─ notifications.user_id (no FK; stored as UUID)
 ```
 
 ## 数据大小预测（生产环境）
@@ -176,4 +184,3 @@ auth-service
 ❌ 创建物理视图隐藏 users（增加复杂性，性能没有收益）
 
 ✓ 做好的事：清晰的文档 + 规则 + 测试
-

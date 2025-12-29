@@ -142,7 +142,7 @@ This document maps each table in the current `nova_content` PostgreSQL database 
 
 **Dependencies**:
 - `users` table (Auth Service) - read via `GetUser()` RPC
-- `videos` table (Video Service) - read via `GetVideo()` RPC
+- `videos` table (Media Service) - read via `GetVideo()` RPC
 - `media` (via Media Service)
 
 **Read Access Required From**:
@@ -193,19 +193,24 @@ This document maps each table in the current `nova_content` PostgreSQL database 
 
 | Table | Purpose | Read By | Write By | Notes |
 |-------|---------|---------|----------|-------|
-| (S3-based, no DB tables) | Media metadata (implied) | ALL | Media Service | File storage in S3 |
+| `uploads` | Completed uploads | Media Service | Media Service | Upload history |
 | `upload_sessions` | Active uploads | Media Service | Media Service | Upload progress |
 | `upload_chunks` | Multipart upload chunks | Media Service | Media Service | Chunk tracking |
-| `uploads` | Completed uploads | Media Service | Media Service | Upload history |
+| `videos` | Video metadata | ALL | Media Service | Title, duration, codec |
+| `video_embeddings` | Video vector embeddings | Media Service | Media Service | Recommendation system |
+| `video_pipeline_state` | Pipeline status | Media Service | Media Service | Processing state |
+| `video_engagement` | Video view stats | Media Service | Media Service | Engagement metrics |
+| `reels` | Short-form video (reels) | Media Service | Media Service | Reels metadata |
+| `reel_transcode_jobs` | Video encoding jobs | Media Service | Media Service | Processing queue |
+| `reel_variants` | Video transcoded versions | Media Service | Media Service | Multiple resolutions |
 
 **Dependencies**:
 - `users` (Auth Service) - read via `GetUser()` RPC
-- S3 storage
+- Object storage (S3/GCS)
 
 **Read Access Required From**:
 - Content Service - for post images
 - Messaging Service - for message attachments
-- Video Service - for thumbnails
 - All services - for media display
 
 ---
@@ -215,7 +220,11 @@ This document maps each table in the current `nova_content` PostgreSQL database 
 
 | Table | Purpose | Read By | Write By | Notes |
 |-------|---------|---------|----------|-------|
-| `notification_jobs` | Push notification queue | Notification Service | Notification Service | Background job tracking |
+| `notifications` | In-app notifications | Notification Service | Notification Service | Read/seen state |
+| `push_tokens` | Device push tokens | Notification Service | Notification Service | FCM/APNs tokens |
+| `push_delivery_logs` | Push delivery attempts | Notification Service | Notification Service | Retry + error tracking |
+| `notification_preferences` | Notification preferences | Notification Service | Notification Service | Per-type toggles |
+| `notification_dedup` | Deduplication window | Notification Service | Notification Service | 1-minute window |
 
 **Dependencies**:
 - `users` (Auth Service) - read via `GetUser()` RPC
@@ -225,8 +234,9 @@ This document maps each table in the current `nova_content` PostgreSQL database 
 
 **Notes**:
 - Subscribes to Kafka events for all notifications
-- No persistent notification storage in DB
-- Notification preferences stored in Auth Service user profile
+- Notifications are persisted in `notifications`
+- Notification preferences stored in `notification_preferences`
+- Legacy `notification_jobs` table exists in pending migrations only
 
 ---
 
@@ -250,30 +260,12 @@ This document maps each table in the current `nova_content` PostgreSQL database 
 
 ---
 
-### 10. **Video Service** 🎬
-**Owned Tables**: Video content and processing
+### 10. **Video Service** 🎬 (Deprecated)
+**Owned Tables**: None (merged into Media Service)
 
-| Table | Purpose | Read By | Write By | Notes |
-|-------|---------|---------|----------|-------|
-| `videos` | Video metadata | ALL | Video Service | Title, duration, codec |
-| `reel_variants` | Video transcoded versions | Video Service | Video Service | Multiple resolutions |
-| `reel_transcode_jobs` | Video encoding jobs | Video Service | Video Service | Processing queue |
-| `video_pipeline_state` | Pipeline status | Video Service | Video Service | Processing state |
-| `video_engagement` | Video view stats | Video Service | Video Service | Engagement metrics |
-| `video_embeddings` | Video vector embeddings | Video Service | Video Service | Recommendation system |
-| `video_webhooks` | Video service webhooks | Video Service | Video Service | Event webhooks |
-| `reels` | Short-form video (reels) | Video Service | Video Service | Reels metadata |
-| `webhook_deliveries` | Webhook delivery tracking | Video Service | Video Service | Delivery audit |
-
-**Dependencies**:
-- `users` (Auth Service) - read via `GetUser()` RPC
-- `media` (Media Service) - read via `GetMedia()` RPC
-
-**Read Access Required From**:
-- Content Service - for post videos
-- Feed Service - for video recommendations
-- Search Service - for video search
-- Streaming Service - for live video
+**Notes**:
+- Video-related tables are now owned by Media Service
+- Keep this section for historical context only
 
 ---
 
@@ -286,7 +278,7 @@ This document maps each table in the current `nova_content` PostgreSQL database 
 
 **Dependencies**:
 - Media Service - to get media URLs
-- Video Service - to get video URLs
+- Media Service - to get video URLs (video tables merged)
 
 **Notes**: CDN configuration is typically stored in external CDN provider or config management system, not in application database.
 
@@ -356,10 +348,9 @@ Auth Service:        users, sessions, refresh_tokens, outbox_events (own DB)
 User Service:        follows, social_metadata
 Messaging Service:   conversations, messages, outbox_events (own DB)
 Content Service:     posts, comments, likes, bookmarks, outbox_events (own DB)
-Video Service:       videos, reels, reel_variants, ...
 Streaming Service:   streams, viewer_sessions, stream_metrics
-Media Service:       uploads, (metadata in S3)
-Notification Service: (none - consumes events)
+Media Service:       uploads, videos, reels, variants, (metadata in object storage)
+Notification Service: notifications, tokens, delivery_logs, preferences, dedup
 Feed Service:        user_feed_preferences
 Search Service:      (none - read-only)
 CDN Service:         (none - external config)
@@ -377,7 +368,7 @@ Graph Service:       follows, blocks, outbox_events (own DB)
        ├─→ User Service (reads users, writes follows)
        ├─→ Messaging Service (reads users, writes messages)
        ├─→ Content Service (reads users, writes posts)
-       ├─→ Video Service (reads users, writes videos)
+       ├─→ Media Service (reads users, writes videos/uploads)
        ├─→ Streaming Service (reads users, writes streams)
        └─→ Feed/Search/Notification (reads via gRPC)
 
@@ -462,7 +453,7 @@ Target (Jan 2026 - Phase 1 Complete):
 
 ### Rule 3: Transactional Consistency
 - Use outbox_events table for multi-service consistency
-- All domain events flow through Events Service → Kafka
+- Each service publishes via its own outbox processor (transactional-outbox)
 
 ### Rule 4: No Direct Foreign Keys Across Services
 - Foreign keys within a service: ✅ OK
@@ -485,13 +476,13 @@ Target (Jan 2026 - Phase 1 Complete):
 | Auth (identity-service) | users, sessions, tokens, settings, oauth, passkeys, outbox_events | 15 | None (foundational) |
 | User (graph-service) | follows, social_metadata, outbox_events | 3 | Auth (read via gRPC) |
 | Messaging (realtime-chat-service) | conversations, messages, Olm/Megolm E2EE (8 tables), calls, locations | 22 | Auth (read via gRPC) |
-| Content | posts, comments, likes, bookmarks, outbox_events | 10 | Auth, Video (read) |
-| Video | videos, reels, variants, pipelines, etc. | 8 | Auth (read) |
+| Content | posts, comments, likes, bookmarks, outbox_events | 10 | Auth, Media (read) |
+| Media | uploads, sessions, chunks, videos, reels, variants, pipelines | 11 | Auth (read) |
+| Video (deprecated) | (merged into Media) | 0 | Media |
 | Streaming | streams, viewers, metrics, quality | 5 | Auth (read) |
-| Media | uploads, sessions, chunks | 3 | Auth (read) |
 | Feed | user_feed_preferences | 1 | Content, User (read) |
 | Experiments | experiments, variants, assignments | 4 | Auth (read) |
-| Notification | (none - stateless) | 0 | All services (read events) |
+| Notification | notifications, push_tokens, delivery_logs, preferences, dedup | 5 | All services (read events) |
 | Search | (none - read-only) | 0 | All services (read replicas) |
 | CDN | (none - external) | 0 | None |
 

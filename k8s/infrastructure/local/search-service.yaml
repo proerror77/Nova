@@ -10,6 +10,7 @@ data:
   RUST_LOG: "info,search_service=debug"
   ELASTICSEARCH_POST_INDEX: "nova_posts"
   ELASTICSEARCH_MESSAGE_INDEX: "nova_messages"
+  KAFKA_MESSAGE_EVENTS_TOPIC: "nova.message.events"
   KAFKA_MESSAGE_PERSISTED_TOPIC: "message_persisted"
   KAFKA_MESSAGE_DELETED_TOPIC: "message_deleted"
   KAFKA_SEARCH_GROUP_ID: "nova-search-service"
