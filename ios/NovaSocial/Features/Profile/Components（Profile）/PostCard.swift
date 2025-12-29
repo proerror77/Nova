@@ -74,7 +74,7 @@ struct PostCard: View {
                             .font(.system(size: 12.f))
                             .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
 
-                        Text("\(likeCount)")
+                        Text(likeCount.abbreviated)
                             .font(Font.custom("SF Pro Display", size: 10.f))
                             .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                     }

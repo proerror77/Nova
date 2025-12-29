@@ -17,7 +17,7 @@ use crate::repository::{
     polls::CreateCandidateInput, BookmarkRepository, CommentRepository, LikeRepository,
     PollRepository, ShareRepository,
 };
-use crate::services::{CounterService, FollowService};
+use crate::services::{CounterService, FollowService, SocialEventProducer};
 use transactional_outbox::{OutboxEvent, OutboxRepository};
 
 fn outbox_error_to_status(err: OutboxError) -> Status {
@@ -39,6 +39,8 @@ pub struct AppState {
     pub counter_service: CounterService,
     pub outbox_repo: Arc<SqlxOutboxRepository>,
     pub graph_client: GraphServiceClient<Channel>,
+    /// Optional Kafka event producer for social events
+    pub event_producer: Option<Arc<SocialEventProducer>>,
 }
 
 impl AppState {
@@ -53,7 +55,13 @@ impl AppState {
             counter_service,
             outbox_repo,
             graph_client,
+            event_producer: None,
         }
+    }
+
+    pub fn with_event_producer(mut self, producer: SocialEventProducer) -> Self {
+        self.event_producer = Some(Arc::new(producer));
+        self
     }
 }
 
@@ -243,19 +251,33 @@ impl SocialService for SocialServiceImpl {
         let post_id = parse_uuid(&req.post_id, "post_id")?;
 
         let like_repo = self.like_repo();
-        let (_like, _was_created) = like_repo
+        let (like, was_created) = like_repo
             .create_like(user_id, post_id)
             .await
             .map_err(|e| Status::internal(format!("Failed to create like: {}", e)))?;
 
         // Read accurate count from PostgreSQL (source of truth)
         // PostgreSQL trigger already updated post_counters
+        // Use rate-limited refresh to prevent thundering herd on hot posts
         let like_count = self
             .state
             .counter_service
-            .refresh_like_count(post_id)
+            .refresh_like_count_rate_limited(post_id)
             .await
             .unwrap_or(0);
+
+        // Emit Kafka event asynchronously (fire-and-forget for analytics/notifications)
+        if was_created {
+            if let Some(producer) = &self.state.event_producer {
+                let producer = producer.clone();
+                let like_id = like.id;
+                tokio::spawn(async move {
+                    if let Err(e) = producer.publish_like_created(like_id, post_id, user_id).await {
+                        tracing::warn!(error = ?e, "Failed to publish like created event");
+                    }
+                });
+            }
+        }
 
         Ok(Response::new(CreateLikeResponse {
             success: true,
@@ -272,19 +294,34 @@ impl SocialService for SocialServiceImpl {
         let post_id = parse_uuid(&req.post_id, "post_id")?;
 
         let like_repo = self.like_repo();
-        let _was_deleted = like_repo
+        let was_deleted = like_repo
             .delete_like(user_id, post_id)
             .await
             .map_err(|e| Status::internal(format!("Failed to delete like: {}", e)))?;
 
         // Read accurate count from PostgreSQL (source of truth)
         // PostgreSQL trigger already updated post_counters
+        // Use rate-limited refresh to prevent thundering herd on hot posts
         let like_count = self
             .state
             .counter_service
-            .refresh_like_count(post_id)
+            .refresh_like_count_rate_limited(post_id)
             .await
             .unwrap_or(0);
+
+        // Emit Kafka event asynchronously (fire-and-forget for analytics/notifications)
+        if was_deleted {
+            if let Some(producer) = &self.state.event_producer {
+                let producer = producer.clone();
+                // Use a placeholder like_id since we don't track it on delete
+                let like_id = Uuid::new_v4();
+                tokio::spawn(async move {
+                    if let Err(e) = producer.publish_like_deleted(like_id, post_id).await {
+                        tracing::warn!(error = ?e, "Failed to publish like deleted event");
+                    }
+                });
+            }
+        }
 
         Ok(Response::new(DeleteLikeResponse {
             success: true,

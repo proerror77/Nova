@@ -28,7 +28,7 @@ use consumers::content_events::{ContentEventsConsumer, ContentEventsConsumerConf
 use grpc::server_v2::{
     social::social_service_server::SocialServiceServer, AppState, SocialServiceImpl,
 };
-use services::CounterService;
+use services::{CounterService, KafkaEventProducerConfig, SocialEventProducer};
 use transactional_outbox::SqlxOutboxRepository;
 use workers::{graph_sync::GraphSyncConsumer, outbox_worker};
 
@@ -182,13 +182,32 @@ async fn main() -> Result<()> {
     let graph_client = grpc_pool.graph();
     info!("✅ Graph service gRPC client initialized");
 
+    // Initialize Kafka event producer (optional)
+    let event_producer = KafkaEventProducerConfig::from_env()
+        .and_then(|config| {
+            match SocialEventProducer::new(&config) {
+                Ok(producer) => {
+                    info!("✅ Kafka event producer initialized");
+                    Some(producer)
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to initialize Kafka event producer: {}", e);
+                    None
+                }
+            }
+        });
+
     // Create AppState
-    let app_state = Arc::new(AppState::new(
+    let mut app_state = AppState::new(
         pg_pool.clone(),
         counter_service,
         outbox_repo,
         graph_client,
-    ));
+    );
+    if let Some(producer) = event_producer {
+        app_state = app_state.with_event_producer(producer);
+    }
+    let app_state = Arc::new(app_state);
     info!("✅ AppState created");
 
     // gRPC server address

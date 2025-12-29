@@ -364,7 +364,7 @@ struct PostSearchResultRow: View {
                 HStack(spacing: 4) {
                     Image(systemName: "heart")
                         .font(.system(size: 12))
-                    Text("\(likeCount)")
+                    Text(likeCount.abbreviated)
                         .font(.system(size: 12))
                 }
                 .foregroundColor(DesignTokens.textSecondary)

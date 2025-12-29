@@ -530,13 +530,16 @@ impl CounterService {
         Ok(())
     }
 
+    /// Rate-limit key TTL for hot post refresh (5 seconds)
+    const REFRESH_RATE_LIMIT_SECONDS: u64 = 5;
+
     /// Refresh like count from PostgreSQL and update Redis cache
     /// This is the preferred method after like/unlike operations
     /// Returns the accurate count from source of truth (PostgreSQL)
     pub async fn refresh_like_count(&self, post_id: Uuid) -> Result<i64> {
         // Read from PostgreSQL (source of truth)
         let count = self.load_like_count_from_pg(post_id).await?;
-        
+
         // Update Redis cache (fire and forget, don't fail if Redis is down)
         if let Err(e) = self.set_like_count(post_id, count).await {
             tracing::warn!(
@@ -545,8 +548,38 @@ impl CounterService {
                 "Failed to update Redis cache for like count"
             );
         }
-        
+
         Ok(count)
+    }
+
+    /// Rate-limited refresh for hot posts
+    /// Only refreshes if no refresh happened in the last N seconds
+    /// Returns the count (either from fresh refresh or existing cache)
+    pub async fn refresh_like_count_rate_limited(&self, post_id: Uuid) -> Result<i64> {
+        let rate_limit_key = format!("post:{}:likes:refresh_lock", post_id);
+
+        // Try to acquire the refresh lock with SETNX
+        let acquired: bool = redis::cmd("SET")
+            .arg(&rate_limit_key)
+            .arg("1")
+            .arg("NX")
+            .arg("EX")
+            .arg(Self::REFRESH_RATE_LIMIT_SECONDS)
+            .query_async(&mut self.redis.clone())
+            .await
+            .unwrap_or(false);
+
+        if acquired {
+            // We acquired the lock, do the refresh
+            self.refresh_like_count(post_id).await
+        } else {
+            // Another request is refreshing, just return cached value
+            // If cache miss, fall back to PostgreSQL
+            match self.get_like_count(post_id).await {
+                Ok(count) => Ok(count),
+                Err(_) => self.load_like_count_from_pg(post_id).await,
+            }
+        }
     }
 
     /// Refresh comment count from PostgreSQL and update Redis cache

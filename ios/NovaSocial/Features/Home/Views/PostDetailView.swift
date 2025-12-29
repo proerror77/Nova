@@ -715,7 +715,7 @@ struct SocialCommentItemView: View {
                                         .resizable()
                                         .scaledToFit()
                                         .frame(width: 12, height: 12)
-                                    Text("\(likeCount)")
+                                    Text(likeCount.abbreviated)
                                         .font(.system(size: 12))
                                         .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                                 }
@@ -731,7 +731,7 @@ struct SocialCommentItemView: View {
                                         .resizable()
                                         .scaledToFit()
                                         .frame(width: 12, height: 12)
-                                    Text("\(saveCount)")
+                                    Text(saveCount.abbreviated)
                                         .font(.system(size: 12))
                                         .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                                 }

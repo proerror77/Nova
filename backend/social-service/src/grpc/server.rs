@@ -60,8 +60,9 @@ impl SocialService for SocialServiceImpl {
             .map_err(|e| Status::internal(format!("Failed to create like: {}", e)))?;
 
         // Read accurate count from PostgreSQL (source of truth)
+        // Use rate-limited refresh to prevent thundering herd on hot posts
         let like_count = self.counter_service
-            .refresh_like_count(post_id)
+            .refresh_like_count_rate_limited(post_id)
             .await
             .unwrap_or(0);
 
@@ -89,8 +90,9 @@ impl SocialService for SocialServiceImpl {
             .map_err(|e| Status::internal(format!("Failed to delete like: {}", e)))?;
 
         // Read accurate count from PostgreSQL (source of truth)
+        // Use rate-limited refresh to prevent thundering herd on hot posts
         let like_count = self.counter_service
-            .refresh_like_count(post_id)
+            .refresh_like_count_rate_limited(post_id)
             .await
             .unwrap_or(0);
 
