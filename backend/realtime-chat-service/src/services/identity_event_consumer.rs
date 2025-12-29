@@ -11,7 +11,8 @@ use crate::services::matrix_admin::MatrixAdminClient;
 use event_schema::{EventEnvelope, UserDeletedEvent, UserProfileUpdatedEvent};
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
-use rdkafka::message::Message;
+use rdkafka::message::{Headers, Message};
+use serde::de::DeserializeOwned;
 use serde_json;
 use std::sync::Arc;
 use std::time::Duration;
@@ -136,6 +137,7 @@ impl IdentityEventConsumer {
         let payload_str = std::str::from_utf8(payload).map_err(|e| {
             AppError::StartServer(format!("Invalid UTF-8 in Kafka message payload: {}", e))
         })?;
+        let header_event_type = header_value(message, "event_type");
 
         // Try to parse as a generic serde_json::Value first to inspect event type
         let envelope_value: serde_json::Value = serde_json::from_str(payload_str).map_err(|e| {
@@ -143,11 +145,19 @@ impl IdentityEventConsumer {
             AppError::StartServer(format!("Invalid JSON in Kafka message: {}", e))
         })?;
 
-        // P1: Prefer explicit event_type field if present
-        if let Some(event_type) = envelope_value.get("event_type").and_then(|v| v.as_str()) {
+        // Prefer Kafka header event_type; fall back to envelope field if present.
+        if let Some(event_type) = header_event_type
+            .or_else(|| envelope_value.get("event_type").and_then(|v| v.as_str()))
+        {
             return match event_type {
-                "UserDeletedEvent" => self.handle_user_deleted(payload_str).await,
-                "UserProfileUpdatedEvent" => self.handle_user_profile_updated(payload_str).await,
+                "identity.user.deleted" | "UserDeletedEvent" => {
+                    let event = parse_enveloped_or_direct::<UserDeletedEvent>(payload)?;
+                    self.handle_user_deleted(event).await
+                }
+                "identity.user.profile_updated" | "UserProfileUpdatedEvent" => {
+                    let event = parse_enveloped_or_direct::<UserProfileUpdatedEvent>(payload)?;
+                    self.handle_user_profile_updated(event).await
+                }
                 _ => {
                     // Unknown event type, skip silently
                     // This allows us to ignore other events like UserCreatedEvent, PasswordChangedEvent, etc.
@@ -162,13 +172,15 @@ impl IdentityEventConsumer {
             // Check for UserDeletedEvent by looking for 'deleted_at' and 'soft_delete' fields
             if data.get("deleted_at").is_some() && data.get("soft_delete").is_some() {
                 warn!("Legacy event format detected (no event_type field). Consider updating producer to include event_type.");
-                return self.handle_user_deleted(payload_str).await;
+                let event = parse_enveloped_or_direct::<UserDeletedEvent>(payload)?;
+                return self.handle_user_deleted(event).await;
             }
 
             // Check for UserProfileUpdatedEvent by looking for 'username' and 'updated_at' fields
             if data.get("username").is_some() && data.get("updated_at").is_some() && data.get("display_name").is_some() {
                 warn!("Legacy event format detected (no event_type field). Consider updating producer to include event_type.");
-                return self.handle_user_profile_updated(payload_str).await;
+                let event = parse_enveloped_or_direct::<UserProfileUpdatedEvent>(payload)?;
+                return self.handle_user_profile_updated(event).await;
             }
         }
 
@@ -177,11 +189,7 @@ impl IdentityEventConsumer {
     }
 
     /// Handle UserDeletedEvent
-    async fn handle_user_deleted(&self, payload: &str) -> Result<(), AppError> {
-        let envelope: EventEnvelope<UserDeletedEvent> = serde_json::from_str(payload)
-            .map_err(|e| AppError::StartServer(format!("Failed to deserialize UserDeletedEvent: {}", e)))?;
-
-        let event = envelope.data;
+    async fn handle_user_deleted(&self, event: UserDeletedEvent) -> Result<(), AppError> {
         info!(
             "Processing UserDeletedEvent: user_id={}, soft_delete={}, deleted_at={}",
             event.user_id, event.soft_delete, event.deleted_at
@@ -221,13 +229,10 @@ impl IdentityEventConsumer {
     }
 
     /// Handle UserProfileUpdatedEvent
-    async fn handle_user_profile_updated(&self, payload: &str) -> Result<(), AppError> {
-        let envelope: EventEnvelope<UserProfileUpdatedEvent> = serde_json::from_str(payload)
-            .map_err(|e| {
-                AppError::StartServer(format!("Failed to deserialize UserProfileUpdatedEvent: {}", e))
-            })?;
-
-        let event = envelope.data;
+    async fn handle_user_profile_updated(
+        &self,
+        event: UserProfileUpdatedEvent,
+    ) -> Result<(), AppError> {
         info!(
             "Processing UserProfileUpdatedEvent: user_id={}, username={}, display_name={:?}, avatar={:?}",
             event.user_id, event.username, event.display_name, event.avatar_url
@@ -269,6 +274,30 @@ impl IdentityEventConsumer {
 
         Ok(())
     }
+}
+
+fn parse_enveloped_or_direct<T: DeserializeOwned>(payload: &[u8]) -> Result<T, AppError> {
+    if let Ok(envelope) = serde_json::from_slice::<EventEnvelope<T>>(payload) {
+        return Ok(envelope.data);
+    }
+    serde_json::from_slice::<T>(payload).map_err(|e| {
+        AppError::StartServer(format!("Failed to deserialize identity event payload: {}", e))
+    })
+}
+
+fn header_value<'a>(
+    message: &'a rdkafka::message::BorrowedMessage<'a>,
+    key: &str,
+) -> Option<&'a str> {
+    message
+        .headers()
+        .and_then(|headers| {
+            headers
+                .iter()
+                .find(|header| header.key == key)
+                .and_then(|header| header.value)
+        })
+        .and_then(|value| std::str::from_utf8(value).ok())
 }
 
 #[cfg(test)]

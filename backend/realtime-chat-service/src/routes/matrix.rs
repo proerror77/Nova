@@ -143,8 +143,17 @@ pub async fn get_matrix_token(
     // This allows iOS to get a device-bound token for seamless E2EE
     let requested_device_id = body.as_ref().and_then(|b| b.device_id.clone());
 
+    tracing::debug!(
+        body_present = body.is_some(),
+        requested_device_id = ?requested_device_id,
+        "Parsing device_id from request body"
+    );
+
     // Generate default device_id if not provided by client
-    let device_id = requested_device_id.unwrap_or_else(|| {
+    let device_id = requested_device_id.clone().unwrap_or_else(|| {
+        tracing::warn!(
+            "No device_id in request body, using default based on user_id"
+        );
         format!("NOVA_IOS_{}", &nova_user_id.to_string()[..8])
     });
 

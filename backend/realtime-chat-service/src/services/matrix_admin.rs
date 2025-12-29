@@ -590,16 +590,10 @@ impl MatrixAdminClient {
             .as_secs() as i64;
         let expires_at = now_sec + token_duration_sec;
 
-        // Make device_id unique by appending timestamp to avoid Synapse duplicate key errors
-        // when the same device requests a new token (e.g., after token expiry)
-        let unique_device_id = device_id.map(|id| {
-            let timestamp = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis();
-            format!("{}_{}", id, timestamp)
-        });
-        let access_token = self.generate_user_login_token(user_id, Some(token_duration_ms), unique_device_id).await?;
+        // Use the device_id as-is for session continuity
+        // Synapse will invalidate the old token when a new one is issued for the same device
+        // This is critical for Matrix SDK session restoration and E2EE key continuity
+        let access_token = self.generate_user_login_token(user_id, Some(token_duration_ms), device_id).await?;
 
         Ok((mxid, access_token, expires_at))
     }
