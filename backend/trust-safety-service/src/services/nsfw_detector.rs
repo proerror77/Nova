@@ -38,8 +38,7 @@ impl NsfwDetector {
             .commit_from_file(model_path)
             .map_err(|e| TrustSafetyError::OnnxRuntime(e.to_string()))?;
 
-        let (input_name, output_name, input_size, input_layout) =
-            Self::infer_io(&session).map_err(TrustSafetyError::OnnxRuntime)?;
+        let (input_name, output_name, input_size, input_layout) = Self::infer_io(&session)?;
 
         Ok(Self {
             session: Arc::new(Mutex::new(session)),
