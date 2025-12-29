@@ -1,5 +1,6 @@
 use crate::models::Upload;
 use anyhow::{Context, Result};
+use rdkafka::message::{Header, OwnedHeaders};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::ClientConfig;
 use resilience::{CircuitBreaker, CircuitBreakerError, CircuitState};
@@ -7,6 +8,7 @@ use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{info, warn};
+use uuid::Uuid;
 
 /// Kafka producer wrapper for media-service events with circuit breaker and retry.
 #[derive(Clone)]
@@ -73,7 +75,10 @@ impl MediaEventsProducer {
             return Ok(());
         }
 
+        let event_type = "media.upload.completed";
+        // media_id is a legacy alias; upload_id is the canonical key for thumbnails.
         let payload = json!({
+            "upload_id": upload.id.to_string(),
             "media_id": upload.id.to_string(),
             "user_id": upload.user_id.to_string(),
             "size_bytes": upload.file_size,
@@ -84,15 +89,43 @@ impl MediaEventsProducer {
         let payload_str =
             serde_json::to_string(&payload).context("Failed to serialize MediaUploaded payload")?;
 
-        let key = upload.user_id.to_string();
+        let event_id = Uuid::new_v4().to_string();
+        let aggregate_id = upload.id.to_string();
+        let created_at = upload.updated_at.to_rfc3339();
+
+        let headers = OwnedHeaders::new()
+            .insert(Header {
+                key: "event_type",
+                value: Some(event_type.as_bytes()),
+            })
+            .insert(Header {
+                key: "event_id",
+                value: Some(event_id.as_bytes()),
+            })
+            .insert(Header {
+                key: "aggregate_type",
+                value: Some(b"media"),
+            })
+            .insert(Header {
+                key: "aggregate_id",
+                value: Some(aggregate_id.as_bytes()),
+            })
+            .insert(Header {
+                key: "created_at",
+                value: Some(created_at.as_bytes()),
+            });
+
         let topic = self.topic.clone();
         let producer = self.inner.clone();
         let upload_id = upload.id;
 
         let result = self
             .circuit_breaker
-            .call(|| async {
-                let record = FutureRecord::to(&topic).key(&key).payload(&payload_str);
+            .call(move || async move {
+                let record = FutureRecord::to(&topic)
+                    .key(&aggregate_id)
+                    .payload(&payload_str)
+                    .headers(headers);
 
                 producer
                     .send(record, Duration::from_secs(10))

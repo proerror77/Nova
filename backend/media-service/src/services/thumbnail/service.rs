@@ -16,6 +16,8 @@ use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
+const MIN_IMAGE_BYTES: usize = 32;
+
 /// Upload record from media database (nova_media.uploads)
 #[derive(Debug, Clone, FromRow)]
 pub struct MediaUpload {
@@ -199,6 +201,15 @@ impl ThumbnailService {
         // Download original from GCS
         let original_data = self.gcs_client.download(storage_path).await?;
 
+        if original_data.len() < MIN_IMAGE_BYTES {
+            self.mark_media_invalid(upload.media_id, storage_path, original_data.len())
+                .await?;
+            return Err(AppError::Internal(format!(
+                "Image payload too small: {} bytes",
+                original_data.len()
+            )));
+        }
+
         // Generate thumbnail
         let thumbnail = self.processor.generate(&original_data)?;
 
@@ -243,6 +254,15 @@ impl ThumbnailService {
         // Download original from GCS
         let original_data = self.gcs_client.download(storage_path).await?;
 
+        if original_data.len() < MIN_IMAGE_BYTES {
+            self.mark_media_invalid(Some(media.id), storage_path, original_data.len())
+                .await?;
+            return Err(AppError::Internal(format!(
+                "Image payload too small: {} bytes",
+                original_data.len()
+            )));
+        }
+
         // Generate thumbnail
         let thumbnail = self.processor.generate(&original_data)?;
 
@@ -284,6 +304,57 @@ impl ThumbnailService {
         .execute(&self.media_pool)
         .await
         .map_err(|e| AppError::Internal(format!("Failed to update thumbnail URL: {e}")))?;
+
+        Ok(())
+    }
+
+    async fn mark_media_invalid(
+        &self,
+        media_id: Option<Uuid>,
+        storage_path: &str,
+        size_bytes: usize,
+    ) -> Result<()> {
+        let rows = if let Some(media_id) = media_id {
+            sqlx::query(
+                r#"
+                UPDATE media_files
+                SET status = 'invalid', updated_at = NOW()
+                WHERE id = $1
+                "#,
+            )
+            .bind(media_id)
+            .execute(&self.media_pool)
+            .await
+            .map_err(|e| AppError::Internal(format!("Failed to mark media invalid: {e}")))?;
+            1
+        } else {
+            let result = sqlx::query(
+                r#"
+                UPDATE media_files
+                SET status = 'invalid', updated_at = NOW()
+                WHERE storage_path = $1
+                "#,
+            )
+            .bind(storage_path)
+            .execute(&self.media_pool)
+            .await
+            .map_err(|e| AppError::Internal(format!("Failed to mark media invalid: {e}")))?;
+            result.rows_affected()
+        };
+
+        if rows == 0 {
+            warn!(
+                storage_path = %storage_path,
+                size_bytes = size_bytes,
+                "No media_files rows updated for invalid image"
+            );
+        } else {
+            warn!(
+                storage_path = %storage_path,
+                size_bytes = size_bytes,
+                "Marked media_files as invalid due to tiny image payload"
+            );
+        }
 
         Ok(())
     }

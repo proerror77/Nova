@@ -158,6 +158,7 @@ pub async fn get_e2ee_conversations_without_rooms(
         JOIN conversation_members cm ON c.id = cm.conversation_id
         LEFT JOIN matrix_room_mapping mrm ON c.id = mrm.conversation_id
         WHERE c.privacy_mode = 'strict_e2e'
+          AND c.deleted_at IS NULL
           AND mrm.conversation_id IS NULL
         GROUP BY c.id
         "#,

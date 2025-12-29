@@ -21,7 +21,7 @@ use uuid::Uuid;
 /// 预期：
 /// - user.deleted_at 设置为当前时间
 /// - user.deleted_by 设置为操作者 ID
-/// - outbox_events 表插入 UserDeleted 事件
+/// - outbox_events 表插入 identity.user.deleted 事件
 /// - 事件 payload 包含完整的删除上下文
 #[tokio::test]
 async fn test_soft_delete_user_creates_outbox_event() {
@@ -64,18 +64,18 @@ async fn test_soft_delete_user_creates_outbox_event() {
 
     // 验证：Outbox 事件已创建
     let event_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM outbox_events WHERE aggregate_id = $1 AND event_type = 'UserDeleted'",
+        "SELECT COUNT(*) FROM outbox_events WHERE aggregate_id = $1 AND event_type = 'identity.user.deleted'",
     )
     .bind(user_id)
     .fetch_one(&*db)
     .await
     .expect("查询 Outbox 事件失败");
 
-    assert_eq!(event_count, 1, "应该有一个 UserDeleted 事件");
+    assert_eq!(event_count, 1, "应该有一个 identity.user.deleted 事件");
 
     // 验证：事件 payload 包含完整信息
     let payload: serde_json::Value = sqlx::query_scalar(
-        "SELECT payload FROM outbox_events WHERE aggregate_id = $1 AND event_type = 'UserDeleted'",
+        "SELECT payload FROM outbox_events WHERE aggregate_id = $1 AND event_type = 'identity.user.deleted'",
     )
     .bind(user_id)
     .fetch_one(&*db)

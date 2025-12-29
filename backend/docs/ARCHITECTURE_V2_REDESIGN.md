@@ -279,7 +279,7 @@ Social Domain:
   social.feed.updated
 
 Media Domain:
-  media.uploaded
+  media.upload.completed
   media.processed
   media.transcoded
   media.deleted

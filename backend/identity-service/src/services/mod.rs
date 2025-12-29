@@ -22,7 +22,7 @@ pub use email::EmailService;
 pub use invite_delivery::{InviteDeliveryConfig, InviteDeliveryService, SendInviteResult};
 pub use kafka_events::KafkaEventProducer;
 pub use oauth::{OAuthAuthorizationUrl, OAuthCallbackResult, OAuthProvider, OAuthService};
-pub use outbox::{spawn_outbox_consumer, OutboxConsumerConfig};
+pub use outbox::{spawn_outbox_consumer, IdentityOutboxPublisher, OutboxConsumerConfig};
 pub use passkey::{PasskeyAuthenticationResult, PasskeyRegistrationResult, PasskeyService};
 pub use phone_auth::{PhoneAuthService, PhoneLoginResult, PhoneRegisterResult};
 pub use two_fa::{TwoFaService, TwoFaSetup};

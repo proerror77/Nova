@@ -474,15 +474,6 @@ impl OAuthService {
             )
             .await?;
 
-            if let Some(producer) = &self.kafka {
-                if let Err(err) = producer
-                    .publish_user_created(new_user.id, &new_user.email, &new_user.username)
-                    .await
-                {
-                    warn!("Failed to publish UserCreated event: {:?}", err);
-                }
-            }
-
             info!(user_id = %new_user.id, provider = provider.as_str(), "New user created via OAuth");
             (new_user.id, true)
         };

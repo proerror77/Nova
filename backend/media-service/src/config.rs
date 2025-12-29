@@ -115,8 +115,13 @@ impl Config {
             kafka: KafkaConfig {
                 brokers: std::env::var("KAFKA_BROKERS")
                     .unwrap_or_else(|_| "localhost:9092".to_string()),
-                events_topic: std::env::var("KAFKA_EVENTS_TOPIC")
-                    .unwrap_or_else(|_| "media_events".to_string()),
+                events_topic: {
+                    let topic_prefix =
+                        std::env::var("KAFKA_TOPIC_PREFIX").unwrap_or_else(|_| "nova".to_string());
+                    std::env::var("KAFKA_MEDIA_EVENTS_TOPIC")
+                        .or_else(|_| std::env::var("KAFKA_EVENTS_TOPIC"))
+                        .unwrap_or_else(|_| format!("{}.media.events", topic_prefix))
+                },
             },
             gcs: {
                 // Enable GCS signing only when a bucket AND some form of service account JSON is provided.

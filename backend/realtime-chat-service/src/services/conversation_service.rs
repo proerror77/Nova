@@ -190,6 +190,7 @@ impl ConversationService {
             SELECT c.id
             FROM conversations c
             WHERE c.conversation_type = 'direct'
+              AND c.deleted_at IS NULL
               AND EXISTS (SELECT 1 FROM conversation_members WHERE conversation_id = c.id AND user_id = $1)
               AND EXISTS (SELECT 1 FROM conversation_members WHERE conversation_id = c.id AND user_id = $2)
             LIMIT 1
@@ -214,13 +215,15 @@ impl ConversationService {
         let r = client.query_one(
             r#"
             SELECT
-              $1::uuid AS id,
+              c.id AS id,
               (
-                SELECT COUNT(*)::int FROM conversation_members cm WHERE cm.conversation_id = $1
+                SELECT COUNT(*)::int FROM conversation_members cm WHERE cm.conversation_id = c.id
               ) AS member_count,
               (
-                SELECT m.id FROM messages m WHERE m.conversation_id = $1 ORDER BY m.created_at DESC LIMIT 1
+                SELECT m.id FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1
               ) AS last_message_id
+            FROM conversations c
+            WHERE c.id = $1 AND c.deleted_at IS NULL
             "#,
             &[&id]
         )
@@ -255,7 +258,7 @@ impl ConversationService {
             SELECT c.id, c.member_count, c.last_message_id
             FROM conversations c
             JOIN conversation_members cm ON c.id = cm.conversation_id
-            WHERE cm.user_id = $1
+            WHERE cm.user_id = $1 AND c.deleted_at IS NULL
             ORDER BY c.updated_at DESC
             LIMIT 100
             "#,
@@ -291,7 +294,15 @@ impl ConversationService {
         })?;
 
         let rec = client.query_opt(
-            "SELECT 1 FROM conversation_members WHERE conversation_id=$1 AND user_id=$2 LIMIT 1",
+            r#"
+            SELECT 1
+            FROM conversation_members cm
+            JOIN conversations c ON c.id = cm.conversation_id
+            WHERE cm.conversation_id = $1
+              AND cm.user_id = $2
+              AND c.deleted_at IS NULL
+            LIMIT 1
+            "#,
             &[&conversation_id, &user_id]
         )
         .await
@@ -322,13 +333,15 @@ impl ConversationService {
         let conv_row = client.query_one(
             r#"
             SELECT
-              $1::uuid AS id,
+              c.id AS id,
               (
-                SELECT COUNT(*)::int FROM conversation_members cm WHERE cm.conversation_id = $1
+                SELECT COUNT(*)::int FROM conversation_members cm WHERE cm.conversation_id = c.id
               ) AS member_count,
               (
-                SELECT m.id FROM messages m WHERE m.conversation_id = $1 ORDER BY m.created_at DESC LIMIT 1
+                SELECT m.id FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1
               ) AS last_message_id
+            FROM conversations c
+            WHERE c.id = $1 AND c.deleted_at IS NULL
             "#,
             &[&conversation_id]
         )
@@ -531,7 +544,10 @@ impl ConversationService {
         })?;
 
         // Get conversation kind to ensure it's a group
-        let conv_row = client.query_opt("SELECT kind FROM conversations WHERE id = $1", &[&conversation_id])
+        let conv_row = client.query_opt(
+            "SELECT kind FROM conversations WHERE id = $1 AND deleted_at IS NULL",
+            &[&conversation_id],
+        )
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("get conversation: {e}")))?
             .ok_or_else(|| crate::error::AppError::Config("Conversation not found".into()))?;
@@ -561,17 +577,13 @@ impl ConversationService {
         let tx = client.transaction().await
             .map_err(|e| crate::error::AppError::StartServer(format!("tx: {e}")))?;
 
-        // Delete all members
-        tx.execute("DELETE FROM conversation_members WHERE conversation_id = $1", &[&conversation_id])
-            .await
-            .map_err(|e| crate::error::AppError::StartServer(format!("delete members: {e}")))?;
-
-        // Delete the conversation
-        tx.execute("DELETE FROM conversations WHERE id = $1", &[&conversation_id])
-            .await
-            .map_err(|e| {
-                crate::error::AppError::StartServer(format!("delete conversation: {e}"))
-            })?;
+        // Soft delete the conversation (preserve members/messages for audit)
+        tx.execute(
+            "UPDATE conversations SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL",
+            &[&conversation_id],
+        )
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("delete conversation: {e}")))?;
 
         tx.commit()
             .await
@@ -594,7 +606,10 @@ impl ConversationService {
         })?;
 
         // Get conversation kind
-        let conv_row = client.query_opt("SELECT kind FROM conversations WHERE id = $1", &[&conversation_id])
+        let conv_row = client.query_opt(
+            "SELECT kind FROM conversations WHERE id = $1 AND deleted_at IS NULL",
+            &[&conversation_id],
+        )
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("get conversation: {e}")))?
             .ok_or_else(|| crate::error::AppError::Config("Conversation not found".into()))?;
@@ -653,7 +668,7 @@ impl ConversationService {
 
         // Update member count
         client.execute(
-            "UPDATE conversations SET member_count = member_count - 1 WHERE id = $1 AND member_count > 0",
+            "UPDATE conversations SET member_count = member_count - 1 WHERE id = $1 AND deleted_at IS NULL AND member_count > 0",
             &[&conversation_id]
         )
         .await
@@ -671,7 +686,10 @@ impl ConversationService {
             crate::error::AppError::StartServer(format!("get client: {e}"))
         })?;
 
-        let row = client.query_opt("SELECT kind FROM conversations WHERE id = $1", &[&conversation_id])
+        let row = client.query_opt(
+            "SELECT kind FROM conversations WHERE id = $1 AND deleted_at IS NULL",
+            &[&conversation_id],
+        )
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("get conversation: {e}")))?
             .ok_or_else(|| crate::error::AppError::Config("Conversation not found".into()))?;
@@ -688,7 +706,10 @@ impl ConversationService {
         })?;
 
         let value: Option<String> =
-            client.query_opt("SELECT privacy_mode::text FROM conversations WHERE id = $1", &[&conversation_id])
+            client.query_opt(
+                "SELECT privacy_mode::text FROM conversations WHERE id = $1 AND deleted_at IS NULL",
+                &[&conversation_id],
+            )
                 .await
                 .map_err(|e| crate::error::AppError::StartServer(format!("get privacy: {e}")))?
                 .map(|row| row.get(0));

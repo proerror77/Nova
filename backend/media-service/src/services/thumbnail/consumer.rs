@@ -5,7 +5,7 @@
 use super::service::ThumbnailService;
 use crate::error::Result;
 use rdkafka::consumer::{Consumer, StreamConsumer};
-use rdkafka::message::Message;
+use rdkafka::message::{Headers, Message};
 use rdkafka::ClientConfig;
 use std::sync::Arc;
 use tokio::sync::watch;
@@ -22,9 +22,14 @@ pub struct ThumbnailConsumerConfig {
 
 impl Default for ThumbnailConsumerConfig {
     fn default() -> Self {
+        let topic_prefix =
+            std::env::var("KAFKA_TOPIC_PREFIX").unwrap_or_else(|_| "nova".to_string());
+        let topic = std::env::var("KAFKA_MEDIA_EVENTS_TOPIC")
+            .or_else(|_| std::env::var("KAFKA_EVENTS_TOPIC"))
+            .unwrap_or_else(|_| format!("{}.media.events", topic_prefix));
         Self {
             brokers: "localhost:9092".to_string(),
-            topic: "media_events".to_string(),
+            topic,
             group_id: "thumbnail-worker".to_string(),
         }
     }
@@ -33,12 +38,18 @@ impl Default for ThumbnailConsumerConfig {
 /// Media uploaded event from Kafka
 #[derive(Debug, serde::Deserialize)]
 struct MediaUploadedEvent {
-    media_id: String,
-    user_id: String,
+    upload_id: Option<String>,
+    media_id: Option<String>,
+    user_id: Option<String>,
     #[allow(dead_code)]
     size_bytes: Option<i64>,
     #[allow(dead_code)]
     file_name: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct EventEnvelope<T> {
+    data: T,
 }
 
 /// Kafka consumer for thumbnail generation
@@ -139,7 +150,17 @@ impl ThumbnailConsumer {
             }
         };
 
-        let event: MediaUploadedEvent = match serde_json::from_slice(payload) {
+        if let Some(event_type) = header_value(msg, "event_type") {
+            if !matches!(
+                event_type,
+                "media.upload.completed" | "media.uploaded" | "MediaUploadedEvent"
+            ) {
+                debug!(event_type = %event_type, "Ignoring non-media upload event");
+                return Ok(());
+            }
+        }
+
+        let event: MediaUploadedEvent = match parse_enveloped_or_direct(payload) {
             Ok(e) => e,
             Err(e) => {
                 warn!(error = %e, "Failed to parse message payload, skipping");
@@ -147,34 +168,46 @@ impl ThumbnailConsumer {
             }
         };
 
+        let upload_id = match event
+            .upload_id
+            .as_deref()
+            .or(event.media_id.as_deref())
+        {
+            Some(id) => id.to_string(),
+            None => {
+                warn!("Media upload event missing upload_id/media_id, skipping");
+                return Ok(());
+            }
+        };
+
         debug!(
-            media_id = %event.media_id,
-            user_id = %event.user_id,
+            upload_id = %upload_id,
+            user_id = %event.user_id.clone().unwrap_or_else(|| "unknown".to_string()),
             "Received media uploaded event"
         );
 
-        // Parse media_id as UUID
-        let media_id = match Uuid::parse_str(&event.media_id) {
+        // Parse upload_id as UUID
+        let upload_id = match Uuid::parse_str(&upload_id) {
             Ok(id) => id,
             Err(e) => {
                 warn!(
-                    media_id = %event.media_id,
+                    upload_id = %upload_id,
                     error = %e,
-                    "Invalid media_id format, skipping"
+                    "Invalid upload_id format, skipping"
                 );
                 return Ok(());
             }
         };
 
         // Process the image (generate thumbnail)
-        match self.thumbnail_service.process_image(media_id).await {
+        match self.thumbnail_service.process_image(upload_id).await {
             Ok(()) => {
-                info!(media_id = %media_id, "Thumbnail generated for uploaded media");
+                info!(upload_id = %upload_id, "Thumbnail generated for uploaded media");
             }
             Err(e) => {
                 // Log but don't fail - the batch processor will catch up
                 warn!(
-                    media_id = %media_id,
+                    upload_id = %upload_id,
                     error = %e,
                     "Failed to generate thumbnail, will retry in batch"
                 );
@@ -183,4 +216,24 @@ impl ThumbnailConsumer {
 
         Ok(())
     }
+}
+
+fn parse_enveloped_or_direct(payload: &[u8]) -> Result<MediaUploadedEvent> {
+    if let Ok(envelope) = serde_json::from_slice::<EventEnvelope<MediaUploadedEvent>>(payload) {
+        return Ok(envelope.data);
+    }
+
+    Ok(serde_json::from_slice::<MediaUploadedEvent>(payload)?)
+}
+
+fn header_value<'a, M: Message>(message: &'a M, key: &str) -> Option<&'a str> {
+    message
+        .headers()
+        .and_then(|headers| {
+            headers
+                .iter()
+                .find(|header| header.key == key)
+                .and_then(|header| header.value)
+        })
+        .and_then(|value| std::str::from_utf8(value).ok())
 }

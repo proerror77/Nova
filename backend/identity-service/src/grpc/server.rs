@@ -212,16 +212,6 @@ impl AuthService for IdentityServiceServer {
         let tokens =
             generate_token_pair(user.id, &user.email, &user.username).map_err(anyhow_to_status)?;
 
-        // 8. Publish UserCreated event
-        if let Some(producer) = &self.kafka {
-            if let Err(err) = producer
-                .publish_user_created(user.id, &user.email, &user.username)
-                .await
-            {
-                warn!("Failed to publish UserCreated event: {:?}", err);
-            }
-        }
-
         info!(
             user_id = %user.id,
             email = %user.email,
@@ -1003,28 +993,6 @@ impl AuthService for IdentityServiceServer {
             .map_err(to_status)?
             .ok_or_else(|| Status::not_found("User not found"))?;
 
-        // Publish UserProfileUpdated event for search indexing
-        if let Some(kafka) = &self.kafka {
-            if let Err(err) = kafka
-                .publish_user_profile_updated(
-                    user.id,
-                    &user.username,
-                    user.display_name.as_deref(),
-                    user.bio.as_deref(),
-                    user.avatar_url.as_deref(),
-                    false, // is_verified - TODO: add to user model if needed
-                    0,     // follower_count - managed by social-service
-                )
-                .await
-            {
-                warn!(
-                    user_id = %user.id,
-                    error = %err,
-                    "Failed to publish UserProfileUpdated event"
-                );
-            }
-        }
-
         Ok(Response::new(UpdateUserProfileResponse {
             profile: Some(UserProfile {
                 user_id: user.id.to_string(),
@@ -1646,13 +1614,6 @@ impl AuthService for IdentityServiceServer {
         db::password_reset::invalidate_user_tokens(&self.db, user_id)
             .await
             .map_err(to_status)?;
-
-        // Publish PasswordChanged event
-        if let Some(producer) = &self.kafka {
-            if let Err(err) = producer.publish_password_changed(user_id).await {
-                warn!("Failed to publish PasswordChanged event: {:?}", err);
-            }
-        }
 
         info!(user_id = %user_id, "Password reset successfully");
 

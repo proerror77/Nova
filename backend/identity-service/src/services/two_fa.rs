@@ -79,11 +79,6 @@ impl TwoFaService {
         if verification {
             crate::db::users::verify_totp(&self.db, user_id).await?;
             token_revocation::revoke_all_user_tokens(&self.redis, user_id).await?;
-            if let Some(producer) = &self.kafka {
-                if let Err(err) = producer.publish_two_fa_enabled(user_id).await {
-                    tracing::warn!("Failed to publish 2FA enabled event: {:?}", err);
-                }
-            }
             Ok(())
         } else {
             Err(IdentityError::InvalidTwoFACode)

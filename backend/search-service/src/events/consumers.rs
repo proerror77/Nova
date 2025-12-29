@@ -2,7 +2,7 @@ use crate::services::elasticsearch::{
     ElasticsearchClient, ElasticsearchError, MessageDocument, UserDocument,
 };
 use chrono::{DateTime, Utc};
-use serde::de::{Deserializer, Error as DeError};
+use serde::de::{DeserializeOwned, Deserializer, Error as DeError};
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
@@ -61,13 +61,18 @@ struct MessageDeletedEvent {
     message_id: Uuid,
 }
 
+#[derive(Debug, Deserialize)]
+struct DataEnvelope<T> {
+    data: T,
+}
+
 /// Handle `message_persisted` events coming from Kafka.
 ///
 /// The handler is defensive: if the search backend is not configured or the
 /// payload is missing content, the event is ignored gracefully while emitting
 /// debug logs to assist with diagnosing pipeline gaps.
 pub async fn on_message_persisted(ctx: &EventContext, payload: &[u8]) -> Result<(), EventError> {
-    let event: MessagePersistedEvent = serde_json::from_slice(payload)?;
+    let event: MessagePersistedEvent = parse_enveloped_or_direct(payload)?;
 
     if event.search_disabled.unwrap_or(false) {
         debug!(
@@ -124,7 +129,7 @@ pub async fn on_message_persisted(ctx: &EventContext, payload: &[u8]) -> Result<
 
 /// Handle `message_deleted` events coming from Kafka.
 pub async fn on_message_deleted(ctx: &EventContext, payload: &[u8]) -> Result<(), EventError> {
-    let event: MessageDeletedEvent = serde_json::from_slice(payload)?;
+    let event: MessageDeletedEvent = parse_enveloped_or_direct(payload)?;
 
     let Some(search) = ctx.search_backend() else {
         debug!(
@@ -147,6 +152,14 @@ pub async fn on_message_deleted(ctx: &EventContext, payload: &[u8]) -> Result<()
         "Removed message document from Elasticsearch"
     );
     Ok(())
+}
+
+fn parse_enveloped_or_direct<T: DeserializeOwned>(payload: &[u8]) -> Result<T, serde_json::Error> {
+    if let Ok(envelope) = serde_json::from_slice::<DataEnvelope<T>>(payload) {
+        return Ok(envelope.data);
+    }
+
+    serde_json::from_slice::<T>(payload)
 }
 
 fn deserialize_optional_datetime<'de, D>(deserializer: D) -> Result<Option<DateTime<Utc>>, D::Error>
@@ -241,104 +254,160 @@ struct UserDeletedEventData {
 }
 
 /// Handle identity events from Kafka (UserCreated, UserProfileUpdated, UserDeleted)
-pub async fn on_identity_event(ctx: &EventContext, payload: &[u8]) -> Result<(), EventError> {
-    let envelope: IdentityEventEnvelope = serde_json::from_slice(payload)?;
-
+pub async fn on_identity_event(
+    ctx: &EventContext,
+    event_type: Option<&str>,
+    payload: &[u8],
+) -> Result<(), EventError> {
     let Some(search) = ctx.search_backend() else {
         debug!("Search backend not configured; identity event ignored");
         return Ok(());
     };
 
+    if let Some(event_type) = event_type {
+        return match event_type {
+            "identity.user.created" | "UserCreatedEvent" => {
+                let event = parse_enveloped_or_direct::<UserCreatedEventData>(payload)?;
+                handle_user_created(search, event).await
+            }
+            "identity.user.profile_updated" | "UserProfileUpdatedEvent" => {
+                let event = parse_enveloped_or_direct::<UserProfileUpdatedEventData>(payload)?;
+                handle_user_profile_updated(search, event).await
+            }
+            "identity.user.deleted" | "UserDeletedEvent" => {
+                let event = parse_enveloped_or_direct::<UserDeletedEventData>(payload)?;
+                handle_user_deleted(search, event).await
+            }
+            _ => {
+                debug!("Ignoring identity event type: {}", event_type);
+                Ok(())
+            }
+        };
+    }
+
+    let envelope: IdentityEventEnvelope = serde_json::from_slice(payload)?;
+
     match envelope.data {
-        IdentityEventData::UserCreated(event) => {
-            debug!(
-                user_id = %event.user_id,
-                username = %event.username,
-                "Processing UserCreated event for search indexing"
-            );
-
-            // Index new user with minimal data (will be updated when profile is filled)
-            let document = UserDocument {
-                user_id: event.user_id,
-                username: event.username,
-                display_name: String::new(),
-                bio: None,
-                location: None,
-                interests: vec![],
-                is_verified: false,
-                follower_count: 0,
-            };
-
-            if let Err(err) = search.index_user(&document).await {
-                error!(
-                    user_id = %event.user_id,
-                    "Failed to index user in Elasticsearch: {err}"
-                );
-                return Err(EventError::Search(err));
-            }
-
-            debug!(
-                user_id = %event.user_id,
-                "Indexed new user into Elasticsearch"
-            );
-        }
+        IdentityEventData::UserCreated(event) => handle_user_created(search, event).await?,
         IdentityEventData::UserProfileUpdated(event) => {
-            debug!(
-                user_id = %event.user_id,
-                username = %event.username,
-                "Processing UserProfileUpdated event for search indexing"
-            );
-
-            let document = UserDocument {
-                user_id: event.user_id,
-                username: event.username,
-                display_name: event.display_name.unwrap_or_default(),
-                bio: event.bio,
-                location: None,
-                interests: vec![],
-                is_verified: event.is_verified,
-                follower_count: event.follower_count,
-            };
-
-            if let Err(err) = search.index_user(&document).await {
-                error!(
-                    user_id = %event.user_id,
-                    "Failed to update user in Elasticsearch: {err}"
-                );
-                return Err(EventError::Search(err));
-            }
-
-            debug!(
-                user_id = %event.user_id,
-                "Updated user in Elasticsearch"
-            );
+            handle_user_profile_updated(search, event).await?
         }
-        IdentityEventData::UserDeleted(event) => {
-            debug!(
-                user_id = %event.user_id,
-                soft_delete = event.soft_delete,
-                "Processing UserDeleted event"
-            );
-
-            // Only remove from search index if hard delete
-            if !event.soft_delete {
-                if let Err(err) = search.delete_user(event.user_id).await {
-                    error!(
-                        user_id = %event.user_id,
-                        "Failed to delete user from Elasticsearch: {err}"
-                    );
-                    return Err(EventError::Search(err));
-                }
-
-                debug!(
-                    user_id = %event.user_id,
-                    "Deleted user from Elasticsearch"
-                );
-            }
-        }
+        IdentityEventData::UserDeleted(event) => handle_user_deleted(search, event).await?,
     }
 
     Ok(())
+}
+
+async fn handle_user_created(
+    search: &Arc<ElasticsearchClient>,
+    event: UserCreatedEventData,
+) -> Result<(), EventError> {
+    debug!(
+        user_id = %event.user_id,
+        username = %event.username,
+        "Processing UserCreated event for search indexing"
+    );
+
+    let document = UserDocument {
+        user_id: event.user_id,
+        username: event.username,
+        display_name: String::new(),
+        bio: None,
+        location: None,
+        interests: vec![],
+        is_verified: false,
+        follower_count: 0,
+    };
+
+    if let Err(err) = search.index_user(&document).await {
+        error!(
+            user_id = %event.user_id,
+            "Failed to index user in Elasticsearch: {err}"
+        );
+        return Err(EventError::Search(err));
+    }
+
+    debug!(
+        user_id = %event.user_id,
+        "Indexed new user into Elasticsearch"
+    );
+    Ok(())
+}
+
+async fn handle_user_profile_updated(
+    search: &Arc<ElasticsearchClient>,
+    event: UserProfileUpdatedEventData,
+) -> Result<(), EventError> {
+    debug!(
+        user_id = %event.user_id,
+        username = %event.username,
+        "Processing UserProfileUpdated event for search indexing"
+    );
+
+    let document = UserDocument {
+        user_id: event.user_id,
+        username: event.username,
+        display_name: event.display_name.unwrap_or_default(),
+        bio: event.bio,
+        location: None,
+        interests: vec![],
+        is_verified: event.is_verified,
+        follower_count: event.follower_count,
+    };
+
+    if let Err(err) = search.index_user(&document).await {
+        error!(
+            user_id = %event.user_id,
+            "Failed to update user in Elasticsearch: {err}"
+        );
+        return Err(EventError::Search(err));
+    }
+
+    debug!(
+        user_id = %event.user_id,
+        "Updated user in Elasticsearch"
+    );
+    Ok(())
+}
+
+async fn handle_user_deleted(
+    search: &Arc<ElasticsearchClient>,
+    event: UserDeletedEventData,
+) -> Result<(), EventError> {
+    debug!(
+        user_id = %event.user_id,
+        soft_delete = event.soft_delete,
+        "Processing UserDeleted event"
+    );
+
+    if !event.soft_delete {
+        if let Err(err) = search.delete_user(event.user_id).await {
+            error!(
+                user_id = %event.user_id,
+                "Failed to delete user from Elasticsearch: {err}"
+            );
+            return Err(EventError::Search(err));
+        }
+
+        debug!(
+            user_id = %event.user_id,
+            "Deleted user from Elasticsearch"
+        );
+    }
+
+    Ok(())
+}
+
+fn parse_enveloped_or_direct<T: DeserializeOwned>(payload: &[u8]) -> Result<T, EventError> {
+    #[derive(Deserialize)]
+    struct Envelope<T> {
+        data: T,
+    }
+
+    if let Ok(envelope) = serde_json::from_slice::<Envelope<T>>(payload) {
+        return Ok(envelope.data);
+    }
+    Ok(serde_json::from_slice::<T>(payload)?)
 }
 
 #[cfg(test)]

@@ -9,7 +9,7 @@
 - **话题标签搜索**: 从帖子 caption 中提取并搜索话题标签
 - **Redis 缓存**: 搜索结果缓存 24 小时，显著提升响应速度
 - **相关性排序**: 帖子搜索按相关性（ts_rank）和时间排序
-- **Kafka 事件同步**: 自动消费 `message_persisted`/`message_deleted` 事件并更新 Elasticsearch 索引
+- **Kafka 事件同步**: 自动消费 `nova.message.events`（event_type: message.persisted/message.deleted），并兼容 `message_persisted`/`message_deleted`
 - Axum web 框架
 - 健康检查端点
 
@@ -24,6 +24,7 @@ ELASTICSEARCH_URL=http://localhost:9200        # 可选，启用 Elasticsearch �
 ELASTICSEARCH_POST_INDEX=nova_posts            # 可选，默认 nova_posts
 ELASTICSEARCH_MESSAGE_INDEX=nova_messages      # 可选，默认 nova_messages
 KAFKA_BROKERS=localhost:9092                   # 可选，启用 Kafka 消费 message 事件
+KAFKA_MESSAGE_EVENTS_TOPIC=nova.message.events
 KAFKA_MESSAGE_PERSISTED_TOPIC=message_persisted
 KAFKA_MESSAGE_DELETED_TOPIC=message_deleted
 KAFKA_SEARCH_GROUP_ID=nova-search-service

@@ -9,7 +9,8 @@
 //! - GCS_SERVICE_ACCOUNT_JSON_PATH: Alternative: path to service account JSON file
 //! - CONTENT_DATABASE_URL: PostgreSQL URL for media DB (uploads/media_files tables in nova_media)
 //! - KAFKA_BROKERS: Kafka broker addresses
-//! - KAFKA_TOPIC: Topic to consume (default: "media_events")
+//! - KAFKA_TOPIC: Topic to consume (default: "nova.media.events")
+//! - KAFKA_MEDIA_EVENTS_TOPIC / KAFKA_EVENTS_TOPIC: Alternate topic envs
 //! - KAFKA_GROUP_ID: Consumer group ID (default: "thumbnail-worker")
 //! - THUMB_MAX_DIMENSION: Max thumbnail dimension (default: 600)
 //! - THUMB_QUALITY: JPEG quality 0-100 (default: 85)
@@ -67,8 +68,14 @@ impl WorkerConfig {
             content_db_url,
             kafka_brokers: std::env::var("KAFKA_BROKERS")
                 .unwrap_or_else(|_| "localhost:9092".to_string()),
-            kafka_topic: std::env::var("KAFKA_TOPIC")
-                .unwrap_or_else(|_| "media_events".to_string()),
+            kafka_topic: {
+                let topic_prefix =
+                    std::env::var("KAFKA_TOPIC_PREFIX").unwrap_or_else(|_| "nova".to_string());
+                std::env::var("KAFKA_TOPIC")
+                    .or_else(|_| std::env::var("KAFKA_MEDIA_EVENTS_TOPIC"))
+                    .or_else(|_| std::env::var("KAFKA_EVENTS_TOPIC"))
+                    .unwrap_or_else(|_| format!("{}.media.events", topic_prefix))
+            },
             kafka_group_id: std::env::var("KAFKA_GROUP_ID")
                 .unwrap_or_else(|_| "thumbnail-worker".to_string()),
             thumb_max_dimension: std::env::var("THUMB_MAX_DIMENSION")

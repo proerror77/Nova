@@ -136,7 +136,7 @@ For each event:
   - feed-service: remove from feeds
   - [UPDATE outbox_events SET published_at = NOW()]
   ↓
-Kafka topic: user-events
+Kafka topic: nova.identity.events
   Event: {"type": "UserDeleted", "user_id": "...", "deleted_at": "..."}
 ```
 

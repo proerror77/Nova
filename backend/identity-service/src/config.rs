@@ -154,7 +154,7 @@ impl KafkaSettings {
 
         Ok(Self {
             brokers,
-            topic_prefix: env::var("KAFKA_TOPIC_PREFIX").unwrap_or_else(|_| "identity".to_string()),
+            topic_prefix: env::var("KAFKA_TOPIC_PREFIX").unwrap_or_else(|_| "nova".to_string()),
             producer_timeout: env::var("KAFKA_PRODUCER_TIMEOUT")
                 .unwrap_or_else(|_| "5".to_string())
                 .parse()
