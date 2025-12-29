@@ -226,6 +226,7 @@ impl CounterService {
     // ========== Batch Operations (MGET Optimization) ==========
 
     /// Batch get all counts for multiple posts (optimized with Redis MGET)
+    /// Falls back to PostgreSQL if Redis is unavailable
     pub async fn batch_get_counts(&self, post_ids: &[Uuid]) -> Result<HashMap<Uuid, PostCounts>> {
         if post_ids.is_empty() {
             return Ok(HashMap::new());
@@ -239,45 +240,56 @@ impl CounterService {
             keys.push(format!("post:{}:shares", post_id));
         }
 
-        // Execute MGET for likes, comments, shares
-        let values: Vec<Option<i64>> = self
+        // Try Redis first, fallback to PostgreSQL on error
+        let redis_result: std::result::Result<Vec<Option<i64>>, _> = self
             .redis
             .clone()
             .get(&keys)
-            .await
-            .context("Failed to batch get counts from Redis")?;
+            .await;
 
-        // Fetch bookmark counts from PostgreSQL (saved_posts table)
-        let bookmark_counts = self.batch_get_bookmark_counts_from_pg(post_ids).await?;
+        let result = match redis_result {
+            Ok(values) => {
+                // Redis succeeded - parse results
+                let bookmark_counts = self.batch_get_bookmark_counts_from_pg(post_ids).await?;
+                let mut result = HashMap::new();
+                for (i, post_id) in post_ids.iter().enumerate() {
+                    let like_count = values[i * 3].unwrap_or(0);
+                    let comment_count = values[i * 3 + 1].unwrap_or(0);
+                    let share_count = values[i * 3 + 2].unwrap_or(0);
+                    let bookmark_count = bookmark_counts.get(post_id).copied().unwrap_or(0);
 
-        // Parse results
-        let mut result = HashMap::new();
-        for (i, post_id) in post_ids.iter().enumerate() {
-            let like_count = values[i * 3].unwrap_or(0);
-            let comment_count = values[i * 3 + 1].unwrap_or(0);
-            let share_count = values[i * 3 + 2].unwrap_or(0);
-            let bookmark_count = bookmark_counts.get(post_id).copied().unwrap_or(0);
+                    result.insert(
+                        *post_id,
+                        PostCounts {
+                            like_count,
+                            comment_count,
+                            share_count,
+                            bookmark_count,
+                        },
+                    );
+                }
 
-            result.insert(
-                *post_id,
-                PostCounts {
-                    like_count,
-                    comment_count,
-                    share_count,
-                    bookmark_count,
-                },
-            );
-        }
+                // Warm cache for missing entries (async background job)
+                if let Err(err) = self.warm_missing_counters(post_ids, &result).await {
+                    tracing::warn!(
+                        error = ?err,
+                        post_count = post_ids.len(),
+                        "Failed to warm missing counters"
+                    );
+                }
 
-        // Warm cache for missing entries (async background job)
-        // Note: This is fire-and-forget, errors logged but not propagated
-        if let Err(err) = self.warm_missing_counters(post_ids, &result).await {
-            tracing::warn!(
-                error = ?err,
-                post_count = post_ids.len(),
-                "Failed to warm missing counters"
-            );
-        }
+                result
+            }
+            Err(redis_err) => {
+                // Redis failed - fallback to PostgreSQL
+                tracing::warn!(
+                    error = ?redis_err,
+                    post_count = post_ids.len(),
+                    "Redis MGET failed, falling back to PostgreSQL"
+                );
+                self.load_counters_from_pg(post_ids).await?
+            }
+        };
 
         Ok(result)
     }

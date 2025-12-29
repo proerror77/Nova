@@ -87,6 +87,11 @@ final class FeedSocialActionsHandler {
             } else {
                 try await socialService.createLike(postId: postId, userId: userId)
             }
+
+            // Invalidate feed cache on successful like/unlike to ensure
+            // fresh data is fetched when user navigates back to feed
+            await FeedCacheService.shared.invalidateCache()
+
             return true
         } catch let error as APIError {
             // Revert on failure
@@ -146,6 +151,10 @@ final class FeedSocialActionsHandler {
             } else {
                 try await socialService.createBookmark(postId: postId, userId: userId)
             }
+
+            // Invalidate feed cache on successful bookmark/unbookmark
+            await FeedCacheService.shared.invalidateCache()
+
             return true
         } catch let error as APIError {
             // Handle specific error cases - some errors should keep local state

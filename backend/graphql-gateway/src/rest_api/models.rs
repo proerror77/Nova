@@ -106,6 +106,7 @@ pub struct UpdateUserResponse {
 // ============================================================================
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FeedPost {
     pub id: String,
     pub user_id: String,
@@ -118,6 +119,9 @@ pub struct FeedPost {
     pub bookmark_count: u32,
     pub media_urls: Vec<String>,
     pub media_type: String,
+    // User-specific engagement status
+    pub is_liked: bool,
+    pub is_bookmarked: bool,
     // Author information
     #[serde(skip_serializing_if = "Option::is_none")]
     pub author_username: Option<String>,

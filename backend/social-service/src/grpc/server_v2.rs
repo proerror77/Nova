@@ -243,24 +243,34 @@ impl SocialService for SocialServiceImpl {
         let post_id = parse_uuid(&req.post_id, "post_id")?;
 
         let like_repo = self.like_repo();
-        like_repo
+        let (_like, was_created) = like_repo
             .create_like(user_id, post_id)
             .await
             .map_err(|e| Status::internal(format!("Failed to create like: {}", e)))?;
 
-        let like_count = match self
-            .state
-            .counter_service
-            .increment_like_count(post_id)
-            .await
-        {
-            Ok(v) => v,
-            Err(_) => self
+        // Only increment counter if this is a NEW like, not a duplicate
+        let like_count = if was_created {
+            match self
                 .state
+                .counter_service
+                .increment_like_count(post_id)
+                .await
+            {
+                Ok(v) => v,
+                Err(_) => self
+                    .state
+                    .counter_service
+                    .get_like_count(post_id)
+                    .await
+                    .unwrap_or(0),
+            }
+        } else {
+            // Already liked - just return current count without incrementing
+            self.state
                 .counter_service
                 .get_like_count(post_id)
                 .await
-                .unwrap_or(0),
+                .unwrap_or(0)
         };
 
         Ok(Response::new(CreateLikeResponse {
@@ -1036,6 +1046,48 @@ impl SocialService for SocialServiceImpl {
         Ok(Response::new(BatchGetCountsResponse {
             counts: proto_counts,
         }))
+    }
+
+    async fn batch_get_like_status(
+        &self,
+        request: Request<BatchGetLikeStatusRequest>,
+    ) -> Result<Response<BatchGetLikeStatusResponse>, Status> {
+        let req = request.into_inner();
+
+        // Validate input
+        if req.post_ids.is_empty() {
+            return Ok(Response::new(BatchGetLikeStatusResponse {
+                statuses: std::collections::HashMap::new(),
+            }));
+        }
+
+        if req.post_ids.len() > 100 {
+            return Err(Status::invalid_argument("Maximum 100 post_ids allowed"));
+        }
+
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+
+        // Parse UUIDs
+        let post_ids: Vec<Uuid> = req
+            .post_ids
+            .iter()
+            .map(|id| parse_uuid(id, "post_id"))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Fetch like status from repository
+        let liked_map = self
+            .like_repo()
+            .batch_check_liked(user_id, &post_ids)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to check like status: {}", e)))?;
+
+        // Convert to proto response
+        let statuses: std::collections::HashMap<String, bool> = liked_map
+            .into_iter()
+            .map(|(post_id, is_liked)| (post_id.to_string(), is_liked))
+            .collect();
+
+        Ok(Response::new(BatchGetLikeStatusResponse { statuses }))
     }
 
     // ========= Bookmarks =========

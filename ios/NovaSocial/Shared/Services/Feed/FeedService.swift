@@ -389,6 +389,10 @@ struct FeedPostRaw: Codable {
     let mediaUrls: [String]?
     let thumbnailUrls: [String]?
     let mediaType: String?
+    /// Whether the current user has liked this post (from backend)
+    let isLiked: Bool?
+    /// Whether the current user has bookmarked this post (from backend)
+    let isBookmarked: Bool?
 
     // Author information (optional for backward compatibility)
     let authorUsername: String?
@@ -631,8 +635,9 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.commentCount = raw.commentCount ?? 0
         self.shareCount = raw.shareCount ?? 0
         self.bookmarkCount = raw.bookmarkCount ?? 0
-        self.isLiked = false
-        self.isBookmarked = false
+        // Use backend-provided like/bookmark status (defaults to false for backward compatibility)
+        self.isLiked = raw.isLiked ?? false
+        self.isBookmarked = raw.isBookmarked ?? false
     }
 
     // Keep existing init for Codable conformance and manual creation

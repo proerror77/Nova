@@ -49,6 +49,16 @@ spec:
       containers:
       - name: media-service
         env:
+        # Port configuration - must be preserved from base manifest
+        - name: HTTP_PORT
+          value: "8085"
+        - name: GRPC_PORT
+          value: "9085"
+        - name: SERVER_HOST
+          value: "0.0.0.0"
+        - name: SERVER_PORT
+          value: "8085"
+        # S3 configuration
         - name: S3_BUCKET_NAME
           valueFrom:
             secretKeyRef:
