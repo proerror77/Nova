@@ -107,10 +107,24 @@ pub struct RoomStatusResponse {
 // Matrix API Handlers (Proxy to realtime-chat-service)
 // =============================================================================
 
+/// Request body for Matrix token endpoint
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct MatrixTokenRequest {
+    /// Optional user_id (usually extracted from JWT, not from body)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<String>,
+    /// Device ID to bind the Matrix session to (for seamless iOS E2EE)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
+}
+
 /// POST /api/v2/matrix/token
 /// Get Matrix access token for the authenticated user
 #[post("/api/v2/matrix/token")]
-pub async fn get_matrix_token(http_req: HttpRequest) -> HttpResponse {
+pub async fn get_matrix_token(
+    http_req: HttpRequest,
+    body: Option<web::Json<MatrixTokenRequest>>,
+) -> HttpResponse {
     let user_id = match http_req.extensions().get::<AuthenticatedUser>().copied() {
         Some(AuthenticatedUser(id)) => id.to_string(),
         None => return HttpResponse::Unauthorized().finish(),
@@ -119,15 +133,23 @@ pub async fn get_matrix_token(http_req: HttpRequest) -> HttpResponse {
     let base_url = get_chat_service_url();
     let url = format!("{}/api/v2/matrix/token", base_url);
 
-    info!(user_id = %user_id, "Proxying Matrix token request");
+    // Extract device_id from request body if provided
+    let device_id = body.as_ref().and_then(|b| b.device_id.clone());
 
-    // Forward the request with user authentication
+    info!(
+        user_id = %user_id,
+        device_id = ?device_id,
+        "Proxying Matrix token request"
+    );
+
+    // Forward the request with user authentication and device_id
     let client = get_http_client();
 
-    // Build the request with user_id in body (realtime-chat-service expects this from the User guard)
-    let request_body = serde_json::json!({
-        "user_id": user_id
-    });
+    // Build the request body, including device_id if provided by client
+    let request_body = MatrixTokenRequest {
+        user_id: Some(user_id.clone()),
+        device_id,
+    };
 
     match client
         .post(&url)
