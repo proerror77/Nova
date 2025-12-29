@@ -278,6 +278,7 @@ extension AppCoordinator {
         case .emailSentConfirmation(let email): return .emailSentConfirmation(email: email)
         case .resetPassword(let token): return .resetPassword(token: token)
         case .createAccount: return .createAccount
+        case .createAccountEmail: return .createAccount  // Use same route as createAccount
         case .home: return .home
         case .rankingList: return .rankingList
         case .search: return .search(query: nil)

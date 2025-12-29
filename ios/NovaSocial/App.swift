@@ -78,6 +78,9 @@ struct IceredApp: App {
                     case .createAccount:
                         CreateAccountView(currentPage: $currentPage)
                             .transition(.identity)
+                    case .createAccountEmail:
+                        CreateAccountEmailView(currentPage: $currentPage)
+                            .transition(.identity)
                     case .home:
                         // Skip 跳过登录直接进入Home
                         HomeView(currentPage: $currentPage)
@@ -89,7 +92,7 @@ struct IceredApp: App {
                 } else {
                     // 已登录后的页面切换
                     switch currentPage {
-                    case .login, .createAccount, .inviteCode:
+                    case .login, .createAccount, .createAccountEmail, .inviteCode:
                         // 登录成功后跳转到首页
                         HomeView(currentPage: $currentPage)
                             .transition(.identity)
