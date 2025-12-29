@@ -37,8 +37,8 @@ struct CreateAccountEmailView: View {
     // Access global AuthenticationManager
     @EnvironmentObject private var authManager: AuthenticationManager
 
-    // Access AvatarManager
-    @StateObject private var avatarManager = AvatarManager.shared
+    // Access AvatarManager (use ObservedObject for singleton)
+    @ObservedObject private var avatarManager = AvatarManager.shared
 
     // Services
     private let mediaService = MediaService()
@@ -370,17 +370,40 @@ struct CreateAccountEmailView: View {
         .ignoresSafeArea(.keyboard)
         .onChange(of: selectedPhotoItem) { oldValue, newValue in
             Task {
-                if let photoItem = newValue,
-                   let data = try? await photoItem.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
+                guard let photoItem = newValue else { return }
+
+                do {
+                    guard let data = try await photoItem.loadTransferable(type: Data.self) else {
+                        await MainActor.run {
+                            errorMessage = "Unable to load the selected photo"
+                        }
+                        return
+                    }
+
+                    guard let image = UIImage(data: data) else {
+                        await MainActor.run {
+                            errorMessage = "The selected image format is not supported"
+                        }
+                        return
+                    }
+
                     // 显示选择的头像
-                    selectedAvatar = image
+                    await MainActor.run {
+                        selectedAvatar = image
+                    }
                     // 保存到 AvatarManager
                     avatarManager.savePendingAvatar(image)
 
                     #if DEBUG
                     print("[CreateAccountEmailView] 头像已选择并保存")
                     #endif
+                } catch {
+                    #if DEBUG
+                    print("[CreateAccountEmailView] Photo loading error: \(error)")
+                    #endif
+                    await MainActor.run {
+                        errorMessage = "Failed to load photo. Please try a different image."
+                    }
                 }
             }
         }
@@ -398,13 +421,20 @@ struct CreateAccountEmailView: View {
 
         let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        let finalInviteCode = inviteCode.isEmpty ? "NOVATEST" : inviteCode
+        let trimmedInviteCode = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Require invite code - no hardcoded fallback for security
+        guard !trimmedInviteCode.isEmpty else {
+            errorMessage = "Please enter an invite code"
+            isLoading = false
+            return
+        }
 
         #if DEBUG
         print("[CreateAccountEmailView] Starting registration")
         print("[CreateAccountEmailView] Username: \(trimmedUsername)")
         print("[CreateAccountEmailView] Email: \(trimmedEmail)")
-        print("[CreateAccountEmailView] Invite Code: \(finalInviteCode)")
+        print("[CreateAccountEmailView] Invite Code: \(trimmedInviteCode)")
         #endif
 
         do {
@@ -413,7 +443,7 @@ struct CreateAccountEmailView: View {
                 email: trimmedEmail,
                 password: password,
                 displayName: displayName.isEmpty ? username : displayName,
-                inviteCode: finalInviteCode
+                inviteCode: trimmedInviteCode
             )
 
             await uploadAvatarIfNeeded(userId: user.id)
