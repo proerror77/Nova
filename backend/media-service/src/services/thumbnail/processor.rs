@@ -2,12 +2,15 @@
 //!
 //! Takes an image, resizes it to the specified max dimension while maintaining aspect ratio,
 //! and encodes it as JPEG with configurable quality.
+//!
+//! Uses `spawn_blocking` for CPU-intensive operations to avoid blocking the async runtime.
 
 use crate::error::{AppError, Result};
 use bytes::Bytes;
 use image::imageops::FilterType;
 use image::{DynamicImage, GenericImageView, ImageOutputFormat};
 use std::io::Cursor;
+use std::sync::Arc;
 use tracing::debug;
 
 /// Configuration for thumbnail generation
@@ -55,7 +58,10 @@ impl ThumbnailProcessor {
         Self::new(ThumbnailConfig::default())
     }
 
-    /// Generate a thumbnail from the given image data
+    /// Generate a thumbnail from the given image data (blocking version)
+    ///
+    /// **Note:** This method performs CPU-intensive operations and should not be called
+    /// directly from async code. Use `generate_async` instead.
     pub fn generate(&self, original_data: &[u8]) -> Result<ThumbnailResult> {
         // Decode the image
         let img = image::load_from_memory(original_data)
@@ -100,6 +106,51 @@ impl ThumbnailProcessor {
             width: new_w,
             height: new_h,
         })
+    }
+
+    /// Generate a thumbnail asynchronously using a blocking thread pool
+    ///
+    /// This method offloads the CPU-intensive image processing to a dedicated
+    /// thread pool, preventing the async runtime from being blocked.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let processor = ThumbnailProcessor::with_defaults();
+    /// let result = processor.generate_async(image_bytes).await?;
+    /// ```
+    pub async fn generate_async(self: Arc<Self>, original_data: Bytes) -> Result<ThumbnailResult> {
+        let processor = self.clone();
+
+        tokio::task::spawn_blocking(move || processor.generate(&original_data))
+            .await
+            .map_err(|e| AppError::Internal(format!("Thumbnail task panicked: {e}")))?
+    }
+
+    /// Generate multiple thumbnails in parallel
+    ///
+    /// Processes multiple images concurrently, each on its own blocking thread.
+    /// Returns results in the same order as the input.
+    pub async fn generate_batch_async(
+        self: Arc<Self>,
+        images: Vec<Bytes>,
+    ) -> Vec<Result<ThumbnailResult>> {
+        let handles: Vec<_> = images
+            .into_iter()
+            .map(|data| {
+                let processor = self.clone();
+                tokio::task::spawn_blocking(move || processor.generate(&data))
+            })
+            .collect();
+
+        let mut results = Vec::with_capacity(handles.len());
+        for handle in handles {
+            let result = match handle.await {
+                Ok(r) => r,
+                Err(e) => Err(AppError::Internal(format!("Thumbnail task panicked: {e}"))),
+            };
+            results.push(result);
+        }
+        results
     }
 
     /// Calculate new dimensions maintaining aspect ratio
