@@ -36,6 +36,7 @@ struct UploadTask: Identifiable {
     let postText: String
     let channelIds: [String]
     let nameType: NameDisplayType
+    let location: String?
     let onSuccess: ((Post) -> Void)?
 
     var status: PostUploadStatus = .preparing
@@ -49,6 +50,7 @@ struct UploadTask: Identifiable {
         postText: String,
         channelIds: [String],
         nameType: NameDisplayType,
+        location: String?,
         onSuccess: ((Post) -> Void)?
     ) {
         self.id = UUID()
@@ -56,6 +58,7 @@ struct UploadTask: Identifiable {
         self.postText = postText
         self.channelIds = channelIds
         self.nameType = nameType
+        self.location = location
         self.onSuccess = onSuccess
     }
 }
@@ -166,6 +169,7 @@ final class BackgroundUploadManager: ObservableObject {
         channelIds: [String],
         nameType: NameDisplayType,
         userId: String,
+        location: String?,
         onSuccess: ((Post) -> Void)?
     ) {
         // Cancel any existing upload
@@ -177,6 +181,7 @@ final class BackgroundUploadManager: ObservableObject {
             postText: postText,
             channelIds: channelIds,
             nameType: nameType,
+            location: location,
             onSuccess: onSuccess
         )
 
@@ -234,7 +239,8 @@ final class BackgroundUploadManager: ObservableObject {
                 userId: userId,
                 content: content.isEmpty ? " " : content,
                 mediaUrls: mediaUrls.isEmpty ? nil : mediaUrls,
-                channelIds: task.channelIds.isEmpty ? nil : task.channelIds
+                channelIds: task.channelIds.isEmpty ? nil : task.channelIds,
+                location: task.location
             )
 
             // Check for cancellation
@@ -299,11 +305,11 @@ final class BackgroundUploadManager: ObservableObject {
 
         for (index, item) in items.enumerated() {
             switch item {
-            case .image(let image):
+            case .image(let image, _):
                 imagesToProcess.append((image: image, index: index))
-            case .livePhoto(let data):
+            case .livePhoto(let data, _):
                 livePhotos.append((data: data, index: index))
-            case .video(let data):
+            case .video(let data, _):
                 videos.append((data: data, index: index))
             }
         }
@@ -483,7 +489,8 @@ final class BackgroundUploadManager: ObservableObject {
         userId: String,
         content: String,
         mediaUrls: [String]?,
-        channelIds: [String]?
+        channelIds: [String]?,
+        location: String?
     ) async throws -> Post {
         var lastError: Error?
         let maxRetries = 5
@@ -515,7 +522,8 @@ final class BackgroundUploadManager: ObservableObject {
                     creatorId: userId,
                     content: content,
                     mediaUrls: mediaUrls,
-                    channelIds: channelIds
+                    channelIds: channelIds,
+                    location: location
                 )
                 return post
             } catch let error as APIError {

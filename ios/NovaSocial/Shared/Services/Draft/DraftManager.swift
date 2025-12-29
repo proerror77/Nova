@@ -138,7 +138,7 @@ actor PostDraftManager {
 
         for (index, item) in mediaItems.enumerated() {
             switch item {
-            case .image(let image):
+            case .image(let image, _):
                 let filename = "image_\(index).jpg"
                 let imagePath = draftMediaDir.appendingPathComponent(filename)
                 if let data = image.jpegData(compressionQuality: 0.8) {
@@ -147,7 +147,7 @@ actor PostDraftManager {
                     draftLogger.debug("Saved draft image: \(filename)")
                 }
 
-            case .livePhoto(let data):
+            case .livePhoto(let data, _):
                 // Save still image
                 let imageFilename = "livephoto_\(index)_still.jpg"
                 let imagePath = draftMediaDir.appendingPathComponent(imageFilename)
@@ -166,7 +166,7 @@ actor PostDraftManager {
                 ))
                 draftLogger.debug("Saved draft Live Photo: \(index)")
 
-            case .video(let data):
+            case .video(let data, _):
                 // Save thumbnail
                 let thumbnailFilename = "video_\(index)_thumb.jpg"
                 let thumbnailPath = draftMediaDir.appendingPathComponent(thumbnailFilename)
@@ -221,6 +221,7 @@ actor PostDraftManager {
     /// Load media items from a draft back into PostMediaItem format
     /// - Parameter draft: The draft to load media from
     /// - Returns: Array of PostMediaItem loaded from disk
+    /// - Note: Metadata is not preserved in drafts, so .empty is used
     func loadMediaForDraft(_ draft: Draft) async -> [PostMediaItem] {
         guard let draftDir = draftDirectory else { return [] }
 
@@ -231,7 +232,8 @@ actor PostDraftManager {
             case .imageFile(let relativePath):
                 let imagePath = draftDir.appendingPathComponent(relativePath)
                 if let image = UIImage(contentsOfFile: imagePath.path) {
-                    mediaItems.append(.image(image))
+                    // Drafts don't preserve photo metadata
+                    mediaItems.append(.image(image, .empty))
                 }
 
             case .livePhotoFile(let imagePath, let videoPath):
@@ -245,7 +247,7 @@ actor PostDraftManager {
                         videoURL: fullVideoPath,
                         phLivePhoto: nil
                     )
-                    mediaItems.append(.livePhoto(livePhotoData))
+                    mediaItems.append(.livePhoto(livePhotoData, .empty))
                 }
 
             case .videoFile(let videoPath, let thumbnailPath, let duration):
@@ -259,7 +261,7 @@ actor PostDraftManager {
                         thumbnail: thumbnail,
                         duration: duration
                     )
-                    mediaItems.append(.video(videoData))
+                    mediaItems.append(.video(videoData, .empty))
                 }
             }
         }

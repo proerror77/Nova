@@ -1,16 +1,60 @@
 import Foundation
+import CoreLocation
 
 // MARK: - VLM (Vision Language Model) Service
 // Calls Nova's VLM API endpoints (/api/v2/vlm/*)
 // Uses Google Cloud Vision for image analysis and automatic channel classification
+// Enhanced with location-aware tagging capabilities
 
 @Observable
 final class VLMService {
     static let shared = VLMService()
 
     private let apiClient = APIClient.shared
+    private let geocoder = CLGeocoder()
 
     private init() {}
+
+    // MARK: - Location Context
+
+    /// Context information extracted from photo metadata for smarter tagging
+    struct LocationContext: Sendable {
+        let latitude: Double
+        let longitude: Double
+        let locationName: String?
+        let timestamp: Date?
+
+        /// Format date as season/time of day for tag generation
+        var seasonContext: String? {
+            guard let date = timestamp else { return nil }
+            let calendar = Calendar.current
+            let month = calendar.component(.month, from: date)
+            let hour = calendar.component(.hour, from: date)
+
+            var context: [String] = []
+
+            // Season (Northern Hemisphere)
+            switch month {
+            case 3...5: context.append("spring")
+            case 6...8: context.append("summer")
+            case 9...11: context.append("autumn")
+            default: context.append("winter")
+            }
+
+            // Time of day
+            switch hour {
+            case 5...8: context.append("morning")
+            case 9...11: context.append("daytime")
+            case 12...14: context.append("noon")
+            case 15...17: context.append("afternoon")
+            case 18...20: context.append("evening")
+            case 21...23, 0...4: context.append("night")
+            default: break
+            }
+
+            return context.joined(separator: ", ")
+        }
+    }
 
     // MARK: - Image Analysis API
 
@@ -59,6 +103,100 @@ final class VLMService {
             #endif
             throw VLMError.from(error)
         }
+    }
+
+    // MARK: - Enhanced Image Analysis with Location
+
+    /// Analyze an image with photo metadata for location-aware tagging
+    /// - Parameters:
+    ///   - imageUrl: CDN URL of the uploaded image
+    ///   - metadata: Photo metadata containing location and timestamp
+    ///   - includeChannels: Whether to include channel suggestions
+    ///   - maxTags: Maximum number of tags to return
+    /// - Returns: Analysis result with tags enhanced by location context
+    @MainActor
+    func analyzeImageWithMetadata(
+        imageUrl: String,
+        metadata: PhotoMetadata,
+        includeChannels: Bool = true,
+        maxTags: Int = 15
+    ) async throws -> VLMAnalysisResult {
+        // First, get the standard VLM analysis
+        var result = try await analyzeImage(
+            imageUrl: imageUrl,
+            includeChannels: includeChannels,
+            maxTags: maxTags
+        )
+
+        // If we have location metadata, add location-based tags
+        if metadata.hasAnyMetadata {
+            let locationTags = generateLocationTags(from: metadata)
+            #if DEBUG
+            print("[VLMService] Generated \(locationTags.count) location-based tags")
+            #endif
+
+            // Merge location tags with VLM tags (location tags have slightly lower confidence)
+            result = VLMAnalysisResult(
+                tags: result.tags + locationTags,
+                channels: result.channels,
+                processingTimeMs: result.processingTimeMs
+            )
+        }
+
+        return result
+    }
+
+    /// Generate tags based on photo location and timestamp
+    /// - Parameter metadata: Photo metadata
+    /// - Returns: Array of location-based tag suggestions
+    private func generateLocationTags(from metadata: PhotoMetadata) -> [TagSuggestion] {
+        var tags: [TagSuggestion] = []
+
+        // Add location name as tag (e.g., #Beijing, #Tokyo)
+        if let locationName = metadata.locationName {
+            // Extract city/country components
+            let components = locationName.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            for (index, component) in components.enumerated() {
+                // Clean component for hashtag use (remove spaces, special chars)
+                let cleanTag = component.replacingOccurrences(of: " ", with: "")
+                    .filter { $0.isLetter || $0.isNumber }
+                if !cleanTag.isEmpty {
+                    // City gets higher confidence than country
+                    let confidence: Float = index == 0 ? 0.75 : 0.65
+                    tags.append(TagSuggestion(
+                        tag: cleanTag,
+                        confidence: confidence,
+                        source: "location"
+                    ))
+                }
+            }
+        }
+
+        // Add temporal tags based on creation date
+        if let date = metadata.creationDate {
+            let calendar = Calendar.current
+            let month = calendar.component(.month, from: date)
+            let year = calendar.component(.year, from: date)
+
+            // Season tag
+            let seasonTag: String
+            switch month {
+            case 3...5: seasonTag = "Spring"
+            case 6...8: seasonTag = "Summer"
+            case 9...11: seasonTag = "Autumn"
+            default: seasonTag = "Winter"
+            }
+            tags.append(TagSuggestion(tag: seasonTag, confidence: 0.6, source: "temporal"))
+
+            // Year tag (for throwback posts)
+            let currentYear = calendar.component(.year, from: Date())
+            if year < currentYear {
+                tags.append(TagSuggestion(tag: "Throwback", confidence: 0.5, source: "temporal"))
+                tags.append(TagSuggestion(tag: "\(year)", confidence: 0.5, source: "temporal"))
+            }
+        }
+
+        return tags
     }
 
     // MARK: - Post Tags API
