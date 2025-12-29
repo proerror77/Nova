@@ -330,7 +330,7 @@ final class BackgroundUploadManager: ObservableObject {
                             imageInfo.image,
                             quality: .low,
                             format: .webp,
-                            stripMetadata: false  // Preserve EXIF, GPS, and other metadata
+                            stripMetadata: false  // Keep metadata for now - stripping causes encoding issues
                         )
                         #if DEBUG
                         print("[BackgroundUpload] WebP: \(result.compressedSize / 1024) KB (saved \(String(format: "%.0f", result.savedPercentage))%)")
@@ -354,7 +354,7 @@ final class BackgroundUploadManager: ObservableObject {
             let imagesToUpload = compressedImages.map { (data: $0.data, filename: $0.filename) }
             let batchResult = await mediaService.uploadImagesInParallel(
                 images: imagesToUpload,
-                maxConcurrent: 5,
+                maxConcurrent: 8,  // Increased for faster parallel uploads
                 progressCallback: { progress in
                     let overallProgress = 0.3 + (progress * 0.4)
                     onProgress(overallProgress, "Uploading images...")
@@ -407,7 +407,7 @@ final class BackgroundUploadManager: ObservableObject {
                             livePhotoInfo.data.stillImage,
                             quality: .low,
                             format: .webp,
-                            stripMetadata: false  // Preserve EXIF, GPS, and other metadata
+                            stripMetadata: false  // Keep metadata for now
                         )
 
                         do {
