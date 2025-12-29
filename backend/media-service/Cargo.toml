@@ -75,7 +75,7 @@ urlencoding = { workspace = true }
 # ============================================================================
 # STREAMING & WEBSOCKET (from streaming-service)
 # ============================================================================
-actix-ws = "0.2"
+actix-ws = "0.3"
 actix-web-actors = "4.3"
 actix = "0.13"
 validator = { version = "0.20", features = ["derive"] }
