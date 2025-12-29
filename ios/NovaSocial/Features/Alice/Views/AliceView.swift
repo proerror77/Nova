@@ -375,8 +375,9 @@ struct AliceView: View {
                 .padding(.bottom, 82.h)  // 距离手机底部边缘 82pt
             }
             .background(DesignTokens.surface)
-            .ignoresSafeArea(edges: [.top, .bottom])
+            .ignoresSafeArea(edges: .top)  // 统一处理顶部安全区域
             .ignoresSafeArea(.keyboard, edges: .bottom)
+            .ignoresSafeArea(edges: .bottom)
 
             // MARK: - 模型选择器弹窗
             if showModelSelector {

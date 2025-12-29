@@ -330,43 +330,10 @@ struct HomeView: View {
                     .frame(height: max(0, 30.h + channelBarOffset))
                     .clipped()
 
-                // MARK: - 内容区域（固定背景 + 滚动内容）
-                ZStack(alignment: .top) {
-                    // 固定背景图片 - 填满屏幕宽度，从顶部对齐
-                    Image("promo-banner-bg")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(maxWidth: .infinity, alignment: .top)
-                        .frame(height: 400.h, alignment: .top)
-                        .offset(y: -100.h)  // 调整垂直位置：正数向下，负数向上
-                        .clipped()
-                        .allowsHitTesting(false)
-
-                    // 可滚动内容区
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            // MARK: - Promo Banner 内容 (Icon + 文字，紧贴顶部)
-                            VStack(spacing: 21.h) {
-                                Image("home-icon")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 54.s, height: 27.s)
-                                
-                                Text("This is Icered.")
-                                    .font(.system(size: 24.f))
-                                    .tracking(0.72)
-                                    .lineSpacing(20)
-                                    .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
-                                    .fixedSize(horizontal: true, vertical: false)
-                            }
-                            .padding(.top, 12.h)  // 与 Channel 栏保持适当间距
-                            .frame(maxWidth: .infinity)
-                            
-                            // 距离 Post 卡片 68pt 的间距
-                            Spacer()
-                                .frame(height: 68.h)
-
-                            // Feed 内容区域（白色背景，覆盖背景图）
+                // MARK: - 内容区域（白色背景）
+                ScrollView {
+                    VStack(spacing: 0) {
+                        // Feed 内容区域
                             // 使用 LazyVStack 优化长列表性能 - 只渲染可见区域
                             LazyVStack(spacing: 0) {
                                 // MARK: - Error State
@@ -466,6 +433,7 @@ struct HomeView: View {
                             .background(DesignTokens.backgroundColor)
                         }
                     }
+                    .background(Color.white)
                     .scrollIndicators(.hidden)
                     .refreshable {
                         await feedViewModel.refresh()
@@ -496,7 +464,6 @@ struct HomeView: View {
                                 lastDragValue = 0
                             }
                     )
-                }
             }
             .background(Color.white)
             .ignoresSafeArea(edges: .top)
@@ -596,147 +563,7 @@ struct HomeView: View {
     }
 }
 
-// MARK: - Suggested Creators Section
-
-/// A horizontal scrollable section showing recommended creators to follow
-/// Used in the Following tab when user doesn't follow many people
-struct SuggestedCreatorsSection: View {
-    let creators: [RecommendedCreator]
-    let onFollow: (String) async -> Void
-    let onCreatorTap: (String) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header
-            HStack {
-                Text("Suggested for you")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.black)
-
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-
-            // Horizontal scroll of creator cards
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(creators) { creator in
-                        SuggestedCreatorCard(
-                            creator: creator,
-                            onFollow: { await onFollow(creator.id) },
-                            onTap: { onCreatorTap(creator.id) }
-                        )
-                    }
-                }
-                .padding(.horizontal, 16)
-            }
-        }
-        .padding(.vertical, 16)
-        .background(Color.white)
-    }
-}
-
-// MARK: - Suggested Creator Card
-
-/// A compact card for displaying a suggested creator
-struct SuggestedCreatorCard: View {
-    let creator: RecommendedCreator
-    let onFollow: () async -> Void
-    let onTap: () -> Void
-
-    @State private var isFollowing = false
-    @State private var isFollowed = false
-
-    var body: some View {
-        VStack(spacing: 8) {
-            // Avatar
-            Button(action: onTap) {
-                AvatarView(image: nil, url: creator.avatarUrl, size: 60)
-            }
-
-            // Name
-            VStack(spacing: 2) {
-                HStack(spacing: 2) {
-                    Text(creator.displayName)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.black)
-                        .lineLimit(1)
-
-                    if creator.isVerified {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(.blue)
-                    }
-                }
-
-                Text("@\(creator.username)")
-                    .font(.system(size: 11))
-                    .foregroundColor(.gray)
-                    .lineLimit(1)
-            }
-
-            // Follower count
-            Text("\(formatFollowerCount(creator.followerCount)) followers")
-                .font(.system(size: 10))
-                .foregroundColor(.gray)
-
-            // Follow button
-            Button(action: {
-                guard !isFollowing && !isFollowed else { return }
-                isFollowing = true
-                Task {
-                    await onFollow()
-                    await MainActor.run {
-                        isFollowed = true
-                        isFollowing = false
-                    }
-                }
-            }) {
-                if isFollowing {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                        .frame(width: 70, height: 28)
-                } else if isFollowed {
-                    Text("Following")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.gray)
-                        .frame(width: 70, height: 28)
-                        .background(Color(red: 0.95, green: 0.95, blue: 0.95))
-                        .cornerRadius(14)
-                } else {
-                    Text("Follow")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 70, height: 28)
-                        .background(DesignTokens.accentColor)
-                        .cornerRadius(14)
-                }
-            }
-            .disabled(isFollowing || isFollowed)
-        }
-        .frame(width: 100)
-        .padding(.vertical, 12)
-        .padding(.horizontal, 8)
-        .background(Color(red: 0.98, green: 0.98, blue: 0.98))
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color(red: 0.92, green: 0.92, blue: 0.92), lineWidth: 1)
-        )
-    }
-
-    private func formatFollowerCount(_ count: Int) -> String {
-        if count >= 1_000_000 {
-            return String(format: "%.1fM", Double(count) / 1_000_000)
-        } else if count >= 1_000 {
-            return String(format: "%.1fK", Double(count) / 1_000)
-        }
-        return "\(count)"
-    }
-}
-
 #Preview {
     HomeView(currentPage: .constant(.home))
         .environmentObject(AuthenticationManager.shared)
 }
-
