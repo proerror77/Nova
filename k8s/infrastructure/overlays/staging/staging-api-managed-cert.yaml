@@ -1,0 +1,9 @@
+# Google Managed Certificate for staging-api.icered.com
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: staging-api-icered-cert
+  namespace: nova-staging
+spec:
+  domains:
+    - staging-api.icered.com

@@ -10,7 +10,7 @@
 
 - **notifications**: Core notification storage
   - Fields: id, user_id, title, body, notification_type, data, related_user_id, related_post_id, related_message_id
-  - Status tracking: is_read, read_at, is_deleted, deleted_at
+  - Status tracking: is_read, read_at, deleted_at, updated_at
   - Priority and status fields
   - Indexes: user_id, is_read, created_at, notification_type, status
 
@@ -61,7 +61,7 @@
    - Returns count of marked notifications
 
 6. **DeleteNotification** ✅
-   - Soft delete (is_deleted=TRUE)
+   - Soft delete (sets deleted_at)
    - Sets deleted_at timestamp
 
 7. **RegisterPushToken** ✅

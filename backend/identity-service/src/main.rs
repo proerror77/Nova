@@ -12,7 +12,7 @@ use identity_service::{
     grpc::{nova::auth_service::auth_service_server::AuthServiceServer, IdentityServiceServer},
     http::{start_http_server, HttpServerState},
     security::initialize_jwt_keys,
-    services::{spawn_outbox_consumer, EmailService, KafkaEventProducer, OutboxConsumerConfig},
+    services::{spawn_outbox_consumer, EmailService, IdentityOutboxPublisher, OutboxConsumerConfig},
 };
 use once_cell::sync::OnceCell;
 use opentelemetry_config::{init_tracing, TracingConfig};
@@ -118,19 +118,19 @@ async fn main() -> Result<()> {
     let redis = redis_pool.manager();
     info!("Redis connection manager initialized");
 
-    // Initialize Kafka producer (optional)
-    let kafka_producer = if settings.kafka.brokers.is_empty() {
+    // Initialize Kafka outbox publisher (optional)
+    let outbox_publisher = if settings.kafka.brokers.is_empty() {
         info!("Kafka brokers not configured; running without event publishing");
         None
     } else {
         let brokers = settings.kafka.brokers.join(",");
-        match KafkaEventProducer::new(&brokers, &settings.kafka.topic_prefix) {
-            Ok(producer) => {
-                info!("Kafka producer initialized");
-                Some(producer)
+        match IdentityOutboxPublisher::new(&brokers, &settings.kafka.topic_prefix) {
+            Ok(publisher) => {
+                info!("Kafka outbox publisher initialized");
+                Some(publisher)
             }
             Err(err) => {
-                error!("Failed to initialize Kafka producer: {:?}", err);
+                error!("Failed to initialize Kafka outbox publisher: {}", err);
                 None
             }
         }
@@ -147,12 +147,12 @@ async fn main() -> Result<()> {
     }
 
     // Spawn outbox consumer (background task)
-    let _outbox_handle = if kafka_producer.is_some() {
+    let _outbox_handle = if outbox_publisher.is_some() {
         let consumer_config = OutboxConsumerConfig::default();
         info!("Starting outbox consumer");
         Some(spawn_outbox_consumer(
             db_pool.clone(),
-            kafka_producer.clone(),
+            outbox_publisher,
             consumer_config,
         ))
     } else {
@@ -175,6 +175,8 @@ async fn main() -> Result<()> {
     };
 
     // Build gRPC server
+    let kafka_producer = None;
+
     let identity_service = IdentityServiceServer::new(
         db_pool.clone(),
         redis.clone(),

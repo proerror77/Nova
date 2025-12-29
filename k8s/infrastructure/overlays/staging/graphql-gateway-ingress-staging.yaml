@@ -1,0 +1,136 @@
+# Staging API Ingress with Google Managed Certificate
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: graphql-gateway-ingress
+  namespace: nova-staging
+  labels:
+    app: nova-api
+    component: ingress
+  annotations:
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.allow-http: "false"
+    # Use Google Managed Certificate
+    networking.gke.io/managed-certificates: staging-api-icered-cert
+spec:
+  ingressClassName: gce
+  rules:
+  # Staging API domain (Cloudflare proxied)
+  - host: staging-api.icered.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: graphql-gateway
+            port:
+              number: 8080
+        path: /graphql
+        pathType: Prefix
+      - backend:
+          service:
+            name: graphql-gateway
+            port:
+              number: 8080
+        path: /playground
+        pathType: Prefix
+      - backend:
+          service:
+            name: graphql-gateway
+            port:
+              number: 8080
+        path: /health
+        pathType: Exact
+      - backend:
+          service:
+            name: graphql-gateway
+            port:
+              number: 8080
+        path: /api/v2
+        pathType: Prefix
+      - backend:
+          service:
+            name: graphql-gateway
+            port:
+              number: 8080
+        path: /api/v1
+        pathType: Prefix
+      - backend:
+          service:
+            name: graphql-gateway
+            port:
+              number: 8080
+        path: /ws
+        pathType: Prefix
+      - backend:
+          service:
+            name: realtime-chat-service
+            port:
+              number: 8080
+        path: /ws/chat
+        pathType: Prefix
+      - backend:
+          service:
+            name: alice-voice-service
+            port:
+              number: 8080
+        path: /alice-voice
+        pathType: Prefix
+  # Catch-all rule for direct IP access
+  - http:
+      paths:
+      - backend:
+          service:
+            name: graphql-gateway
+            port:
+              number: 8080
+        path: /graphql
+        pathType: Prefix
+      - backend:
+          service:
+            name: graphql-gateway
+            port:
+              number: 8080
+        path: /playground
+        pathType: Prefix
+      - backend:
+          service:
+            name: graphql-gateway
+            port:
+              number: 8080
+        path: /health
+        pathType: Exact
+      - backend:
+          service:
+            name: graphql-gateway
+            port:
+              number: 8080
+        path: /api/v2
+        pathType: Prefix
+      - backend:
+          service:
+            name: graphql-gateway
+            port:
+              number: 8080
+        path: /api/v1
+        pathType: Prefix
+      - backend:
+          service:
+            name: graphql-gateway
+            port:
+              number: 8080
+        path: /ws
+        pathType: Prefix
+      - backend:
+          service:
+            name: realtime-chat-service
+            port:
+              number: 8080
+        path: /ws/chat
+        pathType: Prefix
+      - backend:
+          service:
+            name: alice-voice-service
+            port:
+              number: 8080
+        path: /alice-voice
+        pathType: Prefix

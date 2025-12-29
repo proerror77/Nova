@@ -37,7 +37,10 @@ impl MessageService {
         })?;
 
         let row = client
-            .query_opt("SELECT privacy_mode::text FROM conversations WHERE id = $1", &[&conversation_id])
+            .query_opt(
+                "SELECT privacy_mode::text FROM conversations WHERE id = $1 AND deleted_at IS NULL",
+                &[&conversation_id],
+            )
             .await
             .map_err(|e| {
                 crate::error::AppError::StartServer(format!("fetch privacy mode: {e}"))

@@ -731,27 +731,39 @@ final class MatrixService: MatrixServiceProtocol {
     // MARK: - Internal Properties (accessible from extensions)
 
     /// Matrix client instance (from MatrixRustSDK)
-    var client: Client?
+    /// CRITICAL: Use @ObservationIgnored to prevent Rust SDK panic during deallocation
+    @ObservationIgnored var client: Client?
 
     /// Sync service for background updates
-    var syncService: SyncService?
+    /// CRITICAL: Use @ObservationIgnored - SyncService destructor panics if deallocated through observation
+    @ObservationIgnored var syncService: SyncService?
 
     /// Room list service for efficient room updates
-    var roomListService: RoomListService?
+    @ObservationIgnored var roomListService: RoomListService?
 
     /// Keep room list objects alive to prevent crash (Issue #4774)
     /// These must be stored as properties, not local variables
-    var roomListEntriesStreamHandle: TaskHandle?
-    var roomList: RoomList?
-    var roomListController: RoomListDynamicEntriesControllerProtocol?
+    /// CRITICAL: Use @ObservationIgnored to bypass @Observable macro during deallocation
+    /// The Rust SDK's deadpool connection pool panics if deallocation is triggered
+    /// through Swift's observation machinery (ObservationRegistrar.withMutation)
+    @ObservationIgnored var roomListEntriesStreamHandle: TaskHandle?
+    @ObservationIgnored var roomList: RoomList?
+    @ObservationIgnored var roomListController: RoomListDynamicEntriesControllerProtocol?
+
+    /// WORKAROUND: Keep old RoomList objects alive to prevent Rust SDK crash
+    /// The MatrixRustSDK's deadpool library panics when RoomList is deallocated
+    /// because it requires a Tokio runtime context for cleanup. By keeping old
+    /// objects in this array, we prevent deallocation entirely (memory leak, but
+    /// necessary to avoid crash). Limited to 5 entries to bound memory usage.
+    @ObservationIgnored private var roomListDeallocationGuard: [Any] = []
 
     /// Room list service state observation (for waiting for Running state)
-    var roomListStateHandle: TaskHandle?
-    var currentRoomListState: RoomListServiceState = .initial
+    @ObservationIgnored var roomListStateHandle: TaskHandle?
+    @ObservationIgnored var currentRoomListState: RoomListServiceState = .initial
 
     /// Sync service state observation (for debugging)
-    var syncServiceStateHandle: TaskHandle?
-    var currentSyncServiceState: SyncServiceState = .idle
+    @ObservationIgnored var syncServiceStateHandle: TaskHandle?
+    @ObservationIgnored var currentSyncServiceState: SyncServiceState = .idle
 
     /// Session storage path
     var sessionPath: String?
@@ -761,6 +773,10 @@ final class MatrixService: MatrixServiceProtocol {
 
     /// Room cache
     var roomCache: [String: MatrixRoom] = [:]
+
+    /// Flag to track if we've already attempted a token refresh to recover from sync failure
+    /// Reset on logout/new login
+    private var hasAttemptedSyncRecoveryRefresh = false
 
     /// Timeline listeners cache (room_id -> listener)
     var timelineListeners: [String: TaskHandle] = [:]
@@ -862,6 +878,9 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService]   - accessToken prefix: \(String(accessToken.prefix(20)))...")
         print("[MatrixService]   - providedDeviceId: \(providedDeviceId ?? "nil")")
         #endif
+
+        // Reset sync recovery flag for new login
+        hasAttemptedSyncRecoveryRefresh = false
 
         guard let client = client else {
             #if DEBUG
@@ -1233,8 +1252,23 @@ final class MatrixService: MatrixServiceProtocol {
         roomListStateHandle = nil
         syncServiceStateHandle?.cancel()
         syncServiceStateHandle = nil
-        roomListController = nil
-        roomList = nil
+
+        // CRITICAL: Move RoomList objects to guard instead of setting to nil.
+        // Setting to nil triggers Swift ARC deallocation, which invokes Rust's
+        // free_roomlist via UniFFI. The Rust SDK's deadpool SQLite library requires
+        // a Tokio runtime for cleanup, but Swift's MainActor doesn't provide one.
+        // This causes: "there is no reactor running" panic → abort()
+        if let controller = roomListController {
+            roomListDeallocationGuard.append(controller)
+            roomListController = nil
+        }
+        if let list = roomList {
+            roomListDeallocationGuard.append(list)
+            roomList = nil
+        }
+        #if DEBUG
+        print("[MatrixService] Moved RoomList objects to guard (total: \(roomListDeallocationGuard.count))")
+        #endif
 
         // Stop sync service (but DON'T set to nil - causes Rust SDK panic on dealloc)
         try? await syncService?.stop()
@@ -1413,8 +1447,20 @@ final class MatrixService: MatrixServiceProtocol {
         roomListStateHandle = nil
         syncServiceStateHandle?.cancel()
         syncServiceStateHandle = nil
-        roomListController = nil
-        roomList = nil
+
+        // CRITICAL: Move RoomList objects to guard instead of setting to nil.
+        // Same reason as syncService - Rust SDK panics on dealloc without Tokio runtime.
+        if let controller = roomListController {
+            roomListDeallocationGuard.append(controller)
+            roomListController = nil
+        }
+        if let list = roomList {
+            roomListDeallocationGuard.append(list)
+            roomList = nil
+        }
+        #if DEBUG
+        print("[MatrixService] Moved RoomList objects to guard (total: \(roomListDeallocationGuard.count))")
+        #endif
 
         // Stop sync service and clear references in correct order
         // This is done in a Task but we ensure proper ordering within it
@@ -2230,32 +2276,12 @@ final class MatrixService: MatrixServiceProtocol {
             }
 
             // Check if sliding sync failed - fall back to client.rooms() if so
+            // Token refresh for 0 rooms is now handled in handleRoomListUpdates callback
             if self.currentRoomListState == .terminated || self.currentRoomListState == .error {
                 #if DEBUG
                 print("[MatrixService] ⚠️ Sliding sync failed, falling back to client.rooms()...")
                 #endif
                 await self.populateRoomsFromClientFallback()
-
-                // If fallback also returned 0 rooms, the token might be expired
-                // Attempt token refresh and reinitialize session
-                if self.roomCache.isEmpty {
-                    #if DEBUG
-                    print("[MatrixService] ⚠️ Fallback returned 0 rooms - token may be expired, attempting refresh...")
-                    #endif
-
-                    let refreshSuccess = await MatrixTokenRefreshManager.shared.performRefresh()
-                    if refreshSuccess {
-                        #if DEBUG
-                        print("[MatrixService] ✅ Token refresh succeeded - session will be reinitialized")
-                        #endif
-                        // Note: performRefresh() already calls reinitializeSession()
-                        // which restarts sync with the new token
-                    } else {
-                        #if DEBUG
-                        print("[MatrixService] ❌ Token refresh failed - user may need to re-login")
-                        #endif
-                    }
-                }
             }
 
             await setupRoomListObserverWithRetry(roomListService: roomListService, attempt: 1)
@@ -2372,6 +2398,31 @@ final class MatrixService: MatrixServiceProtocol {
             print("[MatrixService] Setting up room list observer (attempt \(attempt)/\(maxAttempts))")
             #endif
 
+            // Clean up old handles before getting new roomList
+            // CRITICAL WORKAROUND: The MatrixRustSDK has a fatal bug where RoomList deallocation
+            // panics in the deadpool SQLite connection pool. To prevent crashes, we MUST keep
+            // old RoomList objects alive by storing them in roomListDeallocationGuard.
+            if let oldRoomList = self.roomList {
+                #if DEBUG
+                print("[MatrixService] Moving old room list to deallocation guard...")
+                #endif
+                // 1. Cancel the stream handle first (stops updates)
+                self.roomListEntriesStreamHandle?.cancel()
+                self.roomListEntriesStreamHandle = nil
+                // 2. Move old objects to guard array to prevent deallocation
+                self.roomListDeallocationGuard.append(oldRoomList)
+                if let oldController = self.roomListController {
+                    self.roomListDeallocationGuard.append(oldController)
+                }
+                self.roomListController = nil
+                // 3. DO NOT trim the guard array - removing items triggers deallocation
+                // which causes Tokio runtime panic in the Matrix Rust SDK.
+                // Memory leak is acceptable to avoid crash. Guard is cleared on logout.
+                #if DEBUG
+                print("[MatrixService] Guard array size: \(self.roomListDeallocationGuard.count) objects retained")
+                #endif
+            }
+
             // CRITICAL: Store roomList as property to prevent deallocation (Issue #4774)
             // If stored as local variable, SDK crashes with EXC_BAD_ACCESS
             self.roomList = try await roomListService.allRooms()
@@ -2463,6 +2514,31 @@ final class MatrixService: MatrixServiceProtocol {
                     print("[MatrixService] ⚠️ Received reset with 0 rooms - trying client.rooms() fallback")
                     #endif
                     await populateRoomsFromClientFallback()
+
+                    // If fallback also returns 0 rooms, the token might be invalid server-side
+                    // even though it appears valid locally. Attempt token refresh once.
+                    #if DEBUG
+                    print("[MatrixService] Checking token refresh: roomCache.isEmpty=\(roomCache.isEmpty), hasAttemptedSyncRecoveryRefresh=\(hasAttemptedSyncRecoveryRefresh)")
+                    #endif
+                    if roomCache.isEmpty && !hasAttemptedSyncRecoveryRefresh {
+                        hasAttemptedSyncRecoveryRefresh = true
+
+                        #if DEBUG
+                        print("[MatrixService] ⚠️ Both sliding sync and fallback returned 0 rooms")
+                        print("[MatrixService] 🔄 Attempting token refresh to recover...")
+                        #endif
+
+                        // Trigger token refresh from backend
+                        let refreshed = await MatrixTokenRefreshManager.shared.performRefresh()
+
+                        #if DEBUG
+                        if refreshed {
+                            print("[MatrixService] ✅ Token refreshed - sync will use new credentials")
+                        } else {
+                            print("[MatrixService] ⚠️ Token refresh failed or skipped")
+                        }
+                        #endif
+                    }
                 }
 
                 for room in rooms {

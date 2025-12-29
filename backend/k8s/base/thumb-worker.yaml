@@ -58,7 +58,7 @@ spec:
         - name: KAFKA_BROKERS
           value: "kafka.nova-staging.svc.cluster.local:9092"
         - name: KAFKA_TOPIC
-          value: "media_events"
+          value: "nova.media.events"
         - name: KAFKA_GROUP_ID
           value: "thumbnail-worker"
         # Thumbnail configuration

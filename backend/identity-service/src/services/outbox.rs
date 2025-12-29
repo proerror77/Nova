@@ -5,14 +5,15 @@
 /// 2. Background consumer polls outbox table and publishes to Kafka
 /// 3. Retries with exponential backoff
 /// 4. Dead letter queue for permanently failed events
-use crate::services::KafkaEventProducer;
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
 use serde_json::{json, Value};
+use rdkafka::producer::{FutureProducer, FutureRecord};
+use rdkafka::ClientConfig;
 use sqlx::{FromRow, PgPool};
 use std::{env, time::Duration};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
+use transactional_outbox::{CircuitBreakerKafkaPublisher, OutboxEvent as TxOutboxEvent, OutboxPublisher};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -28,12 +29,14 @@ pub struct OutboxConsumerConfig {
 
 impl Default for OutboxConsumerConfig {
     fn default() -> Self {
+        let topic_prefix = env::var("KAFKA_TOPIC_PREFIX").unwrap_or_else(|_| "nova".to_string());
+        let default_dlq = format!("{}.identity.events.dlq", topic_prefix);
         let dlq_topic = env::var("IDENTITY_OUTBOX_DLQ_TOPIC")
             .or_else(|_| env::var("KAFKA_DLQ_TOPIC"))
             .map(|value| value.trim().to_owned())
             .ok()
             .filter(|value| !value.is_empty())
-            .or_else(|| Some("identity-events.dlq".to_string()));
+            .or_else(|| Some(default_dlq));
 
         let max_retries = env::var("IDENTITY_OUTBOX_MAX_RETRIES")
             .or_else(|_| env::var("OUTBOX_MAX_RETRIES"))
@@ -53,15 +56,44 @@ impl Default for OutboxConsumerConfig {
     }
 }
 
+pub struct IdentityOutboxPublisher {
+    publisher: CircuitBreakerKafkaPublisher,
+    dlq_producer: FutureProducer,
+}
+
+impl IdentityOutboxPublisher {
+    pub fn new(brokers: &str, topic_prefix: &str) -> Result<Self, String> {
+        let producer: FutureProducer = ClientConfig::new()
+            .set("bootstrap.servers", brokers)
+            .set("client.id", "identity-service-outbox")
+            .set("enable.idempotence", "true")
+            .set("acks", "all")
+            .set("max.in.flight.requests.per.connection", "5")
+            .set("retries", "3")
+            .create()
+            .map_err(|e| format!("Failed to create Kafka producer: {}", e))?;
+
+        let publisher = CircuitBreakerKafkaPublisher::new(
+            producer.clone(),
+            topic_prefix.to_string(),
+        );
+
+        Ok(Self {
+            publisher,
+            dlq_producer: producer,
+        })
+    }
+}
+
 #[derive(Debug, FromRow)]
 struct OutboxRecord {
     /// Primary key of the outbox event
     id: Uuid,
-    /// Aggregate type, e.g. "User"
+    /// Aggregate type, e.g. "identity"
     aggregate_type: String,
     /// Aggregate identifier (stored as text, typically a UUID)
     aggregate_id: String,
-    /// Event type, e.g. "UserDeleted"
+    /// Event type, e.g. "identity.user.deleted"
     event_type: String,
     /// Raw event payload stored in the database (library-standard column name)
     payload: Value,
@@ -78,7 +110,7 @@ struct OutboxRecord {
 /// ## Arguments
 ///
 /// * `db_pool` - PostgreSQL connection pool
-/// * `producer` - Kafka producer (optional for no-op mode)
+/// * `publisher` - Kafka publisher (optional for no-op mode)
 /// * `config` - Consumer configuration
 ///
 /// ## Returns
@@ -86,7 +118,7 @@ struct OutboxRecord {
 /// JoinHandle for background task
 pub fn spawn_outbox_consumer(
     db_pool: PgPool,
-    producer: Option<KafkaEventProducer>,
+    publisher: Option<IdentityOutboxPublisher>,
     config: OutboxConsumerConfig,
 ) -> JoinHandle<()> {
     let dlq_label = config
@@ -95,8 +127,8 @@ pub fn spawn_outbox_consumer(
         .unwrap_or("disabled")
         .to_string();
 
-    if producer.is_none() {
-        warn!("Outbox consumer starting without Kafka producer; events will be marked as handled locally");
+    if publisher.is_none() {
+        warn!("Outbox consumer starting without Kafka publisher; events will be marked as handled locally");
     }
 
     info!(
@@ -111,7 +143,7 @@ pub fn spawn_outbox_consumer(
 
     tokio::spawn(async move {
         loop {
-            if let Err(err) = process_batch(&db_pool, producer.as_ref(), &config).await {
+            if let Err(err) = process_batch(&db_pool, publisher.as_ref(), &config).await {
                 error!("Outbox consumer batch failed: {:#}", err);
             }
             sleep(config.poll_interval).await;
@@ -121,7 +153,7 @@ pub fn spawn_outbox_consumer(
 
 async fn process_batch(
     db_pool: &PgPool,
-    producer: Option<&KafkaEventProducer>,
+    publisher: Option<&IdentityOutboxPublisher>,
     config: &OutboxConsumerConfig,
 ) -> Result<(), sqlx::Error> {
     let events: Vec<OutboxRecord> = sqlx::query_as::<_, OutboxRecord>(
@@ -164,7 +196,7 @@ async fn process_batch(
         );
         let _guard = span.enter();
 
-        let processing_result = process_event(&event, producer, config).await;
+        let processing_result = process_event(&event, publisher, config).await;
         let latency_seconds =
             (Utc::now() - event.created_at).num_milliseconds().max(0) as f64 / 1_000.0;
 
@@ -188,8 +220,10 @@ async fn process_batch(
                 let should_move_to_dlq = failure.is_fatal() || attempt_number >= config.max_retries;
 
                 if should_move_to_dlq {
-                    if let (Some(producer), Some(topic)) = (producer, config.dlq_topic.as_deref()) {
-                        match send_to_dlq(producer, topic, &event, &failure).await {
+                    if let (Some(publisher), Some(topic)) =
+                        (publisher, config.dlq_topic.as_deref())
+                    {
+                        match send_to_dlq(publisher, topic, &event, &failure).await {
                             Ok(_) => {
                                 info!(
                                     "Event routed to DLQ after {} attempts ({})",
@@ -250,83 +284,50 @@ fn calculate_backoff(base: Duration, max: Duration, retry_count: i32) -> Duratio
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct UserDeletedPayload {
-    #[serde(default)]
-    user_id: Option<Uuid>,
-    #[serde(default)]
-    deleted_at: Option<DateTime<Utc>>,
-    #[serde(default = "default_true")]
-    soft_delete: bool,
-}
-
-fn default_true() -> bool {
-    true
-}
-
 async fn process_event(
     event: &OutboxRecord,
-    producer: Option<&KafkaEventProducer>,
+    publisher: Option<&IdentityOutboxPublisher>,
     _config: &OutboxConsumerConfig,
 ) -> Result<ProcessOutcome, ProcessingFailure> {
-    let Some(producer) = producer else {
+    let Some(publisher) = publisher else {
         info!(
             aggregate_type = %event.aggregate_type,
             aggregate_id = %event.aggregate_id,
             event_type = %event.event_type,
-            "Kafka producer unavailable; marking outbox event as handled"
+            "Kafka publisher unavailable; marking outbox event as handled"
         );
         return Ok(ProcessOutcome::Skipped);
     };
 
-    match (event.aggregate_type.as_str(), event.event_type.as_str()) {
-        ("User", "UserDeleted") => {
-            process_user_deleted(event, producer).await?;
-            Ok(ProcessOutcome::Published)
-        }
-        (aggregate, event_type) => Err(ProcessingFailure::new(
-            "unknown_event",
-            format!(
-                "Unsupported outbox event_type '{}' for aggregate '{}'",
-                event_type, aggregate
-            ),
-        )),
-    }
-}
-
-async fn process_user_deleted(
-    event: &OutboxRecord,
-    producer: &KafkaEventProducer,
-) -> Result<(), ProcessingFailure> {
-    let payload: UserDeletedPayload = serde_json::from_value(event.payload.clone())
-        .map_err(|err| ProcessingFailure::new("payload_error", err.to_string()))?;
-
-    // aggregate_id is stored as text, usually a UUID
     let aggregate_id = event
         .aggregate_id
         .parse::<Uuid>()
         .map_err(|err| ProcessingFailure::new("payload_error", err.to_string()))?;
 
-    let user_id = payload.user_id.unwrap_or(aggregate_id);
-    let deleted_at = payload.deleted_at.unwrap_or_else(Utc::now);
+    let outbox_event = TxOutboxEvent {
+        id: event.id,
+        aggregate_type: event.aggregate_type.clone(),
+        aggregate_id,
+        event_type: event.event_type.clone(),
+        payload: event.payload.clone(),
+        metadata: None,
+        created_at: event.created_at,
+        published_at: None,
+        retry_count: event.retry_count,
+        last_error: None,
+    };
 
-    producer
-        .publish_user_deleted(user_id, deleted_at, payload.soft_delete)
+    publisher
+        .publisher
+        .publish(&outbox_event)
         .await
         .map_err(|err| ProcessingFailure::new("publish_error", err.to_string()))?;
 
-    info!(
-        user_id = %user_id,
-        deleted_at = %deleted_at,
-        soft_delete = payload.soft_delete,
-        "Published UserDeleted event to Kafka"
-    );
-
-    Ok(())
+    Ok(ProcessOutcome::Published)
 }
 
 async fn send_to_dlq(
-    producer: &KafkaEventProducer,
+    publisher: &IdentityOutboxPublisher,
     topic: &str,
     event: &OutboxRecord,
     failure: &ProcessingFailure,
@@ -345,10 +346,16 @@ async fn send_to_dlq(
 
     let key = format!("outbox-dlq-{}", event.aggregate_id);
 
-    producer
-        .publish_raw_to_topic(topic, &key, &dlq_payload.to_string())
+    let record = FutureRecord::to(topic)
+        .key(&key)
+        .payload(&dlq_payload.to_string());
+
+    publisher
+        .dlq_producer
+        .send(record, Duration::from_secs(30))
         .await
-        .map_err(|err| err.to_string())
+        .map(|_| ())
+        .map_err(|(err, _)| err.to_string())
 }
 
 async fn mark_published(db_pool: &PgPool, event_id: Uuid) -> Result<(), sqlx::Error> {

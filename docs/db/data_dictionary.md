@@ -68,9 +68,9 @@ This document provides a complete inventory of Nova's database schema as of Nov 
 
 | Table | Owner | Primary Key | Soft Delete | Status | Notes |
 |-------|-------|-------------|-------------|--------|-------|
-| `conversations` | messaging-service | `id UUID` | `deleted_at TIMESTAMPTZ` | OK | 1-to-1 or group chats. FK to users (participants). |
+| `conversations` | messaging-service | `id UUID` | `deleted_at TIMESTAMPTZ` | OK | Added `avatar_url`, `admin_key_version`, soft-delete support. |
 | `conversation_members` | messaging-service | `(conversation_id, user_id)` | `deleted_at TIMESTAMPTZ` | OK | Chat membership. FK to conversations and users. |
-| `messages` | messaging-service | `id UUID` | `deleted_at TIMESTAMPTZ` | ⚠️ CASCADE ISSUE | Hard-delete on conversation removal. Should soft-delete. |
+| `messages` | messaging-service | `id UUID` | `deleted_at TIMESTAMPTZ` | OK | Conversations now use soft-delete; messages stay soft-deletable via `deleted_at`. |
 | `message_attachments` | messaging-service | `id UUID` | `deleted_at TIMESTAMPTZ` | OK | Files, images in messages. FK to messages. |
 | `message_reactions` | messaging-service | `(message_id, user_id, emoji)` | `deleted_at TIMESTAMPTZ` | OK | Emoji reactions. FK to messages and users. |
 | `message_search_index` | messaging-service | `id UUID` | `deleted_at TIMESTAMPTZ` | OK | Full-text search index. FK to messages. |
@@ -80,7 +80,17 @@ This document provides a complete inventory of Nova's database schema as of Nov 
 | Table | Owner | Primary Key | Soft Delete | Status | Notes |
 |-------|-------|-------------|-------------|--------|-------|
 | `user_feed_preferences` | feed-service | `id UUID` | `deleted_at TIMESTAMPTZ` | OK | Per-user feed ranking weights. FK to users. |
-| `notification_jobs` | feed-service | `id UUID` | `deleted_at TIMESTAMPTZ` | OK | Outbox-pattern notifications. FK to users. |
+
+### Notifications
+
+| Table | Owner | Primary Key | Soft Delete | Status | Notes |
+|-------|-------|-------------|-------------|--------|-------|
+| `notifications` | notification-service | `id UUID` | `deleted_at TIMESTAMPTZ` | OK | In-app notifications; `updated_at` added, legacy `is_deleted` removed. |
+| `push_tokens` | notification-service | `id UUID` | N/A | OK | FCM/APNs device tokens. |
+| `push_delivery_logs` | notification-service | `id UUID` | N/A | OK | Delivery attempts and retry state. |
+| `notification_preferences` | notification-service | `id UUID` | N/A | OK | Per-user notification settings. |
+| `notification_dedup` | notification-service | `id UUID` | N/A | OK | 1-minute dedup window. |
+| `notification_jobs` | notification-service | `id UUID` | N/A | ⚠️ LEGACY | Pending migration replaced by notifications + delivery logs. |
 
 ---
 

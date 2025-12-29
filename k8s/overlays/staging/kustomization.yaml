@@ -42,7 +42,7 @@ images:
   # Tier 4: Social & Graph
   - name: nova/social-service
     newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/social-service
-    newTag: 178b5cc3
+    newTag: 796e298a
 
   - name: nova/graph-service
     newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/graph-service

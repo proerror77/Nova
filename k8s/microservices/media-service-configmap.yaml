@@ -13,7 +13,7 @@ data:
   DATABASE_MAX_CONNECTIONS: "5"
   REDIS_URL: redis://redis-cluster:6379
   KAFKA_BROKERS: kafka:9092
-  KAFKA_EVENTS_TOPIC: media_events
+  KAFKA_EVENTS_TOPIC: nova.media.events
   # GCS S3-compatible settings
   AWS_REGION: auto
   S3_BUCKET: nova-media-staging

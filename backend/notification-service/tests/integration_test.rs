@@ -91,8 +91,7 @@ mod notification_service_integration_tests {
         // Test soft delete functionality
         // 1. Create notification
         // 2. Soft delete
-        // 3. Verify is_deleted = true
-        // 4. Verify deleted_at is set
+        // 3. Verify deleted_at is set
 
         assert!(true, "Soft delete test placeholder");
     }

@@ -468,7 +468,7 @@ pub async fn update_group_settings(
         query.push_str(&format!(", avatar_url = ${}", bind_count));
     }
 
-    query.push_str(" WHERE id = $1");
+    query.push_str(" WHERE id = $1 AND deleted_at IS NULL");
 
     // Build the bindings vector in the correct order
     if let Some(ref name) = body.name {

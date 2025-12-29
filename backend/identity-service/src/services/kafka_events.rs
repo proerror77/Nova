@@ -90,7 +90,8 @@ impl KafkaEventProducer {
         };
 
         // P1: Include event_type for reliable event routing
-        let envelope = EventEnvelope::new_with_type("identity-service", "UserCreatedEvent", event)
+        let envelope =
+            EventEnvelope::new_with_type("identity-service", "identity.user.created", event)
             .with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
@@ -106,7 +107,7 @@ impl KafkaEventProducer {
 
         // P1: Include event_type for reliable event routing
         let envelope =
-            EventEnvelope::new_with_type("identity-service", "PasswordChangedEvent", event)
+            EventEnvelope::new_with_type("identity-service", "identity.user.password_changed", event)
                 .with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
@@ -121,7 +122,8 @@ impl KafkaEventProducer {
         };
 
         // P1: Include event_type for reliable event routing
-        let envelope = EventEnvelope::new_with_type("identity-service", "TwoFAEnabledEvent", event)
+        let envelope =
+            EventEnvelope::new_with_type("identity-service", "identity.user.two_fa_enabled", event)
             .with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
@@ -141,7 +143,8 @@ impl KafkaEventProducer {
         };
 
         // P1: Include event_type for reliable event routing
-        let envelope = EventEnvelope::new_with_type("identity-service", "UserDeletedEvent", event)
+        let envelope =
+            EventEnvelope::new_with_type("identity-service", "identity.user.deleted", event)
             .with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
@@ -171,8 +174,11 @@ impl KafkaEventProducer {
         };
 
         // P1: Include event_type for reliable event routing
-        let envelope =
-            EventEnvelope::new_with_type("identity-service", "UserProfileUpdatedEvent", event)
+        let envelope = EventEnvelope::new_with_type(
+            "identity-service",
+            "identity.user.profile_updated",
+            event,
+        )
                 .with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
@@ -271,7 +277,7 @@ mod tests {
     fn test_kafka_producer_creation() {
         // This test requires a running Kafka broker
         // In CI/CD, this should be skipped unless Kafka is available
-        let result = KafkaEventProducer::new("localhost:9092", "identity-events");
+        let result = KafkaEventProducer::new("localhost:9092", "nova.identity.events");
         // Don't assert on success/failure as Kafka may not be available in test environment
         let _ = result;
     }

@@ -295,7 +295,9 @@ pub async fn update_message(
         "SELECT m.conversation_id, m.sender_id, m.version_number, m.created_at, m.content,
                 c.privacy_mode::text AS privacy_mode
          FROM messages m
-         JOIN conversations c ON c.id = m.conversation_id
+         JOIN conversations c
+           ON c.id = m.conversation_id
+          AND c.deleted_at IS NULL
          WHERE m.id = $1
          FOR UPDATE",
         &[&message_id]

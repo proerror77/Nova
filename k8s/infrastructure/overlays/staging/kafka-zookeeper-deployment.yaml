@@ -285,6 +285,8 @@ spec:
           value: "1"
         - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
           value: "1"
+        - name: KAFKA_HEAP_OPTS
+          value: "-Xms512m -Xmx512m"
 
         # Performance and reliability
         - name: KAFKA_NUM_NETWORK_THREADS
@@ -419,15 +421,16 @@ spec:
           TOPICS=(
             "user-events:3:1"
             "content-events:6:1"
-            "media-events:3:1"
+            "nova.media.events:3:1"
             "feed-updates:3:1"
             "messaging-events:3:1"
+            "nova.message.events:3:1"
             "notification-events:2:1"
             "analytics-events:6:1"
             "ranking-updates:3:1"
             "trust-safety-events:3:1"
             "realtime-chat:3:1"
-            "identity-events:3:1"
+            "nova.identity.events:3:1"
           )
 
           echo "Creating topics on $BOOTSTRAP_SERVER..."

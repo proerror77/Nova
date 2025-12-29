@@ -383,7 +383,7 @@ let event_id = format!(
     message.partition(),
     message.offset()
 );
-// Example: "user-events-0-12345"
+// Example: "nova.identity.events-0-12345"
 ```
 
 ⚠️ **Warning**: This only works if you process partitions in order. If you use parallel processing within a partition, you may reprocess events after consumer restart.

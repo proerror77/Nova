@@ -9,6 +9,7 @@ metadata:
     environment: staging
   annotations:
     kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.allow-http: "false"
     networking.gke.io/managed-certificates: synapse-staging-cert,nova-staging-well-known-cert
 spec:
   ingressClassName: gce

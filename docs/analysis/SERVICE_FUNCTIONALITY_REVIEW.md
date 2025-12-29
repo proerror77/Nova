@@ -84,10 +84,10 @@ CREATE TABLE sessions (
 **事件发布:**
 ```
 Kafka Topics:
-  - user-events
-    - UserRegistered { user_id, username, email }
-    - UserLoggedIn { user_id, timestamp }
-    - UserLoggedOut { user_id, timestamp }
+  - nova.identity.events
+    - identity.user.created { user_id, username, email, created_at }
+    - identity.user.profile_updated { user_id, username, display_name, updated_at }
+    - identity.user.deleted { user_id, deleted_at, soft_delete }
 ```
 
 **架构评分:**
@@ -145,7 +145,7 @@ CREATE INDEX idx_posts_tags ON posts USING GIN(tags);
 **事件发布:**
 ```
 Kafka Topics:
-  - content-events (6 partitions)
+  - nova.content.events (6 partitions)
     - PostCreated { post_id, user_id, content, type, visibility, tags }
     - PostUpdated { post_id, content, updated_at }
     - PostDeleted { post_id, user_id }
@@ -154,7 +154,7 @@ Kafka Topics:
 **消费事件:**
 ```
 Kafka Topics:
-  - media-events
+  - nova.media.events
     - MediaUploaded { post_id, media_url } → 自动关联到 post
 ```
 
@@ -209,7 +209,7 @@ CREATE TABLE media (
 **事件发布:**
 ```
 Kafka Topics:
-  - media-events (3 partitions)
+  - nova.media.events (3 partitions)
     - MediaUploaded { media_id, post_id, url, type }
     - MediaDeleted { media_id }
 ```
@@ -271,7 +271,7 @@ CREATE INDEX idx_messages_conversation ON messages(conversation_id, created_at D
 **事件发布:**
 ```
 Kafka Topics:
-  - messaging-events (3 partitions)
+  - nova.message.events (3 partitions)
     - MessageSent { message_id, conversation_id, sender_id, content }
     - MessageRead { message_id, reader_id, timestamp }
 ```
@@ -337,8 +337,8 @@ service SearchService {
 **消费事件:**
 ```
 Kafka Topics:
-  - content-events → 索引新帖子到 Elasticsearch
-  - user-events → 索引新用户
+  - nova.content.events → 索引新帖子到 Elasticsearch
+  - nova.identity.events → 索引新用户
 ```
 
 **架构评分:**
@@ -388,9 +388,9 @@ notification:preferences:{user_id} → {email: true, push: false}
 **消费事件:**
 ```
 Kafka Topics:
-  - social-events → PostLiked, PostCommented → 通知作者
-  - messaging-events → MessageSent → 通知接收者
-  - user-events → UserFollowed → 通知被关注者
+  - nova.social.events → social.like.created → 通知作者
+  - nova.message.events (legacy message_persisted) → message.persisted → 通知接收者
+  - nova.social.events → social.follow.created → 通知被关注者
 ```
 
 **架构评分:**
@@ -479,7 +479,7 @@ feed:trending → {score} {post_id}
 **消费事件:**
 ```
 Kafka Topics:
-  - content-events → PostCreated → 推送到粉丝 feed
+  - nova.content.events → PostCreated → 推送到粉丝 feed
 ```
 
 **架构评分:**
@@ -545,7 +545,7 @@ CREATE TABLE comments (
 **事件发布:**
 ```
 Kafka Topics:
-  - social-events
+  - nova.social.events
     - UserFollowed { follower_id, followee_id }
     - PostLiked { user_id, post_id }
     - PostCommented { comment_id, post_id, user_id }
@@ -652,10 +652,10 @@ GROUP BY date;
 **消费事件:**
 ```
 Kafka Topics (全部):
-  - user-events
-  - content-events
-  - social-events
-  - messaging-events
+  - nova.identity.events
+  - nova.content.events
+  - nova.social.events
+  - nova.message.events
 ```
 
 **架构评分:**
@@ -745,7 +745,7 @@ typing:{conversation_id}:{user_id} → {timestamp}
 **消费事件:**
 ```
 Kafka Topics:
-  - messaging-events → MessageSent → 实时推送给接收者
+  - nova.message.events → MessageSent → 实时推送给接收者
 ```
 
 **架构评分:**
@@ -805,8 +805,8 @@ CREATE TABLE bans (
 **消费事件:**
 ```
 Kafka Topics:
-  - content-events → PostCreated → 自动审核
-  - messaging-events → MessageSent → 自动审核
+  - nova.content.events → PostCreated → 自动审核
+  - nova.message.events → MessageSent → 自动审核
 ```
 
 **架构评分:**

@@ -12,7 +12,8 @@ use anyhow::Result;
 use event_schema::{EventEnvelope, UserCreatedEvent, UserDeletedEvent, UserProfileUpdatedEvent};
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
-use rdkafka::message::Message;
+use rdkafka::message::{BorrowedMessage, Message};
+use serde::de::DeserializeOwned;
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
 
@@ -66,7 +67,7 @@ impl IdentityEventsConsumer {
             match self.consumer.recv().await {
                 Ok(message) => {
                     if let Some(payload) = message.payload() {
-                        if let Err(e) = self.process_message(payload).await {
+                        if let Err(e) = self.process_message(&message, payload).await {
                             error!("Failed to process identity event: {}", e);
                         }
                     }
@@ -80,18 +81,34 @@ impl IdentityEventsConsumer {
     }
 
     /// Process a single Kafka message
-    async fn process_message(&self, payload: &[u8]) -> Result<()> {
+    async fn process_message(
+        &self,
+        message: &BorrowedMessage<'_>,
+        payload: &[u8],
+    ) -> Result<()> {
         let payload_str = std::str::from_utf8(payload)?;
+        let header_event_type = header_value(message, "event_type");
 
         // Parse as generic JSON to inspect event_type
         let envelope_value: serde_json::Value = serde_json::from_str(payload_str)?;
 
-        // P1: Use event_type field if present (preferred)
-        if let Some(event_type) = envelope_value.get("event_type").and_then(|v| v.as_str()) {
+        // Prefer Kafka header event_type; fall back to envelope field if present.
+        if let Some(event_type) = header_event_type
+            .or_else(|| envelope_value.get("event_type").and_then(|v| v.as_str()))
+        {
             return match event_type {
-                "UserCreatedEvent" => self.handle_user_created(payload_str).await,
-                "UserProfileUpdatedEvent" => self.handle_user_profile_updated(payload_str).await,
-                "UserDeletedEvent" => self.handle_user_deleted(payload_str).await,
+                "identity.user.created" | "UserCreatedEvent" => {
+                    let event = parse_enveloped_or_direct::<UserCreatedEvent>(payload)?;
+                    self.handle_user_created(event).await
+                }
+                "identity.user.profile_updated" | "UserProfileUpdatedEvent" => {
+                    let event = parse_enveloped_or_direct::<UserProfileUpdatedEvent>(payload)?;
+                    self.handle_user_profile_updated(event).await
+                }
+                "identity.user.deleted" | "UserDeletedEvent" => {
+                    let event = parse_enveloped_or_direct::<UserDeletedEvent>(payload)?;
+                    self.handle_user_deleted(event).await
+                }
                 _ => {
                     debug!("Ignoring identity event type: {}", event_type);
                     Ok(())
@@ -103,18 +120,21 @@ impl IdentityEventsConsumer {
         if let Some(data) = envelope_value.get("data") {
             if data.get("deleted_at").is_some() && data.get("soft_delete").is_some() {
                 warn!("Legacy event format (no event_type). Processing as UserDeletedEvent.");
-                return self.handle_user_deleted(payload_str).await;
+                let event = parse_enveloped_or_direct::<UserDeletedEvent>(payload)?;
+                return self.handle_user_deleted(event).await;
             }
             if data.get("username").is_some() && data.get("email").is_some() {
                 if data.get("created_at").is_some() && data.get("updated_at").is_none() {
                     warn!("Legacy event format (no event_type). Processing as UserCreatedEvent.");
-                    return self.handle_user_created(payload_str).await;
+                    let event = parse_enveloped_or_direct::<UserCreatedEvent>(payload)?;
+                    return self.handle_user_created(event).await;
                 }
                 if data.get("display_name").is_some() {
                     warn!(
                         "Legacy event format (no event_type). Processing as UserProfileUpdatedEvent."
                     );
-                    return self.handle_user_profile_updated(payload_str).await;
+                    let event = parse_enveloped_or_direct::<UserProfileUpdatedEvent>(payload)?;
+                    return self.handle_user_profile_updated(event).await;
                 }
             }
         }
@@ -124,10 +144,7 @@ impl IdentityEventsConsumer {
     }
 
     /// Handle UserCreatedEvent
-    async fn handle_user_created(&self, payload: &str) -> Result<()> {
-        let envelope: EventEnvelope<UserCreatedEvent> = serde_json::from_str(payload)?;
-        let event = envelope.data;
-
+    async fn handle_user_created(&self, event: UserCreatedEvent) -> Result<()> {
         info!(
             "Processing UserCreatedEvent: user_id={}, username={}",
             event.user_id, event.username
@@ -145,10 +162,7 @@ impl IdentityEventsConsumer {
     }
 
     /// Handle UserProfileUpdatedEvent
-    async fn handle_user_profile_updated(&self, payload: &str) -> Result<()> {
-        let envelope: EventEnvelope<UserProfileUpdatedEvent> = serde_json::from_str(payload)?;
-        let event = envelope.data;
-
+    async fn handle_user_profile_updated(&self, event: UserProfileUpdatedEvent) -> Result<()> {
         info!(
             "Processing UserProfileUpdatedEvent: user_id={}, username={}",
             event.user_id, event.username
@@ -166,10 +180,7 @@ impl IdentityEventsConsumer {
     }
 
     /// Handle UserDeletedEvent
-    async fn handle_user_deleted(&self, payload: &str) -> Result<()> {
-        let envelope: EventEnvelope<UserDeletedEvent> = serde_json::from_str(payload)?;
-        let event = envelope.data;
-
+    async fn handle_user_deleted(&self, event: UserDeletedEvent) -> Result<()> {
         info!(
             "Processing UserDeletedEvent: user_id={}, soft_delete={}",
             event.user_id, event.soft_delete
@@ -193,6 +204,25 @@ impl IdentityEventsConsumer {
 
         Ok(())
     }
+}
+
+fn parse_enveloped_or_direct<T: DeserializeOwned>(payload: &[u8]) -> Result<T> {
+    if let Ok(envelope) = serde_json::from_slice::<EventEnvelope<T>>(payload) {
+        return Ok(envelope.data);
+    }
+    Ok(serde_json::from_slice::<T>(payload)?)
+}
+
+fn header_value<'a>(message: &'a BorrowedMessage<'a>, key: &str) -> Option<&'a str> {
+    message
+        .headers()
+        .and_then(|headers| {
+            headers
+                .iter()
+                .find(|header| header.key == key)
+                .and_then(|header| header.value)
+        })
+        .and_then(|value| std::str::from_utf8(value).ok())
 }
 
 #[cfg(test)]

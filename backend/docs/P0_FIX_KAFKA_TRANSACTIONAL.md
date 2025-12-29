@@ -84,9 +84,9 @@ pub async fn consume_outbox_events(pool: PgPool, kafka: KafkaProducer) -> Result
         // 2. Publish each event to Kafka
         for event in events {
             let topic = match event.aggregate_type.as_str() {
-                "Post" => "post-events",
-                "Comment" => "comment-events",
-                "User" => "user-events",
+                "Post" => "nova.content.events",
+                "Comment" => "nova.content.events",
+                "User" => "nova.identity.events",
                 _ => continue,
             };
 

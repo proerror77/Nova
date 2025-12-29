@@ -17,6 +17,7 @@ pub struct KafkaConsumerConfig {
     pub group_id: String,
     pub message_persisted_topic: String,
     pub message_deleted_topic: String,
+    pub message_events_topic: Option<String>,
     pub identity_events_topic: String,
 }
 
@@ -30,6 +31,8 @@ impl KafkaConsumerConfig {
             return None;
         }
 
+        let topic_prefix = std::env::var("KAFKA_TOPIC_PREFIX").unwrap_or_else(|_| "nova".to_string());
+
         Some(Self {
             brokers,
             group_id: std::env::var("KAFKA_SEARCH_GROUP_ID")
@@ -38,8 +41,11 @@ impl KafkaConsumerConfig {
                 .unwrap_or_else(|_| "message_persisted".to_string()),
             message_deleted_topic: std::env::var("KAFKA_MESSAGE_DELETED_TOPIC")
                 .unwrap_or_else(|_| "message_deleted".to_string()),
+            message_events_topic: std::env::var("KAFKA_MESSAGE_EVENTS_TOPIC")
+                .ok()
+                .filter(|topic| !topic.trim().is_empty()),
             identity_events_topic: std::env::var("KAFKA_IDENTITY_EVENTS_TOPIC")
-                .unwrap_or_else(|_| "identity-events".to_string()),
+                .unwrap_or_else(|_| format!("{}.identity.events", topic_prefix)),
         })
     }
 }
@@ -55,8 +61,14 @@ pub fn spawn_message_consumer(ctx: EventContext, config: KafkaConsumerConfig) ->
 
 async fn run_consumer(ctx: EventContext, config: KafkaConsumerConfig) -> Result<(), KafkaError> {
     info!(
-        "Starting Kafka consumer for search indexing (topics: {}, {}, {})",
-        config.message_persisted_topic, config.message_deleted_topic, config.identity_events_topic
+        "Starting Kafka consumer for search indexing (topics: {}, {}, {}, {})",
+        config.message_persisted_topic,
+        config.message_deleted_topic,
+        config.identity_events_topic,
+        config
+            .message_events_topic
+            .as_deref()
+            .unwrap_or("<disabled>")
     );
 
     let consumer: StreamConsumer = ClientConfig::new()
@@ -68,11 +80,17 @@ async fn run_consumer(ctx: EventContext, config: KafkaConsumerConfig) -> Result<
         .set("max.poll.interval.ms", "300000")
         .create()?;
 
-    consumer.subscribe(&[
+    let mut topics = vec![
         config.message_persisted_topic.as_str(),
         config.message_deleted_topic.as_str(),
         config.identity_events_topic.as_str(),
-    ])?;
+    ];
+
+    if let Some(ref topic) = config.message_events_topic {
+        topics.push(topic.as_str());
+    }
+
+    consumer.subscribe(&topics)?;
 
     loop {
         match consumer.recv().await {
@@ -89,13 +107,33 @@ async fn run_consumer(ctx: EventContext, config: KafkaConsumerConfig) -> Result<
                 }
 
                 let data = payload.expect("Payload checked to be Some above");
+                let event_type = header_value(&record, "event_type");
 
                 let result = if topic == config.message_persisted_topic {
                     on_message_persisted(&ctx, data).await
                 } else if topic == config.message_deleted_topic {
                     on_message_deleted(&ctx, data).await
                 } else if topic == config.identity_events_topic {
-                    on_identity_event(&ctx, data).await
+                    on_identity_event(&ctx, event_type, data).await
+                } else if config.message_events_topic.as_deref() == Some(topic) {
+                    match event_type {
+                        Some("message.persisted") | Some("message_persisted") => {
+                            on_message_persisted(&ctx, data).await
+                        }
+                        Some("message.deleted") | Some("message_deleted") => {
+                            on_message_deleted(&ctx, data).await
+                        }
+                        Some(other) => {
+                            warn!("Unknown message event type on unified topic: {}", other);
+                            Ok(())
+                        }
+                        None => {
+                            warn!(
+                                "Unified message events topic missing event_type header; skipping"
+                            );
+                            Ok(())
+                        }
+                    }
                 } else {
                     warn!("Received message for unexpected topic: {}", topic);
                     Ok(())
@@ -122,4 +160,16 @@ async fn run_consumer(ctx: EventContext, config: KafkaConsumerConfig) -> Result<
             }
         }
     }
+}
+
+fn header_value<'a>(message: &'a rdkafka::message::BorrowedMessage<'a>, key: &str) -> Option<&'a str> {
+    message
+        .headers()
+        .and_then(|headers| {
+            headers
+                .iter()
+                .find(|header| header.key == key)
+                .and_then(|header| header.value)
+        })
+        .and_then(|value| std::str::from_utf8(value).ok())
 }

@@ -44,6 +44,28 @@ pub struct UpdateUserProfileFields {
     pub gender: Option<Gender>,
 }
 
+async fn insert_identity_outbox_event(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: Uuid,
+    event_type: &str,
+    payload: serde_json::Value,
+) -> Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload)
+        VALUES ($1, $2, $3, $4)
+        "#,
+    )
+    .bind("identity")
+    .bind(user_id.to_string())
+    .bind(event_type)
+    .bind(payload)
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(())
+}
+
 /// Find user by email (excluding soft-deleted users)
 pub async fn find_by_email(pool: &PgPool, email: &str) -> Result<Option<User>> {
     let user =
@@ -109,6 +131,8 @@ pub async fn create_user(
     password_hash: &str,
     display_name: Option<&str>,
 ) -> Result<User> {
+    let mut tx = pool.begin().await?;
+
     let user = sqlx::query_as::<_, User>(
         r#"
         INSERT INTO users (id, email, username, password_hash, display_name, email_verified, totp_enabled, totp_verified, created_at, updated_at)
@@ -120,8 +144,19 @@ pub async fn create_user(
     .bind(username)
     .bind(password_hash)
     .bind(display_name)
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await?;
+
+    let payload = json!({
+        "user_id": user.id,
+        "email": user.email,
+        "username": user.username,
+        "created_at": user.created_at,
+    });
+
+    insert_identity_outbox_event(&mut tx, user.id, "identity.user.created", payload).await?;
+
+    tx.commit().await?;
 
     Ok(user)
 }
@@ -164,6 +199,7 @@ pub async fn update_user_profile(
     fields: UpdateUserProfileFields,
 ) -> Result<UserProfileRecord> {
     let now = Utc::now();
+    let mut tx = pool.begin().await?;
 
     let profile = sqlx::query_as::<_, UserProfileRecord>(
         r#"
@@ -180,7 +216,7 @@ pub async fn update_user_profile(
             date_of_birth = COALESCE($10, date_of_birth),
             gender = COALESCE($11, gender),
             updated_at = $12
-        WHERE id = $1
+        WHERE id = $1 AND deleted_at IS NULL
         RETURNING
             id,
             username,
@@ -211,12 +247,33 @@ pub async fn update_user_profile(
     .bind(fields.date_of_birth)
     .bind(fields.gender)
     .bind(now)
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|e| {
         tracing::error!(user_id=%user_id, error=%e, "Failed to update user profile");
         IdentityError::from(e)
     })?;
+
+    let payload = json!({
+        "user_id": profile.id,
+        "username": profile.username,
+        "display_name": profile.display_name,
+        "bio": profile.bio,
+        "avatar_url": profile.avatar_url,
+        "is_verified": false,
+        "follower_count": 0,
+        "updated_at": profile.updated_at,
+    });
+
+    insert_identity_outbox_event(
+        &mut tx,
+        profile.id,
+        "identity.user.profile_updated",
+        payload,
+    )
+    .await?;
+
+    tx.commit().await?;
 
     Ok(profile)
 }
@@ -254,34 +311,6 @@ pub async fn get_user_public_key(pool: &PgPool, user_id: Uuid) -> Result<Option<
     Ok(public_key)
 }
 
-async fn insert_outbox_event(
-    tx: &mut Transaction<'_, Postgres>,
-    user_id: Uuid,
-    deleted_at: DateTime<Utc>,
-    deleted_by: Option<Uuid>,
-) -> Result<()> {
-    let payload = json!({
-        "user_id": user_id,
-        "deleted_at": deleted_at,
-        "deleted_by": deleted_by,
-    });
-
-    sqlx::query(
-        r#"
-        INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload)
-        VALUES ($1, $2, $3, $4)
-        "#,
-    )
-    .bind("User")
-    .bind(user_id)
-    .bind("UserDeleted")
-    .bind(payload)
-    .execute(tx.as_mut())
-    .await?;
-
-    Ok(())
-}
-
 /// Soft delete user (GDPR) and enqueue outbox event for downstream services
 pub async fn soft_delete_user(
     pool: &PgPool,
@@ -312,8 +341,14 @@ pub async fn soft_delete_user(
         return Err(IdentityError::UserNotFound);
     }
 
-    // Emit outbox event for downstream services (e.g., messaging-service)
-    insert_outbox_event(&mut tx, user_id, deleted_at, deleted_by).await?;
+    let payload = json!({
+        "user_id": user_id,
+        "deleted_at": deleted_at,
+        "soft_delete": true,
+        "deleted_by": deleted_by,
+    });
+
+    insert_identity_outbox_event(&mut tx, user_id, "identity.user.deleted", payload).await?;
 
     tx.commit().await?;
 
@@ -414,10 +449,28 @@ pub async fn enable_totp(pool: &PgPool, user_id: Uuid, secret: &str) -> Result<(
 
 /// Verify TOTP secret
 pub async fn verify_totp(pool: &PgPool, user_id: Uuid) -> Result<()> {
+    let mut tx = pool.begin().await?;
+
     sqlx::query("UPDATE users SET totp_verified = true WHERE id = $1")
         .bind(user_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+
+    let payload = json!({
+        "user_id": user_id,
+        "enabled_at": Utc::now(),
+        "method": "totp",
+    });
+
+    insert_identity_outbox_event(
+        &mut tx,
+        user_id,
+        "identity.user.two_fa_enabled",
+        payload,
+    )
+    .await?;
+
+    tx.commit().await?;
 
     Ok(())
 }
@@ -436,6 +489,8 @@ pub async fn disable_totp(pool: &PgPool, user_id: Uuid) -> Result<()> {
 
 /// Update password hash and clear failed login attempts
 pub async fn update_password(pool: &PgPool, user_id: Uuid, password_hash: &str) -> Result<()> {
+    let mut tx = pool.begin().await?;
+
     sqlx::query(
         r#"
         UPDATE users
@@ -448,8 +503,24 @@ pub async fn update_password(pool: &PgPool, user_id: Uuid, password_hash: &str) 
     )
     .bind(password_hash)
     .bind(user_id)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
+
+    let payload = json!({
+        "user_id": user_id,
+        "changed_at": Utc::now(),
+        "invalidate_all_sessions": true,
+    });
+
+    insert_identity_outbox_event(
+        &mut tx,
+        user_id,
+        "identity.user.password_changed",
+        payload,
+    )
+    .await?;
+
+    tx.commit().await?;
 
     Ok(())
 }
@@ -548,6 +619,8 @@ pub async fn create_user_with_phone(
     // This maintains database constraint compatibility while allowing phone-only registration
     let placeholder_email = format!("phone+{}@nova.local", phone_number.replace('+', ""));
 
+    let mut tx = pool.begin().await?;
+
     let user = sqlx::query_as::<_, User>(
         r#"
         INSERT INTO users (
@@ -570,8 +643,19 @@ pub async fn create_user_with_phone(
     .bind(password_hash)
     .bind(display_name)
     .bind(phone_number)
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await?;
+
+    let payload = json!({
+        "user_id": user.id,
+        "email": user.email,
+        "username": user.username,
+        "created_at": user.created_at,
+    });
+
+    insert_identity_outbox_event(&mut tx, user.id, "identity.user.created", payload).await?;
+
+    tx.commit().await?;
 
     Ok(user)
 }
@@ -617,6 +701,8 @@ pub async fn create_oauth_user(
     oauth_provider: &str,
     oauth_provider_id: &str,
 ) -> Result<User> {
+    let mut tx = pool.begin().await?;
+
     // Create user with empty password (OAuth users don't have passwords)
     let user = sqlx::query_as::<_, User>(
         r#"
@@ -627,7 +713,7 @@ pub async fn create_oauth_user(
     )
     .bind(email)
     .bind(username)
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await?;
 
     // Create OAuth connection record
@@ -640,8 +726,19 @@ pub async fn create_oauth_user(
     .bind(user.id)
     .bind(oauth_provider)
     .bind(oauth_provider_id)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
+
+    let payload = json!({
+        "user_id": user.id,
+        "email": user.email,
+        "username": user.username,
+        "created_at": user.created_at,
+    });
+
+    insert_identity_outbox_event(&mut tx, user.id, "identity.user.created", payload).await?;
+
+    tx.commit().await?;
 
     Ok(user)
 }

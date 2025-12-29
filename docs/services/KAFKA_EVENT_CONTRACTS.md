@@ -23,42 +23,81 @@ This document defines all domain events that flow through the Nova system via Ka
 ### Event Naming Convention
 
 ```
-<aggregate_type>.<event_type>
+<domain>.<entity>.<action>
 
 Examples:
-  - user.created
-  - user.updated
-  - post.published
-  - message.sent
-  - video.processing_complete
+  - content.post.created
+  - content.post.deleted
+  - social.like.created
+  - social.follow.created
 ```
 
-### Event Structure (Protobuf)
+Identity events now emit payload-only events on `nova.identity.events` with
+`event_type` headers like `identity.user.created`. Legacy `identity-events`
+EventEnvelope payloads (`UserCreatedEvent`, etc.) are deprecated but still
+recognized by consumers.
+
+### Event Structure (Current Wire Formats)
+
+**1) Outbox/payload events (JSON payload + Kafka headers)**
+- Topic: `${KAFKA_TOPIC_PREFIX}.<aggregate>.events` (default prefix: `nova`)
+- Payload: JSON event payload only
+- Headers: `event_type`, `event_id`, `aggregate_type`, `aggregate_id`, `created_at`, `correlation_id` (optional)
+
+```json
+{
+  "post_id": "uuid",
+  "user_id": "uuid",
+  "caption": "...",
+  "media_type": "image",
+  "status": "published",
+  "created_at": "2025-01-15T10:30:00Z"
+}
+```
+
+**2) Legacy identity events (EventEnvelope<T>, deprecated)**
+- Topic: `identity-events` (legacy)
+- Fields: `event_id`, `timestamp`, `schema_version`, `source`, `event_type`, `correlation_id`, `data`
+
+```json
+{
+  "event_id": "uuid",
+  "timestamp": "2025-01-15T10:30:00Z",
+  "schema_version": 1,
+  "source": "identity-service",
+  "event_type": "UserCreatedEvent",
+  "correlation_id": "uuid",
+  "data": { "user_id": "uuid", "email": "user@example.com", "username": "username" }
+}
+```
+
+### Legacy/Target Structure (Deprecated)
 
 ```protobuf
 message DomainEvent {
-  string id = 1;                      // UUID of event
-  string event_type = 2;              // "user.created", "post.published", etc.
-  string aggregate_id = 3;            // ID of affected entity (user_id, post_id, etc.)
-  string aggregate_type = 4;          // "user", "post", "message", etc.
-  int32 version = 5;                  // Event version for schema evolution
-  string data = 6;                    // JSON event payload
-  string metadata = 7;                // JSON metadata
-  string correlation_id = 8;          // For tracing related events
-  string causation_id = 9;            // ID of triggering event
-  string created_at = 10;             // ISO 8601 timestamp
-  string created_by = 11;             // User who triggered event
+  string id = 1;
+  string event_type = 2;
+  string aggregate_id = 3;
+  string aggregate_type = 4;
+  int32 version = 5;
+  string data = 6;
+  string metadata = 7;
+  string correlation_id = 8;
+  string causation_id = 9;
+  string created_at = 10;
+  string created_by = 11;
 }
 ```
 
 ---
 
-## 👤 Auth Service Events
+## 👤 Identity Service Events
 
-Published by: **Auth Service**
-Owned by: **Auth Service**
+Published by: **identity-service**
+Owned by: **identity-service**
+Topic: `nova.identity.events` (payload-only + `event_type` header)
 
-### user.created
+### identity.user.created
 **Trigger**: New user registration
 **Data**:
 ```json
@@ -66,88 +105,61 @@ Owned by: **Auth Service**
   "user_id": "uuid",
   "email": "user@example.com",
   "username": "username",
-  "created_at": "2025-01-15T10:30:00Z",
-  "source": "web|mobile|api"
+  "created_at": "2025-01-15T10:30:00Z"
 }
 ```
 **Subscribers**: Notification Service, Analytics
 
-### user.updated
+### identity.user.profile_updated
 **Trigger**: User profile change
 **Data**:
 ```json
 {
   "user_id": "uuid",
-  "changed_fields": ["email", "username"],
-  "old_values": {"email": "old@example.com"},
-  "new_values": {"email": "new@example.com"},
+  "username": "username",
+  "display_name": "Display Name",
+  "bio": "Bio",
+  "avatar_url": "https://cdn...",
+  "is_verified": false,
+  "follower_count": 0,
   "updated_at": "2025-01-15T10:30:00Z"
 }
 ```
 **Subscribers**: Search Service, Feed Service, Messaging Service
 
-### user.deleted
+### identity.user.deleted
 **Trigger**: User account deletion
 **Data**:
 ```json
 {
   "user_id": "uuid",
   "deleted_at": "2025-01-15T10:30:00Z",
-  "reason": "user_requested|admin|suspension",
-  "cleanup_required": ["posts", "messages", "followers"]
+  "soft_delete": true,
+  "deleted_by": "uuid"
 }
 ```
 **Subscribers**: Content Service, Messaging Service, User Service (cleanup)
 
-### user.verified
-**Trigger**: Email verification complete
-**Data**:
-```json
-{
-  "user_id": "uuid",
-  "verified_at": "2025-01-15T10:30:00Z",
-  "verification_method": "email|phone|oauth"
-}
-```
-**Subscribers**: Notification Service
-
-### user.login
-**Trigger**: Successful login
-**Data**:
-```json
-{
-  "user_id": "uuid",
-  "login_at": "2025-01-15T10:30:00Z",
-  "ip_address": "192.168.1.1",
-  "user_agent": "Mozilla/5.0...",
-  "device_id": "uuid",
-  "location": {"city": "SF", "country": "US"}
-}
-```
-**Subscribers**: Analytics, Security monitoring
-
-### user.failed_login
-**Trigger**: Failed login attempt
-**Data**:
-```json
-{
-  "user_id": "uuid",
-  "failed_at": "2025-01-15T10:30:00Z",
-  "attempt_count": 3,
-  "ip_address": "192.168.1.1",
-  "reason": "invalid_password|user_not_found|account_locked"
-}
-```
-**Subscribers**: Security monitoring, Rate limiting
-
-### user.password_changed
+### identity.user.password_changed
 **Trigger**: User changes password
 **Data**:
 ```json
 {
   "user_id": "uuid",
   "changed_at": "2025-01-15T10:30:00Z",
-  "method": "self_service|admin|password_reset"
+  "invalidate_all_sessions": true
+}
+```
+**Subscribers**: Notification Service, Security
+
+### identity.user.two_fa_enabled
+**Trigger**: User enables 2FA
+**Data**:
+```json
+{
+  "user_id": "uuid",
+  "enabled_at": "2025-01-15T10:30:00Z",
+  "method": "totp"
 }
 ```
 **Subscribers**: Notification Service, Security
@@ -158,6 +170,9 @@ Owned by: **Auth Service**
 
 Published by: **User Service**
 Owned by: **User Service**
+
+**Note**: Follow/block events are currently emitted by social-service outbox
+as `social.follow.*` / `social.block.*` on `nova.social.events`.
 
 ### user.followed
 **Trigger**: User follows another user
@@ -560,23 +575,22 @@ Owned by: **Streaming Service**
 Published by: **Media Service**
 Owned by: **Media Service**
 
-### media.uploaded
-**Trigger**: Media file uploaded
+### media.upload.completed
+**Trigger**: Upload status marked completed
 **Data**:
 ```json
 {
+  "upload_id": "uuid",
   "media_id": "uuid",
-  "owner_id": "uuid",
-  "filename": "image.jpg",
-  "media_type": "image",
-  "mime_type": "image/jpeg",
-  "file_size": 524288,
+  "user_id": "uuid",
+  "file_name": "image.jpg",
+  "size_bytes": 524288,
   "uploaded_at": "2025-01-15T10:30:00Z"
 }
 ```
-**Subscribers**: CDN Service, Content Service
+**Subscribers**: thumb-worker, Content Service
 
-### media.processing_complete
+### media.processing.completed
 **Trigger**: Image/video processing done
 **Data**:
 ```json
@@ -599,7 +613,7 @@ Owned by: **Media Service**
   "media_id": "uuid",
   "owner_id": "uuid",
   "deleted_at": "2025-01-15T10:30:00Z",
-  "s3_key": "uploads/uuid/image.jpg"
+  "storage_path": "uploads/uuid/image.jpg"
 }
 ```
 **Subscribers**: CDN Service
@@ -614,14 +628,14 @@ Subscribers: **All services** publish events that trigger notifications
 ### Event Mapping for Notifications
 
 ```
-user.created                → Welcome email
-post.created (by followed)  → Push/email notification
-post.liked                  → Push/email notification
-message.sent               → Push/email notification
-comment.created            → Push/email notification
-user.followed              → Push notification
-stream.started             → Push notification
-video.processing_complete  → Email notification
+identity.user.created       → Welcome email
+content.post.created        → Push/email notification
+social.like.created         → Push/email notification
+message.persisted           → Push/email notification (legacy: message_persisted)
+content.comment.created     → Push/email notification
+social.follow.created       → Push notification
+stream.started              → Push notification
+video.processing_complete   → Email notification
 ```
 
 ---
@@ -661,28 +675,37 @@ These events are for analytics/observability (all services publish):
 
 ## 🏗️ Kafka Topic Structure
 
-### Topic Naming Convention
+### Topic Naming Convention (Current)
 ```
-nova.<aggregate_type>.<event_type>
+Outbox topics:
+  ${KAFKA_TOPIC_PREFIX}.<aggregate>.events   (default prefix: nova)
 
 Examples:
-  nova.user.created
-  nova.user.updated
-  nova.post.published
-  nova.message.sent
-  nova.stream.started
+  nova.content.events
+  nova.social.events
+  nova.vlm.events
+
+Identity events:
+  nova.identity.events  (config: KAFKA_IDENTITY_EVENTS_TOPIC)
+
+Media events:
+  nova.media.events  (config: KAFKA_MEDIA_EVENTS_TOPIC / KAFKA_EVENTS_TOPIC)
+
+Search indexing:
+  nova.message.events  (config: KAFKA_MESSAGE_EVENTS_TOPIC)
+  legacy: message_persisted, message_deleted
 ```
 
 ### Topic Configuration
 
 | Topic | Partitions | Retention | Format | Key |
 |-------|-----------|-----------|--------|-----|
-| nova.user.* | 3 | 30 days | JSON | user_id |
-| nova.post.* | 5 | 30 days | JSON | post_id |
-| nova.message.* | 3 | 30 days | JSON | conversation_id |
-| nova.video.* | 3 | 30 days | JSON | video_id |
-| nova.stream.* | 3 | 30 days | JSON | stream_id |
-| nova.media.* | 2 | 30 days | JSON | media_id |
+| ${KAFKA_TOPIC_PREFIX}.<aggregate>.events | 3-6 | 30 days | JSON | aggregate_id |
+| nova.identity.events | 3 | 30 days | JSON payload + headers | user_id |
+| nova.media.events | 3 | 30 days | JSON payload + headers | upload_id |
+| nova.message.events | 3 | 30 days | JSON payload + headers | conversation_id |
+| message_persisted | 3 | 30 days | JSON (legacy) | conversation_id |
+| message_deleted | 3 | 30 days | JSON (legacy) | conversation_id |
 
 **Partitioning Strategy**: Partition by aggregate ID to ensure ordering within an aggregate
 
@@ -693,40 +716,29 @@ Examples:
 ### Consumer Groups per Service
 
 ```
-Auth Service:
-  - Publishes: user.*, no subscriptions
+Identity Service:
+  - Publishes: identity.user.* (nova.identity.events)
+  - Subscribes: none
 
-User Service:
-  - Publishes: user.followed, user.blocked
-  - Subscribes: user.created (new followers)
-
-Messaging Service:
-  - Publishes: message.*, conversation.*
-  - Subscribes: user.blocked (update conversation access)
+Social Service:
+  - Publishes: social.follow.*, social.block.* (nova.social.events)
+  - Subscribes: none
 
 Content Service:
-  - Publishes: post.*, comment.*, post.liked
-  - Subscribes: user.deleted (cleanup posts)
-
-Video Service:
-  - Publishes: video.*
-  - Subscribes: none
-
-Streaming Service:
-  - Publishes: stream.*
-  - Subscribes: none
+  - Publishes: content.post.* (nova.content.events)
+  - Subscribes: nova.identity.events (cleanup), nova.media.events (linking)
 
 Media Service:
-  - Publishes: media.*
+  - Publishes: media.upload.completed (nova.media.events)
   - Subscribes: none
 
-Feed Service:
-  - Publishes: none
-  - Subscribes: post.*, user.followed (invalidate caches)
+Messaging Service:
+  - Publishes: message.persisted/message.deleted (nova.message.events, legacy topics optional)
+  - Subscribes: nova.identity.events (device sync)
 
 Search Service:
   - Publishes: none
-  - Subscribes: post.*, message.*, comment.*, user.updated
+  - Subscribes: nova.identity.events, nova.message.events, message_persisted, message_deleted, content/social events
 
 Notification Service:
   - Publishes: none
@@ -740,7 +752,7 @@ Notification Service:
 ### Idempotency
 - All event handlers must be **idempotent**
 - Processing same event twice = same result
-- Use deduplication key: `event.id`
+- Use deduplication key: EventEnvelope `event_id` (identity) or Kafka header `event_id` (outbox)
 
 ### Ordering
 - Events for same aggregate must be processed in order
@@ -764,9 +776,8 @@ Notification Service:
 ### Phase 1: Outbox Pattern
 1. Service writes to database
 2. Service writes event to `outbox_events` table (same transaction)
-3. Events Service polls `outbox_events` every 5 seconds
-4. Events Service publishes to Kafka
-5. Other services consume and update caches
+3. Service-local outbox worker polls `outbox_events` and publishes to Kafka
+4. Other services consume and update caches
 
 ### Phase 2: Full Event-Driven
 1. Keep outbox pattern for consistency
@@ -780,12 +791,12 @@ Notification Service:
 
 ### Versioning Events
 
-Use `version` field for schema changes:
+Use `schema_version` in EventEnvelope or include a `schema_version` field in outbox payloads:
 
 ```json
 {
   "event_type": "user.updated",
-  "version": 2,  // Schema version
+  "schema_version": 2,
   "data": {...}
 }
 ```

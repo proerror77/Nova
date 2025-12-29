@@ -89,14 +89,21 @@ extension MatrixBridgeService {
         // This ensures E2EE keys are consistent across app sessions
         let deviceId = getOrCreateDeviceId()
 
+        let requestBody = MatrixTokenRequest(deviceId: deviceId)
+
         #if DEBUG
         print("[MatrixBridge] Requesting device-bound token with device_id: \(deviceId)")
+        // Debug: Print the actual JSON being sent
+        if let jsonData = try? JSONEncoder().encode(requestBody),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            print("[MatrixBridge] Request body JSON: \(jsonString)")
+        }
         #endif
 
         let response: MatrixTokenResponse = try await apiClient.request(
             endpoint: APIConfig.Matrix.getToken,
             method: "POST",
-            body: MatrixTokenRequest(deviceId: deviceId)
+            body: requestBody
         )
 
         #if DEBUG

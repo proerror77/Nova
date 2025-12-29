@@ -85,7 +85,7 @@ let was_inserted = result.rows_affected() > 0;
 **Reasoning**:
 - **Flexibility**: Supports multiple event ID strategies
   - Kafka headers: `"idempotency_key"` (UUID string)
-  - Kafka offset: `"user-events-0-12345"` (composite)
+  - Kafka offset: `"nova.identity.events-0-12345"` (composite)
   - Payload UUID: `"550e8400-e29b-41d4-a716-446655440000"`
   - Content hash: `"sha256:abc123..."`
 - **Storage**: 255 bytes max (reasonable for all strategies)

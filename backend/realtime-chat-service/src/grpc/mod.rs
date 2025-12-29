@@ -87,7 +87,7 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
 
         let meta_row = client
             .query_one(
-                "SELECT created_at, updated_at FROM conversations WHERE id = $1",
+                "SELECT created_at, updated_at FROM conversations WHERE id = $1 AND deleted_at IS NULL",
                 &[&conversation_id],
             )
             .await
@@ -197,7 +197,7 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
 
         let meta_row = client
             .query_opt(
-                "SELECT id, conversation_type::TEXT, name, created_at, updated_at FROM conversations WHERE id = $1",
+                "SELECT id, conversation_type::TEXT, name, created_at, updated_at FROM conversations WHERE id = $1 AND deleted_at IS NULL",
                 &[&conversation_id],
             )
             .await
@@ -278,7 +278,7 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
 
         let rows = client
             .query(
-                "SELECT id, name, conversation_type::TEXT, created_at, updated_at FROM conversations WHERE id = ANY($1::uuid[]) ORDER BY updated_at DESC",
+                "SELECT id, name, conversation_type::TEXT, created_at, updated_at FROM conversations WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL ORDER BY updated_at DESC",
                 &[&conv_ids],
             )
             .await

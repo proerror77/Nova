@@ -66,7 +66,9 @@ impl ConversationMember {
                     (c.id IS NOT NULL) AS conversation_exists,
                     (cm.role IN ('admin', 'owner')) AS is_admin
                 FROM conversation_members cm
-                LEFT JOIN conversations c ON c.id = cm.conversation_id
+                LEFT JOIN conversations c
+                  ON c.id = cm.conversation_id
+                 AND c.deleted_at IS NULL
                 WHERE cm.user_id = $1 AND cm.conversation_id = $2
                 "#,
                 &[&user_id, &conversation_id],
@@ -82,6 +84,10 @@ impl ConversationMember {
         let conversation_type: String = row.get("conversation_type");
         let conversation_exists: bool = row.get("conversation_exists");
         let is_admin: bool = row.get("is_admin");
+
+        if !conversation_exists {
+            return Err(AppError::NotFound);
+        }
 
         let role = MemberRole::from_db(&role_str)
             .ok_or_else(|| AppError::StartServer("Invalid role in database".into()))?;
