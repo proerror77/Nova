@@ -67,7 +67,7 @@ images:
 
   - name: nova/realtime-chat-service
     newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/realtime-chat-service
-    newTag: 178b5cc3
+    newTag: 30868ad
 
   - name: nova/search-service
     newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/search-service
