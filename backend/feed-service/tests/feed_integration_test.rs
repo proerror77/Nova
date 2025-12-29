@@ -108,9 +108,17 @@ async fn test_feed_error_handling() {
 
     // The error handling block logs the error but doesn't break the loop,
     // which means it continues fetching other users' posts
+    // Check the pattern exists without exact whitespace matching (fragile after cargo fmt)
+    let has_err_handler = source.contains("Err(e) =>");
+    let has_debug_log = source.contains(r#"debug!("Failed to fetch posts from user"#);
+    let err_before_debug = {
+        // Verify Err handler appears before the debug log (they're in the same block)
+        let err_pos = source.find("Err(e) =>");
+        let debug_pos = source.find(r#"debug!("Failed to fetch posts from user"#);
+        matches!((err_pos, debug_pos), (Some(e), Some(d)) if e < d)
+    };
     assert!(
-        source.contains(r#"Err(e) => {
-                                    debug!("Failed to fetch posts from user"#),
+        has_err_handler && has_debug_log && err_before_debug,
         "Handler should continue on partial failure by logging and not breaking"
     );
 

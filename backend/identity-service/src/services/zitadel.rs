@@ -18,7 +18,6 @@
 /// Zitadel Management API v2:
 /// - Import Human User: POST /management/v1/users/_import
 /// - Add IdP Link: POST /management/v1/users/{userId}/links/_idp
-
 use crate::config::ZitadelSettings;
 use crate::error::{IdentityError, Result};
 use reqwest::Client;
@@ -40,8 +39,9 @@ impl ZitadelService {
             return None;
         }
 
+        // Safety: is_configured() already verified api_url is Some
         info!(
-            api_url = %config.api_url.as_ref().unwrap(),
+            api_url = %config.api_url.as_ref().expect("api_url verified by is_configured"),
             "Zitadel user sync service initialized"
         );
 
@@ -84,8 +84,14 @@ impl ZitadelService {
         let import_request = ImportUserRequest {
             user_name: user.username.clone(),
             profile: ImportUserProfile {
-                given_name: user.given_name.clone().unwrap_or_else(|| user.username.clone()),
-                family_name: user.family_name.clone().unwrap_or_else(|| "User".to_string()),
+                given_name: user
+                    .given_name
+                    .clone()
+                    .unwrap_or_else(|| user.username.clone()),
+                family_name: user
+                    .family_name
+                    .clone()
+                    .unwrap_or_else(|| "User".to_string()),
                 display_name: user.display_name.clone(),
                 nick_name: Some(user.username.clone()),
                 preferred_language: Some("en".to_string()),

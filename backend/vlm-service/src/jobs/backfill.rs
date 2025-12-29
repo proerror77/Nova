@@ -5,7 +5,9 @@
 
 use crate::config::Config;
 use crate::providers::GoogleVisionClient;
-use crate::services::{generate_tags, match_channels, Channel as ServiceChannel, GeneratedTag, KeywordWeight};
+use crate::services::{
+    generate_tags, match_channels, Channel as ServiceChannel, GeneratedTag, KeywordWeight,
+};
 use anyhow::Result;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -60,11 +62,7 @@ pub struct BackfillJob {
 
 impl BackfillJob {
     /// Create a new backfill job
-    pub fn new(
-        pool: PgPool,
-        vision_client: Arc<GoogleVisionClient>,
-        config: Config,
-    ) -> Self {
+    pub fn new(pool: PgPool, vision_client: Arc<GoogleVisionClient>, config: Config) -> Self {
         Self {
             pool,
             vision_client,
@@ -89,11 +87,12 @@ impl BackfillJob {
 
         // Load channels for matching
         let db_channels = self.load_channels().await?;
-        let channels: Vec<ServiceChannel> = db_channels
-            .iter()
-            .map(|c| c.to_service_channel())
-            .collect();
-        info!(channel_count = channels.len(), "Loaded channels for matching");
+        let channels: Vec<ServiceChannel> =
+            db_channels.iter().map(|c| c.to_service_channel()).collect();
+        info!(
+            channel_count = channels.len(),
+            "Loaded channels for matching"
+        );
 
         loop {
             // Check if we've reached the max
@@ -232,10 +231,8 @@ impl BackfillJob {
                 self.save_tags(post.id, &tags).await?;
 
                 // Match channels using the service function
-                let tag_tuples: Vec<(String, f32)> = tags
-                    .iter()
-                    .map(|t| (t.tag.clone(), t.confidence))
-                    .collect();
+                let tag_tuples: Vec<(String, f32)> =
+                    tags.iter().map(|t| (t.tag.clone(), t.confidence)).collect();
                 let matched_channels = match_channels(
                     &tag_tuples,
                     channels,

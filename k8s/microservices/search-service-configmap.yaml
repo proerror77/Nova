@@ -14,4 +14,4 @@ data:
   ELASTICSEARCH_USER_INDEX: "nova_users"
   ELASTICSEARCH_COMMENT_INDEX: "nova_comments"
   # Redis cache
-  REDIS_URL: "redis://redis:6379"
+  REDIS_URL: "redis://redis-cluster:6379"

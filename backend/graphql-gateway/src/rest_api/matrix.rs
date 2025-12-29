@@ -10,7 +10,6 @@
 /// - GET  /api/v2/matrix/conversations - Get conversation by room_id query param
 /// - GET  /api/v2/matrix/encryption/status - Get encryption status
 /// - GET  /api/v2/matrix/conversations/{conversation_id}/room-status - Get room status
-
 use actix_web::{get, post, web, HttpMessage, HttpRequest, HttpResponse};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -148,9 +147,12 @@ pub async fn get_matrix_token(http_req: HttpRequest) -> HttpResponse {
                             .body(body)
                     } else {
                         warn!(status = %status, "Matrix token request failed");
-                        HttpResponse::build(actix_web::http::StatusCode::from_u16(status.as_u16()).unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR))
-                            .content_type("application/json")
-                            .body(body)
+                        HttpResponse::build(
+                            actix_web::http::StatusCode::from_u16(status.as_u16())
+                                .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR),
+                        )
+                        .content_type("application/json")
+                        .body(body)
                     }
                 }
                 Err(e) => {
@@ -184,12 +186,7 @@ pub async fn get_matrix_config(http_req: HttpRequest) -> HttpResponse {
     let url = format!("{}/api/v2/matrix/config", base_url);
 
     let client = get_http_client();
-    match client
-        .get(&url)
-        .header("X-User-Id", &user_id)
-        .send()
-        .await
-    {
+    match client.get(&url).header("X-User-Id", &user_id).send().await {
         Ok(resp) => {
             let status = resp.status();
             match resp.text().await {
@@ -199,9 +196,12 @@ pub async fn get_matrix_config(http_req: HttpRequest) -> HttpResponse {
                             .content_type("application/json")
                             .body(body)
                     } else {
-                        HttpResponse::build(actix_web::http::StatusCode::from_u16(status.as_u16()).unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR))
-                            .content_type("application/json")
-                            .body(body)
+                        HttpResponse::build(
+                            actix_web::http::StatusCode::from_u16(status.as_u16())
+                                .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR),
+                        )
+                        .content_type("application/json")
+                        .body(body)
                     }
                 }
                 Err(e) => {
@@ -234,12 +234,7 @@ pub async fn get_all_room_mappings(http_req: HttpRequest) -> HttpResponse {
     let url = format!("{}/api/v2/matrix/rooms", base_url);
 
     let client = get_http_client();
-    match client
-        .get(&url)
-        .header("X-User-Id", &user_id)
-        .send()
-        .await
-    {
+    match client.get(&url).header("X-User-Id", &user_id).send().await {
         Ok(resp) => {
             let status = resp.status();
             match resp.text().await {
@@ -249,9 +244,12 @@ pub async fn get_all_room_mappings(http_req: HttpRequest) -> HttpResponse {
                             .content_type("application/json")
                             .body(body)
                     } else {
-                        HttpResponse::build(actix_web::http::StatusCode::from_u16(status.as_u16()).unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR))
-                            .content_type("application/json")
-                            .body(body)
+                        HttpResponse::build(
+                            actix_web::http::StatusCode::from_u16(status.as_u16())
+                                .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR),
+                        )
+                        .content_type("application/json")
+                        .body(body)
                     }
                 }
                 Err(e) => {
@@ -300,9 +298,12 @@ pub async fn save_room_mapping(
                             .content_type("application/json")
                             .body(body)
                     } else {
-                        HttpResponse::build(actix_web::http::StatusCode::from_u16(status.as_u16()).unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR))
-                            .content_type("application/json")
-                            .body(body)
+                        HttpResponse::build(
+                            actix_web::http::StatusCode::from_u16(status.as_u16())
+                                .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR),
+                        )
+                        .content_type("application/json")
+                        .body(body)
                     }
                 }
                 Err(e) => {
@@ -321,10 +322,7 @@ pub async fn save_room_mapping(
 /// GET /api/v2/matrix/rooms/{conversation_id}
 /// Get Matrix room ID for a Nova conversation
 #[get("/api/v2/matrix/rooms/{conversation_id}")]
-pub async fn get_room_mapping(
-    http_req: HttpRequest,
-    path: web::Path<String>,
-) -> HttpResponse {
+pub async fn get_room_mapping(http_req: HttpRequest, path: web::Path<String>) -> HttpResponse {
     let user_id = match http_req.extensions().get::<AuthenticatedUser>().copied() {
         Some(AuthenticatedUser(id)) => id.to_string(),
         None => return HttpResponse::Unauthorized().finish(),
@@ -335,12 +333,7 @@ pub async fn get_room_mapping(
     let url = format!("{}/api/v2/matrix/rooms/{}", base_url, conversation_id);
 
     let client = get_http_client();
-    match client
-        .get(&url)
-        .header("X-User-Id", &user_id)
-        .send()
-        .await
-    {
+    match client.get(&url).header("X-User-Id", &user_id).send().await {
         Ok(resp) => {
             let status = resp.status();
             match resp.text().await {
@@ -350,9 +343,12 @@ pub async fn get_room_mapping(
                             .content_type("application/json")
                             .body(body)
                     } else {
-                        HttpResponse::build(actix_web::http::StatusCode::from_u16(status.as_u16()).unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR))
-                            .content_type("application/json")
-                            .body(body)
+                        HttpResponse::build(
+                            actix_web::http::StatusCode::from_u16(status.as_u16())
+                                .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR),
+                        )
+                        .content_type("application/json")
+                        .body(body)
                     }
                 }
                 Err(e) => {
@@ -386,15 +382,14 @@ pub async fn get_conversation_mapping(
     };
 
     let base_url = get_chat_service_url();
-    let url = format!("{}/api/v2/matrix/conversations?room_id={}", base_url, urlencoding::encode(&query.room_id));
+    let url = format!(
+        "{}/api/v2/matrix/conversations?room_id={}",
+        base_url,
+        urlencoding::encode(&query.room_id)
+    );
 
     let client = get_http_client();
-    match client
-        .get(&url)
-        .header("X-User-Id", &user_id)
-        .send()
-        .await
-    {
+    match client.get(&url).header("X-User-Id", &user_id).send().await {
         Ok(resp) => {
             let status = resp.status();
             match resp.text().await {
@@ -404,9 +399,12 @@ pub async fn get_conversation_mapping(
                             .content_type("application/json")
                             .body(body)
                     } else {
-                        HttpResponse::build(actix_web::http::StatusCode::from_u16(status.as_u16()).unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR))
-                            .content_type("application/json")
-                            .body(body)
+                        HttpResponse::build(
+                            actix_web::http::StatusCode::from_u16(status.as_u16())
+                                .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR),
+                        )
+                        .content_type("application/json")
+                        .body(body)
                     }
                 }
                 Err(e) => {
@@ -435,12 +433,7 @@ pub async fn get_encryption_status(http_req: HttpRequest) -> HttpResponse {
     let url = format!("{}/api/v2/matrix/encryption/status", base_url);
 
     let client = get_http_client();
-    match client
-        .get(&url)
-        .header("X-User-Id", &user_id)
-        .send()
-        .await
-    {
+    match client.get(&url).header("X-User-Id", &user_id).send().await {
         Ok(resp) => {
             let status = resp.status();
             match resp.text().await {
@@ -450,9 +443,12 @@ pub async fn get_encryption_status(http_req: HttpRequest) -> HttpResponse {
                             .content_type("application/json")
                             .body(body)
                     } else {
-                        HttpResponse::build(actix_web::http::StatusCode::from_u16(status.as_u16()).unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR))
-                            .content_type("application/json")
-                            .body(body)
+                        HttpResponse::build(
+                            actix_web::http::StatusCode::from_u16(status.as_u16())
+                                .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR),
+                        )
+                        .content_type("application/json")
+                        .body(body)
                     }
                 }
                 Err(e) => {
@@ -471,10 +467,7 @@ pub async fn get_encryption_status(http_req: HttpRequest) -> HttpResponse {
 /// GET /api/v2/matrix/conversations/{conversation_id}/room-status
 /// Get detailed Matrix room status for a conversation
 #[get("/api/v2/matrix/conversations/{conversation_id}/room-status")]
-pub async fn get_room_status(
-    http_req: HttpRequest,
-    path: web::Path<String>,
-) -> HttpResponse {
+pub async fn get_room_status(http_req: HttpRequest, path: web::Path<String>) -> HttpResponse {
     let user_id = match http_req.extensions().get::<AuthenticatedUser>().copied() {
         Some(AuthenticatedUser(id)) => id.to_string(),
         None => return HttpResponse::Unauthorized().finish(),
@@ -482,15 +475,13 @@ pub async fn get_room_status(
 
     let conversation_id = path.into_inner();
     let base_url = get_chat_service_url();
-    let url = format!("{}/api/v2/matrix/conversations/{}/room-status", base_url, conversation_id);
+    let url = format!(
+        "{}/api/v2/matrix/conversations/{}/room-status",
+        base_url, conversation_id
+    );
 
     let client = get_http_client();
-    match client
-        .get(&url)
-        .header("X-User-Id", &user_id)
-        .send()
-        .await
-    {
+    match client.get(&url).header("X-User-Id", &user_id).send().await {
         Ok(resp) => {
             let status = resp.status();
             match resp.text().await {
@@ -500,9 +491,12 @@ pub async fn get_room_status(
                             .content_type("application/json")
                             .body(body)
                     } else {
-                        HttpResponse::build(actix_web::http::StatusCode::from_u16(status.as_u16()).unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR))
-                            .content_type("application/json")
-                            .body(body)
+                        HttpResponse::build(
+                            actix_web::http::StatusCode::from_u16(status.as_u16())
+                                .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR),
+                        )
+                        .content_type("application/json")
+                        .body(body)
                     }
                 }
                 Err(e) => {

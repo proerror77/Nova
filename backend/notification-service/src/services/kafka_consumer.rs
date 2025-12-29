@@ -177,7 +177,12 @@ impl RedisDeduplicator {
     ///
     /// Uses Redis SETNX with TTL - returns true if duplicate (key already exists),
     /// false if new (key was set successfully).
-    pub async fn is_duplicate(&self, user_id: &Uuid, event_type: &str, notification_id: &str) -> bool {
+    pub async fn is_duplicate(
+        &self,
+        user_id: &Uuid,
+        event_type: &str,
+        notification_id: &str,
+    ) -> bool {
         let key = format!("dedup:notif:{}:{}:{}", user_id, event_type, notification_id);
 
         let result: Result<bool, _> = redis_utils::with_timeout(async {
@@ -207,7 +212,11 @@ impl RedisDeduplicator {
             }
             Err(e) => {
                 // On Redis error, log and allow through (fail open)
-                tracing::warn!("Redis dedup check failed for {}: {} - allowing notification", key, e);
+                tracing::warn!(
+                    "Redis dedup check failed for {}: {} - allowing notification",
+                    key,
+                    e
+                );
                 false
             }
         }

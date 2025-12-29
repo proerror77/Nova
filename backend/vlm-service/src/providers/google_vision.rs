@@ -184,12 +184,14 @@ impl GoogleVisionClient {
 
         // Initialize token provider if not already done
         if provider_guard.is_none() {
-            let provider = gcp_auth::provider().await
+            let provider = gcp_auth::provider()
+                .await
                 .context("Failed to initialize GCP authentication")?;
             *provider_guard = Some(provider);
         }
 
-        let provider = provider_guard.as_ref().unwrap();
+        // Safety: we just initialized it above if it was None
+        let provider = provider_guard.as_ref().expect("provider initialized above");
         let token = provider
             .token(VISION_API_SCOPES)
             .await
@@ -270,7 +272,10 @@ impl GoogleVisionClient {
             .context("Failed to parse Vision API response")?;
 
         let elapsed = start.elapsed();
-        debug!(elapsed_ms = elapsed.as_millis(), "Vision API response received");
+        debug!(
+            elapsed_ms = elapsed.as_millis(),
+            "Vision API response received"
+        );
 
         // Process first response
         let annotate_response = vision_response

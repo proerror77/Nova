@@ -95,7 +95,9 @@ impl WorkerConfig {
                 use base64::Engine;
                 let decoded = base64::engine::general_purpose::STANDARD
                     .decode(json.trim())
-                    .map_err(|e| AppError::Internal(format!("Failed to decode base64 SA JSON: {e}")))?;
+                    .map_err(|e| {
+                        AppError::Internal(format!("Failed to decode base64 SA JSON: {e}"))
+                    })?;
                 return String::from_utf8(decoded)
                     .map_err(|e| AppError::Internal(format!("Invalid UTF-8 in SA JSON: {e}")));
             }
@@ -120,8 +122,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("thumb_worker=info".parse().unwrap())
-                .add_directive("media_service=info".parse().unwrap()),
+                .add_directive("thumb_worker=info".parse().expect("valid directive"))
+                .add_directive("media_service=info".parse().expect("valid directive")),
         )
         .init();
 
@@ -138,14 +140,15 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
 
     // Load service account JSON
-    let sa_json = config.load_service_account_json().map_err(|e| format!("{e}"))?;
+    let sa_json = config
+        .load_service_account_json()
+        .map_err(|e| format!("{e}"))?;
 
     // Create GCS client
-    let gcs_client = Arc::new(GcsClient::new(
-        &sa_json,
-        &config.gcs_bucket,
-        "storage.googleapis.com",
-    ).map_err(|e| format!("{e}"))?);
+    let gcs_client = Arc::new(
+        GcsClient::new(&sa_json, &config.gcs_bucket, "storage.googleapis.com")
+            .map_err(|e| format!("{e}"))?,
+    );
     info!("GCS client initialized");
 
     // Create thumbnail service
@@ -157,7 +160,11 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         batch_size: 20,
         content_db_url: config.content_db_url.clone(),
     };
-    let thumbnail_service = Arc::new(ThumbnailService::new(gcs_client.clone(), service_config).await.map_err(|e| format!("{e}"))?);
+    let thumbnail_service = Arc::new(
+        ThumbnailService::new(gcs_client.clone(), service_config)
+            .await
+            .map_err(|e| format!("{e}"))?,
+    );
     info!("Thumbnail service initialized");
 
     // Setup shutdown signal
@@ -179,7 +186,12 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         topic: config.kafka_topic.clone(),
         group_id: config.kafka_group_id.clone(),
     };
-    let mut consumer = ThumbnailConsumer::new(&consumer_config, thumbnail_service.clone(), shutdown_rx.clone()).map_err(|e| format!("{e}"))?;
+    let mut consumer = ThumbnailConsumer::new(
+        &consumer_config,
+        thumbnail_service.clone(),
+        shutdown_rx.clone(),
+    )
+    .map_err(|e| format!("{e}"))?;
     info!("Kafka consumer initialized");
 
     // Spawn batch processing task
@@ -188,7 +200,10 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let batch_interval = Duration::from_secs(config.batch_interval_secs);
 
     let batch_handle = tokio::spawn(async move {
-        info!(interval_secs = config.batch_interval_secs, "Starting batch processor");
+        info!(
+            interval_secs = config.batch_interval_secs,
+            "Starting batch processor"
+        );
 
         // Initial batch run on startup
         match batch_service.process_pending().await {

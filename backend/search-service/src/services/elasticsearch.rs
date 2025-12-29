@@ -414,7 +414,7 @@ impl ElasticsearchClient {
                         "case_insensitive": true
                     }
                 }
-            })
+            }),
         ];
 
         let mut filter_clauses = vec![];

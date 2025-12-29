@@ -12,6 +12,24 @@ extension MatrixBridgeService {
         let matrixUserId: String
         let deviceId: String
         let homeserverUrl: String?
+        /// Token expiry timestamp (Unix seconds)
+        let expiresAt: Int64?
+
+        /// Check if the token is expired or will expire soon
+        /// - Parameter bufferSeconds: Time buffer before actual expiry (default 10 minutes)
+        /// - Returns: true if token is expired or will expire within buffer time
+        func isExpiredOrExpiringSoon(bufferSeconds: Int64 = 600) -> Bool {
+            guard let expiresAt = expiresAt else { return false }
+            let currentTime = Int64(Date().timeIntervalSince1970)
+            return currentTime >= (expiresAt - bufferSeconds)
+        }
+
+        /// Time until token expires (in seconds)
+        var timeUntilExpiry: Int64? {
+            guard let expiresAt = expiresAt else { return nil }
+            let currentTime = Int64(Date().timeIntervalSince1970)
+            return expiresAt - currentTime
+        }
     }
 
     // MARK: - Bridge Configuration
@@ -63,6 +81,8 @@ extension MatrixBridgeService {
             let matrixUserId: String
             let deviceId: String
             let homeserverUrl: String?
+            /// Token expiry timestamp (Unix seconds)
+            let expiresAt: Int64?
         }
 
         // Generate a persistent device ID for this device
@@ -79,11 +99,19 @@ extension MatrixBridgeService {
             body: MatrixTokenRequest(deviceId: deviceId)
         )
 
+        #if DEBUG
+        if let expiresAt = response.expiresAt {
+            let expiryDate = Date(timeIntervalSince1970: TimeInterval(expiresAt))
+            print("[MatrixBridge] Token expires at: \(expiryDate) (in \((expiresAt - Int64(Date().timeIntervalSince1970))/60) minutes)")
+        }
+        #endif
+
         return MatrixCredentials(
             accessToken: response.accessToken,
             matrixUserId: response.matrixUserId,
             deviceId: response.deviceId,
-            homeserverUrl: response.homeserverUrl
+            homeserverUrl: response.homeserverUrl,
+            expiresAt: response.expiresAt
         )
     }
 
@@ -112,12 +140,9 @@ extension MatrixBridgeService {
     // MARK: - Room Mapping API
 
     func queryRoomMapping(conversationId: String) async throws -> String? {
+        // APIClient uses .convertFromSnakeCase for decoding
         struct RoomMappingResponse: Codable {
             let roomId: String?
-
-            enum CodingKeys: String, CodingKey {
-                case roomId = "room_id"
-            }
         }
 
         do {
@@ -132,12 +157,9 @@ extension MatrixBridgeService {
     }
 
     func queryConversationMapping(roomId: String) async throws -> String? {
+        // APIClient uses .convertFromSnakeCase for decoding
         struct ConversationMappingResponse: Codable {
             let conversationId: String?
-
-            enum CodingKeys: String, CodingKey {
-                case conversationId = "conversation_id"
-            }
         }
 
         // URL encode room ID (!xxx:server contains special chars)
@@ -181,11 +203,6 @@ extension MatrixBridgeService {
             struct MappingEntry: Codable {
                 let conversationId: String
                 let roomId: String
-
-                enum CodingKeys: String, CodingKey {
-                    case conversationId = "conversation_id"
-                    case roomId = "room_id"
-                }
             }
         }
 

@@ -59,12 +59,12 @@ spec:
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: username
+              key: DB_USER
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: password
+              key: DB_PASSWORD
 
       - name: wait-for-elasticsearch
         image: busybox:1.35
@@ -168,7 +168,7 @@ spec:
         - |
           echo "⏳ Waiting for redis:6379..."
           for i in $(seq 1 30); do
-            if nc -zv redis.nova-staging.svc.cluster.local 6379 2>/dev/null; then
+            if nc -zv redis-cluster.nova-staging.svc.cluster.local 6379 2>/dev/null; then
               echo "✓ redis is ready"
               exit 0
             fi
@@ -194,7 +194,7 @@ spec:
         - |
           echo "⏳ Waiting for redis:6379..."
           for i in $(seq 1 30); do
-            if nc -zv redis.nova-staging.svc.cluster.local 6379 2>/dev/null; then
+            if nc -zv redis-cluster.nova-staging.svc.cluster.local 6379 2>/dev/null; then
               echo "✓ redis is ready"
               exit 0
             fi
@@ -222,12 +222,12 @@ spec:
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: username
+              key: DB_USER
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: password
+              key: DB_PASSWORD
 
 ---
 # realtime-chat-service 依赖：redis + kafka only (通过 messaging-events 解耦)
@@ -247,7 +247,7 @@ spec:
         - |
           echo "⏳ Waiting for redis:6379..."
           for i in $(seq 1 30); do
-            if nc -zv redis.nova-staging.svc.cluster.local 6379 2>/dev/null; then
+            if nc -zv redis-cluster.nova-staging.svc.cluster.local 6379 2>/dev/null; then
               echo "✓ redis is ready"
               exit 0
             fi
@@ -285,12 +285,12 @@ spec:
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: username
+              key: DB_USER
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: password
+              key: DB_PASSWORD
 
       - name: wait-for-kafka
         image: busybox:1.35
@@ -338,12 +338,12 @@ spec:
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: username
+              key: DB_USER
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: password
+              key: DB_PASSWORD
 
 ---
 # media-service 依赖：postgres only (通过 Kafka media-events 与 content-service 解耦)
@@ -375,12 +375,12 @@ spec:
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: username
+              key: DB_USER
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: password
+              key: DB_PASSWORD
 
 ---
 # identity-service 依赖：postgres only (替代了 user-service)
@@ -412,12 +412,12 @@ spec:
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: username
+              key: DB_USER
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: password
+              key: DB_PASSWORD
 
 ---
 # feature-store 依赖：postgres + kafka + redis (特征存储)
@@ -449,12 +449,12 @@ spec:
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: username
+              key: DB_USER
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: password
+              key: DB_PASSWORD
 
       - name: wait-for-kafka
         image: busybox:1.35
@@ -480,7 +480,7 @@ spec:
         - |
           echo "⏳ Waiting for redis:6379..."
           for i in $(seq 1 30); do
-            if nc -zv redis.nova-staging.svc.cluster.local 6379 2>/dev/null; then
+            if nc -zv redis-cluster.nova-staging.svc.cluster.local 6379 2>/dev/null; then
               echo "✓ redis is ready"
               exit 0
             fi

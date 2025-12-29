@@ -58,13 +58,7 @@ impl APNsClient {
         // Determine authentication mode based on provided parameters
         let cfg = if !key_id.is_empty() && !team_id.is_empty() {
             // Use token-based JWT authentication (.p8 key file)
-            NovaApnsConfig::with_token(
-                key_or_cert_path,
-                key_id,
-                team_id,
-                bundle_id,
-                is_production,
-            )
+            NovaApnsConfig::with_token(key_or_cert_path, key_id, team_id, bundle_id, is_production)
         } else {
             // Fall back to certificate-based authentication (.p12 file)
             NovaApnsConfig::new(key_or_cert_path, bundle_id, is_production)

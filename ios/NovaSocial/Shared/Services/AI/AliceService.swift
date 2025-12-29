@@ -250,18 +250,12 @@ private struct AliceEnhanceRequest: Codable {
 }
 
 /// Alice enhance response format
+/// Note: APIClient uses .convertFromSnakeCase - no CodingKeys needed for responses
 private struct AliceEnhanceResponse: Codable {
     let description: String
     let hashtags: [String]
     let trendingTopics: [String]?
     let alternativeDescriptions: [String]?
-
-    enum CodingKeys: String, CodingKey {
-        case description
-        case hashtags
-        case trendingTopics = "trending_topics"
-        case alternativeDescriptions = "alternative_descriptions"
-    }
 }
 
 /// Post enhancement suggestion result from Alice API

@@ -162,7 +162,8 @@ impl KafkaConsumer {
                         );
 
                         // Apply exponential backoff with jitter
-                        tokio::time::sleep(tokio::time::Duration::from_millis(current_backoff_ms)).await;
+                        tokio::time::sleep(tokio::time::Duration::from_millis(current_backoff_ms))
+                            .await;
 
                         // Increase backoff for next error (exponential with cap)
                         current_backoff_ms = (current_backoff_ms * 2).min(MAX_BACKOFF_MS);

@@ -268,7 +268,7 @@ async fn insert_outbox_event(
 
     sqlx::query(
         r#"
-        INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, event_data)
+        INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload)
         VALUES ($1, $2, $3, $4)
         "#,
     )

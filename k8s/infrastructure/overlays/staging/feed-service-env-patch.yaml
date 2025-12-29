@@ -57,7 +57,7 @@ spec:
         - name: GRPC_FEATURE_STORE_URL
           value: "http://feature-store.nova-staging.svc.cluster.local:9089"
         - name: REDIS_URL
-          value: "redis://redis.nova-staging.svc.cluster.local:6379"
+          value: "redis://redis-cluster.nova-staging.svc.cluster.local:6379"
 
         # ============================================================
         # gRPC 服务 Tier 配置 (非硬依赖，避免启动 CrashLoop)

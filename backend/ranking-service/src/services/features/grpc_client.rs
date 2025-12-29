@@ -181,10 +181,7 @@ impl GrpcFeatureClient {
         let author_quality = match self.batch_get_author_quality(&author_ids).await {
             Ok(quality) => quality,
             Err(e) => {
-                warn!(
-                    "Failed to fetch author quality from feature-store: {}",
-                    e
-                );
+                warn!("Failed to fetch author quality from feature-store: {}", e);
                 HashMap::new()
             }
         };

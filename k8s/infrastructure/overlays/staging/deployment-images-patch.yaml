@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
       - name: content-service
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/content-service@sha256:308a8420b6616764eced6529b60a4562707b9746835b73d1fc256cff2f4e5531
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/content-service@sha256:ed7155fce0f6583d30790308c3330da09b1b7285186a30a47ddd7a98d070d74d
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -29,7 +29,7 @@ spec:
     spec:
       containers:
       - name: identity-service
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/identity-service@sha256:2be63820cdf708c76678cf15803c9fc38897f06eccc16ab3ae6df5b751a59647
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/identity-service@sha256:8f4193f0fdff785c0616bc450feead3aa463cf7fd35225aadab1808dfa997c17
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -40,7 +40,7 @@ spec:
     spec:
       containers:
       - name: search-service
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/search-service@sha256:018d8a99fce3f86924fa68d5a17d9d54a9d4c60b257f6cc785acd908fd97a8ba
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/search-service@sha256:23aa41686854d6e0f39a8b52aca59dd32633615f9157d61d3ab9ee27781b3352
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -84,7 +84,7 @@ spec:
     spec:
       containers:
       - name: graphql-gateway
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/graphql-gateway@sha256:40c26f45306d003045da2c082d7c54e97af06cf7faf2aec27a43b36e1ef61174
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/graphql-gateway@sha256:8ae8f23a8abc34c09686d7d23aaa0d885e7247f460e38bfcc3da530c7c5c9c85
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -117,7 +117,7 @@ spec:
     spec:
       containers:
       - name: social-service
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/social-service@sha256:03a60a7f029785f30d1be5b80b1863609c39504ee2bc4d8e2c44295ceeb5ab82
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/social-service@sha256:01fd12e945285d50125b0347dac014571a967144a6502d49729300d904b02a6f
 ---
 apiVersion: apps/v1
 kind: Deployment

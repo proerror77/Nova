@@ -19,8 +19,8 @@ use crate::clients::ServiceClients;
 
 /// Get X.AI API configuration from environment
 fn get_xai_config() -> (String, String) {
-    let base_url = env::var("XAI_API_BASE_URL")
-        .unwrap_or_else(|_| "https://api.x.ai/v1".to_string());
+    let base_url =
+        env::var("XAI_API_BASE_URL").unwrap_or_else(|_| "https://api.x.ai/v1".to_string());
     let api_key = env::var("XAI_API_KEY").unwrap_or_else(|_| "".to_string());
     (base_url, api_key)
 }
@@ -192,10 +192,7 @@ pub async fn get_status(_clients: web::Data<ServiceClients>) -> Result<HttpRespo
         Ok(HttpResponse::Ok().json(XAIStatusResponse {
             status: "available".to_string(),
             available: true,
-            models: vec![
-                "grok-3-latest".to_string(),
-                "grok-beta".to_string(),
-            ],
+            models: vec!["grok-3-latest".to_string(), "grok-beta".to_string()],
         }))
     } else {
         warn!("X.AI API key not configured");
@@ -229,7 +226,9 @@ pub async fn chat(
     let mut messages: Vec<ChatMessage> = vec![];
 
     // Add system prompt
-    let system_prompt = req.system_prompt.clone()
+    let system_prompt = req
+        .system_prompt
+        .clone()
         .unwrap_or_else(|| ALICE_SYSTEM_PROMPT.to_string());
     messages.push(ChatMessage {
         role: "system".to_string(),
@@ -250,9 +249,12 @@ pub async fn chat(
     // Build search config if enabled
     let search_config = if req.enable_search.unwrap_or(false) {
         let sources = req.search_sources.as_ref().map(|sources| {
-            sources.iter().map(|s| SearchSource {
-                source_type: s.clone(),
-            }).collect()
+            sources
+                .iter()
+                .map(|s| SearchSource {
+                    source_type: s.clone(),
+                })
+                .collect()
         });
 
         Some(SearchConfig {
@@ -298,8 +300,7 @@ pub async fn chat(
                 match response.json::<XAICompletionResponse>().await {
                     Ok(xai_response) => {
                         if let Some(choice) = xai_response.choices.first() {
-                            let content = choice.message.content.clone()
-                                .unwrap_or_default();
+                            let content = choice.message.content.clone().unwrap_or_default();
 
                             let chat_response = XAIChatResponse {
                                 id: xai_response.id,
@@ -398,7 +399,9 @@ pub async fn chat_stream(
     let mut messages: Vec<ChatMessage> = vec![];
 
     // Add system prompt
-    let system_prompt = req.system_prompt.clone()
+    let system_prompt = req
+        .system_prompt
+        .clone()
         .unwrap_or_else(|| ALICE_SYSTEM_PROMPT.to_string());
     messages.push(ChatMessage {
         role: "system".to_string(),
@@ -419,9 +422,12 @@ pub async fn chat_stream(
     // Build search config if enabled
     let search_config = if req.enable_search.unwrap_or(false) {
         let sources = req.search_sources.as_ref().map(|sources| {
-            sources.iter().map(|s| SearchSource {
-                source_type: s.clone(),
-            }).collect()
+            sources
+                .iter()
+                .map(|s| SearchSource {
+                    source_type: s.clone(),
+                })
+                .collect()
         });
 
         Some(SearchConfig {
@@ -604,12 +610,18 @@ pub async fn get_voice_token(_clients: web::Data<ServiceClients>) -> Result<Http
 
             // Get response body as text first for debugging
             let response_text = response.text().await.unwrap_or_default();
-            info!("xAI voice token response status: {}, body: {}", status, &response_text);
+            info!(
+                "xAI voice token response status: {}, body: {}",
+                status, &response_text
+            );
 
             if status.is_success() {
                 match serde_json::from_str::<XAIClientSecretResponse>(&response_text) {
                     Ok(xai_response) => {
-                        info!("Voice token generated successfully, expires_at: {}", xai_response.expires_at);
+                        info!(
+                            "Voice token generated successfully, expires_at: {}",
+                            xai_response.expires_at
+                        );
                         Ok(HttpResponse::Ok().json(VoiceTokenResponse {
                             client_secret: ClientSecret {
                                 value: xai_response.value,
@@ -619,7 +631,10 @@ pub async fn get_voice_token(_clients: web::Data<ServiceClients>) -> Result<Http
                         }))
                     }
                     Err(e) => {
-                        error!("Failed to parse xAI token response: {} - Raw response: {}", e, &response_text);
+                        error!(
+                            "Failed to parse xAI token response: {} - Raw response: {}",
+                            e, &response_text
+                        );
                         Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                             "status": "error",
                             "message": format!("Failed to parse token response: {}", e),

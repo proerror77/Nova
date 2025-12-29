@@ -84,12 +84,7 @@ impl GcsStorageClient {
     }
 
     /// Generate a V4 signed URL for a given HTTP method
-    fn sign_url(
-        &self,
-        method: &str,
-        object_path: &str,
-        expires_in: Duration,
-    ) -> Result<String> {
+    fn sign_url(&self, method: &str, object_path: &str, expires_in: Duration) -> Result<String> {
         let now = chrono::Utc::now();
         let datestamp = now.format("%Y%m%d").to_string();
         let timestamp = now.format("%Y%m%dT%H%M%SZ").to_string();
@@ -151,12 +146,12 @@ impl GcsStorageClient {
     }
 
     /// Generate a presigned URL for uploading a file to GCS
-    pub fn generate_presigned_url(
-        &self,
-        object_key: &str,
-        _content_type: &str,
-    ) -> Result<String> {
-        self.sign_url("PUT", object_key, Duration::from_secs(DEFAULT_PRESIGNED_URL_EXPIRY_SECS))
+    pub fn generate_presigned_url(&self, object_key: &str, _content_type: &str) -> Result<String> {
+        self.sign_url(
+            "PUT",
+            object_key,
+            Duration::from_secs(DEFAULT_PRESIGNED_URL_EXPIRY_SECS),
+        )
     }
 
     /// Verify that a GCS object exists
@@ -237,11 +232,12 @@ impl GcsStorageClient {
             )));
         }
 
-        let data = tokio::fs::read(path)
-            .await
-            .map_err(|e| AppError::Internal(format!("Failed to read file {}: {}", local_path, e)))?;
+        let data = tokio::fs::read(path).await.map_err(|e| {
+            AppError::Internal(format!("Failed to read file {}: {}", local_path, e))
+        })?;
 
-        self.upload(object_key, Bytes::from(data), content_type).await?;
+        self.upload(object_key, Bytes::from(data), content_type)
+            .await?;
 
         tracing::info!(object_key = %object_key, "Uploaded video to GCS");
         Ok(object_key.to_string())
@@ -271,11 +267,7 @@ impl GcsStorageClient {
     }
 
     /// Verify file integrity by comparing SHA256 hashes
-    pub async fn verify_file_hash(
-        &self,
-        object_key: &str,
-        expected_hash: &str,
-    ) -> Result<bool> {
+    pub async fn verify_file_hash(&self, object_key: &str, expected_hash: &str) -> Result<bool> {
         let bytes = self.download(object_key).await?;
 
         let mut hasher = Sha256::new();
@@ -293,10 +285,7 @@ impl GcsStorageClient {
         // Just verify we can create signed URLs - don't actually make a request
         // since the object might not exist
         if test_url.contains("X-Goog-Signature") {
-            tracing::info!(
-                "✅ GCS connection validated (bucket: {})",
-                self.bucket
-            );
+            tracing::info!("✅ GCS connection validated (bucket: {})", self.bucket);
             Ok(())
         } else {
             Err(AppError::Internal("GCS signing failed".to_string()))
@@ -310,7 +299,10 @@ impl GcsStorageClient {
 
     /// Get public URL for an object
     pub fn public_url(&self, object_key: &str) -> String {
-        format!("https://storage.googleapis.com/{}/{}", self.bucket, object_key)
+        format!(
+            "https://storage.googleapis.com/{}/{}",
+            self.bucket, object_key
+        )
     }
 }
 

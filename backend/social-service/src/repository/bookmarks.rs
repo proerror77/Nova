@@ -84,7 +84,10 @@ impl BookmarkRepository {
     }
 
     /// Batch get bookmark counts for multiple posts
-    pub async fn batch_get_bookmark_counts(&self, post_ids: &[Uuid]) -> Result<std::collections::HashMap<Uuid, i64>> {
+    pub async fn batch_get_bookmark_counts(
+        &self,
+        post_ids: &[Uuid],
+    ) -> Result<std::collections::HashMap<Uuid, i64>> {
         use std::collections::HashMap;
 
         if post_ids.is_empty() {

@@ -23,8 +23,8 @@ use tracing::{error, info};
 use super::models::ErrorResponse;
 use crate::clients::proto::notification::{
     BatchCreateNotificationsRequest, CreateNotificationRequest, DeleteNotificationRequest,
-    GetNotificationRequest, GetNotificationsRequest, GetNotificationPreferencesRequest,
-    GetNotificationStatsRequest, GetUnreadCountRequest, MarkAllNotificationsAsReadRequest,
+    GetNotificationPreferencesRequest, GetNotificationRequest, GetNotificationStatsRequest,
+    GetNotificationsRequest, GetUnreadCountRequest, MarkAllNotificationsAsReadRequest,
     MarkNotificationAsReadRequest, RegisterPushTokenRequest, UnregisterPushTokenRequest,
     UpdateNotificationPreferencesRequest,
 };
@@ -189,7 +189,9 @@ pub struct BatchNotificationItem {
 // Helper Functions
 // ============================================================================
 
-fn convert_notification(n: crate::clients::proto::notification::Notification) -> NotificationResponse {
+fn convert_notification(
+    n: crate::clients::proto::notification::Notification,
+) -> NotificationResponse {
     // Combine title and body into message, or use body if title is empty
     let message = if n.title.is_empty() {
         n.body
@@ -224,22 +226,15 @@ fn convert_notification(n: crate::clients::proto::notification::Notification) ->
 
 fn handle_grpc_error(status: tonic::Status, context: &str) -> HttpResponse {
     match status.code() {
-        tonic::Code::NotFound => {
-            HttpResponse::NotFound().json(ErrorResponse::new("Not found"))
-        }
+        tonic::Code::NotFound => HttpResponse::NotFound().json(ErrorResponse::new("Not found")),
         tonic::Code::Unauthenticated => {
             HttpResponse::Unauthorized().json(ErrorResponse::new("Unauthorized"))
         }
-        tonic::Code::InvalidArgument => {
-            HttpResponse::BadRequest().json(ErrorResponse::with_message(
-                "Invalid request",
-                status.message(),
-            ))
-        }
-        _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-            context,
-            status.message(),
-        )),
+        tonic::Code::InvalidArgument => HttpResponse::BadRequest().json(
+            ErrorResponse::with_message("Invalid request", status.message()),
+        ),
+        _ => HttpResponse::InternalServerError()
+            .json(ErrorResponse::with_message(context, status.message())),
     }
 }
 
@@ -408,7 +403,8 @@ pub async fn create_notification(
             if let Some(notification) = grpc_response.notification {
                 Ok(HttpResponse::Created().json(convert_notification(notification)))
             } else {
-                Ok(HttpResponse::InternalServerError().json(ErrorResponse::new("Failed to create notification")))
+                Ok(HttpResponse::InternalServerError()
+                    .json(ErrorResponse::new("Failed to create notification")))
             }
         }
         Err(status) => {
@@ -451,7 +447,10 @@ pub async fn mark_notification_read(
         notification_id: notification_id.clone(),
     });
 
-    match notification_client.mark_notification_as_read(grpc_request).await {
+    match notification_client
+        .mark_notification_as_read(grpc_request)
+        .await
+    {
         Ok(_response) => {
             info!(
                 user_id = %user_id,
@@ -471,7 +470,10 @@ pub async fn mark_notification_read(
                 error = %status,
                 "Failed to mark notification as read"
             );
-            Ok(handle_grpc_error(status, "Failed to mark notification as read"))
+            Ok(handle_grpc_error(
+                status,
+                "Failed to mark notification as read",
+            ))
         }
     }
 }
@@ -502,7 +504,10 @@ pub async fn mark_all_notifications_read(
         user_id: user_id.clone(),
     });
 
-    match notification_client.mark_all_notifications_as_read(grpc_request).await {
+    match notification_client
+        .mark_all_notifications_as_read(grpc_request)
+        .await
+    {
         Ok(response) => {
             let grpc_response = response.into_inner();
 
@@ -523,7 +528,10 @@ pub async fn mark_all_notifications_read(
                 error = %status,
                 "Failed to mark all notifications as read"
             );
-            Ok(handle_grpc_error(status, "Failed to mark all notifications as read"))
+            Ok(handle_grpc_error(
+                status,
+                "Failed to mark all notifications as read",
+            ))
         }
     }
 }
@@ -651,7 +659,10 @@ pub async fn get_notification_stats(
         user_id: user_id.clone(),
     });
 
-    match notification_client.get_notification_stats(grpc_request).await {
+    match notification_client
+        .get_notification_stats(grpc_request)
+        .await
+    {
         Ok(response) => {
             let grpc_response = response.into_inner();
 
@@ -668,7 +679,10 @@ pub async fn get_notification_stats(
                 error = %status,
                 "Failed to get notification stats"
             );
-            Ok(handle_grpc_error(status, "Failed to get notification stats"))
+            Ok(handle_grpc_error(
+                status,
+                "Failed to get notification stats",
+            ))
         }
     }
 }
@@ -699,7 +713,10 @@ pub async fn get_notification_preferences(
         user_id: user_id.clone(),
     });
 
-    match notification_client.get_notification_preferences(grpc_request).await {
+    match notification_client
+        .get_notification_preferences(grpc_request)
+        .await
+    {
         Ok(response) => {
             let grpc_response = response.into_inner();
 
@@ -707,13 +724,26 @@ pub async fn get_notification_preferences(
                 // Convert gRPC preferences to REST response
                 // Map the detailed preferences to simplified iOS model
                 let in_app_enabled = !prefs.disable_all;
-                let push_enabled = prefs.push_on_like || prefs.push_on_comment || prefs.push_on_follow || prefs.push_on_mention || prefs.push_on_message;
-                let email_enabled = prefs.email_on_like || prefs.email_on_comment || prefs.email_on_follow || prefs.email_on_mention;
+                let push_enabled = prefs.push_on_like
+                    || prefs.push_on_comment
+                    || prefs.push_on_follow
+                    || prefs.push_on_mention
+                    || prefs.push_on_message;
+                let email_enabled = prefs.email_on_like
+                    || prefs.email_on_comment
+                    || prefs.email_on_follow
+                    || prefs.email_on_mention;
 
                 // Parse quiet hours (HH:MM format) to hour integers
-                let quiet_hours_start = prefs.quiet_hours_start.split(':').next()
+                let quiet_hours_start = prefs
+                    .quiet_hours_start
+                    .split(':')
+                    .next()
                     .and_then(|h| h.parse::<i32>().ok());
-                let quiet_hours_end = prefs.quiet_hours_end.split(':').next()
+                let quiet_hours_end = prefs
+                    .quiet_hours_end
+                    .split(':')
+                    .next()
                     .and_then(|h| h.parse::<i32>().ok());
 
                 Ok(HttpResponse::Ok().json(NotificationPreferencesResponse {
@@ -742,7 +772,10 @@ pub async fn get_notification_preferences(
                 error = %status,
                 "Failed to get notification preferences"
             );
-            Ok(handle_grpc_error(status, "Failed to get notification preferences"))
+            Ok(handle_grpc_error(
+                status,
+                "Failed to get notification preferences",
+            ))
         }
     }
 }
@@ -776,10 +809,12 @@ pub async fn update_notification_preferences(
     let disable_all = payload.in_app_enabled.map(|v| !v).unwrap_or(false);
 
     // Convert quiet hours to HH:MM format
-    let quiet_hours_start = payload.quiet_hours_start
+    let quiet_hours_start = payload
+        .quiet_hours_start
         .map(|h| format!("{:02}:00", h))
         .unwrap_or_default();
-    let quiet_hours_end = payload.quiet_hours_end
+    let quiet_hours_end = payload
+        .quiet_hours_end
         .map(|h| format!("{:02}:00", h))
         .unwrap_or_default();
 
@@ -799,18 +834,34 @@ pub async fn update_notification_preferences(
         disable_all,
     });
 
-    match notification_client.update_notification_preferences(grpc_request).await {
+    match notification_client
+        .update_notification_preferences(grpc_request)
+        .await
+    {
         Ok(response) => {
             let grpc_response = response.into_inner();
 
             if let Some(prefs) = grpc_response.preferences {
                 let in_app_enabled = !prefs.disable_all;
-                let push_enabled = prefs.push_on_like || prefs.push_on_comment || prefs.push_on_follow || prefs.push_on_mention || prefs.push_on_message;
-                let email_enabled = prefs.email_on_like || prefs.email_on_comment || prefs.email_on_follow || prefs.email_on_mention;
+                let push_enabled = prefs.push_on_like
+                    || prefs.push_on_comment
+                    || prefs.push_on_follow
+                    || prefs.push_on_mention
+                    || prefs.push_on_message;
+                let email_enabled = prefs.email_on_like
+                    || prefs.email_on_comment
+                    || prefs.email_on_follow
+                    || prefs.email_on_mention;
 
-                let quiet_hours_start = prefs.quiet_hours_start.split(':').next()
+                let quiet_hours_start = prefs
+                    .quiet_hours_start
+                    .split(':')
+                    .next()
                     .and_then(|h| h.parse::<i32>().ok());
-                let quiet_hours_end = prefs.quiet_hours_end.split(':').next()
+                let quiet_hours_end = prefs
+                    .quiet_hours_end
+                    .split(':')
+                    .next()
                     .and_then(|h| h.parse::<i32>().ok());
 
                 Ok(HttpResponse::Ok().json(NotificationPreferencesResponse {
@@ -822,7 +873,8 @@ pub async fn update_notification_preferences(
                     quiet_hours_end,
                 }))
             } else {
-                Ok(HttpResponse::InternalServerError().json(ErrorResponse::new("Failed to update preferences")))
+                Ok(HttpResponse::InternalServerError()
+                    .json(ErrorResponse::new("Failed to update preferences")))
             }
         }
         Err(status) => {
@@ -831,7 +883,10 @@ pub async fn update_notification_preferences(
                 error = %status,
                 "Failed to update notification preferences"
             );
-            Ok(handle_grpc_error(status, "Failed to update notification preferences"))
+            Ok(handle_grpc_error(
+                status,
+                "Failed to update notification preferences",
+            ))
         }
     }
 }
@@ -918,7 +973,10 @@ pub async fn unregister_push_token(
         token: token.clone(),
     });
 
-    match notification_client.unregister_push_token(grpc_request).await {
+    match notification_client
+        .unregister_push_token(grpc_request)
+        .await
+    {
         Ok(_response) => {
             info!(
                 user_id = %user_id,
@@ -974,11 +1032,12 @@ pub async fn batch_create_notifications(
         }
     }).collect();
 
-    let grpc_request = tonic::Request::new(BatchCreateNotificationsRequest {
-        notifications,
-    });
+    let grpc_request = tonic::Request::new(BatchCreateNotificationsRequest { notifications });
 
-    match notification_client.batch_create_notifications(grpc_request).await {
+    match notification_client
+        .batch_create_notifications(grpc_request)
+        .await
+    {
         Ok(response) => {
             let grpc_response = response.into_inner();
 
@@ -999,7 +1058,10 @@ pub async fn batch_create_notifications(
                 error = %status,
                 "Failed to create batch notifications"
             );
-            Ok(handle_grpc_error(status, "Failed to create batch notifications"))
+            Ok(handle_grpc_error(
+                status,
+                "Failed to create batch notifications",
+            ))
         }
     }
 }

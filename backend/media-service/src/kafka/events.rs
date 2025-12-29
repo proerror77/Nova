@@ -92,9 +92,7 @@ impl MediaEventsProducer {
         let result = self
             .circuit_breaker
             .call(|| async {
-                let record = FutureRecord::to(&topic)
-                    .key(&key)
-                    .payload(&payload_str);
+                let record = FutureRecord::to(&topic).key(&key).payload(&payload_str);
 
                 producer
                     .send(record, Duration::from_secs(10))
@@ -124,7 +122,10 @@ impl MediaEventsProducer {
                     error_rate = self.error_rate(),
                     "MediaUploaded publish failed"
                 );
-                Err(anyhow::anyhow!("Failed to publish MediaUploaded event: {}", msg))
+                Err(anyhow::anyhow!(
+                    "Failed to publish MediaUploaded event: {}",
+                    msg
+                ))
             }
         }
     }

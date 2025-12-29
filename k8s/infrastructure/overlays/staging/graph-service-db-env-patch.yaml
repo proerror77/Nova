@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graph-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: graph-service
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: graph-db-url

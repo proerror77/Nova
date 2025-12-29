@@ -371,8 +371,7 @@ impl OAuthService {
 
         // 1. Verify and decode the identity token with cryptographic signature verification
         // This validates: signature (RS256), issuer, audience (client_id), and expiration
-        let id_token_claims =
-            verify_apple_id_token(&self.http, identity_token, &client_id).await?;
+        let id_token_claims = verify_apple_id_token(&self.http, identity_token, &client_id).await?;
 
         // 2. Verify the subject matches the user_identifier provided by iOS
         if id_token_claims.sub != user_identifier {
@@ -662,7 +661,9 @@ async fn fetch_apple_jwks(http: &Client) -> Result<Vec<AppleJwk>> {
 async fn get_apple_public_key(http: &Client, kid: &str) -> Result<AppleJwk> {
     // Check cache first
     {
-        let cache = APPLE_JWKS_CACHE.read().unwrap();
+        let cache = APPLE_JWKS_CACHE
+            .read()
+            .expect("APPLE_JWKS_CACHE RwLock poisoned");
         if !cache.is_expired() {
             if let Some(key) = cache.keys.get(kid) {
                 debug!("Using cached Apple public key for kid={}", kid);
@@ -676,7 +677,9 @@ async fn get_apple_public_key(http: &Client, kid: &str) -> Result<AppleJwk> {
 
     // Update cache
     {
-        let mut cache = APPLE_JWKS_CACHE.write().unwrap();
+        let mut cache = APPLE_JWKS_CACHE
+            .write()
+            .expect("APPLE_JWKS_CACHE RwLock poisoned");
         cache.keys.clear();
         for key in &keys {
             cache.keys.insert(key.kid.clone(), key.clone());
@@ -685,7 +688,9 @@ async fn get_apple_public_key(http: &Client, kid: &str) -> Result<AppleJwk> {
     }
 
     // Find the requested key
-    let cache = APPLE_JWKS_CACHE.read().unwrap();
+    let cache = APPLE_JWKS_CACHE
+        .read()
+        .expect("APPLE_JWKS_CACHE RwLock poisoned");
     cache.keys.get(kid).cloned().ok_or_else(|| {
         error!("Apple public key not found for kid={}", kid);
         IdentityError::OAuthError(format!("Apple public key not found for kid={}", kid))
@@ -741,24 +746,27 @@ async fn verify_apple_id_token(
     validation.validate_exp = true;
 
     // 6. Decode and verify the token
-    let token_data = decode::<AppleIdTokenClaims>(token, &decoding_key, &validation).map_err(|e| {
-        error!("Apple JWT verification failed: {}", e);
-        match e.kind() {
-            jsonwebtoken::errors::ErrorKind::InvalidSignature => {
-                IdentityError::OAuthError("Apple ID token signature verification failed".to_string())
+    let token_data =
+        decode::<AppleIdTokenClaims>(token, &decoding_key, &validation).map_err(|e| {
+            error!("Apple JWT verification failed: {}", e);
+            match e.kind() {
+                jsonwebtoken::errors::ErrorKind::InvalidSignature => IdentityError::OAuthError(
+                    "Apple ID token signature verification failed".to_string(),
+                ),
+                jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
+                    IdentityError::OAuthError("Apple ID token has expired".to_string())
+                }
+                jsonwebtoken::errors::ErrorKind::InvalidIssuer => {
+                    IdentityError::OAuthError("Apple ID token has invalid issuer".to_string())
+                }
+                jsonwebtoken::errors::ErrorKind::InvalidAudience => {
+                    IdentityError::OAuthError("Apple ID token has invalid audience".to_string())
+                }
+                _ => {
+                    IdentityError::OAuthError(format!("Apple ID token verification failed: {}", e))
+                }
             }
-            jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
-                IdentityError::OAuthError("Apple ID token has expired".to_string())
-            }
-            jsonwebtoken::errors::ErrorKind::InvalidIssuer => {
-                IdentityError::OAuthError("Apple ID token has invalid issuer".to_string())
-            }
-            jsonwebtoken::errors::ErrorKind::InvalidAudience => {
-                IdentityError::OAuthError("Apple ID token has invalid audience".to_string())
-            }
-            _ => IdentityError::OAuthError(format!("Apple ID token verification failed: {}", e)),
-        }
-    })?;
+        })?;
 
     info!(
         "Successfully verified Apple ID token for sub={}",
@@ -832,7 +840,10 @@ mod tests {
             keys: HashMap::new(),
             fetched_at: Some(Utc::now() - Duration::minutes(59)),
         };
-        assert!(!cache.is_expired(), "59-minute old cache should not be expired");
+        assert!(
+            !cache.is_expired(),
+            "59-minute old cache should not be expired"
+        );
     }
 
     // ========================================================================
@@ -895,7 +906,10 @@ mod tests {
 
         let claims: AppleIdTokenClaims = serde_json::from_str(json).expect("should deserialize");
         assert_eq!(claims.sub, "001234.abcdef.5678");
-        assert_eq!(claims.email, Some("user@privaterelay.appleid.com".to_string()));
+        assert_eq!(
+            claims.email,
+            Some("user@privaterelay.appleid.com".to_string())
+        );
         assert_eq!(claims.iss, "https://appleid.apple.com");
         assert_eq!(claims.aud, "com.example.app");
         assert_eq!(claims.exp, 1700000000);
@@ -988,11 +1002,18 @@ mod tests {
         // Test that our error messages contain useful information
         let error = IdentityError::OAuthError("Apple ID token has expired".to_string());
         let error_str = format!("{:?}", error);
-        assert!(error_str.contains("expired"), "Error should mention expiration");
+        assert!(
+            error_str.contains("expired"),
+            "Error should mention expiration"
+        );
 
-        let error = IdentityError::OAuthError("Apple ID token signature verification failed".to_string());
+        let error =
+            IdentityError::OAuthError("Apple ID token signature verification failed".to_string());
         let error_str = format!("{:?}", error);
-        assert!(error_str.contains("signature"), "Error should mention signature");
+        assert!(
+            error_str.contains("signature"),
+            "Error should mention signature"
+        );
     }
 
     // ========================================================================
@@ -1033,7 +1054,8 @@ mod tests {
     fn test_decode_jwt_claims_unsafe_valid_token() {
         // Create a valid JWT structure
         let header = BASE64_URL_SAFE_NO_PAD.encode(r#"{"alg":"RS256","kid":"test"}"#);
-        let payload = BASE64_URL_SAFE_NO_PAD.encode(r#"{"sub":"test-user-123","email":"test@example.com"}"#);
+        let payload =
+            BASE64_URL_SAFE_NO_PAD.encode(r#"{"sub":"test-user-123","email":"test@example.com"}"#);
         let token = format!("{}.{}.fake_signature", header, payload);
 
         let result: Result<AppleIdTokenClaims> = decode_jwt_claims_unsafe(&token);

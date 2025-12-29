@@ -7,9 +7,9 @@
 --   3. Sync trigger has been running to keep columns in sync
 --
 -- What this migration does:
---   1. Drops the sync trigger that kept event_data<->payload in sync
+--   1. Drops the sync trigger that kept data<->payload in sync
 --   2. Drops the sync function
---   3. Drops legacy columns: event_data, processed_at, max_retries, error_message
+--   3. Drops legacy columns: data (and any deprecated aliases)
 --
 -- Rollback:
 --   If rollback is needed, recreate columns and sync trigger manually.
@@ -21,6 +21,7 @@ DROP TRIGGER IF EXISTS outbox_events_payload_sync ON outbox_events;
 DROP FUNCTION IF EXISTS outbox_events_payload_sync();
 
 -- Step 3: Drop legacy columns
+ALTER TABLE outbox_events DROP COLUMN IF EXISTS data;
 ALTER TABLE outbox_events DROP COLUMN IF EXISTS event_data;
 ALTER TABLE outbox_events DROP COLUMN IF EXISTS processed_at;
 ALTER TABLE outbox_events DROP COLUMN IF EXISTS max_retries;

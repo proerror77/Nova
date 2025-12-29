@@ -173,10 +173,12 @@ pub async fn start_registration(
     let user_id = match get_authenticated_user(&req) {
         Some(id) => id,
         None => {
-            return Ok(HttpResponse::Unauthorized().json(ErrorResponse::with_message(
-                "unauthorized",
-                "Authentication required",
-            )))
+            return Ok(
+                HttpResponse::Unauthorized().json(ErrorResponse::with_message(
+                    "unauthorized",
+                    "Authentication required",
+                )),
+            )
         }
     };
 
@@ -195,10 +197,7 @@ pub async fn start_registration(
         os_version: body.os_version.clone().unwrap_or_default(),
     });
 
-    match auth_client
-        .start_passkey_registration(grpc_request)
-        .await
-    {
+    match auth_client.start_passkey_registration(grpc_request).await {
         Ok(response) => {
             let res = response.into_inner();
             info!(
@@ -217,10 +216,12 @@ pub async fn start_registration(
                 error = %status,
                 "Failed to start passkey registration"
             );
-            Ok(HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                "passkey_start_failed",
-                &format!("Failed to start passkey registration: {}", status.message()),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                    "passkey_start_failed",
+                    &format!("Failed to start passkey registration: {}", status.message()),
+                )),
+            )
         }
     }
 }
@@ -238,10 +239,12 @@ pub async fn complete_registration(
     let user_id = match get_authenticated_user(&req) {
         Some(id) => id,
         None => {
-            return Ok(HttpResponse::Unauthorized().json(ErrorResponse::with_message(
-                "unauthorized",
-                "Authentication required",
-            )))
+            return Ok(
+                HttpResponse::Unauthorized().json(ErrorResponse::with_message(
+                    "unauthorized",
+                    "Authentication required",
+                )),
+            )
         }
     };
 
@@ -322,10 +325,7 @@ pub async fn start_authentication(
         user_id: body.user_id.clone().unwrap_or_default(),
     });
 
-    match auth_client
-        .start_passkey_authentication(grpc_request)
-        .await
-    {
+    match auth_client.start_passkey_authentication(grpc_request).await {
         Ok(response) => {
             let res = response.into_inner();
             info!(
@@ -342,13 +342,15 @@ pub async fn start_authentication(
                 error = %status,
                 "Failed to start passkey authentication"
             );
-            Ok(HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                "passkey_auth_start_failed",
-                &format!(
-                    "Failed to start passkey authentication: {}",
-                    status.message()
-                ),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                    "passkey_auth_start_failed",
+                    &format!(
+                        "Failed to start passkey authentication: {}",
+                        status.message()
+                    ),
+                )),
+            )
         }
     }
 }
@@ -411,13 +413,15 @@ pub async fn complete_authentication(
                 error = %status,
                 "Failed to complete passkey authentication"
             );
-            Ok(HttpResponse::Unauthorized().json(ErrorResponse::with_message(
-                "passkey_auth_failed",
-                &format!(
-                    "Failed to complete passkey authentication: {}",
-                    status.message()
-                ),
-            )))
+            Ok(
+                HttpResponse::Unauthorized().json(ErrorResponse::with_message(
+                    "passkey_auth_failed",
+                    &format!(
+                        "Failed to complete passkey authentication: {}",
+                        status.message()
+                    ),
+                )),
+            )
         }
     }
 }
@@ -438,10 +442,12 @@ pub async fn list_passkeys(
     let user_id = match get_authenticated_user(&req) {
         Some(id) => id,
         None => {
-            return Ok(HttpResponse::Unauthorized().json(ErrorResponse::with_message(
-                "unauthorized",
-                "Authentication required",
-            )))
+            return Ok(
+                HttpResponse::Unauthorized().json(ErrorResponse::with_message(
+                    "unauthorized",
+                    "Authentication required",
+                )),
+            )
         }
     };
 
@@ -464,10 +470,7 @@ pub async fn list_passkeys(
                 .into_iter()
                 .map(|p| {
                     // Convert proto timestamp to Unix timestamp
-                    let created_at = p
-                        .created_at
-                        .map(|ts| ts.seconds)
-                        .unwrap_or(0);
+                    let created_at = p.created_at.map(|ts| ts.seconds).unwrap_or(0);
                     let last_used_at = p.last_used_at.map(|ts| ts.seconds);
 
                     PasskeyInfo {
@@ -510,10 +513,12 @@ pub async fn list_passkeys(
                 error = %status,
                 "Failed to list passkeys"
             );
-            Ok(HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                "list_passkeys_failed",
-                &format!("Failed to list passkeys: {}", status.message()),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                    "list_passkeys_failed",
+                    &format!("Failed to list passkeys: {}", status.message()),
+                )),
+            )
         }
     }
 }
@@ -531,10 +536,12 @@ pub async fn revoke_passkey(
     let user_id = match get_authenticated_user(&req) {
         Some(id) => id,
         None => {
-            return Ok(HttpResponse::Unauthorized().json(ErrorResponse::with_message(
-                "unauthorized",
-                "Authentication required",
-            )))
+            return Ok(
+                HttpResponse::Unauthorized().json(ErrorResponse::with_message(
+                    "unauthorized",
+                    "Authentication required",
+                )),
+            )
         }
     };
 
@@ -592,10 +599,12 @@ pub async fn rename_passkey(
     let user_id = match get_authenticated_user(&req) {
         Some(id) => id,
         None => {
-            return Ok(HttpResponse::Unauthorized().json(ErrorResponse::with_message(
-                "unauthorized",
-                "Authentication required",
-            )))
+            return Ok(
+                HttpResponse::Unauthorized().json(ErrorResponse::with_message(
+                    "unauthorized",
+                    "Authentication required",
+                )),
+            )
         }
     };
 

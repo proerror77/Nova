@@ -11,35 +11,25 @@ data:
     # Listening ports
     listening-port=3478
     listening-ip=0.0.0.0
-    alt-listening-port=3479
+    alt-listening-port=443
 
     # External IP for clients to connect to
     external-ip=${EXTERNAL_IP}
 
     # Relay ports
     relay-ip=0.0.0.0
-    min-bps=0
-    bps-capacity=0
 
     # Credentials
     realm=${REALM}
 
-    # Authentication
-    user=${TURN_USER}:${TURN_PASSWORD}
+    # Authentication (Matrix-compatible short-term credentials)
+    use-auth-secret
+    static-auth-secret=${TURN_SHARED_SECRET}
+    fingerprint
+    lt-cred-mech
 
     # Verbose logging
     log-file=/var/log/turn/turn.log
-
-    # Performance
-    max-bps=1000000
-    bps-capacity=0
-
-    # Database (optional - for persistent sessions)
-    # db=/var/lib/turn/turnserver.db
-
-    # HTTPS/TLS support
-    # cert=/etc/turn/cert.pem
-    # pkey=/etc/turn/key.pem
 
 ---
 # Secret for TURN server credentials
@@ -49,10 +39,9 @@ metadata:
   name: turn-server-secret
 type: Opaque
 stringData:
-  TURN_USER: "nova"
-  TURN_PASSWORD: "changeme-in-production"  # TODO: Change in production
+  TURN_SHARED_SECRET: "changeme-in-production"  # TODO: Change in production
   REALM: "turn.nova.local"
-  EXTERNAL_IP: "your-server-ip"  # TODO: Set to your server's public IP
+  EXTERNAL_IP: "34.84.3.228"  # Staging LoadBalancer IP
 
 ---
 # Service for TURN server (UDP for media)
@@ -67,22 +56,38 @@ spec:
   type: LoadBalancer
   ports:
     # TURN/STUN UDP ports
-    - name: stun-udp
-      port: 3478
-      targetPort: 3478
-      protocol: UDP
     - name: turn-udp
       port: 3478
       targetPort: 3478
       protocol: UDP
     - name: turn-udp-alt
-      port: 3479
-      targetPort: 3479
+      port: 443
+      targetPort: 443
       protocol: UDP
-    # TURN TCP ports
+  selector:
+    app: nova
+    component: turn-server
+  externalTrafficPolicy: Local  # Preserve source IP for NAT traversal
+
+---
+# Service for TURN server (TCP fallback)
+apiVersion: v1
+kind: Service
+metadata:
+  name: turn-server-tcp
+  labels:
+    app: nova
+    component: turn-server
+spec:
+  type: LoadBalancer
+  ports:
     - name: turn-tcp
       port: 3478
       targetPort: 3478
+      protocol: TCP
+    - name: turn-tcp-alt
+      port: 443
+      targetPort: 443
       protocol: TCP
   selector:
     app: nova
@@ -114,23 +119,59 @@ spec:
         app: nova
         component: turn-server
     spec:
+      initContainers:
+        - name: config-envsubst
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              cat /etc/coturn-template/turnserver.conf | \
+                sed "s|\${EXTERNAL_IP}|$EXTERNAL_IP|g" | \
+                sed "s|\${REALM}|$REALM|g" | \
+                sed "s|\${TURN_SHARED_SECRET}|$TURN_SHARED_SECRET|g" > /etc/coturn/turnserver.conf
+              cat /etc/coturn/turnserver.conf
+          env:
+            - name: EXTERNAL_IP
+              valueFrom:
+                secretKeyRef:
+                  name: turn-server-secret
+                  key: EXTERNAL_IP
+            - name: TURN_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: turn-server-secret
+                  key: TURN_SHARED_SECRET
+            - name: REALM
+              valueFrom:
+                secretKeyRef:
+                  name: turn-server-secret
+                  key: REALM
+          volumeMounts:
+            - name: config-template
+              mountPath: /etc/coturn-template
+              readOnly: true
+            - name: config
+              mountPath: /etc/coturn
       containers:
         - name: turn-server
           image: coturn/coturn:latest
           imagePullPolicy: IfNotPresent
 
           ports:
-            # STUN/TURN UDP
-            - name: stun-udp
+            # TURN/STUN UDP
+            - name: turn-udp
               containerPort: 3478
               protocol: UDP
-            # TURN UDP alt port
             - name: turn-udp-alt
-              containerPort: 3479
+              containerPort: 443
               protocol: UDP
             # TURN TCP
             - name: turn-tcp
               containerPort: 3478
+              protocol: TCP
+            - name: turn-tcp-alt
+              containerPort: 443
               protocol: TCP
 
           env:
@@ -139,16 +180,11 @@ spec:
                 secretKeyRef:
                   name: turn-server-secret
                   key: EXTERNAL_IP
-            - name: TURN_USER
+            - name: TURN_SHARED_SECRET
               valueFrom:
                 secretKeyRef:
                   name: turn-server-secret
-                  key: TURN_USER
-            - name: TURN_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: turn-server-secret
-                  key: TURN_PASSWORD
+                  key: TURN_SHARED_SECRET
             - name: REALM
               valueFrom:
                 secretKeyRef:
@@ -194,9 +230,11 @@ spec:
 
       # Volumes
       volumes:
-        - name: config
+        - name: config-template
           configMap:
             name: turn-server-config
+        - name: config
+          emptyDir: {}
         - name: logs
           emptyDir: {}
 

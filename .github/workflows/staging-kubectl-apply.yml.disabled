@@ -1,0 +1,227 @@
+name: Staging Kubectl Apply
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'k8s/**'
+      - '.github/workflows/staging-kubectl-apply.yml'
+
+env:
+  AWS_REGION: ap-northeast-1
+  CLUSTER_NAME: nova-staging
+  ROLE_TO_ASSUME: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
+
+concurrency:
+  group: staging-kubectl-apply
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: gha-staging-apply-${{ github.run_id }}
+          audience: sts.amazonaws.com
+
+      - name: Ensure EKS access entry for this role
+        id: access
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRINCIPAL="${ROLE_TO_ASSUME}"
+          echo "Creating/ensuring EKS access entry for $PRINCIPAL on ${CLUSTER_NAME}"
+          aws eks create-access-entry --cluster-name "$CLUSTER_NAME" --principal-arn "$PRINCIPAL" 2>/dev/null || true
+          aws eks associate-access-policy \
+            --cluster-name "$CLUSTER_NAME" \
+            --principal-arn "$PRINCIPAL" \
+            --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy \
+            --access-scope type=cluster 2>/dev/null || true
+          aws eks list-associated-access-policies --cluster-name "$CLUSTER_NAME" --principal-arn "$PRINCIPAL"
+
+      - name: Install kubectl
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y curl
+          curl -sLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl
+          chmod +x /usr/local/bin/kubectl
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME"
+          kubectl cluster-info || true
+
+      - name: Ensure aws-auth mapping for nodegroup role
+        shell: bash
+        run: |
+          set -euo pipefail
+          NODE_ROLE=$(aws eks describe-nodegroup --cluster-name "$CLUSTER_NAME" --nodegroup-name "${CLUSTER_NAME}-node-group" --region "$AWS_REGION" --output json | jq -r '.nodegroup.nodeRole')
+          echo "Using node role: $NODE_ROLE"
+          cat > /tmp/aws-auth.yaml << 'YAML'
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: aws-auth
+            namespace: kube-system
+          data:
+            mapRoles: |
+              - rolearn: REPLACE_NODE_ROLE
+                username: system:node:{{EC2PrivateDNSName}}
+                groups:
+                  - system:bootstrappers
+                  - system:nodes
+          YAML
+          sed -i "" "s#REPLACE_NODE_ROLE#${NODE_ROLE//#/\\#}#" /tmp/aws-auth.yaml || sed -i "s#REPLACE_NODE_ROLE#${NODE_ROLE//#/\\#}#" /tmp/aws-auth.yaml
+          kubectl apply -f /tmp/aws-auth.yaml
+
+      - name: Wait for nodes to register
+        shell: bash
+        run: |
+          for i in {1..30}; do
+            READY=$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ')
+            if [ "$READY" -ge 1 ]; then
+              kubectl get nodes -o wide
+              exit 0
+            fi
+            echo "waiting for nodes to register... ($i/30)"
+            sleep 10
+          done
+          echo "No nodes registered after waiting." >&2
+          kubectl get events -A || true
+          exit 1
+
+      - name: Setup Helm (for ClickHouse)
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Install ClickHouse Operator (CRDs)
+        id: ch-helm
+        continue-on-error: true
+        run: |
+          set -e
+          helm repo add altinity https://helm.clickhouse.tech
+          helm repo update
+          # Install operator in its own namespace via Helm
+          helm upgrade --install clickhouse-operator altinity/clickhouse-operator \
+            -n clickhouse-operator --create-namespace \
+            --set installCRDs=true --atomic --wait --timeout 5m
+          echo ok=true >> $GITHUB_OUTPUT
+
+      - name: Fallback install ClickHouse Operator via raw bundle
+        if: always()
+        run: |
+          set -e
+          BRANCH=master
+          BUNDLE=https://raw.githubusercontent.com/Altinity/clickhouse-operator/${BRANCH}/deploy/operator/clickhouse-operator-install-bundle.yaml
+          # Skip if CRDs already present (Helm succeeded earlier)
+          if kubectl get crd | grep -q clickhouseinstallations.clickhouse.altinity.com; then
+            echo "ClickHouse CRDs already installed; skipping raw bundle"
+          else
+            kubectl create namespace clickhouse-operator --dry-run=client -o yaml | kubectl apply -f - || true
+            kubectl apply -f "$BUNDLE"
+            kubectl rollout status -n clickhouse-operator deploy/clickhouse-operator --timeout=300s || true
+          fi
+
+      - name: Sync critical secrets from AWS Secrets Manager (fallback)
+        env:
+          NS: nova-staging
+          AWS_REGION: ${{ env.AWS_REGION }}
+        run: |
+          set -euo pipefail
+          apply_secret() {
+            local name=$1
+            local json=$2
+            tmp=/tmp/secret-${name}.yaml
+            echo "Applying secret $name to $NS"
+            {
+              echo 'apiVersion: v1'
+              echo 'kind: Secret'
+              echo 'metadata:'
+              echo '  name: '"$name"
+              echo '  namespace: '"$NS"
+              echo 'type: Opaque'
+              echo 'data:'
+              echo "$json" | jq -r 'to_entries | map({key: .key, val: (.value|@base64)})[] | "  \(.key): \(.val)"'
+            } > "$tmp"
+            kubectl apply -f "$tmp"
+          }
+
+          # DB credentials
+          DB_JSON=$(aws secretsmanager get-secret-value --secret-id nova/staging/nova-db-credentials --region "$AWS_REGION" | jq -r .SecretString)
+          [ -n "$DB_JSON" ] && apply_secret nova-db-credentials "$DB_JSON"
+
+          # JWT keys
+          JWT_JSON=$(aws secretsmanager get-secret-value --secret-id nova/staging/nova-jwt-keys --region "$AWS_REGION" | jq -r .SecretString)
+          [ -n "$JWT_JSON" ] && apply_secret nova-jwt-keys "$JWT_JSON"
+
+          # ClickHouse credentials
+          CH_JSON=$(aws secretsmanager get-secret-value --secret-id nova/staging/nova-clickhouse-credentials --region "$AWS_REGION" | jq -r .SecretString)
+          [ -n "$CH_JSON" ] && apply_secret nova-clickhouse-credentials "$CH_JSON"
+
+          # S3 config (region/bucket) — creds 由 STS rotator 寫入
+          # 優先使用包含臨時/長期金鑰的憑證 Secret；若不存在再用 config（僅 bucket/region）
+          if aws secretsmanager describe-secret --secret-id nova/staging/nova-s3-credentials --region "$AWS_REGION" >/dev/null 2>&1; then
+            S3_JSON=$(aws secretsmanager get-secret-value --secret-id nova/staging/nova-s3-credentials --region "$AWS_REGION" | jq -r .SecretString)
+            [ -n "$S3_JSON" ] && apply_secret nova-s3-credentials "$S3_JSON"
+          else
+            S3CFG_JSON=$(aws secretsmanager get-secret-value --secret-id nova/staging/nova-s3-config --region "$AWS_REGION" | jq -r .SecretString)
+            [ -n "$S3CFG_JSON" ] && apply_secret nova-s3-credentials "$S3CFG_JSON"
+          fi
+
+      - name: Render overlay (staging)
+        run: |
+          kubectl kustomize k8s/infrastructure/overlays/staging > /tmp/staging.yaml
+          head -n 30 /tmp/staging.yaml
+
+
+      - name: Apply to cluster
+        run: |
+          set -e
+          kubectl apply -f /tmp/staging.yaml || true
+          kubectl get pods -n nova-staging -o wide
+
+      - name: Wait for core services readiness
+        run: |
+          set -e
+          NS=nova-staging
+
+          echo "[infra] wait kube-system daemonsets"
+          kubectl -n kube-system rollout status ds/aws-node --timeout=300s || true
+          kubectl -n kube-system rollout status ds/kube-proxy --timeout=300s || true
+
+          echo "[infra] wait clickhouse-operator deployment"
+          if kubectl get ns clickhouse-operator >/dev/null 2>&1; then
+            kubectl -n clickhouse-operator rollout status deploy/clickhouse-operator --timeout=600s || true
+          fi
+
+          echo "[apps] wait all deployments in $NS"
+          for d in $(kubectl -n $NS get deploy -o json | jq -r '.items[].metadata.name'); do
+            echo "Waiting for deployment/$d"; kubectl -n $NS rollout status deploy/$d --timeout=600s || true; done
+
+          echo "[apps] wait all statefulsets in $NS"
+          for s in $(kubectl -n $NS get statefulset -o json | jq -r '.items[].metadata.name'); do
+            echo "Waiting for statefulset/$s"; kubectl -n $NS rollout status statefulset/$s --timeout=900s || true; done
+
+          echo "Summary:"; kubectl -n $NS get deploy,statefulset; kubectl -n $NS get pods -o wide
+          echo "Non-ready pods:"; kubectl -n $NS get pods | awk 'NR==1 || $3!="Running"{print}'
+          echo "Recent events:"; kubectl -n $NS get events --sort-by=.lastTimestamp | tail -n 200 || true
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "✅ kubectl apply completed (or attempted)." 
+          echo "Check pods:" 
+          echo "kubectl get pods -n nova-staging"

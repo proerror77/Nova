@@ -19,12 +19,10 @@ type HmacSha256 = Hmac<Sha256>;
 // MARK: - Configuration
 
 fn get_livekit_config() -> (String, String, String) {
-    let url = env::var("LIVEKIT_URL")
-        .unwrap_or_else(|_| "wss://kok-fjbuamt4.livekit.cloud".to_string());
-    let api_key = env::var("LIVEKIT_API_KEY")
-        .unwrap_or_else(|_| "".to_string());
-    let api_secret = env::var("LIVEKIT_API_SECRET")
-        .unwrap_or_else(|_| "".to_string());
+    let url =
+        env::var("LIVEKIT_URL").unwrap_or_else(|_| "wss://kok-fjbuamt4.livekit.cloud".to_string());
+    let api_key = env::var("LIVEKIT_API_KEY").unwrap_or_else(|_| "".to_string());
+    let api_secret = env::var("LIVEKIT_API_SECRET").unwrap_or_else(|_| "".to_string());
     (url, api_key, api_secret)
 }
 
@@ -129,9 +127,7 @@ fn generate_livekit_token(
 
     // Create room_config with agent dispatch if agent_name is provided
     let room_config = agent_name.map(|agent| RoomConfig {
-        agents: vec![RoomAgentDispatch {
-            agent_name: agent,
-        }],
+        agents: vec![RoomAgentDispatch { agent_name: agent }],
     });
 
     let claims = LiveKitClaims {
@@ -163,8 +159,7 @@ fn generate_livekit_token(
     let message = format!("{}.{}", header_b64, claims_b64);
 
     // Sign with HMAC-SHA256
-    let mut mac = HmacSha256::new_from_slice(api_secret.as_bytes())
-        .map_err(|e| e.to_string())?;
+    let mut mac = HmacSha256::new_from_slice(api_secret.as_bytes()).map_err(|e| e.to_string())?;
     mac.update(message.as_bytes());
     let signature = mac.finalize().into_bytes();
     let signature_b64 = BASE64_URL.encode(signature);
@@ -177,9 +172,7 @@ fn generate_livekit_token(
 /// Generate LiveKit access token for voice chat
 ///
 /// POST /api/v2/livekit/token
-pub async fn generate_token(
-    body: web::Json<LiveKitTokenRequest>,
-) -> Result<HttpResponse> {
+pub async fn generate_token(body: web::Json<LiveKitTokenRequest>) -> Result<HttpResponse> {
     let (url, api_key, api_secret) = get_livekit_config();
 
     if api_key.is_empty() || api_secret.is_empty() {
@@ -226,8 +219,5 @@ pub async fn generate_token(
 
 /// Configure LiveKit routes
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::resource("/api/v2/livekit/token")
-            .route(web::post().to(generate_token))
-    );
+    cfg.service(web::resource("/api/v2/livekit/token").route(web::post().to(generate_token)));
 }

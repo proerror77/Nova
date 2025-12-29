@@ -184,12 +184,14 @@ impl IdentityError {
                 Status::new(Code::Internal, format!("Zitadel error: {}", msg))
             }
             // Passkey errors
-            IdentityError::PasskeyRegistrationFailed(msg) => {
-                Status::new(Code::Internal, format!("Passkey registration failed: {}", msg))
-            }
-            IdentityError::PasskeyAuthenticationFailed(msg) => {
-                Status::new(Code::Unauthenticated, format!("Passkey authentication failed: {}", msg))
-            }
+            IdentityError::PasskeyRegistrationFailed(msg) => Status::new(
+                Code::Internal,
+                format!("Passkey registration failed: {}", msg),
+            ),
+            IdentityError::PasskeyAuthenticationFailed(msg) => Status::new(
+                Code::Unauthenticated,
+                format!("Passkey authentication failed: {}", msg),
+            ),
             IdentityError::PasskeyChallengeExpired => {
                 Status::new(Code::InvalidArgument, "Passkey challenge expired")
             }

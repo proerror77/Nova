@@ -57,7 +57,7 @@ spec:
         - -c
         - |
           echo "Waiting for Redis..."
-          until nc -z redis 6379; do
+          until nc -z redis-cluster 6379; do
             echo "Redis not ready, waiting..."
             sleep 2
           done
@@ -65,7 +65,7 @@ spec:
       
       containers:
       - name: streaming-service
-        image: nova/streaming-service
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/streaming-service:latest
         imagePullPolicy: IfNotPresent
         
         ports:

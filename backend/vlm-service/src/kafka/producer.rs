@@ -40,10 +40,7 @@ impl VLMProducer {
     }
 
     /// Publish VLM analysis result
-    pub async fn publish_analyzed(
-        &self,
-        event: VLMPostAnalyzed,
-    ) -> Result<(), VLMProducerError> {
+    pub async fn publish_analyzed(&self, event: VLMPostAnalyzed) -> Result<(), VLMProducerError> {
         let payload = serde_json::to_string(&event)
             .map_err(|e| VLMProducerError::Serialization(e.to_string()))?;
 

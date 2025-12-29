@@ -43,6 +43,17 @@ class Client {
     func logout() async throws {}
     func session() throws -> Session { fatalError("MatrixRustSDK not integrated") }
     func restoreSession(session: Session) async throws {}
+    /// Returns the sliding sync versions available on the homeserver
+    func availableSlidingSyncVersions() async -> [SlidingSyncVersion] { [.none] }
+    /// Returns the current sliding sync version being used
+    func slidingSyncVersion() -> SlidingSyncVersion { .none }
+}
+
+/// Builder enum for sliding sync version configuration
+enum SlidingSyncVersionBuilder {
+    case none
+    case native
+    case discoverNative
 }
 
 class ClientBuilder {
@@ -51,6 +62,7 @@ class ClientBuilder {
     func sessionPaths(dataPath: String, cachePath: String) -> ClientBuilder { self }
     func userAgent(userAgent: String) -> ClientBuilder { self }
     func setSessionDelegate(sessionDelegate: ClientSessionDelegate) -> ClientBuilder { self }
+    func slidingSyncVersionBuilder(versionBuilder: SlidingSyncVersionBuilder) -> ClientBuilder { self }
     func build() async throws -> Client { Client() }
 }
 
@@ -63,10 +75,36 @@ class SyncService {
     func start() async throws {}
     func stop() async throws {}
     func roomListService() -> RoomListService { RoomListService() }
+    func state(listener: SyncServiceStateObserver) -> TaskHandle { TaskHandle() }
+}
+
+enum SyncServiceState {
+    case idle
+    case running
+    case terminated
+    case error
+}
+
+protocol SyncServiceStateObserver: AnyObject, Sendable {
+    func onUpdate(state: SyncServiceState)
 }
 
 class RoomListService {
     func allRooms() async throws -> RoomList { RoomList() }
+    func state(listener: RoomListServiceStateListener) -> TaskHandle { TaskHandle() }
+}
+
+enum RoomListServiceState {
+    case initial
+    case settingUp
+    case recovering
+    case running
+    case error
+    case terminated
+}
+
+protocol RoomListServiceStateListener: AnyObject, Sendable {
+    func onUpdate(state: RoomListServiceState)
 }
 
 class RoomList {
@@ -450,6 +488,12 @@ protocol MatrixServiceProtocol: AnyObject {
     /// Clear stored credentials without full logout (for session expiry recovery)
     func clearCredentials()
 
+    /// Store Matrix credentials (for token refresh)
+    func storeCredentials(userId: String, accessToken: String, deviceId: String, homeserverUrl: String?, expiresAt: Int64?)
+
+    /// Reinitialize Matrix session with new credentials (for token refresh)
+    func reinitializeSession(accessToken: String, deviceId: String) async throws
+
     /// Start background sync
     func startSync() async throws
 
@@ -701,6 +745,14 @@ final class MatrixService: MatrixServiceProtocol {
     var roomList: RoomList?
     var roomListController: RoomListDynamicEntriesControllerProtocol?
 
+    /// Room list service state observation (for waiting for Running state)
+    var roomListStateHandle: TaskHandle?
+    var currentRoomListState: RoomListServiceState = .initial
+
+    /// Sync service state observation (for debugging)
+    var syncServiceStateHandle: TaskHandle?
+    var currentSyncServiceState: SyncServiceState = .idle
+
     /// Session storage path
     var sessionPath: String?
 
@@ -762,16 +814,33 @@ final class MatrixService: MatrixServiceProtocol {
             // Build client using ClientBuilder
             // - setSessionDelegate: enables automatic token refresh with persistence
             // - Token refresh is enabled by default (don't call disableAutomaticTokenRefresh)
+            // - slidingSyncVersionBuilder: use discoverNative to auto-detect server support
+            // NOTE: RoomListService requires sliding sync. Server must have it properly configured.
+            // If rooms don't sync, check matrix.staging.gcp.icered.com sliding sync configuration.
             let clientBuilder = ClientBuilder()
                 .homeserverUrl(url: homeserverURL)
                 .sessionPaths(dataPath: sessionPath, cachePath: cachePath)
                 .userAgent(userAgent: "NovaSocial-iOS/1.0")
                 .setSessionDelegate(sessionDelegate: delegate)
+                .slidingSyncVersionBuilder(versionBuilder: .discoverNative)
 
             self.client = try await clientBuilder.build()
 
             #if DEBUG
             print("[MatrixService] Client built with session delegate for token refresh")
+            print("[MatrixService] Client configured with discoverNative sliding sync")
+            #endif
+
+            // Check available sliding sync versions for diagnostics
+            #if DEBUG
+            Task {
+                if let client = self.client {
+                    let availableVersions = await client.availableSlidingSyncVersions()
+                    print("[MatrixService] 🔍 Available sliding sync versions: \(availableVersions)")
+                    let currentVersion = client.slidingSyncVersion()
+                    print("[MatrixService] 🔍 Current sliding sync version: \(currentVersion)")
+                }
+            }
             #endif
 
             updateConnectionState(.disconnected)
@@ -816,15 +885,24 @@ final class MatrixService: MatrixServiceProtocol {
             // Use provided device ID or get/create one
             let deviceId = providedDeviceId ?? getOrCreateDeviceId()
 
+            // Determine the best sliding sync version to use
+            // The client was built with .discoverNative, so it should know what's available
+            let detectedSlidingSyncVersion = client.slidingSyncVersion()
+
             #if DEBUG
             print("[MatrixService] Session parameters:")
             print("[MatrixService]   - Matrix User ID: \(matrixUserId)")
             print("[MatrixService]   - Device ID: \(deviceId)")
             print("[MatrixService]   - Homeserver URL: \(homeserverURL ?? "NOT SET!")")
-            print("[MatrixService]   - Sliding Sync: native")
+            print("[MatrixService]   - Sliding Sync: \(detectedSlidingSyncVersion)")
+
+            // Also check available versions for debugging
+            let availableVersions = await client.availableSlidingSyncVersions()
+            print("[MatrixService]   - Available sliding sync versions: \(availableVersions)")
             #endif
 
             // Restore session with access token
+            // Use the detected sliding sync version from the client builder discovery
             let session = Session(
                 accessToken: accessToken,
                 refreshToken: nil,
@@ -832,7 +910,7 @@ final class MatrixService: MatrixServiceProtocol {
                 deviceId: deviceId,
                 homeserverUrl: homeserverURL ?? "",
                 oidcData: nil,
-                slidingSyncVersion: .native
+                slidingSyncVersion: detectedSlidingSyncVersion
             )
 
             #if DEBUG
@@ -929,6 +1007,13 @@ final class MatrixService: MatrixServiceProtocol {
         }
 
         do {
+            // Use the detected sliding sync version from client discovery
+            let detectedSlidingSyncVersion = client.slidingSyncVersion()
+
+            #if DEBUG
+            print("[MatrixService] Restoring session with sliding sync version: \(detectedSlidingSyncVersion)")
+            #endif
+
             // Include refresh token if available for automatic token refresh
             let session = Session(
                 accessToken: credentials.accessToken,
@@ -937,7 +1022,7 @@ final class MatrixService: MatrixServiceProtocol {
                 deviceId: credentials.deviceId,
                 homeserverUrl: credentials.homeserverUrl ?? homeserverURL ?? "",
                 oidcData: nil,
-                slidingSyncVersion: .native
+                slidingSyncVersion: detectedSlidingSyncVersion
             )
 
             try await client.restoreSession(session: session)
@@ -996,6 +1081,70 @@ final class MatrixService: MatrixServiceProtocol {
         clearSessionCredentials()
     }
 
+    /// Store Matrix credentials (for token refresh)
+    /// - Parameters:
+    ///   - userId: Matrix user ID
+    ///   - accessToken: Access token
+    ///   - deviceId: Device ID
+    ///   - homeserverUrl: Optional homeserver URL
+    ///   - expiresAt: Optional token expiry timestamp (Unix seconds)
+    func storeCredentials(userId: String, accessToken: String, deviceId: String, homeserverUrl: String?, expiresAt: Int64?) {
+        storeSessionCredentials(
+            userId: userId,
+            accessToken: accessToken,
+            deviceId: deviceId,
+            homeserverUrl: homeserverUrl,
+            expiresAt: expiresAt
+        )
+    }
+
+    /// Reinitialize Matrix session with new credentials
+    /// Used for token refresh to update the SDK session without full logout/login
+    /// - Parameters:
+    ///   - accessToken: New access token
+    ///   - deviceId: Device ID (should remain the same)
+    func reinitializeSession(accessToken: String, deviceId: String) async throws {
+        #if DEBUG
+        print("[MatrixService] Reinitializing session with refreshed token...")
+        #endif
+
+        guard let matrixClient = client else {
+            throw MatrixError.notInitialized
+        }
+
+        // Stop current sync first
+        stopSync()
+
+        // Load stored credentials to get user ID
+        guard let stored = loadSessionCredentials() else {
+            throw MatrixError.sessionRestoreFailed
+        }
+
+        // Create new session with refreshed token
+        // Use detected sliding sync version from client
+        let syncVersion = matrixClient.slidingSyncVersion()
+
+        let session = Session(
+            accessToken: accessToken,
+            refreshToken: nil,
+            userId: stored.userId,
+            deviceId: deviceId,
+            homeserverUrl: stored.homeserverUrl ?? self.homeserverURL ?? "",
+            oidcData: nil,
+            slidingSyncVersion: syncVersion
+        )
+
+        // Restore the session with the client
+        try await matrixClient.restoreSession(session: session)
+
+        // Restart sync
+        try await startSync()
+
+        #if DEBUG
+        print("[MatrixService] Session reinitialized successfully with new token")
+        #endif
+    }
+
     /// Stop sync and wait for cleanup to complete
     /// Use this instead of stopSync() when you need to ensure cleanup is done before continuing
     private func stopSyncAndWait() async {
@@ -1014,6 +1163,10 @@ final class MatrixService: MatrixServiceProtocol {
         // Cancel room list stream handle and clear references (Issue #4774)
         roomListEntriesStreamHandle?.cancel()
         roomListEntriesStreamHandle = nil
+        roomListStateHandle?.cancel()
+        roomListStateHandle = nil
+        syncServiceStateHandle?.cancel()
+        syncServiceStateHandle = nil
         roomListController = nil
         roomList = nil
 
@@ -1051,6 +1204,20 @@ final class MatrixService: MatrixServiceProtocol {
             throw MatrixError.notLoggedIn
         }
 
+        // Log sliding sync diagnostics before starting
+        #if DEBUG
+        let currentSlidingSyncVersion = client.slidingSyncVersion()
+        print("[MatrixService] 📊 Current sliding sync version: \(currentSlidingSyncVersion)")
+
+        let availableVersions = await client.availableSlidingSyncVersions()
+        print("[MatrixService] 📊 Available sliding sync versions: \(availableVersions)")
+
+        // Check for potential issues
+        if availableVersions.isEmpty || availableVersions.contains(.none) && !availableVersions.contains(.native) {
+            print("[MatrixService] ⚠️ Warning: Server may not support sliding sync - rooms may not sync properly")
+        }
+        #endif
+
         // If sync service already exists and is running, just return
         // Avoid recreating sync service as it causes Rust SDK panic on dealloc
         if syncService != nil {
@@ -1076,6 +1243,9 @@ final class MatrixService: MatrixServiceProtocol {
 
             // Start sync
             try await syncService?.start()
+
+            // Monitor sync service state for debugging
+            setupSyncServiceStateObserver()
 
             // Room list service and observer for real-time room updates
             self.roomListService = syncService?.roomListService()
@@ -1173,6 +1343,10 @@ final class MatrixService: MatrixServiceProtocol {
         // Cancel room list stream handle and clear references (Issue #4774)
         roomListEntriesStreamHandle?.cancel()
         roomListEntriesStreamHandle = nil
+        roomListStateHandle?.cancel()
+        roomListStateHandle = nil
+        syncServiceStateHandle?.cancel()
+        syncServiceStateHandle = nil
         roomListController = nil
         roomList = nil
 
@@ -1656,13 +1830,29 @@ final class MatrixService: MatrixServiceProtocol {
         // Update room cache from client
         let rooms = client.rooms()
 
+        #if DEBUG
+        print("[MatrixService] 📊 client.rooms() returned \(rooms.count) rooms")
+        for (index, room) in rooms.enumerated() {
+            let roomId = room.id()
+            let membership = room.membership()
+            print("[MatrixService]   [\(index)] Room: \(roomId), membership: \(membership)")
+        }
+        #endif
+
         var matrixRooms: [MatrixRoom] = []
+        var skippedCount = 0
         for room in rooms {
             if let matrixRoom = await convertSDKRoomToMatrixRoom(room) {
                 roomCache[matrixRoom.id] = matrixRoom
                 matrixRooms.append(matrixRoom)
+            } else {
+                skippedCount += 1
             }
         }
+
+        #if DEBUG
+        print("[MatrixService] ✅ Converted \(matrixRooms.count) rooms, skipped \(skippedCount)")
+        #endif
 
         return matrixRooms
     }
@@ -1917,19 +2107,55 @@ final class MatrixService: MatrixServiceProtocol {
         connectionStateSubject.send(state)
     }
 
+    // MARK: - Sync Service State Observer
+
+    private func setupSyncServiceStateObserver() {
+        guard let syncService = syncService else { return }
+
+        let observer = SyncServiceStateObserverImpl { [weak self] state in
+            guard let self = self else { return }
+
+            Task { @MainActor in
+                self.currentSyncServiceState = state
+
+                #if DEBUG
+                print("[MatrixService] 🔄 SyncService state changed: \(state)")
+                #endif
+
+                // Log additional info based on state
+                switch state {
+                case .idle:
+                    print("[MatrixService]   → SyncService is idle")
+                case .running:
+                    print("[MatrixService]   → SyncService is running")
+                case .terminated:
+                    print("[MatrixService]   ⚠️ SyncService terminated")
+                case .error:
+                    print("[MatrixService]   ❌ SyncService encountered an error")
+                @unknown default:
+                    print("[MatrixService]   → SyncService in unknown state: \(state)")
+                }
+            }
+        }
+
+        self.syncServiceStateHandle = syncService.state(listener: observer)
+    }
+
     // MARK: - Room List Observer
 
     private func setupRoomListObserver() {
         guard let roomListService = roomListService else { return }
 
         Task {
-            // WORKAROUND: Significantly increased delay to prevent crash in MatrixRustSDK rooms_stream
-            // The SDK's internal rooms_stream can crash with EXC_BAD_ACCESS if called too early
-            // before the client state is fully initialized. Using 3 second delay as safer buffer.
-            // TODO: Investigate proper "ready" signal from SDK or update SDK version
-            try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
+            // Subscribe to room list service state to wait for Running state
+            // This is more reliable than arbitrary delays
+            #if DEBUG
+            print("[MatrixService] 🔄 Setting up room list state observer...")
+            #endif
 
-            // Double-check that sync service is still active after the delay
+            await waitForRoomListServiceRunning(roomListService: roomListService)
+
+            // Double-check that sync service is still active
             guard self.syncService != nil, self.roomListService != nil else {
                 #if DEBUG
                 print("[MatrixService] Room list observer setup skipped - sync service no longer active")
@@ -1937,8 +2163,110 @@ final class MatrixService: MatrixServiceProtocol {
                 return
             }
 
+            // Check if sliding sync failed - fall back to client.rooms() if so
+            if self.currentRoomListState == .terminated || self.currentRoomListState == .error {
+                #if DEBUG
+                print("[MatrixService] ⚠️ Sliding sync failed, falling back to client.rooms()...")
+                #endif
+                await self.populateRoomsFromClientFallback()
+            }
+
             await setupRoomListObserverWithRetry(roomListService: roomListService, attempt: 1)
         }
+    }
+
+    /// Wait for RoomListService to reach the Running state
+    /// This ensures sliding sync has fully initialized before we try to get rooms
+    private func waitForRoomListServiceRunning(roomListService: RoomListService) async {
+        // Create a continuation to wait for the Running state
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            var hasResumed = false
+
+            let listener = RoomListServiceStateListenerImpl { [weak self] state in
+                guard let self = self else { return }
+
+                Task { @MainActor in
+                    self.currentRoomListState = state
+
+                    #if DEBUG
+                    print("[MatrixService] 📊 RoomListService state changed: \(state)")
+                    #endif
+
+                    // Resume when we reach Running state (or Error/Terminated as fallback)
+                    if !hasResumed {
+                        switch state {
+                        case .running:
+                            hasResumed = true
+                            #if DEBUG
+                            print("[MatrixService] ✅ RoomListService reached Running state - proceeding with room list setup")
+                            #endif
+                            continuation.resume()
+                        case .error, .terminated:
+                            hasResumed = true
+                            #if DEBUG
+                            print("[MatrixService] ⚠️ RoomListService reached \(state) state - proceeding anyway")
+                            #endif
+                            continuation.resume()
+                        case .initial, .settingUp, .recovering:
+                            // Still waiting...
+                            break
+                        }
+                    }
+                }
+            }
+
+            // Store the state handle to keep it alive
+            self.roomListStateHandle = roomListService.state(listener: listener)
+
+            // Also add a timeout in case the state never reaches Running
+            Task {
+                try? await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds max
+                if !hasResumed {
+                    hasResumed = true
+                    #if DEBUG
+                    print("[MatrixService] ⏱️ RoomListService state wait timed out after 30s - proceeding anyway")
+                    #endif
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
+    /// Fallback method to populate rooms when sliding sync fails
+    /// Uses client.rooms() directly instead of RoomListService
+    private func populateRoomsFromClientFallback() async {
+        guard let client = client else {
+            #if DEBUG
+            print("[MatrixService] ❌ Cannot populate rooms - client is nil")
+            #endif
+            return
+        }
+
+        let rooms = client.rooms()
+
+        #if DEBUG
+        print("[MatrixService] 📊 Fallback: client.rooms() returned \(rooms.count) rooms")
+        #endif
+
+        for room in rooms {
+            #if DEBUG
+            let roomId = room.id()
+            let membership = room.membership()
+            print("[MatrixService]   - Fallback room: \(roomId), membership: \(membership)")
+            #endif
+
+            // Check for invited DM rooms and auto-accept
+            await autoAcceptInviteIfNeeded(room)
+
+            if let matrixRoom = await convertSDKRoomToMatrixRoom(room) {
+                roomCache[room.id()] = matrixRoom
+                onRoomUpdated?(matrixRoom)
+            }
+        }
+
+        #if DEBUG
+        print("[MatrixService] ✅ Fallback: Populated \(roomCache.count) rooms in cache")
+        #endif
     }
 
     private func setupRoomListObserverWithRetry(roomListService: RoomListService, attempt: Int) async {
@@ -2015,18 +2343,41 @@ final class MatrixService: MatrixServiceProtocol {
                 await setupRoomListObserverWithRetry(roomListService: roomListService, attempt: attempt + 1)
             } else {
                 #if DEBUG
-                print("[MatrixService] ⚠️ Room list observer setup failed after \(maxAttempts) attempts. Room updates may be delayed.")
+                print("[MatrixService] ⚠️ Room list observer setup failed after \(maxAttempts) attempts. Falling back to client.rooms().")
                 #endif
-                // Don't crash - just log and continue without real-time room updates
-                // Users can still manually refresh room list
+                // Fall back to client.rooms() to at least populate the room cache
+                await populateRoomsFromClientFallback()
             }
         }
     }
 
     private func handleRoomListUpdates(_ updates: [RoomListEntriesUpdate]) async {
+        #if DEBUG
+        print("[MatrixService] 🔄 handleRoomListUpdates called with \(updates.count) updates")
+        #endif
+
         for update in updates {
             switch update {
             case .append(let rooms), .reset(let rooms):
+                #if DEBUG
+                let updateType = {
+                    if case .append = update { return "append" }
+                    return "reset"
+                }()
+                print("[MatrixService]   📥 \(updateType): \(rooms.count) rooms")
+                for room in rooms {
+                    print("[MatrixService]     - Room: \(room.id()), membership: \(room.membership())")
+                }
+                #endif
+
+                // If reset with 0 rooms and cache is empty, try fallback
+                if case .reset = update, rooms.isEmpty && roomCache.isEmpty {
+                    #if DEBUG
+                    print("[MatrixService] ⚠️ Received reset with 0 rooms - trying client.rooms() fallback")
+                    #endif
+                    await populateRoomsFromClientFallback()
+                }
+
                 for room in rooms {
                     // Check for invited DM rooms and auto-accept
                     await autoAcceptInviteIfNeeded(room)
@@ -2037,6 +2388,10 @@ final class MatrixService: MatrixServiceProtocol {
                     }
                 }
             case .pushFront(let room), .pushBack(let room), .insert(_, let room), .set(_, let room):
+                #if DEBUG
+                print("[MatrixService]   📥 Single room update: \(room.id()), membership: \(room.membership())")
+                #endif
+
                 // Check for invited DM rooms and auto-accept
                 await autoAcceptInviteIfNeeded(room)
 
@@ -2050,9 +2405,16 @@ final class MatrixService: MatrixServiceProtocol {
                 print("[MatrixService] Room removed at index: \(index)")
                 #endif
             case .clear, .popFront, .popBack, .truncate:
+                #if DEBUG
+                print("[MatrixService]   ⚠️ Other update type: clear/popFront/popBack/truncate")
+                #endif
                 break
             }
         }
+
+        #if DEBUG
+        print("[MatrixService] 📊 After updates, roomCache has \(roomCache.count) rooms")
+        #endif
     }
 
     /// Auto-accept room invitations for DM rooms
@@ -2100,7 +2462,13 @@ final class MatrixService: MatrixServiceProtocol {
 
     func convertSDKRoomToMatrixRoom(_ room: Room) async -> MatrixRoom? {
         let roomId = room.id()
-        guard let info = try? await room.roomInfo() else {
+        let info: RoomInfo
+        do {
+            info = try await room.roomInfo()
+        } catch {
+            #if DEBUG
+            print("[MatrixService] ⚠️ Failed to get roomInfo for \(roomId): \(error)")
+            #endif
             return nil
         }
 
@@ -2196,13 +2564,16 @@ final class MatrixService: MatrixServiceProtocol {
         let deviceId: String
         let refreshToken: String?
         let homeserverUrl: String?
+        /// Token expiry timestamp (Unix seconds)
+        let expiresAt: Int64?
 
-        init(userId: String, accessToken: String, deviceId: String, refreshToken: String? = nil, homeserverUrl: String? = nil) {
+        init(userId: String, accessToken: String, deviceId: String, refreshToken: String? = nil, homeserverUrl: String? = nil, expiresAt: Int64? = nil) {
             self.userId = userId
             self.accessToken = accessToken
             self.deviceId = deviceId
             self.refreshToken = refreshToken
             self.homeserverUrl = homeserverUrl
+            self.expiresAt = expiresAt
         }
     }
 
@@ -2212,19 +2583,21 @@ final class MatrixService: MatrixServiceProtocol {
     // Matrix session storage key for UserDefaults (not sensitive enough for Keychain)
     private static let matrixSessionKey = "matrix_session_data"
 
-    private func storeSessionCredentials(userId: String, accessToken: String, deviceId: String, refreshToken: String? = nil, homeserverUrl: String? = nil) {
+    private func storeSessionCredentials(userId: String, accessToken: String, deviceId: String, refreshToken: String? = nil, homeserverUrl: String? = nil, expiresAt: Int64? = nil) {
         let credentials = StoredCredentials(
             userId: userId,
             accessToken: accessToken,
             deviceId: deviceId,
             refreshToken: refreshToken,
-            homeserverUrl: homeserverUrl ?? homeserverURL
+            homeserverUrl: homeserverUrl ?? homeserverURL,
+            expiresAt: expiresAt
         )
 
         if let data = try? JSONEncoder().encode(credentials) {
             UserDefaults.standard.set(data, forKey: Self.matrixSessionKey)
             #if DEBUG
-            print("[MatrixService] Session credentials stored (refreshToken: \(refreshToken != nil ? "yes" : "no"))")
+            let expiryInfo = expiresAt.map { "expires at \($0)" } ?? "no expiry"
+            print("[MatrixService] Session credentials stored (refreshToken: \(refreshToken != nil ? "yes" : "no"), \(expiryInfo))")
             #endif
         }
     }
@@ -2348,6 +2721,34 @@ private final class RoomListEntriesListenerImpl: RoomListEntriesListener, @unche
 
     func onUpdate(roomEntriesUpdate: [RoomListEntriesUpdate]) {
         handler(roomEntriesUpdate)
+    }
+}
+
+// MARK: - Room List Service State Listener
+
+private final class RoomListServiceStateListenerImpl: RoomListServiceStateListener, @unchecked Sendable {
+    private let handler: (RoomListServiceState) -> Void
+
+    init(handler: @escaping (RoomListServiceState) -> Void) {
+        self.handler = handler
+    }
+
+    func onUpdate(state: RoomListServiceState) {
+        handler(state)
+    }
+}
+
+// MARK: - Sync Service State Observer
+
+private final class SyncServiceStateObserverImpl: SyncServiceStateObserver, @unchecked Sendable {
+    private let handler: (SyncServiceState) -> Void
+
+    init(handler: @escaping (SyncServiceState) -> Void) {
+        self.handler = handler
+    }
+
+    func onUpdate(state: SyncServiceState) {
+        handler(state)
     }
 }
 

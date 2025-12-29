@@ -152,16 +152,11 @@ private struct UpdatePostTagsRequest: Codable {
 
 // MARK: - Response Models
 
+// APIClient uses .convertFromSnakeCase - no CodingKeys needed for responses
 private struct VLMAnalyzeResponse: Codable {
     let tags: [TagResponse]
     let channels: [ChannelResponse]?
     let processingTimeMs: Int
-
-    enum CodingKeys: String, CodingKey {
-        case tags
-        case channels
-        case processingTimeMs = "processing_time_ms"
-    }
 }
 
 private struct TagResponse: Codable {
@@ -170,32 +165,20 @@ private struct TagResponse: Codable {
     let source: String
 }
 
+// APIClient uses .convertFromSnakeCase - no CodingKeys needed for responses
 private struct ChannelResponse: Codable {
     let id: String
     let name: String
     let slug: String
     let confidence: Float
     let matchedKeywords: [String]
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case name
-        case slug
-        case confidence
-        case matchedKeywords = "matched_keywords"
-    }
 }
 
+// APIClient uses .convertFromSnakeCase - no CodingKeys needed for responses
 private struct PostTagsResponse: Codable {
     let postId: String
     let tags: [TagResponse]
     let channelIds: [String]?
-
-    enum CodingKeys: String, CodingKey {
-        case postId = "post_id"
-        case tags
-        case channelIds = "channel_ids"
-    }
 }
 
 // MARK: - Public Models

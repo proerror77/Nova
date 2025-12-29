@@ -5,8 +5,11 @@ metadata:
   labels:
     app: cdc-consumer
     component: data-pipeline
+  annotations:
+    nova.nova/merge-target: "analytics-service"
+    nova.nova/deprecated: "true"
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: cdc-consumer
@@ -42,7 +45,7 @@ spec:
                   key: analytics-db-url
                   name: nova-db-credentials
             - name: CDC_CONSUMER_ENABLED
-              value: "true"
+              value: "false"
             - name: RUST_LOG
               value: "info,analytics_service::services::cdc=debug"
             - name: KAFKA_BROKERS
@@ -53,13 +56,13 @@ spec:
             - name: CDC_CONSUMER_GROUP
               value: "nova-cdc-consumer-v1"
             - name: CDC_TOPICS
-              value: "cdc.posts,cdc.follows,cdc.comments,cdc.likes"
+              value: "cdc.posts,cdc.follows,cdc.comments,cdc.likes,cdc.users"
             - name: CDC_MAX_CONCURRENT_INSERTS
               value: "10"
             - name: CLICKHOUSE_URL
               value: "http://clickhouse:8123"
             - name: CLICKHOUSE_DATABASE
-              value: "analytics"
+              value: "nova_feed"
             - name: CLICKHOUSE_USER
               valueFrom:
                 secretKeyRef:

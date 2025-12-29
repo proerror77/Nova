@@ -14,16 +14,9 @@ apiVersion: clickhouse.altinity.com/v1
 kind: ClickHouseInstallation
 metadata:
   annotations:
-    argocd.argoproj.io/compare-result: "false"
     environment: staging
-  creationTimestamp: "2025-11-14T16:27:55Z"
-  finalizers:
-  - finalizer.clickhouseinstallation.altinity.com
-  generation: 5
   name: nova-ch
   namespace: nova-staging
-  resourceVersion: "9778126"
-  uid: 54a5c517-b147-4f4a-8d2e-3dc64319d84c
 spec:
   configuration:
     clusters:

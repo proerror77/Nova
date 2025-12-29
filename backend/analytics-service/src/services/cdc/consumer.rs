@@ -219,9 +219,9 @@ pub struct PostsCdcRow {
 pub struct FollowsCdcRow {
     pub follower_id: String,
     pub followee_id: String,
-    pub created_at: u32,        // Unix timestamp for ClickHouse DateTime
+    pub created_at: u32, // Unix timestamp for ClickHouse DateTime
     pub cdc_operation: i8,
-    pub cdc_timestamp: u32,     // Unix timestamp for ClickHouse DateTime
+    pub cdc_timestamp: u32, // Unix timestamp for ClickHouse DateTime
     pub follow_count: i8,
 }
 
@@ -233,10 +233,10 @@ pub struct CommentsCdcRow {
     pub post_id: String,
     pub user_id: String,
     pub content: String,
-    pub parent_comment_id: String,  // Empty string for None
+    pub parent_comment_id: String, // Empty string for None
     pub created_at: u32,
     pub updated_at: u32,
-    pub soft_delete: u32,  // 0 for None
+    pub soft_delete: u32, // 0 for None
     pub cdc_operation: i8,
     pub cdc_timestamp: u32,
 }
@@ -300,7 +300,9 @@ impl CdcConsumerConfig {
             group_id: std::env::var("CDC_CONSUMER_GROUP")
                 .unwrap_or_else(|_| "analytics-cdc-consumer-v1".to_string()),
             topics: std::env::var("CDC_TOPICS")
-                .unwrap_or_else(|_| "cdc.posts,cdc.follows,cdc.comments,cdc.likes,cdc.users".to_string())
+                .unwrap_or_else(|_| {
+                    "cdc.posts,cdc.follows,cdc.comments,cdc.likes,cdc.users".to_string()
+                })
                 .split(',')
                 .map(|s| s.trim().to_string())
                 .collect(),
@@ -478,14 +480,17 @@ impl CdcConsumer {
 
                     // Update health status
                     let is_healthy = self.is_healthy();
-                    self.metrics.consumer_healthy.set(if is_healthy { 1 } else { 0 });
+                    self.metrics
+                        .consumer_healthy
+                        .set(if is_healthy { 1 } else { 0 });
 
                     // Log with appropriate severity based on consecutive errors
                     if consecutive >= CRITICAL_ERROR_THRESHOLD {
                         error!(
                             consecutive_errors = consecutive,
                             backoff_secs = backoff.as_secs(),
-                            time_since_success_secs = self.error_state.time_since_success().as_secs(),
+                            time_since_success_secs =
+                                self.error_state.time_since_success().as_secs(),
                             "CRITICAL: Kafka consumer experiencing persistent failures. \
                              Manual intervention may be required. Error: {}",
                             e
@@ -711,11 +716,13 @@ impl CdcConsumer {
         let _ = Uuid::parse_str(&user_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid user UUID: {}", e)))?;
         let content: String = Self::extract_field(data, "content")?;
-        let parent_comment_id_raw: Option<String> = Self::extract_optional_field(data, "parent_comment_id");
+        let parent_comment_id_raw: Option<String> =
+            Self::extract_optional_field(data, "parent_comment_id");
         // Validate parent_comment_id if present
         if let Some(ref parent_id) = parent_comment_id_raw {
-            let _ = Uuid::parse_str(parent_id)
-                .map_err(|e| AnalyticsError::Validation(format!("Invalid parent_comment_id UUID: {}", e)))?;
+            let _ = Uuid::parse_str(parent_id).map_err(|e| {
+                AnalyticsError::Validation(format!("Invalid parent_comment_id UUID: {}", e))
+            })?;
         }
         let created_at_raw: String = Self::extract_field(data, "created_at")?;
         let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
@@ -839,13 +846,15 @@ impl CdcConsumer {
         let id_raw: String = Self::extract_field(data, "id")?;
         let user_id = Uuid::parse_str(&id_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid user UUID: {}", e)))?;
-        
+
         let username: String = Self::extract_field(data, "username")?;
-        let display_name: String = Self::extract_optional_field(data, "display_name").unwrap_or_default();
+        let display_name: String =
+            Self::extract_optional_field(data, "display_name").unwrap_or_default();
         let email: String = Self::extract_optional_field(data, "email").unwrap_or_default();
-        let avatar_url: String = Self::extract_optional_field(data, "avatar_url").unwrap_or_default();
+        let avatar_url: String =
+            Self::extract_optional_field(data, "avatar_url").unwrap_or_default();
         let bio: String = Self::extract_optional_field(data, "bio").unwrap_or_default();
-        
+
         let created_at_raw: String = Self::extract_field(data, "created_at")?;
         let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
         let updated_at_raw: String = Self::extract_field(data, "updated_at")?;
@@ -893,7 +902,10 @@ impl CdcConsumer {
             AnalyticsError::ClickHouse(e.to_string())
         })?;
 
-        debug!("Inserted users CDC: id={}, username={}, op={:?}", user_id, row.username, op);
+        debug!(
+            "Inserted users CDC: id={}, username={}, op={:?}",
+            user_id, row.username, op
+        );
         Ok(())
     }
 

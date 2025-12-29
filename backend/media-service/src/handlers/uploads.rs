@@ -173,8 +173,7 @@ pub async fn generate_presigned_url(
         .as_ref()
         .ok_or_else(|| AppError::Internal("GCS configuration required".to_string()))?;
 
-    let signer =
-        GcsSigner::from_config(gcs_cfg).map_err(|e| AppError::Internal(e.to_string()))?;
+    let signer = GcsSigner::from_config(gcs_cfg).map_err(|e| AppError::Internal(e.to_string()))?;
 
     let presigned_url = signer
         .sign_put_url(

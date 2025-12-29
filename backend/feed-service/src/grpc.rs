@@ -209,10 +209,7 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
                 }
             }
         } else {
-            debug!(
-                "Skipping cache for paginated request (offset: {})",
-                offset
-            );
+            debug!("Skipping cache for paginated request (offset: {})", offset);
         }
 
         // Step 2: Cache miss - fetch from ContentService
@@ -236,7 +233,10 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
             {
                 Ok(p) => p,
                 Err(e) => {
-                    warn!("Failed to fetch followed users' posts: {}, falling back to global", e);
+                    warn!(
+                        "Failed to fetch followed users' posts: {}, falling back to global",
+                        e
+                    );
                     // Fallback to global posts if following feed fails
                     self.fetch_posts_from_content_service(limit as i32, &user_id, &channel_id)
                         .await
@@ -366,7 +366,11 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
         let guard = RequestGuard::new("feed-service", "GetRecommendedCreators");
 
         let req = request.into_inner();
-        let limit = if req.limit == 0 { 10 } else { req.limit.min(50) };
+        let limit = if req.limit == 0 {
+            10
+        } else {
+            req.limit.min(50)
+        };
         info!(
             "Getting recommended creators for user: {} (limit: {})",
             req.user_id, limit
@@ -418,10 +422,10 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
             .take(limit as usize)
             .map(|(id, post_count)| RecommendedCreator {
                 id,
-                name: String::new(),       // Enriched by gateway
-                avatar: String::new(),     // Enriched by gateway
+                name: String::new(),   // Enriched by gateway
+                avatar: String::new(), // Enriched by gateway
                 relevance_score: (post_count as f64) / 10.0,
-                follower_count: 0,         // Enriched by gateway
+                follower_count: 0, // Enriched by gateway
                 reason: format!("{} recent posts", post_count),
             })
             .collect();

@@ -72,6 +72,12 @@ patches:
       kind: Deployment
       name: thumb-worker
     path: thumb-worker-db-patch.yaml
+  # Realtime-chat-service Matrix Admin token patch
+  # Maps SYNAPSE_ADMIN_TOKEN secret to MATRIX_ADMIN_TOKEN env var for user provisioning
+  - target:
+      kind: Deployment
+      name: realtime-chat-service
+    path: realtime-chat-service-matrix-patch.yaml
   # Zitadel PVC storage class patch (use GKE default)
   - target:
       kind: PersistentVolumeClaim

@@ -285,6 +285,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[serial_test::serial]
     fn test_default_config() {
         // Clear any env vars that might override defaults
         std::env::remove_var("DB_MAX_CONNECTIONS");
@@ -333,6 +334,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_for_service_high_traffic() {
         // Clear env vars that could override the service-specific defaults
         std::env::remove_var("DB_MAX_CONNECTIONS");
@@ -356,6 +358,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_for_service_medium_traffic() {
         // Clear env vars that could override the service-specific defaults
         std::env::remove_var("DB_MAX_CONNECTIONS");
@@ -373,6 +376,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_for_service_light_traffic() {
         // Clear env vars that could override the service-specific defaults
         std::env::remove_var("DB_MAX_CONNECTIONS");
@@ -387,6 +391,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_for_service_unknown_service() {
         // Clear env vars that could override the service-specific defaults
         std::env::remove_var("DB_MAX_CONNECTIONS");
@@ -399,6 +404,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_for_service_connect_timeout() {
         // Clear env vars that could override the service-specific defaults
         std::env::remove_var("DB_CONNECT_TIMEOUT_SECS");
@@ -429,7 +435,12 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_total_connections_under_postgresql_limit() {
+        // Clear env vars that could override the service-specific defaults
+        std::env::remove_var("DB_MAX_CONNECTIONS");
+        std::env::remove_var("DB_MIN_CONNECTIONS");
+
         // PostgreSQL default max_connections = 100
         // Strategy: Reserve 25 for system/overhead, allocate 75 to services
         let services = vec![

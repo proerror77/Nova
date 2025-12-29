@@ -83,24 +83,35 @@ impl ApnsPush {
 
         let client = match &cfg.auth_mode {
             ApnsAuthMode::Certificate { path, passphrase } => {
-                let mut file = File::open(path)
-                    .map_err(|e| ApnsError::StartServer(format!("failed to open certificate file: {e}")))?;
+                let mut file = File::open(path).map_err(|e| {
+                    ApnsError::StartServer(format!("failed to open certificate file: {e}"))
+                })?;
                 let password = passphrase.as_deref().unwrap_or("");
 
                 Client::certificate(&mut file, password, client_config).map_err(|e| {
-                    ApnsError::StartServer(format!("failed to initialize APNs client with certificate: {e}"))
+                    ApnsError::StartServer(format!(
+                        "failed to initialize APNs client with certificate: {e}"
+                    ))
                 })?
             }
-            ApnsAuthMode::Token { key_path, key_id, team_id } => {
-                let mut file = File::open(key_path)
-                    .map_err(|e| ApnsError::StartServer(format!("failed to open .p8 key file: {e}")))?;
+            ApnsAuthMode::Token {
+                key_path,
+                key_id,
+                team_id,
+            } => {
+                let mut file = File::open(key_path).map_err(|e| {
+                    ApnsError::StartServer(format!("failed to open .p8 key file: {e}"))
+                })?;
                 let mut key_pem = Vec::new();
-                file.read_to_end(&mut key_pem)
-                    .map_err(|e| ApnsError::StartServer(format!("failed to read .p8 key file: {e}")))?;
+                file.read_to_end(&mut key_pem).map_err(|e| {
+                    ApnsError::StartServer(format!("failed to read .p8 key file: {e}"))
+                })?;
 
                 let mut key_reader = Cursor::new(key_pem);
                 Client::token(&mut key_reader, key_id, team_id, client_config).map_err(|e| {
-                    ApnsError::StartServer(format!("failed to initialize APNs client with JWT token: {e}"))
+                    ApnsError::StartServer(format!(
+                        "failed to initialize APNs client with JWT token: {e}"
+                    ))
                 })?
             }
         };
@@ -210,7 +221,9 @@ mod tests {
         assert_eq!(cfg.is_production, false);
         assert_eq!(cfg.bundle_id, "com.example.app");
         match cfg.auth_mode {
-            ApnsAuthMode::Token { key_id, team_id, .. } => {
+            ApnsAuthMode::Token {
+                key_id, team_id, ..
+            } => {
                 assert_eq!(key_id, "KEY123");
                 assert_eq!(team_id, "TEAM456");
             }
