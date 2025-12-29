@@ -267,6 +267,7 @@ spec:
           echo "Created mv_post_comments_hourly"
 
           # MV for user-author likes affinity
+          # Note: likes_cdc.post_id and posts_cdc.id are both UUID types
           clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
             --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
             --multiquery --query="
@@ -275,15 +276,16 @@ spec:
           SELECT
             toString(l.user_id) AS user_id,
             toString(p.user_id) AS author_id,
-            if(l.cdc_operation = 2, -1.0, 1.0) AS affinity_delta,
+            if(l.cdc_operation = 'DELETE', -1.0, 1.0) AS affinity_delta,
             toDateTime(l.created_at) AS event_time,
             now() AS updated_at
           FROM nova_feed.likes_cdc l
-          INNER JOIN nova_feed.posts_cdc p ON toString(p.id) = l.post_id"
+          INNER JOIN nova_feed.posts_cdc p ON l.post_id = p.id"
 
           echo "Created mv_user_author_likes"
 
           # MV for user-author comments affinity (weight 2x for comments)
+          # Note: comments_cdc.post_id and posts_cdc.id are both UUID types
           clickhouse-client --host="$CLICKHOUSE_HOST" --port="$CLICKHOUSE_PORT" \
             --user="$CLICKHOUSE_USER" --password="$CH_PASS" \
             --multiquery --query="
@@ -292,11 +294,11 @@ spec:
           SELECT
             toString(c.user_id) AS user_id,
             toString(p.user_id) AS author_id,
-            if(c.cdc_operation = 3, -2.0, if(c.cdc_operation = 1, 2.0, 0.0)) AS affinity_delta,
+            if(c.cdc_operation = 'DELETE', -2.0, if(c.cdc_operation = 'INSERT', 2.0, 0.0)) AS affinity_delta,
             toDateTime(c.created_at) AS event_time,
             now() AS updated_at
           FROM nova_feed.comments_cdc c
-          INNER JOIN nova_feed.posts_cdc p ON toString(p.id) = c.post_id"
+          INNER JOIN nova_feed.posts_cdc p ON c.post_id = p.id"
 
           echo "Created mv_user_author_comments"
 
