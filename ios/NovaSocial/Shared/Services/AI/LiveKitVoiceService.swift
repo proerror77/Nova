@@ -159,18 +159,25 @@ final class LiveKitVoiceService: NSObject {
             // - .voiceChat: optimized for voice conversations with echo cancellation
             // - .defaultToSpeaker: output to speaker by default
             // - .allowBluetoothHFP: support Bluetooth headsets
-            // - .mixWithOthers: 允許與其他音訊混合（可選）
             try audioSession.setCategory(
                 .playAndRecord,
                 mode: .voiceChat,
                 options: [.defaultToSpeaker, .allowBluetoothHFP, .allowBluetooth]
             )
 
-            // 設置較低的緩衝區持續時間以降低延遲
-            // 預設約 23ms (1024 samples @ 44.1kHz)，設為 0.005 (5ms) 可降低延遲
-            try audioSession.setPreferredIOBufferDuration(0.005)
+            // 設置緩衝區持續時間
+            // 模擬器需要較高的 buffer 以避免音訊斷斷續續
+            // 真機可以使用較低的值以降低延遲
+            #if targetEnvironment(simulator)
+            // 模擬器：使用較高的 buffer (20ms) 以確保穩定性
+            try audioSession.setPreferredIOBufferDuration(0.02)
+            liveKitLog("Running on Simulator - using higher buffer duration for stability")
+            #else
+            // 真機：使用較低的 buffer (10ms) 以降低延遲
+            try audioSession.setPreferredIOBufferDuration(0.01)
+            #endif
 
-            // 設置較高的採樣率以提高音質
+            // 設置採樣率
             try audioSession.setPreferredSampleRate(48000)
 
             try audioSession.setActive(true)
