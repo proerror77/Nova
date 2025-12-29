@@ -3,7 +3,7 @@ import SwiftUI
 /// 应用页面枚举
 enum AppPage: Equatable {
     case splash
-    case welcome
+    case inviteCode
     case login
     case phoneLogin
     case phoneRegistration
@@ -11,6 +11,7 @@ enum AppPage: Equatable {
     case emailSentConfirmation(email: String)
     case resetPassword(token: String)
     case createAccount
+    case createAccountEmail
     case home
     case rankingList
     case search

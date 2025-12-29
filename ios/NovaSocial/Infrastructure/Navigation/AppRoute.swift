@@ -4,7 +4,7 @@ import SwiftUI
 enum AppRoute: Hashable, Codable {
     // MARK: - Authentication Routes
     case splash
-    case welcome
+    case inviteCode
     case login
     case phoneLogin
     case phoneRegistration
@@ -69,7 +69,7 @@ enum AppRoute: Hashable, Codable {
 
         switch type {
         case "splash": self = .splash
-        case "welcome": self = .welcome
+        case "inviteCode": self = .inviteCode
         case "login": self = .login
         case "phoneLogin": self = .phoneLogin
         case "phoneRegistration": self = .phoneRegistration
@@ -127,7 +127,7 @@ enum AppRoute: Hashable, Codable {
 
         switch self {
         case .splash: try container.encode("splash", forKey: .type)
-        case .welcome: try container.encode("welcome", forKey: .type)
+        case .inviteCode: try container.encode("inviteCode", forKey: .type)
         case .login: try container.encode("login", forKey: .type)
         case .phoneLogin: try container.encode("phoneLogin", forKey: .type)
         case .phoneRegistration: try container.encode("phoneRegistration", forKey: .type)
@@ -189,7 +189,7 @@ extension AppRoute {
     var toAppPage: AppPage {
         switch self {
         case .splash: return .splash
-        case .welcome: return .welcome
+        case .inviteCode: return .inviteCode
         case .login: return .login
         case .phoneLogin: return .phoneLogin
         case .phoneRegistration: return .phoneRegistration

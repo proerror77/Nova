@@ -1,661 +1,268 @@
 import SwiftUI
-import PhotosUI
-
-// MARK: - Create Account View
 
 struct CreateAccountView: View {
-    // MARK: - Bindings
     @Binding var currentPage: AppPage
-
-    // MARK: - State
-    @State private var username = ""
     @State private var email = ""
-    @State private var password = ""
-    @State private var confirmPassword = ""
-    @State private var displayName = ""
-    @State private var inviteCode = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var showPassword = false
-    @State private var showConfirmPassword = false
-    @State private var selectedPhotoItem: PhotosPickerItem?
-    @State private var selectedAvatar: UIImage?
-    @State private var showErrorView = false
-    @State private var isGoogleLoading = false
-    @State private var isAppleLoading = false
+    @FocusState private var isInputFocused: Bool
 
-    // MARK: - Focus State
-    @FocusState private var focusedField: Field?
-
-    enum Field {
-        case email
-        case username
-        case password
-        case confirmPassword
-    }
-
-    // Access global AuthenticationManager
-    @EnvironmentObject private var authManager: AuthenticationManager
-
-    // Access AvatarManager
-    @StateObject private var avatarManager = AvatarManager.shared
-
-    // Services
-    private let mediaService = MediaService()
-    private let identityService = IdentityService()
-
-    var body: some View {
-        GeometryReader { geometry in
-        ZStack {
-            // Background Image - Fixed size to prevent scaling when keyboard appears
-            Image("Registration-background")
-                .resizable()
-                .scaledToFill()
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .clipped()
-                .ignoresSafeArea(.all)
-
-            // Dark overlay to dim the background
-            Color.black
-                .opacity(0.4)
-                .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                if showErrorView, let error = errorMessage {
-                    // Full-screen error view with retry
-                    VStack {
-                        Spacer()
-                        ErrorStateView(
-                            errorMessage: error,
-                            onRetry: {
-                                showErrorView = false
-                                errorMessage = nil
-                                await handleRegister()
-                            },
-                            onDismiss: {
-                                showErrorView = false
-                                errorMessage = nil
-                            }
-                        )
-                        Spacer()
-                    }
-                } else {
-                    // 使用固定高度替代Spacer，防止键盘推动布局
-                    Color.clear
-                        .frame(height: max(0, (geometry.size.height - 812) / 2))
-
-                    // Main Content
-                            ZStack {
-                    Group {
-                        // Profile Picture Circle - 显示选择的头像或默认头像
-                        AvatarView(image: selectedAvatar, url: nil, size: 136)
-                            .offset(x: 0.50, y: -290)
-
-                        // Add Photo Button - 使用 PhotosPicker
-                        PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color(red: 0.87, green: 0.11, blue: 0.26))
-                                    .frame(width: 35, height: 35)
-
-                                Image(systemName: selectedAvatar != nil ? "checkmark" : "plus")
-                                    .font(Typography.semibold18)
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        .offset(x: 48, y: -242.50)
-
-
-                        // SHOW button for PASSWORD - 优化点击响应
-                        Button(action: {
-                            // 直接切换显示状态，不需要延迟
-                            let wasFocused = focusedField == .password
-                            withAnimation(.none) {
-                                showPassword.toggle()
-                            }
-                            // 如果之前有焦点，立即恢复焦点
-                            if wasFocused {
-                                focusedField = .password
-                            }
-                        }) {
-                            Text(showPassword ? "HIDE" : "SHOW")
-                                .font(Typography.regular12)
-                                .lineSpacing(20)
-                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                                .padding(.horizontal, 30)
-                                .padding(.vertical, 24)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .offset(x: 138.50, y: -20)
-
-                        // SHOW button for CONFIRM PASSWORD - 优化点击响应
-                        Button(action: {
-                            // 直接切换显示状态，不需要延迟
-                            let wasFocused = focusedField == .confirmPassword
-                            withAnimation(.none) {
-                                showConfirmPassword.toggle()
-                            }
-                            // 如果之前有焦点，立即恢复焦点
-                            if wasFocused {
-                                focusedField = .confirmPassword
-                            }
-                        }) {
-                            Text(showConfirmPassword ? "HIDE" : "SHOW")
-                                .font(Typography.regular12)
-                                .lineSpacing(20)
-                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                                .padding(.horizontal, 30)
-                                .padding(.vertical, 24)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .offset(x: 138.50, y: 49)
-
-                        // Email Input Field
-                        Rectangle()
-                            .foregroundColor(.clear)
-                            .frame(width: 343.w, height: 49.h)
-                            .cornerRadius(6)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .inset(by: 0.20)
-                                    .stroke(.white, lineWidth: 0.20)
-                            )
-                            .offset(x: 0, y: -157.50)
-
-                        // Username Input Field
-                        Rectangle()
-                            .foregroundColor(.clear)
-                            .frame(width: 343.w, height: 49.h)
-                            .cornerRadius(6)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .inset(by: 0.20)
-                                    .stroke(.white, lineWidth: 0.20)
-                            )
-                            .offset(x: 0, y: -88.50)
-
-                        // Password Input Field
-                        Rectangle()
-                            .foregroundColor(.clear)
-                            .frame(width: 343.w, height: 49.h)
-                            .cornerRadius(6)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .inset(by: 0.20)
-                                    .stroke(.white, lineWidth: 0.20)
-                            )
-                            .offset(x: 0, y: -19.50)
-
-                        // Confirm Password Input Field
-                        Rectangle()
-                            .foregroundColor(.clear)
-                            .frame(width: 343.w, height: 49.h)
-                            .cornerRadius(6)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .inset(by: 0.20)
-                                    .stroke(.white, lineWidth: 0.20)
-                            )
-                            .offset(x: 0, y: 49.50)
-                    }
-
-                    Group {
-                        // Text fields for input
-                        TextField("", text: $email, prompt: Text("Enter your email").foregroundColor(Color.white.opacity(0.4)))
-                            .foregroundColor(.white)
-                            .font(Typography.regular14)
-                            .padding(.horizontal, 16)
-                            .frame(width: 343.w, height: 49.h)
-                            .autocapitalization(.none)
-                            .keyboardType(.emailAddress)
-                            .autocorrectionDisabled()
-                            .offset(x: 0, y: -157.50)
-                            .accessibilityIdentifier("emailTextField")
-
-                        TextField("", text: $username, prompt: Text("Your Username").foregroundColor(Color.white.opacity(0.4)))
-                            .foregroundColor(.white)
-                            .font(Typography.regular14)
-                            .padding(.horizontal, 16)
-                            .frame(width: 343.w, height: 49.h)
-                            .autocapitalization(.none)
-                            .autocorrectionDisabled()
-                            .offset(x: 0, y: -88.50)
-                            .accessibilityIdentifier("usernameTextField")
-
-                        // Password field - 优化版本，避免视图重建
-                        Group {
-                            if showPassword {
-                                TextField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
-                                    .foregroundColor(.white)
-                                    .font(Typography.regular14)
-                                    .padding(.horizontal, 16)
-                                    .frame(width: 343.w, height: 49.h)
-                                    .autocapitalization(.none)
-                                    .autocorrectionDisabled()
-                                    .textContentType(.password)
-                                    .accessibilityIdentifier("passwordTextField")
-                                    .focused($focusedField, equals: .password)
-                            } else {
-                                SecureField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
-                                    .foregroundColor(.white)
-                                    .font(Typography.regular14)
-                                    .padding(.horizontal, 16)
-                                    .frame(width: 343.w, height: 49.h)
-                                    .textContentType(.password)
-                                    .accessibilityIdentifier("passwordTextField")
-                                    .focused($focusedField, equals: .password)
-                            }
-                        }
-                        .offset(x: 0, y: -19.50)
-
-                        // Confirm Password field - 优化版本，避免视图重建
-                        Group {
-                            if showConfirmPassword {
-                                TextField("", text: $confirmPassword, prompt: Text("Confirm your password").foregroundColor(Color.white.opacity(0.4)))
-                                    .foregroundColor(.white)
-                                    .font(Typography.regular14)
-                                    .padding(.horizontal, 16)
-                                    .frame(width: 343.w, height: 49.h)
-                                    .autocapitalization(.none)
-                                    .autocorrectionDisabled()
-                                    .textContentType(.password)
-                                    .accessibilityIdentifier("confirmPasswordTextField")
-                                    .focused($focusedField, equals: .confirmPassword)
-                            } else {
-                                SecureField("", text: $confirmPassword, prompt: Text("Confirm your password").foregroundColor(Color.white.opacity(0.4)))
-                                    .foregroundColor(.white)
-                                    .font(Typography.regular14)
-                                    .padding(.horizontal, 16)
-                                    .frame(width: 343.w, height: 49.h)
-                                    .textContentType(.password)
-                                    .accessibilityIdentifier("confirmPasswordTextField")
-                                    .focused($focusedField, equals: .confirmPassword)
-                            }
-                        }
-                        .offset(x: 0, y: 49.50)
-
-                        // Sign up Button
-                        Button(action: {
-                            Task {
-                                await handleRegister()
-                            }
-                        }) {
-                            HStack(spacing: 8) {
-                                if isLoading {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                }
-                                Text(LocalizedStringKey("Sign_Up"))
-                                    .font(Typography.semibold16)
-                                    .lineSpacing(20)
-                                    .foregroundColor(.white)
-                            }
-                            .frame(width: 343.w, height: 46.h)
-                            .background(Color(red: 0.87, green: 0.11, blue: 0.26))
-                            .cornerRadius(31.50)
-                        }
-                        .disabled(isLoading)
-                        .offset(x: 0, y: 137)
-                        .accessibilityIdentifier("signUpButton")
-
-                        // "or you can" text
-                        Text(LocalizedStringKey("Or_you_can"))
-                            .font(Typography.semibold16)
-                            .lineSpacing(20)
-                            .foregroundColor(.white)
-                            .offset(x: 0.50, y: 200)
-
-                        // Decorative lines
-                        Rectangle()
-                            .foregroundColor(.clear)
-                            .frame(width: 120.w, height: 0)
-                            .overlay(Rectangle()
-                                .stroke(.white, lineWidth: 0.20))
-                            .offset(x: -111.50, y: 202)
-
-                        Rectangle()
-                            .foregroundColor(.clear)
-                            .frame(width: 120.w, height: 0)
-                            .overlay(Rectangle()
-                                .stroke(.white, lineWidth: 0.20))
-                            .offset(x: 111.50, y: 202)
-
-                        // Social login buttons
-                        HStack(spacing: 54) {
-                            // Phone button
-                            Button(action: {
-                                // TODO: Phone login
-                            }) {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "iphone")
-                                        .font(Typography.regular20)
-                                        .foregroundColor(.white)
-                                }
-                                .frame(width: 46.s, height: 46.s)
-                                .cornerRadius(23)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 23)
-                                        .inset(by: 0.20)
-                                        .stroke(.white, lineWidth: 0.20)
-                                )
-                            }
-
-                            // Apple button
-                            Button(action: {
-                                Task {
-                                    await handleAppleSignIn()
-                                }
-                            }) {
-                                HStack(spacing: 8) {
-                                    if isAppleLoading {
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    } else {
-                                        Image(systemName: "apple.logo")
-                                            .font(Typography.regular20)
-                                            .foregroundColor(.white)
-                                    }
-                                }
-                                .frame(width: 46.s, height: 46.s)
-                                .cornerRadius(23)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 23)
-                                        .inset(by: 0.20)
-                                        .stroke(.white, lineWidth: 0.20)
-                                )
-                            }
-                            .disabled(isLoading || isGoogleLoading || isAppleLoading)
-
-                            // Google button
-                            Button(action: {
-                                Task {
-                                    await handleGoogleSignIn()
-                                }
-                            }) {
-                                HStack(spacing: 8) {
-                                    if isGoogleLoading {
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    } else {
-                                        Text("G")
-                                            .font(Typography.bold20)
-                                            .foregroundColor(.white)
-                                    }
-                                }
-                                .frame(width: 46.s, height: 46.s)
-                                .cornerRadius(23)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 23)
-                                        .inset(by: 0.20)
-                                        .stroke(.white, lineWidth: 0.20)
-                                )
-                            }
-                            .disabled(isLoading || isGoogleLoading || isAppleLoading)
-                        }
-                        .offset(x: 0.50, y: 263)
-
-                        // Already have an account
-                        HStack(spacing: 4) {
-                            Text("Already have an account?")
-                                .font(Typography.regular16)
-                                .lineSpacing(20)
-                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-
-                            Button(action: {
-                                currentPage = .login
-                            }) {
-                                Text(LocalizedStringKey("Sign_in"))
-                                    .font(Typography.semibold16)
-                                    .lineSpacing(20)
-                                    .underline()
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        .offset(x: 0, y: 326)
-
-                        // Error Message
-                        if let errorMessage = errorMessage {
-                            Text(LocalizedStringKey(errorMessage))
-                                .font(Typography.regular12)
-                                .foregroundColor(.red)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 40)
-                                .offset(x: 0, y: 100)
-                        }
-                    }
-                    }
-                    .frame(width: ScreenScale.screenWidth, height: ScreenScale.screenHeight)
-
-                    // 使用固定高度替代Spacer，防止键盘推动布局
-                    Color.clear
-                        .frame(height: max(0, (geometry.size.height - 812) / 2))
-                }
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            }
-        }
-        // 移除 .ignoresSafeArea(.keyboard) 防止页面随键盘浮动
-        .scrollDismissesKeyboard(.interactively)
-        .onChange(of: selectedPhotoItem) { oldValue, newValue in
-            Task {
-                if let photoItem = newValue,
-                   let data = try? await photoItem.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    // 显示选择的头像
-                    selectedAvatar = image
-                    // 保存到 AvatarManager
-                    avatarManager.savePendingAvatar(image)
-
-                    #if DEBUG
-                    print("[CreateAccountView] 头像已选择并保存")
-                    #endif
-                }
-            }
-        }
-        } // GeometryReader
-    }
-
-    // MARK: - Actions
-
-    private func handleRegister() async {
-        guard validateRegister() else { return }
-
-        isLoading = true
-        errorMessage = nil
-        showErrorView = false
-
-        let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        let finalInviteCode = inviteCode.isEmpty ? "NOVATEST" : inviteCode
-
-        #if DEBUG
-        print("[CreateAccountView] Starting registration")
-        print("[CreateAccountView] Username: \(trimmedUsername)")
-        print("[CreateAccountView] Email: \(trimmedEmail)")
-        print("[CreateAccountView] Invite Code: \(finalInviteCode)")
-        #endif
-
-        do {
-            let user = try await authManager.register(
-                username: trimmedUsername,
-                email: trimmedEmail,
-                password: password,
-                displayName: displayName.isEmpty ? username : displayName,
-                inviteCode: finalInviteCode
-            )
-
-            await uploadAvatarIfNeeded(userId: user.id)
-            #if DEBUG
-            print("[CreateAccountView] Registration successful!")
-            #endif
-            // Success - Navigate to home page
-            await MainActor.run {
-                currentPage = .home
-            }
-        } catch {
-            #if DEBUG
-            print("[CreateAccountView] Registration error: \(error)")
-            print("[CreateAccountView] Error type: \(type(of: error))")
-            print("[CreateAccountView] Error description: \(error.localizedDescription)")
-            #endif
-
-            // Provide user-friendly error messages
-            if error.localizedDescription.contains("409") || error.localizedDescription.contains("already exists") {
-                errorMessage = "This username or email is already registered. Please try a different one."
-                showErrorView = true
-            } else if error.localizedDescription.contains("network") || error.localizedDescription.contains("connection") {
-                errorMessage = "Unable to connect to the server. Please check your internet connection and try again."
-                showErrorView = true
-            } else if error.localizedDescription.contains("invite") || error.localizedDescription.contains("code") {
-                errorMessage = "Invalid invite code. Please check your code and try again."
-                showErrorView = true
-            } else {
-                errorMessage = "Registration failed. Please try again later."
-                showErrorView = true
-            }
-        }
-
-        isLoading = false
-    }
-
-    private func uploadAvatarIfNeeded(userId: String) async {
-        guard let image = selectedAvatar ?? avatarManager.getPendingAvatar(),
-              let imageData = image.jpegData(compressionQuality: 0.8) else {
-            return
-        }
-
-        do {
-            let avatarUrl = try await mediaService.uploadImage(imageData: imageData, filename: "avatar.jpg")
-            let updates = UserProfileUpdate(
-                displayName: nil,
-                bio: nil,
-                avatarUrl: avatarUrl,
-                coverUrl: nil,
-                website: nil,
-                location: nil
-            )
-            let updatedUser = try await identityService.updateUser(userId: userId, updates: updates)
-            await MainActor.run {
-                authManager.updateCurrentUser(updatedUser)
-                avatarManager.clearPendingAvatar()
-            }
-            #if DEBUG
-            print("[CreateAccountView] Avatar uploaded after registration: \(avatarUrl)")
-            #endif
-        } catch {
-            #if DEBUG
-            print("[CreateAccountView] Avatar upload failed after registration: \(error)")
-            #endif
-            // Non-blocking: registration success should not fail due to avatar upload
-        }
-    }
-
-    // MARK: - Validation
-
-    private func validateRegister() -> Bool {
-            if email.isEmpty {
-                errorMessage = "Please_enter_an_email"
-            return false
-        }
-
-            if !isValidEmail(email) {
-                errorMessage = "Please_enter_a_valid_email"
-            return false
-        }
-
-            if username.isEmpty {
-                errorMessage = "Please_enter_a_username"
-            return false
-        }
-
-            if password.isEmpty {
-                errorMessage = "Please_enter_a_password"
-            return false
-        }
-
-        if password.count < 6 {
-            errorMessage = "Password must be at least 6 characters"
-            return false
-        }
-
-        if !isStrongPassword(password) {
-            errorMessage = "Password must be at least 6 characters"
-            return false
-        }
-
-        if confirmPassword.isEmpty {
-            errorMessage = "Please confirm your password"
-            return false
-        }
-
-            if password != confirmPassword {
-                errorMessage = "Passwords_do_not_match"
-            return false
-        }
-
-        return true
-    }
-
-    private func isValidEmail(_ email: String) -> Bool {
+    private var isEmailValid: Bool {
         let emailRegex = #"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"#
         return email.range(of: emailRegex, options: .regularExpression) != nil
     }
 
-    private func isStrongPassword(_ password: String) -> Bool {
-        // Simplified validation - only check minimum length
-        return password.count >= 6
+    var body: some View {
+        ZStack {
+            // Background - Linear Gradient (same as InviteCodeView)
+            LinearGradient(
+                colors: [
+                    Color(red: 0.027, green: 0.106, blue: 0.212),  // #071B36
+                    Color(red: 0.271, green: 0.310, blue: 0.388)   // #454F63
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            // Content
+            VStack(spacing: 0) {
+                Spacer().frame(height: 167.h)
+                logoSection
+                Spacer().frame(height: 20.h)
+                titleSection
+                Spacer().frame(height: 24.h)
+                phoneButton.padding(.horizontal, 37.w)
+                Spacer().frame(height: 15.h)
+                orText
+                Spacer().frame(height: 15.h)
+                googleButton.padding(.horizontal, 37.w)
+                Spacer().frame(height: 16.h)
+                appleButton.padding(.horizontal, 37.w)
+                Spacer().frame(height: 16.h)
+                emailButton.padding(.horizontal, 37.w)
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Back Button - Top Left
+            VStack {
+                HStack {
+                    Button(action: { currentPage = .inviteCode }) {
+                        Image("back-white")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 24.s, height: 24.s)
+                    }
+                    .padding(.leading, 16.w)
+                    .padding(.top, 56.h)
+                    Spacer()
+                }
+                Spacer()
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { isInputFocused = false }
+        .ignoresSafeArea()
+        .ignoresSafeArea(.keyboard)
     }
 
-    // MARK: - Social Login
+    // MARK: - Components
 
-    private func handleGoogleSignIn() async {
-        isGoogleLoading = true
-        errorMessage = nil
-
-        do {
-            let _ = try await authManager.loginWithGoogle()
-            await MainActor.run {
-                currentPage = .home
-            }
-        } catch {
-            #if DEBUG
-            print("[CreateAccountView] Google sign in error: \(error)")
-            #endif
-            errorMessage = "Google sign in failed. Please try again."
-            showErrorView = true
+    private var logoSection: some View {
+        ZStack {
+            Image("Login-Icon")
+                .resizable()
+                .scaledToFit()
         }
-
-        isGoogleLoading = false
+        .frame(width: 84.w, height: 52.h)
     }
 
-    private func handleAppleSignIn() async {
-        isAppleLoading = true
+    private var titleSection: some View {
+        Text("Create Account")
+            .font(.system(size: 24.f, weight: .semibold))
+            .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
+    }
+
+    private var phoneButton: some View {
+        Button(action: {
+            // TODO: Navigate to phone number input
+        }) {
+            ZStack {
+                HStack {
+                    Image("Phone-2")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 18.s, height: 18.s)
+                    Spacer()
+                }
+                .padding(.leading, 27.w)
+
+                Text("Use Phone number")
+                    .font(.system(size: 16.f, weight: .heavy))
+                    .tracking(0.32)
+                    .foregroundColor(.black)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 48.h)
+            .background(.white)
+            .cornerRadius(65.s)
+        }
+    }
+
+    private var orText: some View {
+        Text("or")
+            .font(.system(size: 16.f))
+            .foregroundColor(.white)
+    }
+
+    private var googleButton: some View {
+        Button(action: {
+            // TODO: Google sign in
+        }) {
+            ZStack {
+                HStack {
+                    Image("Google（B）")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 18.s, height: 18.s)
+                    Spacer()
+                }
+                .padding(.leading, 27.w)
+
+                Text("Continue with Google")
+                    .font(.system(size: 16.f, weight: .heavy))
+                    .tracking(0.32)
+                    .foregroundColor(.black)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 48.h)
+            .background(.white)
+            .cornerRadius(65.s)
+        }
+    }
+
+    private var appleButton: some View {
+        Button(action: {
+            // TODO: Apple sign in
+        }) {
+            ZStack {
+                HStack {
+                    Image("Apple（B）")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 18.s, height: 18.s)
+                    Spacer()
+                }
+                .padding(.leading, 27.w)
+
+                Text("Continue with Apple")
+                    .font(.system(size: 16.f, weight: .heavy))
+                    .tracking(0.32)
+                    .foregroundColor(.black)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 48.h)
+            .background(.white)
+            .cornerRadius(65.s)
+        }
+    }
+
+    private var emailButton: some View {
+        Button(action: {
+            currentPage = .createAccountEmail
+        }) {
+            ZStack {
+                HStack {
+                    Image("Email")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 18.s, height: 18.s)
+                    Spacer()
+                }
+                .padding(.leading, 27.w)
+
+                Text("Continue with Email")
+                    .font(.system(size: 16.f, weight: .heavy))
+                    .tracking(0.32)
+                    .foregroundColor(.black)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 48.h)
+            .background(.white)
+            .cornerRadius(65.s)
+        }
+    }
+
+    private var emailInput: some View {
+        TextField("", text: $email, prompt: Text("Email address")
+            .foregroundColor(Color(red: 0.6, green: 0.6, blue: 0.6)))
+            .font(.system(size: 16.f, weight: .light))
+            .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
+            .multilineTextAlignment(.center)
+            .textInputAutocapitalization(.never)
+            .keyboardType(.emailAddress)
+            .autocorrectionDisabled()
+            .focused($isInputFocused)
+            .padding(EdgeInsets(top: 13.h, leading: 20.w, bottom: 13.h, trailing: 20.w))
+            .frame(width: 300.w, height: 48.h)
+            .background(Color(red: 0.85, green: 0.85, blue: 0.85).opacity(0.25))
+            .cornerRadius(43.s)
+            .overlay(
+                RoundedRectangle(cornerRadius: 43.s)
+                    .inset(by: 0.50)
+                    .stroke(.white, lineWidth: 0.50)
+            )
+    }
+
+    @ViewBuilder
+    private var errorMessageView: some View {
+        if let errorMessage {
+            Text(LocalizedStringKey(errorMessage))
+                .font(.system(size: 12.f))
+                .foregroundColor(.red)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40.w)
+                .padding(.top, 12.h)
+        }
+    }
+
+    private var continueButton: some View {
+        Button(action: { Task { await submitEmail() } }) {
+            HStack(spacing: 8.s) {
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                        .scaleEffect(0.9)
+                }
+                Text("Continue")
+                    .font(.system(size: 16.f, weight: .heavy))
+                    .tracking(0.32)
+                    .foregroundColor(.black)
+            }
+            .frame(width: 300.w, height: 48.h)
+            .background(Color.white.opacity(isEmailValid ? 1 : 0.5))
+            .cornerRadius(43.s)
+        }
+        .disabled(!isEmailValid || isLoading)
+    }
+
+    // MARK: - Actions
+
+    private func submitEmail() async {
+        guard isEmailValid else { return }
+
+        isLoading = true
         errorMessage = nil
 
-        do {
-            let _ = try await authManager.loginWithApple()
-            await MainActor.run {
-                currentPage = .home
-            }
-        } catch {
-            #if DEBUG
-            print("[CreateAccountView] Apple sign in error: \(error)")
-            #endif
-            errorMessage = "Apple sign in failed. Please try again."
-            showErrorView = true
-        }
+        // TODO: Implement email submission logic
+        // This will need backend API integration
 
-        isAppleLoading = false
+        try? await Task.sleep(for: .milliseconds(500))
+
+        isLoading = false
     }
 }
 
-// MARK: - Preview
-
 #Preview {
     CreateAccountView(currentPage: .constant(.createAccount))
-        .environmentObject(AuthenticationManager.shared)
 }
