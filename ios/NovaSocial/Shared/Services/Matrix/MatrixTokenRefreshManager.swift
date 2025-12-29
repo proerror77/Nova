@@ -145,15 +145,19 @@ final class MatrixTokenRefreshManager {
         #endif
 
         do {
-            // Get fresh credentials from backend
-            guard let currentUser = AuthenticationManager.shared.currentUser else {
+            // Get user ID from currentUser or fall back to stored keychain value
+            // (currentUser may be nil early in app lifecycle before profile is fetched)
+            let userId = AuthenticationManager.shared.currentUser?.id
+                ?? AuthenticationManager.shared.storedUserId
+
+            guard let novaUserId = userId else {
                 #if DEBUG
-                print("[MatrixTokenRefresh] No current user, cannot refresh")
+                print("[MatrixTokenRefresh] No user ID available (neither currentUser nor storedUserId)")
                 #endif
                 return false
             }
 
-            let credentials = try await bridgeService.getMatrixCredentials(novaUserId: currentUser.id)
+            let credentials = try await bridgeService.getMatrixCredentials(novaUserId: novaUserId)
 
             #if DEBUG
             print("[MatrixTokenRefresh] Got new credentials:")
