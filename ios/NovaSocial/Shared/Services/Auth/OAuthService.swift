@@ -14,6 +14,25 @@ class OAuthService: NSObject {
     // Apple Sign-In continuation for async/await
     private var appleSignInContinuation: CheckedContinuation<ASAuthorization, Error>?
 
+    // MARK: - Pending OAuth Credentials (for invite code retry)
+
+    /// Stores pending Apple credentials when invite code is required
+    struct PendingAppleCredentials {
+        let authorizationCode: String
+        let identityToken: String
+        let userIdentifier: String
+        let email: String?
+        let fullName: PersonNameComponents?
+    }
+
+    /// Pending Apple credentials for retry after invite code input
+    private(set) var pendingAppleCredentials: PendingAppleCredentials?
+
+    /// Clear pending credentials after successful sign-in or cancellation
+    func clearPendingCredentials() {
+        pendingAppleCredentials = nil
+    }
+
     // MARK: - OAuth Provider
 
     enum OAuthProvider: String {
@@ -61,7 +80,11 @@ class OAuthService: NSObject {
     // MARK: - OAuth Flow
 
     /// Start OAuth flow - get authorization URL from backend
-    func startOAuthFlow(provider: OAuthProvider) async throws -> OAuthStartResponse {
+    /// - Parameters:
+    ///   - provider: OAuth provider (Google or Apple)
+    ///   - inviteCode: Optional invite code for new user registration
+    /// - Returns: OAuth start response with authorization URL
+    func startOAuthFlow(provider: OAuthProvider, inviteCode: String? = nil) async throws -> OAuthStartResponse {
         let redirectUri = getRedirectUri(for: provider)
 
         let url = URL(string: "\(APIConfig.current.baseURL)/api/v2/auth/oauth/\(provider.rawValue)/start")!
@@ -69,9 +92,15 @@ class OAuthService: NSObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "redirect_uri": redirectUri
         ]
+
+        // Add invite code if provided
+        if let inviteCode = inviteCode, !inviteCode.isEmpty {
+            body["invite_code"] = inviteCode
+        }
+
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -137,11 +166,21 @@ class OAuthService: NSObject {
 
     // MARK: - Google Sign-In (Web-based flow with backend proxy)
 
+    /// Pending Google state for invite code retry
+    private(set) var pendingGoogleState: String?
+
     /// Perform Google Sign-In using ASWebAuthenticationSession
     /// Uses backend proxy flow: Google redirects to backend, backend exchanges tokens and redirects to iOS
-    func signInWithGoogle() async throws -> OAuthCallbackResponse {
-        // 1. Start flow to get authorization URL
-        let startResponse = try await startOAuthFlow(provider: .google)
+    /// - Parameter inviteCode: Optional invite code for new user registration
+    /// - Returns: OAuth callback response with tokens
+    /// - Throws: `OAuthError.inviteCodeRequired` if new user without invite code
+    @MainActor
+    func signInWithGoogle(inviteCode: String? = nil) async throws -> OAuthCallbackResponse {
+        // 1. Start flow to get authorization URL (include invite code if provided)
+        let startResponse = try await startOAuthFlow(provider: .google, inviteCode: inviteCode)
+
+        // Store state for potential retry
+        pendingGoogleState = startResponse.state
 
         // 2. Present web authentication session
         // The callback will come from the backend with tokens (not from Google with code)
@@ -158,14 +197,30 @@ class OAuthService: NSObject {
         // Check for error in callback
         if let error = components.queryItems?.first(where: { $0.name == "error" })?.value {
             let message = components.queryItems?.first(where: { $0.name == "message" })?.value ?? error
+
+            // Check for invite code required error
+            if message == "INVITE_CODE_REQUIRED" || message.contains("INVITE_CODE_REQUIRED") {
+                throw OAuthError.inviteCodeRequired
+            }
+
+            if message.lowercased().contains("invalid invite code") {
+                throw OAuthError.invalidInviteCode(message)
+            }
+
+            // Clear pending state on other errors
+            pendingGoogleState = nil
             throw OAuthError.serverError(message)
         }
 
         // Extract tokens from callback URL (backend proxy flow)
         guard let userId = components.queryItems?.first(where: { $0.name == "user_id" })?.value,
               let token = components.queryItems?.first(where: { $0.name == "token" })?.value else {
+            pendingGoogleState = nil
             throw OAuthError.invalidCallback
         }
+
+        // Success - clear pending state
+        pendingGoogleState = nil
 
         let refreshToken = components.queryItems?.first(where: { $0.name == "refresh_token" })?.value
         let expiresInString = components.queryItems?.first(where: { $0.name == "expires_in" })?.value
@@ -194,11 +249,47 @@ class OAuthService: NSObject {
         )
     }
 
+    /// Retry Google Sign-In with invite code
+    /// Note: Google flow requires re-authentication, cannot reuse previous session
+    /// - Parameter inviteCode: Invite code for new user registration
+    /// - Returns: OAuth callback response with tokens
+    @MainActor
+    func retryGoogleSignInWithInviteCode(_ inviteCode: String) async throws -> OAuthCallbackResponse {
+        return try await signInWithGoogle(inviteCode: inviteCode)
+    }
+
     // MARK: - Apple Sign-In (Native flow)
 
     /// Perform Apple Sign-In using native AuthenticationServices
+    /// - Parameter inviteCode: Optional invite code for new user registration
+    /// - Returns: OAuth callback response with tokens
+    /// - Throws: `OAuthError.inviteCodeRequired` if new user without invite code
     @MainActor
-    func signInWithApple() async throws -> OAuthCallbackResponse {
+    func signInWithApple(inviteCode: String? = nil) async throws -> OAuthCallbackResponse {
+        // If we have pending credentials, use them (retry with invite code)
+        if let pending = pendingAppleCredentials {
+            do {
+                let response = try await completeAppleSignIn(
+                    authorizationCode: pending.authorizationCode,
+                    identityToken: pending.identityToken,
+                    userIdentifier: pending.userIdentifier,
+                    email: pending.email,
+                    fullName: pending.fullName,
+                    inviteCode: inviteCode
+                )
+                clearPendingCredentials()
+                return response
+            } catch {
+                // If it fails again with invite code required, keep credentials
+                if let oauthError = error as? OAuthError, oauthError.requiresInviteCode {
+                    throw error
+                }
+                // Other errors - clear credentials
+                clearPendingCredentials()
+                throw error
+            }
+        }
+
         // 1. Request Apple authorization
         let authorization = try await requestAppleAuthorization()
 
@@ -223,13 +314,39 @@ class OAuthService: NSObject {
         let email = appleIDCredential.email
 
         // 5. Exchange with backend
-        return try await completeAppleSignIn(
-            authorizationCode: authorizationCode,
-            identityToken: identityToken,
-            userIdentifier: appleIDCredential.user,
-            email: email,
-            fullName: fullName
-        )
+        do {
+            return try await completeAppleSignIn(
+                authorizationCode: authorizationCode,
+                identityToken: identityToken,
+                userIdentifier: appleIDCredential.user,
+                email: email,
+                fullName: fullName,
+                inviteCode: inviteCode
+            )
+        } catch let error as OAuthError {
+            // If invite code required, store credentials for retry
+            if error.requiresInviteCode {
+                pendingAppleCredentials = PendingAppleCredentials(
+                    authorizationCode: authorizationCode,
+                    identityToken: identityToken,
+                    userIdentifier: appleIDCredential.user,
+                    email: email,
+                    fullName: fullName
+                )
+            }
+            throw error
+        }
+    }
+
+    /// Retry Apple Sign-In with invite code (uses stored credentials)
+    /// - Parameter inviteCode: Invite code for new user registration
+    /// - Returns: OAuth callback response with tokens
+    @MainActor
+    func retryAppleSignInWithInviteCode(_ inviteCode: String) async throws -> OAuthCallbackResponse {
+        guard pendingAppleCredentials != nil else {
+            throw OAuthError.invalidCallback
+        }
+        return try await signInWithApple(inviteCode: inviteCode)
     }
 
     /// Request Apple authorization using ASAuthorizationController
@@ -250,12 +367,22 @@ class OAuthService: NSObject {
     }
 
     /// Complete Apple Sign-In by exchanging credentials with backend
+    /// - Parameters:
+    ///   - authorizationCode: Authorization code from Apple
+    ///   - identityToken: Identity token from Apple
+    ///   - userIdentifier: Unique user identifier from Apple
+    ///   - email: User's email (only available on first sign-in)
+    ///   - fullName: User's full name (only available on first sign-in)
+    ///   - inviteCode: Optional invite code for new user registration
+    /// - Returns: OAuth callback response with tokens
+    /// - Throws: `OAuthError.inviteCodeRequired` if new user without invite code
     private func completeAppleSignIn(
         authorizationCode: String,
         identityToken: String,
         userIdentifier: String,
         email: String?,
-        fullName: PersonNameComponents?
+        fullName: PersonNameComponents?,
+        inviteCode: String? = nil
     ) async throws -> OAuthCallbackResponse {
         let url = URL(string: "\(APIConfig.current.baseURL)/api/v2/auth/oauth/apple/native")!
         var request = URLRequest(url: url)
@@ -285,6 +412,11 @@ class OAuthService: NSObject {
             }
         }
 
+        // Add invite code if provided
+        if let inviteCode = inviteCode, !inviteCode.isEmpty {
+            body["invite_code"] = inviteCode
+        }
+
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -294,13 +426,31 @@ class OAuthService: NSObject {
         }
 
         if httpResponse.statusCode != 200 {
-            if let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
-                throw OAuthError.serverError(errorResponse.message ?? "Unknown error")
-            }
-            throw OAuthError.callbackFailed
+            // Parse error response and detect INVITE_CODE_REQUIRED
+            throw parseOAuthError(from: data, statusCode: httpResponse.statusCode)
         }
 
         return try JSONDecoder().decode(OAuthCallbackResponse.self, from: data)
+    }
+
+    /// Parse OAuth error from backend response
+    private func parseOAuthError(from data: Data, statusCode: Int) -> OAuthError {
+        if let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
+            let message = errorResponse.message ?? errorResponse.error ?? "Unknown error"
+
+            // Check for specific error codes from backend
+            if message == "INVITE_CODE_REQUIRED" || message.contains("INVITE_CODE_REQUIRED") {
+                return .inviteCodeRequired
+            }
+
+            if message.lowercased().contains("invalid invite code") {
+                return .invalidInviteCode(message)
+            }
+
+            return .serverError(message)
+        }
+
+        return .callbackFailed
     }
 
     // MARK: - Web Authentication
@@ -418,6 +568,10 @@ enum OAuthError: LocalizedError {
     case userCancelled
     case webAuthFailed(String)
     case serverError(String)
+    /// New user requires invite code - frontend should prompt for invite code
+    case inviteCodeRequired
+    /// Invalid invite code provided
+    case invalidInviteCode(String)
 
     var errorDescription: String? {
         switch self {
@@ -435,7 +589,17 @@ enum OAuthError: LocalizedError {
             return "Web authentication failed: \(message)"
         case .serverError(let message):
             return message
+        case .inviteCodeRequired:
+            return "Invite code required for new account registration"
+        case .invalidInviteCode(let message):
+            return "Invalid invite code: \(message)"
         }
+    }
+
+    /// Check if this error requires invite code input
+    var requiresInviteCode: Bool {
+        if case .inviteCodeRequired = self { return true }
+        return false
     }
 }
 

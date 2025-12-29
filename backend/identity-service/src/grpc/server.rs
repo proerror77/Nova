@@ -1322,10 +1322,11 @@ impl AuthService for IdentityServiceServer {
 
         // For new users via OAuth, we require an invite code (Nova is invite-only)
         // The invite code is validated during user creation in OAuthService::upsert_user
+        let invite_code = req.invite_code.as_deref();
 
         let result = self
             .oauth
-            .complete_flow(&req.state, &req.code, &req.redirect_uri)
+            .complete_flow(&req.state, &req.code, &req.redirect_uri, invite_code)
             .await
             .map_err(to_status)?;
 
@@ -1452,6 +1453,9 @@ impl AuthService for IdentityServiceServer {
     ) -> std::result::Result<Response<AppleNativeSignInResponse>, Status> {
         let req = request.into_inner();
 
+        // For new users via OAuth, we require an invite code (Nova is invite-only)
+        let invite_code = req.invite_code.as_deref();
+
         let result = self
             .oauth
             .apple_native_sign_in(
@@ -1460,6 +1464,7 @@ impl AuthService for IdentityServiceServer {
                 req.email.as_deref(),
                 req.given_name.as_deref(),
                 req.family_name.as_deref(),
+                invite_code,
             )
             .await
             .map_err(to_status)?;
@@ -2445,6 +2450,13 @@ fn to_status(err: IdentityError) -> Status {
         }
         // Zitadel errors
         IdentityError::ZitadelError(msg) => Status::internal(format!("Zitadel error: {}", msg)),
+        // OAuth invite code errors
+        IdentityError::InviteCodeRequired => {
+            Status::failed_precondition("INVITE_CODE_REQUIRED")
+        }
+        IdentityError::InvalidInviteCode(msg) => {
+            Status::invalid_argument(format!("Invalid invite code: {}", msg))
+        }
     }
 }
 

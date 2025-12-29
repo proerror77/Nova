@@ -480,6 +480,16 @@ struct LoginView: View {
         do {
             let _ = try await authManager.loginWithGoogle()
             // Success - AuthenticationManager will update isAuthenticated
+        } catch let error as OAuthError {
+            // Check for invite code required
+            if error.requiresInviteCode {
+                // Navigate to invite code page - SSO will retry after validation
+                currentPage = .inviteCode
+            } else if case .userCancelled = error {
+                // User cancelled, no error message needed
+            } else {
+                errorMessage = error.localizedDescription
+            }
         } catch {
             // Check if user cancelled (error description contains "cancelled")
             let errorDesc = error.localizedDescription.lowercased()
@@ -500,6 +510,16 @@ struct LoginView: View {
         do {
             let _ = try await authManager.loginWithApple()
             // Success - AuthenticationManager will update isAuthenticated
+        } catch let error as OAuthError {
+            // Check for invite code required
+            if error.requiresInviteCode {
+                // Navigate to invite code page - SSO will retry after validation
+                currentPage = .inviteCode
+            } else if case .userCancelled = error {
+                // User cancelled, no error message needed
+            } else {
+                errorMessage = error.localizedDescription
+            }
         } catch {
             // Check if user cancelled
             let errorDesc = error.localizedDescription.lowercased()

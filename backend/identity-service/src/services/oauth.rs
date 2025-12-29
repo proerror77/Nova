@@ -93,6 +93,17 @@ pub struct OAuthCallbackResult {
     pub is_new_user: bool,
 }
 
+/// OAuth user check result (before invite code validation)
+#[derive(Debug)]
+pub struct OAuthUserCheckResult {
+    /// Whether this would be a new user
+    pub is_new_user: bool,
+    /// Existing user if found
+    pub existing_user: Option<User>,
+    /// OAuth user info from provider
+    pub oauth_user: OAuthUserInfo,
+}
+
 impl OAuthService {
     pub fn new(
         config: OAuthSettings,
@@ -156,15 +167,21 @@ impl OAuthService {
     /// * `state` - State token from authorization URL
     /// * `code` - Authorization code from provider
     /// * `redirect_uri` - Same redirect URI used in start_flow
+    /// * `invite_code` - Optional invite code for new user registration
     ///
     /// ## Returns
     ///
     /// User record (created or existing) and flag indicating if user is new
+    ///
+    /// ## Errors
+    ///
+    /// Returns `InviteCodeRequired` if this would create a new user but no invite code provided
     pub async fn complete_flow(
         &self,
         state: &str,
         code: &str,
         redirect_uri: &str,
+        invite_code: Option<&str>,
     ) -> Result<OAuthCallbackResult> {
         // Verify and consume state token
         let state_key = format!("nova:oauth:state:{}", state);
@@ -202,8 +219,8 @@ impl OAuthService {
             OAuthProvider::Apple => self.exchange_apple(code, redirect_uri).await?,
         };
 
-        // Create or link user
-        let (user, is_new_user) = self.upsert_user(oauth_user, provider).await?;
+        // Create or link user (with invite code validation for new users)
+        let (user, is_new_user) = self.upsert_user(oauth_user, provider, invite_code).await?;
 
         Ok(OAuthCallbackResult { user, is_new_user })
     }
@@ -359,6 +376,10 @@ impl OAuthService {
     /// - The token was issued for our app (audience = client_id)
     /// - The token is from Apple (issuer = https://appleid.apple.com)
     /// - The token has not expired
+    ///
+    /// ## Errors
+    ///
+    /// Returns `InviteCodeRequired` if this would create a new user but no invite code provided
     pub async fn apple_native_sign_in(
         &self,
         identity_token: &str,
@@ -366,6 +387,7 @@ impl OAuthService {
         email: Option<&str>,
         given_name: Option<&str>,
         family_name: Option<&str>,
+        invite_code: Option<&str>,
     ) -> Result<OAuthCallbackResult> {
         let client_id = self.apple_client_id()?.clone();
 
@@ -409,8 +431,8 @@ impl OAuthService {
             expires_at: None,
         };
 
-        // 4. Create or link user
-        let (user, is_new_user) = self.upsert_user(oauth_user, OAuthProvider::Apple).await?;
+        // 4. Create or link user (with invite code validation for new users)
+        let (user, is_new_user) = self.upsert_user(oauth_user, OAuthProvider::Apple, invite_code).await?;
 
         info!(
             user_id = %user.id,
@@ -425,8 +447,9 @@ impl OAuthService {
         &self,
         oauth_user: OAuthUserInfo,
         provider: OAuthProvider,
+        invite_code: Option<&str>,
     ) -> Result<(User, bool)> {
-        // Check if OAuth connection exists
+        // Check if OAuth connection exists (existing user login)
         if let Some(conn) = crate::db::oauth::find_by_provider(
             &self.db,
             provider.as_str(),
@@ -454,15 +477,40 @@ impl OAuthService {
         }
 
         // Check if user exists by email
-        let user = if !oauth_user.email.is_empty() {
+        let existing_user = if !oauth_user.email.is_empty() {
             crate::db::users::find_by_email(&self.db, &oauth_user.email).await?
         } else {
             None
         };
 
-        let (user_id, is_new_user) = if let Some(existing_user) = user {
-            (existing_user.id, false)
+        let (user_id, is_new_user) = if let Some(existing) = existing_user {
+            // User exists by email - link OAuth (no invite code needed)
+            (existing.id, false)
         } else {
+            // NEW USER - Require invite code (Nova is invite-only)
+            let code = invite_code.ok_or_else(|| {
+                info!(
+                    provider = provider.as_str(),
+                    email = %oauth_user.email,
+                    "OAuth sign-in blocked: new user without invite code"
+                );
+                IdentityError::InviteCodeRequired
+            })?;
+
+            // Validate invite code
+            let validation = crate::db::invitations::validate_invite(&self.db, code).await?;
+            if !validation.is_valid {
+                let error_msg = validation.error.unwrap_or_else(|| "Invalid invite code".into());
+                warn!(
+                    provider = provider.as_str(),
+                    email = %oauth_user.email,
+                    invite_code = %code,
+                    error = %error_msg,
+                    "OAuth sign-in blocked: invalid invite code"
+                );
+                return Err(IdentityError::InvalidInviteCode(error_msg));
+            }
+
             // Create new user
             let username = self.derive_username(&oauth_user.email);
             let new_user = crate::db::users::create_oauth_user(
@@ -474,7 +522,28 @@ impl OAuthService {
             )
             .await?;
 
-            info!(user_id = %new_user.id, provider = provider.as_str(), "New user created via OAuth");
+            // Redeem the invite code (triggers referral chain via DB trigger)
+            if let Err(e) = crate::db::invitations::redeem_invite(&self.db, code, new_user.id).await {
+                warn!(
+                    user_id = %new_user.id,
+                    invite_code = %code,
+                    error = %e,
+                    "Failed to redeem invite code after user creation (non-fatal)"
+                );
+            } else {
+                info!(
+                    user_id = %new_user.id,
+                    invite_code = %code,
+                    "Invite code redeemed successfully for OAuth user"
+                );
+            }
+
+            info!(
+                user_id = %new_user.id,
+                provider = provider.as_str(),
+                invite_code = %code,
+                "New user created via OAuth with invite code"
+            );
             (new_user.id, true)
         };
 
@@ -528,14 +597,16 @@ impl OAuthService {
 
 // ===== Helper Structures =====
 
-struct OAuthUserInfo {
-    provider_user_id: String,
-    email: String,
-    name: Option<String>,
-    picture: Option<String>,
-    access_token: String,
-    refresh_token: Option<String>,
-    expires_at: Option<DateTime<Utc>>,
+/// OAuth user info from provider
+#[derive(Debug, Clone)]
+pub struct OAuthUserInfo {
+    pub provider_user_id: String,
+    pub email: String,
+    pub name: Option<String>,
+    pub picture: Option<String>,
+    pub access_token: String,
+    pub refresh_token: Option<String>,
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 // ===== Provider Response Types =====
