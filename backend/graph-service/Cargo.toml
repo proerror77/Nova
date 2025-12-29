@@ -68,7 +68,7 @@ nova-cache = { path = "../libs/nova-cache" }
 redis-utils = { path = "../libs/redis-utils" }
 
 # Random for cache jitter
-rand = "0.8"
+rand = "0.9"
 
 [build-dependencies]
 tonic-build = "0.12"
