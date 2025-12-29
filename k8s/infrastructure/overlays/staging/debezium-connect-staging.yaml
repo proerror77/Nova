@@ -175,6 +175,10 @@ metadata:
   labels:
     app: kafka-connect
     component: cdc-init
+  annotations:
+    # ArgoCD hook: Run only on first sync, delete before creating new one
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
   ttlSecondsAfterFinished: 3600
   backoffLimit: 10
@@ -275,7 +279,7 @@ spec:
           if curl -sf "${CONNECT_URL}/connectors/${CONNECTOR_NAME}" > /dev/null 2>&1; then
             echo "  Connector ${CONNECTOR_NAME} already exists, skipping..."
           else
-            curl -sf -X POST "${CONNECT_URL}/connectors" \
+            curl -s -X POST "${CONNECT_URL}/connectors" \
               -H "Content-Type: application/json" \
               -d '{
                 "name": "nova-content-cdc",
@@ -333,7 +337,7 @@ spec:
           if curl -sf "${CONNECT_URL}/connectors/${CONNECTOR_NAME}" > /dev/null 2>&1; then
             echo "  Connector ${CONNECTOR_NAME} already exists, skipping..."
           else
-            curl -sf -X POST "${CONNECT_URL}/connectors" \
+            curl -s -X POST "${CONNECT_URL}/connectors" \
               -H "Content-Type: application/json" \
               -d '{
                 "name": "nova-graph-cdc",
@@ -395,7 +399,7 @@ spec:
           if curl -sf "${CONNECT_URL}/connectors/${CONNECTOR_NAME}" > /dev/null 2>&1; then
             echo "  Connector ${CONNECTOR_NAME} already exists, skipping..."
           else
-            curl -sf -X POST "${CONNECT_URL}/connectors" \
+            curl -s -X POST "${CONNECT_URL}/connectors" \
               -H "Content-Type: application/json" \
               -d '{
                 "name": "nova-auth-cdc",
