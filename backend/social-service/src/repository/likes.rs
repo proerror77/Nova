@@ -15,7 +15,11 @@ impl LikeRepository {
     }
 
     /// Create a new like (idempotent - returns success if already exists)
-    pub async fn create_like(&self, user_id: Uuid, post_id: Uuid) -> Result<Like> {
+    /// Returns (Like, was_created) where was_created is true if this is a new like
+    pub async fn create_like(&self, user_id: Uuid, post_id: Uuid) -> Result<(Like, bool)> {
+        // First check if already liked
+        let already_liked = self.check_user_liked(user_id, post_id).await?;
+
         let like = sqlx::query_as::<_, Like>(
             r#"
             INSERT INTO likes (user_id, post_id)
@@ -30,7 +34,8 @@ impl LikeRepository {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(like)
+        // was_created is true only if it didn't exist before
+        Ok((like, !already_liked))
     }
 
     /// Delete a like (idempotent - returns success if doesn't exist)
