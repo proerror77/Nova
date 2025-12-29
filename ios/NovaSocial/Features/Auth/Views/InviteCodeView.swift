@@ -13,67 +13,101 @@ struct InviteCodeView: View {
     private var isInviteCodeValid: Bool { inviteCode.count == 8 }
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                // Background
-                Image("Registration-background")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .clipped()
-                    .ignoresSafeArea()
+        ZStack {
+            // Background - Linear Gradient
+            LinearGradient(
+                colors: [
+                    Color(red: 0.027, green: 0.106, blue: 0.212),  // #071B36
+                    Color(red: 0.271, green: 0.310, blue: 0.388)   // #454F63
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
 
-                Color.black.opacity(0.4).ignoresSafeArea()
-
-                // Content
-                VStack(spacing: 0) {
-                    logoSection
-                    Spacer().frame(height: 40)
-                    titleSection
-                    Spacer().frame(height: 28)
-                    inviteCodeInput.padding(.horizontal, 16)
-                    errorMessageView
-                    Spacer().frame(height: 24)
-                    doneButton.padding(.horizontal, 16)
-                    Spacer().frame(height: 20)
-                    goBackButton
-                }
-                .offset(y: contentVerticalOffset)
+            // Content
+            VStack(spacing: 0) {
+                Spacer().frame(height: 167.h)
+                logoSection
+                Spacer().frame(height: 20.h)  // 167 + 52 + 20 = 239
+                titleSection
+                Spacer().frame(height: 30.h)  // 351 - 287 - 34(副标题高度) ≈ 30
+                inviteCodeInput.padding(.horizontal, 37.w)
+                errorMessageView
+                Spacer().frame(height: 24.h)  // 423 - 351 - 48 = 24
+                doneButton.padding(.horizontal, 37.w)
+                Spacer()
             }
-            .contentShape(Rectangle())
-            .onTapGesture { isInputFocused = false }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Back Button - 左上角
+            VStack {
+                HStack {
+                    Button(action: { currentPage = .login }) {
+                        Image("back-white")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 24.s, height: 24.s)
+                    }
+                    .padding(.leading, 16.w)
+                    .padding(.top, 56.h)
+                    Spacer()
+                }
+                Spacer()
+            }
+
+            // Bottom Notice - 底部提示
+            VStack {
+                Spacer()
+                HStack(spacing: 6.s) {
+                    Image("NoticeW")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 12.s, height: 12.s)
+                    Text("Join the waitlist and get notified when access opens.")
+                        .font(.system(size: 12.f))
+                        .tracking(0.24)
+                        .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64))
+                        .lineLimit(1)
+                }
+                .padding(.bottom, 35.h)
+            }
         }
+        .contentShape(Rectangle())
+        .onTapGesture { isInputFocused = false }
+        .ignoresSafeArea()
         .ignoresSafeArea(.keyboard)
     }
 
     // MARK: - Components
 
     private var logoSection: some View {
-        Image("Logo-R")
-            .resizable()
-            .scaledToFit()
-            .frame(height: 90)
-            .colorInvert()
-            .brightness(1)
+        ZStack {
+            Image("Login-Icon")
+                .resizable()
+                .scaledToFit()
+        }
+        .frame(width: 84.w, height: 52.h)
     }
 
     private var titleSection: some View {
-        VStack(spacing: 16) {
-            Text("Enter invite code")
-                .font(Typography.semibold24)
-                .foregroundColor(.white)
+        VStack(spacing: 19.h) {  // 287 - 239 - 29(标题高度) ≈ 19
+            Text("Icered is invite only")
+                .font(.system(size: 24.f, weight: .semibold))
+                .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
 
             Text("lf you have an invite code\nEnter it below.")
-                .font(Typography.light14)
+                .font(.system(size: 14.f))
+                .tracking(0.28)
                 .multilineTextAlignment(.center)
-                .foregroundColor(Color(white: 0.77))
+                .foregroundColor(Color(red: 0.75, green: 0.75, blue: 0.75))
         }
     }
 
     private var inviteCodeInput: some View {
         ZStack {
+            // 隐藏的输入框 - 保留功能
             TextField("", text: $inviteCode)
-                .font(Typography.regular16)
+                .font(.system(size: 16.f, weight: .light))
                 .foregroundColor(.clear)
                 .accentColor(.clear)
                 .multilineTextAlignment(.center)
@@ -84,23 +118,25 @@ struct InviteCodeView: View {
                     inviteCode = String(newValue.prefix(8)).uppercased()
                 }
 
-            HStack(spacing: 0) {
-                Text(inviteCode)
-                    .font(Typography.regular16)
+            // 显示的文字
+            HStack(spacing: 8.s) {
+                Text(inviteCode.isEmpty ? "—" : "\(inviteCode)\(inviteCode.count < 8 ? "—" : "")")
+                    .font(.system(size: 16.f, weight: .light))
                     .tracking(4)
-                    .foregroundColor(Color(white: 0.97))
-                if inviteCode.count < 8 {
-                    Text("—")
-                        .font(Typography.regular16)
-                        .foregroundColor(Color(white: 0.97))
-                }
+                    .lineSpacing(20)
+                    .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
             }
             .allowsHitTesting(false)
         }
-        .frame(maxWidth: .infinity, minHeight: 46)
-        .background(Color(white: 0.27).opacity(0.45))
-        .cornerRadius(43)
-        .overlay(RoundedRectangle(cornerRadius: 43).stroke(Color(white: 0.53), lineWidth: 0.5))
+        .padding(EdgeInsets(top: 13.h, leading: 114.w, bottom: 13.h, trailing: 114.w))
+        .frame(width: 300.w, height: 48.h)
+        .background(Color(red: 0.85, green: 0.85, blue: 0.85).opacity(0.25))
+        .cornerRadius(43.s)
+        .overlay(
+            RoundedRectangle(cornerRadius: 43.s)
+                .inset(by: 0.50)
+                .stroke(.white, lineWidth: 0.50)
+        )
         .onTapGesture { isInputFocused = true }
     }
 
@@ -111,37 +147,29 @@ struct InviteCodeView: View {
                 .font(Typography.regular12)
                 .foregroundColor(.red)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-                .padding(.top, 12)
+                .padding(.horizontal, 40.w)
+                .padding(.top, 12.h)
         }
     }
 
     private var doneButton: some View {
         Button(action: { Task { await validateInviteCode() } }) {
-            HStack(spacing: 8) {
+            HStack(spacing: 8.s) {
                 if isLoading {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .black))
                         .scaleEffect(0.9)
                 }
-                Text("Done")
-                    .font(Typography.semibold16)
+                Text("Submit")
+                    .font(.system(size: 16.f, weight: .heavy))
+                    .tracking(0.32)
                     .foregroundColor(.black)
             }
-            .frame(maxWidth: .infinity, minHeight: 46)
+            .frame(width: 300.w, height: 48.h)
             .background(Color.white.opacity(isInviteCodeValid ? 1 : 0.5))
-            .cornerRadius(43)
+            .cornerRadius(43.s)
         }
         .disabled(!isInviteCodeValid || isLoading)
-    }
-
-    private var goBackButton: some View {
-        Button(action: { currentPage = .login }) {
-            Text("Go back")
-                .font(Typography.bold12)
-                .underline()
-                .foregroundColor(.white)
-        }
     }
 
     // MARK: - Validation
