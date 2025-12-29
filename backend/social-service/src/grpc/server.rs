@@ -53,25 +53,17 @@ impl SocialService for SocialServiceImpl {
         let post_id = Uuid::parse_str(&req.post_id)
             .map_err(|_| Status::invalid_argument("Invalid post_id"))?;
 
-        // Create like in database - returns (Like, was_created)
-        let (_like, was_created) = self.like_repo
+        // Create like in database
+        let (_like, _was_created) = self.like_repo
             .create_like(user_id, post_id)
             .await
             .map_err(|e| Status::internal(format!("Failed to create like: {}", e)))?;
 
-        // Only increment counter if this is a NEW like
-        let like_count = if was_created {
-            self.counter_service
-                .increment_like_count(post_id)
-                .await
-                .unwrap_or(0)
-        } else {
-            // Already liked - just get current count
-            self.counter_service
-                .get_like_count(post_id)
-                .await
-                .unwrap_or(0)
-        };
+        // Read accurate count from PostgreSQL (source of truth)
+        let like_count = self.counter_service
+            .refresh_like_count(post_id)
+            .await
+            .unwrap_or(0);
 
         Ok(Response::new(CreateLikeResponse {
             success: true,
@@ -90,25 +82,17 @@ impl SocialService for SocialServiceImpl {
         let post_id = Uuid::parse_str(&req.post_id)
             .map_err(|_| Status::invalid_argument("Invalid post_id"))?;
 
-        // Delete like from database - returns true if actually deleted
-        let was_deleted = self.like_repo
+        // Delete like from database
+        let _was_deleted = self.like_repo
             .delete_like(user_id, post_id)
             .await
             .map_err(|e| Status::internal(format!("Failed to delete like: {}", e)))?;
 
-        // Only decrement counter if a like was actually deleted
-        let like_count = if was_deleted {
-            self.counter_service
-                .decrement_like_count(post_id)
-                .await
-                .unwrap_or(0)
-        } else {
-            // Nothing was deleted - just get current count
-            self.counter_service
-                .get_like_count(post_id)
-                .await
-                .unwrap_or(0)
-        };
+        // Read accurate count from PostgreSQL (source of truth)
+        let like_count = self.counter_service
+            .refresh_like_count(post_id)
+            .await
+            .unwrap_or(0);
 
         Ok(Response::new(DeleteLikeResponse {
             success: true,

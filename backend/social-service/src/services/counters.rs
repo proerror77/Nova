@@ -530,6 +530,55 @@ impl CounterService {
         Ok(())
     }
 
+    /// Refresh like count from PostgreSQL and update Redis cache
+    /// This is the preferred method after like/unlike operations
+    /// Returns the accurate count from source of truth (PostgreSQL)
+    pub async fn refresh_like_count(&self, post_id: Uuid) -> Result<i64> {
+        // Read from PostgreSQL (source of truth)
+        let count = self.load_like_count_from_pg(post_id).await?;
+        
+        // Update Redis cache (fire and forget, don't fail if Redis is down)
+        if let Err(e) = self.set_like_count(post_id, count).await {
+            tracing::warn!(
+                post_id = %post_id,
+                error = ?e,
+                "Failed to update Redis cache for like count"
+            );
+        }
+        
+        Ok(count)
+    }
+
+    /// Refresh comment count from PostgreSQL and update Redis cache
+    pub async fn refresh_comment_count(&self, post_id: Uuid) -> Result<i64> {
+        let count = self.load_comment_count_from_pg(post_id).await?;
+        
+        if let Err(e) = self.set_comment_count(post_id, count).await {
+            tracing::warn!(
+                post_id = %post_id,
+                error = ?e,
+                "Failed to update Redis cache for comment count"
+            );
+        }
+        
+        Ok(count)
+    }
+
+    /// Refresh share count from PostgreSQL and update Redis cache
+    pub async fn refresh_share_count(&self, post_id: Uuid) -> Result<i64> {
+        let count = self.load_share_count_from_pg(post_id).await?;
+        
+        if let Err(e) = self.set_share_count(post_id, count).await {
+            tracing::warn!(
+                post_id = %post_id,
+                error = ?e,
+                "Failed to update Redis cache for share count"
+            );
+        }
+        
+        Ok(count)
+    }
+
     /// Batch get all stats for multiple posts (legacy API)
     pub async fn batch_get_post_stats(
         &self,
