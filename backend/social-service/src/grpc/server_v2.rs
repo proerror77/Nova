@@ -288,24 +288,34 @@ impl SocialService for SocialServiceImpl {
         let post_id = parse_uuid(&req.post_id, "post_id")?;
 
         let like_repo = self.like_repo();
-        like_repo
+        let was_deleted = like_repo
             .delete_like(user_id, post_id)
             .await
             .map_err(|e| Status::internal(format!("Failed to delete like: {}", e)))?;
 
-        let like_count = match self
-            .state
-            .counter_service
-            .decrement_like_count(post_id)
-            .await
-        {
-            Ok(v) => v,
-            Err(_) => self
+        // Only decrement counter if a like was actually deleted
+        let like_count = if was_deleted {
+            match self
                 .state
+                .counter_service
+                .decrement_like_count(post_id)
+                .await
+            {
+                Ok(v) => v,
+                Err(_) => self
+                    .state
+                    .counter_service
+                    .get_like_count(post_id)
+                    .await
+                    .unwrap_or(0),
+            }
+        } else {
+            // Nothing was deleted - just return current count
+            self.state
                 .counter_service
                 .get_like_count(post_id)
                 .await
-                .unwrap_or(0),
+                .unwrap_or(0)
         };
 
         Ok(Response::new(DeleteLikeResponse {

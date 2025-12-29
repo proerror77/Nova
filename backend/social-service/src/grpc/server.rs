@@ -90,18 +90,25 @@ impl SocialService for SocialServiceImpl {
         let post_id = Uuid::parse_str(&req.post_id)
             .map_err(|_| Status::invalid_argument("Invalid post_id"))?;
 
-        // Delete like from database (idempotent)
-        self.like_repo
+        // Delete like from database - returns true if actually deleted
+        let was_deleted = self.like_repo
             .delete_like(user_id, post_id)
             .await
             .map_err(|e| Status::internal(format!("Failed to delete like: {}", e)))?;
 
-        // Decrement counter in Redis
-        let like_count = self
-            .counter_service
-            .decrement_like_count(post_id)
-            .await
-            .unwrap_or(0);
+        // Only decrement counter if a like was actually deleted
+        let like_count = if was_deleted {
+            self.counter_service
+                .decrement_like_count(post_id)
+                .await
+                .unwrap_or(0)
+        } else {
+            // Nothing was deleted - just get current count
+            self.counter_service
+                .get_like_count(post_id)
+                .await
+                .unwrap_or(0)
+        };
 
         Ok(Response::new(DeleteLikeResponse {
             success: true,
