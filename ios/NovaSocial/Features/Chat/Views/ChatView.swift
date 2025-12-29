@@ -622,92 +622,94 @@ struct ChatView: View {
     // MARK: - Attachment Options View
 
     private var attachmentOptionsView: some View {
-        HStack(spacing: 20) {
-            // Photo picker
-            PhotosPicker(selection: $viewModel.selectedPhotoItem, matching: .images) {
-                VStack(spacing: 4) {
-                    Image(systemName: "photo.on.rectangle")
-                        .font(.system(size: 22))
-                    Text("Album")
-                        .font(.system(size: 11))
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 16) {
+                // Photo picker
+                PhotosPicker(selection: $viewModel.selectedPhotoItem, matching: .images) {
+                    VStack(spacing: 4) {
+                        Image(systemName: "photo.on.rectangle")
+                            .font(.system(size: 22))
+                        Text("Album")
+                            .font(.system(size: 11))
+                    }
+                    .foregroundColor(DesignTokens.textSecondary)
+                    .frame(width: 56, height: 56)
                 }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60, height: 60)
-            }
 
-            // Camera
-            Button(action: {
-                viewModel.checkCameraPermissionAndOpen()
-            }) {
-                VStack(spacing: 4) {
-                    Image(systemName: "camera")
-                        .font(.system(size: 22))
-                    Text("Camera")
-                        .font(.system(size: 11))
+                // Camera
+                Button(action: {
+                    viewModel.checkCameraPermissionAndOpen()
+                }) {
+                    VStack(spacing: 4) {
+                        Image(systemName: "camera")
+                            .font(.system(size: 22))
+                        Text("Camera")
+                            .font(.system(size: 11))
+                    }
+                    .foregroundColor(DesignTokens.textSecondary)
+                    .frame(width: 56, height: 56)
                 }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60, height: 60)
-            }
 
-            // Video call
-            Button(action: {
-                viewModel.showVideoCall = true
-            }) {
-                VStack(spacing: 4) {
-                    Image(systemName: "video")
-                        .font(.system(size: 22))
-                    Text("Video")
-                        .font(.system(size: 11))
+                // Video call
+                Button(action: {
+                    viewModel.showVideoCall = true
+                }) {
+                    VStack(spacing: 4) {
+                        Image(systemName: "video")
+                            .font(.system(size: 22))
+                        Text("Video")
+                            .font(.system(size: 11))
+                    }
+                    .foregroundColor(DesignTokens.textSecondary)
+                    .frame(width: 56, height: 56)
                 }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60, height: 60)
-            }
 
-            // Voice call
-            Button(action: {
-                viewModel.showVoiceCall = true
-            }) {
-                VStack(spacing: 4) {
-                    Image(systemName: "phone")
-                        .font(.system(size: 22))
-                    Text("Call")
-                        .font(.system(size: 11))
+                // Voice call
+                Button(action: {
+                    viewModel.showVoiceCall = true
+                }) {
+                    VStack(spacing: 4) {
+                        Image(systemName: "phone")
+                            .font(.system(size: 22))
+                        Text("Call")
+                            .font(.system(size: 11))
+                    }
+                    .foregroundColor(DesignTokens.textSecondary)
+                    .frame(width: 56, height: 56)
                 }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60, height: 60)
-            }
 
-            // Location
-            Button(action: {
-                locationManager.requestLocation()
-                viewModel.showLocationAlert = true
-            }) {
-                VStack(spacing: 4) {
-                    Image(systemName: "location")
-                        .font(.system(size: 22))
-                    Text("Location")
-                        .font(.system(size: 11))
+                // Location
+                Button(action: {
+                    locationManager.requestLocation()
+                    viewModel.showLocationAlert = true
+                }) {
+                    VStack(spacing: 4) {
+                        Image(systemName: "location")
+                            .font(.system(size: 22))
+                        Text("Location")
+                            .font(.system(size: 11))
+                    }
+                    .foregroundColor(DesignTokens.textSecondary)
+                    .frame(width: 56, height: 56)
                 }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60, height: 60)
-            }
 
-            // File picker
-            Button(action: {
-                viewModel.showFilePicker = true
-            }) {
-                VStack(spacing: 4) {
-                    Image(systemName: "doc")
-                        .font(.system(size: 22))
-                    Text("File")
-                        .font(.system(size: 11))
+                // File picker
+                Button(action: {
+                    viewModel.showFilePicker = true
+                }) {
+                    VStack(spacing: 4) {
+                        Image(systemName: "doc")
+                            .font(.system(size: 22))
+                        Text("File")
+                            .font(.system(size: 11))
+                    }
+                    .foregroundColor(DesignTokens.textSecondary)
+                    .frame(width: 56, height: 56)
                 }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60, height: 60)
             }
+            .padding(.horizontal, 16)
         }
         .padding(.vertical, 12)
-        .padding(.horizontal, 16)
         .background(DesignTokens.surface)
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
