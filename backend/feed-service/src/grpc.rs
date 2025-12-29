@@ -37,7 +37,7 @@ use crate::cache::{CachedFeed, CachedFeedPost, FeedCache};
 use base64::{engine::general_purpose, Engine};
 use chrono::Utc;
 use grpc_clients::{config::GrpcConfig, GrpcClientPool};
-use grpc_clients::nova::social_service::v2::BatchGetLikeStatusRequest;
+use grpc_clients::nova::social_service::v2::{BatchGetCountsRequest, BatchGetLikeStatusRequest, PostCounts};
 use grpc_metrics::layer::RequestGuard;
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -174,31 +174,39 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
                         "Cache hit for user {} with algorithm {}",
                         user_id, algorithm
                     );
-                    // Fetch like status for the user (user-specific, cannot be cached)
+                    // Fetch real-time data (cannot be cached)
                     let post_ids: Vec<String> = cached.posts.iter().map(|p| p.id.clone()).collect();
-                    let like_statuses = fetch_like_statuses(&self.grpc_pool, &user_id, &post_ids).await;
+                    // Fetch like status and social counts in parallel
+                    let (like_statuses, social_counts) = tokio::join!(
+                        fetch_like_statuses(&self.grpc_pool, &user_id, &post_ids),
+                        fetch_social_counts(&self.grpc_pool, &post_ids)
+                    );
 
-                    // Return cached feed with real-time like status
+                    // Return cached feed with real-time like status and counts
                     guard.complete("0");
                     return Ok(Response::new(GetFeedResponse {
                         posts: cached
                             .posts
                             .iter()
-                            .map(|post| FeedPost {
-                                id: post.id.clone(),
-                                user_id: post.user_id.clone(),
-                                content: post.content.clone(),
-                                created_at: post.created_at,
-                                ranking_score: post.ranking_score,
-                                like_count: post.like_count,
-                                comment_count: post.comment_count,
-                                share_count: post.share_count,
-                                bookmark_count: post.bookmark_count,
-                                media_urls: post.media_urls.clone(),
-                                media_type: post.media_type.clone(),
-                                thumbnail_urls: post.thumbnail_urls.clone(),
-                                is_liked: like_statuses.get(&post.id).copied().unwrap_or(false),
-                                is_bookmarked: false, // TODO: implement bookmark status
+                            .map(|post| {
+                                let counts = social_counts.get(&post.id);
+                                FeedPost {
+                                    id: post.id.clone(),
+                                    user_id: post.user_id.clone(),
+                                    content: post.content.clone(),
+                                    created_at: post.created_at,
+                                    ranking_score: post.ranking_score,
+                                    // Use real-time counts, fallback to cached
+                                    like_count: counts.map(|c| c.like_count as u32).unwrap_or(post.like_count),
+                                    comment_count: counts.map(|c| c.comment_count as u32).unwrap_or(post.comment_count),
+                                    share_count: counts.map(|c| c.share_count as u32).unwrap_or(post.share_count),
+                                    bookmark_count: counts.map(|c| c.bookmark_count as u32).unwrap_or(post.bookmark_count),
+                                    media_urls: post.media_urls.clone(),
+                                    media_type: post.media_type.clone(),
+                                    thumbnail_urls: post.thumbnail_urls.clone(),
+                                    is_liked: like_statuses.get(&post.id).copied().unwrap_or(false),
+                                    is_bookmarked: false, // TODO: implement bookmark status
+                                }
                             })
                             .collect(),
                         next_cursor: cached.cursor.unwrap_or_default(),
@@ -894,6 +902,34 @@ async fn fetch_like_statuses(
         }
         Err(e) => {
             warn!("Failed to fetch like status (continuing with false): {}", e);
+            HashMap::new()
+        }
+    }
+}
+
+/// Fetch social counts (like_count, comment_count, etc.) for a batch of posts
+async fn fetch_social_counts(
+    grpc_pool: &GrpcClientPool,
+    post_ids: &[String],
+) -> HashMap<String, PostCounts> {
+    if post_ids.is_empty() {
+        return HashMap::new();
+    }
+
+    let mut social_client = grpc_pool.social();
+    match social_client
+        .batch_get_counts(BatchGetCountsRequest {
+            post_ids: post_ids.to_vec(),
+        })
+        .await
+    {
+        Ok(response) => {
+            let counts = response.into_inner().counts;
+            debug!("Fetched social counts for {} posts", counts.len());
+            counts
+        }
+        Err(e) => {
+            warn!("Failed to fetch social counts (continuing with cached): {}", e);
             HashMap::new()
         }
     }
