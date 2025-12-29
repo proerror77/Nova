@@ -50,6 +50,10 @@ struct ProfileFollowingView: View {
     @State private var showUserProfile = false
     @State private var selectedUserId: String? = nil
 
+    // MARK: - Error Feedback
+    @State private var showErrorAlert = false
+    @State private var errorAlertMessage = ""
+
     // MARK: - Services
     private let graphService = GraphService()
     private let userService = UserService.shared
@@ -123,6 +127,11 @@ struct ProfileFollowingView: View {
             if let userId = selectedUserId {
                 UserProfileView(showUserProfile: $showUserProfile, userId: userId)
             }
+        }
+        .alert("操作失敗", isPresented: $showErrorAlert) {
+            Button("確定", role: .cancel) { }
+        } message: {
+            Text(errorAlertMessage)
         }
     }
 
@@ -280,7 +289,20 @@ struct ProfileFollowingView: View {
 
     // MARK: - 关注/取消关注用户
     private func toggleFollow(user: FollowUser) async {
-        guard let currentUserId = authManager.currentUser?.id else { return }
+        #if DEBUG
+        print("[ProfileFollowing] toggleFollow called for user: \(user.username), isFollowedByMe: \(user.isFollowedByMe)")
+        #endif
+
+        guard let currentUserId = authManager.currentUser?.id else {
+            #if DEBUG
+            print("[ProfileFollowing] No current user ID found")
+            #endif
+            await MainActor.run {
+                errorAlertMessage = "請先登入"
+                showErrorAlert = true
+            }
+            return
+        }
 
         do {
             if user.isFollowedByMe {
@@ -291,7 +313,7 @@ struct ProfileFollowingView: View {
                 try await graphService.followUser(followerId: currentUserId, followeeId: user.id)
             }
 
-            // 更新本地状态
+            // 更新本地状态（不從列表移除，只切換按鈕狀態）
             await MainActor.run {
                 if let index = followingUsers.firstIndex(where: { $0.id == user.id }) {
                     followingUsers[index].isFollowedByMe.toggle()
@@ -301,17 +323,17 @@ struct ProfileFollowingView: View {
                 }
             }
 
-            // 如果取消关注，从 Following 列表中移除
-            if user.isFollowedByMe {
-                await MainActor.run {
-                    followingUsers.removeAll { $0.id == user.id }
-                }
-            }
-
+            #if DEBUG
+            print("[ProfileFollowing] Toggle follow succeeded for user: \(user.id)")
+            #endif
         } catch {
             #if DEBUG
             print("[ProfileFollowing] Failed to toggle follow: \(error)")
             #endif
+            await MainActor.run {
+                errorAlertMessage = "操作失敗，請稍後再試"
+                showErrorAlert = true
+            }
         }
     }
 
@@ -582,31 +604,35 @@ struct UserRowView: View {
 
             Spacer()
 
-            // 按钮区域
-            if showFollowButton && !user.isFollowedByMe {
-                // Follow Back 按钮
-                Button(action: onFollowTap) {
-                    Text("Follow back")
-                        .font(.system(size: 12))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Color(red: 0.87, green: 0.11, blue: 0.26))
-                        .cornerRadius(46)
-                }
-            } else {
-                // Following Button (已關注狀態)
+            // 按钮区域 - 根據關注狀態顯示不同按鈕
+            if user.isFollowedByMe {
+                // Following Button (已關注狀態) - 點擊可取消關注
                 Button(action: onFollowTap) {
                     Text("Following")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.black)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
+                        .background(Color.white)
                         .overlay(
                             RoundedRectangle(cornerRadius: 66)
                                 .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.66)
                         )
+                        .cornerRadius(66)
                 }
+                .buttonStyle(.plain)
+            } else {
+                // Follow Button (未關注狀態) - 點擊可關注
+                Button(action: onFollowTap) {
+                    Text("Follow")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color(red: 0.87, green: 0.11, blue: 0.26))
+                        .cornerRadius(46)
+                }
+                .buttonStyle(.plain)
             }
         }
     }
