@@ -260,14 +260,18 @@ final class NewPostViewModel {
                     vlmTags = result.tags
                     vlmChannelSuggestions = result.channels ?? []
 
-                    // Auto-select high confidence tags (>80%)
-                    for tag in result.tags where tag.confidence >= 0.8 {
+                    // Auto-select tags with confidence >= 60% (more aggressive)
+                    for tag in result.tags where tag.confidence >= 0.6 {
                         selectedVLMTags.insert(tag.tag)
                     }
 
-                    // Auto-suggest channels if none selected
-                    if selectedChannelIds.isEmpty, let topChannel = vlmChannelSuggestions.first {
-                        selectedChannelIds = [topChannel.id]
+                    // Auto-select top VLM channel suggestions (up to 3)
+                    if selectedChannelIds.isEmpty {
+                        let topChannels = vlmChannelSuggestions
+                            .filter { $0.confidence >= 0.5 }  // Only channels with >50% confidence
+                            .prefix(3)
+                            .map { $0.id }
+                        selectedChannelIds = Array(topChannels)
                     }
 
                     // Auto-fill location from photo metadata if not already set
@@ -276,6 +280,10 @@ final class NewPostViewModel {
                     }
 
                     isAnalyzingImage = false
+
+                    #if DEBUG
+                    print("[NewPostViewModel] Auto-selected \(selectedVLMTags.count) tags, \(selectedChannelIds.count) channels")
+                    #endif
                 }
 
                 #if DEBUG
@@ -462,6 +470,37 @@ final class NewPostViewModel {
 
     // MARK: - Post Submission
 
+    /// Build post content with auto-generated hashtags from VLM tags
+    private func buildPostContentWithHashtags() -> String {
+        var content = postText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Convert selected VLM tags to hashtags
+        guard !selectedVLMTags.isEmpty else { return content }
+
+        // Get existing hashtags in content (case-insensitive)
+        let existingHashtags = Set(
+            content.components(separatedBy: .whitespacesAndNewlines)
+                .filter { $0.hasPrefix("#") }
+                .map { $0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "#")) }
+        )
+
+        // Filter out tags that already exist as hashtags
+        let newHashtags = selectedVLMTags
+            .filter { !existingHashtags.contains($0.lowercased()) }
+            .sorted()  // Consistent ordering
+            .map { "#\($0)" }
+
+        guard !newHashtags.isEmpty else { return content }
+
+        // Append hashtags with proper spacing
+        let hashtagString = newHashtags.joined(separator: " ")
+        if content.isEmpty {
+            return hashtagString
+        } else {
+            return "\(content)\n\n\(hashtagString)"
+        }
+    }
+
     func submitPost() async {
         guard canPost else { return }
 
@@ -473,20 +512,26 @@ final class NewPostViewModel {
 
         let itemsToUpload: [PostMediaItem] = selectedMediaItems
 
+        // Build final content with auto-hashtags
+        let finalContent = buildPostContentWithHashtags()
+
         // For posts WITH media: Use background upload (user can continue using app)
         if !itemsToUpload.isEmpty {
             #if DEBUG
             print("[NewPostViewModel] Starting background upload for \(itemsToUpload.count) media item(s)")
+            if finalContent != postText {
+                print("[NewPostViewModel] Auto-added hashtags: \(Array(selectedVLMTags))")
+            }
             #endif
 
             // VLM tags to save after post creation
             let tagsToSave = Array(selectedVLMTags)
             let channelsToSave = selectedChannelIds
 
-            // Start background upload
+            // Start background upload with hashtag-enhanced content
             uploadManager.startUpload(
                 mediaItems: itemsToUpload,
-                postText: postText,
+                postText: finalContent,
                 channelIds: selectedChannelIds,
                 nameType: selectedNameType,
                 userId: userId,
@@ -526,9 +571,16 @@ final class NewPostViewModel {
         postError = nil
 
         do {
-            let content = postText.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Use the hashtag-enhanced content
+            let content = finalContent
             var post: Post?
             var lastError: Error?
+
+            #if DEBUG
+            if content != postText.trimmingCharacters(in: .whitespacesAndNewlines) {
+                print("[NewPostViewModel] Auto-added hashtags: \(Array(selectedVLMTags))")
+            }
+            #endif
 
             for attempt in 1...3 {
                 do {
