@@ -40,7 +40,7 @@ serde_json = "1.0"
 # Observability
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-opentelemetry = "0.21"
+opentelemetry = "0.22"
 opentelemetry-jaeger = "0.20"
 opentelemetry-config = { path = "../libs/opentelemetry-config" }
 prometheus = { version = "0.13", features = ["process"] }
