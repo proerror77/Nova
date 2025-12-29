@@ -13,6 +13,7 @@ use chrono::{DateTime, Utc};
 use grpc_clients::{config::GrpcConfig as GrpcClientConfig, GrpcClientPool};
 
 mod config;
+mod consumers;
 mod domain;
 mod error;
 mod grpc;
@@ -23,6 +24,7 @@ mod services;
 mod workers;
 
 use config::Config;
+use consumers::content_events::{ContentEventsConsumer, ContentEventsConsumerConfig};
 use grpc::server_v2::{
     social::social_service_server::SocialServiceServer, AppState, SocialServiceImpl,
 };
@@ -314,6 +316,20 @@ async fn main() -> Result<()> {
         info!("✅ Graph-sync consumer started (edge upsert to graph-service)");
     } else {
         info!("Graph-sync consumer disabled: INTERNAL_GRAPH_WRITE_TOKEN not set");
+    }
+
+    // Start content events consumer to initialize post_counters on post creation
+    if let Some(content_config) = ContentEventsConsumerConfig::from_env() {
+        let pool_for_content = pg_pool.clone();
+        join_set.spawn(async move {
+            ContentEventsConsumer::new(pool_for_content, content_config)
+                .run()
+                .await;
+            Ok(())
+        });
+        info!("✅ Content events consumer started (post_counters initialization)");
+    } else {
+        info!("Content events consumer disabled: KAFKA_BROKERS not configured");
     }
 
     info!("✅ All services started successfully");
