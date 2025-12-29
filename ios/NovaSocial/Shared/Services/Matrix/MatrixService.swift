@@ -831,8 +831,7 @@ final class MatrixService: MatrixServiceProtocol {
             // - setSessionDelegate: enables automatic token refresh with persistence
             // - Token refresh is enabled by default (don't call disableAutomaticTokenRefresh)
             // - slidingSyncVersionBuilder: use discoverNative to auto-detect server support
-            // NOTE: RoomListService requires sliding sync. Server must have it properly configured.
-            // If rooms don't sync, check matrix.staging.gcp.icered.com sliding sync configuration.
+            // NOTE: Requires Synapse 1.121.1+ for native sliding sync to work properly.
             let clientBuilder = ClientBuilder()
                 .homeserverUrl(url: homeserverURL)
                 .sessionPaths(dataPath: sessionPath, cachePath: cachePath)
@@ -1689,28 +1688,78 @@ final class MatrixService: MatrixServiceProtocol {
 
             let timeline = try await room.timeline()
 
-            // Read file data
+            // Read file data to get size and validate
             let data = try Data(contentsOf: mediaURL)
-            _ = mediaURL.lastPathComponent  // Filename available for future use
+            let filename = mediaURL.lastPathComponent
+            // Get the full file path (not percent-encoded) for the SDK
+            // Element X uses: url.path(percentEncoded: false)
+            let filePath = mediaURL.path(percentEncoded: false)
 
-            // Create upload parameters
-            let uploadParams = UploadParameters(
-                source: .file(filename: mediaURL.path),
-                caption: caption,
-                formattedCaption: nil,
-                mentions: nil,
-                inReplyTo: nil
-            )
+            #if DEBUG
+            print("[MatrixService] sendMedia: filename=\(filename), dataSize=\(data.count), mimeType=\(mimeType)")
+            print("[MatrixService] sendMedia: filePath=\(filePath)")
+            // Check if data looks like a valid JPEG (starts with FFD8)
+            if data.count >= 2 {
+                let bytes = [UInt8](data.prefix(2))
+                let isJpeg = bytes[0] == 0xFF && bytes[1] == 0xD8
+                print("[MatrixService] sendMedia: isValidJpeg=\(isJpeg), firstBytes=\(String(format: "%02X %02X", bytes[0], bytes[1]))")
+            }
+            #endif
+
+            // Validate that data is not empty
+            guard !data.isEmpty else {
+                throw MatrixError.sendFailed("Attachment data is empty")
+            }
 
             // Determine media type and create appropriate content
+            // IMPORTANT: Must call join() on the handle to wait for upload completion
+            let sendHandle: SendAttachmentJoinHandle
+
             if mimeType.hasPrefix("image/") {
-                // Send as image
-                _ = try timeline.sendImage(
-                    params: uploadParams,
+                // Extract image dimensions (skip thumbnail for now to isolate issue)
+                var imageWidth: UInt64? = nil
+                var imageHeight: UInt64? = nil
+
+                if let image = UIImage(data: data) {
+                    // Use rounded pixel values for dimensions
+                    let pixelWidth = image.size.width * image.scale
+                    let pixelHeight = image.size.height * image.scale
+                    imageWidth = UInt64(pixelWidth.rounded())
+                    imageHeight = UInt64(pixelHeight.rounded())
+
+                    #if DEBUG
+                    print("[MatrixService] Image dimensions: \(imageWidth ?? 0)x\(imageHeight ?? 0)")
+                    print("[MatrixService] Raw dimensions: \(pixelWidth)x\(pixelHeight)")
+                    #endif
+                } else {
+                    #if DEBUG
+                    print("[MatrixService] ⚠️ Failed to create UIImage from data")
+                    #endif
+                }
+
+                // Create upload params using .file() with original media URL
+                let imageParams = UploadParameters(
+                    source: .file(filename: filePath),
+                    caption: caption,
+                    formattedCaption: nil,
+                    mentions: nil,
+                    inReplyTo: nil
+                )
+
+                #if DEBUG
+                print("[MatrixService] Using .file() source: \(filePath)")
+                print("[MatrixService] File exists: \(FileManager.default.fileExists(atPath: filePath))")
+                print("[MatrixService] Data size: \(data.count) bytes")
+                #endif
+
+                // Send as image WITHOUT thumbnail (to isolate issue)
+                // SDK should be able to handle nil thumbnail
+                sendHandle = try timeline.sendImage(
+                    params: imageParams,
                     thumbnailSource: nil,
                     imageInfo: ImageInfo(
-                        height: nil,
-                        width: nil,
+                        height: imageHeight,
+                        width: imageWidth,
                         mimetype: mimeType,
                         size: UInt64(data.count),
                         thumbnailInfo: nil,
@@ -1720,9 +1769,16 @@ final class MatrixService: MatrixServiceProtocol {
                     )
                 )
             } else if mimeType.hasPrefix("video/") {
-                // Send as video
-                _ = try timeline.sendVideo(
-                    params: uploadParams,
+                // Send as video using .file() approach
+                let videoParams = UploadParameters(
+                    source: .file(filename: filePath),
+                    caption: caption,
+                    formattedCaption: nil,
+                    mentions: nil,
+                    inReplyTo: nil
+                )
+                sendHandle = try timeline.sendVideo(
+                    params: videoParams,
                     thumbnailSource: nil,
                     videoInfo: VideoInfo(
                         duration: nil,
@@ -1736,9 +1792,16 @@ final class MatrixService: MatrixServiceProtocol {
                     )
                 )
             } else if mimeType.hasPrefix("audio/") {
-                // Send as audio
-                _ = try timeline.sendAudio(
-                    params: uploadParams,
+                // Send as audio using .file() approach
+                let audioParams = UploadParameters(
+                    source: .file(filename: filePath),
+                    caption: caption,
+                    formattedCaption: nil,
+                    mentions: nil,
+                    inReplyTo: nil
+                )
+                sendHandle = try timeline.sendAudio(
+                    params: audioParams,
                     audioInfo: AudioInfo(
                         duration: nil,
                         size: UInt64(data.count),
@@ -1746,9 +1809,16 @@ final class MatrixService: MatrixServiceProtocol {
                     )
                 )
             } else {
-                // Send as file
-                _ = try timeline.sendFile(
-                    params: uploadParams,
+                // Send as file using .file() approach
+                let fileParams = UploadParameters(
+                    source: .file(filename: filePath),
+                    caption: caption,
+                    formattedCaption: nil,
+                    mentions: nil,
+                    inReplyTo: nil
+                )
+                sendHandle = try timeline.sendFile(
+                    params: fileParams,
                     fileInfo: FileInfo(
                         mimetype: mimeType,
                         size: UInt64(data.count),
@@ -1757,6 +1827,9 @@ final class MatrixService: MatrixServiceProtocol {
                     )
                 )
             }
+
+            // Wait for the upload to complete
+            try await sendHandle.join()
 
             let localEventId = "$local.\(UUID().uuidString)"
 
