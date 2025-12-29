@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct WelcomeView: View {
+struct InviteCodeView: View {
     @Binding var currentPage: AppPage
     @State private var inviteCode = ""
     @State private var isLoading = false
@@ -171,9 +171,9 @@ struct WelcomeView: View {
         } catch {
             // Handle network errors with detailed APIError handling
             #if DEBUG
-            print("[WelcomeView] Invite code validation error: \(error)")
-            print("[WelcomeView] Error details: \(error.localizedDescription)")
-            print("[WelcomeView] Error type: \(type(of: error))")
+            print("[InviteCodeView] Invite code validation error: \(error)")
+            print("[InviteCodeView] Error details: \(error.localizedDescription)")
+            print("[InviteCodeView] Error type: \(type(of: error))")
             #endif
 
             if let apiError = error as? APIError {
@@ -207,5 +207,5 @@ struct WelcomeView: View {
 }
 
 #Preview {
-    WelcomeView(currentPage: .constant(.welcome))
+    InviteCodeView(currentPage: .constant(.inviteCode))
 }

@@ -69,8 +69,8 @@ struct IceredApp: App {
                 else if !authManager.isAuthenticated {
                     // 未登录时的页面切换
                     switch currentPage {
-                    case .welcome:
-                        WelcomeView(currentPage: $currentPage)
+                    case .inviteCode:
+                        InviteCodeView(currentPage: $currentPage)
                             .transition(.identity)
                     case .login:
                         LoginView(currentPage: $currentPage)
@@ -89,7 +89,7 @@ struct IceredApp: App {
                 } else {
                     // 已登录后的页面切换
                     switch currentPage {
-                    case .login, .createAccount, .welcome:
+                    case .login, .createAccount, .inviteCode:
                         // 登录成功后跳转到首页
                         HomeView(currentPage: $currentPage)
                             .transition(.identity)

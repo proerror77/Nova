@@ -195,7 +195,7 @@ final class AppCoordinator: @unchecked Sendable {
     /// Check if a route requires authentication
     private func requiresAuthentication(_ route: AppRoute) -> Bool {
         switch route {
-        case .splash, .welcome, .login, .phoneLogin, .phoneRegistration,
+        case .splash, .inviteCode, .login, .phoneLogin, .phoneRegistration,
              .forgotPassword, .emailSentConfirmation, .resetPassword, .createAccount:
             return false
         default:
@@ -270,7 +270,7 @@ extension AppCoordinator {
     private func appPageToRoute(_ page: AppPage) -> AppRoute {
         switch page {
         case .splash: return .splash
-        case .welcome: return .welcome
+        case .inviteCode: return .inviteCode
         case .login: return .login
         case .phoneLogin: return .phoneLogin
         case .phoneRegistration: return .phoneRegistration
