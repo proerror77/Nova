@@ -5,6 +5,7 @@ import SwiftUI
 /// A floating overlay that shows upload progress across the app
 struct UploadProgressOverlay: View {
     @ObservedObject var uploadManager = BackgroundUploadManager.shared
+    @State private var showingFailedBanner = false
 
     var body: some View {
         VStack {
@@ -15,6 +16,19 @@ struct UploadProgressOverlay: View {
                     uploadManager.cancelUpload()
                 })
                 .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else if let task = uploadManager.currentTask, task.status == .failed, let errorMessage = task.error {
+                // Show failed banner when upload fails
+                UploadFailedBanner(
+                    errorMessage: errorMessage,
+                    onRetry: {
+                        // TODO: Implement retry - for now just dismiss
+                        uploadManager.dismissCompletionBanner()
+                    },
+                    onDismiss: {
+                        uploadManager.dismissCompletionBanner()
+                    }
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             } else if uploadManager.showCompletionBanner, let post = uploadManager.completedPost {
                 UploadCompletedBanner(post: post, onDismiss: {
                     uploadManager.dismissCompletionBanner()
@@ -24,6 +38,7 @@ struct UploadProgressOverlay: View {
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: uploadManager.isUploading)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: uploadManager.showCompletionBanner)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: uploadManager.currentTask?.status)
     }
 }
 
