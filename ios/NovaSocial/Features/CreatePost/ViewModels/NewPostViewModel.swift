@@ -279,6 +279,11 @@ final class NewPostViewModel {
                         selectedLocation = locName
                     }
 
+                    // Auto-fill location from photo metadata if not already set
+                    if selectedLocation.isEmpty, let locName = metadata.locationName {
+                        selectedLocation = locName
+                    }
+
                     isAnalyzingImage = false
 
                     #if DEBUG
