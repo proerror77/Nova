@@ -200,8 +200,6 @@ extension MatrixBridgeService {
         struct AllMappingsResponse: Codable {
             let mappings: [MappingEntry]
 
-            // Note: APIClient uses .convertFromSnakeCase which auto-converts
-            // conversation_id -> conversationId and room_id -> roomId
             struct MappingEntry: Codable {
                 let conversationId: String
                 let roomId: String
