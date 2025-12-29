@@ -161,6 +161,8 @@ spec:
         - name: turn-server
           image: coturn/coturn:latest
           imagePullPolicy: IfNotPresent
+          # Run in foreground mode (-n) to prevent container exit
+          command: ["/usr/bin/turnserver", "-n", "-c", "/etc/coturn/turnserver.conf"]
 
           ports:
             # TURN/STUN UDP
@@ -212,13 +214,10 @@ spec:
             - name: logs
               mountPath: /var/log/turn
 
-          # Health check
+          # Health check - use TCP socket (nc not available in coturn image)
           livenessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - "echo 'STUN' | nc -w 1 localhost 3478 || exit 1"
+            tcpSocket:
+              port: 3478
             initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 5
