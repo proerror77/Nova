@@ -735,6 +735,8 @@ struct FollowerRow: View {
                         )
                 }
             }
+            .buttonStyle(.plain)  // 關鍵：確保按鈕在 ScrollView 中可點擊
+            .contentShape(Rectangle())  // 確保整個按鈕區域可點擊
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
