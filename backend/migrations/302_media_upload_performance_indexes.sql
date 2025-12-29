@@ -15,9 +15,14 @@
 --
 -- Author: Claude Code
 -- Date: 2025-12-29
+--
+-- NOTE: This migration uses CREATE INDEX CONCURRENTLY which cannot run
+-- inside a transaction. Each statement runs independently, so if one fails
+-- after others have succeeded, you may need to manually drop the created
+-- indexes before re-running.
 -- ============================================
 
-BEGIN;
+-- NOTE: No BEGIN/COMMIT - CONCURRENTLY cannot run in a transaction
 
 -- ============================================
 -- Part 1: uploads table indexes
@@ -79,7 +84,7 @@ ANALYZE uploads;
 ANALYZE post_images;
 ANALYZE upload_sessions;
 
-COMMIT;
+-- NOTE: No COMMIT - CONCURRENTLY cannot run in a transaction
 
 -- ============================================
 -- Verification Queries (run after migration)

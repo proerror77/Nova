@@ -1006,6 +1006,29 @@ final class MatrixService: MatrixServiceProtocol {
             return false
         }
 
+        // Check if token is expired or will expire soon (10 minute buffer)
+        if let expiresAt = credentials.expiresAt {
+            let currentTime = Int64(Date().timeIntervalSince1970)
+            let bufferSeconds: Int64 = 600 // 10 minutes
+            if currentTime >= (expiresAt - bufferSeconds) {
+                #if DEBUG
+                let expiredAgo = currentTime - expiresAt
+                if expiredAgo > 0 {
+                    print("[MatrixService] ⚠️ Token expired \(expiredAgo) seconds ago, need fresh token")
+                } else {
+                    print("[MatrixService] ⚠️ Token expires in \(-expiredAgo) seconds (< 10 min buffer), need fresh token")
+                }
+                #endif
+                // Clear expired credentials
+                clearSessionCredentials()
+                return false
+            }
+            #if DEBUG
+            let timeUntilExpiry = expiresAt - currentTime
+            print("[MatrixService] ✅ Token valid for \(timeUntilExpiry / 60) more minutes")
+            #endif
+        }
+
         do {
             // Use the detected sliding sync version from client discovery
             let detectedSlidingSyncVersion = client.slidingSyncVersion()
@@ -1108,34 +1131,77 @@ final class MatrixService: MatrixServiceProtocol {
         print("[MatrixService] Reinitializing session with refreshed token...")
         #endif
 
-        guard let matrixClient = client else {
-            throw MatrixError.notInitialized
-        }
-
-        // Stop current sync first
-        stopSync()
-
-        // Load stored credentials to get user ID
+        // Load stored credentials to get user ID and homeserver
         guard let stored = loadSessionCredentials() else {
             throw MatrixError.sessionRestoreFailed
         }
 
-        // Create new session with refreshed token
-        // Use detected sliding sync version from client
-        let syncVersion = matrixClient.slidingSyncVersion()
+        // Get sliding sync version from current client before destroying it
+        let syncVersion: SlidingSyncVersion = client?.slidingSyncVersion() ?? .native
 
+        // Stop current sync and clean up listeners
+        stopSync()
+
+        // Cancel all timeline listeners
+        for (_, handle) in timelineListeners {
+            handle.cancel()
+        }
+        timelineListeners.removeAll()
+        roomTimelines.removeAll()
+        seenTimelineEventIdsByRoom.removeAll()
+
+        // Destroy old client to allow creating a new one
+        // The SDK doesn't allow restoreSession on an already-authenticated client
+        client = nil
+        roomListService = nil
+        syncService = nil
+
+        #if DEBUG
+        print("[MatrixService] Old client destroyed, creating new client...")
+        #endif
+
+        // Re-create the client (same as in initialize())
+        guard let homeserverURL = self.homeserverURL else {
+            throw MatrixError.sdkError("No homeserver URL configured")
+        }
+
+        let appSupportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let sessionPath = appSupportURL.appendingPathComponent("matrix_session").path
+        let cachePath = appSupportURL.appendingPathComponent("matrix_cache").path
+
+        // Create session delegate for token refresh handling
+        let delegate = MatrixSessionDelegateImpl(matrixService: self)
+        self.sessionDelegate = delegate
+
+        // Build new client
+        let clientBuilder = ClientBuilder()
+            .homeserverUrl(url: homeserverURL)
+            .sessionPaths(dataPath: sessionPath, cachePath: cachePath)
+            .userAgent(userAgent: "NovaSocial-iOS/1.0")
+            .setSessionDelegate(sessionDelegate: delegate)
+            .slidingSyncVersionBuilder(versionBuilder: .discoverNative)
+
+        self.client = try await clientBuilder.build()
+
+        #if DEBUG
+        print("[MatrixService] New client built, restoring session with new token...")
+        #endif
+
+        // Create session with refreshed token
         let session = Session(
             accessToken: accessToken,
             refreshToken: nil,
             userId: stored.userId,
             deviceId: deviceId,
-            homeserverUrl: stored.homeserverUrl ?? self.homeserverURL ?? "",
+            homeserverUrl: stored.homeserverUrl ?? homeserverURL,
             oidcData: nil,
             slidingSyncVersion: syncVersion
         )
 
-        // Restore the session with the client
-        try await matrixClient.restoreSession(session: session)
+        // Restore session on the fresh client
+        try await client!.restoreSession(session: session)
+
+        updateConnectionState(.connected)
 
         // Restart sync
         try await startSync()
@@ -2169,6 +2235,27 @@ final class MatrixService: MatrixServiceProtocol {
                 print("[MatrixService] ⚠️ Sliding sync failed, falling back to client.rooms()...")
                 #endif
                 await self.populateRoomsFromClientFallback()
+
+                // If fallback also returned 0 rooms, the token might be expired
+                // Attempt token refresh and reinitialize session
+                if self.roomCache.isEmpty {
+                    #if DEBUG
+                    print("[MatrixService] ⚠️ Fallback returned 0 rooms - token may be expired, attempting refresh...")
+                    #endif
+
+                    let refreshSuccess = await MatrixTokenRefreshManager.shared.performRefresh()
+                    if refreshSuccess {
+                        #if DEBUG
+                        print("[MatrixService] ✅ Token refresh succeeded - session will be reinitialized")
+                        #endif
+                        // Note: performRefresh() already calls reinitializeSession()
+                        // which restarts sync with the new token
+                    } else {
+                        #if DEBUG
+                        print("[MatrixService] ❌ Token refresh failed - user may need to re-login")
+                        #endif
+                    }
+                }
             }
 
             await setupRoomListObserverWithRetry(roomListService: roomListService, attempt: 1)

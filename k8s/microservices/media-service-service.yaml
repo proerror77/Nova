@@ -8,8 +8,8 @@ spec:
     app: media-service
   ports:
     - name: http
-      port: 8082
-      targetPort: 8082
+      port: 8085
+      targetPort: 8085
     - name: grpc
-      port: 9082
-      targetPort: 9082
+      port: 9085
+      targetPort: 9085

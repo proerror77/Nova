@@ -172,7 +172,7 @@ spec:
             - name: GRPC_SOCIAL_SERVICE_URL
               value: "https://social-service.nova-staging.svc.cluster.local:50052"
             - name: GRPC_MEDIA_SERVICE_URL
-              value: "https://media-service.nova-staging.svc.cluster.local:9082"
+              value: "https://media-service.nova-staging.svc.cluster.local:9085"
             - name: GRPC_SEARCH_SERVICE_URL
               value: "http://search-service.nova-staging.svc.cluster.local:9086"
 

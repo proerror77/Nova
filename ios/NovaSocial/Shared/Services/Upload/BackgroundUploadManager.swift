@@ -9,6 +9,7 @@ enum UploadError: LocalizedError {
     case noNetwork
     case maxRetriesExceeded
     case cancelled
+    case allUploadsFailed(underlying: Error?)
 
     var errorDescription: String? {
         switch self {
@@ -18,6 +19,11 @@ enum UploadError: LocalizedError {
             return "Upload failed after multiple retries."
         case .cancelled:
             return "Upload was cancelled."
+        case .allUploadsFailed(let underlying):
+            if let error = underlying {
+                return "All uploads failed: \(error.localizedDescription)"
+            }
+            return "All image uploads failed."
         }
     }
 }
@@ -349,6 +355,13 @@ final class BackgroundUploadManager: ObservableObject {
                 }
             )
 
+            // Check if all uploads failed
+            if !batchResult.failedIndices.isEmpty && batchResult.urlsByIndex.isEmpty {
+                // All uploads failed - throw with the first underlying error
+                let firstError = batchResult.errors.values.first
+                throw UploadError.allUploadsFailed(underlying: firstError)
+            }
+
             for (arrayIndex, imageInfo) in compressedImages.enumerated() {
                 if let url = batchResult.url(for: arrayIndex) {
                     allUrls.append((index: imageInfo.index, urls: [url]))
@@ -362,6 +375,16 @@ final class BackgroundUploadManager: ObservableObject {
                     #endif
                 }
             }
+
+            // Log partial failures if any
+            #if DEBUG
+            if !batchResult.failedIndices.isEmpty {
+                print("[BackgroundUpload] Warning: \(batchResult.failedIndices.count) image(s) failed to upload")
+                for (index, error) in batchResult.errors {
+                    print("[BackgroundUpload] Image \(index) failed: \(error.localizedDescription)")
+                }
+            }
+            #endif
         }
 
         // Process Live Photos in parallel for faster upload
