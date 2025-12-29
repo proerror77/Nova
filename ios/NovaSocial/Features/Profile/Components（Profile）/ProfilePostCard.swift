@@ -39,6 +39,7 @@ struct ProfilePostCard: View, Equatable {
             id: "1",
             authorId: "user1",
             content: "Cyborg dreams in neon light...",
+            title: "Digital Art",
             createdAt: Int64(Date().timeIntervalSince1970),
             updatedAt: Int64(Date().timeIntervalSince1970),
             status: "published",
@@ -50,7 +51,9 @@ struct ProfilePostCard: View, Equatable {
             bookmarkCount: nil,
             authorUsername: "simone_carter",
             authorDisplayName: "Simone Carter",
-            authorAvatarUrl: nil
+            authorAvatarUrl: nil,
+            location: nil,
+            tags: nil
         ),
         username: "Simone Carter",
         avatarUrl: nil,

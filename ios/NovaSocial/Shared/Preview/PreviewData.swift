@@ -121,6 +121,7 @@ enum PreviewData {
             id: "preview-post-001",
             authorId: Users.currentUser.id,
             content: "Beautiful sunset at the beach! 🌅 #sunset #beach #photography",
+            title: "Golden Hour",
             createdAt: Int64(Date().timeIntervalSince1970 - 3600),
             updatedAt: Int64(Date().timeIntervalSince1970 - 3600),
             status: "published",
@@ -132,7 +133,9 @@ enum PreviewData {
             bookmarkCount: nil,
             authorUsername: Users.currentUser.username,
             authorDisplayName: Users.currentUser.displayName,
-            authorAvatarUrl: Users.currentUser.avatarUrl
+            authorAvatarUrl: Users.currentUser.avatarUrl,
+            location: "Malibu, California",
+            tags: ["sunset", "beach", "photography"]
         )
 
         /// Sample post with multiple images
@@ -140,6 +143,7 @@ enum PreviewData {
             id: "preview-post-002",
             authorId: Users.regularUser.id,
             content: "My travel diary from Japan 🇯🇵 Swipe to see more!",
+            title: "Japan Travel Diary",
             createdAt: Int64(Date().timeIntervalSince1970 - 7200),
             updatedAt: Int64(Date().timeIntervalSince1970 - 7200),
             status: "published",
@@ -155,7 +159,9 @@ enum PreviewData {
             bookmarkCount: nil,
             authorUsername: Users.regularUser.username,
             authorDisplayName: Users.regularUser.displayName,
-            authorAvatarUrl: Users.regularUser.avatarUrl
+            authorAvatarUrl: Users.regularUser.avatarUrl,
+            location: "Tokyo, Japan",
+            tags: ["travel", "japan", "tokyo", "diary"]
         )
 
         /// Sample text-only post
@@ -163,6 +169,7 @@ enum PreviewData {
             id: "preview-post-003",
             authorId: Users.currentUser.id,
             content: "Just finished reading an amazing book about SwiftUI! Highly recommend it for anyone looking to level up their iOS development skills. 📚",
+            title: "Book Recommendation",
             createdAt: Int64(Date().timeIntervalSince1970 - 86400),
             updatedAt: Int64(Date().timeIntervalSince1970 - 86400),
             status: "published",
@@ -174,7 +181,9 @@ enum PreviewData {
             bookmarkCount: nil,
             authorUsername: Users.currentUser.username,
             authorDisplayName: Users.currentUser.displayName,
-            authorAvatarUrl: Users.currentUser.avatarUrl
+            authorAvatarUrl: Users.currentUser.avatarUrl,
+            location: nil,
+            tags: ["SwiftUI", "iOS", "programming", "books"]
         )
 
         /// Array of sample posts for feeds
@@ -182,9 +191,9 @@ enum PreviewData {
             imagePost,
             multiImagePost,
             textPost,
-            Post(id: "preview-post-004", authorId: "preview-user-004", content: "Working on something exciting! Stay tuned 🚀", createdAt: Int64(Date().timeIntervalSince1970 - 3600 * 5), updatedAt: Int64(Date().timeIntervalSince1970 - 3600 * 5), status: "published", mediaUrls: ["https://picsum.photos/604/400"], mediaType: "image", likeCount: 234, commentCount: 45, shareCount: 12, bookmarkCount: nil, authorUsername: "alice_wonder", authorDisplayName: "Alice Wonder", authorAvatarUrl: "https://picsum.photos/203"),
-            Post(id: "preview-post-005", authorId: "preview-user-005", content: "Morning coffee ☕️", createdAt: Int64(Date().timeIntervalSince1970 - 3600 * 8), updatedAt: Int64(Date().timeIntervalSince1970 - 3600 * 8), status: "published", mediaUrls: ["https://picsum.photos/605/400"], mediaType: "image", likeCount: 89, commentCount: 7, shareCount: 2, bookmarkCount: nil, authorUsername: "bob_builder", authorDisplayName: "Bob Builder", authorAvatarUrl: "https://picsum.photos/204"),
-            Post(id: "preview-post-006", authorId: "preview-user-006", content: "Just hit a new personal record at the gym! 💪", createdAt: Int64(Date().timeIntervalSince1970 - 86400 * 2), updatedAt: Int64(Date().timeIntervalSince1970 - 86400 * 2), status: "published", mediaUrls: nil, mediaType: nil, likeCount: 156, commentCount: 34, shareCount: 5, bookmarkCount: nil, authorUsername: "carol_smith", authorDisplayName: "Carol Smith", authorAvatarUrl: "https://picsum.photos/205"),
+            Post(id: "preview-post-004", authorId: "preview-user-004", content: "Working on something exciting! Stay tuned 🚀", title: "Sneak Peek", createdAt: Int64(Date().timeIntervalSince1970 - 3600 * 5), updatedAt: Int64(Date().timeIntervalSince1970 - 3600 * 5), status: "published", mediaUrls: ["https://picsum.photos/604/400"], mediaType: "image", likeCount: 234, commentCount: 45, shareCount: 12, bookmarkCount: nil, authorUsername: "alice_wonder", authorDisplayName: "Alice Wonder", authorAvatarUrl: "https://picsum.photos/203", location: "San Francisco, USA", tags: ["startup", "tech"]),
+            Post(id: "preview-post-005", authorId: "preview-user-005", content: "Morning coffee ☕️", title: "Coffee Time", createdAt: Int64(Date().timeIntervalSince1970 - 3600 * 8), updatedAt: Int64(Date().timeIntervalSince1970 - 3600 * 8), status: "published", mediaUrls: ["https://picsum.photos/605/400"], mediaType: "image", likeCount: 89, commentCount: 7, shareCount: 2, bookmarkCount: nil, authorUsername: "bob_builder", authorDisplayName: "Bob Builder", authorAvatarUrl: "https://picsum.photos/204", location: "Seattle, USA", tags: ["coffee", "morning"]),
+            Post(id: "preview-post-006", authorId: "preview-user-006", content: "Just hit a new personal record at the gym! 💪", title: "Personal Best", createdAt: Int64(Date().timeIntervalSince1970 - 86400 * 2), updatedAt: Int64(Date().timeIntervalSince1970 - 86400 * 2), status: "published", mediaUrls: nil, mediaType: nil, likeCount: 156, commentCount: 34, shareCount: 5, bookmarkCount: nil, authorUsername: "carol_smith", authorDisplayName: "Carol Smith", authorAvatarUrl: "https://picsum.photos/205", location: nil, tags: ["fitness", "gym", "workout"]),
         ]
     }
 
@@ -206,7 +215,9 @@ enum PreviewData {
                 commentCount: 23,
                 shareCount: 8,
                 isLiked: false,
-                isBookmarked: false
+                isBookmarked: false,
+                location: "Malibu, California",
+                tags: ["sunset", "beach", "photography"]
             ),
             FeedPost(
                 id: "feed-002",
@@ -221,7 +232,9 @@ enum PreviewData {
                 commentCount: 56,
                 shareCount: 21,
                 isLiked: true,
-                isBookmarked: false
+                isBookmarked: false,
+                location: "San Francisco, USA",
+                tags: ["startup", "tech", "app"]
             ),
             FeedPost(
                 id: "feed-003",
@@ -236,7 +249,9 @@ enum PreviewData {
                 commentCount: 12,
                 shareCount: 3,
                 isLiked: false,
-                isBookmarked: true
+                isBookmarked: true,
+                location: "Seattle, USA",
+                tags: ["coffee", "cafe", "work"]
             ),
         ]
     }

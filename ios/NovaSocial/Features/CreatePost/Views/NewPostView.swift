@@ -273,7 +273,7 @@ struct NewPostView: View {
                         // Top-right alignment for delete button
                         ZStack(alignment: .topTrailing) {
                             switch mediaItem {
-                            case .image(let image):
+                            case .image(let image, _):
                                 // Regular image preview
                                 Image(uiImage: image)
                                     .resizable()
@@ -282,7 +282,7 @@ struct NewPostView: View {
                                     .cornerRadius(10)
                                     .clipped()
 
-                            case .livePhoto(let livePhotoData):
+                            case .livePhoto(let livePhotoData, _):
                                 // Live Photo preview with play capability
                                 LivePhotoPreviewCard(
                                     livePhotoData: livePhotoData,
@@ -291,7 +291,7 @@ struct NewPostView: View {
                                     }
                                 )
 
-                            case .video(let videoData):
+                            case .video(let videoData, _):
                                 // Video preview with thumbnail and duration
                                 ZStack(alignment: .bottomTrailing) {
                                     Image(uiImage: videoData.thumbnail)
@@ -510,6 +510,10 @@ struct NewPostView: View {
                     onFocusChange: { focused in
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                             viewModel.isTextEditorFocused = focused
+                        }
+                        // Trigger on-device AI tag generation when user finishes typing
+                        if !focused {
+                            viewModel.generateTextBasedTags()
                         }
                     }
                 )

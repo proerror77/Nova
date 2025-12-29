@@ -92,9 +92,11 @@ struct FeedPostCard: View {
                                 .font(.system(size: 10.f))
                                 .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
 
-                            Text("Location")
-                                .font(.system(size: 10.f))
-                                .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                            if let location = post.location {
+                                Text(location)
+                                    .font(.system(size: 10.f))
+                                    .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                            }
                         }
                     }
                 }

@@ -237,6 +237,7 @@ struct UploadFailedBanner: View {
                     postText: "Test post",
                     channelIds: [],
                     nameType: .realName,
+                    location: nil,
                     onSuccess: nil
                 ),
                 onCancel: {}
