@@ -520,9 +520,9 @@ final class NewPostViewModel {
                 userId: userId,
                 location: selectedLocation.isEmpty ? nil : selectedLocation,
                 onSuccess: { [onPostSuccess, vlmService] post in
-                    // Update VLM tags after post is created
-                    if !tagsToSave.isEmpty {
-                        Task {
+                    Task {
+                        // Step 1: Save local VLM tags
+                        if !tagsToSave.isEmpty {
                             do {
                                 _ = try await vlmService.updatePostTags(
                                     postId: post.id,
@@ -536,6 +536,37 @@ final class NewPostViewModel {
                                 #if DEBUG
                                 print("[NewPostViewModel] Failed to save VLM tags: \(error)")
                                 #endif
+                            }
+                        }
+
+                        // Step 2: Background channel classification via Google Cloud Vision
+                        // Only if user didn't manually select channels
+                        if channelsToSave.isEmpty, let firstMediaUrl = post.mediaUrls?.first {
+                            do {
+                                let result = try await vlmService.analyzeImage(
+                                    imageUrl: firstMediaUrl,
+                                    includeChannels: true
+                                )
+
+                                // Auto-assign to suggested channels (confidence >= 70%)
+                                if let suggestedChannels = result.channels?.filter({ $0.confidence >= 0.7 }) {
+                                    let channelIds = suggestedChannels.map { $0.id }
+                                    if !channelIds.isEmpty {
+                                        _ = try await vlmService.updatePostTags(
+                                            postId: post.id,
+                                            tags: tagsToSave,
+                                            channelIds: channelIds
+                                        )
+                                        #if DEBUG
+                                        print("[NewPostViewModel] Auto-assigned channels: \(suggestedChannels.map { $0.name })")
+                                        #endif
+                                    }
+                                }
+                            } catch {
+                                #if DEBUG
+                                print("[NewPostViewModel] Background channel classification failed: \(error)")
+                                #endif
+                                // Silent failure - don't affect user experience
                             }
                         }
                     }
