@@ -183,6 +183,7 @@ LEFT JOIN (
         ) AS l
         INNER JOIN posts_cdc AS p2
             ON toString(p2.id) = l.post_id
+        WHERE p2.deleted_at IS NULL
         UNION ALL
         SELECT
             c.user_id AS viewer_id,
@@ -203,13 +204,13 @@ LEFT JOIN (
         ) AS c
         INNER JOIN posts_cdc AS p2
             ON toString(p2.id) = c.post_id
-        WHERE c.is_deleted = 0
+        WHERE c.is_deleted = 0 AND p2.deleted_at IS NULL
     ) AS interactions
     GROUP BY interactions.viewer_id, interactions.author_id
 ) AS affinity
     ON affinity.user_id = f.follower_id
     AND affinity.author_id = toString(p.user_id)
-WHERE p.deleted_at = toDateTime(0)
+WHERE p.deleted_at IS NULL
   AND p.created_at >= now() - INTERVAL 30 DAY
 ORDER BY user_id, combined_score DESC
 LIMIT 500 BY user_id
@@ -259,7 +260,7 @@ LEFT JOIN (
     GROUP BY post_id
     HAVING comments_count > 0
 ) AS comments ON comments.post_id = toString(p.id)
-WHERE p.deleted_at = toDateTime(0)
+WHERE p.deleted_at IS NULL
   AND p.created_at >= now() - INTERVAL 14 DAY
 ORDER BY combined_score DESC
 LIMIT 1000
@@ -305,6 +306,7 @@ INNER JOIN (
         ) AS l
         INNER JOIN posts_cdc AS p2
             ON toString(p2.id) = l.post_id
+        WHERE p2.deleted_at IS NULL
         UNION ALL
         SELECT
             c.user_id AS viewer_id,
@@ -325,7 +327,7 @@ INNER JOIN (
         ) AS c
         INNER JOIN posts_cdc AS p2
             ON toString(p2.id) = c.post_id
-        WHERE c.is_deleted = 0
+        WHERE c.is_deleted = 0 AND p2.deleted_at IS NULL
     ) AS interactions
     GROUP BY interactions.viewer_id, interactions.author_id
     HAVING affinity_score > 0
@@ -355,7 +357,7 @@ LEFT JOIN (
     GROUP BY post_id
     HAVING comments_count > 0
 ) AS comments ON comments.post_id = toString(p.id)
-WHERE p.deleted_at = toDateTime(0)
+WHERE p.deleted_at IS NULL
   AND p.created_at >= now() - INTERVAL 30 DAY
 ORDER BY user_id, combined_score DESC
 LIMIT 300 BY user_id
