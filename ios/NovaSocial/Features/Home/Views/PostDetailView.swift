@@ -1,4 +1,5 @@
 import SwiftUI
+import Photos
 
 // MARK: - Comment ViewModel
 
@@ -143,6 +144,7 @@ struct PostDetailView: View {
     let post: FeedPost
     var onDismiss: (() -> Void)?
     var onAvatarTapped: ((String) -> Void)?  // 点击头像回调，传入 authorId
+    var onPostDeleted: (() -> Void)?  // 帖子删除后回调
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var authManager: AuthenticationManager
     @State private var currentImageIndex = 0
@@ -150,6 +152,7 @@ struct PostDetailView: View {
     @State private var isFollowLoading = false
 
     private let graphService = GraphService()
+    private let contentService = ContentService()
 
     // MARK: - Comment State
     @State private var commentViewModel = CommentViewModel()
@@ -161,6 +164,22 @@ struct PostDetailView: View {
     @State private var isPostSaved = false
     @State private var postLikeCount: Int = 0
     @State private var postSaveCount: Int = 0
+
+    // MARK: - Post Actions State (作者操作)
+    @State private var showingActionSheet = false
+    @State private var showingDeleteConfirmation = false
+    @State private var isDeleting = false
+    @State private var showingSaveSuccess = false
+    @State private var showingSaveError = false
+    @State private var saveErrorMessage = ""
+    @State private var showingDeleteError = false
+    @State private var deleteErrorMessage = ""
+
+    /// 是否是自己的帖子
+    private var isOwnPost: Bool {
+        guard let currentUserId = authManager.currentUser?.id else { return false }
+        return post.authorId == currentUserId
+    }
 
     /// 当前显示的评论
     private var displayComments: [SocialComment] {
@@ -221,6 +240,69 @@ struct PostDetailView: View {
             isPostLiked = post.isLiked
             isPostSaved = post.isBookmarked
         }
+        // MARK: - Action Sheet (作者操作菜单)
+        .confirmationDialog("Post Options", isPresented: $showingActionSheet, titleVisibility: .visible) {
+            if !post.displayMediaUrls.isEmpty {
+                Button("Save Image") {
+                    Task {
+                        await saveCurrentImageToPhotos()
+                    }
+                }
+            }
+            Button("Delete Post", role: .destructive) {
+                showingDeleteConfirmation = true
+            }
+            Button("Cancel", role: .cancel) { }
+        }
+        // MARK: - Delete Confirmation
+        .alert("Delete Post", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                Task {
+                    await deletePost()
+                }
+            }
+        } message: {
+            Text("Are you sure you want to delete this post? This action cannot be undone.")
+        }
+        // MARK: - Save Success Alert
+        .alert("Saved", isPresented: $showingSaveSuccess) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Image saved to Photos")
+        }
+        // MARK: - Save Error Alert
+        .alert("Save Failed", isPresented: $showingSaveError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(saveErrorMessage)
+        }
+        // MARK: - Delete Error Alert
+        .alert("Delete Failed", isPresented: $showingDeleteError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(deleteErrorMessage)
+        }
+        // MARK: - Deleting Overlay
+        .overlay {
+            if isDeleting {
+                ZStack {
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(.white)
+                        Text("Deleting...")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white)
+                    }
+                    .padding(24)
+                    .background(Color.black.opacity(0.7))
+                    .cornerRadius(12)
+                }
+            }
+        }
     }
 
     // MARK: - Top Navigation Bar
@@ -264,35 +346,49 @@ struct PostDetailView: View {
 
                 Spacer()
 
-                // Follow Button
-                Button(action: {
-                    Task {
-                        await toggleFollow()
+                // 根据是否是自己的帖子显示不同按钮
+                if isOwnPost {
+                    // 作者视角: 显示 "..." 按钮
+                    Button(action: {
+                        showingActionSheet = true
+                    }) {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundColor(DesignTokens.textPrimary)
+                            .frame(width: 24, height: 24)
                     }
-                }) {
-                    if isFollowLoading {
-                        ProgressView()
-                            .frame(width: 60, height: 24)
-                    } else {
-                        Text(isFollowing ? "Following" : "Follow")
-                            .font(.system(size: 12))
-                            .foregroundColor(isFollowing ? DesignTokens.textSecondary : DesignTokens.accentColor)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: 100)
-                                    .stroke(isFollowing ? DesignTokens.textSecondary : DesignTokens.accentColor, lineWidth: 0.5)
-                            )
+                } else {
+                    // 其他用户视角: 显示 Follow + Share 按钮
+                    // Follow Button
+                    Button(action: {
+                        Task {
+                            await toggleFollow()
+                        }
+                    }) {
+                        if isFollowLoading {
+                            ProgressView()
+                                .frame(width: 60, height: 24)
+                        } else {
+                            Text(isFollowing ? "Following" : "Follow")
+                                .font(.system(size: 12))
+                                .foregroundColor(isFollowing ? DesignTokens.textSecondary : DesignTokens.accentColor)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 100)
+                                        .stroke(isFollowing ? DesignTokens.textSecondary : DesignTokens.accentColor, lineWidth: 0.5)
+                                )
+                        }
                     }
-                }
-                .disabled(isFollowLoading)
+                    .disabled(isFollowLoading)
 
-                // Share Button
-                Button(action: {}) {
-                    Image("card-share-icon")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 18, height: 18)
+                    // Share Button
+                    Button(action: {}) {
+                        Image("card-share-icon")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 18, height: 18)
+                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -646,6 +742,97 @@ struct PostDetailView: View {
                lowercased.contains(".mp4") ||
                lowercased.contains(".m4v") ||
                lowercased.contains(".webm")
+    }
+
+    // MARK: - Delete Post
+
+    private func deletePost() async {
+        isDeleting = true
+
+        do {
+            try await contentService.deletePost(postId: post.id)
+
+            #if DEBUG
+            print("✅ Post deleted successfully: \(post.id)")
+            #endif
+
+            await MainActor.run {
+                isDeleting = false
+                onPostDeleted?()
+                if let onDismiss = onDismiss {
+                    onDismiss()
+                } else {
+                    dismiss()
+                }
+            }
+        } catch {
+            #if DEBUG
+            print("❌ Failed to delete post: \(error)")
+            #endif
+
+            await MainActor.run {
+                isDeleting = false
+                deleteErrorMessage = "Failed to delete. Please try again."
+                showingDeleteError = true
+            }
+        }
+    }
+
+    // MARK: - Save Image to Photos
+
+    private func saveCurrentImageToPhotos() async {
+        // 获取当前显示的图片 URL
+        guard currentImageIndex < post.displayMediaUrls.count else {
+            saveErrorMessage = "No image to save"
+            showingSaveError = true
+            return
+        }
+
+        let imageUrlString = post.displayMediaUrls[currentImageIndex]
+
+        // Skip videos
+        guard !isVideoUrl(imageUrlString) else {
+            saveErrorMessage = "Video saving is not supported"
+            showingSaveError = true
+            return
+        }
+
+        guard let imageUrl = URL(string: imageUrlString) else {
+            saveErrorMessage = "Invalid image URL"
+            showingSaveError = true
+            return
+        }
+
+        // Request photo library permission
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else {
+            saveErrorMessage = "Please allow photo library access in Settings"
+            showingSaveError = true
+            return
+        }
+
+        do {
+            // Download image
+            let (data, _) = try await URLSession.shared.data(from: imageUrl)
+            guard let image = UIImage(data: data) else {
+                saveErrorMessage = "Failed to load image"
+                showingSaveError = true
+                return
+            }
+
+            // Save to photo library
+            try await PHPhotoLibrary.shared().performChanges {
+                PHAssetChangeRequest.creationRequestForAsset(from: image)
+            }
+
+            showingSaveSuccess = true
+        } catch {
+            #if DEBUG
+            print("❌ Failed to save image: \(error)")
+            #endif
+            saveErrorMessage = "Save failed: \(error.localizedDescription)"
+            showingSaveError = true
+        }
     }
 }
 
