@@ -592,37 +592,47 @@ impl CdcConsumer {
             CdcOperation::Update => 2,
             CdcOperation::Delete => 3,
         };
+        let cdc_op_name = match cdc_operation {
+            1 => "INSERT",
+            2 => "UPDATE",
+            _ => "DELETE",
+        };
         let cdc_timestamp = msg.timestamp();
 
-        // Use type-safe parameterized insert to prevent SQL injection
-        // Convert DateTime to unix timestamp (u32) for ClickHouse DateTime compatibility
-        let row = PostsCdcRow {
-            id: id_raw.clone(),
-            user_id: user_id_raw.clone(),
-            content,
-            media_key,
-            media_type,
-            created_at: created_at.timestamp() as u32,
-            updated_at: updated_at.timestamp() as u32,
-            deleted_at: deleted_at.map(|dt| dt.timestamp() as u32),
-            cdc_operation,
-            cdc_timestamp: cdc_timestamp.timestamp() as u32,
+        // Format deleted_at for SQL - NULL or timestamp string
+        let deleted_at_sql = match deleted_at {
+            Some(dt) => format!("'{}'", dt.format("%Y-%m-%d %H:%M:%S%.3f")),
+            None => "NULL".to_string(),
         };
 
-        let mut insert = self.ch_client.insert("posts_cdc").map_err(|e| {
-            error!("ClickHouse insert preparation error: {}", e);
-            AnalyticsError::ClickHouse(e.to_string())
-        })?;
+        // Escape single quotes in content for SQL safety
+        let escaped_content = content.replace('\'', "''");
+        let escaped_media_key = media_key.replace('\'', "''");
+        let escaped_media_type = media_type.replace('\'', "''");
 
-        insert.write(&row).await.map_err(|e| {
-            error!("ClickHouse row write error: {}", e);
-            AnalyticsError::ClickHouse(e.to_string())
-        })?;
+        // Use raw SQL INSERT to bypass Row serialization issues with UUID and DateTime types
+        let insert_sql = format!(
+            "INSERT INTO posts_cdc (id, user_id, content, media_key, media_type, created_at, updated_at, deleted_at, cdc_operation, cdc_timestamp) VALUES ('{}', '{}', '{}', '{}', '{}', '{}', '{}', {}, '{}', '{}')",
+            id_raw,
+            user_id_raw,
+            escaped_content,
+            escaped_media_key,
+            escaped_media_type,
+            created_at.format("%Y-%m-%d %H:%M:%S%.3f"),
+            updated_at.format("%Y-%m-%d %H:%M:%S%.3f"),
+            deleted_at_sql,
+            cdc_op_name,
+            cdc_timestamp.format("%Y-%m-%d %H:%M:%S%.3f"),
+        );
 
-        insert.end().await.map_err(|e| {
-            error!("ClickHouse insert error: {}", e);
-            AnalyticsError::ClickHouse(e.to_string())
-        })?;
+        self.ch_client
+            .query(&insert_sql)
+            .execute()
+            .await
+            .map_err(|e| {
+                error!("ClickHouse insert error: {}", e);
+                AnalyticsError::ClickHouse(e.to_string())
+            })?;
 
         debug!("Inserted posts CDC: id={}, op={:?}", id_raw, op);
         Ok(())
