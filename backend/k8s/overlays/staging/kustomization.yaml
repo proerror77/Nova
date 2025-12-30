@@ -10,6 +10,7 @@ resources:
   - zitadel-ingress.yaml
   # Identity service Zitadel sync secret (token must be set manually or via sealed-secrets)
   - identity-service-zitadel-secret.yaml
+  # Note: graphql-gateway-vlm secret is managed by ExternalSecret (see k8s/microservices/graphql-gateway-vlm-externalsecret.yaml)
 
 namespace: nova-backend
 
@@ -78,6 +79,11 @@ patches:
       kind: Deployment
       name: realtime-chat-service
     path: realtime-chat-service-matrix-patch.yaml
+  # GraphQL Gateway VLM secret mount (Google Cloud Vision API key)
+  - target:
+      kind: Deployment
+      name: graphql-gateway
+    path: graphql-gateway-vlm-patch.yaml
   # Zitadel PVC storage class patch (use GKE default)
   - target:
       kind: PersistentVolumeClaim

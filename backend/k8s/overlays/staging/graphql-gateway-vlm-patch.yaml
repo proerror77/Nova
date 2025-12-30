@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphql-gateway
+spec:
+  template:
+    spec:
+      containers:
+      - name: graphql-gateway
+        envFrom:
+        - configMapRef:
+            name: nova-backend-config
+        - secretRef:
+            name: nova-backend-secrets
+            optional: true
+        - secretRef:
+            name: graphql-gateway-vlm
+            optional: true
