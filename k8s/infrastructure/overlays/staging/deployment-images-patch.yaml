@@ -18,7 +18,8 @@ spec:
     spec:
       containers:
       - name: media-service
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/media-service@sha256:74783644c0f930475746c32ba2b8d8cb6e614e4712c2c7e2249b09871c5a8420
+        # Updated: Use commit-tagged image that properly reads HTTP_PORT env var
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/media-service:b203ac0175d836b693abb487165d949984d5f718
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -51,7 +52,7 @@ spec:
     spec:
       containers:
       - name: realtime-chat-service
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/realtime-chat-service@sha256:82dcc42c3e87ad98da35ad4b7e592a9cc76ffcd83e13096e144ac3f9a7299dde
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/realtime-chat-service:latest
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -128,7 +129,7 @@ spec:
     spec:
       containers:
       - name: trust-safety-service
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/trust-safety-service@sha256:e0429e30348a48d48ae9899514a8a1ceedadca32d6152eca1a5b0b5200c0a483
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/trust-safety-service@sha256:c0e75dd816650aebfaad372eee8d299b7ca1c7c61286d85ad44ea0cd5785b46e
 ---
 apiVersion: apps/v1
 kind: Deployment

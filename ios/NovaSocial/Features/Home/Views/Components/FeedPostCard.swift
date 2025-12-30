@@ -92,9 +92,11 @@ struct FeedPostCard: View {
                                 .font(.system(size: 10.f))
                                 .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
 
-                            Text("Location")
-                                .font(.system(size: 10.f))
-                                .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                            if let location = post.location {
+                                Text(location)
+                                    .font(.system(size: 10.f))
+                                    .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                            }
                         }
                     }
                 }
@@ -142,7 +144,7 @@ struct FeedPostCard: View {
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 20.s, height: 20.s)
-                            Text("\(post.likeCount)")
+                            Text(post.likeCount.abbreviated)
                                 .font(.system(size: 10.f))
                                 .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                                 .contentTransition(.numericText())
@@ -159,7 +161,7 @@ struct FeedPostCard: View {
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 20.s, height: 20.s)
-                            Text("\(post.commentCount)")
+                            Text(post.commentCount.abbreviated)
                                 .font(.system(size: 10.f))
                                 .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                                 .contentTransition(.numericText())
@@ -177,7 +179,7 @@ struct FeedPostCard: View {
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 20.s, height: 20.s)
-                            Text("\(post.bookmarkCount)")
+                            Text(post.bookmarkCount.abbreviated)
                                 .font(.system(size: 10.f))
                                 .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                         }

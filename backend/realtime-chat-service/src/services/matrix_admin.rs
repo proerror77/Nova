@@ -57,12 +57,55 @@ struct UpdateAvatarRequest {
 struct CreateUserRequest {
     /// Display name for the user
     displayname: Option<String>,
+    /// Password for the user (required for standard Matrix login with device sessions)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    password: Option<String>,
     /// Whether the user is an admin (default: false)
     #[serde(skip_serializing_if = "Option::is_none")]
     admin: Option<bool>,
     /// Whether the user is deactivated (default: false)
     #[serde(skip_serializing_if = "Option::is_none")]
     deactivated: Option<bool>,
+}
+
+/// Request body for standard Matrix login via Client-Server API
+/// POST /_matrix/client/v3/login
+#[derive(Debug, Serialize)]
+struct MatrixLoginRequest {
+    /// Login type (always "m.login.password" for password login)
+    #[serde(rename = "type")]
+    login_type: String,
+    /// User identifier
+    identifier: MatrixUserIdentifier,
+    /// User password
+    password: String,
+    /// Device ID to bind the session to (creates a proper device session!)
+    device_id: Option<String>,
+    /// Device display name
+    initial_device_display_name: Option<String>,
+}
+
+/// User identifier for Matrix login
+#[derive(Debug, Serialize)]
+struct MatrixUserIdentifier {
+    /// Identifier type (always "m.id.user" for user ID login)
+    #[serde(rename = "type")]
+    id_type: String,
+    /// The Matrix user ID
+    user: String,
+}
+
+/// Response from standard Matrix login
+#[derive(Debug, Deserialize)]
+struct MatrixLoginResponse {
+    /// The Matrix user ID
+    user_id: String,
+    /// The access token (device-bound!)
+    access_token: String,
+    /// The device ID
+    device_id: String,
+    /// Token expiry in milliseconds (optional)
+    expires_in_ms: Option<i64>,
 }
 
 /// Response from creating/updating a Matrix user
@@ -123,6 +166,114 @@ impl MatrixAdminClient {
     /// Example: @nova-123e4567-e89b-12d3-a456-426614174000:staging.nova.app
     pub fn user_id_to_mxid(&self, user_id: Uuid) -> String {
         format!("@nova-{}:{}", user_id, self.server_name)
+    }
+
+    /// Generate a deterministic password for a Matrix user
+    ///
+    /// The password is derived from the user_id and admin_token to ensure:
+    /// 1. Same user always gets the same password (allows re-login)
+    /// 2. Passwords are not guessable without the admin_token
+    /// 3. Each user has a unique password
+    fn generate_user_password(&self, user_id: Uuid) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        user_id.hash(&mut hasher);
+        self.admin_token.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        // Create a 32-char hex password
+        format!("nova_matrix_{:016x}", hash)
+    }
+
+    /// Login to Matrix using standard password authentication
+    ///
+    /// This uses POST /_matrix/client/v3/login which creates a proper device session,
+    /// required for sliding sync (MSC3575) in Synapse 1.114+.
+    ///
+    /// Unlike Admin API login, this creates a real device in the devices table,
+    /// which is required for sliding sync's per-device connection tracking.
+    ///
+    /// # Arguments
+    /// * `user_id` - Nova user ID (will be converted to MXID)
+    /// * `device_id` - Device ID to bind the session to (required for E2EE/sliding sync)
+    ///
+    /// # Returns
+    /// Ok((access_token, device_id, expires_at)) if successful, Err otherwise
+    pub async fn login_with_password(
+        &self,
+        user_id: Uuid,
+        device_id: Option<String>,
+    ) -> Result<(String, String, Option<i64>), AppError> {
+        let mxid = self.user_id_to_mxid(user_id);
+        let password = self.generate_user_password(user_id);
+
+        let url = format!(
+            "{}/_matrix/client/v3/login",
+            self.homeserver_url
+        );
+
+        info!(
+            "Performing standard Matrix login for: mxid={}, nova_user_id={}, device_id={:?}",
+            mxid, user_id, device_id
+        );
+
+        let request_body = MatrixLoginRequest {
+            login_type: "m.login.password".to_string(),
+            identifier: MatrixUserIdentifier {
+                id_type: "m.id.user".to_string(),
+                user: mxid.clone(),
+            },
+            password,
+            device_id: device_id.clone(),
+            initial_device_display_name: Some(format!("Nova iOS Device")),
+        };
+
+        let response = self
+            .client
+            .post(&url)
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| {
+                error!("Failed to send standard Matrix login request: {}", e);
+                AppError::ServiceUnavailable(format!("Matrix login request failed: {}", e))
+            })?;
+
+        let status = response.status();
+        if status.is_success() {
+            let login_response: MatrixLoginResponse = response.json().await.map_err(|e| {
+                error!("Failed to parse Matrix login response: {}", e);
+                AppError::ServiceUnavailable(format!("Invalid response from Matrix: {}", e))
+            })?;
+
+            // Calculate expiry timestamp if provided
+            let expires_at = login_response.expires_in_ms.map(|ms| {
+                let now_sec = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64;
+                now_sec + (ms / 1000)
+            });
+
+            info!(
+                "Successfully logged into Matrix with device session: mxid={}, device_id={}, nova_user_id={}",
+                mxid, login_response.device_id, user_id
+            );
+
+            Ok((login_response.access_token, login_response.device_id, expires_at))
+        } else {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            error!(
+                "Matrix login failed: status={}, body={}, mxid={}",
+                status, error_text, mxid
+            );
+            Err(AppError::ServiceUnavailable(format!(
+                "Matrix login failed ({}): {}",
+                status, error_text
+            )))
+        }
     }
 
     /// Deactivate a Matrix user account via Synapse Admin API
@@ -433,8 +584,13 @@ impl MatrixAdminClient {
             mxid, displayname, user_id
         );
 
+        // Generate a deterministic password for this user
+        // This is required for standard Matrix login which creates proper device sessions
+        let password = self.generate_user_password(user_id);
+
         let request_body = CreateUserRequest {
             displayname,
+            password: Some(password),
             admin: Some(false),
             deactivated: Some(false),
         };
@@ -578,22 +734,25 @@ impl MatrixAdminClient {
         // Step 1: Create or update the user
         let mxid = self.create_or_get_user(user_id, displayname).await?;
 
-        // Step 2: Generate a device-bound access token for the user
-        // Token valid for 1 hour (3600000 ms = 3600 seconds)
-        let token_duration_ms: i64 = 3600000;
-        let token_duration_sec: i64 = 3600;
+        // Step 2: Login with password to get a device-bound access token
+        // This creates a proper device session which is REQUIRED for sliding sync (Synapse 1.114+)
+        // The Admin API login endpoint does NOT create device sessions, causing sliding sync to fail
+        // with "AssertionError: device_id is not None" in the connection store
+        let (access_token, returned_device_id, expires_at) = self.login_with_password(user_id, device_id).await?;
 
-        // Calculate expiry timestamp (Unix seconds)
-        let now_sec = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64;
-        let expires_at = now_sec + token_duration_sec;
+        // Calculate expiry timestamp if not provided by server (default to 24 hours)
+        let expires_at = expires_at.unwrap_or_else(|| {
+            let now_sec = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+            now_sec + 86400 // 24 hours default
+        });
 
-        // Use the device_id as-is for session continuity
-        // Synapse will invalidate the old token when a new one is issued for the same device
-        // This is critical for Matrix SDK session restoration and E2EE key continuity
-        let access_token = self.generate_user_login_token(user_id, Some(token_duration_ms), device_id).await?;
+        info!(
+            "Matrix user provisioned with device session: mxid={}, device_id={}, expires_at={}",
+            mxid, returned_device_id, expires_at
+        );
 
         Ok((mxid, access_token, expires_at))
     }

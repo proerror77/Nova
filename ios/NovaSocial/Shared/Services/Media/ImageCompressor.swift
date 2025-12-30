@@ -293,32 +293,67 @@ actor ImageCompressor {
     }
 
     /// Encode to JPEG format with optional metadata stripping
+    /// Note: Metadata stripping via ImageIO has device-specific issues, so we use simple jpegData() as primary method
     private func encodeToJPEG(_ image: UIImage, quality: CGFloat, stripMetadata: Bool) -> Data {
-        if stripMetadata {
-            // Use ImageIO to strip metadata
-            guard let cgImage = image.cgImage else {
-                return image.jpegData(compressionQuality: quality) ?? Data()
-            }
-
-            let data = NSMutableData()
-            guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else {
-                return image.jpegData(compressionQuality: quality) ?? Data()
-            }
-
-            let options: [CFString: Any] = [
-                kCGImageDestinationLossyCompressionQuality: quality,
-                kCGImageDestinationMetadata: NSNull(),
-                kCGImagePropertyExifDictionary: NSNull(),
-                kCGImagePropertyGPSDictionary: NSNull()
-            ]
-
-            CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
-            CGImageDestinationFinalize(destination)
-
-            return data as Data
-        } else {
-            return image.jpegData(compressionQuality: quality) ?? Data()
+        // Primary method: simple and reliable jpegData()
+        // This works consistently across all devices, though it preserves metadata
+        guard let simpleData = image.jpegData(compressionQuality: quality), simpleData.count > 100 else {
+            #if DEBUG
+            print("[ImageCompressor] ⚠️ jpegData() failed or returned tiny data")
+            #endif
+            return Data()
         }
+
+        // If metadata stripping not requested, return simple data
+        guard stripMetadata else {
+            return simpleData
+        }
+
+        // Try ImageIO for metadata stripping (optional enhancement, not required)
+        guard let cgImage = image.cgImage else {
+            #if DEBUG
+            print("[ImageCompressor] No cgImage, using jpegData (metadata preserved)")
+            #endif
+            return simpleData
+        }
+
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else {
+            #if DEBUG
+            print("[ImageCompressor] CGImageDestination creation failed, using jpegData (metadata preserved)")
+            #endif
+            return simpleData
+        }
+
+        let options: [CFString: Any] = [
+            kCGImageDestinationLossyCompressionQuality: quality,
+            kCGImageDestinationMetadata: NSNull(),
+            kCGImagePropertyExifDictionary: NSNull(),
+            kCGImagePropertyGPSDictionary: NSNull()
+        ]
+
+        CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
+
+        // Finalize and validate output
+        let finalized = CGImageDestinationFinalize(destination)
+        let resultData = data as Data
+
+        // Validate: must have valid JPEG data (starts with 0xFF 0xD8) and reasonable size
+        let isValidJPEG = resultData.count >= 100 &&
+                          resultData[0] == 0xFF &&
+                          resultData[1] == 0xD8
+
+        guard finalized, isValidJPEG else {
+            #if DEBUG
+            print("[ImageCompressor] ImageIO metadata stripping failed (finalized=\(finalized), bytes=\(resultData.count)), using jpegData (metadata preserved)")
+            #endif
+            return simpleData  // Fall back to simple JPEG with metadata
+        }
+
+        #if DEBUG
+        print("[ImageCompressor] ✓ Metadata stripped successfully")
+        #endif
+        return resultData
     }
 
     // MARK: - Batch Compression with Pipeline

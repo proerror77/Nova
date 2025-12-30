@@ -345,10 +345,11 @@ async fn send_to_dlq(
     });
 
     let key = format!("outbox-dlq-{}", event.aggregate_id);
+    let payload_str = dlq_payload.to_string();
 
     let record = FutureRecord::to(topic)
         .key(&key)
-        .payload(&dlq_payload.to_string());
+        .payload(&payload_str);
 
     publisher
         .dlq_producer

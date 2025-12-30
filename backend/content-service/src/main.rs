@@ -523,7 +523,16 @@ async fn main() -> io::Result<()> {
         FeedRankingConfig::from(&config.feed),
     ));
 
-    let feed_candidate_job = FeedCandidateRefreshJob::new(ch_client.clone());
+    // Create a dedicated ClickHouse client for the feed candidate refresh job
+    // with a longer timeout (60s) since it runs complex batch aggregation queries
+    let ch_client_batch = Arc::new(ClickHouseClient::new_writable(
+        &ch_cfg.url,
+        &ch_cfg.database,
+        &ch_cfg.username,
+        &ch_cfg.password,
+        60_000, // 60 seconds for batch processing
+    ));
+    let feed_candidate_job = FeedCandidateRefreshJob::new(ch_client_batch);
 
     let feed_state = web::Data::new(FeedHandlerState {
         feed_ranking: feed_ranking.clone(),

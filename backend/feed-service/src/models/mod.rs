@@ -32,6 +32,12 @@ pub struct FeedPostFull {
     pub thumbnail_urls: Vec<String>,
     #[serde(default)]
     pub media_type: String,
+    /// Whether the current user has liked this post
+    #[serde(default)]
+    pub is_liked: bool,
+    /// Whether the current user has bookmarked this post
+    #[serde(default)]
+    pub is_bookmarked: bool,
     /// Author information for display
     #[serde(skip_serializing_if = "Option::is_none")]
     pub author_username: Option<String>,

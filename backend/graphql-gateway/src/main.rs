@@ -553,19 +553,19 @@ async fn main() -> std::io::Result<()> {
                 "/api/v2/photo-analysis/onboarding",
                 web::post().to(rest_api::photo_analysis::upload_onboarding_interests),
             )
-            // VLM API (Vision Language Model - Image Analysis & Tagging) - WIP
-            // .route(
-            //     "/api/v2/vlm/analyze",
-            //     web::post().to(rest_api::vlm::analyze_image),
-            // )
-            // .route(
-            //     "/api/v2/posts/{id}/tags",
-            //     web::get().to(rest_api::vlm::get_post_tags),
-            // )
-            // .route(
-            //     "/api/v2/posts/{id}/tags",
-            //     web::put().to(rest_api::vlm::update_post_tags),
-            // )
+            // VLM API (Vision Language Model - Image Analysis & Tagging)
+            .route(
+                "/api/v2/vlm/analyze",
+                web::post().to(rest_api::vlm::analyze_image),
+            )
+            .route(
+                "/api/v2/posts/{id}/tags",
+                web::get().to(rest_api::vlm::get_post_tags),
+            )
+            .route(
+                "/api/v2/posts/{id}/tags",
+                web::put().to(rest_api::vlm::update_post_tags),
+            )
             // ✅ Channels API
             .route(
                 "/api/v2/channels",

@@ -3,6 +3,47 @@ import PhotosUI
 import Photos
 import AVFoundation
 import UniformTypeIdentifiers
+import CoreLocation
+
+// MARK: - Photo Metadata Model
+
+/// Metadata extracted from photo's PHAsset
+struct PhotoMetadata: Sendable {
+    /// GPS location where photo was taken
+    let location: CLLocation?
+    /// When the photo was taken
+    let creationDate: Date?
+    /// When the photo was last modified
+    let modificationDate: Date?
+    /// Reverse geocoded location name (populated async)
+    var locationName: String?
+
+    /// Check if location data is available
+    var hasLocation: Bool { location != nil }
+
+    /// Check if any metadata is available
+    var hasAnyMetadata: Bool { location != nil || creationDate != nil }
+
+    /// Format creation date for display
+    var formattedDate: String? {
+        guard let date = creationDate else { return nil }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
+    }
+
+    /// Format location for display (coordinates or name)
+    var formattedLocation: String? {
+        if let name = locationName {
+            return name
+        }
+        guard let loc = location else { return nil }
+        return String(format: "%.4f, %.4f", loc.coordinate.latitude, loc.coordinate.longitude)
+    }
+
+    static let empty = PhotoMetadata(location: nil, creationDate: nil, modificationDate: nil, locationName: nil)
+}
 
 // MARK: - Movie Transferable for Video Loading
 
@@ -52,18 +93,19 @@ struct VideoData: Identifiable {
 }
 
 /// Media item that can be either a regular image, Live Photo, or video
+/// Now includes extracted photo metadata (location, timestamp)
 enum PostMediaItem: Identifiable {
-    case image(UIImage)
-    case livePhoto(LivePhotoData)
-    case video(VideoData)
+    case image(UIImage, PhotoMetadata)
+    case livePhoto(LivePhotoData, PhotoMetadata)
+    case video(VideoData, PhotoMetadata)
 
     var id: String {
         switch self {
-        case .image(let image):
+        case .image(let image, _):
             return "image-\(ObjectIdentifier(image).hashValue)"
-        case .livePhoto(let data):
+        case .livePhoto(let data, _):
             return data.id.uuidString
-        case .video(let data):
+        case .video(let data, _):
             return data.id.uuidString
         }
     }
@@ -71,12 +113,24 @@ enum PostMediaItem: Identifiable {
     /// Get the display image (still image for Live Photo, thumbnail for video)
     var displayImage: UIImage {
         switch self {
-        case .image(let image):
+        case .image(let image, _):
             return image
-        case .livePhoto(let data):
+        case .livePhoto(let data, _):
             return data.stillImage
-        case .video(let data):
+        case .video(let data, _):
             return data.thumbnail
+        }
+    }
+
+    /// Get the associated photo metadata
+    var metadata: PhotoMetadata {
+        switch self {
+        case .image(_, let meta):
+            return meta
+        case .livePhoto(_, let meta):
+            return meta
+        case .video(_, let meta):
+            return meta
         }
     }
 
@@ -90,6 +144,21 @@ enum PostMediaItem: Identifiable {
     var isVideo: Bool {
         if case .video = self { return true }
         return false
+    }
+
+    /// Check if location metadata is available
+    var hasLocation: Bool {
+        metadata.hasLocation
+    }
+
+    /// Get location name if available
+    var locationName: String? {
+        metadata.locationName ?? metadata.formattedLocation
+    }
+
+    /// Get creation date if available
+    var creationDate: Date? {
+        metadata.creationDate
     }
 }
 
@@ -105,12 +174,80 @@ class LivePhotoManager: ObservableObject {
     
     private init() {}
     
+    // MARK: - Metadata Extraction
+
+    /// Extract metadata from a PHAsset
+    private func extractMetadata(from asset: PHAsset) async -> PhotoMetadata {
+        var metadata = PhotoMetadata(
+            location: asset.location,
+            creationDate: asset.creationDate,
+            modificationDate: asset.modificationDate,
+            locationName: nil
+        )
+
+        // Reverse geocode location to get human-readable name
+        if let location = asset.location {
+            metadata.locationName = await reverseGeocode(location: location)
+        }
+
+        return metadata
+    }
+
+    /// Reverse geocode a location to get city/country name
+    private func reverseGeocode(location: CLLocation) async -> String? {
+        let geocoder = CLGeocoder()
+
+        do {
+            let placemarks = try await geocoder.reverseGeocodeLocation(location)
+            guard let placemark = placemarks.first else { return nil }
+
+            // Build location string: City, Country
+            var components: [String] = []
+            if let city = placemark.locality {
+                components.append(city)
+            } else if let area = placemark.administrativeArea {
+                components.append(area)
+            }
+            if let country = placemark.country {
+                components.append(country)
+            }
+
+            return components.isEmpty ? nil : components.joined(separator: ", ")
+        } catch {
+            #if DEBUG
+            print("[LivePhotoManager] Reverse geocoding failed: \(error)")
+            #endif
+            return nil
+        }
+    }
+
+    /// Get PHAsset from PhotosPickerItem identifier
+    private func getPHAsset(from item: PhotosPickerItem) -> PHAsset? {
+        guard let assetId = item.itemIdentifier else { return nil }
+        let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: [assetId], options: nil)
+        return fetchResult.firstObject
+    }
+
     // MARK: - Load from PhotosPickerItem
 
     /// Load media from PhotosPickerItem - supports images, Live Photos, and videos
+    /// Now includes metadata extraction (location, timestamp)
     func loadMedia(from item: PhotosPickerItem) async throws -> PostMediaItem {
         isProcessing = true
         defer { isProcessing = false }
+
+        // Extract metadata from PHAsset if available
+        let metadata: PhotoMetadata
+        if let asset = getPHAsset(from: item) {
+            metadata = await extractMetadata(from: asset)
+            #if DEBUG
+            if metadata.hasAnyMetadata {
+                print("[LivePhotoManager] Extracted metadata - Location: \(metadata.locationName ?? "N/A"), Date: \(metadata.formattedDate ?? "N/A")")
+            }
+            #endif
+        } else {
+            metadata = .empty
+        }
 
         let supportedTypes = item.supportedContentTypes
 
@@ -118,7 +255,7 @@ class LivePhotoManager: ObservableObject {
         let videoTypes = supportedTypes.filter { $0.conforms(to: .movie) || $0.conforms(to: .video) }
         if !videoTypes.isEmpty {
             if let videoData = try await loadVideo(from: item) {
-                return .video(videoData)
+                return .video(videoData, metadata)
             }
         }
 
@@ -126,14 +263,14 @@ class LivePhotoManager: ObservableObject {
         let hasLivePhotoType = supportedTypes.contains { $0.identifier == "com.apple.live-photo" }
         if hasLivePhotoType {
             if let livePhotoData = try await loadLivePhoto(from: item) {
-                return .livePhoto(livePhotoData)
+                return .livePhoto(livePhotoData, metadata)
             }
         }
 
         // Fall back to regular image
         if let data = try? await item.loadTransferable(type: Data.self),
            let image = UIImage(data: data) {
-            return .image(image)
+            return .image(image, metadata)
         }
 
         throw LivePhotoError.loadFailed
@@ -279,14 +416,23 @@ class LivePhotoManager: ObservableObject {
     }
 
     /// Load single media item without setting isProcessing (for parallel use)
+    /// Includes metadata extraction for location-aware AI tagging
     private func loadMediaItem(from item: PhotosPickerItem) async throws -> PostMediaItem {
+        // Extract metadata from PHAsset if available
+        let metadata: PhotoMetadata
+        if let asset = getPHAsset(from: item) {
+            metadata = await extractMetadata(from: asset)
+        } else {
+            metadata = .empty
+        }
+
         let supportedTypes = item.supportedContentTypes
 
         // Check if it's a video
         let videoTypes = supportedTypes.filter { $0.conforms(to: .movie) || $0.conforms(to: .video) }
         if !videoTypes.isEmpty {
             if let videoData = try await loadVideo(from: item) {
-                return .video(videoData)
+                return .video(videoData, metadata)
             }
         }
 
@@ -294,14 +440,14 @@ class LivePhotoManager: ObservableObject {
         let hasLivePhotoType = supportedTypes.contains { $0.identifier == "com.apple.live-photo" }
         if hasLivePhotoType {
             if let livePhotoData = try await loadLivePhoto(from: item) {
-                return .livePhoto(livePhotoData)
+                return .livePhoto(livePhotoData, metadata)
             }
         }
 
         // Fall back to regular image - use faster loading
         if let data = try? await item.loadTransferable(type: Data.self),
            let image = UIImage(data: data) {
-            return .image(image)
+            return .image(image, metadata)
         }
 
         throw LivePhotoError.loadFailed
@@ -406,9 +552,9 @@ class LivePhotoManager: ObservableObject {
     func cleanupTemporaryFiles(for items: [PostMediaItem]) {
         for item in items {
             switch item {
-            case .livePhoto(let data):
+            case .livePhoto(let data, _):
                 try? FileManager.default.removeItem(at: data.videoURL)
-            case .video(let data):
+            case .video(let data, _):
                 try? FileManager.default.removeItem(at: data.url)
             case .image:
                 break

@@ -37,29 +37,29 @@ class SocialService {
 
     // MARK: - Likes
 
-    func createLike(postId: String, userId: String) async throws {
+    /// Response from like/unlike operations containing accurate count from server
+    struct LikeResponse: Codable {
+        let success: Bool
+        let likeCount: Int64
+    }
+
+    /// Create a like and return the accurate like count from server
+    func createLike(postId: String, userId: String) async throws -> LikeResponse {
         struct Request: Codable {
             let post_id: String
             let user_id: String
         }
 
-        struct Response: Codable {
-            let success: Bool
-        }
-
         let request = Request(post_id: postId, user_id: userId)
-        let _: Response = try await client.request(
+        return try await client.request(
             endpoint: APIConfig.Social.createLike,
             body: request
         )
     }
 
-    func deleteLike(postId: String, userId: String) async throws {
-        struct Response: Codable {
-            let success: Bool
-        }
-
-        let _: Response = try await client.request(
+    /// Delete a like and return the accurate like count from server
+    func deleteLike(postId: String, userId: String) async throws -> LikeResponse {
+        return try await client.request(
             endpoint: APIConfig.Social.deleteLike(postId),
             method: "DELETE"
         )

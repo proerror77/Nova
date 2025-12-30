@@ -232,7 +232,7 @@ impl SearchService for SearchServiceImpl {
                 username: user.username,
                 display_name: user.display_name,
                 bio: user.bio.unwrap_or_default(),
-                avatar_url: String::new(),
+                avatar_url: user.avatar_url.unwrap_or_default(),
                 is_verified: user.is_verified,
                 follower_count: user.follower_count,
                 relevance_score: 1.0,

@@ -15,7 +15,11 @@ impl LikeRepository {
     }
 
     /// Create a new like (idempotent - returns success if already exists)
-    pub async fn create_like(&self, user_id: Uuid, post_id: Uuid) -> Result<Like> {
+    /// Returns (Like, was_created) where was_created is true if this is a new like
+    pub async fn create_like(&self, user_id: Uuid, post_id: Uuid) -> Result<(Like, bool)> {
+        // First check if already liked
+        let already_liked = self.check_user_liked(user_id, post_id).await?;
+
         let like = sqlx::query_as::<_, Like>(
             r#"
             INSERT INTO likes (user_id, post_id)
@@ -30,7 +34,8 @@ impl LikeRepository {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(like)
+        // was_created is true only if it didn't exist before
+        Ok((like, !already_liked))
     }
 
     /// Delete a like (idempotent - returns success if doesn't exist)
@@ -142,5 +147,41 @@ impl LikeRepository {
         .await?;
 
         Ok((post_ids, total as i32))
+    }
+
+    /// Batch check if user has liked multiple posts
+    /// Returns a HashMap of post_id -> is_liked
+    pub async fn batch_check_liked(
+        &self,
+        user_id: Uuid,
+        post_ids: &[Uuid],
+    ) -> Result<std::collections::HashMap<Uuid, bool>> {
+        use std::collections::HashMap;
+
+        if post_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        // Get all posts that the user has liked from the given list
+        let liked_posts: Vec<Uuid> = sqlx::query_scalar(
+            r#"
+            SELECT post_id
+            FROM likes
+            WHERE user_id = $1 AND post_id = ANY($2)
+            "#,
+        )
+        .bind(user_id)
+        .bind(post_ids)
+        .fetch_all(&self.pool)
+        .await?;
+
+        // Build the result map
+        let liked_set: std::collections::HashSet<Uuid> = liked_posts.into_iter().collect();
+        let result: HashMap<Uuid, bool> = post_ids
+            .iter()
+            .map(|id| (*id, liked_set.contains(id)))
+            .collect();
+
+        Ok(result)
     }
 }

@@ -15,6 +15,14 @@
 # - CommentCreated (3 partitions) - New comment notifications
 # - PostLiked (3 partitions) - Post like notifications
 # - ReplyLiked (3 partitions) - Reply like notifications
+# Service Event Topics:
+# - message_deleted (3 partitions) - Message deletion events for search
+# - message_persisted (3 partitions) - Message persistence events for search
+# - nova.content.events (3 partitions) - Content service events
+# - nova.identity.events (3 partitions) - Identity service events
+# - nova.social.events (3 partitions) - Social service events
+# - nova.media.events (3 partitions) - Media service events
+# - nova.message.events (3 partitions) - Messaging service events
 # Dead Letter Queues:
 # - dlq.nova-content-cdc (1 partition) - Dead letter queue for content CDC
 # - dlq.nova-graph-cdc (1 partition) - Dead letter queue for graph CDC
@@ -96,6 +104,17 @@ spec:
             "ReplyLiked:3:1"
           )
 
+          # Service event topics (for inter-service communication)
+          SERVICE_EVENT_TOPICS=(
+            "message_deleted:3:1"
+            "message_persisted:3:1"
+            "nova.content.events:3:1"
+            "nova.identity.events:3:1"
+            "nova.social.events:3:1"
+            "nova.media.events:3:1"
+            "nova.message.events:3:1"
+          )
+
           # Dead Letter Queue topics for failed CDC messages
           DLQ_TOPICS=(
             "dlq.nova-content-cdc:1:1"
@@ -134,6 +153,26 @@ spec:
           echo ""
 
           for topic_spec in "${NOTIFICATION_TOPICS[@]}"; do
+            IFS=':' read -r topic_name partitions replication <<< "$topic_spec"
+            echo "Creating topic: $topic_name (partitions: $partitions)"
+
+            kafka-topics \
+              --bootstrap-server "$BOOTSTRAP_SERVER" \
+              --create \
+              --topic "$topic_name" \
+              --partitions "$partitions" \
+              --replication-factor "$replication" \
+              --if-not-exists \
+              --config retention.ms=604800000 \
+              --config cleanup.policy=delete || true
+
+            echo ""
+          done
+
+          echo "Creating Service event topics..."
+          echo ""
+
+          for topic_spec in "${SERVICE_EVENT_TOPICS[@]}"; do
             IFS=':' read -r topic_name partitions replication <<< "$topic_spec"
             echo "Creating topic: $topic_name (partitions: $partitions)"
 
@@ -196,7 +235,7 @@ spec:
           echo "=============================================="
           echo ""
           echo "Topic list:"
-          kafka-topics --bootstrap-server "$BOOTSTRAP_SERVER" --list | grep -E "^(cdc\.|dlq\.|connect-|Message|Follow|Comment|Post|Reply)" || true
+          kafka-topics --bootstrap-server "$BOOTSTRAP_SERVER" --list | grep -E "^(cdc\.|dlq\.|connect-|Message|Follow|Comment|Post|Reply|nova\.|message_)" || true
           echo ""
 
         resources:

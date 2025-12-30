@@ -7,10 +7,16 @@ struct InviteCodeView: View {
     @State private var errorMessage: String?
     @FocusState private var isInputFocused: Bool
 
+    // Access AuthenticationManager for pending SSO retry
+    @EnvironmentObject private var authManager: AuthenticationManager
+
     /// 整体内容垂直偏移（负值上移，正值下移）
     private let contentVerticalOffset: CGFloat = -50
 
     private var isInviteCodeValid: Bool { inviteCode.count == 8 }
+
+    /// Whether we're retrying a pending SSO flow
+    private var isPendingSSO: Bool { authManager.hasPendingSSO }
 
     var body: some View {
         ZStack {
@@ -42,7 +48,11 @@ struct InviteCodeView: View {
             // Back Button - 左上角
             VStack {
                 HStack {
-                    Button(action: { currentPage = .login }) {
+                    Button(action: {
+                        // Clear pending SSO state when going back
+                        authManager.clearPendingSSOState()
+                        currentPage = .login
+                    }) {
                         Image("back-white")
                             .resizable()
                             .scaledToFit()
@@ -192,7 +202,13 @@ struct InviteCodeView: View {
             let response: ValidateResponse = try await APIClient.shared.request(endpoint: endpoint, method: "GET")
 
             if response.isValid {
-                await MainActor.run { currentPage = .createAccount }
+                // Check if we have a pending SSO flow to retry
+                if isPendingSSO {
+                    await retrySSOWithInviteCode()
+                } else {
+                    // Normal flow - go to create account
+                    await MainActor.run { currentPage = .createAccount }
+                }
             } else {
                 errorMessage = response.error ?? "Invalid_invite_code_generic"
             }
@@ -232,8 +248,37 @@ struct InviteCodeView: View {
 
         isLoading = false
     }
+
+    /// Retry pending SSO flow with the validated invite code
+    @MainActor
+    private func retrySSOWithInviteCode() async {
+        do {
+            let _ = try await authManager.retrySSOWithInviteCode(inviteCode)
+            // Success - AuthenticationManager will update isAuthenticated
+            // The auth state change will navigate away from this view
+        } catch let error as OAuthError {
+            if case .invalidInviteCode(let message) = error {
+                errorMessage = message
+            } else if error.requiresInviteCode {
+                // Still requires invite code - shouldn't happen after validation
+                errorMessage = "Invalid_invite_code_generic"
+            } else if case .userCancelled = error {
+                // User cancelled - go back to login
+                authManager.clearPendingSSOState()
+                currentPage = .login
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        } catch {
+            #if DEBUG
+            print("[InviteCodeView] SSO retry error: \(error)")
+            #endif
+            errorMessage = error.localizedDescription
+        }
+    }
 }
 
 #Preview {
     InviteCodeView(currentPage: .constant(.inviteCode))
+        .environmentObject(AuthenticationManager.shared)
 }

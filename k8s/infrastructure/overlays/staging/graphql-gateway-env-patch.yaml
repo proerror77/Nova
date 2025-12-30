@@ -42,13 +42,13 @@ spec:
         - name: GRPC_SOCIAL_SERVICE_URL
           value: "https://social-service.nova-staging.svc.cluster.local:50052"
 
-        # Chat service - gRPC on 9095 with mTLS (via grpc-mtls-shared)
+        # Chat service - gRPC on 9095 (HTTP without mTLS for internal cluster)
         - name: GRPC_CHAT_SERVICE_URL
-          value: "https://realtime-chat-service.nova-staging.svc.cluster.local:9095"
+          value: "http://realtime-chat-service.nova-staging.svc.cluster.local:9095"
 
         # Chat service HTTP URL for Matrix API proxy (port 8080)
         - name: CHAT_SERVICE_HTTP_URL
-          value: "http://realtime-chat-service:8080"
+          value: "http://realtime-chat-service.nova-staging.svc.cluster.local:8080"
 
         # ============================================================
         # Notification and Graph services (now using GrpcConfig)

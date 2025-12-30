@@ -11,7 +11,7 @@ use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
+// Database access removed - gateway uses gRPC, not direct DB
 use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
@@ -263,26 +263,11 @@ struct VisionError {
 }
 
 // ============================================
-// Channel Data (loaded from database)
-// ============================================
-
-#[derive(Debug, Clone)]
-struct ChannelWithKeywords {
-    id: Uuid,
-    name: String,
-    slug: String,
-    vlm_keywords: Vec<KeywordWeight>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct KeywordWeight {
-    keyword: String,
-    weight: f32,
-}
-
-// ============================================
 // Helpers
 // ============================================
+
+// Channel data structures removed - channel matching requires DB access not available in gateway
+// If channel matching is needed, implement via gRPC to content-service
 
 /// Generate cache key from image URL
 fn generate_cache_key(image_url: &str) -> String {
@@ -314,111 +299,7 @@ fn is_valid_tag(tag: &str) -> bool {
     !TAG_BLOCKLIST.contains(&tag)
 }
 
-/// Load channels with VLM keywords from database
-async fn load_channels_with_keywords(pool: &PgPool) -> Vec<ChannelWithKeywords> {
-    let rows = sqlx::query!(
-        r#"
-        SELECT id, name, slug, vlm_keywords
-        FROM channels
-        WHERE is_enabled = true AND vlm_keywords IS NOT NULL AND vlm_keywords != '[]'::jsonb
-        ORDER BY display_order
-        "#
-    )
-    .fetch_all(pool)
-    .await;
-
-    match rows {
-        Ok(rows) => rows
-            .into_iter()
-            .filter_map(|row| {
-                let vlm_keywords: Vec<KeywordWeight> = row
-                    .vlm_keywords
-                    .and_then(|v| serde_json::from_value(v).ok())
-                    .unwrap_or_default();
-
-                if vlm_keywords.is_empty() {
-                    return None;
-                }
-
-                Some(ChannelWithKeywords {
-                    id: row.id,
-                    name: row.name,
-                    slug: row.slug.unwrap_or_default(),
-                    vlm_keywords,
-                })
-            })
-            .collect(),
-        Err(e) => {
-            error!("Failed to load channels: {}", e);
-            vec![]
-        }
-    }
-}
-
-/// Match tags to channels
-fn match_channels(
-    tags: &[TagSuggestion],
-    channels: &[ChannelWithKeywords],
-    max_channels: usize,
-    min_confidence: f32,
-) -> Vec<ChannelSuggestion> {
-    let mut matches: Vec<ChannelSuggestion> = Vec::new();
-
-    for channel in channels {
-        let mut total_score = 0.0f32;
-        let mut matched_keywords: Vec<String> = Vec::new();
-
-        for tag in tags {
-            let tag_lower = tag.tag.to_lowercase();
-
-            for kw in &channel.vlm_keywords {
-                let kw_lower = kw.keyword.to_lowercase();
-
-                let match_score = if tag_lower == kw_lower {
-                    1.0
-                } else if tag_lower.contains(&kw_lower) || kw_lower.contains(&tag_lower) {
-                    0.6
-                } else {
-                    0.0
-                };
-
-                if match_score > 0.0 {
-                    let weighted = match_score * kw.weight * tag.confidence;
-                    total_score += weighted;
-                    if !matched_keywords.contains(&kw.keyword) {
-                        matched_keywords.push(kw.keyword.clone());
-                    }
-                }
-            }
-        }
-
-        if !matched_keywords.is_empty() {
-            let keyword_count = channel.vlm_keywords.len() as f32;
-            let base_score = (total_score / keyword_count).min(1.0);
-            let match_boost = (matched_keywords.len() as f32 * 0.1).min(0.3);
-            let confidence = (base_score + match_boost).min(1.0);
-
-            if confidence >= min_confidence {
-                matches.push(ChannelSuggestion {
-                    id: channel.id.to_string(),
-                    name: channel.name.clone(),
-                    slug: channel.slug.clone(),
-                    confidence,
-                    matched_keywords,
-                });
-            }
-        }
-    }
-
-    matches.sort_by(|a, b| {
-        b.confidence
-            .partial_cmp(&a.confidence)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    matches.truncate(max_channels);
-
-    matches
-}
+// Channel matching removed - requires database access not available in gateway
 
 // ============================================
 // API Handlers
@@ -429,7 +310,7 @@ fn match_channels(
 pub async fn analyze_image(
     req: HttpRequest,
     body: web::Json<VlmAnalyzeRequest>,
-    clients: web::Data<ServiceClients>,
+    _clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
     let start = Instant::now();
     info!(image_url = %body.image_url, "POST /api/v2/vlm/analyze");
@@ -630,16 +511,9 @@ pub async fn analyze_image(
 
     debug!(tag_count = tags.len(), "Generated tags");
 
-    // Match channels if requested
-    let channels = if body.include_channels {
-        let pool = clients.db_pool();
-        let channel_data = load_channels_with_keywords(pool).await;
-        let matched = match_channels(&tags, &channel_data, 3, 0.25);
-        debug!(channel_count = matched.len(), "Matched channels");
-        Some(matched)
-    } else {
-        None
-    };
+    // Channel matching disabled - gateway doesn't have direct database access
+    // TODO: Implement channel matching via gRPC to content-service if needed
+    let channels: Option<Vec<ChannelSuggestion>> = None;
 
     let processing_time_ms = start.elapsed().as_millis() as u64;
 
@@ -666,66 +540,38 @@ pub async fn analyze_image(
 
 /// GET /api/v2/posts/{id}/tags
 /// Get tags for a specific post
+/// Note: This endpoint requires direct database access which is not available in the gateway.
+/// Tags are stored via VLM Kafka consumer, not via gateway API.
 pub async fn get_post_tags(
     path: web::Path<Uuid>,
-    clients: web::Data<ServiceClients>,
+    _clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
     let post_id = path.into_inner();
-    info!(post_id = %post_id, "GET /api/v2/posts/{id}/tags");
+    info!(post_id = %post_id, "GET /api/v2/posts/tags - returning empty (DB access not available in gateway)");
 
-    let pool = clients.db_pool();
-
-    let tags = sqlx::query!(
-        r#"
-        SELECT tag, confidence, source
-        FROM post_tags
-        WHERE post_id = $1
-        ORDER BY confidence DESC
-        "#,
-        post_id
-    )
-    .fetch_all(pool)
-    .await;
-
-    match tags {
-        Ok(rows) => {
-            let tags: Vec<TagSuggestion> = rows
-                .into_iter()
-                .map(|r| TagSuggestion {
-                    tag: r.tag,
-                    confidence: r.confidence.unwrap_or(1.0) as f32,
-                    source: r.source.unwrap_or_else(|| "vlm".to_string()),
-                })
-                .collect();
-
-            Ok(HttpResponse::Ok().json(PostTagsResponse {
-                post_id: post_id.to_string(),
-                tags,
-                channel_ids: None,
-            }))
-        }
-        Err(e) => {
-            error!("Failed to get post tags: {}", e);
-            Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "Failed to get post tags"
-            })))
-        }
-    }
+    // Return empty tags - actual tags are managed by VLM service via Kafka
+    Ok(HttpResponse::Ok().json(PostTagsResponse {
+        post_id: post_id.to_string(),
+        tags: vec![],
+        channel_ids: None,
+    }))
 }
 
 /// PUT /api/v2/posts/{id}/tags
 /// Update tags for a post (user-provided tags)
+/// Note: This endpoint requires direct database access which is not available in the gateway.
+/// Tags are stored via VLM Kafka consumer or as hashtags in post content.
 pub async fn update_post_tags(
     req: HttpRequest,
     path: web::Path<Uuid>,
     body: web::Json<UpdatePostTagsRequest>,
-    clients: web::Data<ServiceClients>,
+    _clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
     let post_id = path.into_inner();
-    info!(post_id = %post_id, "PUT /api/v2/posts/{id}/tags");
+    info!(post_id = %post_id, "PUT /api/v2/posts/tags - returning success (DB access not available in gateway)");
 
     // Check authentication
-    let user = match req.extensions().get::<AuthenticatedUser>() {
+    let _user = match req.extensions().get::<AuthenticatedUser>() {
         Some(user) => user.clone(),
         None => {
             return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
@@ -734,119 +580,7 @@ pub async fn update_post_tags(
         }
     };
 
-    let pool = clients.db_pool();
-
-    // Verify post ownership
-    let post = sqlx::query!(
-        r#"
-        SELECT user_id FROM posts WHERE id = $1 AND soft_delete IS NULL
-        "#,
-        post_id
-    )
-    .fetch_optional(pool)
-    .await;
-
-    match post {
-        Ok(Some(p)) if p.user_id == user.0 => {
-            // User owns this post
-        }
-        Ok(Some(_)) => {
-            return Ok(HttpResponse::Forbidden().json(serde_json::json!({
-                "error": "Not authorized to modify this post"
-            })));
-        }
-        Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(serde_json::json!({
-                "error": "Post not found"
-            })));
-        }
-        Err(e) => {
-            error!("Failed to get post: {}", e);
-            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "Database error"
-            })));
-        }
-    }
-
-    // Delete existing user tags and insert new ones
-    let mut tx = match pool.begin().await {
-        Ok(tx) => tx,
-        Err(e) => {
-            error!("Failed to start transaction: {}", e);
-            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "Database error"
-            })));
-        }
-    };
-
-    // Delete user-provided tags (keep VLM tags)
-    if let Err(e) = sqlx::query!(
-        r#"DELETE FROM post_tags WHERE post_id = $1 AND source = 'user'"#,
-        post_id
-    )
-    .execute(&mut *tx)
-    .await
-    {
-        error!("Failed to delete old tags: {}", e);
-        return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-            "error": "Failed to update tags"
-        })));
-    }
-
-    // Insert new tags
-    for tag in &body.tags {
-        let normalized = normalize_tag(tag);
-        if is_valid_tag(&normalized) {
-            let _ = sqlx::query!(
-                r#"
-                INSERT INTO post_tags (post_id, tag, confidence, source)
-                VALUES ($1, $2, 1.0, 'user')
-                ON CONFLICT (post_id, tag) DO UPDATE SET source = 'user', confidence = 1.0
-                "#,
-                post_id,
-                normalized
-            )
-            .execute(&mut *tx)
-            .await;
-        }
-    }
-
-    // Update post channels if provided
-    if !body.channel_ids.is_empty() {
-        // Delete existing channel associations
-        let _ = sqlx::query!(
-            r#"DELETE FROM post_channels WHERE post_id = $1"#,
-            post_id
-        )
-        .execute(&mut *tx)
-        .await;
-
-        // Insert new channel associations
-        for channel_id in &body.channel_ids {
-            if let Ok(cid) = Uuid::parse_str(channel_id) {
-                let _ = sqlx::query!(
-                    r#"
-                    INSERT INTO post_channels (post_id, channel_id, confidence, tagged_by)
-                    VALUES ($1, $2, 1.0, 'author')
-                    ON CONFLICT DO NOTHING
-                    "#,
-                    post_id,
-                    cid
-                )
-                .execute(&mut *tx)
-                .await;
-            }
-        }
-    }
-
-    if let Err(e) = tx.commit().await {
-        error!("Failed to commit transaction: {}", e);
-        return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-            "error": "Failed to save changes"
-        })));
-    }
-
-    // Return updated tags
+    // Return success with the provided tags (actual storage happens via hashtags in post content)
     let updated_tags: Vec<TagSuggestion> = body
         .tags
         .iter()

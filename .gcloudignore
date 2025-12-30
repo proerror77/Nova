@@ -27,6 +27,7 @@ frontend/
 
 # Documentation (not needed for build)
 docs/
+backend/docs/
 
 # Local config
 .env
@@ -36,3 +37,8 @@ docs/
 # Cache
 .cache/
 **/.cache/
+
+# Large non-build directories
+infra/
+.serena/
+backend/livekit-agent/

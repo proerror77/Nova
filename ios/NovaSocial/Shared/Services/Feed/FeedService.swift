@@ -380,6 +380,7 @@ struct FeedPostRaw: Codable {
     let id: String
     let userId: String
     let content: String
+    let title: String?
     let createdAt: Int64
     let rankingScore: Double?
     let likeCount: Int?
@@ -389,11 +390,19 @@ struct FeedPostRaw: Codable {
     let mediaUrls: [String]?
     let thumbnailUrls: [String]?
     let mediaType: String?
+    /// Whether the current user has liked this post (from backend)
+    let isLiked: Bool?
+    /// Whether the current user has bookmarked this post (from backend)
+    let isBookmarked: Bool?
 
     // Author information (optional for backward compatibility)
     let authorUsername: String?
     let authorDisplayName: String?
     let authorAvatar: String?
+
+    // Location and tags (from VLM service or user input)
+    let location: String?
+    let tags: [String]?
 }
 
 /// Response from feed-service /api/v2/feed endpoint
@@ -500,6 +509,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
     let authorName: String
     let authorAvatar: String?
     let content: String
+    let title: String?
     let mediaUrls: [String]
     let thumbnailUrls: [String]
     let mediaType: FeedMediaType
@@ -510,6 +520,14 @@ struct FeedPost: Identifiable, Codable, Equatable {
     let bookmarkCount: Int
     let isLiked: Bool
     let isBookmarked: Bool
+    let location: String?
+    let tags: [String]?
+
+    /// Formatted tags string for display (e.g., "#Fashion #Sport #Art")
+    var formattedTags: String? {
+        guard let tags = tags, !tags.isEmpty else { return nil }
+        return tags.map { "#\($0)" }.joined(separator: " ")
+    }
 
     /// Prefer thumbnails for list performance; fall back to originals when missing.
     /// Normalizes relative URLs and filters out invalid URLs (e.g., "text-content-xxx" placeholders).
@@ -613,6 +631,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
 
         self.authorAvatar = raw.authorAvatar
         self.content = raw.content
+        self.title = raw.title
         self.mediaUrls = raw.mediaUrls ?? []
 
         #if DEBUG
@@ -631,15 +650,20 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.commentCount = raw.commentCount ?? 0
         self.shareCount = raw.shareCount ?? 0
         self.bookmarkCount = raw.bookmarkCount ?? 0
-        self.isLiked = false
-        self.isBookmarked = false
+        // Use backend-provided like/bookmark status (defaults to false for backward compatibility)
+        self.isLiked = raw.isLiked ?? false
+        self.isBookmarked = raw.isBookmarked ?? false
+        // Location and tags from VLM analysis
+        self.location = raw.location
+        self.tags = raw.tags
     }
 
     // Keep existing init for Codable conformance and manual creation
     init(id: String, authorId: String, authorName: String, authorAvatar: String?,
-        content: String, mediaUrls: [String], mediaType: FeedMediaType? = nil, createdAt: Date,
+        content: String, title: String? = nil, mediaUrls: [String], mediaType: FeedMediaType? = nil, createdAt: Date,
          likeCount: Int, commentCount: Int, shareCount: Int, bookmarkCount: Int = 0,
-         isLiked: Bool, isBookmarked: Bool) {
+         isLiked: Bool, isBookmarked: Bool,
+         location: String? = nil, tags: [String]? = nil) {
         #if DEBUG
         print("[Feed] Created post via manual init: \(id.prefix(8)), mediaUrls=\(mediaUrls.count)")
         #endif
@@ -648,6 +672,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.authorName = authorName
         self.authorAvatar = authorAvatar
         self.content = content
+        self.title = title
         self.mediaUrls = mediaUrls
         self.thumbnailUrls = mediaUrls
         // Use provided type or infer from URLs
@@ -659,6 +684,8 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.bookmarkCount = bookmarkCount
         self.isLiked = isLiked
         self.isBookmarked = isBookmarked
+        self.location = location
+        self.tags = tags
     }
 
     /// Create a copy with optional field overrides (eliminates duplicate creation code)
@@ -678,6 +705,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
             authorName: authorName ?? self.authorName,
             authorAvatar: authorAvatar ?? self.authorAvatar,
             content: self.content,
+            title: self.title,
             mediaUrls: self.mediaUrls,
             mediaType: self.mediaType,
             createdAt: self.createdAt,
@@ -686,7 +714,9 @@ struct FeedPost: Identifiable, Codable, Equatable {
             shareCount: shareCount ?? self.shareCount,
             bookmarkCount: bookmarkCount ?? self.bookmarkCount,
             isLiked: isLiked ?? self.isLiked,
-            isBookmarked: isBookmarked ?? self.isBookmarked
+            isBookmarked: isBookmarked ?? self.isBookmarked,
+            location: self.location,
+            tags: self.tags
         )
     }
 
@@ -700,6 +730,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.authorName = authorName
         self.authorAvatar = authorAvatar
         self.content = post.content
+        self.title = post.title
         self.mediaUrls = post.mediaUrls ?? []
         self.thumbnailUrls = post.mediaUrls ?? []
         self.mediaType = FeedMediaType.from(urls: post.mediaUrls ?? [])
@@ -710,6 +741,8 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.bookmarkCount = post.bookmarkCount ?? 0
         self.isLiked = false
         self.isBookmarked = false
+        self.location = post.location
+        self.tags = post.tags
     }
 }
 

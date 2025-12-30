@@ -54,15 +54,15 @@ impl SocialService for SocialServiceImpl {
             .map_err(|_| Status::invalid_argument("Invalid post_id"))?;
 
         // Create like in database
-        self.like_repo
+        let (_like, _was_created) = self.like_repo
             .create_like(user_id, post_id)
             .await
             .map_err(|e| Status::internal(format!("Failed to create like: {}", e)))?;
 
-        // Increment counter in Redis
-        let like_count = self
-            .counter_service
-            .increment_like_count(post_id)
+        // Read accurate count from PostgreSQL (source of truth)
+        // Use rate-limited refresh to prevent thundering herd on hot posts
+        let like_count = self.counter_service
+            .refresh_like_count_rate_limited(post_id)
             .await
             .unwrap_or(0);
 
@@ -83,16 +83,16 @@ impl SocialService for SocialServiceImpl {
         let post_id = Uuid::parse_str(&req.post_id)
             .map_err(|_| Status::invalid_argument("Invalid post_id"))?;
 
-        // Delete like from database (idempotent)
-        self.like_repo
+        // Delete like from database
+        let _was_deleted = self.like_repo
             .delete_like(user_id, post_id)
             .await
             .map_err(|e| Status::internal(format!("Failed to delete like: {}", e)))?;
 
-        // Decrement counter in Redis
-        let like_count = self
-            .counter_service
-            .decrement_like_count(post_id)
+        // Read accurate count from PostgreSQL (source of truth)
+        // Use rate-limited refresh to prevent thundering herd on hot posts
+        let like_count = self.counter_service
+            .refresh_like_count_rate_limited(post_id)
             .await
             .unwrap_or(0);
 

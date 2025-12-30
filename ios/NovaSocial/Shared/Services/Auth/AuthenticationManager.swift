@@ -265,69 +265,120 @@ class AuthenticationManager: ObservableObject, @unchecked Sendable {
 
     // MARK: - OAuth Login
 
+    /// Pending SSO provider type for invite code retry
+    enum PendingSSOProvider {
+        case google
+        case apple
+    }
+
+    /// Stores which SSO provider is pending invite code
+    private(set) var pendingSSOProvider: PendingSSOProvider?
+
+    /// Clear pending SSO state
+    func clearPendingSSOState() {
+        pendingSSOProvider = nil
+        OAuthService.shared.clearPendingCredentials()
+    }
+
     /// Login with Google OAuth
-    func loginWithGoogle() async throws -> UserProfile {
+    /// - Parameter inviteCode: Optional invite code for new user registration
+    /// - Returns: User profile on success
+    /// - Throws: `OAuthError.inviteCodeRequired` if new user without invite code
+    @MainActor
+    func loginWithGoogle(inviteCode: String? = nil) async throws -> UserProfile {
         let oauthService = OAuthService.shared
 
-        // Perform Google Sign-In flow
-        let response = try await oauthService.signInWithGoogle()
+        do {
+            // Perform Google Sign-In flow
+            let response = try await oauthService.signInWithGoogle(inviteCode: inviteCode)
 
-        // Create user profile from response
-        let user: UserProfile
-        if let responseUser = response.user {
-            user = responseUser
-        } else {
-            // Minimal profile if not provided
-            user = UserProfile(
-                id: response.userId,
-                username: "user_\(response.userId.prefix(8))",
-                email: nil,
-                displayName: nil,
-                bio: nil,
-                avatarUrl: nil,
-                coverUrl: nil,
-                website: nil,
-                location: nil,
-                isVerified: false,
-                isPrivate: false,
-                isBanned: false,
-                followerCount: 0,
-                followingCount: 0,
-                postCount: 0,
-                createdAt: nil,
-                updatedAt: nil,
-                deletedAt: nil,
-                firstName: nil,
-                lastName: nil,
-                dateOfBirth: nil,
-                gender: nil
-            )
+            // Clear pending state on success
+            pendingSSOProvider = nil
+
+            // Create user profile from response
+            let user = createUserProfile(from: response)
+
+            // Save authentication
+            await saveAuth(token: response.token, refreshToken: response.refreshToken, user: user)
+
+            #if DEBUG
+            print("[Auth] Google Sign-In successful, isNewUser: \(response.isNewUser)")
+            #endif
+
+            return user
+        } catch let error as OAuthError {
+            // Store pending provider for invite code retry
+            if error.requiresInviteCode {
+                pendingSSOProvider = .google
+            }
+            throw error
         }
-
-        // Save authentication
-        await saveAuth(token: response.token, refreshToken: response.refreshToken, user: user)
-
-        #if DEBUG
-        print("[Auth] Google Sign-In successful, isNewUser: \(response.isNewUser)")
-        #endif
-
-        return user
     }
 
     /// Login with Apple Sign-In
-    func loginWithApple() async throws -> UserProfile {
+    /// - Parameter inviteCode: Optional invite code for new user registration
+    /// - Returns: User profile on success
+    /// - Throws: `OAuthError.inviteCodeRequired` if new user without invite code
+    @MainActor
+    func loginWithApple(inviteCode: String? = nil) async throws -> UserProfile {
         let oauthService = OAuthService.shared
 
-        // Perform Apple Sign-In flow (native)
-        let response = try await oauthService.signInWithApple()
+        do {
+            // Perform Apple Sign-In flow (native)
+            let response = try await oauthService.signInWithApple(inviteCode: inviteCode)
 
-        // Create user profile from response
-        let user: UserProfile
+            // Clear pending state on success
+            pendingSSOProvider = nil
+
+            // Create user profile from response
+            let user = createUserProfile(from: response)
+
+            // Save authentication
+            await saveAuth(token: response.token, refreshToken: response.refreshToken, user: user)
+
+            #if DEBUG
+            print("[Auth] Apple Sign-In successful, isNewUser: \(response.isNewUser)")
+            #endif
+
+            return user
+        } catch let error as OAuthError {
+            // Store pending provider for invite code retry
+            if error.requiresInviteCode {
+                pendingSSOProvider = .apple
+            }
+            throw error
+        }
+    }
+
+    /// Retry SSO login with invite code
+    /// - Parameter inviteCode: Invite code for new user registration
+    /// - Returns: User profile on success
+    @MainActor
+    func retrySSOWithInviteCode(_ inviteCode: String) async throws -> UserProfile {
+        guard let provider = pendingSSOProvider else {
+            throw OAuthError.invalidCallback
+        }
+
+        switch provider {
+        case .google:
+            return try await loginWithGoogle(inviteCode: inviteCode)
+        case .apple:
+            return try await loginWithApple(inviteCode: inviteCode)
+        }
+    }
+
+    /// Check if there's a pending SSO that requires invite code
+    var hasPendingSSO: Bool {
+        pendingSSOProvider != nil
+    }
+
+    /// Helper to create UserProfile from OAuth response
+    private func createUserProfile(from response: OAuthService.OAuthCallbackResponse) -> UserProfile {
         if let responseUser = response.user {
-            user = responseUser
+            return responseUser
         } else {
             // Minimal profile if not provided
-            user = UserProfile(
+            return UserProfile(
                 id: response.userId,
                 username: "user_\(response.userId.prefix(8))",
                 email: nil,
@@ -352,15 +403,6 @@ class AuthenticationManager: ObservableObject, @unchecked Sendable {
                 gender: nil
             )
         }
-
-        // Save authentication
-        await saveAuth(token: response.token, refreshToken: response.refreshToken, user: user)
-
-        #if DEBUG
-        print("[Auth] Apple Sign-In successful, isNewUser: \(response.isNewUser)")
-        #endif
-
-        return user
     }
 
     /// Login with Passkey authentication

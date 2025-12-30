@@ -15,7 +15,7 @@ use grpc_clients::nova::content_service::v2::{
 };
 use grpc_clients::nova::graph_service::v2::GetFollowingRequest;
 use grpc_clients::nova::identity_service::v2::GetUserProfilesByIdsRequest;
-use grpc_clients::nova::social_service::v2::BatchGetCountsRequest;
+use grpc_clients::nova::social_service::v2::{BatchGetCountsRequest, BatchGetLikeStatusRequest};
 
 #[derive(Debug, Deserialize)]
 pub struct FeedQueryParams {
@@ -300,7 +300,7 @@ pub async fn get_feed(
     };
 
     // Step: Fetch full post details from content-service
-    let full_posts = fetch_full_posts(&state, &posts).await?;
+    let full_posts = fetch_full_posts(&state, &posts, Some(user_id)).await?;
 
     Ok(HttpResponse::Ok().json(FeedResponse {
         posts: full_posts,
@@ -311,9 +311,11 @@ pub async fn get_feed(
 }
 
 /// Fetch full post details from content-service and social stats
+/// When user_id is provided, also fetches like/bookmark status for the user
 async fn fetch_full_posts(
     state: &FeedHandlerState,
     post_ids: &[Uuid],
+    user_id: Option<Uuid>,
 ) -> Result<Vec<FeedPostFull>> {
     if post_ids.is_empty() {
         return Ok(vec![]);
@@ -384,6 +386,30 @@ async fn fetch_full_posts(
         }
     };
 
+    // Fetch like status for authenticated user (graceful degradation)
+    // Note: bookmark status requires BatchCheckBookmarked which isn't in grpc-clients yet
+    let like_statuses: HashMap<String, bool> = if let Some(uid) = user_id {
+        let user_id_str = uid.to_string();
+
+        // Fetch like status
+        let mut social_client_like = state.grpc_pool.social();
+        match social_client_like
+            .batch_get_like_status(BatchGetLikeStatusRequest {
+                post_ids: post_id_strings.clone(),
+                user_id: user_id_str,
+            })
+            .await
+        {
+            Ok(resp) => resp.into_inner().statuses,
+            Err(e) => {
+                warn!("Failed to fetch like status (continuing with false): {}", e);
+                HashMap::new()
+            }
+        }
+    } else {
+        HashMap::new()
+    };
+
     // Convert to FeedPostFull with social stats
     let full_posts: Vec<FeedPostFull> = posts_resp
         .posts
@@ -424,6 +450,8 @@ async fn fetch_full_posts(
                 media_urls,
                 thumbnail_urls,
                 media_type: post.media_type.clone(),
+                is_liked: like_statuses.get(&post.id).copied().unwrap_or(false),
+                is_bookmarked: false, // TODO: Add BatchCheckBookmarked to grpc-clients
                 author_username,
                 author_display_name,
                 author_avatar,
@@ -544,8 +572,8 @@ pub async fn get_guest_feed(
         posts_count, offset, has_more
     );
 
-    // Fetch full post details from content-service
-    let full_posts = fetch_full_posts(&state, &posts).await?;
+    // Fetch full post details from content-service (no user context for guest)
+    let full_posts = fetch_full_posts(&state, &posts, None).await?;
 
     Ok(HttpResponse::Ok().json(FeedResponse {
         posts: full_posts,

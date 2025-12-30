@@ -377,21 +377,27 @@ struct PostDetailView: View {
 
     private var contentSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Title
-            Text("Beautiful scenery")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(DesignTokens.textPrimary)
+            // Title (from backend or VLM analysis)
+            if let title = post.title, !title.isEmpty {
+                Text(title)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(DesignTokens.textPrimary)
+            }
 
             // Description
-            Text(post.content.isEmpty ? "The setting sun dyed the entire sea surface golden. The ship seemed to slowly sail into the light." : post.content)
-                .font(.system(size: 12))
-                .lineSpacing(6)
-                .foregroundColor(DesignTokens.textPrimary)
+            if !post.content.isEmpty {
+                Text(post.content)
+                    .font(.system(size: 12))
+                    .lineSpacing(6)
+                    .foregroundColor(DesignTokens.textPrimary)
+            }
 
-            // Tags
-            Text("#Fashion #Sport #Art #Beautiful")
-                .font(.system(size: 12))
-                .foregroundColor(DesignTokens.accentColor)
+            // Tags (from AI analysis or user input)
+            if let formattedTags = post.formattedTags {
+                Text(formattedTags)
+                    .font(.system(size: 12))
+                    .foregroundColor(DesignTokens.accentColor)
+            }
 
             // Time and Location
             HStack(spacing: 5) {
@@ -399,9 +405,11 @@ struct PostDetailView: View {
                     .font(.system(size: 10))
                     .foregroundColor(DesignTokens.textSecondary)
 
-                Text("Beijing")
-                    .font(.system(size: 10))
-                    .foregroundColor(DesignTokens.textSecondary)
+                if let location = post.location {
+                    Text(location)
+                        .font(.system(size: 10))
+                        .foregroundColor(DesignTokens.textSecondary)
+                }
             }
 
             // Divider
@@ -707,7 +715,7 @@ struct SocialCommentItemView: View {
                                         .resizable()
                                         .scaledToFit()
                                         .frame(width: 12, height: 12)
-                                    Text("\(likeCount)")
+                                    Text(likeCount.abbreviated)
                                         .font(.system(size: 12))
                                         .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                                 }
@@ -723,7 +731,7 @@ struct SocialCommentItemView: View {
                                         .resizable()
                                         .scaledToFit()
                                         .frame(width: 12, height: 12)
-                                    Text("\(saveCount)")
+                                    Text(saveCount.abbreviated)
                                         .font(.system(size: 12))
                                         .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                                 }

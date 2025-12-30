@@ -49,6 +49,7 @@ pub struct UserDocument {
     pub username: String,
     pub display_name: String,
     pub bio: Option<String>,
+    pub avatar_url: Option<String>,
     pub location: Option<String>,
     pub interests: Vec<String>,
     pub is_verified: bool,

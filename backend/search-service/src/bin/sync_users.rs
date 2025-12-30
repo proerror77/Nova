@@ -28,7 +28,6 @@ struct UserRecord {
     username: String,
     display_name: Option<String>,
     bio: Option<String>,
-    #[allow(dead_code)]
     avatar_url: Option<String>,
     #[allow(dead_code)]
     created_at: DateTime<Utc>,
@@ -41,6 +40,7 @@ struct UserDocument {
     username: String,
     display_name: String,
     bio: Option<String>,
+    avatar_url: Option<String>,
     location: Option<String>,
     interests: Vec<String>,
     is_verified: bool,
@@ -249,6 +249,7 @@ fn to_es_document(user: &UserRecord) -> UserDocument {
         username: user.username.clone(),
         display_name: user.display_name.clone().unwrap_or_default(),
         bio: user.bio.clone(),
+        avatar_url: user.avatar_url.clone(),
         location: None,
         interests: vec![],
         is_verified: false,

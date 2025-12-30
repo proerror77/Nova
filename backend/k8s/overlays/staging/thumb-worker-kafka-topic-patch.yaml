@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: thumb-worker
+spec:
+  template:
+    spec:
+      containers:
+      - name: thumb-worker
+        env:
+        - name: KAFKA_TOPIC
+          value: "nova.media.events"

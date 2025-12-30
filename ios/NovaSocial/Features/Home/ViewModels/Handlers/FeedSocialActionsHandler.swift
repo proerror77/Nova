@@ -72,21 +72,36 @@ final class FeedSocialActionsHandler {
         defer { ongoingLikeOperations.remove(postId) }
         
         let wasLiked = currentPost.isLiked
-        
-        // Optimistic update
+
+        // Optimistic update - immediate UI feedback
         onPostUpdate?(postId) { post in
             post.copying(
                 likeCount: wasLiked ? post.likeCount - 1 : post.likeCount + 1,
                 isLiked: !wasLiked
             )
         }
-        
+
         do {
+            let response: SocialService.LikeResponse
             if wasLiked {
-                try await socialService.deleteLike(postId: postId, userId: userId)
+                response = try await socialService.deleteLike(postId: postId, userId: userId)
             } else {
-                try await socialService.createLike(postId: postId, userId: userId)
+                response = try await socialService.createLike(postId: postId, userId: userId)
             }
+
+            // Reconcile with server's accurate count
+            // This ensures UI shows the correct count from PostgreSQL (source of truth)
+            onPostUpdate?(postId) { post in
+                post.copying(
+                    likeCount: Int(response.likeCount),
+                    isLiked: !wasLiked
+                )
+            }
+
+            // Invalidate feed cache on successful like/unlike to ensure
+            // fresh data is fetched when user navigates back to feed
+            await FeedCacheService.shared.invalidateCache()
+
             return true
         } catch let error as APIError {
             // Revert on failure
@@ -146,6 +161,10 @@ final class FeedSocialActionsHandler {
             } else {
                 try await socialService.createBookmark(postId: postId, userId: userId)
             }
+
+            // Invalidate feed cache on successful bookmark/unbookmark
+            await FeedCacheService.shared.invalidateCache()
+
             return true
         } catch let error as APIError {
             // Handle specific error cases - some errors should keep local state

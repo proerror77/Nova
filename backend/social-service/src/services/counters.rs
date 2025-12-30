@@ -226,6 +226,7 @@ impl CounterService {
     // ========== Batch Operations (MGET Optimization) ==========
 
     /// Batch get all counts for multiple posts (optimized with Redis MGET)
+    /// Falls back to PostgreSQL if Redis is unavailable
     pub async fn batch_get_counts(&self, post_ids: &[Uuid]) -> Result<HashMap<Uuid, PostCounts>> {
         if post_ids.is_empty() {
             return Ok(HashMap::new());
@@ -239,45 +240,56 @@ impl CounterService {
             keys.push(format!("post:{}:shares", post_id));
         }
 
-        // Execute MGET for likes, comments, shares
-        let values: Vec<Option<i64>> = self
+        // Try Redis first, fallback to PostgreSQL on error
+        let redis_result: std::result::Result<Vec<Option<i64>>, _> = self
             .redis
             .clone()
             .get(&keys)
-            .await
-            .context("Failed to batch get counts from Redis")?;
+            .await;
 
-        // Fetch bookmark counts from PostgreSQL (saved_posts table)
-        let bookmark_counts = self.batch_get_bookmark_counts_from_pg(post_ids).await?;
+        let result = match redis_result {
+            Ok(values) => {
+                // Redis succeeded - parse results
+                let bookmark_counts = self.batch_get_bookmark_counts_from_pg(post_ids).await?;
+                let mut result = HashMap::new();
+                for (i, post_id) in post_ids.iter().enumerate() {
+                    let like_count = values[i * 3].unwrap_or(0);
+                    let comment_count = values[i * 3 + 1].unwrap_or(0);
+                    let share_count = values[i * 3 + 2].unwrap_or(0);
+                    let bookmark_count = bookmark_counts.get(post_id).copied().unwrap_or(0);
 
-        // Parse results
-        let mut result = HashMap::new();
-        for (i, post_id) in post_ids.iter().enumerate() {
-            let like_count = values[i * 3].unwrap_or(0);
-            let comment_count = values[i * 3 + 1].unwrap_or(0);
-            let share_count = values[i * 3 + 2].unwrap_or(0);
-            let bookmark_count = bookmark_counts.get(post_id).copied().unwrap_or(0);
+                    result.insert(
+                        *post_id,
+                        PostCounts {
+                            like_count,
+                            comment_count,
+                            share_count,
+                            bookmark_count,
+                        },
+                    );
+                }
 
-            result.insert(
-                *post_id,
-                PostCounts {
-                    like_count,
-                    comment_count,
-                    share_count,
-                    bookmark_count,
-                },
-            );
-        }
+                // Warm cache for missing entries (async background job)
+                if let Err(err) = self.warm_missing_counters(post_ids, &result).await {
+                    tracing::warn!(
+                        error = ?err,
+                        post_count = post_ids.len(),
+                        "Failed to warm missing counters"
+                    );
+                }
 
-        // Warm cache for missing entries (async background job)
-        // Note: This is fire-and-forget, errors logged but not propagated
-        if let Err(err) = self.warm_missing_counters(post_ids, &result).await {
-            tracing::warn!(
-                error = ?err,
-                post_count = post_ids.len(),
-                "Failed to warm missing counters"
-            );
-        }
+                result
+            }
+            Err(redis_err) => {
+                // Redis failed - fallback to PostgreSQL
+                tracing::warn!(
+                    error = ?redis_err,
+                    post_count = post_ids.len(),
+                    "Redis MGET failed, falling back to PostgreSQL"
+                );
+                self.load_counters_from_pg(post_ids).await?
+            }
+        };
 
         Ok(result)
     }
@@ -516,6 +528,88 @@ impl CounterService {
             .await
             .context("Failed to set share count")?;
         Ok(())
+    }
+
+    /// Rate-limit key TTL for hot post refresh (5 seconds)
+    const REFRESH_RATE_LIMIT_SECONDS: u64 = 5;
+
+    /// Refresh like count from PostgreSQL and update Redis cache
+    /// This is the preferred method after like/unlike operations
+    /// Returns the accurate count from source of truth (PostgreSQL)
+    pub async fn refresh_like_count(&self, post_id: Uuid) -> Result<i64> {
+        // Read from PostgreSQL (source of truth)
+        let count = self.load_like_count_from_pg(post_id).await?;
+
+        // Update Redis cache (fire and forget, don't fail if Redis is down)
+        if let Err(e) = self.set_like_count(post_id, count).await {
+            tracing::warn!(
+                post_id = %post_id,
+                error = ?e,
+                "Failed to update Redis cache for like count"
+            );
+        }
+
+        Ok(count)
+    }
+
+    /// Rate-limited refresh for hot posts
+    /// Only refreshes if no refresh happened in the last N seconds
+    /// Returns the count (either from fresh refresh or existing cache)
+    pub async fn refresh_like_count_rate_limited(&self, post_id: Uuid) -> Result<i64> {
+        let rate_limit_key = format!("post:{}:likes:refresh_lock", post_id);
+
+        // Try to acquire the refresh lock with SETNX
+        let acquired: bool = redis::cmd("SET")
+            .arg(&rate_limit_key)
+            .arg("1")
+            .arg("NX")
+            .arg("EX")
+            .arg(Self::REFRESH_RATE_LIMIT_SECONDS)
+            .query_async(&mut self.redis.clone())
+            .await
+            .unwrap_or(false);
+
+        if acquired {
+            // We acquired the lock, do the refresh
+            self.refresh_like_count(post_id).await
+        } else {
+            // Another request is refreshing, just return cached value
+            // If cache miss, fall back to PostgreSQL
+            match self.get_like_count(post_id).await {
+                Ok(count) => Ok(count),
+                Err(_) => self.load_like_count_from_pg(post_id).await,
+            }
+        }
+    }
+
+    /// Refresh comment count from PostgreSQL and update Redis cache
+    pub async fn refresh_comment_count(&self, post_id: Uuid) -> Result<i64> {
+        let count = self.load_comment_count_from_pg(post_id).await?;
+        
+        if let Err(e) = self.set_comment_count(post_id, count).await {
+            tracing::warn!(
+                post_id = %post_id,
+                error = ?e,
+                "Failed to update Redis cache for comment count"
+            );
+        }
+        
+        Ok(count)
+    }
+
+    /// Refresh share count from PostgreSQL and update Redis cache
+    pub async fn refresh_share_count(&self, post_id: Uuid) -> Result<i64> {
+        let count = self.load_share_count_from_pg(post_id).await?;
+        
+        if let Err(e) = self.set_share_count(post_id, count).await {
+            tracing::warn!(
+                post_id = %post_id,
+                error = ?e,
+                "Failed to update Redis cache for share count"
+            );
+        }
+        
+        Ok(count)
     }
 
     /// Batch get all stats for multiple posts (legacy API)

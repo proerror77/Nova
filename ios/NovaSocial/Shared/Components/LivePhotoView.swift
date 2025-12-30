@@ -416,13 +416,13 @@ struct MediaPreviewView: View {
             GeometryReader { geometry in
                 ZStack {
                     switch mediaItem {
-                    case .image(let image):
+                    case .image(let image, _):
                         imagePreview(image: image, geometry: geometry)
 
-                    case .livePhoto(let data):
+                    case .livePhoto(let data, _):
                         livePhotoPreview(data: data, geometry: geometry)
 
-                    case .video(let data):
+                    case .video(let data, _):
                         videoPreview(data: data, geometry: geometry)
                     }
                 }
@@ -846,14 +846,14 @@ struct MediaPreviewView: View {
 
 #Preview("MediaPreview - Image") {
     MediaPreviewView(
-        mediaItem: .image(UIImage(systemName: "photo")!),
+        mediaItem: .image(UIImage(systemName: "photo")!, .empty),
         isPresented: .constant(true)
     )
 }
 
 #Preview("MediaPreview - With Delete") {
     MediaPreviewView(
-        mediaItem: .image(UIImage(systemName: "photo")!),
+        mediaItem: .image(UIImage(systemName: "photo")!, .empty),
         isPresented: .constant(true),
         onDelete: {
             print("Delete tapped")

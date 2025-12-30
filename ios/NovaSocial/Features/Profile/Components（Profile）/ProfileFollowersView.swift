@@ -24,6 +24,13 @@ struct ProfileFollowersView: View {
     @State private var showUnfollowConfirmation = false
     @State private var userToUnfollow: FollowerUser? = nil
 
+    // MARK: - 強制刷新觸發器
+    @State private var refreshID = UUID()
+
+    // MARK: - Error Feedback
+    @State private var showErrorAlert = false
+    @State private var errorAlertMessage = ""
+
     // MARK: - Services
     private let graphService = GraphService()
     private let userService = UserService.shared
@@ -96,6 +103,11 @@ struct ProfileFollowersView: View {
             if let user = userToUnfollow {
                 Text("Are you sure you want to unfollow \(user.name)?")
             }
+        }
+        .alert("操作失敗", isPresented: $showErrorAlert) {
+            Button("確定", role: .cancel) { }
+        } message: {
+            Text(errorAlertMessage)
         }
     }
 
@@ -249,19 +261,27 @@ struct ProfileFollowersView: View {
                 try await graphService.followUser(followerId: currentUserId, followeeId: user.id)
             }
 
-            // 更新本地状态
+            // 更新本地状态 - 創建新數組強制 SwiftUI 重新渲染
             await MainActor.run {
                 if let index = followers.firstIndex(where: { $0.id == user.id }) {
-                    followers[index].youAreFollowing.toggle()
+                    var updatedFollowers = followers
+                    updatedFollowers[index].youAreFollowing.toggle()
+                    followers = updatedFollowers
                 }
                 if let index = following.firstIndex(where: { $0.id == user.id }) {
-                    following[index].youAreFollowing.toggle()
+                    var updatedFollowing = following
+                    updatedFollowing[index].youAreFollowing.toggle()
+                    following = updatedFollowing
                 }
             }
         } catch {
             #if DEBUG
             print("[ProfileFollowers] Failed to toggle follow: \(error)")
             #endif
+            await MainActor.run {
+                errorAlertMessage = "操作失敗，請稍後再試"
+                showErrorAlert = true
+            }
         }
     }
 
@@ -281,18 +301,41 @@ struct ProfileFollowersView: View {
 
     // MARK: - 执行取消关注
     private func performUnfollow(user: FollowerUser) async {
-        guard let currentUserId = authManager.currentUser?.id else { return }
+        #if DEBUG
+        print("[ProfileFollowers] performUnfollow called for user: \(user.name) (id: \(user.id))")
+        #endif
+
+        guard let currentUserId = authManager.currentUser?.id else {
+            #if DEBUG
+            print("[ProfileFollowers] ERROR: No current user ID")
+            #endif
+            await MainActor.run {
+                errorAlertMessage = "請先登入"
+                showErrorAlert = true
+            }
+            return
+        }
 
         do {
             try await graphService.unfollowUser(followerId: currentUserId, followeeId: user.id)
 
-            // 更新本地状态
+            // 更新本地状态 - 創建新數組強制 SwiftUI 重新渲染
             await MainActor.run {
+                // 更新 followers 數組
                 if let index = followers.firstIndex(where: { $0.id == user.id }) {
-                    followers[index].youAreFollowing = false
+                    var updatedFollowers = followers
+                    updatedFollowers[index].youAreFollowing = false
+                    followers = updatedFollowers
                 }
+
+                // 更新 following 數組 - 創建新數組以強制 SwiftUI 重新渲染
                 if let index = following.firstIndex(where: { $0.id == user.id }) {
-                    following[index].youAreFollowing = false
+                    var updatedFollowing = following
+                    updatedFollowing[index].youAreFollowing = false
+                    following = updatedFollowing
+
+                    // 強制刷新視圖
+                    refreshID = UUID()
                 }
             }
 
@@ -303,6 +346,10 @@ struct ProfileFollowersView: View {
             #if DEBUG
             print("[ProfileFollowers] Failed to unfollow: \(error)")
             #endif
+            await MainActor.run {
+                errorAlertMessage = "取消關注失敗，請稍後再試"
+                showErrorAlert = true
+            }
         }
     }
 
@@ -543,15 +590,23 @@ struct ProfileFollowersView: View {
             } else {
                 // 正在关注的用户列表
                 ForEach(filteredFollowing) { user in
+                    let computedButtonType: FollowerRow.ButtonType = user.youAreFollowing
+                        ? (user.isFollowingYou ? .friend : .following)
+                        : .follow
                     FollowerRow(
                         user: user,
-                        // 互相关注显示 Friend，否则显示 Following
-                        buttonType: user.isFollowingYou ? .friend : .following,
+                        // 根據關注狀態顯示按鈕：
+                        // - youAreFollowing=true + isFollowingYou=true → Friend（互相關注）
+                        // - youAreFollowing=true + isFollowingYou=false → Following（單向關注）
+                        // - youAreFollowing=false → Follow（取消關注後）
+                        buttonType: computedButtonType,
                         onFollowTapped: {
                             handleFollowButtonTap(user: user)
                         }
                     )
+                    .id("\(user.id)-\(user.youAreFollowing)")  // 強制根據關注狀態重新渲染
                 }
+                .id(refreshID)  // 強制刷新整個列表
             }
         }
     }
@@ -680,6 +735,8 @@ struct FollowerRow: View {
                         )
                 }
             }
+            .buttonStyle(.plain)  // 關鍵：確保按鈕在 ScrollView 中可點擊
+            .contentShape(Rectangle())  // 確保整個按鈕區域可點擊
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

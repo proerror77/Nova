@@ -55,12 +55,17 @@ class MediaService {
 
     // MARK: - Upload Methods
 
-    /// Dedicated URLSession for media uploads with longer timeout
+    /// Dedicated URLSession for media uploads with optimized settings
     private lazy var uploadSession: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 120  // 2 minutes for upload requests
-        config.timeoutIntervalForResource = 300 // 5 minutes for total upload
-        config.httpMaximumConnectionsPerHost = 4 // Allow more parallel connections
+        config.timeoutIntervalForRequest = 60   // 1 minute for upload requests
+        config.timeoutIntervalForResource = 180 // 3 minutes for total upload
+        config.httpMaximumConnectionsPerHost = 6 // More parallel connections to GCS
+        config.httpShouldUsePipelining = true   // Enable HTTP pipelining
+        config.urlCache = nil                   // No caching for uploads
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        // Enable HTTP/2 multiplexing
+        config.multipathServiceType = .handover
         return URLSession(configuration: config)
     }()
     
@@ -689,18 +694,25 @@ class MediaService {
 
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
-        request.httpBody = data
         // Content-Type MUST match what was specified when generating the presigned URL
         // Otherwise S3/GCS will reject with signature mismatch
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         request.setValue("\(data.count)", forHTTPHeaderField: "Content-Length")
-        request.timeoutInterval = 120  // 2 minutes for upload
+        request.timeoutInterval = 60  // 1 minute for upload
 
         #if DEBUG
-        print("[Media] Uploading to presigned URL: \(data.count / 1024) KB, Content-Type: \(contentType)")
+        let startTime = CFAbsoluteTimeGetCurrent()
+        print("[Media] ⬆️ Starting GCS upload: \(data.count / 1024) KB")
         #endif
 
-        let (responseData, response) = try await uploadSession.data(for: request)
+        // IMPORTANT: Use upload(for:from:) instead of data(for:) because data(for:) ignores httpBody!
+        let (responseData, response) = try await uploadSession.upload(for: request, from: data)
+
+        #if DEBUG
+        let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+        let speedKBps = Double(data.count) / 1024.0 / elapsed
+        print("[Media] ✅ GCS upload completed: \(String(format: "%.1f", elapsed))s (\(String(format: "%.0f", speedKBps)) KB/s)")
+        #endif
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse

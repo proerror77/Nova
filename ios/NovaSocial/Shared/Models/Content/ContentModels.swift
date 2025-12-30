@@ -7,6 +7,7 @@ struct Post: Codable, Identifiable {
     let id: String
     let authorId: String  // 改为 authorId 以匹配 convertFromSnakeCase
     let content: String
+    let title: String?  // Optional post title
     let createdAt: Int64
     let updatedAt: Int64
     let status: String?
@@ -21,6 +22,10 @@ struct Post: Codable, Identifiable {
     let authorUsername: String?
     let authorDisplayName: String?
     let authorAvatarUrl: String?
+
+    // Location and tags (populated by VLM service or user input)
+    let location: String?
+    let tags: [String]?
 
     // 便利属性，保持向后兼容
     var creatorId: String { authorId }
@@ -51,6 +56,7 @@ struct Post: Codable, Identifiable {
             id: id,
             authorId: authorId,
             content: content,
+            title: title,
             createdAt: createdAt,
             updatedAt: updatedAt,
             status: status,
@@ -62,8 +68,16 @@ struct Post: Codable, Identifiable {
             bookmarkCount: bookmarkCount,
             authorUsername: self.authorUsername ?? username,
             authorDisplayName: self.authorDisplayName ?? displayName,
-            authorAvatarUrl: self.authorAvatarUrl ?? avatarUrl
+            authorAvatarUrl: self.authorAvatarUrl ?? avatarUrl,
+            location: location,
+            tags: tags
         )
+    }
+
+    /// Formatted tags string for display (e.g., "#Fashion #Sport #Art")
+    var formattedTags: String? {
+        guard let tags = tags, !tags.isEmpty else { return nil }
+        return tags.map { "#\($0)" }.joined(separator: " ")
     }
 
     /// Check if author info is missing

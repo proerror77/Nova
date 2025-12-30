@@ -113,6 +113,13 @@ pub enum IdentityError {
 
     #[error("Passkey credential not found")]
     PasskeyCredentialNotFound,
+
+    // OAuth invite code errors
+    #[error("Invite code required for new user registration")]
+    InviteCodeRequired,
+
+    #[error("Invalid invite code: {0}")]
+    InvalidInviteCode(String),
 }
 
 impl IdentityError {
@@ -206,6 +213,13 @@ impl IdentityError {
             }
             IdentityError::PasskeyCredentialNotFound => {
                 Status::new(Code::NotFound, "Passkey credential not found")
+            }
+            // OAuth invite code errors - use specific error code for frontend detection
+            IdentityError::InviteCodeRequired => {
+                Status::new(Code::FailedPrecondition, "INVITE_CODE_REQUIRED")
+            }
+            IdentityError::InvalidInviteCode(msg) => {
+                Status::new(Code::InvalidArgument, format!("Invalid invite code: {}", msg))
             }
             IdentityError::Database(_)
             | IdentityError::Redis(_)

@@ -10,6 +10,7 @@ resources:
   - zitadel-ingress.yaml
   # Identity service Zitadel sync secret (token must be set manually or via sealed-secrets)
   - identity-service-zitadel-secret.yaml
+  # Note: graphql-gateway-vlm secret is managed by ExternalSecret (see k8s/microservices/graphql-gateway-vlm-externalsecret.yaml)
 
 namespace: nova-backend
 
@@ -67,17 +68,22 @@ patches:
       - op: replace
         path: /data/ZITADEL_DATABASE_POSTGRES_HOST
         value: "postgres.nova-staging.svc.cluster.local"
-  # Thumb-worker database patch - use nova_content database for post_images table
+  # Thumb-worker Kafka topic (single source of truth)
   - target:
       kind: Deployment
       name: thumb-worker
-    path: thumb-worker-db-patch.yaml
+    path: thumb-worker-kafka-topic-patch.yaml
   # Realtime-chat-service Matrix Admin token patch
   # Maps SYNAPSE_ADMIN_TOKEN secret to MATRIX_ADMIN_TOKEN env var for user provisioning
   - target:
       kind: Deployment
       name: realtime-chat-service
     path: realtime-chat-service-matrix-patch.yaml
+  # GraphQL Gateway VLM secret mount (Google Cloud Vision API key)
+  - target:
+      kind: Deployment
+      name: graphql-gateway
+    path: graphql-gateway-vlm-patch.yaml
   # Zitadel PVC storage class patch (use GKE default)
   - target:
       kind: PersistentVolumeClaim
@@ -176,7 +182,7 @@ images:
     newTag: latest
   - name: nova-media-service
     newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/media-service
-    newTag: latest
+    newTag: staging-20251229-1
   - name: nova-notification-service
     newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/notification-service
     newTag: latest
@@ -194,7 +200,7 @@ images:
     newTag: latest
   - name: nova-trust-safety-service
     newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/trust-safety-service
-    newTag: latest
+    newTag: staging-20251229-1
   - name: nova-streaming-service
     newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/streaming-service
     newTag: latest
