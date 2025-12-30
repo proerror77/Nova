@@ -192,6 +192,7 @@
 		99102A991485C9372C8D1F82 /* TypingDotsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C4102217CF0F3A8D85CEE13 /* TypingDotsView.swift */; };
 		9920396B904663D0D7C089E3 /* FeedSocialActionsHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11D12962BB2DE0FDB4E04425 /* FeedSocialActionsHandler.swift */; };
 		9BABE8173583077653158EFE /* LiveKitVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D0D3B3370FF4745E247F086 /* LiveKitVoiceService.swift */; };
+		9C0D1E2F3A4B5C6D7E8F9A0B /* LocalVisionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F0A1B2C3D4E5F /* LocalVisionService.swift */; };
 		9D55D796DF9157C00C8CD5C3 /* ChatBackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A70DFA302633861E940F01D6 /* ChatBackupService.swift */; };
 		9D7F9AEE30BE973B332063C6 /* AIRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F1DC3CB50728D0BCC6036BE /* AIRouter.swift */; };
 		9EB7CA6CFE1E6DD184294B59 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BBEC927960F534FBD87D8F6 /* SearchView.swift */; };
@@ -367,6 +368,7 @@
 		18EBCDEC4F561F630331FD33 /* FriendRequestsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendRequestsView.swift; sourceTree = "<group>"; };
 		199D244D3597420056B33BB5 /* ProfileStatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileStatsView.swift; sourceTree = "<group>"; };
 		1A00351ECE6777F8EBDD4951 /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
+		1A2B3C4D5E6F0A1B2C3D4E5F /* LocalVisionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalVisionService.swift; sourceTree = "<group>"; };
 		1B5722C159C353AB0D1195AF /* UserPostsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserPostsManager.swift; sourceTree = "<group>"; };
 		1D42EC6A56940B63DCFB5EE2 /* FeedHighlightsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedHighlightsView.swift; sourceTree = "<group>"; };
 		1DA6B1BE0A96FDD49C0D3F86 /* TrendingTopicsTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendingTopicsTool.swift; sourceTree = "<group>"; };
@@ -1010,6 +1012,7 @@
 				9E64D8CE635DABDB1071AC90 /* GrokVoiceConfig.swift */,
 				B4FE222AADC0282302AC0298 /* GrokVoiceService.swift */,
 				2D0D3B3370FF4745E247F086 /* LiveKitVoiceService.swift */,
+				1A2B3C4D5E6F0A1B2C3D4E5F /* LocalVisionService.swift */,
 				E3737976AD8AA33408751C99 /* PhotoAnalysisService.swift */,
 				11B00F77C6F3BF1BBEF052E1 /* VLMService.swift */,
 				DC10E2956B60DCEAD154ABCA /* XAIService.swift */,
@@ -2178,6 +2181,7 @@
 				25999654EF73AB23FD488809 /* KeychainService.swift in Sources */,
 				1136A7E6A4ADD2A1E5282DB1 /* LiveKitVoiceChatView.swift in Sources */,
 				9BABE8173583077653158EFE /* LiveKitVoiceService.swift in Sources */,
+				9C0D1E2F3A4B5C6D7E8F9A0B /* LocalVisionService.swift in Sources */,
 				82C9BD41879DA5DF78FF4FF9 /* LivePhotoManager.swift in Sources */,
 				3C256333D1261A332236B029 /* LivePhotoView.swift in Sources */,
 				66BC3564EB68BFAE8D0D7BFC /* LocationMessageView.swift in Sources */,

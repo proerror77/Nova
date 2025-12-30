@@ -208,10 +208,21 @@ final class NewPostViewModel {
         selectedMediaItems.first?.metadata ?? .empty
     }
 
-    /// Analyze image with VLM API, enhanced with photo location metadata
+    /// Analyze image locally using Apple Vision framework
+    /// Fast, on-device analysis - no network required
     func analyzeImageWithVLM() {
-        guard let firstImage = getFirstImage() else { return }
-        guard !isAnalyzingImage else { return }
+        guard let firstImage = getFirstImage() else {
+            #if DEBUG
+            print("[NewPostViewModel] ❌ No image available for analysis")
+            #endif
+            return
+        }
+        guard !isAnalyzingImage else {
+            #if DEBUG
+            print("[NewPostViewModel] ⏳ Already analyzing, skipping")
+            #endif
+            return
+        }
 
         isAnalyzingImage = true
         vlmTags = []
@@ -221,83 +232,80 @@ final class NewPostViewModel {
         let metadata = getFirstMediaMetadata()
 
         Task {
-            do {
-                // Compress image for upload
-                let compressionResult = await imageCompressor.compressImage(firstImage, quality: .low)
-                let imageData = compressionResult.data
-                let filename = "vlm_\(UUID().uuidString).\(compressionResult.format.fileExtension)"
+            #if DEBUG
+            print("[NewPostViewModel] 🔍 Starting local Vision analysis...")
+            #endif
 
-                // Upload to get URL
-                let imageUrl = try await mediaService.uploadImage(imageData: imageData, filename: filename)
+            // Use Apple Vision for on-device analysis (instant, no network)
+            var result = await LocalVisionService.shared.analyzeImage(firstImage)
 
-                // Call VLM API with metadata for location-aware tagging
-                let result: VLMAnalysisResult
-                if metadata.hasAnyMetadata {
-                    result = try await vlmService.analyzeImageWithMetadata(
-                        imageUrl: imageUrl,
-                        metadata: metadata,
-                        includeChannels: true,
-                        maxTags: 15
-                    )
-                    #if DEBUG
-                    print("[NewPostViewModel] Using location-enhanced VLM analysis")
-                    if let locName = metadata.locationName {
-                        print("[NewPostViewModel] Photo location: \(locName)")
-                    }
-                    if let date = metadata.formattedDate {
-                        print("[NewPostViewModel] Photo date: \(date)")
-                    }
-                    #endif
-                } else {
-                    result = try await vlmService.analyzeImage(
-                        imageUrl: imageUrl,
-                        includeChannels: true,
-                        maxTags: 15
-                    )
-                }
+            #if DEBUG
+            print("[NewPostViewModel] 📸 Vision returned \(result.tags.count) tags")
+            for tag in result.tags {
+                print("[NewPostViewModel]   - \(tag.tag): \(String(format: "%.1f%%", tag.confidence * 100))")
+            }
+            #endif
 
-                await MainActor.run {
-                    vlmTags = result.tags
-                    vlmChannelSuggestions = result.channels ?? []
-
-                    // Auto-select tags with confidence >= 60% (more aggressive)
-                    for tag in result.tags where tag.confidence >= 0.6 {
-                        selectedVLMTags.insert(tag.tag)
-                    }
-
-                    // Auto-select top VLM channel suggestions (up to 3)
-                    if selectedChannelIds.isEmpty {
-                        let topChannels = vlmChannelSuggestions
-                            .filter { $0.confidence >= 0.5 }  // Only channels with >50% confidence
-                            .prefix(3)
-                            .map { $0.id }
-                        selectedChannelIds = Array(topChannels)
-                    }
-
-                    // Auto-fill location from photo metadata if not already set
-                    if selectedLocation.isEmpty, let locName = metadata.locationName {
-                        selectedLocation = locName
-                    }
-
-                    isAnalyzingImage = false
-
-                    #if DEBUG
-                    print("[NewPostViewModel] Auto-selected \(selectedVLMTags.count) tags, \(selectedChannelIds.count) channels")
-                    #endif
-                }
-
+            // Add location-based tags from photo metadata
+            if metadata.hasAnyMetadata {
+                let locationTags = generateLocationTags(from: metadata)
+                result = VLMAnalysisResult(
+                    tags: result.tags + locationTags,
+                    channels: result.channels,
+                    processingTimeMs: result.processingTimeMs
+                )
                 #if DEBUG
-                print("[NewPostViewModel] VLM analysis complete: \(result.tags.count) tags, \(result.channels?.count ?? 0) channels")
+                print("[NewPostViewModel] 📍 Added \(locationTags.count) location tags")
                 #endif
-            } catch {
-                #if DEBUG
-                print("[NewPostViewModel] VLM analysis failed: \(error)")
-                #endif
-                await MainActor.run {
-                    isAnalyzingImage = false
-                }
+            }
+
+            // Update UI with results
+            vlmTags = result.tags
+            vlmChannelSuggestions = result.channels ?? []
+
+            // Auto-select tags with confidence >= 60%
+            for tag in result.tags where tag.confidence >= 0.6 {
+                selectedVLMTags.insert(tag.tag)
+            }
+
+            // Auto-fill location from photo metadata if not already set
+            if selectedLocation.isEmpty, let locName = metadata.locationName {
+                selectedLocation = locName
+            }
+
+            isAnalyzingImage = false
+
+            #if DEBUG
+            print("[NewPostViewModel] ✅ Analysis complete: \(vlmTags.count) tags, auto-selected \(selectedVLMTags.count)")
+            #endif
+        }
+    }
+
+    /// Generate location-based tags from photo metadata
+    private func generateLocationTags(from metadata: PhotoMetadata) -> [TagSuggestion] {
+        var tags: [TagSuggestion] = []
+
+        // Add city/area tag
+        if let locationName = metadata.locationName {
+            let parts = locationName.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            for part in parts.prefix(2) {
+                tags.append(TagSuggestion(tag: part, confidence: 0.7, source: "location"))
             }
         }
+
+        // Add time-of-day tag based on photo timestamp
+        if let date = metadata.creationDate {
+            let hour = Calendar.current.component(.hour, from: date)
+            if hour >= 5 && hour < 9 {
+                tags.append(TagSuggestion(tag: "Morning", confidence: 0.5, source: "time"))
+            } else if hour >= 17 && hour < 20 {
+                tags.append(TagSuggestion(tag: "Sunset", confidence: 0.5, source: "time"))
+            } else if hour >= 20 || hour < 5 {
+                tags.append(TagSuggestion(tag: "Night", confidence: 0.5, source: "time"))
+            }
+        }
+
+        return tags
     }
 
     func toggleVLMTag(_ tag: String) {
