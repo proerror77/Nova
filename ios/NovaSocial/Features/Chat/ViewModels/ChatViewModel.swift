@@ -141,7 +141,7 @@ final class ChatViewModel {
     #if DEBUG
     private static var useChatPreviewMode: Bool {
         #if targetEnvironment(simulator)
-        return false
+        return true
         #else
         return false
         #endif

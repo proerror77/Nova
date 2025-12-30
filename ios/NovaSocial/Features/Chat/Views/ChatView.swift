@@ -54,11 +54,37 @@ struct ChatView: View {
 
     var body: some View {
         ZStack {
-            DesignTokens.backgroundColor
-                .ignoresSafeArea()
-
             VStack(spacing: 0) {
-                navigationBar
+                // 顶部导航栏白色背景（紧贴手机顶部，包含安全区域）
+                ZStack(alignment: .bottom) {
+                    Rectangle()
+                        .foregroundColor(.clear)
+                        .frame(height: 98.h)
+                        .frame(maxWidth: .infinity)
+                        .background(.white)
+                    
+                    // 导航栏内容
+                    ZStack {
+                        // 返回按钮 - 距离左边16pt
+                        HStack {
+                            Button {
+                                showChat = false
+                            } label: {
+                                Image("back-black")
+                                    .frame(width: 24, height: 24)
+                            }
+                            .padding(.leading, 16)
+                            Spacer()
+                        }
+                        
+                        // 用户名 - 居中
+                        Text(userName)
+                            .font(.system(size: 18, weight: .semibold))
+                            .lineSpacing(20)
+                            .foregroundColor(.black)
+                    }
+                    .padding(.bottom, 18)
+                }
 
                 Divider()
                     .frame(height: 0.5)
@@ -66,8 +92,49 @@ struct ChatView: View {
 
                 messageListView
 
-                inputAreaView
+                // 底部信息输入栏白色背景（紧贴手机底部，包含安全区域）
+                ZStack(alignment: .top) {
+                    Rectangle()
+                        .foregroundColor(.clear)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 88.h)
+                        .background(.white)
+                    
+                    // 输入栏区域
+                    HStack(spacing: 6) {
+                        // More icon - 左侧
+                        ZStack {
+                            Image("More")
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 30, height: 30)
+                        }
+                        .frame(width: 30, height: 30)
+                        
+                        // 灰色输入栏
+                        HStack {
+                            Spacer()
+                            // Voice icon
+                            ZStack {
+                                Image("Voice")
+                                    .frame(width: 24, height: 24)
+                            }
+                            .frame(width: 24, height: 24)
+                            .padding(.trailing, 10)
+                            .padding(.vertical, 3)
+                        }
+                        .frame(height: 30)
+                        .frame(maxWidth: .infinity)
+                        .background(Color(red: 0.90, green: 0.90, blue: 0.90))
+                        .cornerRadius(56)
+                    }
+                    .padding(.leading, 16)
+                    .padding(.trailing, 16)
+                    .padding(.top, 12)
+                }
             }
+            .background(DesignTokens.backgroundColor)
+            .ignoresSafeArea(edges: [.top, .bottom])
 
             // 新消息浮動按鈕
             if !isAtBottom && newMessageCount > 0 {
@@ -85,22 +152,22 @@ struct ChatView: View {
                             }
                             newMessageCount = 0
                         } label: {
-                            HStack(spacing: 6) {
+                            HStack(spacing: 6.s) {
                                 Image(systemName: "arrow.down")
-                                    .font(.system(size: 12, weight: .semibold))
+                                    .font(.system(size: 12.f, weight: .semibold))
                                 Text("\(newMessageCount) 則新訊息")
-                                    .font(.system(size: 13, weight: .medium))
+                                    .font(.system(size: 13.f, weight: .medium))
                             }
                             .foregroundColor(.white)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 14.w)
+                            .padding(.vertical, 8.h)
                             .background(DesignTokens.accentColor)
                             .clipShape(Capsule())
                             .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
                         }
                         Spacer()
                     }
-                    .padding(.bottom, 80)  // 在輸入欄上方
+                    .padding(.bottom, 80.h)  // 在輸入欄上方
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(.spring(response: 0.3, dampingFraction: 0.8), value: newMessageCount)
@@ -236,109 +303,45 @@ struct ChatView: View {
 
     // MARK: - Navigation Bar
 
-    private var navigationBar: some View {
-        HStack(spacing: 13) {
-            Button(action: {
-                showChat = false
-            }) {
-                Image(systemName: "chevron.left")
-                    .frame(width: 24, height: 24)
-                    .foregroundColor(DesignTokens.textPrimary)
-            }
-
-            HStack(spacing: 13) {
-                // Avatar
-                if userName.lowercased() == "alice" {
-                    Image("alice-avatar")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 40, height: 40)
-                        .clipShape(Circle())
-                } else {
-                    DefaultAvatarView(size: 40)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(userName)
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(DesignTokens.textPrimary)
-
-                    // Matrix E2EE status indicator
-                    if viewModel.isMatrixE2EEEnabled {
-                        HStack(spacing: 4) {
-                            Image(systemName: "lock.shield.fill")
-                                .font(.system(size: 10))
-                                .foregroundColor(.green)
-                            Text("End-to-end encrypted")
-                                .font(.system(size: 10))
-                                .foregroundColor(.green)
-                        }
-                    }
-                }
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) {
-                    viewModel.showUserProfile = true
-                }
-            }
-
-            Spacer()
-
-            // Search button
-            Button(action: {
-                showMessageSearch = true
-            }) {
-                Image(systemName: "magnifyingglass")
-                    .frame(width: 24, height: 24)
-                    .foregroundColor(DesignTokens.textPrimary)
-            }
-        }
-        .frame(height: DesignTokens.topBarHeight)
-        .padding(.horizontal, 16)
-        .background(DesignTokens.surface)
-    }
-
     // MARK: - Message List View
 
     private var messageListView: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 16) {
-                    // Load more history button
-                    if viewModel.hasMoreMessages && !viewModel.isLoadingHistory {
-                        Button(action: {
-                            Task { await viewModel.loadMoreMessages() }
-                        }) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "arrow.up.circle")
-                                    .font(.system(size: 14))
-                                Text("載入更多歷史消息")
-                                    .font(.system(size: 13))
-                            }
-                            .foregroundColor(DesignTokens.accentColor)
-                            .padding(.vertical, 10)
-                        }
-                    }
+                LazyVStack(spacing: 16.h) {
+                    // Load more history button (暂时隐藏)
+                    // if viewModel.hasMoreMessages && !viewModel.isLoadingHistory {
+                    //     Button(action: {
+                    //         Task { await viewModel.loadMoreMessages() }
+                    //     }) {
+                    //         HStack(spacing: 8.w) {
+                    //             Image(systemName: "arrow.up.circle")
+                    //                 .font(.system(size: 14.f))
+                    //             Text("載入更多歷史消息")
+                    //                 .font(.system(size: 13.f))
+                    //         }
+                    //         .foregroundColor(DesignTokens.accentColor)
+                    //         .padding(.vertical, 10.h)
+                    //     }
+                    //     .padding(.horizontal, 16.w)
+                    // }
 
-                    // Preview mode indicator
-                    #if DEBUG
-                    if viewModel.isPreviewMode {
-                        HStack(spacing: 8) {
-                            Image(systemName: "eye.fill")
-                                .font(.system(size: 12))
-                            Text("Preview Mode - Mock Data (Simulator)")
-                                .font(.system(size: 12, weight: .medium))
-                            Spacer()
-                        }
-                        .foregroundColor(.orange)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Color.orange.opacity(0.1))
-                    }
-                    #endif
+                    // Preview mode indicator (暂时隐藏)
+                    // #if DEBUG
+                    // if viewModel.isPreviewMode {
+                    //     HStack(spacing: 8.w) {
+                    //         Image(systemName: "eye.fill")
+                    //             .font(.system(size: 12.f))
+                    //         Text("Preview Mode - Mock Data (Simulator)")
+                    //             .font(.system(size: 12.f, weight: .medium))
+                    //         Spacer()
+                    //     }
+                    //     .foregroundColor(.orange)
+                    //     .padding(.horizontal, 16.w)
+                    //     .padding(.vertical, 8.h)
+                    //     .background(Color.orange.opacity(0.1))
+                    // }
+                    // #endif
 
                     // Loading indicator
                     if viewModel.isLoadingHistory {
@@ -348,12 +351,12 @@ struct ChatView: View {
 
                     // Error message
                     if let error = viewModel.error {
-                        VStack(spacing: 8) {
+                        VStack(spacing: 8.h) {
                             Image(systemName: "exclamationmark.triangle")
-                                .font(.system(size: 30))
+                                .font(.system(size: 30.f))
                                 .foregroundColor(.orange)
                             Text(error)
-                                .font(.system(size: 14))
+                                .font(.system(size: 14.f))
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
                             Button("Retry") {
@@ -366,10 +369,11 @@ struct ChatView: View {
 
                     // Date separator
                     Text(viewModel.currentDateString())
-                        .font(Font.custom("Helvetica Neue", size: 12))
+                        .font(Font.custom("Helvetica Neue", size: 12.f))
                         .lineSpacing(20)
                         .foregroundColor(Color(red: 0.59, green: 0.59, blue: 0.59))
-                        .padding(.top, 16)
+                        .padding(.top, 16.h)
+                        .padding(.horizontal, 16.w)
 
                     // Message list
                     ForEach(viewModel.messages) { message in
@@ -416,7 +420,7 @@ struct ChatView: View {
                             ProgressView()
                                 .scaleEffect(0.8)
                             Text("Sending...")
-                                .font(.system(size: 12))
+                                .font(.system(size: 12.f))
                                 .foregroundColor(.secondary)
                             Spacer()
                         }
@@ -425,24 +429,24 @@ struct ChatView: View {
 
                     // Typing indicator
                     if typingHandler.isOtherUserTyping {
-                        HStack(spacing: 6) {
-                            AvatarView(image: nil, url: otherUserAvatarUrl, size: 30)
+                        HStack(spacing: 6.w) {
+                            AvatarView(image: nil, url: otherUserAvatarUrl, size: 30.s)
 
-                            HStack(spacing: 4) {
+                            HStack(spacing: 4.w) {
                                 Text("\(typingHandler.typingUserName.isEmpty ? userName : typingHandler.typingUserName) is typing")
-                                    .font(Font.custom("Helvetica Neue", size: 14))
+                                    .font(Font.custom("Helvetica Neue", size: 14.f))
                                     .foregroundColor(DesignTokens.textMuted)
                                     .italic()
 
                                 TypingDotsView()
                             }
-                            .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                            .padding(EdgeInsets(top: 8.h, leading: 12.w, bottom: 8.h, trailing: 12.w))
                             .background(DesignTokens.chatBubbleOther.opacity(0.5))
-                            .cornerRadius(16)
+                            .cornerRadius(16.s)
 
                             Spacer()
                         }
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, 16.w)
                         .transition(.opacity)
                     }
 
@@ -453,8 +457,7 @@ struct ChatView: View {
                         .onAppear { isAtBottom = true; newMessageCount = 0 }
                         .onDisappear { isAtBottom = false }
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 10)
+                .padding(.bottom, 10.h)
             }
             .onChange(of: viewModel.messages.count) { oldCount, newCount in
                 if isAtBottom {
@@ -493,14 +496,14 @@ struct ChatView: View {
                 HStack {
                     RoundedRectangle(cornerRadius: 1.5)
                         .fill(DesignTokens.accentColor)
-                        .frame(width: 3)
+                        .frame(width: 3.w)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 2.h) {
                         Text("回覆 \(replyPreview.senderName)")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 12.f, weight: .medium))
                             .foregroundColor(DesignTokens.accentColor)
                         Text(replyPreview.content)
-                            .font(.system(size: 12))
+                            .font(.system(size: 12.f))
                             .foregroundColor(DesignTokens.textSecondary)
                             .lineLimit(1)
                     }
@@ -511,12 +514,12 @@ struct ChatView: View {
                         viewModel.cancelReply()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 18))
+                            .font(.system(size: 18.f))
                             .foregroundColor(DesignTokens.textMuted)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 16.w)
+                .padding(.vertical, 8.h)
                 .background(DesignTokens.surface)
             }
 
@@ -525,14 +528,14 @@ struct ChatView: View {
                 HStack {
                     RoundedRectangle(cornerRadius: 1.5)
                         .fill(Color.orange)
-                        .frame(width: 3)
+                        .frame(width: 3.w)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 2.h) {
                         Text("編輯消息")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 12.f, weight: .medium))
                             .foregroundColor(.orange)
                         Text(editingMsg.text)
-                            .font(.system(size: 12))
+                            .font(.system(size: 12.f))
                             .foregroundColor(DesignTokens.textSecondary)
                             .lineLimit(1)
                     }
@@ -543,12 +546,12 @@ struct ChatView: View {
                         viewModel.cancelEdit()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 18))
+                            .font(.system(size: 18.f))
                             .foregroundColor(DesignTokens.textMuted)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 16.w)
+                .padding(.vertical, 8.h)
                 .background(DesignTokens.surface)
             }
 
@@ -556,7 +559,7 @@ struct ChatView: View {
                 attachmentOptionsView
             }
 
-            HStack(spacing: 12) {
+            HStack(spacing: 12.w) {
                 // Attachment button
                 Button(action: {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -564,17 +567,17 @@ struct ChatView: View {
                     }
                 }) {
                     Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 24))
+                        .font(.system(size: 24.f))
                         .foregroundColor(DesignTokens.accentColor)
                         .rotationEffect(.degrees(viewModel.showAttachmentOptions ? 45 : 0))
                 }
 
                 // Text input
-                HStack(spacing: 8) {
+                HStack(spacing: 8.w) {
                     TextField(viewModel.editingMessage != nil ? "編輯消息..." : "Type a message...", text: $viewModel.messageText)
-                        .font(.system(size: 16))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .font(.system(size: 16.f))
+                        .padding(.horizontal, 12.w)
+                        .padding(.vertical, 8.h)
                         .focused($isInputFocused)
                         .onChange(of: viewModel.messageText) { _, newValue in
                             if viewModel.editingMessage == nil {
@@ -596,10 +599,10 @@ struct ChatView: View {
                             if viewModel.isSavingEdit {
                                 ProgressView()
                                     .scaleEffect(0.8)
-                                    .frame(width: 28, height: 28)
+                                    .frame(width: 28.s, height: 28.s)
                             } else {
                                 Image(systemName: viewModel.editingMessage != nil ? "checkmark.circle.fill" : "arrow.up.circle.fill")
-                                    .font(.system(size: 28))
+                                    .font(.system(size: 28.f))
                                     .foregroundColor(viewModel.editingMessage != nil ? .orange : DesignTokens.accentColor)
                             }
                         }
@@ -607,14 +610,14 @@ struct ChatView: View {
                     }
                 }
                 .background(DesignTokens.surface)
-                .cornerRadius(20)
+                .cornerRadius(20.s)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 20)
+                    RoundedRectangle(cornerRadius: 20.s)
                         .stroke(DesignTokens.borderColor, lineWidth: 1)
                 )
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 16.w)
+            .padding(.vertical, 8.h)
             .background(DesignTokens.surface)
         }
     }
@@ -622,59 +625,59 @@ struct ChatView: View {
     // MARK: - Attachment Options View
 
     private var attachmentOptionsView: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: 20.w) {
             // Photo picker
             PhotosPicker(selection: $viewModel.selectedPhotoItem, matching: .images) {
-                VStack(spacing: 4) {
+                VStack(spacing: 4.h) {
                     Image(systemName: "photo.on.rectangle")
-                        .font(.system(size: 22))
+                        .font(.system(size: 22.f))
                     Text("Album")
-                        .font(.system(size: 11))
+                        .font(.system(size: 11.f))
                 }
                 .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60, height: 60)
+                .frame(width: 60.s, height: 60.s)
             }
 
             // Camera
             Button(action: {
                 viewModel.checkCameraPermissionAndOpen()
             }) {
-                VStack(spacing: 4) {
+                VStack(spacing: 4.h) {
                     Image(systemName: "camera")
-                        .font(.system(size: 22))
+                        .font(.system(size: 22.f))
                     Text("Camera")
-                        .font(.system(size: 11))
+                        .font(.system(size: 11.f))
                 }
                 .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60, height: 60)
+                .frame(width: 60.s, height: 60.s)
             }
 
             // Video call
             Button(action: {
                 viewModel.showVideoCall = true
             }) {
-                VStack(spacing: 4) {
+                VStack(spacing: 4.h) {
                     Image(systemName: "video")
-                        .font(.system(size: 22))
+                        .font(.system(size: 22.f))
                     Text("Video")
-                        .font(.system(size: 11))
+                        .font(.system(size: 11.f))
                 }
                 .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60, height: 60)
+                .frame(width: 60.s, height: 60.s)
             }
 
             // Voice call
             Button(action: {
                 viewModel.showVoiceCall = true
             }) {
-                VStack(spacing: 4) {
+                VStack(spacing: 4.h) {
                     Image(systemName: "phone")
-                        .font(.system(size: 22))
+                        .font(.system(size: 22.f))
                     Text("Call")
-                        .font(.system(size: 11))
+                        .font(.system(size: 11.f))
                 }
                 .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60, height: 60)
+                .frame(width: 60.s, height: 60.s)
             }
 
             // Location
@@ -682,32 +685,32 @@ struct ChatView: View {
                 locationManager.requestLocation()
                 viewModel.showLocationAlert = true
             }) {
-                VStack(spacing: 4) {
+                VStack(spacing: 4.h) {
                     Image(systemName: "location")
-                        .font(.system(size: 22))
+                        .font(.system(size: 22.f))
                     Text("Location")
-                        .font(.system(size: 11))
+                        .font(.system(size: 11.f))
                 }
                 .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60, height: 60)
+                .frame(width: 60.s, height: 60.s)
             }
 
             // File picker
             Button(action: {
                 viewModel.showFilePicker = true
             }) {
-                VStack(spacing: 4) {
+                VStack(spacing: 4.h) {
                     Image(systemName: "doc")
-                        .font(.system(size: 22))
+                        .font(.system(size: 22.f))
                     Text("File")
-                        .font(.system(size: 11))
+                        .font(.system(size: 11.f))
                 }
                 .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60, height: 60)
+                .frame(width: 60.s, height: 60.s)
             }
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 16)
+        .padding(.vertical, 12.h)
+        .padding(.horizontal, 16.w)
         .background(DesignTokens.surface)
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
@@ -720,14 +723,14 @@ struct ChatView: View {
             if viewModel.isRecordingVoice {
                 Circle()
                     .fill(Color.red.opacity(0.2))
-                    .frame(width: 60, height: 60)
+                    .frame(width: 60.s, height: 60.s)
                     .scaleEffect(1.0 + sin(Date().timeIntervalSince1970 * 3) * 0.1)
                     .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: viewModel.isRecordingVoice)
             }
 
             // Microphone button
             Image(systemName: viewModel.isRecordingVoice ? "stop.circle.fill" : "mic.circle.fill")
-                .font(.system(size: 28))
+                .font(.system(size: 28.f))
                 .foregroundColor(viewModel.isRecordingVoice ? .red : DesignTokens.textSecondary)
                 .gesture(
                     DragGesture(minimumDistance: 0)
@@ -746,24 +749,24 @@ struct ChatView: View {
             if viewModel.isRecordingVoice && viewModel.voiceRecordDragOffset < viewModel.voiceCancelThreshold {
                 VStack {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 24))
+                        .font(.system(size: 24.f))
                         .foregroundColor(.red)
                     Text("Release to cancel")
-                        .font(.system(size: 10))
+                        .font(.system(size: 10.f))
                         .foregroundColor(.red)
                 }
-                .offset(y: -50)
+                .offset(y: -50.h)
             }
 
             // Recording duration
             if viewModel.isRecordingVoice {
                 Text(viewModel.formatDuration(viewModel.audioRecorder.recordingDuration))
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(.system(size: 12.f, design: .monospaced))
                     .foregroundColor(.red)
-                    .offset(y: 25)
+                    .offset(y: 25.h)
             }
         }
-        .frame(width: 44, height: 44)
+        .frame(width: 44.s, height: 44.s)
     }
 }
 
