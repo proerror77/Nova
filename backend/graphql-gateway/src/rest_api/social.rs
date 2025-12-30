@@ -63,9 +63,10 @@ impl From<AuthUserProfile> for FriendProfile {
             display_name: p.display_name,
             avatar_url: p.avatar_url,
             bio: p.bio,
-            is_verified: p.is_verified,
-            follower_count: p.follower_count,
-            following_count: p.following_count,
+            // These fields aren't in auth proto's UserProfile - set to None
+            is_verified: None,
+            follower_count: None,
+            following_count: None,
         }
     }
 }
