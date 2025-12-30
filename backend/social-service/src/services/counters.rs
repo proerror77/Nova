@@ -31,6 +31,21 @@ impl CounterService {
         Self { redis, pg_pool }
     }
 
+    /// Get reference to Redis connection manager for health checks
+    pub fn redis(&self) -> &ConnectionManager {
+        &self.redis
+    }
+
+    /// Ping Redis to check connection health
+    /// Used by background health check to keep connections alive
+    pub async fn ping(&self) -> Result<()> {
+        redis::cmd("PING")
+            .query_async::<_, String>(&mut self.redis.clone())
+            .await
+            .context("Redis PING failed")?;
+        Ok(())
+    }
+
     // ========== Like Counter Operations ==========
 
     /// Increment like count (called after PostgreSQL insert)
