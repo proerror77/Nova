@@ -136,6 +136,12 @@ class CommentViewModel {
     func refresh() async {
         await loadComments(postId: postId)
     }
+
+    // MARK: - Update Total Count (从 CommentSheetView 回调)
+
+    func updateTotalCount(_ count: Int) {
+        totalCount = count
+    }
 }
 
 // MARK: - Post Detail View
@@ -159,8 +165,7 @@ struct PostDetailView: View {
 
     // MARK: - Comment State
     @State private var commentViewModel = CommentViewModel()
-    @State private var newCommentText = ""
-    @FocusState private var isCommentInputFocused: Bool
+    @State private var showComments = false  // 使用 CommentSheetView 弹窗（与 Home 统一）
 
     // MARK: - Interaction State
     @State private var isPostLiked = false
@@ -222,11 +227,6 @@ struct PostDetailView: View {
                         // Bottom padding for action bar
                         Color.clear.frame(height: 100)
                     }
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    // 点击滚动区域退出键盘（不影响底部输入框）
-                    isCommentInputFocused = false
                 }
             }
 
@@ -307,6 +307,20 @@ struct PostDetailView: View {
                     .cornerRadius(12)
                 }
             }
+        }
+        // MARK: - Comment Sheet (与 Home 统一)
+        .sheet(isPresented: $showComments) {
+            CommentSheetView(
+                post: post,
+                isPresented: $showComments,
+                onAvatarTapped: { userId in
+                    onAvatarTapped?(userId)
+                },
+                onCommentCountUpdated: { postId, actualCount in
+                    // 更新本地评论数量
+                    commentViewModel.updateTotalCount(actualCount)
+                }
+            )
         }
     }
 
@@ -552,7 +566,7 @@ struct PostDetailView: View {
                     SocialCommentItemView(
                         comment: comment,
                         onReplyTapped: {
-                            isCommentInputFocused = true
+                            showComments = true
                         },
                         onAvatarTapped: onAvatarTapped
                     )
@@ -619,9 +633,9 @@ struct PostDetailView: View {
                 }
                 .disabled(isLikeLoading)
 
-                // Comment Button (点击呼出键盘)
+                // Comment Button (打开评论弹窗，与 Home 统一)
                 Button(action: {
-                    isCommentInputFocused = true
+                    showComments = true
                 }) {
                     HStack(spacing: 6) {
                         Image("card-comment-icon")
@@ -665,62 +679,8 @@ struct PostDetailView: View {
             .padding(.bottom, 16)
             .background(DesignTokens.surface)
 
-            // 评论输入框（始终存在于视图层级中，避免 @FocusState 时序问题，用 opacity 控制显示）
-            HStack(spacing: 10) {
-                HStack {
-                    TextField("Add a comment...", text: $newCommentText)
-                        .font(.system(size: 14))
-                        .foregroundColor(DesignTokens.textPrimary)
-                        .focused($isCommentInputFocused)
-                        .onSubmit {
-                            Task { await sendComment() }
-                        }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(Color(red: 0.95, green: 0.95, blue: 0.95))
-                .cornerRadius(20)
-
-                // Send Button
-                Button(action: {
-                    Task {
-                        await sendComment()
-                    }
-                }) {
-                    if commentViewModel.isSendingComment {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                            .frame(width: 32, height: 32)
-                    } else {
-                        Image(systemName: "paperplane.fill")
-                            .font(.system(size: 16))
-                            .foregroundColor(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? DesignTokens.textSecondary : DesignTokens.accentColor)
-                            .frame(width: 32, height: 32)
-                    }
-                }
-                .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || commentViewModel.isSendingComment)
-            }
-            .padding(.horizontal, 17)
-            .padding(.bottom, 12)
-            .background(DesignTokens.surface)
-            .opacity(isCommentInputFocused ? 1 : 0)
-            .frame(height: isCommentInputFocused ? nil : 0)
-            .clipped()
         }
         .background(DesignTokens.surface)
-    }
-
-    // MARK: - Send Comment
-
-    private func sendComment() async {
-        let content = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !content.isEmpty else { return }
-
-        let success = await commentViewModel.sendComment(content: content)
-        if success {
-            newCommentText = ""
-            isCommentInputFocused = false
-        }
     }
 
     // MARK: - Follow Actions
