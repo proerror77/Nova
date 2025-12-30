@@ -147,22 +147,25 @@ final class NewPostViewModel {
 
             selectedMediaItems.append(contentsOf: newMedia)
             // Trigger VLM analysis when first image is added
-            if !newMedia.isEmpty && vlmTags.isEmpty {
+            if !newMedia.isEmpty {
                 analyzeImageWithVLM()
             }
         } catch {
-            #if DEBUG
-            print("[NewPostViewModel] Failed to process photos: \(error)")
-            #endif
 
             // Fallback to regular image loading (without metadata since item can't be converted to PHAsset)
+            var addedAny = false
             for item in items {
                 guard selectedMediaItems.count < 5 else { break }
 
                 if let data = try? await item.loadTransferable(type: Data.self),
                    let image = UIImage(data: data) {
                     selectedMediaItems.append(.image(image, .empty))
+                    addedAny = true
                 }
+            }
+            // Trigger VLM analysis for fallback path too
+            if addedAny {
+                analyzeImageWithVLM()
             }
         }
     }
@@ -208,7 +211,8 @@ final class NewPostViewModel {
         selectedMediaItems.first?.metadata ?? .empty
     }
 
-    /// Analyze image with VLM API, enhanced with photo location metadata
+    /// Analyze image locally using Apple Vision framework
+    /// Fast, on-device analysis - no network required
     func analyzeImageWithVLM() {
         guard let firstImage = getFirstImage() else { return }
         guard !isAnalyzingImage else { return }
@@ -221,88 +225,62 @@ final class NewPostViewModel {
         let metadata = getFirstMediaMetadata()
 
         Task {
-            do {
-                // Compress image for upload
-                let compressionResult = await imageCompressor.compressImage(firstImage, quality: .low)
-                let imageData = compressionResult.data
-                let filename = "vlm_\(UUID().uuidString).\(compressionResult.format.fileExtension)"
+            // Use Apple Vision for on-device analysis (instant, no network)
+            var result = await LocalVisionService.shared.analyzeImage(firstImage)
 
-                // Upload to get URL
-                let imageUrl = try await mediaService.uploadImage(imageData: imageData, filename: filename)
+            // Add location-based tags from photo metadata
+            if metadata.hasAnyMetadata {
+                let locationTags = generateLocationTags(from: metadata)
+                result = VLMAnalysisResult(
+                    tags: result.tags + locationTags,
+                    channels: result.channels,
+                    processingTimeMs: result.processingTimeMs
+                )
+            }
 
-                // Call VLM API with metadata for location-aware tagging
-                let result: VLMAnalysisResult
-                if metadata.hasAnyMetadata {
-                    result = try await vlmService.analyzeImageWithMetadata(
-                        imageUrl: imageUrl,
-                        metadata: metadata,
-                        includeChannels: true,
-                        maxTags: 15
-                    )
-                    #if DEBUG
-                    print("[NewPostViewModel] Using location-enhanced VLM analysis")
-                    if let locName = metadata.locationName {
-                        print("[NewPostViewModel] Photo location: \(locName)")
-                    }
-                    if let date = metadata.formattedDate {
-                        print("[NewPostViewModel] Photo date: \(date)")
-                    }
-                    #endif
-                } else {
-                    result = try await vlmService.analyzeImage(
-                        imageUrl: imageUrl,
-                        includeChannels: true,
-                        maxTags: 15
-                    )
-                }
+            // Update UI with results
+            vlmTags = result.tags
+            vlmChannelSuggestions = result.channels ?? []
 
-                await MainActor.run {
-                    vlmTags = result.tags
-                    vlmChannelSuggestions = result.channels ?? []
+            // Auto-select tags with confidence >= 60%
+            for tag in result.tags where tag.confidence >= 0.6 {
+                selectedVLMTags.insert(tag.tag)
+            }
 
-                    // Auto-select tags with confidence >= 60% (more aggressive)
-                    for tag in result.tags where tag.confidence >= 0.6 {
-                        selectedVLMTags.insert(tag.tag)
-                    }
+            // Auto-fill location from photo metadata if not already set
+            if selectedLocation.isEmpty, let locName = metadata.locationName {
+                selectedLocation = locName
+            }
 
-                    // Auto-select top VLM channel suggestions (up to 3)
-                    if selectedChannelIds.isEmpty {
-                        let topChannels = vlmChannelSuggestions
-                            .filter { $0.confidence >= 0.5 }  // Only channels with >50% confidence
-                            .prefix(3)
-                            .map { $0.id }
-                        selectedChannelIds = Array(topChannels)
-                    }
+            isAnalyzingImage = false
+        }
+    }
 
-                    // Auto-fill location from photo metadata if not already set
-                    if selectedLocation.isEmpty, let locName = metadata.locationName {
-                        selectedLocation = locName
-                    }
+    /// Generate location-based tags from photo metadata
+    private func generateLocationTags(from metadata: PhotoMetadata) -> [TagSuggestion] {
+        var tags: [TagSuggestion] = []
 
-                    // Auto-fill location from photo metadata if not already set
-                    if selectedLocation.isEmpty, let locName = metadata.locationName {
-                        selectedLocation = locName
-                    }
-
-                    isAnalyzingImage = false
-
-                    #if DEBUG
-                    print("[NewPostViewModel] Auto-selected \(selectedVLMTags.count) tags, \(selectedChannelIds.count) channels")
-                    #endif
-                }
-
-                #if DEBUG
-                print("[NewPostViewModel] VLM analysis complete: \(result.tags.count) tags, \(result.channels?.count ?? 0) channels")
-                #endif
-            } catch {
-                #if DEBUG
-                print("[NewPostViewModel] VLM analysis failed: \(error)")
-                #endif
-                await MainActor.run {
-                    isAnalyzingImage = false
-                }
+        // Add city/area tag
+        if let locationName = metadata.locationName {
+            let parts = locationName.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            for part in parts.prefix(2) {
+                tags.append(TagSuggestion(tag: part, confidence: 0.7, source: "location"))
             }
         }
+
+        // Add time-of-day tag based on photo timestamp
+        if let date = metadata.creationDate {
+            let hour = Calendar.current.component(.hour, from: date)
+            if hour >= 5 && hour < 9 {
+                tags.append(TagSuggestion(tag: "Morning", confidence: 0.5, source: "time"))
+            } else if hour >= 17 && hour < 20 {
+                tags.append(TagSuggestion(tag: "Sunset", confidence: 0.5, source: "time"))
+            } else if hour >= 20 || hour < 5 {
+                tags.append(TagSuggestion(tag: "Night", confidence: 0.5, source: "time"))
+            }
+        }
+
+        return tags
     }
 
     func toggleVLMTag(_ tag: String) {
@@ -542,9 +520,9 @@ final class NewPostViewModel {
                 userId: userId,
                 location: selectedLocation.isEmpty ? nil : selectedLocation,
                 onSuccess: { [onPostSuccess, vlmService] post in
-                    // Update VLM tags after post is created
-                    if !tagsToSave.isEmpty {
-                        Task {
+                    Task {
+                        // Step 1: Save local VLM tags
+                        if !tagsToSave.isEmpty {
                             do {
                                 _ = try await vlmService.updatePostTags(
                                     postId: post.id,
@@ -558,6 +536,37 @@ final class NewPostViewModel {
                                 #if DEBUG
                                 print("[NewPostViewModel] Failed to save VLM tags: \(error)")
                                 #endif
+                            }
+                        }
+
+                        // Step 2: Background channel classification via Google Cloud Vision
+                        // Only if user didn't manually select channels
+                        if channelsToSave.isEmpty, let firstMediaUrl = post.mediaUrls?.first {
+                            do {
+                                let result = try await vlmService.analyzeImage(
+                                    imageUrl: firstMediaUrl,
+                                    includeChannels: true
+                                )
+
+                                // Auto-assign to suggested channels (confidence >= 70%)
+                                if let suggestedChannels = result.channels?.filter({ $0.confidence >= 0.7 }) {
+                                    let channelIds = suggestedChannels.map { $0.id }
+                                    if !channelIds.isEmpty {
+                                        _ = try await vlmService.updatePostTags(
+                                            postId: post.id,
+                                            tags: tagsToSave,
+                                            channelIds: channelIds
+                                        )
+                                        #if DEBUG
+                                        print("[NewPostViewModel] Auto-assigned channels: \(suggestedChannels.map { $0.name })")
+                                        #endif
+                                    }
+                                }
+                            } catch {
+                                #if DEBUG
+                                print("[NewPostViewModel] Background channel classification failed: \(error)")
+                                #endif
+                                // Silent failure - don't affect user experience
                             }
                         }
                     }

@@ -363,13 +363,13 @@ enum GrokVoiceChatState: Equatable {
     
     var description: String {
         switch self {
-        case .disconnected: return "未連線"
-        case .connecting: return "連線中..."
-        case .connected: return "已連線"
-        case .listening: return "正在聆聽..."
-        case .processing: return "思考中..."
-        case .responding: return "回應中..."
-        case .error(let msg): return "錯誤: \(msg)"
+        case .disconnected: return "Disconnected"
+        case .connecting: return "Connecting..."
+        case .connected: return "Connected"
+        case .listening: return "Listening..."
+        case .processing: return "Thinking..."
+        case .responding: return "Responding..."
+        case .error(let msg): return "Error: \(msg)"
         }
     }
     

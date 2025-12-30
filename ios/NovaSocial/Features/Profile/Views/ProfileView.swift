@@ -69,6 +69,8 @@ struct ProfileView: View {
     @State private var showDeleteConfirmation = false       // 显示删除确认
     @State private var postToDelete: Post? = nil            // 待删除的帖子
     @State private var isDeleting = false                   // 正在删除中
+    @State private var deleteErrorMessage: String? = nil    // 刪除失敗錯誤訊息
+    @State private var showDeleteError = false              // 顯示刪除失敗提示
     @State private var showCameraPermissionAlert = false    // 相机权限提示
     @State private var searchDebounceTask: Task<Void, Never>?  // 搜索防抖任務
 
@@ -403,6 +405,13 @@ struct ProfileView: View {
             }
         } message: {
             Text("確定要刪除這則貼文嗎？此操作無法撤銷。")
+        }
+        .alert("刪除失敗", isPresented: $showDeleteError) {
+            Button("確定", role: .cancel) {
+                deleteErrorMessage = nil
+            }
+        } message: {
+            Text(deleteErrorMessage ?? "無法刪除貼文，請稍後再試")
         }
         // MARK: - 相机权限提示
         .alert("需要相机权限", isPresented: $showCameraPermissionAlert) {
@@ -1076,10 +1085,18 @@ struct ProfileView: View {
             // 从本地状态中移除
             userPostsManager.deletePost(postId: post.id)
 
-            print("✅ Post deleted successfully: \(post.id)")
+            #if DEBUG
+            print("[ProfileView] Post deleted successfully: \(post.id)")
+            #endif
         } catch {
-            print("❌ Failed to delete post: \(error)")
-            // TODO: 显示错误提示给用户
+            #if DEBUG
+            print("[ProfileView] Failed to delete post: \(error)")
+            #endif
+            // 顯示錯誤提示給用戶
+            await MainActor.run {
+                deleteErrorMessage = "無法刪除貼文，請檢查網路連線後重試"
+                showDeleteError = true
+            }
         }
 
         await MainActor.run {

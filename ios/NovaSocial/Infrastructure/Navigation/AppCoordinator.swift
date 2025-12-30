@@ -28,6 +28,9 @@ final class AppCoordinator: @unchecked Sendable {
     /// Flag to track if user is authenticated
     var isAuthenticated: Bool = false
 
+    /// Flag indicating voice mode should be auto-opened (set by Action Button intent)
+    var shouldOpenVoiceMode: Bool = false
+
     // MARK: - State Restoration Keys
 
     private let selectedTabKey = "AppCoordinator.selectedTab"
@@ -99,6 +102,43 @@ final class AppCoordinator: @unchecked Sendable {
         guard let pendingRoute = pendingDeepLink else { return }
         pendingDeepLink = nil
         navigate(to: pendingRoute)
+
+        // Also process pending voice mode request if applicable
+        if shouldOpenVoiceMode {
+            // Voice mode flag will be handled by AliceView
+            #if DEBUG
+            print("[AppCoordinator] Processing pending voice mode request")
+            #endif
+        }
+    }
+
+    /// Navigate directly to Alice voice mode (triggered by Action Button)
+    func navigateToAliceVoiceMode() {
+        // If user is not authenticated, store pending action
+        guard isAuthenticated else {
+            pendingDeepLink = .alice
+            shouldOpenVoiceMode = true
+            currentPage = .login
+
+            #if DEBUG
+            print("[AppCoordinator] User not authenticated, storing voice mode request")
+            #endif
+            return
+        }
+
+        // Switch to Alice tab
+        if selectedTab != .alice {
+            resetPath(for: selectedTab)
+        }
+        selectedTab = .alice
+        currentPage = .alice
+
+        // Set flag for AliceView to auto-open voice mode
+        shouldOpenVoiceMode = true
+
+        #if DEBUG
+        print("[AppCoordinator] Navigating to Alice Voice Mode")
+        #endif
     }
 
     /// Go back one step in navigation

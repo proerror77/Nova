@@ -65,6 +65,7 @@ targets:
       #   product: RtcBasic
       - package: MatrixRustSDK
         product: MatrixRustSDK
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.app.icered.pro

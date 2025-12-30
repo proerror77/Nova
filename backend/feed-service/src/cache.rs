@@ -63,6 +63,28 @@ impl FeedCache {
         })
     }
 
+    /// Ping Redis to check connection health and keep connection alive
+    ///
+    /// This method should be called periodically from a background task
+    /// to prevent "broken pipe" errors from stale connections.
+    pub async fn ping(&self) -> Result<()> {
+        redis::cmd("PING")
+            .query_async::<_, String>(&mut self.client.as_ref().clone())
+            .await
+            .map_err(|e| {
+                warn!("Redis PING failed: {}", e);
+                AppError::Internal(format!("Redis health check failed: {}", e))
+            })?;
+        Ok(())
+    }
+
+    /// Get a clone of the connection manager for shared use
+    ///
+    /// Useful for passing to handlers that need direct Redis access
+    pub fn connection_manager(&self) -> Arc<ConnectionManager> {
+        Arc::clone(&self.client)
+    }
+
     /// Get cached feed for user
     ///
     /// Returns serialized feed response if found in cache, None if miss/error

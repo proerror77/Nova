@@ -15,11 +15,12 @@
 /// POST /api/v2/chat/groups/create - Create group chat
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::clients::proto::auth::{
     auth_service_client::AuthServiceClient, GenerateInviteRequest, GetCurrentDeviceRequest,
-    GetInvitationStatsRequest, ListDevicesRequest, ListInvitationsRequest, LogoutDeviceRequest,
+    GetInvitationStatsRequest, GetUserProfilesByIdsRequest, ListDevicesRequest,
+    ListInvitationsRequest, LogoutDeviceRequest, UserProfile as AuthUserProfile,
 };
 use crate::clients::proto::chat::{ConversationType, CreateConversationRequest};
 use crate::clients::proto::graph::GetMutualFollowersRequest as GrpcGetMutualFollowersRequest;
@@ -38,6 +39,35 @@ pub struct UserCard {
     pub avatar_url: Option<String>,
     pub bio: Option<String>,
     pub is_following: bool,
+}
+
+/// Friend profile for friends list API - matches iOS UserProfile struct
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FriendProfile {
+    pub id: String,
+    pub username: String,
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>,
+    pub bio: Option<String>,
+    pub is_verified: Option<bool>,
+    pub follower_count: Option<i32>,
+    pub following_count: Option<i32>,
+}
+
+impl From<AuthUserProfile> for FriendProfile {
+    fn from(p: AuthUserProfile) -> Self {
+        Self {
+            id: p.user_id,
+            username: p.username,
+            display_name: p.display_name,
+            avatar_url: p.avatar_url,
+            bio: p.bio,
+            is_verified: p.is_verified,
+            follower_count: p.follower_count,
+            following_count: p.following_count,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

@@ -37,9 +37,9 @@ struct MessageBubbleView: View {
     }
 
     private var myMessageView: some View {
-        HStack(alignment: .bottom, spacing: 10) {
+        HStack(alignment: .top, spacing: 10.w) {
             Spacer()
-            VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .trailing, spacing: 4.h) {
                 messageContent
                     .contextMenu { contextMenuItems }
                 // 反應顯示
@@ -53,26 +53,27 @@ struct MessageBubbleView: View {
                     )
                 }
                 // 時間和狀態
-                HStack(spacing: 4) {
+                HStack(spacing: 4.w) {
                     if message.isEdited {
                         Text("已編輯")
-                            .font(.system(size: 10))
+                            .font(.system(size: 10.f))
                             .foregroundColor(DesignTokens.textMuted)
                     }
                     Text(formattedTime)
-                        .font(.system(size: 11))
+                        .font(.system(size: 11.f))
                         .foregroundColor(DesignTokens.textMuted)
                     statusIcon
                 }
             }
-            AvatarView(image: nil, url: myAvatarUrl, size: 40)
-        }.padding(.horizontal, 16)
+            AvatarView(image: nil, url: myAvatarUrl, size: 40.s)
+        }
+        .padding(.trailing, 16)
     }
 
     private var otherMessageView: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            AvatarView(image: nil, url: senderAvatarUrl, size: 40)
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .top, spacing: 10.w) {
+            AvatarView(image: nil, url: senderAvatarUrl, size: 40.s)
+            VStack(alignment: .leading, spacing: 4.h) {
                 otherMessageContent
                     .contextMenu { contextMenuItems }
                 // 反應顯示
@@ -86,19 +87,20 @@ struct MessageBubbleView: View {
                     )
                 }
                 // 時間
-                HStack(spacing: 4) {
+                HStack(spacing: 4.w) {
                     Text(formattedTime)
-                        .font(.system(size: 11))
+                        .font(.system(size: 11.f))
                         .foregroundColor(DesignTokens.textMuted)
                     if message.isEdited {
                         Text("已編輯")
-                            .font(.system(size: 10))
+                            .font(.system(size: 10.f))
                             .foregroundColor(DesignTokens.textMuted)
                     }
                 }
             }
             Spacer()
-        }.padding(.horizontal, 16)
+        }
+        .padding(.leading, 16)
     }
 
     // MARK: - 狀態圖標
@@ -332,22 +334,26 @@ struct MessageBubbleView: View {
         }
         // 7. 文字消息
         else {
-            VStack(alignment: .leading, spacing: 6) {
-                // 回覆預覽
-                replyPreviewInBubble(isFromMe: isFromMe)
+            HStack {
+                if isFromMe { Spacer(minLength: 0) }
+                
+                VStack(alignment: .leading, spacing: 8.h) {
+                    // 回覆預覽
+                    replyPreviewInBubble(isFromMe: isFromMe)
 
-                // 消息內容
-                Text(message.text)
-                    .font(Font.custom("Helvetica Neue", size: 16))
-                    .lineSpacing(4)
-                    .foregroundColor(textColor)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
+                    // 消息內容
+                    Text(message.text)
+                        .font(Font.custom("SF Pro Display", size: 16.f))
+                        .foregroundColor(textColor)
+                        .multilineTextAlignment(.leading)
+                }
+                .padding(EdgeInsets(top: 12.h, leading: 16.w, bottom: 12.h, trailing: 16.w))
+                .background(bubbleColor)
+                .cornerRadius(14.s)
+                .frame(maxWidth: 237.w, alignment: alignment)
+                
+                if !isFromMe { Spacer(minLength: 0) }
             }
-            .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
-            .background(bubbleColor)
-            .cornerRadius(14)
-            .frame(maxWidth: 260, alignment: alignment)
         }
     }
 
