@@ -224,6 +224,22 @@ struct IceredApp: App {
                 // Handle session expiration - navigate to login immediately
                 handleSessionExpired(notification.userInfo)
             }
+            // MARK: - Action Button Intent Handling
+            .onReceive(NotificationCenter.default.publisher(for: .openAliceVoiceMode)) { _ in
+                // Handle Alice Voice Mode intent from Action Button (iPhone 15 Pro+)
+                #if DEBUG
+                print("[App] Received Alice Voice Mode intent from Action Button")
+                #endif
+                coordinator.navigateToAliceVoiceMode()
+                // Also update currentPage if authenticated
+                if coordinator.isAuthenticated {
+                    currentPage = .alice
+                }
+            }
+            // Use UIApplication.didBecomeActiveNotification as more reliable trigger for voice mode intent
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                checkForVoiceModeIntent()
+            }
             // MARK: - Deep Link Handling
             .onOpenURL { url in
                 handleDeepLink(url)
@@ -239,6 +255,10 @@ struct IceredApp: App {
 
                     // Pause Matrix sync to save resources
                     MatrixBridgeService.shared.pauseSync()
+                }
+                // Check for Action Button voice mode request when becoming active
+                if newPhase == .active {
+                    checkForVoiceModeIntent()
                 }
                 // 当 App 从后台返回到活跃状态时
                 if newPhase == .active, let entryTime = backgroundEntryTime {
@@ -323,6 +343,64 @@ struct IceredApp: App {
         print("[App] SESSION EXPIRED - Navigating to login page")
         currentPage = .login
         coordinator.onLogout()
+    }
+
+    // MARK: - Action Button Voice Mode Intent Handling
+
+    /// Check for voice mode intent from Action Button (App Groups UserDefaults)
+    /// - Parameter retryCount: Number of retry attempts remaining (for delayed checks)
+    private func checkForVoiceModeIntent(retryCount: Int = 3) {
+        guard let defaults = UserDefaults(suiteName: VoiceModeIntentKeys.appGroupSuiteName) else {
+            print("[App] 🎤 Failed to access App Groups UserDefaults")
+            return
+        }
+
+        let shouldOpenVoiceMode = defaults.bool(forKey: VoiceModeIntentKeys.shouldOpenVoiceMode)
+        let timestamp = defaults.double(forKey: VoiceModeIntentKeys.voiceModeTimestamp)
+
+        // If flag not set and we have retries left, schedule a delayed re-check
+        // This handles timing where intent's perform() runs AFTER app activation
+        guard shouldOpenVoiceMode else {
+            if retryCount > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
+                    checkForVoiceModeIntent(retryCount: retryCount - 1)
+                }
+            }
+            return
+        }
+
+        let timeSinceIntent = Date().timeIntervalSince1970 - timestamp
+        guard timeSinceIntent < 10 else {
+            // Clear stale flag
+            defaults.set(false, forKey: VoiceModeIntentKeys.shouldOpenVoiceMode)
+            defaults.synchronize()
+            print("[App] 🎤 Stale voice mode intent ignored (age: \(String(format: "%.1f", timeSinceIntent))s)")
+            return
+        }
+
+        // Clear the flag immediately to prevent re-triggering
+        defaults.set(false, forKey: VoiceModeIntentKeys.shouldOpenVoiceMode)
+        defaults.synchronize()
+
+        // Use AuthenticationManager.shared directly to ensure we get the current state
+        let isAuth = AuthenticationManager.shared.isAuthenticated
+        print("[App] 🎤 Voice mode intent detected! isAuthenticated=\(isAuth)")
+
+        // Sync coordinator auth state with AuthenticationManager.shared
+        coordinator.isAuthenticated = isAuth
+
+        if isAuth {
+            // User is authenticated - navigate directly to Alice voice mode
+            coordinator.selectedTab = .alice
+            coordinator.shouldOpenVoiceMode = true
+            currentPage = .alice
+            print("[App] 🎤 Navigating to Alice Voice Mode")
+        } else {
+            // User not authenticated - store for after login
+            coordinator.pendingDeepLink = .alice
+            coordinator.shouldOpenVoiceMode = true
+            print("[App] 🎤 User not authenticated, will navigate after login")
+        }
     }
 
     // MARK: - Deep Link Handling

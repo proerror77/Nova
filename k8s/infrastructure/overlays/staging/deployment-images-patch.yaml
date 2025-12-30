@@ -52,7 +52,7 @@ spec:
     spec:
       containers:
       - name: realtime-chat-service
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/realtime-chat-service@sha256:82dcc42c3e87ad98da35ad4b7e592a9cc76ffcd83e13096e144ac3f9a7299dde
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/realtime-chat-service:latest
 ---
 apiVersion: apps/v1
 kind: Deployment
