@@ -209,7 +209,7 @@ LEFT JOIN (
 ) AS affinity
     ON affinity.user_id = f.follower_id
     AND affinity.author_id = toString(p.user_id)
-WHERE p.is_deleted = 0
+WHERE p.deleted_at = toDateTime(0)
   AND p.created_at >= now() - INTERVAL 30 DAY
 ORDER BY user_id, combined_score DESC
 LIMIT 500 BY user_id
@@ -259,7 +259,7 @@ LEFT JOIN (
     GROUP BY post_id
     HAVING comments_count > 0
 ) AS comments ON comments.post_id = toString(p.id)
-WHERE p.is_deleted = 0
+WHERE p.deleted_at = toDateTime(0)
   AND p.created_at >= now() - INTERVAL 14 DAY
 ORDER BY combined_score DESC
 LIMIT 1000
@@ -355,7 +355,7 @@ LEFT JOIN (
     GROUP BY post_id
     HAVING comments_count > 0
 ) AS comments ON comments.post_id = toString(p.id)
-WHERE p.is_deleted = 0
+WHERE p.deleted_at = toDateTime(0)
   AND p.created_at >= now() - INTERVAL 30 DAY
 ORDER BY user_id, combined_score DESC
 LIMIT 300 BY user_id
