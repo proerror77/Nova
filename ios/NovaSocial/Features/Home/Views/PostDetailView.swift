@@ -412,14 +412,19 @@ struct PostDetailView: View {
                     TabView(selection: $currentImageIndex) {
                         ForEach(Array(post.displayMediaUrls.enumerated()), id: \.element) { index, mediaUrl in
                             Group {
-                                if isVideoUrl(mediaUrl) {
+                                if isVideoUrl(mediaUrl), let videoUrl = URL(string: mediaUrl) {
                                     // Video content - use FeedVideoPlayer
                                     FeedVideoPlayer(
-                                        url: URL(string: mediaUrl)!,
+                                        url: videoUrl,
                                         autoPlay: true,
                                         isMuted: true,
                                         height: geometry.size.width * 4 / 3 - 40
                                     )
+                                } else if isVideoUrl(mediaUrl) {
+                                    // Invalid video URL - show placeholder
+                                    Rectangle()
+                                        .fill(DesignTokens.placeholderColor)
+                                        .frame(height: geometry.size.width * 4 / 3 - 40)
                                 } else {
                                     // Image content - use CachedAsyncImage
                                     CachedAsyncImage(
