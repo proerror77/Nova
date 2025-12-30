@@ -141,7 +141,7 @@ final class ChatViewModel {
     #if DEBUG
     private static var useChatPreviewMode: Bool {
         #if targetEnvironment(simulator)
-        return false
+        return false  // 改為 false 以測試真實後端
         #else
         return false
         #endif
