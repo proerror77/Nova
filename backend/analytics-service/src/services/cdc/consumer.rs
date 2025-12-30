@@ -196,6 +196,7 @@ pub struct ConsumerStatus {
 }
 
 /// Row struct for posts_cdc table - used for type-safe ClickHouse inserts
+/// Note: Matches ClickHouse schema exactly - deleted_at is Nullable(DateTime64)
 #[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct PostsCdcRow {
     pub id: Uuid,
@@ -206,10 +207,8 @@ pub struct PostsCdcRow {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
-    pub is_deleted: u8,
     pub cdc_operation: i8,
     pub cdc_timestamp: DateTime<Utc>,
-    pub media_url: Option<String>,
 }
 
 /// Row struct for follows_cdc table - used for type-safe ClickHouse inserts
@@ -593,14 +592,6 @@ impl CdcConsumer {
         };
         let cdc_timestamp = msg.timestamp();
 
-        // Extract is_deleted flag (default to 0 if not present)
-        let is_deleted: u8 = Self::extract_optional_field::<bool>(data, "is_deleted")
-            .map(|b| if b { 1 } else { 0 })
-            .unwrap_or(if deleted_at.is_some() { 1 } else { 0 });
-
-        // Extract media_url if present
-        let media_url: Option<String> = Self::extract_optional_field(data, "media_url");
-
         // Use type-safe parameterized insert to prevent SQL injection
         let row = PostsCdcRow {
             id: post_id,
@@ -611,10 +602,8 @@ impl CdcConsumer {
             created_at,
             updated_at,
             deleted_at,
-            is_deleted,
             cdc_operation,
             cdc_timestamp,
-            media_url,
         };
 
         let mut insert = self.ch_client.insert("posts_cdc").map_err(|e| {
