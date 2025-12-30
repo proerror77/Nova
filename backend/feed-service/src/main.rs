@@ -272,6 +272,17 @@ async fn main() -> io::Result<()> {
         }
     };
 
+    // Start Redis health check background job to prevent broken pipe errors
+    let health_cache = Arc::clone(&grpc_cache);
+    tokio::spawn(async move {
+        recommendation_service::jobs::redis_health::start_redis_health_check(
+            health_cache,
+            recommendation_service::jobs::redis_health::RedisHealthConfig::default(),
+        )
+        .await;
+    });
+    info!("Redis health check background job started");
+
     // Initialize gRPC service with existing pools (avoid creating another GrpcClientPool)
     let grpc_svc = recommendation_service::grpc::RecommendationServiceImpl::with_cache(
         grpc_db_pool,
