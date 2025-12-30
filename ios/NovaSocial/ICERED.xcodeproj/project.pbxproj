@@ -1939,6 +1939,10 @@
 				"TEMP_B9C518E7-D401-4D3D-8BC8-0957468CDAEE" /* AppPage.swift */,
 				"TEMP_22F3168B-D035-4C44-A2C6-36287D87FEA9" /* AppDelegate.swift */,
 				"TEMP_23BED3CF-2786-4000-8D9C-513C279C3AE0" /* App.swift */,
+			);
+			path = NovaSocial;
+			sourceTree = "<group>";
+		};
 		"TEMP_5B608B5C-D717-4D1E-9D9A-D338B71E898C" /* NovaSocial */ = {
 			isa = PBXGroup;
 			children = (
@@ -2470,6 +2474,10 @@
 			isa = PBXVariantGroup;
 			children = (
 				"TEMP_0DB20EB3-42E8-481B-A0B4-9D5370644AA0" /* en */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
 		"TEMP_99C268A2-D529-4DD2-9E1B-6B4FA7DCCA1D" /* Localizable.strings */ = {
 			isa = PBXVariantGroup;
 			children = (

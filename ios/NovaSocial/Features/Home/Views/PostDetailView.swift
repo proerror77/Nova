@@ -191,22 +191,6 @@ struct PostDetailView: View {
         return post.authorId == currentUserId
     }
 
-    // MARK: - Post Actions State (作者操作)
-    @State private var showingActionSheet = false
-    @State private var showingDeleteConfirmation = false
-    @State private var isDeleting = false
-    @State private var showingSaveSuccess = false
-    @State private var showingSaveError = false
-    @State private var saveErrorMessage = ""
-    @State private var showingDeleteError = false
-    @State private var deleteErrorMessage = ""
-
-    /// 是否是自己的帖子
-    private var isOwnPost: Bool {
-        guard let currentUserId = authManager.currentUser?.id else { return false }
-        return post.authorId == currentUserId
-    }
-
     /// 当前显示的评论
     private var displayComments: [SocialComment] {
         commentViewModel.comments
