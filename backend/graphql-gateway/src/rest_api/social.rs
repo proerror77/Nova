@@ -393,13 +393,72 @@ pub async fn get_friends_list(
         .await
     {
         Ok(response) => {
-            info!(user_id = %user_id, total = response.total_count, "Friends list retrieved successfully");
+            info!(user_id = %user_id, total = response.total_count, "Friends list retrieved from graph-service");
 
-            Ok(HttpResponse::Ok().json(serde_json::json!({
-                "friends": response.user_ids,
-                "total": response.total_count,
-                "hasMore": response.has_more,
-            })))
+            // If no friends, return empty list immediately
+            if response.user_ids.is_empty() {
+                return Ok(HttpResponse::Ok().json(serde_json::json!({
+                    "friends": Vec::<FriendProfile>::new(),
+                    "total": 0,
+                })));
+            }
+
+            // Enrich UUIDs with full user profiles from auth-service
+            let mut auth_client = clients.auth_client();
+            let profile_request = tonic::Request::new(GetUserProfilesByIdsRequest {
+                user_ids: response.user_ids.clone(),
+            });
+
+            match auth_client.get_user_profiles_by_ids(profile_request).await {
+                Ok(profiles_response) => {
+                    let profiles = profiles_response.into_inner();
+                    let friends: Vec<FriendProfile> = profiles
+                        .profiles
+                        .into_iter()
+                        .map(FriendProfile::from)
+                        .collect();
+
+                    info!(
+                        user_id = %user_id,
+                        total = response.total_count,
+                        enriched = friends.len(),
+                        "Friends list enriched successfully"
+                    );
+
+                    Ok(HttpResponse::Ok().json(serde_json::json!({
+                        "friends": friends,
+                        "total": response.total_count,
+                    })))
+                }
+                Err(e) => {
+                    warn!(
+                        user_id = %user_id,
+                        error = %e,
+                        "Failed to enrich friends with profiles, returning UUIDs as fallback"
+                    );
+
+                    // Fallback: return minimal profile with just IDs
+                    let friends: Vec<FriendProfile> = response
+                        .user_ids
+                        .iter()
+                        .map(|id| FriendProfile {
+                            id: id.clone(),
+                            username: format!("user_{}", &id[..8.min(id.len())]),
+                            display_name: None,
+                            avatar_url: None,
+                            bio: None,
+                            is_verified: None,
+                            follower_count: None,
+                            following_count: None,
+                        })
+                        .collect();
+
+                    Ok(HttpResponse::Ok().json(serde_json::json!({
+                        "friends": friends,
+                        "total": response.total_count,
+                    })))
+                }
+            }
         }
         Err(e) => {
             error!(
