@@ -196,19 +196,20 @@ pub struct ConsumerStatus {
 }
 
 /// Row struct for posts_cdc table - used for type-safe ClickHouse inserts
-/// Note: Matches ClickHouse schema exactly - deleted_at is Nullable(DateTime64)
+/// Uses String for UUIDs and u32 for DateTime to avoid clickhouse-rs serialization issues
+/// Note: deleted_at uses Option<u32> for Nullable(DateTime64) compatibility
 #[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct PostsCdcRow {
-    pub id: Uuid,
-    pub user_id: Uuid,
+    pub id: String,
+    pub user_id: String,
     pub content: String,
     pub media_key: String,
     pub media_type: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
+    pub created_at: u32,
+    pub updated_at: u32,
+    pub deleted_at: Option<u32>,
     pub cdc_operation: i8,
-    pub cdc_timestamp: DateTime<Utc>,
+    pub cdc_timestamp: u32,
 }
 
 /// Row struct for follows_cdc table - used for type-safe ClickHouse inserts
@@ -566,10 +567,11 @@ impl CdcConsumer {
 
         let id_raw: String = Self::extract_field(data, "id")?;
         let user_id_raw: String = Self::extract_field(data, "user_id")?;
-        let post_id = Uuid::parse_str(&id_raw).map_err(|e| {
+        // Validate UUIDs but keep as strings for ClickHouse compatibility
+        let _ = Uuid::parse_str(&id_raw).map_err(|e| {
             AnalyticsError::Validation(format!("Invalid post UUID '{}': {}", id_raw, e))
         })?;
-        let author_id = Uuid::parse_str(&user_id_raw).map_err(|e| {
+        let _ = Uuid::parse_str(&user_id_raw).map_err(|e| {
             AnalyticsError::Validation(format!("Invalid user UUID '{}': {}", user_id_raw, e))
         })?;
         let content: String = Self::extract_field(data, "content").unwrap_or_default();
@@ -593,17 +595,18 @@ impl CdcConsumer {
         let cdc_timestamp = msg.timestamp();
 
         // Use type-safe parameterized insert to prevent SQL injection
+        // Convert DateTime to unix timestamp (u32) for ClickHouse DateTime compatibility
         let row = PostsCdcRow {
-            id: post_id,
-            user_id: author_id,
+            id: id_raw.clone(),
+            user_id: user_id_raw.clone(),
             content,
             media_key,
             media_type,
-            created_at,
-            updated_at,
-            deleted_at,
+            created_at: created_at.timestamp() as u32,
+            updated_at: updated_at.timestamp() as u32,
+            deleted_at: deleted_at.map(|dt| dt.timestamp() as u32),
             cdc_operation,
-            cdc_timestamp,
+            cdc_timestamp: cdc_timestamp.timestamp() as u32,
         };
 
         let mut insert = self.ch_client.insert("posts_cdc").map_err(|e| {
@@ -621,7 +624,7 @@ impl CdcConsumer {
             AnalyticsError::ClickHouse(e.to_string())
         })?;
 
-        debug!("Inserted posts CDC: id={}, op={:?}", post_id, op);
+        debug!("Inserted posts CDC: id={}, op={:?}", id_raw, op);
         Ok(())
     }
 
