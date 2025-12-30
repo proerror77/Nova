@@ -605,10 +605,11 @@ impl CdcConsumer {
             None => "NULL".to_string(),
         };
 
-        // Escape single quotes in content for SQL safety
-        let escaped_content = content.replace('\'', "''");
-        let escaped_media_key = media_key.replace('\'', "''");
-        let escaped_media_type = media_type.replace('\'', "''");
+        // Escape single quotes and ? (bind parameter) in content for SQL safety
+        // clickhouse-rs treats ? as a bind parameter placeholder, escape with ??
+        let escaped_content = content.replace('\'', "''").replace('?', "??");
+        let escaped_media_key = media_key.replace('\'', "''").replace('?', "??");
+        let escaped_media_type = media_type.replace('\'', "''").replace('?', "??");
 
         // Use raw SQL INSERT to bypass Row serialization issues with UUID and DateTime types
         let insert_sql = format!(
