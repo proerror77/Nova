@@ -2,6 +2,7 @@ use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use clickhouse::Client as ClickHouseClient;
 use clickhouse::Row;
 use prometheus::{IntCounter, IntGauge};
+use reqwest::Client as HttpClient;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::message::Message;
@@ -334,7 +335,8 @@ const CRITICAL_ERROR_THRESHOLD: u32 = 10;
 pub struct CdcConsumer {
     consumer: StreamConsumer,
     ch_client: ClickHouseClient,
-    #[allow(dead_code)]
+    /// HTTP client for raw SQL execution (bypasses clickhouse-rs SQL parsing)
+    http_client: HttpClient,
     config: CdcConsumerConfig,
     semaphore: Arc<Semaphore>,
     /// Metrics for monitoring consumer health and performance
@@ -382,6 +384,9 @@ impl CdcConsumer {
             .with_user(&config.clickhouse_user)
             .with_password(&config.clickhouse_password);
 
+        // Create HTTP client for raw SQL execution (bypasses clickhouse-rs SQL parsing)
+        let http_client = HttpClient::new();
+
         let metrics = CdcConsumerMetrics::new();
         let error_state = Arc::new(ConsumerErrorState::new());
 
@@ -390,6 +395,7 @@ impl CdcConsumer {
         Ok(Self {
             consumer,
             ch_client,
+            http_client,
             semaphore: Arc::new(Semaphore::new(config.max_concurrent_inserts)),
             config,
             metrics,
@@ -605,13 +611,12 @@ impl CdcConsumer {
             None => "NULL".to_string(),
         };
 
-        // Escape single quotes and ? (bind parameter) in content for SQL safety
-        // clickhouse-rs treats ? as a bind parameter placeholder, escape with ??
-        let escaped_content = content.replace('\'', "''").replace('?', "??");
-        let escaped_media_key = media_key.replace('\'', "''").replace('?', "??");
-        let escaped_media_type = media_type.replace('\'', "''").replace('?', "??");
+        // Escape single quotes in content for SQL safety
+        let escaped_content = content.replace('\'', "''");
+        let escaped_media_key = media_key.replace('\'', "''");
+        let escaped_media_type = media_type.replace('\'', "''");
 
-        // Use raw SQL INSERT to bypass Row serialization issues with UUID and DateTime types
+        // Use raw HTTP POST to bypass clickhouse-rs SQL parsing (which treats ? as bind param)
         let insert_sql = format!(
             "INSERT INTO posts_cdc (id, user_id, content, media_key, media_type, created_at, updated_at, deleted_at, cdc_operation, cdc_timestamp) VALUES ('{}', '{}', '{}', '{}', '{}', '{}', '{}', {}, '{}', '{}')",
             id_raw,
@@ -626,14 +631,31 @@ impl CdcConsumer {
             cdc_timestamp.format("%Y-%m-%d %H:%M:%S%.3f"),
         );
 
-        self.ch_client
-            .query(&insert_sql)
-            .execute()
+        // Execute via direct HTTP to bypass clickhouse-rs's SQL parsing
+        let url = format!(
+            "{}/?user={}&password={}&database={}",
+            self.config.clickhouse_url,
+            self.config.clickhouse_user,
+            self.config.clickhouse_password,
+            self.config.clickhouse_database
+        );
+
+        let response = self
+            .http_client
+            .post(&url)
+            .body(insert_sql.clone())
+            .send()
             .await
             .map_err(|e| {
-                error!("ClickHouse insert error: {}", e);
+                error!("ClickHouse HTTP request failed: {}", e);
                 AnalyticsError::ClickHouse(e.to_string())
             })?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            error!("ClickHouse insert error: {}", error_text);
+            return Err(AnalyticsError::ClickHouse(error_text));
+        }
 
         debug!("Inserted posts CDC: id={}, op={:?}", id_raw, op);
         Ok(())
