@@ -55,35 +55,70 @@ struct ChatView: View {
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
-                // 顶部导航栏白色背景（紧贴手机顶部，包含安全区域）
+                // 顶部导航栏（功能完整版，支持深色模式）
                 ZStack(alignment: .bottom) {
                     Rectangle()
                         .foregroundColor(.clear)
                         .frame(height: 98.h)
                         .frame(maxWidth: .infinity)
-                        .background(.white)
+                        .background(DesignTokens.surface)
                     
                     // 导航栏内容
-                    ZStack {
-                        // 返回按钮 - 距离左边16pt
-                        HStack {
-                            Button {
-                                showChat = false
-                            } label: {
-                                Image("back-black")
-                                    .frame(width: 24, height: 24)
-                            }
-                            .padding(.leading, 16)
-                            Spacer()
+                    HStack(spacing: 12.w) {
+                        // 返回按钮
+                        Button {
+                            showChat = false
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 18.f, weight: .semibold))
+                                .foregroundColor(DesignTokens.textPrimary)
+                                .frame(width: 24.s, height: 24.s)
                         }
                         
-                        // 用户名 - 居中
-                        Text(userName)
-                            .font(.system(size: 18, weight: .semibold))
-                            .lineSpacing(20)
-                            .foregroundColor(.black)
+                        // 头像 - 可点击查看个人资料
+                        Button {
+                            viewModel.showUserProfile = true
+                        } label: {
+                            AvatarView(
+                                image: nil,
+                                url: otherUserAvatarUrl,
+                                size: 36.s
+                            )
+                        }
+                        
+                        // 用户名和 E2EE 状态
+                        VStack(alignment: .leading, spacing: 2.h) {
+                            Text(userName)
+                                .font(.system(size: 16.f, weight: .semibold))
+                                .foregroundColor(DesignTokens.textPrimary)
+                                .lineLimit(1)
+                            
+                            // E2EE 状态指示器
+                            if viewModel.isMatrixE2EEEnabled {
+                                HStack(spacing: 4.w) {
+                                    Image(systemName: "lock.fill")
+                                        .font(.system(size: 10.f))
+                                    Text("End-to-end encrypted")
+                                        .font(.system(size: 11.f))
+                                }
+                                .foregroundColor(DesignTokens.textMuted)
+                            }
+                        }
+                        
+                        Spacer()
+                        
+                        // 搜索按钮
+                        Button {
+                            showMessageSearch = true
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 18.f))
+                                .foregroundColor(DesignTokens.textPrimary)
+                                .frame(width: 24.s, height: 24.s)
+                        }
                     }
-                    .padding(.bottom, 18)
+                    .padding(.horizontal, 16.w)
+                    .padding(.bottom, 12.h)
                 }
 
                 Divider()
@@ -92,46 +127,8 @@ struct ChatView: View {
 
                 messageListView
 
-                // 底部信息输入栏白色背景（紧贴手机底部，包含安全区域）
-                ZStack(alignment: .top) {
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 88.h)
-                        .background(.white)
-                    
-                    // 输入栏区域
-                    HStack(spacing: 6) {
-                        // More icon - 左侧
-                        ZStack {
-                            Image("More")
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 30, height: 30)
-                        }
-                        .frame(width: 30, height: 30)
-                        
-                        // 灰色输入栏
-                        HStack {
-                            Spacer()
-                            // Voice icon
-                            ZStack {
-                                Image("Voice")
-                                    .frame(width: 24, height: 24)
-                            }
-                            .frame(width: 24, height: 24)
-                            .padding(.trailing, 10)
-                            .padding(.vertical, 3)
-                        }
-                        .frame(height: 30)
-                        .frame(maxWidth: .infinity)
-                        .background(Color(red: 0.90, green: 0.90, blue: 0.90))
-                        .cornerRadius(56)
-                    }
-                    .padding(.leading, 16)
-                    .padding(.trailing, 16)
-                    .padding(.top, 12)
-                }
+                // 底部信息输入栏（功能完整版）
+                inputAreaView
             }
             .background(DesignTokens.backgroundColor)
             .ignoresSafeArea(edges: [.top, .bottom])
@@ -309,40 +306,6 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 16.h) {
-                    // Load more history button (暂时隐藏)
-                    // if viewModel.hasMoreMessages && !viewModel.isLoadingHistory {
-                    //     Button(action: {
-                    //         Task { await viewModel.loadMoreMessages() }
-                    //     }) {
-                    //         HStack(spacing: 8.w) {
-                    //             Image(systemName: "arrow.up.circle")
-                    //                 .font(.system(size: 14.f))
-                    //             Text("載入更多歷史消息")
-                    //                 .font(.system(size: 13.f))
-                    //         }
-                    //         .foregroundColor(DesignTokens.accentColor)
-                    //         .padding(.vertical, 10.h)
-                    //     }
-                    //     .padding(.horizontal, 16.w)
-                    // }
-
-                    // Preview mode indicator (暂时隐藏)
-                    // #if DEBUG
-                    // if viewModel.isPreviewMode {
-                    //     HStack(spacing: 8.w) {
-                    //         Image(systemName: "eye.fill")
-                    //             .font(.system(size: 12.f))
-                    //         Text("Preview Mode - Mock Data (Simulator)")
-                    //             .font(.system(size: 12.f, weight: .medium))
-                    //         Spacer()
-                    //     }
-                    //     .foregroundColor(.orange)
-                    //     .padding(.horizontal, 16.w)
-                    //     .padding(.vertical, 8.h)
-                    //     .background(Color.orange.opacity(0.1))
-                    // }
-                    // #endif
-
                     // Loading indicator
                     if viewModel.isLoadingHistory {
                         ProgressView("Loading messages...")
