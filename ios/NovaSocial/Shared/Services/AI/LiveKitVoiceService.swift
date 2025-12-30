@@ -32,13 +32,13 @@ enum LiveKitVoiceChatState: Equatable {
 
     var description: String {
         switch self {
-        case .disconnected: return "已斷開"
-        case .connecting: return "連接中..."
-        case .connected: return "已連接"
-        case .listening: return "聆聽中..."
-        case .userSpeaking: return "你正在說話"
-        case .aiSpeaking: return "Alice 正在說話"
-        case .error(let msg): return "錯誤: \(msg)"
+        case .disconnected: return "Disconnected"
+        case .connecting: return "Connecting..."
+        case .connected: return "Connected"
+        case .listening: return "Listening..."
+        case .userSpeaking: return "You are speaking"
+        case .aiSpeaking: return "Alice is speaking"
+        case .error(let msg): return "Error: \(msg)"
         }
     }
 }

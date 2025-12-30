@@ -42,7 +42,6 @@ final class AliceChatMessage: Identifiable {
 struct AliceView: View {
     @Binding var currentPage: AppPage
     @State private var showPhotoOptions = false
-    @State private var showModelSelector = false
     @State private var showImagePicker = false
     @State private var showCamera = false
     @State private var selectedImage: UIImage?
@@ -73,7 +72,7 @@ struct AliceView: View {
         // Grok 4 - X.AI 最新模型（推薦）
         models.append(AliceModel(
             name: "grok-4",  // 功能：使用 Grok API
-            displayName: "alice 5.1",  // UI 显示
+            displayName: "alice AI",  // UI 显示
             description: "最新模型 ⭐️ 推薦"
         ))
 
@@ -160,33 +159,26 @@ struct AliceView: View {
                     Spacer()
                     
                     HStack {
-                        // 清除對話按鈕（左侧）
+                        // 清除對話按鈕（左侧）- 固定宽度以平衡右侧
                         Button(action: clearChat) {
                             Image(systemName: "trash")
                                 .font(.system(size: 18.f))
                                 .foregroundColor(messages.isEmpty ? DesignTokens.textSecondary : DesignTokens.textPrimary)
                         }
                         .disabled(messages.isEmpty)
+                        .frame(width: 34.w, height: 18.h)
                         .padding(.leading, 16.w)
-                        
+
                         Spacer()
-                        
-                        // 模型選擇器（中间）- 显示选中模型的 displayName
-                        HStack(spacing: 6.s) {
-                            Text(aliceModels.first { $0.name == selectedModel }?.displayName ?? "alice")
-                                .font(.system(size: 18.f, weight: .semibold))
-                                .foregroundColor(DesignTokens.textPrimary)
-                                .lineLimit(1)
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 14.f, weight: .semibold))
-                                .foregroundColor(DesignTokens.textPrimary)
-                        }
-                        .onTapGesture {
-                            showModelSelector.toggle()
-                        }
-                        
+
+                        // 模型名稱（中间）
+                        Text(aliceModels.first { $0.name == selectedModel }?.displayName ?? "alice")
+                            .font(.system(size: 18.f, weight: .semibold))
+                            .foregroundColor(DesignTokens.textPrimary)
+                            .lineLimit(1)
+
                         Spacer()
-                        
+
                         // 右侧占位符保持对称
                         Color.clear
                             .frame(width: 34.w, height: 18.h)
@@ -378,11 +370,6 @@ struct AliceView: View {
             .ignoresSafeArea(edges: .top)  // 统一处理顶部安全区域
             .ignoresSafeArea(.keyboard, edges: .bottom)
             .ignoresSafeArea(edges: .bottom)
-
-            // MARK: - 模型选择器弹窗
-            if showModelSelector {
-                modelSelectorModal
-            }
 
             // MARK: - 照片选项弹窗
             if showPhotoOptions {
@@ -581,106 +568,6 @@ struct AliceView: View {
         xaiService.resetConversation()
     }
 
-    // MARK: - 模型选择器弹窗
-    private var modelSelectorModal: some View {
-        ZStack {
-            // 背景模糊遮罩（除了底部导航栏）
-            VStack(spacing: 0) {
-                Color.clear
-                    .background(.ultraThinMaterial)
-                    .ignoresSafeArea()
-
-                // 底部导航栏区域保持清晰
-                Color.clear
-                    .frame(height: 95)
-            }
-            .onTapGesture {
-                showModelSelector = false
-            }
-
-            // 模型选择器 - 使用结构化数据
-            VStack {
-                Spacer()
-                    .frame(height: 88.h)  // 距离顶部 88pt
-
-                VStack(spacing: 4) {
-                    ForEach(aliceModels) { model in
-                        ModelRowView(
-                            model: model,
-                            isSelected: model.name == selectedModel,
-                            onSelect: {
-                                selectedModel = model.name
-                                showModelSelector = false
-                            }
-                        )
-                    }
-                }
-                .padding(.vertical, 8)
-                .frame(width: 280.w)  // 响应式宽度
-                .background(DesignTokens.surface)
-                .cornerRadius(20.s)
-                .shadow(color: Color(red: 0, green: 0, blue: 0, opacity: 0.15), radius: 12, x: 0, y: 4)
-
-                Spacer()
-            }
-            .frame(maxWidth: .infinity)  // 水平居中
-        }
-    }
-
-}
-
-// MARK: - Model Row Component
-struct ModelRowView: View {
-    let model: AliceModel
-    let isSelected: Bool
-    let onSelect: () -> Void
-
-    var body: some View {
-        Button(action: onSelect) {
-            HStack(spacing: 12) {
-                // 模型圖標
-                if model.isGrok {
-                    // X.AI Grok 圖標
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 16))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [.purple, .blue],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                } else if model.isOnDevice {
-                    Image(systemName: "cpu")
-                        .font(.system(size: 16))
-                        .foregroundColor(.green)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(model.displayName)
-                        .font(.system(size: 16))
-                        .foregroundColor(DesignTokens.textPrimary)
-
-                    Text(model.description)
-                        .font(.system(size: 14))
-                        .foregroundColor(DesignTokens.textSecondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(DesignTokens.accentColor)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(isSelected ? DesignTokens.tileBackground : Color.clear)
-            .cornerRadius(12)
-            .padding(.horizontal, 6)
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
 }
 
 // MARK: - Previews

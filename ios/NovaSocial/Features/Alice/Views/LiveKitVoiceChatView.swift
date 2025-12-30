@@ -78,20 +78,20 @@ struct LiveKitVoiceChatView: View {
         .onDisappear {
             endVoiceChat()
         }
-        .alert("結束對話", isPresented: $showEndConfirmation) {
-            Button("取消", role: .cancel) { }
-            Button("結束", role: .destructive) {
+        .alert("End Conversation", isPresented: $showEndConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("End", role: .destructive) {
                 endVoiceChat()
                 isPresented = false
             }
         } message: {
-            Text("確定要結束與 Alice 的語音對話嗎？")
+            Text("Are you sure you want to end the voice conversation with Alice?")
         }
-        .alert("連線錯誤", isPresented: $showErrorAlert) {
-            Button("重試") {
+        .alert("Connection Error", isPresented: $showErrorAlert) {
+            Button("Retry") {
                 attemptReconnect()
             }
-            Button("關閉", role: .cancel) {
+            Button("Close", role: .cancel) {
                 endVoiceChat()
                 isPresented = false
             }
@@ -212,7 +212,7 @@ struct LiveKitVoiceChatView: View {
             if message.role == .user { Spacer(minLength: 60) }
 
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
-                Text(message.role == .user ? "你" : "Alice")
+                Text(message.role == .user ? "You" : "Alice")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(message.role == .user ? .cyan.opacity(0.7) : .purple.opacity(0.7))
 
@@ -244,7 +244,7 @@ struct LiveKitVoiceChatView: View {
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
                 HStack(spacing: 4) {
-                    Text(isUser ? "你" : "Alice")
+                    Text(isUser ? "You" : "Alice")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(isUser ? .cyan.opacity(0.7) : .purple.opacity(0.7))
 
@@ -272,7 +272,7 @@ struct LiveKitVoiceChatView: View {
     // MARK: - Text Input Bar
     private var textInputBar: some View {
         HStack(spacing: 12) {
-            TextField("輸入訊息...", text: $textInput)
+            TextField("Type a message...", text: $textInput)
                 .textFieldStyle(.plain)
                 .font(.system(size: 16))
                 .foregroundColor(.white)
@@ -317,7 +317,7 @@ struct LiveKitVoiceChatView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "bubble.left.and.bubble.right")
                             .font(.system(size: 12))
-                        Text("查看 \(messages.count) 則對話")
+                        Text("View \(messages.count) messages")
                             .font(.system(size: 13, weight: .medium))
                     }
                     .foregroundColor(.white.opacity(0.6))
@@ -428,33 +428,36 @@ struct LiveKitVoiceChatView: View {
             Text(stateTitle)
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundColor(.white)
+                .multilineTextAlignment(.center)
 
             Text(stateSubtitle)
                 .font(.system(size: 13))
                 .foregroundColor(.white.opacity(0.6))
+                .multilineTextAlignment(.center)
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var stateTitle: String {
         switch state {
-        case .disconnected: return "未連線"
-        case .connecting: return "連線中..."
-        case .connected: return "已連線"
-        case .listening: return "正在聆聽..."
-        case .userSpeaking: return "你正在說話"
-        case .aiSpeaking: return "Alice 正在回覆"
-        case .error: return "連線錯誤"
+        case .disconnected: return "Not Connected"
+        case .connecting: return "Connecting..."
+        case .connected: return "Connected"
+        case .listening: return "Listening..."
+        case .userSpeaking: return "You are speaking"
+        case .aiSpeaking: return "Alice is responding"
+        case .error: return "Connection Error"
         }
     }
 
     private var stateSubtitle: String {
         switch state {
-        case .disconnected: return "點擊下方按鈕開始對話"
-        case .connecting: return "正在連接到 LiveKit..."
-        case .connected: return "準備就緒，開始說話吧"
-        case .listening: return "說完後會自動處理 • 支援打斷"
-        case .userSpeaking: return "正在識別你的語音..."
-        case .aiSpeaking: return "你可以隨時打斷 Alice"
+        case .disconnected: return "Tap the button below to start the conversation"
+        case .connecting: return "Connecting to LiveKit..."
+        case .connected: return "Ready, start speaking"
+        case .listening: return "Auto-processes when done • Voice interruption supported"
+        case .userSpeaking: return "Recognizing your voice..."
+        case .aiSpeaking: return "You can interrupt Alice anytime"
         case .error(let msg): return msg
         }
     }
@@ -539,7 +542,7 @@ struct LiveKitVoiceChatView: View {
                 )
             }
 
-            Text("LiveKit WebRTC • 支援語音打斷")
+            Text("LiveKit WebRTC • Voice interruption supported")
                 .font(.system(size: 11))
                 .foregroundColor(.white.opacity(0.4))
         }
@@ -662,7 +665,7 @@ struct LiveKitVoiceChatView: View {
             }
         } else {
             print("[LiveKitVoiceChatView] Max reconnect attempts reached")
-            errorMessage = "多次連線失敗，請稍後再試"
+            errorMessage = "Multiple connection failures, please try again later"
             showErrorAlert = true
         }
     }
@@ -697,7 +700,7 @@ struct LiveKitVoiceChatView: View {
         // 暫時顯示提示
         let systemMessage = VoiceChatMessage(
             role: .assistant,
-            text: "文字輸入功能開發中，請使用語音對話",
+            text: "Text input feature is under development, please use voice chat",
             timestamp: Date()
         )
         messages.append(systemMessage)

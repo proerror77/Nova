@@ -46,14 +46,14 @@ struct VoiceChatView: View {
         .onDisappear {
             endVoiceChat()
         }
-        .alert("結束對話", isPresented: $showEndConfirmation) {
-            Button("取消", role: .cancel) { }
-            Button("結束", role: .destructive) {
+        .alert("End Conversation", isPresented: $showEndConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("End", role: .destructive) {
                 endVoiceChat()
                 isPresented = false
             }
         } message: {
-            Text("確定要結束與 Alice 的語音對話嗎？")
+            Text("Are you sure you want to end the voice conversation with Alice?")
         }
     }
     
@@ -221,33 +221,36 @@ struct VoiceChatView: View {
             Text(stateTitle)
                 .font(.system(size: 24, weight: .semibold))
                 .foregroundColor(.white)
-            
+                .multilineTextAlignment(.center)
+
             Text(stateSubtitle)
                 .font(.system(size: 14))
                 .foregroundColor(.white.opacity(0.6))
+                .multilineTextAlignment(.center)
         }
+        .frame(maxWidth: .infinity)
     }
     
     private var stateTitle: String {
         switch state {
-        case .disconnected: return "未連線"
-        case .connecting: return "連線中..."
-        case .connected: return "已連線"
-        case .listening: return "正在聆聽你說話"
-        case .responding: return "Alice 正在回覆"
-        case .processing: return "Alice 正在思考..."
-        case .error: return "連線錯誤"
+        case .disconnected: return "Not Connected"
+        case .connecting: return "Connecting..."
+        case .connected: return "Connected"
+        case .listening: return "Listening to you"
+        case .responding: return "Alice is responding"
+        case .processing: return "Alice is thinking..."
+        case .error: return "Connection Error"
         }
     }
     
     private var stateSubtitle: String {
         switch state {
-        case .disconnected: return "點擊下方按鈕開始對話"
-        case .connecting: return "正在連接到 Grok Voice..."
-        case .connected: return "準備就緒，開始說話吧"
-        case .listening: return "說完後會自動處理"
-        case .responding: return "請聆聯回覆"
-        case .processing: return "正在生成回覆..."
+        case .disconnected: return "Tap the button below to start the conversation"
+        case .connecting: return "Connecting to Grok Voice..."
+        case .connected: return "Ready, start speaking"
+        case .listening: return "Auto-processes when done"
+        case .responding: return "Please listen to the response"
+        case .processing: return "Generating response..."
         case .error(let msg): return msg
         }
     }
@@ -258,7 +261,7 @@ struct VoiceChatView: View {
             // 用戶說的話
             if !transcript.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("你說：")
+                    Text("You said:")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.white.opacity(0.5))
                     Text(transcript)
@@ -333,7 +336,7 @@ struct VoiceChatView: View {
             }
             
             // 提示文字
-            Text("點擊紅色按鈕結束對話")
+            Text("Tap the red button to end the conversation")
                 .font(.system(size: 12))
                 .foregroundColor(.white.opacity(0.4))
         }
