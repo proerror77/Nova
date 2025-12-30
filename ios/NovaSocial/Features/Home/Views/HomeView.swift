@@ -121,10 +121,19 @@ struct HomeView: View {
                 WriteView(showWrite: $showWrite, currentPage: $currentPage)
                     .transition(.identity)
             } else if showPostDetail, let post = selectedPostForDetail {
-                PostDetailView(post: post, onDismiss: {
-                    showPostDetail = false
-                    selectedPostForDetail = nil
-                })
+                PostDetailView(
+                    post: post,
+                    onDismiss: {
+                        showPostDetail = false
+                        selectedPostForDetail = nil
+                    },
+                    onLikeChanged: { isLiked, likeCount in
+                        feedViewModel.updateLikeState(postId: post.id, isLiked: isLiked, likeCount: likeCount)
+                    },
+                    onBookmarkChanged: { isBookmarked, bookmarkCount in
+                        feedViewModel.updateBookmarkState(postId: post.id, isBookmarked: isBookmarked, bookmarkCount: bookmarkCount)
+                    }
+                )
                 .transition(.identity)
             } else {
                 homeContent

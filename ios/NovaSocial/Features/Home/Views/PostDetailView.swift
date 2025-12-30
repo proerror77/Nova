@@ -145,6 +145,8 @@ struct PostDetailView: View {
     var onDismiss: (() -> Void)?
     var onAvatarTapped: ((String) -> Void)?  // 点击头像回调，传入 authorId
     var onPostDeleted: (() -> Void)?  // 帖子删除后回调
+    var onLikeChanged: ((Bool, Int) -> Void)?  // 点赞状态变化回调 (isLiked, likeCount)
+    var onBookmarkChanged: ((Bool, Int) -> Void)?  // 收藏状态变化回调 (isBookmarked, bookmarkCount)
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var authManager: AuthenticationManager
     @State private var currentImageIndex = 0
@@ -153,6 +155,7 @@ struct PostDetailView: View {
 
     private let graphService = GraphService()
     private let contentService = ContentService()
+    private let socialService = SocialService()
 
     // MARK: - Comment State
     @State private var commentViewModel = CommentViewModel()
@@ -164,6 +167,8 @@ struct PostDetailView: View {
     @State private var isPostSaved = false
     @State private var postLikeCount: Int = 0
     @State private var postSaveCount: Int = 0
+    @State private var isLikeLoading = false
+    @State private var isBookmarkLoading = false
 
     // MARK: - Post Actions State (作者操作)
     @State private var showingActionSheet = false
@@ -218,15 +223,15 @@ struct PostDetailView: View {
                         Color.clear.frame(height: 100)
                     }
                 }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    // 点击滚动区域退出键盘（不影响底部输入框）
+                    isCommentInputFocused = false
+                }
             }
 
             // MARK: - Bottom Action Bar
             bottomActionBar
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            // 点击空白区域退出键盘
-            isCommentInputFocused = false
         }
         .navigationBarBackButtonHidden(true)
         .task {
@@ -236,7 +241,7 @@ struct PostDetailView: View {
         .onAppear {
             // 初始化点赞和收藏数量
             postLikeCount = post.likeCount
-            postSaveCount = post.shareCount
+            postSaveCount = post.bookmarkCount  // 修复: 应该使用 bookmarkCount 而非 shareCount
             isPostLiked = post.isLiked
             isPostSaved = post.isBookmarked
         }
@@ -593,28 +598,36 @@ struct PostDetailView: View {
             HStack(spacing: 16) {
                 // Like Button
                 Button(action: {
-                    isPostLiked.toggle()
-                    postLikeCount += isPostLiked ? 1 : -1
+                    Task { await toggleLike() }
                 }) {
                     HStack(spacing: 6) {
-                        Image(systemName: isPostLiked ? "heart.fill" : "heart")
-                            .font(.system(size: 18))
-                            .foregroundColor(isPostLiked ? .red : Color(red: 0.27, green: 0.27, blue: 0.27))
+                        if isLikeLoading {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                                .frame(width: 20, height: 20)
+                        } else {
+                            Image(isPostLiked ? "card-heart-icon-filled" : "card-heart-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                        }
                         Text("\(postLikeCount)")
                             .font(.system(size: 14))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                     }
                 }
+                .disabled(isLikeLoading)
 
                 // Comment Button (点击呼出键盘)
                 Button(action: {
                     isCommentInputFocused = true
                 }) {
                     HStack(spacing: 6) {
-                        Image(systemName: "bubble.left")
-                            .font(.system(size: 18))
-                            .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                        Image("card-comment-icon")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20)
                         Text("\(displayCommentCount)")
                             .font(.system(size: 14))
                             .lineSpacing(20)
@@ -622,21 +635,28 @@ struct PostDetailView: View {
                     }
                 }
 
-                // Save Button
+                // Bookmark Button (与 Home 一致的图标)
                 Button(action: {
-                    isPostSaved.toggle()
-                    postSaveCount += isPostSaved ? 1 : -1
+                    Task { await toggleBookmark() }
                 }) {
                     HStack(spacing: 6) {
-                        Image(systemName: isPostSaved ? "bookmark.fill" : "bookmark")
-                            .font(.system(size: 18))
-                            .foregroundColor(isPostSaved ? .yellow : Color(red: 0.27, green: 0.27, blue: 0.27))
+                        if isBookmarkLoading {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                                .frame(width: 20, height: 20)
+                        } else {
+                            Image(isPostSaved ? "collect-fill" : "collect")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                        }
                         Text("\(postSaveCount)")
                             .font(.system(size: 14))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                     }
                 }
+                .disabled(isBookmarkLoading)
 
                 Spacer()
             }
@@ -645,43 +665,44 @@ struct PostDetailView: View {
             .padding(.bottom, 16)
             .background(DesignTokens.surface)
 
-            // 隐藏的输入框 (键盘弹出时显示)
-            if isCommentInputFocused {
-                HStack(spacing: 10) {
-                    HStack {
-                        TextField("Add a comment...", text: $newCommentText)
-                            .font(.system(size: 14))
-                            .foregroundColor(DesignTokens.textPrimary)
-                            .focused($isCommentInputFocused)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(Color(red: 0.95, green: 0.95, blue: 0.95))
-                    .cornerRadius(20)
-
-                    // Send Button
-                    Button(action: {
-                        Task {
-                            await sendComment()
+            // 评论输入框（始终存在于视图层级中，避免 @FocusState 时序问题）
+            HStack(spacing: 10) {
+                HStack {
+                    TextField("Add a comment...", text: $newCommentText)
+                        .font(.system(size: 14))
+                        .foregroundColor(DesignTokens.textPrimary)
+                        .focused($isCommentInputFocused)
+                        .onSubmit {
+                            Task { await sendComment() }
                         }
-                    }) {
-                        if commentViewModel.isSendingComment {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                                .frame(width: 32, height: 32)
-                        } else {
-                            Image(systemName: "paperplane.fill")
-                                .font(.system(size: 16))
-                                .foregroundColor(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? DesignTokens.textSecondary : DesignTokens.accentColor)
-                                .frame(width: 32, height: 32)
-                        }
-                    }
-                    .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || commentViewModel.isSendingComment)
                 }
-                .padding(.horizontal, 17)
-                .padding(.bottom, 12)
-                .background(DesignTokens.surface)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color(red: 0.95, green: 0.95, blue: 0.95))
+                .cornerRadius(20)
+
+                // Send Button
+                Button(action: {
+                    Task {
+                        await sendComment()
+                    }
+                }) {
+                    if commentViewModel.isSendingComment {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .frame(width: 32, height: 32)
+                    } else {
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? DesignTokens.textSecondary : DesignTokens.accentColor)
+                            .frame(width: 32, height: 32)
+                    }
+                }
+                .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || commentViewModel.isSendingComment)
             }
+            .padding(.horizontal, 17)
+            .padding(.bottom, 12)
+            .background(DesignTokens.surface)
         }
         .background(DesignTokens.surface)
     }
@@ -733,6 +754,84 @@ struct PostDetailView: View {
             print("[PostDetailView] Failed to check follow status: \(error)")
             #endif
         }
+    }
+
+    // MARK: - Like Actions
+
+    private func toggleLike() async {
+        guard let userId = authManager.currentUser?.id else { return }
+        guard !isLikeLoading else { return }
+
+        isLikeLoading = true
+        let wasLiked = isPostLiked
+
+        // Optimistic update
+        isPostLiked.toggle()
+        postLikeCount = max(0, postLikeCount + (isPostLiked ? 1 : -1))
+
+        do {
+            let response: SocialService.LikeResponse
+            if wasLiked {
+                response = try await socialService.deleteLike(postId: post.id, userId: userId)
+            } else {
+                response = try await socialService.createLike(postId: post.id, userId: userId)
+            }
+
+            // Sync with server's accurate count
+            postLikeCount = Int(response.likeCount)
+
+            // Notify parent to sync state
+            onLikeChanged?(isPostLiked, postLikeCount)
+
+            // Invalidate feed cache
+            await FeedCacheService.shared.invalidateCache()
+        } catch {
+            // Revert on failure
+            isPostLiked = wasLiked
+            postLikeCount = max(0, postLikeCount + (wasLiked ? 1 : -1))
+            #if DEBUG
+            print("[PostDetailView] Toggle like error: \(error)")
+            #endif
+        }
+
+        isLikeLoading = false
+    }
+
+    // MARK: - Bookmark Actions
+
+    private func toggleBookmark() async {
+        guard let userId = authManager.currentUser?.id else { return }
+        guard !isBookmarkLoading else { return }
+
+        isBookmarkLoading = true
+        let wasBookmarked = isPostSaved
+
+        // Optimistic update
+        isPostSaved.toggle()
+        postSaveCount = max(0, postSaveCount + (isPostSaved ? 1 : -1))
+
+        do {
+            if wasBookmarked {
+                try await socialService.deleteBookmark(postId: post.id)
+            } else {
+                try await socialService.createBookmark(postId: post.id, userId: userId)
+            }
+
+            // Notify parent to sync state
+            onBookmarkChanged?(isPostSaved, postSaveCount)
+
+            // Invalidate feed cache
+            await FeedCacheService.shared.invalidateCache()
+        } catch {
+            // Revert on failure
+            isPostSaved = wasBookmarked
+            postSaveCount = max(0, postSaveCount + (wasBookmarked ? 1 : -1))
+            #if DEBUG
+            print("[PostDetailView] Toggle bookmark error: \(error)")
+            #endif
+        }
+
+        isBookmarkLoading = false
     }
 
     /// Check if URL points to a video file

@@ -512,6 +512,44 @@ final class FeedViewModel {
         }
     }
 
+    /// Update like state for a post (called from PostDetailView callback)
+    func updateLikeState(postId: String, isLiked: Bool, likeCount: Int) {
+        #if DEBUG
+        print("[Feed] ❤️ updateLikeState called - postId: \(postId), isLiked: \(isLiked), likeCount: \(likeCount)")
+        #endif
+        guard let index = posts.firstIndex(where: { $0.id == postId }) else {
+            #if DEBUG
+            print("[Feed] ❌ updateLikeState - post not found in array")
+            #endif
+            return
+        }
+        posts[index] = posts[index].copying(likeCount: likeCount, isLiked: isLiked)
+        // 关键修复: 数组元素修改不会触发 didSet，需要手动清除缓存
+        _cachedFeedItems = nil
+        #if DEBUG
+        print("[Feed] ✅ updateLikeState - state updated successfully, cache invalidated")
+        #endif
+    }
+
+    /// Update bookmark state for a post (called from PostDetailView callback)
+    func updateBookmarkState(postId: String, isBookmarked: Bool, bookmarkCount: Int) {
+        #if DEBUG
+        print("[Feed] ⭐ updateBookmarkState called - postId: \(postId), isBookmarked: \(isBookmarked), bookmarkCount: \(bookmarkCount)")
+        #endif
+        guard let index = posts.firstIndex(where: { $0.id == postId }) else {
+            #if DEBUG
+            print("[Feed] ❌ updateBookmarkState - post not found in array")
+            #endif
+            return
+        }
+        posts[index] = posts[index].copying(bookmarkCount: bookmarkCount, isBookmarked: isBookmarked)
+        // 关键修复: 数组元素修改不会触发 didSet，需要手动清除缓存
+        _cachedFeedItems = nil
+        #if DEBUG
+        print("[Feed] ✅ updateBookmarkState - state updated successfully, cache invalidated")
+        #endif
+    }
+
     private func fetchFeed(algorithm: FeedAlgorithm) async throws -> FeedResponse {
         if isAuthenticated {
             return try await feedService.getFeed(algo: algorithm, limit: 20, cursor: nil, channelId: selectedChannelId)
