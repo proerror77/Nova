@@ -665,7 +665,7 @@ struct PostDetailView: View {
             .padding(.bottom, 16)
             .background(DesignTokens.surface)
 
-            // 评论输入框（始终存在于视图层级中，避免 @FocusState 时序问题）
+            // 评论输入框（始终存在于视图层级中，避免 @FocusState 时序问题，用 opacity 控制显示）
             HStack(spacing: 10) {
                 HStack {
                     TextField("Add a comment...", text: $newCommentText)
@@ -703,6 +703,9 @@ struct PostDetailView: View {
             .padding(.horizontal, 17)
             .padding(.bottom, 12)
             .background(DesignTokens.surface)
+            .opacity(isCommentInputFocused ? 1 : 0)
+            .frame(height: isCommentInputFocused ? nil : 0)
+            .clipped()
         }
         .background(DesignTokens.surface)
     }
