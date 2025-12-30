@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 import PhotosUI
 
 // MARK: - Profile View State
@@ -68,6 +69,9 @@ struct ProfileView: View {
     @State private var showDeleteConfirmation = false       // 显示删除确认
     @State private var postToDelete: Post? = nil            // 待删除的帖子
     @State private var isDeleting = false                   // 正在删除中
+    @State private var deleteErrorMessage: String? = nil    // 刪除失敗錯誤訊息
+    @State private var showDeleteError = false              // 顯示刪除失敗提示
+    @State private var showCameraPermissionAlert = false    // 相机权限提示
     @State private var searchDebounceTask: Task<Void, Never>?  // 搜索防抖任務
 
     // MARK: - 頭像/背景圖更換狀態
@@ -218,13 +222,25 @@ struct ProfileView: View {
         .animation(.none, value: activeSheet)
         .sheet(isPresented: Binding(
             get: { activeSheet == .imagePicker },
-            set: { if !$0 { activeSheet = .none } }
+            set: { newValue in
+                // 只有当 activeSheet 仍然是 .imagePicker 时才重置为 .none
+                // 避免覆盖已经被 .onChange(of: selectedImage) 设置的 .newPost 状态
+                if !newValue && activeSheet == .imagePicker {
+                    activeSheet = .none
+                }
+            }
         )) {
             ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
         }
         .sheet(isPresented: Binding(
             get: { activeSheet == .camera },
-            set: { if !$0 { activeSheet = .none } }
+            set: { newValue in
+                // 只有当 activeSheet 仍然是 .camera 时才重置为 .none
+                // 避免覆盖已经被 .onChange(of: selectedImage) 设置的 .newPost 状态
+                if !newValue && activeSheet == .camera {
+                    activeSheet = .none
+                }
+            }
         )) {
             ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
         }
@@ -260,13 +276,19 @@ struct ProfileView: View {
                 PhotoOptionsModal(
                     isPresented: Binding(
                         get: { activeSheet == .photoOptions },
-                        set: { if !$0 { activeSheet = .none } }
+                        set: { newValue in
+                            // 只有当 activeSheet 仍然是 .photoOptions 时才重置为 .none
+                            // 避免覆盖已经被 onTakePhoto/onChoosePhoto 等设置的新状态
+                            if !newValue && activeSheet == .photoOptions {
+                                activeSheet = .none
+                            }
+                        }
                     ),
                     onChoosePhoto: {
                         activeSheet = .imagePicker
                     },
                     onTakePhoto: {
-                        activeSheet = .camera
+                        checkCameraPermissionAndOpen()
                     },
                     onGenerateImage: {
                         activeSheet = .generateImage
@@ -383,6 +405,24 @@ struct ProfileView: View {
             }
         } message: {
             Text("確定要刪除這則貼文嗎？此操作無法撤銷。")
+        }
+        .alert("刪除失敗", isPresented: $showDeleteError) {
+            Button("確定", role: .cancel) {
+                deleteErrorMessage = nil
+            }
+        } message: {
+            Text(deleteErrorMessage ?? "無法刪除貼文，請稍後再試")
+        }
+        // MARK: - 相机权限提示
+        .alert("需要相机权限", isPresented: $showCameraPermissionAlert) {
+            Button("打开设置") {
+                if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(settingsUrl)
+                }
+            }
+            Button("取消", role: .cancel) { }
+        } message: {
+            Text("请在设置中允许访问相机以拍摄照片。")
         }
         .overlay {
             if isDeleting {
@@ -1000,6 +1040,37 @@ struct ProfileView: View {
         .padding(.top, 60.h)
     }
 
+    // MARK: - 检查相机权限并打开
+    private func checkCameraPermissionAndOpen() {
+        // 首先检查设备是否有相机
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            print("⚠️ Camera not available on this device")
+            return
+        }
+
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            // 已授权，直接打开相机
+            activeSheet = .camera
+        case .notDetermined:
+            // 未决定，请求权限
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async {
+                    if granted {
+                        activeSheet = .camera
+                    } else {
+                        showCameraPermissionAlert = true
+                    }
+                }
+            }
+        case .denied, .restricted:
+            // 已拒绝或受限，显示提示
+            showCameraPermissionAlert = true
+        @unknown default:
+            showCameraPermissionAlert = true
+        }
+    }
+
     // MARK: - 删除帖子
     private func deletePost(_ post: Post) async {
         await MainActor.run {
@@ -1014,10 +1085,18 @@ struct ProfileView: View {
             // 从本地状态中移除
             userPostsManager.deletePost(postId: post.id)
 
-            print("✅ Post deleted successfully: \(post.id)")
+            #if DEBUG
+            print("[ProfileView] Post deleted successfully: \(post.id)")
+            #endif
         } catch {
-            print("❌ Failed to delete post: \(error)")
-            // TODO: 显示错误提示给用户
+            #if DEBUG
+            print("[ProfileView] Failed to delete post: \(error)")
+            #endif
+            // 顯示錯誤提示給用戶
+            await MainActor.run {
+                deleteErrorMessage = "無法刪除貼文，請檢查網路連線後重試"
+                showDeleteError = true
+            }
         }
 
         await MainActor.run {

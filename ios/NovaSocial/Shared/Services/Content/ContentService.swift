@@ -202,20 +202,9 @@ class ContentService {
 
     /// Delete a post
     func deletePost(postId: String) async throws {
-        struct Response: Codable {
-            let postId: String
-            let deletedAt: String
-
-            enum CodingKeys: String, CodingKey {
-                case postId = "post_id"
-                case deletedAt = "deleted_at"
-            }
-        }
-
-        let _: Response = try await client.request(
-            endpoint: APIConfig.Content.deletePost(postId),
-            method: "DELETE"
-        )
+        // 使用不需要解析响应体的 delete 方法
+        // 只要返回 2xx 状态码就认为删除成功
+        try await client.delete(endpoint: APIConfig.Content.deletePost(postId))
     }
 
     /// Get list of recent posts

@@ -142,6 +142,37 @@ struct AliceView: View {
                 showNewPost = true
             }
         }
+        // MARK: - Action Button Voice Mode Auto-Open
+        .onAppear {
+            // Check if voice mode was requested via Action Button
+            checkForVoiceModeRequest()
+        }
+        .onChange(of: AppCoordinator.shared.shouldOpenVoiceMode) { _, newValue in
+            // Auto-open voice chat when triggered by Action Button intent
+            if newValue {
+                AppCoordinator.shared.shouldOpenVoiceMode = false
+                #if DEBUG
+                print("[AliceView] Auto-opening voice chat from Action Button")
+                #endif
+                // Small delay to ensure view is ready
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    showVoiceChat = true
+                }
+            }
+        }
+    }
+
+    /// Check if voice mode was requested (for initial load)
+    private func checkForVoiceModeRequest() {
+        if AppCoordinator.shared.shouldOpenVoiceMode {
+            AppCoordinator.shared.shouldOpenVoiceMode = false
+            #if DEBUG
+            print("[AliceView] Processing pending voice mode request on appear")
+            #endif
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                showVoiceChat = true
+            }
+        }
     }
 
     // MARK: - Alice 主内容

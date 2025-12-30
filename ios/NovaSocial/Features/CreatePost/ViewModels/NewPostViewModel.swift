@@ -147,22 +147,25 @@ final class NewPostViewModel {
 
             selectedMediaItems.append(contentsOf: newMedia)
             // Trigger VLM analysis when first image is added
-            if !newMedia.isEmpty && vlmTags.isEmpty {
+            if !newMedia.isEmpty {
                 analyzeImageWithVLM()
             }
         } catch {
-            #if DEBUG
-            print("[NewPostViewModel] Failed to process photos: \(error)")
-            #endif
 
             // Fallback to regular image loading (without metadata since item can't be converted to PHAsset)
+            var addedAny = false
             for item in items {
                 guard selectedMediaItems.count < 5 else { break }
 
                 if let data = try? await item.loadTransferable(type: Data.self),
                    let image = UIImage(data: data) {
                     selectedMediaItems.append(.image(image, .empty))
+                    addedAny = true
                 }
+            }
+            // Trigger VLM analysis for fallback path too
+            if addedAny {
+                analyzeImageWithVLM()
             }
         }
     }
@@ -211,18 +214,8 @@ final class NewPostViewModel {
     /// Analyze image locally using Apple Vision framework
     /// Fast, on-device analysis - no network required
     func analyzeImageWithVLM() {
-        guard let firstImage = getFirstImage() else {
-            #if DEBUG
-            print("[NewPostViewModel] ❌ No image available for analysis")
-            #endif
-            return
-        }
-        guard !isAnalyzingImage else {
-            #if DEBUG
-            print("[NewPostViewModel] ⏳ Already analyzing, skipping")
-            #endif
-            return
-        }
+        guard let firstImage = getFirstImage() else { return }
+        guard !isAnalyzingImage else { return }
 
         isAnalyzingImage = true
         vlmTags = []
@@ -232,19 +225,8 @@ final class NewPostViewModel {
         let metadata = getFirstMediaMetadata()
 
         Task {
-            #if DEBUG
-            print("[NewPostViewModel] 🔍 Starting local Vision analysis...")
-            #endif
-
             // Use Apple Vision for on-device analysis (instant, no network)
             var result = await LocalVisionService.shared.analyzeImage(firstImage)
-
-            #if DEBUG
-            print("[NewPostViewModel] 📸 Vision returned \(result.tags.count) tags")
-            for tag in result.tags {
-                print("[NewPostViewModel]   - \(tag.tag): \(String(format: "%.1f%%", tag.confidence * 100))")
-            }
-            #endif
 
             // Add location-based tags from photo metadata
             if metadata.hasAnyMetadata {
@@ -254,9 +236,6 @@ final class NewPostViewModel {
                     channels: result.channels,
                     processingTimeMs: result.processingTimeMs
                 )
-                #if DEBUG
-                print("[NewPostViewModel] 📍 Added \(locationTags.count) location tags")
-                #endif
             }
 
             // Update UI with results
@@ -274,10 +253,6 @@ final class NewPostViewModel {
             }
 
             isAnalyzingImage = false
-
-            #if DEBUG
-            print("[NewPostViewModel] ✅ Analysis complete: \(vlmTags.count) tags, auto-selected \(selectedVLMTags.count)")
-            #endif
         }
     }
 
@@ -545,9 +520,9 @@ final class NewPostViewModel {
                 userId: userId,
                 location: selectedLocation.isEmpty ? nil : selectedLocation,
                 onSuccess: { [onPostSuccess, vlmService] post in
-                    // Update VLM tags after post is created
-                    if !tagsToSave.isEmpty {
-                        Task {
+                    Task {
+                        // Step 1: Save local VLM tags
+                        if !tagsToSave.isEmpty {
                             do {
                                 _ = try await vlmService.updatePostTags(
                                     postId: post.id,
@@ -561,6 +536,37 @@ final class NewPostViewModel {
                                 #if DEBUG
                                 print("[NewPostViewModel] Failed to save VLM tags: \(error)")
                                 #endif
+                            }
+                        }
+
+                        // Step 2: Background channel classification via Google Cloud Vision
+                        // Only if user didn't manually select channels
+                        if channelsToSave.isEmpty, let firstMediaUrl = post.mediaUrls?.first {
+                            do {
+                                let result = try await vlmService.analyzeImage(
+                                    imageUrl: firstMediaUrl,
+                                    includeChannels: true
+                                )
+
+                                // Auto-assign to suggested channels (confidence >= 70%)
+                                if let suggestedChannels = result.channels?.filter({ $0.confidence >= 0.7 }) {
+                                    let channelIds = suggestedChannels.map { $0.id }
+                                    if !channelIds.isEmpty {
+                                        _ = try await vlmService.updatePostTags(
+                                            postId: post.id,
+                                            tags: tagsToSave,
+                                            channelIds: channelIds
+                                        )
+                                        #if DEBUG
+                                        print("[NewPostViewModel] Auto-assigned channels: \(suggestedChannels.map { $0.name })")
+                                        #endif
+                                    }
+                                }
+                            } catch {
+                                #if DEBUG
+                                print("[NewPostViewModel] Background channel classification failed: \(error)")
+                                #endif
+                                // Silent failure - don't affect user experience
                             }
                         }
                     }
