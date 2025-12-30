@@ -134,21 +134,21 @@ SELECT
     now()
 FROM posts_cdc AS p
 INNER JOIN (
-    SELECT follower_id, followed_id
+    SELECT toString(follower_id) AS follower_id, toString(followed_id) AS followed_id
     FROM follows_cdc
     GROUP BY follower_id, followed_id
     HAVING sum(follow_count) > 0
 ) AS f
     ON f.followed_id = toString(p.user_id)
 LEFT JOIN (
-    SELECT post_id, sum(like_count) AS likes_count
+    SELECT toString(post_id) AS post_id, sum(like_count) AS likes_count
     FROM likes_cdc
     WHERE created_at >= now() - INTERVAL 30 DAY
     GROUP BY post_id
     HAVING likes_count > 0
 ) AS likes ON likes.post_id = toString(p.id)
 LEFT JOIN (
-    SELECT post_id, countIf(is_deleted = 0) AS comments_count
+    SELECT toString(post_id) AS post_id, countIf(is_deleted = 0) AS comments_count
     FROM (
         SELECT
             post_id,
@@ -171,7 +171,7 @@ LEFT JOIN (
         sum(interactions.weight) AS affinity_score
     FROM (
         SELECT
-            l.user_id AS viewer_id,
+            toString(l.user_id) AS viewer_id,
             toString(p2.user_id) AS author_id,
             1.0 AS weight
         FROM (
@@ -182,11 +182,11 @@ LEFT JOIN (
             HAVING sum(like_count) > 0
         ) AS l
         INNER JOIN posts_cdc AS p2
-            ON toString(p2.id) = l.post_id
+            ON p2.id = l.post_id
         WHERE p2.deleted_at IS NULL
         UNION ALL
         SELECT
-            c.user_id AS viewer_id,
+            toString(c.user_id) AS viewer_id,
             toString(p2.user_id) AS author_id,
             1.5 AS weight
         FROM (
@@ -203,7 +203,7 @@ LEFT JOIN (
             GROUP BY user_id, post_id, id
         ) AS c
         INNER JOIN posts_cdc AS p2
-            ON toString(p2.id) = c.post_id
+            ON p2.id = c.post_id
         WHERE c.is_deleted = 0 AND p2.deleted_at IS NULL
     ) AS interactions
     GROUP BY interactions.viewer_id, interactions.author_id
@@ -237,14 +237,14 @@ SELECT
     now()
 FROM posts_cdc AS p
 LEFT JOIN (
-    SELECT post_id, sum(like_count) AS likes_count
+    SELECT toString(post_id) AS post_id, sum(like_count) AS likes_count
     FROM likes_cdc
     WHERE created_at >= now() - INTERVAL 14 DAY
     GROUP BY post_id
     HAVING likes_count > 0
 ) AS likes ON likes.post_id = toString(p.id)
 LEFT JOIN (
-    SELECT post_id, countIf(is_deleted = 0) AS comments_count
+    SELECT toString(post_id) AS post_id, countIf(is_deleted = 0) AS comments_count
     FROM (
         SELECT
             post_id,
@@ -294,7 +294,7 @@ INNER JOIN (
         sum(interactions.weight) AS affinity_score
     FROM (
         SELECT
-            l.user_id AS viewer_id,
+            toString(l.user_id) AS viewer_id,
             toString(p2.user_id) AS author_id,
             1.0 AS weight
         FROM (
@@ -305,11 +305,11 @@ INNER JOIN (
             HAVING sum(like_count) > 0
         ) AS l
         INNER JOIN posts_cdc AS p2
-            ON toString(p2.id) = l.post_id
+            ON p2.id = l.post_id
         WHERE p2.deleted_at IS NULL
         UNION ALL
         SELECT
-            c.user_id AS viewer_id,
+            toString(c.user_id) AS viewer_id,
             toString(p2.user_id) AS author_id,
             1.5 AS weight
         FROM (
@@ -326,7 +326,7 @@ INNER JOIN (
             GROUP BY user_id, post_id, id
         ) AS c
         INNER JOIN posts_cdc AS p2
-            ON toString(p2.id) = c.post_id
+            ON p2.id = c.post_id
         WHERE c.is_deleted = 0 AND p2.deleted_at IS NULL
     ) AS interactions
     GROUP BY interactions.viewer_id, interactions.author_id
@@ -334,14 +334,14 @@ INNER JOIN (
 ) AS affinity
     ON affinity.author_id = toString(p.user_id)
 LEFT JOIN (
-    SELECT post_id, sum(like_count) AS likes_count
+    SELECT toString(post_id) AS post_id, sum(like_count) AS likes_count
     FROM likes_cdc
     WHERE created_at >= now() - INTERVAL 30 DAY
     GROUP BY post_id
     HAVING likes_count > 0
 ) AS likes ON likes.post_id = toString(p.id)
 LEFT JOIN (
-    SELECT post_id, countIf(is_deleted = 0) AS comments_count
+    SELECT toString(post_id) AS post_id, countIf(is_deleted = 0) AS comments_count
     FROM (
         SELECT
             post_id,
