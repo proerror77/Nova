@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import AVFoundation
 
 struct NewPostView: View {
     @Binding var showNewPost: Bool
@@ -11,6 +12,7 @@ struct NewPostView: View {
     @State private var viewModel = NewPostViewModel()
     @State private var isBottomSwitchOn = false  // 底部开关状态
     @State private var keyboardHeight: CGFloat = 0  // 键盘高度
+    @State private var capturedCameraImage: UIImage?  // Camera capture result
 
     var body: some View {
         ZStack {
@@ -107,7 +109,21 @@ struct NewPostView: View {
         }
         .ignoresSafeArea(edges: [.top, .bottom])
         .sheet(isPresented: $viewModel.showCamera) {
-            ImagePicker(sourceType: .camera, selectedImage: .constant(nil))
+            ImagePicker(
+                sourceType: .camera,
+                selectedImage: $capturedCameraImage,
+                onVideoSelected: { videoURL in
+                    handleCapturedVideo(url: videoURL)
+                },
+                allowsVideo: true
+            )
+        }
+        .onChange(of: capturedCameraImage) { _, newImage in
+            if let image = newImage, viewModel.selectedMediaItems.count < 5 {
+                viewModel.selectedMediaItems.append(.image(image, .empty))
+                viewModel.analyzeImageWithVLM()
+                capturedCameraImage = nil  // Reset for next capture
+            }
         }
         // PhotosPicker with Live Photo and video support
         .photosPicker(
@@ -194,6 +210,42 @@ struct NewPostView: View {
                 selectedChannelIds: $viewModel.selectedChannelIds,
                 isPresented: $viewModel.showChannelPicker
             )
+        }
+    }
+
+    // MARK: - Helper Methods
+
+    /// Handle video captured from camera
+    private func handleCapturedVideo(url: URL) {
+        guard viewModel.selectedMediaItems.count < 5 else { return }
+
+        Task {
+            // Generate thumbnail
+            let asset = AVURLAsset(url: url)
+            let imageGenerator = AVAssetImageGenerator(asset: asset)
+            imageGenerator.appliesPreferredTrackTransform = true
+
+            var thumbnail: UIImage
+            var duration: TimeInterval
+
+            do {
+                let (cgImage, _) = try await imageGenerator.image(at: .zero)
+                thumbnail = UIImage(cgImage: cgImage)
+            } catch {
+                thumbnail = UIImage(systemName: "video.fill") ?? UIImage()
+            }
+
+            do {
+                let durationCM = try await asset.load(.duration)
+                duration = durationCM.seconds
+            } catch {
+                duration = 0
+            }
+
+            let videoData = VideoData(url: url, thumbnail: thumbnail, duration: duration)
+            await MainActor.run {
+                viewModel.selectedMediaItems.append(.video(videoData, .empty))
+            }
         }
     }
 

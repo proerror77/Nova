@@ -150,16 +150,16 @@ struct LivePhotoPreviewCard: View {
                 Image(uiImage: livePhotoData.stillImage)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 239, height: 290)
+                    .frame(width: 239.w, height: 290.h)
                     .clipped()
-                
+
                 // Video overlay when playing
                 if isPlaying, let player = player {
                     VideoPlayerLayer(player: player)
-                        .frame(width: 239, height: 290)
+                        .frame(width: 239.w, height: 290.h)
                         .clipped()
                 }
-                
+
                 // Live badge
                 VStack {
                     HStack {
@@ -167,23 +167,23 @@ struct LivePhotoPreviewCard: View {
                         Spacer()
                     }
                     Spacer()
-                    
+
                     // Hint text
                     if !isPlaying {
                         Text("Press and hold to play")
-                            .font(.system(size: 11))
+                            .font(.system(size: 11.f))
                             .foregroundColor(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
+                            .padding(.horizontal, 8.w)
+                            .padding(.vertical, 4.h)
                             .background(Color.black.opacity(0.5))
-                            .cornerRadius(4)
-                            .padding(.bottom, 8)
+                            .cornerRadius(4.s)
+                            .padding(.bottom, 8.h)
                     }
                 }
-                .padding(8)
+                .padding(8.s)
             }
-            .frame(width: 239, height: 290)
-            .cornerRadius(10)
+            .frame(width: 239.w, height: 290.h)
+            .cornerRadius(10.s)
             .contentShape(Rectangle())
             .onLongPressGesture(minimumDuration: 0.1, pressing: { pressing in
                 if pressing {
@@ -196,15 +196,15 @@ struct LivePhotoPreviewCard: View {
             // Delete button
             Button(action: onDelete) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 20))
+                    .font(.system(size: 20.f))
                     .foregroundColor(.white)
                     .background(
                         Circle()
                             .fill(Color.black.opacity(0.5))
-                            .frame(width: 20, height: 20)
+                            .frame(width: 20.s, height: 20.s)
                     )
             }
-            .padding(4)
+            .padding(4.s)
         }
         .onDisappear {
             stopPlaying()
