@@ -67,6 +67,7 @@ struct ActiveCallBanner: View {
             }
             .onDisappear {
                 durationTimer?.invalidate()
+                durationTimer = nil
             }
         }
     }
@@ -261,6 +262,10 @@ struct MinimizedCallView: View {
                 hasSetInitialPosition = true
             }
             startDurationTimer()
+        }
+        .onDisappear {
+            durationTimer?.invalidate()
+            durationTimer = nil
         }
     }
 

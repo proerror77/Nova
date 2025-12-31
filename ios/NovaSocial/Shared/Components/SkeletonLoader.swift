@@ -113,9 +113,9 @@ struct MessageRowSkeleton: View {
 // MARK: - Generic List Skeleton
 
 /// Generic skeleton loader showing multiple placeholder items
-struct SkeletonListLoader: View {
+struct SkeletonListLoader<Content: View>: View {
     var itemCount: Int = 5
-    var itemBuilder: () -> AnyView
+    @ViewBuilder var itemBuilder: () -> Content
 
     var body: some View {
         LazyVStack(spacing: 0) {

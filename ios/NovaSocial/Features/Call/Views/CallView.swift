@@ -76,6 +76,7 @@ struct CallView: View {
         }
         .onDisappear {
             durationTimer?.invalidate()
+            durationTimer = nil
         }
         .alert("Call Error", isPresented: $showError) {
             Button("OK") {
@@ -307,6 +308,10 @@ struct CallView: View {
     }
 
     private func startDurationTimer() {
+        // Cancel any existing timer first
+        durationTimer?.invalidate()
+        durationTimer = nil
+
         durationTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak callService] _ in
             Task { @MainActor in
                 if let startTime = callService?.activeCall?.startTime {

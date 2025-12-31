@@ -107,9 +107,9 @@ class ProfileData {
             #endif
 
             // 背景預載入其他 tabs（提高切換速度）
-            Task.detached(priority: .utility) { [weak self] in
-                guard let self = self else { return }
-                await self.preloadOtherTabs()
+            // 使用 Task 而非 Task.detached 以繼承 @MainActor 上下文
+            Task(priority: .utility) { [weak self] in
+                await self?.preloadOtherTabs()
             }
         } catch {
             #if DEBUG

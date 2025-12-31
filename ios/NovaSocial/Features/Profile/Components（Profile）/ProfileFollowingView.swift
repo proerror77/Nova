@@ -436,7 +436,7 @@ struct ProfileFollowingView: View {
         LazyVStack(spacing: 0) {
             if isLoadingFollowing {
                 SkeletonListLoader(itemCount: 5) {
-                    AnyView(UserRowSkeleton())
+                    UserRowSkeleton()
                 }
             } else if let error = followingError {
                 // 錯誤狀態
@@ -501,7 +501,7 @@ struct ProfileFollowingView: View {
         LazyVStack(spacing: 0) {
             if isLoadingFollowers {
                 SkeletonListLoader(itemCount: 5) {
-                    AnyView(UserRowSkeleton())
+                    UserRowSkeleton()
                 }
             } else if let error = followersError {
                 // 錯誤狀態
