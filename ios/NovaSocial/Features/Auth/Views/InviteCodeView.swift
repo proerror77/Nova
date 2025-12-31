@@ -202,6 +202,11 @@ struct InviteCodeView: View {
             let response: ValidateResponse = try await APIClient.shared.request(endpoint: endpoint, method: "GET")
 
             if response.isValid {
+                // Store the validated invite code for use in registration
+                await MainActor.run {
+                    authManager.validatedInviteCode = inviteCode
+                }
+
                 // Check if we have a pending SSO flow to retry
                 if isPendingSSO {
                     await retrySSOWithInviteCode()

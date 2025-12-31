@@ -13,6 +13,10 @@ class AuthenticationManager: ObservableObject, @unchecked Sendable {
     @Published var currentUser: UserProfile?
     @Published var authToken: String?
 
+    /// Validated invite code stored after successful validation in InviteCodeView
+    /// Used by CreateAccountEmailView for registration
+    @Published var validatedInviteCode: String?
+
     private let identityService = IdentityService()
     private let keychain = KeychainService.shared
 
