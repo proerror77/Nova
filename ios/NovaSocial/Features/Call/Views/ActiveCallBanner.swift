@@ -120,6 +120,12 @@ struct ActiveCallBannerModifier: ViewModifier {
                     isVideoCall: call.isVideoCall,
                     intent: call.isOutgoing ? .startCall : .joinExisting
                 )
+            } else {
+                // Fallback: auto-dismiss if call is nil to prevent blank screen
+                Color.clear
+                    .onAppear {
+                        callCoordinator.showCallView = false
+                    }
             }
         }
     }

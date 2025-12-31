@@ -105,6 +105,12 @@ struct SearchView: View {
         .fullScreenCover(isPresented: $showUserProfile) {
             if let userId = selectedUserId {
                 UserProfileView(showUserProfile: $showUserProfile, userId: userId)
+            } else {
+                // Fallback: auto-dismiss if userId is nil to prevent blank screen
+                Color.clear
+                    .onAppear {
+                        showUserProfile = false
+                    }
             }
         }
     }

@@ -240,6 +240,12 @@ struct IncomingCallAlertModifier: ViewModifier {
                         roomId: incoming.roomId,
                         hasVideo: incoming.hasVideo
                     )
+                } else {
+                    // Fallback: auto-dismiss if incoming call info is nil to prevent blank screen
+                    Color.clear
+                        .onAppear {
+                            callCoordinator.showIncomingCallAlert = false
+                        }
                 }
             }
     }
