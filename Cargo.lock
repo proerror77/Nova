@@ -8106,6 +8106,7 @@ dependencies = [
  "chrono",
  "db-pool",
  "error-types",
+ "event-schema",
  "grpc-clients",
  "grpc-tls",
  "idempotent-consumer",
