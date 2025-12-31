@@ -1,6 +1,18 @@
 import SwiftUI
 import Combine
 
+// MARK: - Presentation Style
+
+/// Defines how a route should be presented
+enum PresentationStyle {
+    /// Present as a sheet (modal that slides up from bottom)
+    case sheet
+    /// Present as a full screen cover (covers entire screen)
+    case fullScreen
+    /// Push onto navigation stack
+    case push
+}
+
 /// Centralized navigation coordinator for the app
 /// Manages navigation state, deep links, and tab coordination
 @MainActor
@@ -30,6 +42,48 @@ final class AppCoordinator: @unchecked Sendable {
 
     /// Flag indicating voice mode should be auto-opened (set by Action Button intent)
     var shouldOpenVoiceMode: Bool = false
+
+    // MARK: - Modal Presentation State (Centralized)
+
+    /// Currently presented sheet route (nil = no sheet)
+    var presentedSheet: AppRoute?
+
+    /// Currently presented full screen cover route (nil = no cover)
+    var presentedFullScreen: AppRoute?
+
+    // MARK: - Modal Presentation Methods
+
+    /// Present a route as sheet or full screen cover
+    func present(_ route: AppRoute, style: PresentationStyle) {
+        switch style {
+        case .sheet:
+            presentedSheet = route
+        case .fullScreen:
+            presentedFullScreen = route
+        case .push:
+            navigate(to: route)
+        }
+
+        #if DEBUG
+        print("[AppCoordinator] Presented \(route) as \(style)")
+        #endif
+    }
+
+    /// Dismiss currently presented sheet
+    func dismissSheet() {
+        presentedSheet = nil
+    }
+
+    /// Dismiss currently presented full screen cover
+    func dismissFullScreen() {
+        presentedFullScreen = nil
+    }
+
+    /// Dismiss all modals (sheet and full screen)
+    func dismissAllModals() {
+        presentedSheet = nil
+        presentedFullScreen = nil
+    }
 
     // MARK: - State Restoration Keys
 
@@ -260,6 +314,9 @@ final class AppCoordinator: @unchecked Sendable {
         selectedTab = .home
         currentPage = .login
         pendingDeepLink = nil
+        // Dismiss any presented modals
+        presentedSheet = nil
+        presentedFullScreen = nil
     }
 
     // MARK: - State Persistence
@@ -343,6 +400,34 @@ extension AppCoordinator {
         case .chatBackup: return .chatBackup
         case .callRecordings: return .callRecordings
         }
+    }
+
+    // MARK: - Modal Presentation Bindings
+
+    /// Binding for sheet presentation (use with .sheet(item:))
+    var sheetBinding: Binding<AppRoute?> {
+        Binding(
+            get: { self.presentedSheet },
+            set: { self.presentedSheet = $0 }
+        )
+    }
+
+    /// Binding for full screen cover presentation (use with .fullScreenCover(item:))
+    var fullScreenBinding: Binding<AppRoute?> {
+        Binding(
+            get: { self.presentedFullScreen },
+            set: { self.presentedFullScreen = $0 }
+        )
+    }
+
+    /// Check if a specific route is currently presented as sheet
+    func isSheetPresented(_ route: AppRoute) -> Bool {
+        presentedSheet == route
+    }
+
+    /// Check if a specific route is currently presented as full screen cover
+    func isFullScreenPresented(_ route: AppRoute) -> Bool {
+        presentedFullScreen == route
     }
 }
 
