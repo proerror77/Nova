@@ -166,15 +166,16 @@ final class LiveKitVoiceService: NSObject {
             )
 
             // 設置緩衝區持續時間
-            // 模擬器需要較高的 buffer 以避免音訊斷斷續續
-            // 真機可以使用較低的值以降低延遲
+            // 較高的 buffer 可以減少音訊斷斷續續，但會增加延遲
+            // 20ms 是語音對話的良好平衡點（足夠穩定，延遲可接受）
             #if targetEnvironment(simulator)
-            // 模擬器：使用較高的 buffer (20ms) 以確保穩定性
-            try audioSession.setPreferredIOBufferDuration(0.02)
+            // 模擬器：使用較高的 buffer (25ms) 以確保穩定性
+            try audioSession.setPreferredIOBufferDuration(0.025)
             liveKitLog("Running on Simulator - using higher buffer duration for stability")
             #else
-            // 真機：使用較低的 buffer (10ms) 以降低延遲
-            try audioSession.setPreferredIOBufferDuration(0.01)
+            // 真機：使用 20ms buffer 以平衡穩定性和延遲
+            // 從 10ms 增加到 20ms 以減少網路抖動導致的音訊斷續
+            try audioSession.setPreferredIOBufferDuration(0.02)
             #endif
 
             // 設置採樣率
@@ -316,6 +317,7 @@ final class LiveKitVoiceService: NSObject {
         // 創建 RoomOptions 配置音訊
         // 注意: DTX, adaptiveStream, dynacast 設為 false 以避免語音斷斷續續
         // - DTX (Discontinuous Transmission): 靜音時停止傳輸，可能造成語音檢測不穩定
+        // - RED (Redundant Audio Data): 啟用冗餘音訊，防止網路丟包導致聲音斷續
         // - adaptiveStream: 自適應串流可能導致質量波動
         // - dynacast: 動態廣播可能影響即時性
         let roomOptions = RoomOptions(
@@ -326,7 +328,8 @@ final class LiveKitVoiceService: NSObject {
                 highpassFilter: true  // 過濾低頻噪音
             ),
             defaultAudioPublishOptions: AudioPublishOptions(
-                dtx: false  // 禁用不連續傳輸，保持穩定的音訊流
+                dtx: false,  // 禁用不連續傳輸，保持穩定的音訊流
+                red: true    // 啟用冗餘音訊數據，防止網路丟包導致聲音斷續
             ),
             adaptiveStream: false,  // 禁用自適應串流，避免質量波動
             dynacast: false  // 禁用動態廣播，確保即時性
