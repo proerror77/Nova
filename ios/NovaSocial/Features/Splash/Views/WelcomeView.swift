@@ -70,15 +70,19 @@ struct WelcomeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea(.all)
         .task {
-            // 显示 2 秒后根据认证状态跳转
-            try? await Task.sleep(for: .seconds(2))
-            if authManager.isAuthenticated {
-                print("[Welcome] ✅ User authenticated, navigating to home")
-                currentPage = .home
-            } else {
-                print("[Welcome] ℹ️ User not authenticated, navigating to login")
-                currentPage = .login
+            // 显示 2 秒后清除标记并跳转到 Home
+            do {
+                try await Task.sleep(for: .seconds(2))
+            } catch {
+                // Handle task cancellation gracefully
+                print("[Welcome] ⚠️ Task cancelled: \(error)")
+                return
             }
+            
+            // Clear the first-time registration flag
+            UserDefaults.standard.set(false, forKey: "shouldShowWelcome")
+            print("[Welcome] ✅ First-time welcome shown, navigating to home")
+            currentPage = .home
         }
     }
 }

@@ -453,9 +453,12 @@ struct PhoneRegistrationView: View {
                 authManager.updateCurrentUser(user)
             }
 
-            // Navigate to home
+            // Set flag to show welcome screen for first-time registration
+            UserDefaults.standard.set(true, forKey: "shouldShowWelcome")
+
+            // Navigate to welcome (will then go to home after showing)
             await MainActor.run {
-                currentPage = .home
+                currentPage = .welcome
             }
         } catch {
             errorMessage = error.localizedDescription

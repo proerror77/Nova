@@ -48,14 +48,20 @@ struct SplashScreenView: View {
             }
             
             if isValid && authManager.isAuthenticated {
-                print("[Splash] ✅ Session valid, navigating to welcome")
-                currentPage = .welcome
+                // Check if this is first-time registration (should show welcome)
+                if UserDefaults.standard.bool(forKey: "shouldShowWelcome") {
+                    print("[Splash] ✅ Session valid, first-time user, navigating to welcome")
+                    currentPage = .welcome
+                } else {
+                    print("[Splash] ✅ Session valid, returning user, navigating to home")
+                    currentPage = .home
+                }
             } else {
-                print("[Splash] ❌ Session invalid, navigating to welcome")
-                currentPage = .welcome
+                print("[Splash] ❌ Session invalid, navigating to login")
+                currentPage = .login
             }
         } else {
-            print("[Splash] ℹ️ Not authenticated, navigating to welcome")
+            print("[Splash] ℹ️ Not authenticated, navigating to login")
             
             // Ensure minimum splash duration
             let elapsed = Date().timeIntervalSince(splashStartTime)
@@ -63,7 +69,7 @@ struct SplashScreenView: View {
                 try? await Task.sleep(for: .seconds(minimumSplashDuration - elapsed))
             }
             
-            currentPage = .welcome
+            currentPage = .login
         }
         
         print("[Splash] 🏁 Navigation complete -> \(currentPage)")
