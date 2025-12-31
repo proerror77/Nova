@@ -595,7 +595,7 @@ struct ChatView: View {
             }
             .padding(.horizontal, 16.w)
             .padding(.vertical, 8.h)
-            .background(DesignTokens.surface)
+            .glassInputBackground()  // Liquid Glass on iOS 26+
         }
     }
 
@@ -653,7 +653,7 @@ struct ChatView: View {
         }
         .padding(.vertical, 12.h)
         .padding(.horizontal, 16.w)
-        .background(DesignTokens.surface)
+        .glassSurface()  // Liquid Glass on iOS 26+
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 

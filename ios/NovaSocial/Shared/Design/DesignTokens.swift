@@ -386,3 +386,39 @@ final class ThemeManager: ObservableObject {
         }
     }
 }
+
+// MARK: - Glass Effects
+/// Modern glass background effects using Material for depth and translucency
+
+extension View {
+    /// Applies glass-like effect using ultra thin material
+    /// Use for content cards, panels, and surfaces that need depth
+    @ViewBuilder
+    func glassSurface() -> some View {
+        self.background(.ultraThinMaterial)
+    }
+
+    /// Applies glass-like effect using thin material
+    /// Use for input areas, toolbars, and overlays on media content
+    @ViewBuilder
+    func glassInputBackground() -> some View {
+        self.background(.thinMaterial)
+    }
+
+    /// Applies glass-like effect with custom corner radius
+    @ViewBuilder
+    func glassSurface(cornerRadius: CGFloat) -> some View {
+        self
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+    }
+
+    /// Applies glass-like effect for floating panels and popovers
+    @ViewBuilder
+    func glassFloatingPanel(cornerRadius: CGFloat = 16) -> some View {
+        self
+            .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .shadow(color: Color.black.opacity(0.15), radius: 10, y: 4)
+    }
+}

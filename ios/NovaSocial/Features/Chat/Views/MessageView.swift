@@ -925,12 +925,10 @@ struct MessageView: View {
                     Spacer()
 
                     ZStack {
-                        // 背景
-                        Rectangle()
-                            .foregroundColor(DesignTokens.surface)
+                        // 背景 - Liquid Glass on iOS 26+
+                        Color.clear
                             .frame(width: 160.w, height: 132.h)
-                            .cornerRadius(8.s)
-                            .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
+                            .glassFloatingPanel(cornerRadius: 8.s)
 
                         VStack(spacing: 0) {
                             // Add Friends
