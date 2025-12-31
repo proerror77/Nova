@@ -588,59 +588,38 @@ struct ChatView: View {
     // MARK: - Attachment Options View
 
     private var attachmentOptionsView: some View {
-        HStack(spacing: 20.w) {
+        let columns = [
+            GridItem(.flexible()),
+            GridItem(.flexible()),
+            GridItem(.flexible()),
+            GridItem(.flexible())
+        ]
+
+        return LazyVGrid(columns: columns, spacing: 16.h) {
             // Photo picker
             PhotosPicker(selection: $viewModel.selectedPhotoItem, matching: .images) {
-                VStack(spacing: 4.h) {
-                    Image(systemName: "photo.on.rectangle")
-                        .font(.system(size: 22.f))
-                    Text("Album")
-                        .font(.system(size: 11.f))
-                }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60.s, height: 60.s)
+                attachmentButton(icon: "photo.on.rectangle", label: "Album")
             }
 
             // Camera
             Button(action: {
                 viewModel.checkCameraPermissionAndOpen()
             }) {
-                VStack(spacing: 4.h) {
-                    Image(systemName: "camera")
-                        .font(.system(size: 22.f))
-                    Text("Camera")
-                        .font(.system(size: 11.f))
-                }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60.s, height: 60.s)
+                attachmentButton(icon: "camera", label: "Camera")
             }
 
             // Video call
             Button(action: {
                 viewModel.showVideoCall = true
             }) {
-                VStack(spacing: 4.h) {
-                    Image(systemName: "video")
-                        .font(.system(size: 22.f))
-                    Text("Video")
-                        .font(.system(size: 11.f))
-                }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60.s, height: 60.s)
+                attachmentButton(icon: "video", label: "Video")
             }
 
             // Voice call
             Button(action: {
                 viewModel.showVoiceCall = true
             }) {
-                VStack(spacing: 4.h) {
-                    Image(systemName: "phone")
-                        .font(.system(size: 22.f))
-                    Text("Call")
-                        .font(.system(size: 11.f))
-                }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60.s, height: 60.s)
+                attachmentButton(icon: "phone", label: "Call")
             }
 
             // Location
@@ -648,34 +627,35 @@ struct ChatView: View {
                 locationManager.requestLocation()
                 viewModel.showLocationAlert = true
             }) {
-                VStack(spacing: 4.h) {
-                    Image(systemName: "location")
-                        .font(.system(size: 22.f))
-                    Text("Location")
-                        .font(.system(size: 11.f))
-                }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60.s, height: 60.s)
+                attachmentButton(icon: "location", label: "Location")
             }
 
             // File picker
             Button(action: {
                 viewModel.showFilePicker = true
             }) {
-                VStack(spacing: 4.h) {
-                    Image(systemName: "doc")
-                        .font(.system(size: 22.f))
-                    Text("File")
-                        .font(.system(size: 11.f))
-                }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60.s, height: 60.s)
+                attachmentButton(icon: "doc", label: "File")
             }
         }
         .padding(.vertical, 12.h)
         .padding(.horizontal, 16.w)
         .background(DesignTokens.surface)
         .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    // MARK: - Attachment Button Helper
+
+    @ViewBuilder
+    private func attachmentButton(icon: String, label: String) -> some View {
+        VStack(spacing: 6.h) {
+            Image(systemName: icon)
+                .font(.system(size: 24.f))
+            Text(label)
+                .font(.system(size: 12.f))
+        }
+        .foregroundColor(DesignTokens.textSecondary)
+        .frame(maxWidth: .infinity)
+        .frame(height: 60.s)
     }
 
     // MARK: - Voice Record Button
