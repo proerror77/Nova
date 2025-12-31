@@ -26,7 +26,7 @@ enum APIEnvironment {
             // DNS: staging-api.icered.com -> Cloudflare (SSL termination) -> 34.8.163.8
             return "https://staging-api.icered.com"
         case .production:
-            return "http://api.icered.com:8000"
+            return "https://api.icered.com"
         }
     }
 
@@ -685,4 +685,9 @@ struct APIFeatureFlags {
     /// Allow connecting to staging even if the TLS cert does not match (DEBUG only).
     /// Keep this false for release builds.
     static var allowInsecureStagingCert = true
+    /// Enable SSL certificate pinning for enhanced security.
+    /// When enabled, connections will only succeed if the server certificate matches
+    /// the pinned public key hashes in CertificatePinningManager.
+    /// Note: Update pinned hashes in CertificatePinningManager before enabling in production.
+    static var enableCertificatePinning = false
 }

@@ -5,7 +5,7 @@ struct AliasNameView: View {
     @Binding var currentPage: AppPage
 
     // MARK: - ViewModel
-    @StateObject private var viewModel = AliasAccountViewModel()
+    @State private var viewModel = AliasAccountViewModel()
 
     // Photo picker
     @State private var selectedPhotoItem: PhotosPickerItem?

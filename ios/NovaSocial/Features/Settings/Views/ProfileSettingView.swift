@@ -3,7 +3,7 @@ import PhotosUI
 
 struct ProfileSettingView: View {
     @Binding var currentPage: AppPage
-    @StateObject private var viewModel = ProfileSettingViewModel()
+    @State private var viewModel = ProfileSettingViewModel()
 
     // Photo picker
     @State private var selectedPhotoItem: PhotosPickerItem?
