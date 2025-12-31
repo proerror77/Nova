@@ -9,34 +9,94 @@ struct NewPostView: View {
 
     @EnvironmentObject private var authManager: AuthenticationManager
     @State private var viewModel = NewPostViewModel()
+    @State private var isBottomSwitchOn = false  // 底部开关状态
+    @State private var keyboardHeight: CGFloat = 0  // 键盘高度
 
     var body: some View {
         ZStack {
             // 背景色
-            Color(red: 0.97, green: 0.97, blue: 0.97)
-                .ignoresSafeArea()
+            Color.white
 
-            VStack(spacing: 0) {
-                topNavigationBar
+            // MARK: - 可滚动内容区域
+            ScrollView {
+                VStack(spacing: 0) {
+                    // 顶部留白，给固定导航栏让出空间
+                    Spacer()
+                        .frame(height: 98.h)
 
-                ScrollView {
                     contentView
                 }
-                .scrollDismissesKeyboard(.interactively)
-                .onTapGesture {
-                    viewModel.hideKeyboard()
-                }
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .onTapGesture {
+                viewModel.hideKeyboard()
+            }
+
+            // MARK: - 固定顶部导航栏
+            VStack(spacing: 0) {
+                topNavigationBar
 
                 // MARK: - Error Message
                 if let error = viewModel.postError {
                     Text(error)
-                        .font(.system(size: 12))
+                        .font(.system(size: 12.f))
                         .foregroundColor(.red)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16.w)
+                        .padding(.vertical, 8.h)
+                        .background(Color.white)
                 }
+
+                Spacer()
             }
+
+            // MARK: - 底部白色背景模块
+            VStack {
+                Spacer()
+                VStack(spacing: 0) {
+                    // 底部 icon 区域
+                    HStack(spacing: 30.s) {
+                        // Alice icon - Enhance with Alice 功能
+                        Button(action: {
+                            viewModel.requestEnhancement()
+                        }) {
+                            if viewModel.isEnhancing {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .frame(width: 16.s, height: 16.s)
+                            } else {
+                                Image("Alice-icon-B")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 16.s, height: 16.s)
+                            }
+                        }
+                        .disabled(viewModel.isEnhancing)
+
+                        // Location icon
+                        Button(action: {
+                            viewModel.showLocationPicker = true
+                        }) {
+                            Image("Location-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 11.w, height: 14.h)
+                        }
+
+                        Spacer()
+                    }
+                    .padding(.leading, 16.w)
+                    .padding(.top, keyboardHeight > 0 ? 10.h : 16.h)
+
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: keyboardHeight > 0 ? 36.h : 70.h)
+                .background(.white)
+            }
+            .padding(.bottom, keyboardHeight)
+            .animation(.easeOut(duration: 0.25), value: keyboardHeight)
         }
+        .ignoresSafeArea(edges: [.top, .bottom])
         .sheet(isPresented: $viewModel.showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: .constant(nil))
         }
@@ -60,6 +120,14 @@ struct NewPostView: View {
                 onPostSuccess: onPostSuccess,
                 onDismiss: { showNewPost = false }
             )
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
+            if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
+                keyboardHeight = keyboardFrame.height
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardHeight = 0
         }
         .overlay {
             // MARK: - 名称选择弹窗
@@ -108,50 +176,68 @@ struct NewPostView: View {
 
     // MARK: - Top Navigation Bar
     private var topNavigationBar: some View {
-        HStack {
-            // Cancel 按钮
-            Button(action: {
-                viewModel.handleCancelTapped()
-            }) {
-                Text("Cancel")
-                    .font(.system(size: 14))
-                    .lineSpacing(20)
+        VStack(spacing: 0) {
+            Spacer()
+
+            ZStack {
+                // 标题 - 居中摆放
+                Text("NewPost")
+                    .font(.system(size: 18.f, weight: .medium))
                     .foregroundColor(.black)
+
+                // 两侧按钮
+                HStack {
+                    // Cancel 按钮
+                    Button(action: {
+                        viewModel.handleCancelTapped()
+                    }) {
+                        Text("Cancel")
+                            .font(Font.custom("SF Pro Display", size: 14.f))
+                            .tracking(0.28)
+                            .foregroundColor(.black)
+                    }
+                    .frame(height: 24.h)
+
+                    Spacer()
+
+                    // Post 按钮
+                    Button(action: {
+                        Task {
+                            await viewModel.submitPost()
+                        }
+                    }) {
+                        if viewModel.isPosting {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                                .tint(Color(red: 0.87, green: 0.11, blue: 0.26))
+                        } else {
+                            Text("Post")
+                                .font(Font.custom("SF Pro Display", size: 14.f))
+                                .tracking(0.28)
+                                .foregroundColor(viewModel.canPost ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.53, green: 0.53, blue: 0.53))
+                        }
+                    }
+                    .disabled(!viewModel.canPost || viewModel.isPosting)
+                    .frame(width: 36.w, height: 24.h)
+                }
             }
+            .padding(.horizontal, 16.w)
 
             Spacer()
+                .frame(height: 18.h)
 
-            // 标题
-            Text("Newpost")
-                .font(.system(size: 18, weight: .medium))
-                .lineSpacing(20)
-                .foregroundColor(.black)
-
-            Spacer()
-
-            // Post 按钮
-            Button(action: {
-                Task {
-                    await viewModel.submitPost()
-                }
-            }) {
-                if viewModel.isPosting {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                        .tint(Color(red: 0.87, green: 0.11, blue: 0.26))
-                } else {
-                    Text("Post")
-                        .font(.system(size: 14))
-                        .lineSpacing(20)
-                        .foregroundColor(viewModel.canPost ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.53, green: 0.53, blue: 0.53))
-                }
-            }
-            .disabled(!viewModel.canPost || viewModel.isPosting)
-            .frame(minWidth: 36)
+            // 底部灰线
+            Rectangle()
+                .fill(DesignTokens.borderColor)
+                .frame(height: 0.5)
         }
-        .frame(height: DesignTokens.topBarHeight)
-        .padding(.horizontal, 16)
-        .background(Color.white)
+        .frame(maxWidth: .infinity)
+        .frame(height: 98.h)
+        .background(
+            Rectangle()
+                .foregroundColor(.clear)
+                .background(.white)
+        )
     }
 
     // MARK: - Content View
@@ -163,43 +249,57 @@ struct NewPostView: View {
             textInputSection
             channelsAndEnhanceSection
 
-            Rectangle()
-                .foregroundColor(.clear)
-                .frame(height: 0)
-                .overlay(
-                    Rectangle()
-                        .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
-                )
-                .padding(.top, 20)
+            // Invite alice 区域 + 开关
+            HStack(spacing: 10.s) {
+                Image("alice-center-icon")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 16.s, height: 16.s)
 
-            checkInSection
+                VStack(alignment: .leading, spacing: 4.s) {
+                    Text("Invite alice")
+                        .font(.system(size: 14.f, weight: .medium))
+                        .foregroundColor(.black)
 
-            Rectangle()
-                .foregroundColor(.clear)
-                .frame(height: 0)
-                .overlay(
-                    Rectangle()
-                        .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
-                )
+                    Text("Add AI in this conversation")
+                        .font(.system(size: 12.f))
+                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                }
 
-            inviteAliceSection
+                Spacer()
 
-            if viewModel.inviteAlice {
-                inviteAlicePrompt
+                // 开关按钮
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isBottomSwitchOn.toggle()
+                    }
+                }) {
+                    Image(isBottomSwitchOn ? "Switch-on" : "Switch-off")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 37.w, height: 20.h)
+                }
+                .buttonStyle(.plain)
             }
+            .padding(.horizontal, 16.w)
+            .padding(.top, 20.h)
+
+            // 底部留白，避免被底部白色模块遮挡
+            Spacer()
+                .frame(height: 120.h)
         }
     }
 
     // MARK: - Post As Section
     private var postAsSection: some View {
-        HStack(spacing: 13) {
+        HStack(spacing: 13.s) {
             // 头像 - 优先显示 AvatarManager 的头像
             ZStack {
                 if let pendingAvatar = AvatarManager.shared.pendingAvatar {
                     Image(uiImage: pendingAvatar)
                         .resizable()
                         .scaledToFill()
-                        .frame(width: 30, height: 30)
+                        .frame(width: 30.s, height: 30.s)
                         .clipShape(Circle())
                 } else if let avatarUrl = authManager.currentUser?.avatarUrl,
                           let url = URL(string: avatarUrl) {
@@ -208,12 +308,12 @@ struct NewPostView: View {
                             .resizable()
                             .scaledToFill()
                     } placeholder: {
-                        DefaultAvatarView(size: 30)
+                        DefaultAvatarView(size: 30.s)
                     }
-                    .frame(width: 30, height: 30)
+                    .frame(width: 30.s, height: 30.s)
                     .clipShape(Circle())
                 } else {
-                    DefaultAvatarView(size: 30)
+                    DefaultAvatarView(size: 30.s)
                 }
             }
             .overlay(
@@ -221,23 +321,21 @@ struct NewPostView: View {
                     .stroke(Color(red: 0.81, green: 0.13, blue: 0.25), lineWidth: 0.50)
             )
 
-            // 显示名称 - 根据选择的类型显示真实名称或别名
-            Text(viewModel.displayedName)
-                .font(.system(size: 14, weight: .medium))
-                .lineSpacing(20)
-                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+            // 显示名称 + 箭头（保持 6pt 间距）
+            HStack(spacing: 6.s) {
+                Text(viewModel.displayedName)
+                    .font(.system(size: 14.f, weight: .medium))
+                    .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
-            ZStack {
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 10))
+                    .font(.system(size: 10.f))
                     .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
             }
-            .frame(width: 16, height: 16)
 
             Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 24)
+        .padding(.leading, 16.w)
+        .padding(.top, 12.h)
         .contentShape(Rectangle())
         .onTapGesture {
             viewModel.showNameSelector = true
@@ -247,21 +345,21 @@ struct NewPostView: View {
     // MARK: - Image Preview Section (with Live Photo support)
     private var imagePreviewSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: 12.s) {
                 // Processing indicator
                 if viewModel.isProcessingMedia {
                     ZStack {
                         Rectangle()
                             .foregroundColor(.clear)
-                            .frame(width: 239, height: 290)
+                            .frame(width: 239.w, height: 290.h)
                             .background(Color(red: 0.91, green: 0.91, blue: 0.91))
-                            .cornerRadius(10)
+                            .cornerRadius(10.s)
 
-                        VStack(spacing: 12) {
+                        VStack(spacing: 12.s) {
                             ProgressView()
                                 .scaleEffect(1.2)
                             Text("Processing...")
-                                .font(.system(size: 12))
+                                .font(.system(size: 12.f))
                                 .foregroundColor(.gray)
                         }
                     }
@@ -278,9 +376,8 @@ struct NewPostView: View {
                                 Image(uiImage: image)
                                     .resizable()
                                     .scaledToFill()
-                                    .frame(width: 239, height: 290)
-                                    .cornerRadius(10)
-                                    .clipped()
+                                    .frame(width: 239.w, height: 290.h)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10.s))
 
                             case .livePhoto(let livePhotoData, _):
                                 // Live Photo preview with play capability
@@ -297,23 +394,22 @@ struct NewPostView: View {
                                     Image(uiImage: videoData.thumbnail)
                                         .resizable()
                                         .scaledToFill()
-                                        .frame(width: 239, height: 290)
-                                        .cornerRadius(10)
-                                        .clipped()
+                                        .frame(width: 239.w, height: 290.h)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10.s))
 
                                     // Video duration badge
                                     Text(viewModel.formatDuration(videoData.duration))
-                                        .font(.system(size: 12, weight: .medium))
+                                        .font(.system(size: 12.f, weight: .medium))
                                         .foregroundColor(.white)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
+                                        .padding(.horizontal, 8.w)
+                                        .padding(.vertical, 4.h)
                                         .background(Color.black.opacity(0.6))
-                                        .cornerRadius(4)
-                                        .padding(8)
+                                        .cornerRadius(4.s)
+                                        .padding(8.s)
 
                                     // Play icon overlay
                                     Image(systemName: "play.circle.fill")
-                                        .font(.system(size: 40))
+                                        .font(.system(size: 40.f))
                                         .foregroundColor(.white.opacity(0.9))
                                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                                 }
@@ -325,70 +421,35 @@ struct NewPostView: View {
                                     viewModel.removeMediaItem(at: index)
                                 }) {
                                     Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 20))
+                                        .font(.system(size: 20.f))
                                         .foregroundColor(.white)
                                         .background(
                                             Circle()
                                                 .fill(Color.black.opacity(0.5))
-                                                .frame(width: 20, height: 20)
+                                                .frame(width: 20.s, height: 20.s)
                                         )
                                 }
-                                .padding(4)
+                                .padding(4.s)
                             }
-                        }
-
-                        // Enhance with Alice button (only on first image)
-                        if index == 0 {
-                            VStack {
-                                Spacer()
-                                HStack {
-                                    enhanceWithAliceButton
-                                        .padding(.leading, 8)
-                                        .padding(.bottom, 8)
-                                    Spacer()
-                                }
-                            }
-                            .frame(width: 239, height: 290)
                         }
                     }
                 }
 
                 // Add more media button (max 5) - always shown on the right
                 if viewModel.totalMediaCount < 5 && !viewModel.isProcessingMedia {
-                    ZStack {
-                        Rectangle()
-                            .foregroundColor(.clear)
-                            .frame(width: viewModel.totalMediaCount == 0 ? 239 : 100, height: viewModel.totalMediaCount == 0 ? 290 : 210)
-                            .background(Color(red: 0.91, green: 0.91, blue: 0.91))
-                            .cornerRadius(10)
-
-                        VStack(spacing: 8) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 30, weight: .light))
-                                .foregroundColor(.white)
-
-                            if viewModel.totalMediaCount > 0 {
-                                Text("\(viewModel.totalMediaCount)/5")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.white)
-                            }
-
-                            // Hint for Live Photo support
-                            if viewModel.totalMediaCount == 0 {
-                                Text("Photos & Live Photos")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.white.opacity(0.8))
-                            }
+                    Rectangle()
+                        .foregroundColor(.clear)
+                        .frame(width: 239.w, height: 290.h)
+                        .background(Color(red: 0.91, green: 0.91, blue: 0.91))
+                        .cornerRadius(10.s)
+                        .onTapGesture {
+                            viewModel.showPhotoPicker = true
                         }
-                    }
-                    .onTapGesture {
-                        viewModel.showPhotoPicker = true
-                    }
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 16.w)
         }
-        .padding(.top, 16)
+        .padding(.top, 12.h)
     }
 
     // MARK: - VLM Tags Section
@@ -435,37 +496,6 @@ struct NewPostView: View {
         }
     }
 
-    // MARK: - Enhance with Alice Button
-    private var enhanceWithAliceButton: some View {
-        Button(action: {
-            viewModel.requestEnhancement()
-        }) {
-            HStack(spacing: 6) {
-                if viewModel.isEnhancing {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                        .frame(width: 14, height: 14)
-                } else {
-                    Image("alice-center-icon")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 14, height: 14)
-                }
-
-                Text(viewModel.isEnhancing ? "Analyzing..." : "Enhance with alice")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.black)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
-            )
-        }
-        .disabled(viewModel.isEnhancing)
-    }
 
     // MARK: - Text Input Section
     private var textInputSection: some View {
@@ -503,7 +533,7 @@ struct NewPostView: View {
 
                 NoAutoFillTextView(
                     text: $viewModel.postText,
-                    placeholder: "What do you want to talk about?",
+                    placeholder: "Enter text...",
                     textColor: UIColor(red: 0.38, green: 0.37, blue: 0.37, alpha: 1),
                     placeholderColor: UIColor(red: 0.38, green: 0.37, blue: 0.37, alpha: 1),
                     font: .systemFont(ofSize: 14),
@@ -634,71 +664,41 @@ struct NewPostView: View {
         .padding(.top, 20)
     }
 
-    // MARK: - Check In Section
-    private var checkInSection: some View {
-        HStack(spacing: 10) {
-            Image("Location-icon")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 20, height: 20)
-
-            Text(viewModel.selectedLocation.isEmpty ? "Check in" : viewModel.selectedLocation)
-                .font(.system(size: 16))
-                .lineSpacing(40.94)
-                .foregroundColor(.black)
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 14))
-                .foregroundColor(.gray)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 20)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            viewModel.showLocationPicker = true
-        }
-    }
 
     // MARK: - Invite Alice Section
     private var inviteAliceSection: some View {
-        HStack(spacing: 10) {
-            Image("alice-center-icon")
+        HStack(spacing: 10.s) {
+            Image("ColourAlice")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 20, height: 20)
-                .colorMultiply(.black)
+                .frame(width: 20.s, height: 20.s)
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4.s) {
                 Text("Invite alice")
-                    .font(.system(size: 16))
-                    .lineSpacing(40.94)
+                    .font(.system(size: 14.f, weight: .medium))
                     .foregroundColor(.black)
 
-                Text("add AI insight to this conversation")
-                    .font(.system(size: 12))
-                    .lineSpacing(40.94)
-                    .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                Text("Add AI in this conversation")
+                    .font(.system(size: 12.f))
+                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
             }
 
             Spacer()
 
-            Toggle("", isOn: $viewModel.inviteAlice)
-                .labelsHidden()
-                .toggleStyle(SwitchToggleStyle(tint: Color(red: 0.82, green: 0.13, blue: 0.25)))
+            CustomSwitch(isOn: $viewModel.inviteAlice)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 20)
+        .padding(.horizontal, 16.w)
+        .padding(.top, 16.h)
+        .padding(.bottom, 16.h)
     }
 
     // MARK: - Invite Alice Prompt
     private var inviteAlicePrompt: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 5.s) {
             ZStack {
                 Ellipse()
                     .foregroundColor(.clear)
-                    .frame(width: 9.60, height: 9.60)
+                    .frame(width: 9.6.s, height: 9.6.s)
                     .background(.white)
                     .overlay(
                         Ellipse()
@@ -708,25 +708,40 @@ struct NewPostView: View {
 
                 Ellipse()
                     .foregroundColor(.clear)
-                    .frame(width: 5.28, height: 5.28)
+                    .frame(width: 5.28.s, height: 5.28.s)
                     .background(Color(red: 0.82, green: 0.13, blue: 0.25))
             }
-            .frame(width: 9.60, height: 9.60)
+            .frame(width: 9.6.s, height: 9.6.s)
 
             Text("Invite Alice to join the discussion")
-                .font(.system(size: 12, weight: .medium))
-                .lineSpacing(20)
+                .font(.system(size: 12.f, weight: .medium))
                 .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
 
             Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 20)
+        .padding(.horizontal, 16.w)
+        .padding(.bottom, 20.h)
     }
 }
 
-// MARK: - Flow Layout for Tags (disabled - duplicate with EnhanceSuggestionView)
-// FlowLayout removed to avoid redeclaration - use shared version from EnhanceSuggestionView
+// MARK: - Custom Switch Component
+private struct CustomSwitch: View {
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Button(action: {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isOn.toggle()
+            }
+        }) {
+            Image(isOn ? "Switch-on" : "Switch-off")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 37.w, height: 20.h)
+        }
+        .buttonStyle(.plain)
+    }
+}
 
 #Preview {
     @Previewable @State var showNewPost = true
