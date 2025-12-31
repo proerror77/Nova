@@ -57,7 +57,6 @@
 		272598D330CF94B84DFC9650 /* QRCodeGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD8FB047FFB30F2D43138A99 /* QRCodeGenerator.swift */; };
 		28D1CB51128CF8588FF25756 /* VisibilityTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 275B20909898AA9B7510292B /* VisibilityTracker.swift */; };
 		293C0E22315AFF6065593D7F /* PreviewHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B06660E0C49D80305A0FC4A /* PreviewHelpers.swift */; };
-		294057F867CDBC916D15A038 /* ICERED.ipa in Resources */ = {isa = PBXBuildFile; fileRef = "TEMP_BB33EA6C-5CEC-405D-B769-AA34F0B96A8F" /* ICERED.ipa */; };
 		29510E46949E636C6C54D4B1 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA73CC5E85BCBF50C09E9E70 /* HomeView.swift */; };
 		2962AE38643043A9326E40C8 /* MatrixStubs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4111AEC0D8BCD3BC2918165D /* MatrixStubs.swift */; };
 		2B3C1F85A7E47D750599DF9C /* SimpleCarouselView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DBE05105D66034FFAE21C35 /* SimpleCarouselView.swift */; };
@@ -208,7 +207,6 @@
 		9EB7CA6CFE1E6DD184294B59 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BBEC927960F534FBD87D8F6 /* SearchView.swift */; };
 		9F4007BE87A9E709B48DF9B9 /* UserModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA8A23427CDC24E3C754293 /* UserModels.swift */; };
 		9F6BCDC560BB110D9DDE2532 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D354C7E36DF2232F9B1BDF5 /* WelcomeView.swift */; };
-		9F8F8D5D2215C695FD4D2FF9 /* ICERED.app.dSYM.zip in Resources */ = {isa = PBXBuildFile; fileRef = "TEMP_70291AC4-117E-4368-8343-81E6BDAAFDD0" /* ICERED.app.dSYM.zip */; };
 		A0B51410464CBBECB8318D9C /* ChatMessageSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AFB663D3BC00E0EF01AAFDF /* ChatMessageSender.swift */; };
 		A0E98C8402F42826C6B27C70 /* ThankYouModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DB971D0D914AD2BF041C7C0 /* ThankYouModal.swift */; };
 		A35ABFA321D24C60DB3F1AE2 /* DeviceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C3AD3B56FD470BDD566CA47 /* DeviceService.swift */; };
@@ -677,10 +675,8 @@
 		"TEMP_2171C7C6-0604-42E6-A50A-9149535C5FB3" /* ExportOptions.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = ExportOptions.plist; sourceTree = "<group>"; };
 		"TEMP_611A839A-2283-4839-ABB1-B98D2C84F805" /* .swiftlint.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = .swiftlint.yml; sourceTree = "<group>"; };
 		"TEMP_6349CD14-4CC8-4FF1-A4CB-D7EFD8375FA5" /* AppPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPage.swift; sourceTree = "<group>"; };
-		"TEMP_70291AC4-117E-4368-8343-81E6BDAAFDD0" /* ICERED.app.dSYM.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = ICERED.app.dSYM.zip; sourceTree = "<group>"; };
 		"TEMP_85827CE8-8D52-4864-BEF2-C58EF8C1634D" /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		"TEMP_B59E40D6-AFB3-4C63-BB14-272CCD182B46" /* .gitattributes */ = {isa = PBXFileReference; path = .gitattributes; sourceTree = "<group>"; };
-		"TEMP_BB33EA6C-5CEC-405D-B769-AA34F0B96A8F" /* ICERED.ipa */ = {isa = PBXFileReference; path = ICERED.ipa; sourceTree = "<group>"; };
 		"TEMP_D102D073-6981-40AF-8929-650703A92AAC" /* .gitignore */ = {isa = PBXFileReference; path = .gitignore; sourceTree = "<group>"; };
 		"TEMP_D1B7883D-EE3A-45D6-B24B-9F8FEA4FCB3C" /* ICERED.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ICERED.entitlements; sourceTree = "<group>"; };
 		"TEMP_DAE5F84D-5CB3-4900-A30E-CDC0963199CD" /* fastlane.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = fastlane.sh; sourceTree = "<group>"; };
@@ -1950,10 +1946,8 @@
 				"TEMP_611A839A-2283-4839-ABB1-B98D2C84F805" /* .swiftlint.yml */,
 				"TEMP_1BE9AB9D-522D-447C-85E2-6E1163A14676" /* Assets.xcassets */,
 				"TEMP_DAE5F84D-5CB3-4900-A30E-CDC0963199CD" /* fastlane.sh */,
-				"TEMP_70291AC4-117E-4368-8343-81E6BDAAFDD0" /* ICERED.app.dSYM.zip */,
 				"TEMP_2171C7C6-0604-42E6-A50A-9149535C5FB3" /* ExportOptions.plist */,
 				"TEMP_D102D073-6981-40AF-8929-650703A92AAC" /* .gitignore */,
-				"TEMP_BB33EA6C-5CEC-405D-B769-AA34F0B96A8F" /* ICERED.ipa */,
 				"TEMP_0DB3996D-8CA0-4463-8220-80B1FC9EEFE4" /* PrivacyInfo.xcprivacy */,
 				"TEMP_B59E40D6-AFB3-4C63-BB14-272CCD182B46" /* .gitattributes */,
 				"TEMP_6349CD14-4CC8-4FF1-A4CB-D7EFD8375FA5" /* AppPage.swift */,
@@ -2118,8 +2112,6 @@
 				881C536F1EA888B6FE7B2814 /* Assets.xcassets in Resources */,
 				0A908340FB1061B18C43BA52 /* ExportOptions.plist in Resources */,
 				4F1AD2005C8C5210ECF30FD9 /* Fonts in Resources */,
-				9F8F8D5D2215C695FD4D2FF9 /* ICERED.app.dSYM.zip in Resources */,
-				294057F867CDBC916D15A038 /* ICERED.ipa in Resources */,
 				4679E194ED83C34FB4DCCDAE /* INTEGRATION_GUIDE.md in Resources */,
 				A48DD965F23B4ACF413808DF /* Localizable.strings in Resources */,
 				BB79B10B3BE7445C0AF5E3A8 /* MATRIX_INTEGRATION_COMPLETE.md in Resources */,
