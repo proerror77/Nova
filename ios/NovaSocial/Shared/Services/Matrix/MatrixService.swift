@@ -2075,8 +2075,8 @@ final class MatrixService: MatrixServiceProtocol {
                     @unknown default: membershipState = .leave
                     }
 
-                    // Only include joined members
-                    guard membershipState == .join else { continue }
+                    // Include joined and invited members (for DM rooms, other user may still be invited)
+                    guard membershipState == .join || membershipState == .invite else { continue }
 
                     // Extract power level value from enum
                     let powerLevelInt: Int
