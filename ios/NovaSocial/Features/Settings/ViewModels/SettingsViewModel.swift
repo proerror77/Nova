@@ -1,22 +1,23 @@
 import Foundation
 
 @MainActor
-final class SettingsViewModel: ObservableObject {
+@Observable
+final class SettingsViewModel {
     // MARK: - Theme Settings
-    @Published var isDarkMode = false
-    @Published var isSavingDarkMode = false
+    var isDarkMode = false
+    var isSavingDarkMode = false
 
     // MARK: - Account Management
-    @Published var accounts: [Account] = []
-    @Published var currentAccountId: String?
-    @Published var isLoadingAccounts = false
-    @Published var isSwitchingAccount = false
-    @Published var hasLoadedAccounts = false  // 标记是否已完成首次加载
+    var accounts: [Account] = []
+    var currentAccountId: String?
+    var isLoadingAccounts = false
+    var isSwitchingAccount = false
+    var hasLoadedAccounts = false  // 标记是否已完成首次加载
 
     // MARK: - General State
-    @Published var isLoading = false
-    @Published var userSettings: UserSettings?
-    @Published var errorMessage: String?
+    var isLoading = false
+    var userSettings: UserSettings?
+    var errorMessage: String?
 
     // MARK: - Dependencies
     private let authManager: AuthenticationManager

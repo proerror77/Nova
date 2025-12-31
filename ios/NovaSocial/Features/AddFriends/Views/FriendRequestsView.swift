@@ -52,7 +52,7 @@ class FriendRequestsViewModel {
                 print("[FriendRequests] Endpoint not deployed yet")
                 #endif
             } else {
-                errorMessage = "加載好友請求失敗: \(error.localizedDescription)"
+                errorMessage = "Failed to load friend requests: \(error.localizedDescription)"
                 #if DEBUG
                 print("❌ Failed to load friend requests: \(error)")
                 #endif
@@ -76,13 +76,13 @@ class FriendRequestsViewModel {
             receivedRequests.removeAll { $0.id == requestId }
             pendingCount = max(0, pendingCount - 1)
 
-            showToast("已接受好友請求")
+            showToast("Friend request accepted")
 
             #if DEBUG
             print("[FriendRequests] Accepted request: \(requestId)")
             #endif
         } catch {
-            errorMessage = "接受請求失敗: \(error.localizedDescription)"
+            errorMessage = "Failed to accept request: \(error.localizedDescription)"
             #if DEBUG
             print("❌ Failed to accept request: \(error)")
             #endif
@@ -105,13 +105,13 @@ class FriendRequestsViewModel {
             receivedRequests.removeAll { $0.id == requestId }
             pendingCount = max(0, pendingCount - 1)
 
-            showToast("已拒絕好友請求")
+            showToast("Friend request rejected")
 
             #if DEBUG
             print("[FriendRequests] Rejected request: \(requestId)")
             #endif
         } catch {
-            errorMessage = "拒絕請求失敗: \(error.localizedDescription)"
+            errorMessage = "Failed to reject request: \(error.localizedDescription)"
             #if DEBUG
             print("❌ Failed to reject request: \(error)")
             #endif
@@ -133,13 +133,13 @@ class FriendRequestsViewModel {
             // Remove from sent list
             sentRequests.removeAll { $0.id == requestId }
 
-            showToast("已取消好友請求")
+            showToast("Friend request cancelled")
 
             #if DEBUG
             print("[FriendRequests] Cancelled request: \(requestId)")
             #endif
         } catch {
-            errorMessage = "取消請求失敗: \(error.localizedDescription)"
+            errorMessage = "Failed to cancel request: \(error.localizedDescription)"
             #if DEBUG
             print("❌ Failed to cancel request: \(error)")
             #endif
@@ -238,7 +238,7 @@ struct FriendRequestsView: View {
 
             Spacer()
 
-            Text("好友請求")
+            Text("Friend Requests")
                 .font(.system(size: 20, weight: .bold))
                 .foregroundColor(.black)
 
@@ -267,7 +267,7 @@ struct FriendRequestsView: View {
     private var segmentedControl: some View {
         HStack(spacing: 0) {
             segmentButton(
-                title: "收到的請求",
+                title: "Received",
                 count: viewModel.receivedRequests.count,
                 isSelected: viewModel.selectedTab == .received
             ) {
@@ -277,7 +277,7 @@ struct FriendRequestsView: View {
             }
 
             segmentButton(
-                title: "已發送的請求",
+                title: "Sent",
                 count: viewModel.sentRequests.count,
                 isSelected: viewModel.selectedTab == .sent
             ) {
@@ -320,7 +320,7 @@ struct FriendRequestsView: View {
     private var loadingView: some View {
         VStack {
             Spacer()
-            ProgressView("加載中...")
+            ProgressView("Loading...")
             Spacer()
         }
     }
@@ -335,12 +335,12 @@ struct FriendRequestsView: View {
                 .font(.system(size: 48))
                 .foregroundColor(.gray.opacity(0.5))
 
-            Text(viewModel.selectedTab == .received ? "沒有收到的好友請求" : "沒有已發送的好友請求")
+            Text(viewModel.selectedTab == .received ? "No received friend requests" : "No sent friend requests")
                 .font(.system(size: 16))
                 .foregroundColor(.gray)
 
             if viewModel.selectedTab == .received {
-                Text("當有人向你發送好友請求時，會顯示在這裡")
+                Text("When someone sends you a friend request, it will appear here")
                     .font(.system(size: 14))
                     .foregroundColor(.gray.opacity(0.7))
                     .multilineTextAlignment(.center)
@@ -483,7 +483,7 @@ struct FriendRequestCardView: View {
         case .sent:
             // Cancel Button
             Button(action: onCancel) {
-                Text("取消")
+                Text("Cancel")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.gray)
                     .padding(.horizontal, 16)
@@ -502,16 +502,16 @@ struct FriendRequestCardView: View {
         let interval = now.timeIntervalSince(date)
 
         if interval < 60 {
-            return "剛剛"
+            return "Just now"
         } else if interval < 3600 {
             let minutes = Int(interval / 60)
-            return "\(minutes) 分鐘前"
+            return "\(minutes) min ago"
         } else if interval < 86400 {
             let hours = Int(interval / 3600)
-            return "\(hours) 小時前"
+            return "\(hours) hr ago"
         } else if interval < 604800 {
             let days = Int(interval / 86400)
-            return "\(days) 天前"
+            return "\(days) days ago"
         } else {
             let formatter = DateFormatter()
             formatter.dateFormat = "MM/dd"

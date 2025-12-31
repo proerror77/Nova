@@ -2,26 +2,27 @@ import Foundation
 import UIKit
 
 @MainActor
-final class ProfileSettingViewModel: ObservableObject {
+@Observable
+final class ProfileSettingViewModel {
     // Form state
-    @Published var firstName = ""
-    @Published var lastName = ""
-    @Published var username = ""
-    @Published var dateOfBirth = ""
-    @Published var gender: Gender = .notSet
-    @Published var profession = ""
-    @Published var identity = ""
-    @Published var location = ""
+    var firstName = ""
+    var lastName = ""
+    var username = ""
+    var dateOfBirth = ""
+    var gender: Gender = .notSet
+    var profession = ""
+    var identity = ""
+    var location = ""
 
     // Avatar
-    @Published var avatarImage: UIImage?
-    @Published var avatarUrl: String?
+    var avatarImage: UIImage?
+    var avatarUrl: String?
 
     // State
-    @Published var isLoading = false
-    @Published var isSaving = false
-    @Published var errorMessage: String?
-    @Published var showSuccessMessage = false
+    var isLoading = false
+    var isSaving = false
+    var errorMessage: String?
+    var showSuccessMessage = false
 
     var validationError: String? {
         if !dateOfBirth.isEmpty && !isValidDate(dateOfBirth) {

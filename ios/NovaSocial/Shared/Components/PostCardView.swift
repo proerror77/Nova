@@ -150,7 +150,7 @@ struct PostCardView: View, Equatable {
             Button {
                 // Share functionality
             } label: {
-                Label("分享", systemImage: "square.and.arrow.up")
+                Label("Share", systemImage: "square.and.arrow.up")
             }
 
             if isOwnPost {
@@ -159,7 +159,7 @@ struct PostCardView: View, Equatable {
                 Button(role: .destructive) {
                     onDelete?()
                 } label: {
-                    Label("刪除貼文", systemImage: "trash")
+                    Label("Delete Post", systemImage: "trash")
                 }
             }
         }

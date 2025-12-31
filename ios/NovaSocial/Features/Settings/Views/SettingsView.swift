@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Binding var currentPage: AppPage
-    @StateObject private var viewModel = SettingsViewModel()
+    @State private var viewModel = SettingsViewModel()
     @EnvironmentObject private var authManager: AuthenticationManager
     @EnvironmentObject private var pushManager: PushNotificationManager
     @State private var isPostAsExpanded = false

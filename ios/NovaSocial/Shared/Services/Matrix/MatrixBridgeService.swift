@@ -1185,30 +1185,51 @@ extension MatrixBridgeService {
     /// Find an existing direct room with a specific user
     /// - Parameter userId: The Matrix user ID to search for
     /// - Returns: The existing conversation info if found, nil otherwise
+    /// - Note: This function checks ALL rooms with 2 members, not just those marked as isDirect,
+    ///         because the m.direct account data may not be synced after logout/login.
     func findExistingDirectRoom(withUserId userId: String) async throws -> MatrixConversationInfo? {
         // Convert userId to Matrix format for comparison
         let matrixUserId = matrixService.convertToMatrixUserId(novaUserId: userId)
+        let currentUserId = matrixService.userId
 
         #if DEBUG
         print("[MatrixBridge] 🔍 Searching for existing DM with: \(userId) (Matrix ID: \(matrixUserId))")
+        print("[MatrixBridge]   Current user: \(currentUserId ?? "nil")")
         #endif
 
         // Get all rooms from Matrix
         let rooms = try await matrixService.getJoinedRooms()
 
-        // Filter to find direct rooms that include this user
-        for room in rooms where room.isDirect {
+        #if DEBUG
+        print("[MatrixBridge]   Total rooms to check: \(rooms.count)")
+        #endif
+
+        // Check ALL rooms that could be DMs (not just isDirect, as that flag may not be synced)
+        // A DM is a room with exactly 2 members: current user and target user
+        for room in rooms {
+            // Skip rooms with more than 2 members (definitely not a DM)
+            // But check rooms with 1-2 members as they could be DMs
+            if room.memberCount > 2 {
+                continue
+            }
+
             // Get members of this room
             do {
                 let members = try await matrixService.getRoomMembers(roomId: room.id)
                 let memberIds = members.map { $0.userId }
 
                 #if DEBUG
-                print("[MatrixBridge]   Checking DM room \(room.id) with members: \(memberIds)")
+                print("[MatrixBridge]   Checking room \(room.id) (isDirect=\(room.isDirect), members=\(memberIds.count)): \(memberIds)")
                 #endif
 
-                // Check if the target user is in this room (compare with Matrix user ID)
-                if memberIds.contains(matrixUserId) {
+                // For a DM, we need:
+                // 1. The target user to be in the room
+                // 2. Either exactly 2 members (normal DM) or the room is marked as isDirect
+                let hasTargetUser = memberIds.contains(matrixUserId)
+                let hasTwoMembers = memberIds.count == 2
+                let isLikelyDM = hasTargetUser && (hasTwoMembers || room.isDirect)
+
+                if isLikelyDM {
                     #if DEBUG
                     print("[MatrixBridge]   ✅ Found existing DM room: \(room.id)")
                     #endif

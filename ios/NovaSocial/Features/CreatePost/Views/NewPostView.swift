@@ -36,11 +36,20 @@ struct NewPostView: View {
             VStack(spacing: 0) {
                 topNavigationBar
 
-                // MARK: - Error Message
+                // MARK: - Error Messages
                 if let error = viewModel.postError {
                     Text(error)
                         .font(.system(size: 12.f))
                         .foregroundColor(.red)
+                        .padding(.horizontal, 16.w)
+                        .padding(.vertical, 8.h)
+                        .background(Color.white)
+                }
+
+                if let enhanceError = viewModel.enhanceError {
+                    Text(enhanceError)
+                        .font(.system(size: 12.f))
+                        .foregroundColor(.orange)
                         .padding(.horizontal, 16.w)
                         .padding(.vertical, 8.h)
                         .background(Color.white)
@@ -122,9 +131,14 @@ struct NewPostView: View {
             )
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
-            if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
-                keyboardHeight = keyboardFrame.height
+            guard let userInfo = notification.userInfo,
+                  let keyboardFrame = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else {
+                #if DEBUG
+                print("[NewPostView] Failed to extract keyboard frame from notification")
+                #endif
+                return
             }
+            keyboardHeight = keyboardFrame.height
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             keyboardHeight = 0
@@ -168,6 +182,9 @@ struct NewPostView: View {
                 // Fallback: auto-dismiss if suggestion is nil to prevent blank sheet
                 Color.clear
                     .onAppear {
+                        #if DEBUG
+                        print("[NewPostView] Warning: showEnhanceSuggestion=true but enhanceSuggestion is nil - state synchronization issue")
+                        #endif
                         viewModel.showEnhanceSuggestion = false
                     }
             }
@@ -668,84 +685,6 @@ struct NewPostView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 20)
-    }
-
-
-    // MARK: - Invite Alice Section
-    private var inviteAliceSection: some View {
-        HStack(spacing: 10.s) {
-            Image("ColourAlice")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 20.s, height: 20.s)
-
-            VStack(alignment: .leading, spacing: 4.s) {
-                Text("Invite alice")
-                    .font(.system(size: 14.f, weight: .medium))
-                    .foregroundColor(.black)
-
-                Text("Add AI in this conversation")
-                    .font(.system(size: 12.f))
-                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-            }
-
-            Spacer()
-
-            CustomSwitch(isOn: $viewModel.inviteAlice)
-        }
-        .padding(.horizontal, 16.w)
-        .padding(.top, 16.h)
-        .padding(.bottom, 16.h)
-    }
-
-    // MARK: - Invite Alice Prompt
-    private var inviteAlicePrompt: some View {
-        HStack(spacing: 5.s) {
-            ZStack {
-                Ellipse()
-                    .foregroundColor(.clear)
-                    .frame(width: 9.6.s, height: 9.6.s)
-                    .background(.white)
-                    .overlay(
-                        Ellipse()
-                            .inset(by: 0.24)
-                            .stroke(Color(red: 0.82, green: 0.13, blue: 0.25), lineWidth: 0.24)
-                    )
-
-                Ellipse()
-                    .foregroundColor(.clear)
-                    .frame(width: 5.28.s, height: 5.28.s)
-                    .background(Color(red: 0.82, green: 0.13, blue: 0.25))
-            }
-            .frame(width: 9.6.s, height: 9.6.s)
-
-            Text("Invite Alice to join the discussion")
-                .font(.system(size: 12.f, weight: .medium))
-                .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
-
-            Spacer()
-        }
-        .padding(.horizontal, 16.w)
-        .padding(.bottom, 20.h)
-    }
-}
-
-// MARK: - Custom Switch Component
-private struct CustomSwitch: View {
-    @Binding var isOn: Bool
-
-    var body: some View {
-        Button(action: {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                isOn.toggle()
-            }
-        }) {
-            Image(isOn ? "Switch-on" : "Switch-off")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 37.w, height: 20.h)
-        }
-        .buttonStyle(.plain)
     }
 }
 

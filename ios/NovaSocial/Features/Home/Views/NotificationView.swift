@@ -2,7 +2,7 @@ import SwiftUI
 
 struct NotificationView: View {
     @Binding var showNotification: Bool
-    @StateObject private var viewModel = NotificationViewModel()
+    @State private var viewModel = NotificationViewModel()
     @State private var showChat = false
     @State private var selectedUserName = ""
     @State private var selectedConversationId = ""

@@ -104,8 +104,8 @@ struct ProfileFollowersView: View {
                 Text("Are you sure you want to unfollow \(user.name)?")
             }
         }
-        .alert("操作失敗", isPresented: $showErrorAlert) {
-            Button("確定", role: .cancel) { }
+        .alert("Operation Failed", isPresented: $showErrorAlert) {
+            Button("OK", role: .cancel) { }
         } message: {
             Text(errorAlertMessage)
         }
@@ -123,7 +123,7 @@ struct ProfileFollowersView: View {
     private func loadFollowers() async {
         guard let currentUserId = authManager.currentUser?.id else {
             await MainActor.run {
-                followersError = "請先登入"
+                followersError = "Please login first"
             }
             return
         }
@@ -168,7 +168,7 @@ struct ProfileFollowersView: View {
             #endif
             await MainActor.run {
                 isLoadingFollowers = false
-                followersError = "載入失敗，請下拉重試"
+                followersError = "Failed to load. Pull down to retry."
             }
         }
     }
@@ -177,7 +177,7 @@ struct ProfileFollowersView: View {
     private func loadFollowing() async {
         guard let currentUserId = authManager.currentUser?.id else {
             await MainActor.run {
-                followingError = "請先登入"
+                followingError = "Please login first"
             }
             return
         }
@@ -222,7 +222,7 @@ struct ProfileFollowersView: View {
             #endif
             await MainActor.run {
                 isLoadingFollowing = false
-                followingError = "載入失敗，請下拉重試"
+                followingError = "Failed to load. Pull down to retry."
             }
         }
     }
@@ -279,7 +279,7 @@ struct ProfileFollowersView: View {
             print("[ProfileFollowers] Failed to toggle follow: \(error)")
             #endif
             await MainActor.run {
-                errorAlertMessage = "操作失敗，請稍後再試"
+                errorAlertMessage = "Operation failed. Please try again later."
                 showErrorAlert = true
             }
         }
@@ -310,7 +310,7 @@ struct ProfileFollowersView: View {
             print("[ProfileFollowers] ERROR: No current user ID")
             #endif
             await MainActor.run {
-                errorAlertMessage = "請先登入"
+                errorAlertMessage = "Please login first"
                 showErrorAlert = true
             }
             return
@@ -347,7 +347,7 @@ struct ProfileFollowersView: View {
             print("[ProfileFollowers] Failed to unfollow: \(error)")
             #endif
             await MainActor.run {
-                errorAlertMessage = "取消關注失敗，請稍後再試"
+                errorAlertMessage = "Failed to unfollow. Please try again later."
                 showErrorAlert = true
             }
         }
@@ -463,7 +463,7 @@ struct ProfileFollowersView: View {
                     Button(action: {
                         Task { await loadFollowers() }
                     }) {
-                        Text("重試")
+                        Text("Retry")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(.white)
                             .padding(.horizontal, 24)
@@ -566,7 +566,7 @@ struct ProfileFollowersView: View {
                     Button(action: {
                         Task { await loadFollowing() }
                     }) {
-                        Text("重試")
+                        Text("Retry")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(.white)
                             .padding(.horizontal, 24)

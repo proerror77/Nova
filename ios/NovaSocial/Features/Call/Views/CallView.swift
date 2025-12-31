@@ -85,10 +85,10 @@ struct CallView: View {
         } message: {
             Text(errorMessage ?? "An error occurred")
         }
-        .alert("錄音錯誤", isPresented: $showRecordingAlert) {
-            Button("確定", role: .cancel) {}
+        .alert("Recording Error", isPresented: $showRecordingAlert) {
+            Button("OK", role: .cancel) {}
         } message: {
-            Text(recordingError ?? "無法開始錄音")
+            Text(recordingError ?? "Unable to start recording")
         }
         .statusBar(hidden: true)
     }
@@ -181,7 +181,7 @@ struct CallView: View {
                     Circle()
                         .fill(Color.red)
                         .frame(width: 10, height: 10)
-                    Text("錄音中")
+                    Text("Recording")
                         .font(.caption)
                         .foregroundColor(.white)
                 }

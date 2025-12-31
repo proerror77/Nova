@@ -13,6 +13,10 @@ class AuthenticationManager: ObservableObject, @unchecked Sendable {
     @Published var currentUser: UserProfile?
     @Published var authToken: String?
 
+    /// Validated invite code stored after successful validation in InviteCodeView
+    /// Used by CreateAccountEmailView for registration
+    @Published var validatedInviteCode: String?
+
     private let identityService = IdentityService()
     private let keychain = KeychainService.shared
 
@@ -89,10 +93,7 @@ class AuthenticationManager: ObservableObject, @unchecked Sendable {
 
             let hasRefreshToken = keychain.exists(.refreshToken)
             #if DEBUG
-            print("[Auth]   ✅ Found saved auth:")
-            print("[Auth]   - Access token: \(token.prefix(20))...")
-            print("[Auth]   - User ID: \(userId)")
-            print("[Auth]   - Has refresh token: \(hasRefreshToken)")
+            print("[Auth]   ✅ Found saved auth (userId: \(userId.prefix(8))..., hasRefreshToken: \(hasRefreshToken))")
             #endif
 
             // Load user profile and proactively refresh token if needed
@@ -140,21 +141,69 @@ class AuthenticationManager: ObservableObject, @unchecked Sendable {
         }
     }
 
-    /// Extract expiration date from JWT token (without validation)
+    /// Extract expiration date from JWT token payload
+    /// - Note: This is for token refresh scheduling only. Server performs authoritative validation.
+    ///         Client-side parsing is purely for UX (proactive refresh before expiry).
+    /// - Parameter token: The JWT token string
+    /// - Returns: The expiration date if successfully parsed, nil otherwise
     private func getTokenExpirationDate(token: String) -> Date? {
+        // JWT structure: header.payload.signature (3 parts separated by dots)
         let parts = token.split(separator: ".")
-        guard parts.count == 3 else { return nil }
-
-        // Decode the payload (second part)
-        var payload = String(parts[1])
-        // Add padding if needed for base64 decoding
-        while payload.count % 4 != 0 {
-            payload += "="
+        guard parts.count == 3 else {
+            #if DEBUG
+            print("[Auth] Invalid JWT structure: expected 3 parts, got \(parts.count)")
+            #endif
+            return nil
         }
 
-        guard let data = Data(base64Encoded: payload),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let exp = json["exp"] as? TimeInterval else {
+        // Decode the payload (second part) using URL-safe base64
+        var payload = String(parts[1])
+
+        // Convert URL-safe base64 to standard base64
+        // JWT uses base64url encoding: '-' instead of '+', '_' instead of '/'
+        payload = payload
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+
+        // Add padding if needed for base64 decoding
+        let paddingLength = (4 - payload.count % 4) % 4
+        payload += String(repeating: "=", count: paddingLength)
+
+        guard let data = Data(base64Encoded: payload) else {
+            #if DEBUG
+            print("[Auth] Failed to decode JWT payload from base64")
+            #endif
+            return nil
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            #if DEBUG
+            print("[Auth] Failed to parse JWT payload as JSON")
+            #endif
+            return nil
+        }
+
+        // Extract expiration claim - handle both Int and Double representations
+        let exp: TimeInterval
+        if let expDouble = json["exp"] as? TimeInterval {
+            exp = expDouble
+        } else if let expInt = json["exp"] as? Int {
+            exp = TimeInterval(expInt)
+        } else if let expInt64 = json["exp"] as? Int64 {
+            exp = TimeInterval(expInt64)
+        } else {
+            #if DEBUG
+            print("[Auth] JWT payload missing or invalid 'exp' claim")
+            #endif
+            return nil
+        }
+
+        // Sanity check: expiration should be a reasonable Unix timestamp (after year 2020)
+        let minValidTimestamp: TimeInterval = 1577836800 // 2020-01-01
+        guard exp > minValidTimestamp else {
+            #if DEBUG
+            print("[Auth] JWT 'exp' claim has invalid timestamp: \(exp)")
+            #endif
             return nil
         }
 
@@ -233,7 +282,7 @@ class AuthenticationManager: ObservableObject, @unchecked Sendable {
     // MARK: - Registration
 
     /// Register new user
-    func register(username: String, email: String, password: String, displayName: String, inviteCode: String = "NOVA2025TEST") async throws -> UserProfile {
+    func register(username: String, email: String, password: String, displayName: String, inviteCode: String) async throws -> UserProfile {
         let response = try await identityService.register(
             username: username,
             email: email,
@@ -617,7 +666,6 @@ class AuthenticationManager: ObservableObject, @unchecked Sendable {
 
         #if DEBUG
         print("[Auth] 🔄 Attempting token refresh...")
-        print("[Auth]   - Refresh token length: \(storedRefreshToken.count) chars")
         #endif
 
         // Create and store the refresh task
@@ -829,16 +877,13 @@ class AuthenticationManager: ObservableObject, @unchecked Sendable {
         let userIdSaved = keychain.save(user.id, for: .userId)
 
         #if DEBUG
-        print("[Auth] 💾 Saving auth to Keychain:")
-        print("[Auth]   - Access token saved: \(tokenSaved)")
-        print("[Auth]   - User ID saved: \(userIdSaved)")
+        print("[Auth] 💾 Saving auth to Keychain (token: \(tokenSaved), userId: \(userIdSaved))")
         #endif
 
         if let refreshToken = refreshToken {
             let refreshSaved = keychain.save(refreshToken, for: .refreshToken)
             #if DEBUG
             print("[Auth]   - Refresh token saved: \(refreshSaved)")
-            print("[Auth]   - Refresh token length: \(refreshToken.count) chars")
             #endif
         } else {
             #if DEBUG

@@ -13,7 +13,6 @@ struct CreateAccountEmailView: View {
     @State private var password = ""
     @State private var confirmPassword = ""
     @State private var displayName = ""
-    @State private var inviteCode = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showPassword = false
@@ -421,12 +420,13 @@ struct CreateAccountEmailView: View {
 
         let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedInviteCode = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Require invite code - no hardcoded fallback for security
-        guard !trimmedInviteCode.isEmpty else {
-            errorMessage = "Please enter an invite code"
+        // Get validated invite code from AuthenticationManager (set by InviteCodeView)
+        guard let validatedInviteCode = authManager.validatedInviteCode, !validatedInviteCode.isEmpty else {
+            errorMessage = "Please enter an invite code first"
             isLoading = false
+            // Navigate back to invite code page
+            currentPage = .inviteCode
             return
         }
 
@@ -434,7 +434,7 @@ struct CreateAccountEmailView: View {
         print("[CreateAccountEmailView] Starting registration")
         print("[CreateAccountEmailView] Username: \(trimmedUsername)")
         print("[CreateAccountEmailView] Email: \(trimmedEmail)")
-        print("[CreateAccountEmailView] Invite Code: \(trimmedInviteCode)")
+        print("[CreateAccountEmailView] Invite Code: \(validatedInviteCode)")
         #endif
 
         do {
@@ -443,8 +443,11 @@ struct CreateAccountEmailView: View {
                 email: trimmedEmail,
                 password: password,
                 displayName: displayName.isEmpty ? username : displayName,
-                inviteCode: trimmedInviteCode
+                inviteCode: validatedInviteCode
             )
+
+            // Clear the validated invite code after successful registration
+            authManager.validatedInviteCode = nil
 
             await uploadAvatarIfNeeded(userId: user.id)
             #if DEBUG

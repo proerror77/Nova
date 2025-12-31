@@ -109,10 +109,10 @@ struct VoiceMessageOptionsView: View {
 
             // 操作按鈕
             VStack(spacing: 12) {
-                // 發送語音
+                // Send voice
                 OptionButton(
                     icon: "mic.fill",
-                    title: "發送語音",
+                    title: "Send Voice",
                     subtitle: formatDuration(duration),
                     color: DesignTokens.accentColor,
                     action: {
@@ -121,11 +121,11 @@ struct VoiceMessageOptionsView: View {
                     }
                 )
 
-                // 轉換成文字
+                // Convert to text
                 OptionButton(
                     icon: "text.bubble.fill",
-                    title: isConverting ? "正在轉換..." : (recognizedText.isEmpty ? "轉換成文字" : "發送文字"),
-                    subtitle: isConverting ? nil : (recognizedText.isEmpty ? "使用語音識別" : recognizedText),
+                    title: isConverting ? "Converting..." : (recognizedText.isEmpty ? "Convert to Text" : "Send Text"),
+                    subtitle: isConverting ? nil : (recognizedText.isEmpty ? "Use speech recognition" : recognizedText),
                     color: .blue,
                     isLoading: isConverting,
                     action: {
@@ -145,7 +145,7 @@ struct VoiceMessageOptionsView: View {
                     onCancel()
                     isPresented = false
                 }) {
-                    Text("取消")
+                    Text("Cancel")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.red)
                         .frame(maxWidth: .infinity)
@@ -170,14 +170,14 @@ struct VoiceMessageOptionsView: View {
     private var textPreviewSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(isEditingText ? "編輯文字" : "識別結果")
+                Text(isEditingText ? "Edit Text" : "Recognition Result")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(DesignTokens.textSecondary)
 
                 Spacer()
 
                 if !recognizedText.isEmpty && !isConverting {
-                    Button(isEditingText ? "完成" : "編輯") {
+                    Button(isEditingText ? "Done" : "Edit") {
                         if isEditingText {
                             // 完成編輯，保存文字
                             recognizedText = editableText
@@ -197,13 +197,13 @@ struct VoiceMessageOptionsView: View {
                 HStack(spacing: 8) {
                     ProgressView()
                         .scaleEffect(0.8)
-                    Text("正在識別語音...")
+                    Text("Recognizing speech...")
                         .font(.system(size: 14))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
                 .padding(.vertical, 8)
             } else if recognizedText.isEmpty && !isEditingText {
-                Text("無法識別語音內容")
+                Text("Unable to recognize speech")
                     .font(.system(size: 14))
                     .foregroundColor(.orange)
                     .padding(.vertical, 8)

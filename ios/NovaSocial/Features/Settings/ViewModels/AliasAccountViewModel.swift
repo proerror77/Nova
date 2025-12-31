@@ -5,30 +5,31 @@ import UIKit
 
 /// ViewModel for managing alias account (子账户) profile
 @MainActor
-final class AliasAccountViewModel: ObservableObject {
+@Observable
+final class AliasAccountViewModel {
     // MARK: - Form State
 
-    @Published var aliasName = ""
-    @Published var dateOfBirth = ""
-    @Published var gender: Gender = .notSet
-    @Published var profession = ""
-    @Published var location = ""
+    var aliasName = ""
+    var dateOfBirth = ""
+    var gender: Gender = .notSet
+    var profession = ""
+    var location = ""
 
     // Avatar
-    @Published var avatarImage: UIImage?
-    @Published var avatarUrl: String?
+    var avatarImage: UIImage?
+    var avatarUrl: String?
 
     // MARK: - UI State
 
-    @Published var isLoading = false
-    @Published var isSaving = false
-    @Published var errorMessage: String?
-    @Published var showSuccessMessage = false
+    var isLoading = false
+    var isSaving = false
+    var errorMessage: String?
+    var showSuccessMessage = false
 
     // MARK: - Account State
 
     /// Current alias account being edited (nil if creating new)
-    @Published private(set) var currentAliasAccount: Account?
+    private(set) var currentAliasAccount: Account?
 
     /// Whether we're editing an existing alias or creating a new one
     var isEditing: Bool {

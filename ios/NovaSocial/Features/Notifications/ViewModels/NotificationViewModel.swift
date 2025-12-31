@@ -4,20 +4,21 @@ import SwiftUI
 // MARK: - Notification ViewModel
 
 @MainActor
-class NotificationViewModel: ObservableObject {
-    // MARK: - Published Properties
+@Observable
+final class NotificationViewModel {
+    // MARK: - Observable Properties
 
-    @Published var notifications: [NotificationItem] = [] {
+    var notifications: [NotificationItem] = [] {
         didSet {
             // Invalidate cached groups when notifications change
             invalidateGroupedCache()
         }
     }
-    @Published var isLoading = false
-    @Published var isLoadingMore = false
-    @Published var error: String?
-    @Published var hasMore = true
-    @Published var unreadCount = 0
+    var isLoading = false
+    var isLoadingMore = false
+    var error: String?
+    var hasMore = true
+    var unreadCount = 0
 
     // MARK: - Cached Grouped Notifications
 

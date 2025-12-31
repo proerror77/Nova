@@ -871,11 +871,7 @@ final class MatrixService: MatrixServiceProtocol {
 
     func login(novaUserId: String, accessToken: String, deviceId providedDeviceId: String? = nil) async throws {
         #if DEBUG
-        print("[MatrixService] 🔐 login() called with:")
-        print("[MatrixService]   - novaUserId: \(novaUserId)")
-        print("[MatrixService]   - accessToken length: \(accessToken.count) chars")
-        print("[MatrixService]   - accessToken prefix: \(String(accessToken.prefix(20)))...")
-        print("[MatrixService]   - providedDeviceId: \(providedDeviceId ?? "nil")")
+        print("[MatrixService] 🔐 login() called (userId: \(novaUserId.prefix(8))..., deviceId: \(providedDeviceId ?? "nil"))")
         #endif
 
         // Reset sync recovery flag for new login

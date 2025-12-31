@@ -111,7 +111,13 @@ class APIClient {
         // Use HTTP/2 when available (default in modern iOS, but explicit)
         config.multipathServiceType = .none  // Multipath disabled for better HTTP/2 behavior
 
-        self.session = URLSession(configuration: config)
+        // Use certificate pinning for enhanced security
+        // Note: Pinning is configured in CertificatePinningManager with domain-specific hashes
+        if APIFeatureFlags.enableCertificatePinning {
+            self.session = URLSession.withPinning(configuration: config)
+        } else {
+            self.session = URLSession(configuration: config)
+        }
     }
 
     // MARK: - Request Key Generation (生成請求唯一鍵)

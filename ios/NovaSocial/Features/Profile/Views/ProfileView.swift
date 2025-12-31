@@ -386,17 +386,17 @@ struct ProfileView: View {
                     ProgressView()
                         .tint(.white)
                         .scaleEffect(1.2)
-                    Text(isUploadingAvatar ? "上傳頭像中..." : "處理背景圖...")
+                    Text(isUploadingAvatar ? "Uploading avatar..." : "Processing background...")
                         .font(.system(size: 14.f))
                         .foregroundColor(.white)
                 }
             }
         }
-        .alert("刪除貼文", isPresented: $showDeleteConfirmation) {
-            Button("取消", role: .cancel) {
+        .alert("Delete Post", isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {
                 postToDelete = nil
             }
-            Button("刪除", role: .destructive) {
+            Button("Delete", role: .destructive) {
                 if let post = postToDelete {
                     Task {
                         await deletePost(post)
@@ -404,25 +404,25 @@ struct ProfileView: View {
                 }
             }
         } message: {
-            Text("確定要刪除這則貼文嗎？此操作無法撤銷。")
+            Text("Are you sure you want to delete this post? This action cannot be undone.")
         }
-        .alert("刪除失敗", isPresented: $showDeleteError) {
-            Button("確定", role: .cancel) {
+        .alert("Delete Failed", isPresented: $showDeleteError) {
+            Button("OK", role: .cancel) {
                 deleteErrorMessage = nil
             }
         } message: {
-            Text(deleteErrorMessage ?? "無法刪除貼文，請稍後再試")
+            Text(deleteErrorMessage ?? "Failed to delete post. Please try again later.")
         }
-        // MARK: - 相机权限提示
-        .alert("需要相机权限", isPresented: $showCameraPermissionAlert) {
-            Button("打开设置") {
+        // MARK: - Camera Permission Alert
+        .alert("Camera Access Required", isPresented: $showCameraPermissionAlert) {
+            Button("Open Settings") {
                 if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
                     UIApplication.shared.open(settingsUrl)
                 }
             }
-            Button("取消", role: .cancel) { }
+            Button("Cancel", role: .cancel) { }
         } message: {
-            Text("请在设置中允许访问相机以拍摄照片。")
+            Text("Please allow camera access in Settings to take photos.")
         }
         .overlay {
             if isDeleting {
@@ -918,7 +918,7 @@ struct ProfileView: View {
                         .font(.system(size: 14.f))
                         .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
-                    TextField("搜索帖子內容...", text: $searchText)
+                    TextField("Search posts...", text: $searchText)
                         .font(.system(size: 14.f))
                         .foregroundColor(.black)
                         .textFieldStyle(.plain)
@@ -1030,10 +1030,10 @@ struct ProfileView: View {
                 .font(.system(size: 48.f))
                 .foregroundColor(.gray)
                 .symbolEffect(.pulse, options: .repeating)
-            Text("找不到相關帖子")
+            Text("No matching posts found")
                 .font(.system(size: 16.f, weight: .medium))
                 .foregroundColor(.gray)
-            Text("試試其他關鍵詞")
+            Text("Try different keywords")
                 .font(.system(size: 14.f))
                 .foregroundColor(.gray.opacity(0.7))
         }
@@ -1094,7 +1094,7 @@ struct ProfileView: View {
             #endif
             // 顯示錯誤提示給用戶
             await MainActor.run {
-                deleteErrorMessage = "無法刪除貼文，請檢查網路連線後重試"
+                deleteErrorMessage = "Failed to delete post. Please check your connection and try again."
                 showDeleteError = true
             }
         }

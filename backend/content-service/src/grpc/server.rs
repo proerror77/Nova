@@ -8,6 +8,8 @@ use base64::Engine;
 use grpc_clients::nova::content_service::v2::content_service_server::{
     ContentService, ContentServiceServer,
 };
+use grpc_clients::nova::feed_service::v2::InvalidateFeedCacheRequest;
+use grpc_clients::GrpcClientPool;
 use grpc_clients::nova::content_service::v2::{
     Channel, ContentStatus, CreatePostRequest, CreatePostResponse, DeletePostRequest,
     DeletePostResponse, GetChannelRequest, GetChannelResponse, GetPostRequest, GetPostResponse,
@@ -34,6 +36,7 @@ pub struct ContentServiceImpl {
     pub feed_cache: Arc<FeedCache>,
     pub feed_ranking: Arc<FeedRankingService>,
     pub auth_client: Arc<AuthClient>,
+    pub grpc_pool: Arc<GrpcClientPool>,
 }
 
 fn map_status(status: &str) -> i32 {
@@ -156,6 +159,23 @@ impl ContentService for ContentServiceImpl {
                 tracing::error!("create_post failed: {}", e);
                 Status::internal("failed to create post")
             })?;
+
+        // Invalidate author's feed cache so they see their new post immediately
+        // This is fire-and-forget - don't fail the request if cache invalidation fails
+        let mut feed_client = self.grpc_pool.feed();
+        let invalidate_req = InvalidateFeedCacheRequest {
+            user_id: author_id.to_string(),
+            event_type: "new_post".to_string(),
+        };
+        if let Err(e) = feed_client.invalidate_feed_cache(invalidate_req).await {
+            tracing::warn!(
+                author_id = %author_id,
+                error = %e,
+                "Failed to invalidate feed cache (will expire via TTL)"
+            );
+        } else {
+            tracing::debug!(author_id = %author_id, "Feed cache invalidated for post author");
+        }
 
         guard.complete("0");
         Ok(Response::new(CreatePostResponse {
@@ -994,6 +1014,7 @@ pub async fn start_grpc_server(
     feed_cache: Arc<FeedCache>,
     feed_ranking: Arc<FeedRankingService>,
     auth_client: Arc<AuthClient>,
+    grpc_pool: Arc<GrpcClientPool>,
     mut shutdown: broadcast::Receiver<()>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let svc = ContentServiceImpl {
@@ -1002,6 +1023,7 @@ pub async fn start_grpc_server(
         feed_cache,
         feed_ranking,
         auth_client,
+        grpc_pool,
     };
 
     let mut server_builder = Server::builder();
