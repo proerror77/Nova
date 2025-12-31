@@ -11,8 +11,11 @@ struct ConversationPreview: Identifiable {
     let hasUnread: Bool
     let isEncrypted: Bool  // E2EE status indicator
     let avatarUrl: String?  // 头像URL（可选）
+    let isGroup: Bool       // 是否為群組聊天
+    let memberAvatars: [String?]  // 群組成員頭像URLs (用於堆疊頭像)
+    let memberNames: [String]     // 群組成員名稱 (用於首字母占位符)
 
-    init(id: String, userName: String, lastMessage: String, time: String, unreadCount: Int, hasUnread: Bool, isEncrypted: Bool, avatarUrl: String? = nil) {
+    init(id: String, userName: String, lastMessage: String, time: String, unreadCount: Int, hasUnread: Bool, isEncrypted: Bool, avatarUrl: String? = nil, isGroup: Bool = false, memberAvatars: [String?] = [], memberNames: [String] = []) {
         self.id = id
         self.userName = userName
         self.lastMessage = lastMessage
@@ -21,6 +24,9 @@ struct ConversationPreview: Identifiable {
         self.hasUnread = hasUnread
         self.isEncrypted = isEncrypted
         self.avatarUrl = avatarUrl
+        self.isGroup = isGroup
+        self.memberAvatars = memberAvatars
+        self.memberNames = memberNames
     }
 }
 
@@ -264,7 +270,10 @@ struct MessageView: View {
                     unreadCount: conv.unreadCount,
                     hasUnread: conv.unreadCount > 0,
                     isEncrypted: conv.isEncrypted,
-                    avatarUrl: conv.avatarURL
+                    avatarUrl: conv.avatarURL,
+                    isGroup: !conv.isDirect,
+                    memberAvatars: conv.memberAvatars,
+                    memberNames: conv.memberNames
                 )
             }
 
@@ -837,6 +846,9 @@ struct MessageView: View {
                                     isEncrypted: convo.isEncrypted,
                                     userId: convo.id,
                                     avatarUrl: convo.avatarUrl,
+                                    isGroup: convo.isGroup,
+                                    memberAvatars: convo.memberAvatars,
+                                    memberNames: convo.memberNames,
                                     onAvatarTapped: { userId in
                                         if convo.userName.lowercased() != "alice" {
                                             selectedUserId = userId
@@ -1008,6 +1020,9 @@ struct MessageListItem: View {
     var isEncrypted: Bool = false  // E2EE status indicator
     var userId: String = ""  // 用户ID（用于跳转用户主页）
     var avatarUrl: String? = nil  // 头像URL（用于显示真实头像）
+    var isGroup: Bool = false     // 是否為群組聊天
+    var memberAvatars: [String?] = []  // 群組成員頭像URLs
+    var memberNames: [String] = []     // 群組成員名稱
     var onAvatarTapped: ((String) -> Void)?  // 点击头像回调
 
     var body: some View {
@@ -1020,7 +1035,15 @@ struct MessageListItem: View {
                         .scaledToFill()
                         .frame(width: 50.s, height: 50.s)
                         .clipShape(Circle())
+                } else if isGroup {
+                    // 群組聊天：使用堆疊頭像
+                    StackedAvatarView(
+                        avatarUrls: memberAvatars,
+                        names: memberNames,
+                        size: 50.s
+                    )
                 } else {
+                    // DM：使用單個頭像
                     AvatarView(image: nil, url: avatarUrl, size: 50.s, name: name)
                 }
             }

@@ -181,11 +181,23 @@ struct HomeView: View {
                         feedViewModel.updateCommentCount(postId: postId, count: actualCount)
                     }
                 )
+            } else {
+                // Fallback: auto-dismiss if post is nil to prevent blank sheet
+                Color.clear
+                    .onAppear {
+                        showComments = false
+                    }
             }
         }
         .fullScreenCover(isPresented: $showUserProfile) {
             if let userId = selectedUserId {
                 UserProfileView(showUserProfile: $showUserProfile, userId: userId)
+            } else {
+                // Fallback: auto-dismiss if userId is nil to prevent blank screen
+                Color.clear
+                    .onAppear {
+                        showUserProfile = false
+                    }
             }
         }
         // System PhotosPicker - user selects 1-5 photos, taps blue checkmark to confirm

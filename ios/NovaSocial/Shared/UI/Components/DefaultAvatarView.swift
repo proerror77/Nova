@@ -97,6 +97,107 @@ struct AvatarView: View {
     }
 }
 
+// MARK: - Stacked Avatar View (for group chats)
+
+/// 堆疊頭像視圖 - 用於群組聊天顯示多個成員頭像
+struct StackedAvatarView: View {
+    let avatarUrls: [String?]  // 成員頭像URLs (最多顯示3個)
+    let names: [String]        // 成員名稱 (用於顯示首字母占位符)
+    let size: CGFloat          // 主要頭像大小
+
+    /// 小頭像的縮放比例
+    private let smallScale: CGFloat = 0.6
+
+    /// 計算偏移量
+    private var offset: CGFloat {
+        size * 0.35
+    }
+
+    var body: some View {
+        let displayCount = min(avatarUrls.count, 3)
+        let smallSize = size * smallScale
+
+        ZStack {
+            // 根據成員數量顯示不同佈局
+            if displayCount >= 3 {
+                // 3個頭像：右下、左下、上中
+                AvatarView(
+                    image: nil,
+                    url: avatarUrls.indices.contains(2) ? avatarUrls[2] : nil,
+                    size: smallSize,
+                    name: names.indices.contains(2) ? names[2] : nil
+                )
+                .offset(x: offset * 0.5, y: offset * 0.5)
+
+                AvatarView(
+                    image: nil,
+                    url: avatarUrls.indices.contains(1) ? avatarUrls[1] : nil,
+                    size: smallSize,
+                    name: names.indices.contains(1) ? names[1] : nil
+                )
+                .offset(x: -offset * 0.5, y: offset * 0.5)
+
+                AvatarView(
+                    image: nil,
+                    url: avatarUrls.indices.contains(0) ? avatarUrls[0] : nil,
+                    size: smallSize,
+                    name: names.indices.contains(0) ? names[0] : nil
+                )
+                .offset(x: 0, y: -offset * 0.3)
+            } else if displayCount == 2 {
+                // 2個頭像：右下、左上
+                AvatarView(
+                    image: nil,
+                    url: avatarUrls.indices.contains(1) ? avatarUrls[1] : nil,
+                    size: smallSize,
+                    name: names.indices.contains(1) ? names[1] : nil
+                )
+                .offset(x: offset * 0.4, y: offset * 0.4)
+
+                AvatarView(
+                    image: nil,
+                    url: avatarUrls.indices.contains(0) ? avatarUrls[0] : nil,
+                    size: smallSize,
+                    name: names.indices.contains(0) ? names[0] : nil
+                )
+                .offset(x: -offset * 0.4, y: -offset * 0.4)
+            } else if displayCount == 1 {
+                // 只有1個頭像：顯示單個
+                AvatarView(
+                    image: nil,
+                    url: avatarUrls.first ?? nil,
+                    size: size,
+                    name: names.first
+                )
+            } else {
+                // 沒有頭像：顯示群組圖標
+                DefaultGroupAvatarView(size: size)
+            }
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+/// 默認群組頭像視圖 - 無成員時顯示
+struct DefaultGroupAvatarView: View {
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color(red: 0.20, green: 0.60, blue: 0.86))  // 藍色背景
+                .frame(width: size, height: size)
+
+            Image(systemName: "person.2.fill")
+                .resizable()
+                .scaledToFit()
+                .frame(width: size * 0.5, height: size * 0.5)
+                .foregroundColor(.white)
+        }
+        .clipShape(Circle())
+    }
+}
+
 // MARK: - Previews
 
 #Preview("Avatar - Default") {
@@ -145,4 +246,30 @@ struct AvatarView: View {
 #Preview("AvatarView - Dark Mode") {
     AvatarView(image: nil, url: nil, size: 100, name: "Test")
         .preferredColorScheme(.dark)
+}
+
+#Preview("StackedAvatarView - 3 Members") {
+    StackedAvatarView(
+        avatarUrls: [nil, nil, nil],
+        names: ["Alice", "Bob", "Charlie"],
+        size: 60
+    )
+    .padding()
+    .background(Color.gray.opacity(0.3))
+}
+
+#Preview("StackedAvatarView - 2 Members") {
+    StackedAvatarView(
+        avatarUrls: [nil, nil],
+        names: ["Alice", "Bob"],
+        size: 60
+    )
+    .padding()
+    .background(Color.gray.opacity(0.3))
+}
+
+#Preview("DefaultGroupAvatarView") {
+    DefaultGroupAvatarView(size: 60)
+        .padding()
+        .background(Color.gray.opacity(0.3))
 }

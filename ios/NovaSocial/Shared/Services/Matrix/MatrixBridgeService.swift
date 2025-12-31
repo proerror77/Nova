@@ -905,6 +905,8 @@ extension MatrixBridgeService {
         let isDirect: Bool          // 1:1 vs group
         let avatarURL: String?      // Avatar URL
         let memberCount: Int        // Number of members
+        let memberAvatars: [String?]  // Member avatar URLs (for stacked avatars in groups)
+        let memberNames: [String]     // Member names (for initials fallback)
     }
 
     /// Get all Matrix rooms as conversation info for the message list
@@ -939,13 +941,24 @@ extension MatrixBridgeService {
                 return name.hasPrefix("!") && name.contains(":")
             }
 
+            // Helper function to check if name looks like a member count fallback (e.g., "2 people", "3 people")
+            func looksLikeMemberCountFallback(_ name: String) -> Bool {
+                let pattern = #"^\d+\s+people$"#
+                return name.range(of: pattern, options: .regularExpression) != nil
+            }
+
             if room.isDirect {
                 let initialName = room.name ?? ""
                 displayName = initialName.isEmpty ? "Direct Message" : initialName
                 avatarURL = room.avatarURL
 
-                // Check if we need to enrich the display name (either empty or looks like a room ID)
-                let needsEnrichment = displayName == "Direct Message" || looksLikeRoomId(displayName)
+                // Check if we need to enrich the display name
+                // - Empty/default name
+                // - Looks like a Matrix room ID
+                // - Looks like a member count fallback (e.g., "2 people")
+                let needsEnrichment = displayName == "Direct Message" ||
+                                      looksLikeRoomId(displayName) ||
+                                      looksLikeMemberCountFallback(displayName)
 
                 // Try to enrich from Nova conversation + identity profiles.
                 // This fixes cases where Matrix room display names/avatars are not yet configured.
@@ -968,25 +981,45 @@ extension MatrixBridgeService {
                         }
                     }
 
-                    // If still showing room ID, try to extract other user from Matrix ID
-                    if looksLikeRoomId(displayName) {
-                        // Last resort: try to look up the user directly via UserService
-                        // Extract potential user ID from last message sender
-                        if let lastSenderId = room.lastMessage?.senderId {
-                            if let novaUserId = matrixService.convertToNovaUserId(matrixUserId: lastSenderId),
-                               novaUserId != currentUserId {
-                                if let userProfile = try? await UserService.shared.getUser(userId: novaUserId) {
-                                    displayName = userProfile.displayName ?? userProfile.username
+                    // If still showing room ID or member count fallback, try to get other user from Matrix room members
+                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) {
+                        // Try to get the other user directly from Matrix room members
+                        do {
+                            let members = try await matrixService.getRoomMembers(roomId: room.id)
+                            // Find the other member (not current user)
+                            if let otherMember = members.first(where: { member in
+                                // Check if this is not the current user
+                                if let novaId = matrixService.convertToNovaUserId(matrixUserId: member.userId) {
+                                    return novaId != currentUserId
+                                }
+                                return !member.userId.contains(currentUserId)
+                            }) {
+                                // Use their display name if available
+                                if let memberDisplayName = otherMember.displayName, !memberDisplayName.isEmpty {
+                                    displayName = memberDisplayName
                                     if avatarURL == nil || avatarURL?.isEmpty == true {
-                                        avatarURL = userProfile.avatarUrl
+                                        avatarURL = otherMember.avatarUrl
+                                    }
+                                } else {
+                                    // Try to look up via Nova UserService
+                                    if let novaUserId = matrixService.convertToNovaUserId(matrixUserId: otherMember.userId),
+                                       let userProfile = try? await UserService.shared.getUser(userId: novaUserId) {
+                                        displayName = userProfile.displayName ?? userProfile.username
+                                        if avatarURL == nil || avatarURL?.isEmpty == true {
+                                            avatarURL = userProfile.avatarUrl
+                                        }
                                     }
                                 }
                             }
+                        } catch {
+                            #if DEBUG
+                            print("[MatrixBridge]   ⚠️ Failed to get room members for DM enrichment: \(error)")
+                            #endif
                         }
                     }
 
-                    // Final fallback - just show "Chat" instead of ugly room ID
-                    if looksLikeRoomId(displayName) {
+                    // Final fallback - just show "Chat" instead of ugly room ID or member count
+                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) {
                         displayName = "Chat"
                     }
                 }
@@ -1000,6 +1033,26 @@ extension MatrixBridgeService {
                 }
             }
 
+            // Fetch member avatars for group chats (for stacked avatar display)
+            var memberAvatars: [String?] = []
+            var memberNames: [String] = []
+
+            if !room.isDirect {
+                // For groups, fetch first 3 members (excluding current user) for stacked avatars
+                do {
+                    let members = try await matrixService.getRoomMembers(roomId: room.id)
+                    let otherMembers = members.filter { $0.userId != currentUserId }.prefix(3)
+                    for member in otherMembers {
+                        memberAvatars.append(member.avatarUrl)
+                        memberNames.append(member.displayName ?? member.userId)
+                    }
+                } catch {
+                    #if DEBUG
+                    print("[MatrixBridge]   ⚠️ Failed to get members for stacked avatars in room \(room.id): \(error)")
+                    #endif
+                }
+            }
+
             conversations.append(
                 MatrixConversationInfo(
                     id: room.id,
@@ -1010,7 +1063,9 @@ extension MatrixBridgeService {
                     isEncrypted: room.isEncrypted,
                     isDirect: room.isDirect,
                     avatarURL: avatarURL,
-                    memberCount: room.memberCount
+                    memberCount: room.memberCount,
+                    memberAvatars: memberAvatars,
+                    memberNames: memberNames
                 )
             )
         }
@@ -1067,7 +1122,9 @@ extension MatrixBridgeService {
                         isEncrypted: room.isEncrypted,
                         isDirect: true,
                         avatarURL: room.avatarURL,
-                        memberCount: room.memberCount
+                        memberCount: room.memberCount,
+                        memberAvatars: [],
+                        memberNames: []
                     )
                 }
             } catch {
@@ -1151,7 +1208,9 @@ extension MatrixBridgeService {
             isEncrypted: isPrivate,
             isDirect: true,
             avatarURL: nil,
-            memberCount: 2
+            memberCount: 2,
+            memberAvatars: [],
+            memberNames: []
         )
     }
 
@@ -1202,7 +1261,9 @@ extension MatrixBridgeService {
             isEncrypted: isPrivate,
             isDirect: false,
             avatarURL: nil,
-            memberCount: userIds.count + 1  // Including current user
+            memberCount: userIds.count + 1,  // Including current user
+            memberAvatars: [],  // Will be populated on next refresh
+            memberNames: []
         )
     }
 }
