@@ -166,8 +166,17 @@ async def entrypoint(ctx: JobContext):
     logger.info(f"Connecting to room: {ctx.room.name}")
 
     # 配置 xAI Realtime Model
+    # turn_detection 配置可優化語音檢測，減少延遲和斷斷續續
     llm = xai.realtime.RealtimeModel(
         voice="Ara",  # 使用 Ara 女聲
+        turn_detection={
+            "type": "server_vad",
+            "threshold": 0.4,           # VAD 閾值 (0-1)，較低更敏感
+            "prefix_padding_ms": 100,   # 語音開始前的填充時間（減少延遲）
+            "silence_duration_ms": 300, # 靜音持續時間檢測語音結束（減少延遲）
+            "create_response": True,    # 自動創建回應
+            "interrupt_response": True, # 允許中斷回應 (barge-in)
+        },
     )
 
     # 配置工具列表
@@ -321,13 +330,21 @@ async def entrypoint(ctx: JobContext):
         agent=AliceAgent(),
         room=ctx.room,
         room_options=room_io.RoomOptions(
+            # 音訊輸入配置
             audio_input=room_io.AudioInputOptions(
+                sample_rate=24000,      # 與 xAI API 匹配
+                num_channels=1,         # 單聲道
                 # 噪音消除 - 根據參與者類型選擇
                 noise_cancellation=lambda params: (
                     noise_cancellation.BVCTelephony()
                     if params.participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP
                     else noise_cancellation.BVC()
                 ),
+            ),
+            # 音訊輸出配置 - 優化音質和穩定性
+            audio_output=room_io.AudioOutputOptions(
+                sample_rate=24000,      # 與 xAI API 匹配
+                num_channels=1,         # 單聲道
             ),
         ),
     )

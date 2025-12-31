@@ -178,8 +178,9 @@ final class LiveKitVoiceService: NSObject {
             try audioSession.setPreferredIOBufferDuration(0.02)
             #endif
 
-            // 設置採樣率
-            try audioSession.setPreferredSampleRate(48000)
+            // 設置採樣率 - 與後端 xAI API 匹配 (24000 Hz)
+            // 使用相同採樣率避免重採樣導致的音質損失
+            try audioSession.setPreferredSampleRate(24000)
 
             try audioSession.setActive(true)
             liveKitLog("Audio session configured: bufferDuration=\(audioSession.ioBufferDuration), sampleRate=\(audioSession.sampleRate)")
