@@ -2,6 +2,7 @@ use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use clickhouse::Client as ClickHouseClient;
 use clickhouse::Row;
 use prometheus::{IntCounter, IntGauge};
+use reqwest::Client as HttpClient;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::message::Message;
@@ -196,20 +197,20 @@ pub struct ConsumerStatus {
 }
 
 /// Row struct for posts_cdc table - used for type-safe ClickHouse inserts
+/// Uses String for UUIDs and u32 for DateTime to avoid clickhouse-rs serialization issues
+/// Note: deleted_at uses Option<u32> for Nullable(DateTime64) compatibility
 #[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct PostsCdcRow {
-    pub id: Uuid,
-    pub user_id: Uuid,
+    pub id: String,
+    pub user_id: String,
     pub content: String,
     pub media_key: String,
     pub media_type: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deleted_at: Option<DateTime<Utc>>,
-    pub is_deleted: u8,
+    pub created_at: u32,
+    pub updated_at: u32,
+    pub deleted_at: Option<u32>,
     pub cdc_operation: i8,
-    pub cdc_timestamp: DateTime<Utc>,
-    pub media_url: Option<String>,
+    pub cdc_timestamp: u32,
 }
 
 /// Row struct for follows_cdc table - used for type-safe ClickHouse inserts
@@ -334,7 +335,8 @@ const CRITICAL_ERROR_THRESHOLD: u32 = 10;
 pub struct CdcConsumer {
     consumer: StreamConsumer,
     ch_client: ClickHouseClient,
-    #[allow(dead_code)]
+    /// HTTP client for raw SQL execution (bypasses clickhouse-rs SQL parsing)
+    http_client: HttpClient,
     config: CdcConsumerConfig,
     semaphore: Arc<Semaphore>,
     /// Metrics for monitoring consumer health and performance
@@ -382,6 +384,9 @@ impl CdcConsumer {
             .with_user(&config.clickhouse_user)
             .with_password(&config.clickhouse_password);
 
+        // Create HTTP client for raw SQL execution (bypasses clickhouse-rs SQL parsing)
+        let http_client = HttpClient::new();
+
         let metrics = CdcConsumerMetrics::new();
         let error_state = Arc::new(ConsumerErrorState::new());
 
@@ -390,6 +395,7 @@ impl CdcConsumer {
         Ok(Self {
             consumer,
             ch_client,
+            http_client,
             semaphore: Arc::new(Semaphore::new(config.max_concurrent_inserts)),
             config,
             metrics,
@@ -567,10 +573,11 @@ impl CdcConsumer {
 
         let id_raw: String = Self::extract_field(data, "id")?;
         let user_id_raw: String = Self::extract_field(data, "user_id")?;
-        let post_id = Uuid::parse_str(&id_raw).map_err(|e| {
+        // Validate UUIDs but keep as strings for ClickHouse compatibility
+        let _ = Uuid::parse_str(&id_raw).map_err(|e| {
             AnalyticsError::Validation(format!("Invalid post UUID '{}': {}", id_raw, e))
         })?;
-        let author_id = Uuid::parse_str(&user_id_raw).map_err(|e| {
+        let _ = Uuid::parse_str(&user_id_raw).map_err(|e| {
             AnalyticsError::Validation(format!("Invalid user UUID '{}': {}", user_id_raw, e))
         })?;
         let content: String = Self::extract_field(data, "content").unwrap_or_default();
@@ -591,48 +598,66 @@ impl CdcConsumer {
             CdcOperation::Update => 2,
             CdcOperation::Delete => 3,
         };
+        let cdc_op_name = match cdc_operation {
+            1 => "INSERT",
+            2 => "UPDATE",
+            _ => "DELETE",
+        };
         let cdc_timestamp = msg.timestamp();
 
-        // Extract is_deleted flag (default to 0 if not present)
-        let is_deleted: u8 = Self::extract_optional_field::<bool>(data, "is_deleted")
-            .map(|b| if b { 1 } else { 0 })
-            .unwrap_or(if deleted_at.is_some() { 1 } else { 0 });
-
-        // Extract media_url if present
-        let media_url: Option<String> = Self::extract_optional_field(data, "media_url");
-
-        // Use type-safe parameterized insert to prevent SQL injection
-        let row = PostsCdcRow {
-            id: post_id,
-            user_id: author_id,
-            content,
-            media_key,
-            media_type,
-            created_at,
-            updated_at,
-            deleted_at,
-            is_deleted,
-            cdc_operation,
-            cdc_timestamp,
-            media_url,
+        // Format deleted_at for SQL - NULL or timestamp string
+        let deleted_at_sql = match deleted_at {
+            Some(dt) => format!("'{}'", dt.format("%Y-%m-%d %H:%M:%S%.3f")),
+            None => "NULL".to_string(),
         };
 
-        let mut insert = self.ch_client.insert("posts_cdc").map_err(|e| {
-            error!("ClickHouse insert preparation error: {}", e);
-            AnalyticsError::ClickHouse(e.to_string())
-        })?;
+        // Escape single quotes in content for SQL safety
+        let escaped_content = content.replace('\'', "''");
+        let escaped_media_key = media_key.replace('\'', "''");
+        let escaped_media_type = media_type.replace('\'', "''");
 
-        insert.write(&row).await.map_err(|e| {
-            error!("ClickHouse row write error: {}", e);
-            AnalyticsError::ClickHouse(e.to_string())
-        })?;
+        // Use raw HTTP POST to bypass clickhouse-rs SQL parsing (which treats ? as bind param)
+        let insert_sql = format!(
+            "INSERT INTO posts_cdc (id, user_id, content, media_key, media_type, created_at, updated_at, deleted_at, cdc_operation, cdc_timestamp) VALUES ('{}', '{}', '{}', '{}', '{}', '{}', '{}', {}, '{}', '{}')",
+            id_raw,
+            user_id_raw,
+            escaped_content,
+            escaped_media_key,
+            escaped_media_type,
+            created_at.format("%Y-%m-%d %H:%M:%S%.3f"),
+            updated_at.format("%Y-%m-%d %H:%M:%S%.3f"),
+            deleted_at_sql,
+            cdc_op_name,
+            cdc_timestamp.format("%Y-%m-%d %H:%M:%S%.3f"),
+        );
 
-        insert.end().await.map_err(|e| {
-            error!("ClickHouse insert error: {}", e);
-            AnalyticsError::ClickHouse(e.to_string())
-        })?;
+        // Execute via direct HTTP to bypass clickhouse-rs's SQL parsing
+        let url = format!(
+            "{}/?user={}&password={}&database={}",
+            self.config.clickhouse_url,
+            self.config.clickhouse_user,
+            self.config.clickhouse_password,
+            self.config.clickhouse_database
+        );
 
-        debug!("Inserted posts CDC: id={}, op={:?}", post_id, op);
+        let response = self
+            .http_client
+            .post(&url)
+            .body(insert_sql.clone())
+            .send()
+            .await
+            .map_err(|e| {
+                error!("ClickHouse HTTP request failed: {}", e);
+                AnalyticsError::ClickHouse(e.to_string())
+            })?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            error!("ClickHouse insert error: {}", error_text);
+            return Err(AnalyticsError::ClickHouse(error_text));
+        }
+
+        debug!("Inserted posts CDC: id={}, op={:?}", id_raw, op);
         Ok(())
     }
 
@@ -708,7 +733,7 @@ impl CdcConsumer {
         let id_raw: String = Self::extract_field(data, "id")?;
         let post_raw: String = Self::extract_field(data, "post_id")?;
         let user_raw: String = Self::extract_field(data, "user_id")?;
-        // Validate UUIDs but keep as strings for ClickHouse compatibility
+        // Validate UUIDs
         let _ = Uuid::parse_str(&id_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid comment UUID: {}", e)))?;
         let _ = Uuid::parse_str(&post_raw)
@@ -734,42 +759,68 @@ impl CdcConsumer {
             .map(Self::parse_datetime_best_effort)
             .transpose()?;
 
-        let cdc_operation: i8 = match op {
-            CdcOperation::Insert | CdcOperation::Read => 1,
-            CdcOperation::Update => 2,
-            CdcOperation::Delete => 3,
+        let cdc_op_name = match op {
+            CdcOperation::Insert | CdcOperation::Read => "INSERT",
+            CdcOperation::Update => "UPDATE",
+            CdcOperation::Delete => "DELETE",
         };
         let cdc_timestamp = msg.timestamp();
 
-        // Use type-safe parameterized insert to prevent SQL injection
-        // Convert DateTime to unix timestamp (u32) for ClickHouse DateTime compatibility
-        let row = CommentsCdcRow {
-            id: id_raw.clone(),
-            post_id: post_raw,
-            user_id: user_raw,
-            content,
-            parent_comment_id: parent_comment_id_raw.unwrap_or_default(),
-            created_at: created_at.timestamp() as u32,
-            updated_at: updated_at.timestamp() as u32,
-            soft_delete: soft_delete.map(|dt| dt.timestamp() as u32).unwrap_or(0),
-            cdc_operation,
-            cdc_timestamp: cdc_timestamp.timestamp() as u32,
+        // Format soft_delete for SQL - NULL or timestamp string
+        let soft_delete_sql = match soft_delete {
+            Some(dt) => format!("'{}'", dt.format("%Y-%m-%d %H:%M:%S%.3f")),
+            None => "toDateTime64(0, 3)".to_string(),
         };
 
-        let mut insert = self.ch_client.insert("comments_cdc").map_err(|e| {
-            error!("ClickHouse insert preparation error: {}", e);
-            AnalyticsError::ClickHouse(e.to_string())
-        })?;
+        // Format parent_comment_id for SQL - NULL or UUID
+        let parent_comment_id_sql = match &parent_comment_id_raw {
+            Some(id) => format!("'{}'", id),
+            None => "toUUID('00000000-0000-0000-0000-000000000000')".to_string(),
+        };
 
-        insert.write(&row).await.map_err(|e| {
-            error!("ClickHouse row write error: {}", e);
-            AnalyticsError::ClickHouse(e.to_string())
-        })?;
+        // Escape single quotes in content for SQL safety
+        let escaped_content = content.replace('\'', "''");
 
-        insert.end().await.map_err(|e| {
-            error!("ClickHouse insert error: {}", e);
-            AnalyticsError::ClickHouse(e.to_string())
-        })?;
+        // Use raw HTTP POST to bypass clickhouse-rs serialization issues
+        let insert_sql = format!(
+            "INSERT INTO comments_cdc (id, post_id, user_id, content, parent_comment_id, created_at, updated_at, soft_delete, cdc_operation, cdc_timestamp) VALUES ('{}', '{}', '{}', '{}', {}, '{}', '{}', {}, '{}', '{}')",
+            id_raw,
+            post_raw,
+            user_raw,
+            escaped_content,
+            parent_comment_id_sql,
+            created_at.format("%Y-%m-%d %H:%M:%S%.3f"),
+            updated_at.format("%Y-%m-%d %H:%M:%S%.3f"),
+            soft_delete_sql,
+            cdc_op_name,
+            cdc_timestamp.format("%Y-%m-%d %H:%M:%S%.3f"),
+        );
+
+        // Execute via direct HTTP to bypass clickhouse-rs's SQL parsing
+        let url = format!(
+            "{}/?user={}&password={}&database={}",
+            self.config.clickhouse_url,
+            self.config.clickhouse_user,
+            self.config.clickhouse_password,
+            self.config.clickhouse_database
+        );
+
+        let response = self
+            .http_client
+            .post(&url)
+            .body(insert_sql.clone())
+            .send()
+            .await
+            .map_err(|e| {
+                error!("ClickHouse HTTP request failed: {}", e);
+                AnalyticsError::ClickHouse(e.to_string())
+            })?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            error!("ClickHouse insert error: {}", error_text);
+            return Err(AnalyticsError::ClickHouse(error_text));
+        }
 
         debug!("Inserted comments CDC: id={}, op={:?}", id_raw, op);
         Ok(())
@@ -786,7 +837,7 @@ impl CdcConsumer {
 
         let user_raw: String = Self::extract_field(data, "user_id")?;
         let post_raw: String = Self::extract_field(data, "post_id")?;
-        // Validate UUIDs but store as strings for clickhouse-rs compatibility
+        // Validate UUIDs
         Uuid::parse_str(&user_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid user UUID: {}", e)))?;
         Uuid::parse_str(&post_raw)
@@ -794,38 +845,49 @@ impl CdcConsumer {
         let created_at_raw: String = Self::extract_field(data, "created_at")?;
         let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
 
-        let cdc_operation: i8 = match op {
-            CdcOperation::Delete => 2,
-            CdcOperation::Insert | CdcOperation::Read | CdcOperation::Update => 1,
+        let cdc_op_name = match op {
+            CdcOperation::Delete => "DELETE",
+            CdcOperation::Insert | CdcOperation::Read | CdcOperation::Update => "INSERT",
         };
         let like_count: i8 = if *op == CdcOperation::Delete { -1 } else { 1 };
         let cdc_timestamp = msg.timestamp();
 
-        // Use type-safe parameterized insert to prevent SQL injection
-        // Uses String for UUIDs and u32 for DateTime to avoid clickhouse-rs serialization issues
-        let row = LikesCdcRow {
-            post_id: post_raw.clone(),
-            user_id: user_raw.clone(),
-            created_at: created_at.timestamp() as u32,
-            cdc_operation,
-            cdc_timestamp: cdc_timestamp.timestamp() as u32,
+        // Use raw HTTP POST to bypass clickhouse-rs serialization issues with UUID/Enum8 types
+        let insert_sql = format!(
+            "INSERT INTO likes_cdc (post_id, user_id, created_at, cdc_operation, cdc_timestamp, like_count) VALUES ('{}', '{}', '{}', '{}', '{}', {})",
+            post_raw,
+            user_raw,
+            created_at.format("%Y-%m-%d %H:%M:%S%.3f"),
+            cdc_op_name,
+            cdc_timestamp.format("%Y-%m-%d %H:%M:%S%.3f"),
             like_count,
-        };
+        );
 
-        let mut insert = self.ch_client.insert("likes_cdc").map_err(|e| {
-            error!("ClickHouse insert preparation error: {}", e);
-            AnalyticsError::ClickHouse(e.to_string())
-        })?;
+        // Execute via direct HTTP to bypass clickhouse-rs's SQL parsing
+        let url = format!(
+            "{}/?user={}&password={}&database={}",
+            self.config.clickhouse_url,
+            self.config.clickhouse_user,
+            self.config.clickhouse_password,
+            self.config.clickhouse_database
+        );
 
-        insert.write(&row).await.map_err(|e| {
-            error!("ClickHouse row write error: {}", e);
-            AnalyticsError::ClickHouse(e.to_string())
-        })?;
+        let response = self
+            .http_client
+            .post(&url)
+            .body(insert_sql.clone())
+            .send()
+            .await
+            .map_err(|e| {
+                error!("ClickHouse HTTP request failed: {}", e);
+                AnalyticsError::ClickHouse(e.to_string())
+            })?;
 
-        insert.end().await.map_err(|e| {
-            error!("ClickHouse insert error: {}", e);
-            AnalyticsError::ClickHouse(e.to_string())
-        })?;
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            error!("ClickHouse insert error: {}", error_text);
+            return Err(AnalyticsError::ClickHouse(error_text));
+        }
 
         debug!(
             "Inserted likes CDC: user={}, post={}, op={:?}",

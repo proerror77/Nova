@@ -30,7 +30,7 @@ use grpc::server_v2::{
 };
 use services::{CounterService, KafkaEventProducerConfig, SocialEventProducer};
 use transactional_outbox::SqlxOutboxRepository;
-use workers::{graph_sync::GraphSyncConsumer, outbox_worker};
+use workers::{graph_sync::GraphSyncConsumer, outbox_worker, redis_health};
 
 async fn shutdown_signal() {
     #[cfg(unix)]
@@ -170,6 +170,17 @@ async fn main() -> Result<()> {
     // Initialize Counter service
     let counter_service = CounterService::new(redis_conn.clone(), pg_pool.clone());
     info!("✅ Counter service initialized");
+
+    // Start Redis health check background job to prevent broken pipe errors
+    let health_counter_service = Arc::new(counter_service.clone());
+    tokio::spawn(async move {
+        redis_health::start_redis_health_check(
+            health_counter_service,
+            redis_health::RedisHealthConfig::default(),
+        )
+        .await;
+    });
+    info!("✅ Redis health check background job started");
 
     // Initialize gRPC client for graph-service
     let grpc_cfg = GrpcClientConfig::from_env()

@@ -74,6 +74,8 @@ struct ChatView: View {
                                 .foregroundColor(DesignTokens.textPrimary)
                                 .frame(width: 24.s, height: 24.s)
                         }
+                        .accessibilityLabel("Back")
+                        .accessibilityHint("Returns to conversation list")
                         
                         // 头像 - 可点击查看个人资料
                         Button {
@@ -85,6 +87,8 @@ struct ChatView: View {
                                 size: 36.s
                             )
                         }
+                        .accessibilityLabel("\(userName)'s profile picture")
+                        .accessibilityHint("Double tap to view profile")
                         
                         // 用户名和 E2EE 状态
                         VStack(alignment: .leading, spacing: 2.h) {
@@ -116,6 +120,8 @@ struct ChatView: View {
                                 .foregroundColor(DesignTokens.textPrimary)
                                 .frame(width: 24.s, height: 24.s)
                         }
+                        .accessibilityLabel("Search messages")
+                        .accessibilityHint("Search within this conversation")
                     }
                     .padding(.horizontal, 16.w)
                     .padding(.bottom, 12.h)
@@ -162,6 +168,8 @@ struct ChatView: View {
                             .clipShape(Capsule())
                             .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
                         }
+                        .accessibilityLabel("\(newMessageCount) new messages")
+                        .accessibilityHint("Scroll to newest messages")
                         Spacer()
                     }
                     .padding(.bottom, 80.h)  // 在輸入欄上方
@@ -534,6 +542,8 @@ struct ChatView: View {
                         .foregroundColor(DesignTokens.accentColor)
                         .rotationEffect(.degrees(viewModel.showAttachmentOptions ? 45 : 0))
                 }
+                .accessibilityLabel(viewModel.showAttachmentOptions ? "Close attachment options" : "Add attachment")
+                .accessibilityHint("Send photos, files, or location")
 
                 // Text input
                 HStack(spacing: 8.w) {
@@ -547,6 +557,8 @@ struct ChatView: View {
                                 viewModel.sendTypingIndicator(isTyping: !newValue.isEmpty)
                             }
                         }
+                        .accessibilityLabel(viewModel.editingMessage != nil ? "Edit message" : "Message input")
+                        .accessibilityHint("Type your message here")
 
                     // Voice record / Send / Save Edit button
                     if viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && viewModel.editingMessage == nil {
@@ -570,6 +582,8 @@ struct ChatView: View {
                             }
                         }
                         .disabled(viewModel.isSavingEdit)
+                        .accessibilityLabel(viewModel.editingMessage != nil ? "Save edit" : "Send message")
+                        .accessibilityHint(viewModel.editingMessage != nil ? "Save your edited message" : "Send this message")
                     }
                 }
                 .background(DesignTokens.surface)
@@ -581,66 +595,45 @@ struct ChatView: View {
             }
             .padding(.horizontal, 16.w)
             .padding(.vertical, 8.h)
-            .background(DesignTokens.surface)
+            .glassInputBackground()  // Liquid Glass on iOS 26+
         }
     }
 
     // MARK: - Attachment Options View
 
     private var attachmentOptionsView: some View {
-        HStack(spacing: 20.w) {
+        let columns = [
+            GridItem(.flexible()),
+            GridItem(.flexible()),
+            GridItem(.flexible()),
+            GridItem(.flexible())
+        ]
+
+        return LazyVGrid(columns: columns, spacing: 16.h) {
             // Photo picker
             PhotosPicker(selection: $viewModel.selectedPhotoItem, matching: .images) {
-                VStack(spacing: 4.h) {
-                    Image(systemName: "photo.on.rectangle")
-                        .font(.system(size: 22.f))
-                    Text("Album")
-                        .font(.system(size: 11.f))
-                }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60.s, height: 60.s)
+                attachmentButton(icon: "photo.on.rectangle", label: "Album")
             }
 
             // Camera
             Button(action: {
                 viewModel.checkCameraPermissionAndOpen()
             }) {
-                VStack(spacing: 4.h) {
-                    Image(systemName: "camera")
-                        .font(.system(size: 22.f))
-                    Text("Camera")
-                        .font(.system(size: 11.f))
-                }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60.s, height: 60.s)
+                attachmentButton(icon: "camera", label: "Camera")
             }
 
             // Video call
             Button(action: {
                 viewModel.showVideoCall = true
             }) {
-                VStack(spacing: 4.h) {
-                    Image(systemName: "video")
-                        .font(.system(size: 22.f))
-                    Text("Video")
-                        .font(.system(size: 11.f))
-                }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60.s, height: 60.s)
+                attachmentButton(icon: "video", label: "Video")
             }
 
             // Voice call
             Button(action: {
                 viewModel.showVoiceCall = true
             }) {
-                VStack(spacing: 4.h) {
-                    Image(systemName: "phone")
-                        .font(.system(size: 22.f))
-                    Text("Call")
-                        .font(.system(size: 11.f))
-                }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60.s, height: 60.s)
+                attachmentButton(icon: "phone", label: "Call")
             }
 
             // Location
@@ -648,34 +641,35 @@ struct ChatView: View {
                 locationManager.requestLocation()
                 viewModel.showLocationAlert = true
             }) {
-                VStack(spacing: 4.h) {
-                    Image(systemName: "location")
-                        .font(.system(size: 22.f))
-                    Text("Location")
-                        .font(.system(size: 11.f))
-                }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60.s, height: 60.s)
+                attachmentButton(icon: "location", label: "Location")
             }
 
             // File picker
             Button(action: {
                 viewModel.showFilePicker = true
             }) {
-                VStack(spacing: 4.h) {
-                    Image(systemName: "doc")
-                        .font(.system(size: 22.f))
-                    Text("File")
-                        .font(.system(size: 11.f))
-                }
-                .foregroundColor(DesignTokens.textSecondary)
-                .frame(width: 60.s, height: 60.s)
+                attachmentButton(icon: "doc", label: "File")
             }
         }
         .padding(.vertical, 12.h)
         .padding(.horizontal, 16.w)
-        .background(DesignTokens.surface)
+        .glassSurface()  // Liquid Glass on iOS 26+
         .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    // MARK: - Attachment Button Helper
+
+    @ViewBuilder
+    private func attachmentButton(icon: String, label: String) -> some View {
+        VStack(spacing: 6.h) {
+            Image(systemName: icon)
+                .font(.system(size: 24.f))
+            Text(label)
+                .font(.system(size: 12.f))
+        }
+        .foregroundColor(DesignTokens.textSecondary)
+        .frame(maxWidth: .infinity)
+        .frame(height: 60.s)
     }
 
     // MARK: - Voice Record Button
@@ -730,6 +724,9 @@ struct ChatView: View {
             }
         }
         .frame(width: 44.s, height: 44.s)
+        .accessibilityLabel(viewModel.isRecordingVoice ? "Recording voice message" : "Record voice message")
+        .accessibilityHint(viewModel.isRecordingVoice ? "Release to send, drag left to cancel" : "Hold to record a voice message")
+        .accessibilityAddTraits(.startsMediaSession)
     }
 }
 

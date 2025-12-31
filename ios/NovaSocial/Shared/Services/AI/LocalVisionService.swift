@@ -6,7 +6,6 @@ import UIKit
 // Uses Apple's Vision framework for on-device image analysis
 // No network required - instant results
 
-@MainActor
 final class LocalVisionService {
     static let shared = LocalVisionService()
 
@@ -24,40 +23,48 @@ final class LocalVisionService {
             return VLMAnalysisResult(tags: [], channels: nil, processingTimeMs: 0)
         }
 
-        var tags: [TagSuggestion] = []
+        // Run Vision requests on background thread to avoid blocking UI
+        let tags: [TagSuggestion] = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                var allTags: [TagSuggestion] = []
 
-        // Run classification
-        let classificationTags = await classifyImage(cgImage)
-        tags.append(contentsOf: classificationTags)
+                // Run classification
+                let classificationTags = self.classifyImageSync(cgImage)
+                allTags.append(contentsOf: classificationTags)
 
-        // Detect text (for memes, screenshots, etc.)
-        let textTags = await detectText(cgImage)
-        tags.append(contentsOf: textTags)
+                // Detect text (for memes, screenshots, etc.)
+                let textTags = self.detectTextSync(cgImage)
+                allTags.append(contentsOf: textTags)
 
-        // Detect faces for portrait tagging
-        let faceTags = await detectFaces(cgImage)
-        tags.append(contentsOf: faceTags)
+                // Detect faces for portrait tagging
+                let faceTags = self.detectFacesSync(cgImage)
+                allTags.append(contentsOf: faceTags)
 
-        // Sort by confidence and limit
-        tags.sort { $0.confidence > $1.confidence }
-        let limitedTags = Array(tags.prefix(15))
+                // Sort by confidence and limit
+                allTags.sort { $0.confidence > $1.confidence }
+                let limitedTags = Array(allTags.prefix(15))
+
+                continuation.resume(returning: limitedTags)
+            }
+        }
 
         let processingTime = Int((CFAbsoluteTimeGetCurrent() - startTime) * 1000)
 
-        #if DEBUG
-        print("[LocalVision] Analyzed image in \(processingTime)ms, found \(limitedTags.count) tags")
-        #endif
-
         return VLMAnalysisResult(
-            tags: limitedTags,
+            tags: tags,
             channels: nil,
             processingTimeMs: processingTime
         )
     }
 
-    // MARK: - Vision Classification
+    // MARK: - Vision Classification (Sync - runs on background thread)
 
-    private func classifyImage(_ cgImage: CGImage) async -> [TagSuggestion] {
+    private func classifyImageSync(_ cgImage: CGImage) -> [TagSuggestion] {
+        #if targetEnvironment(simulator)
+        // VNClassifyImageRequest doesn't work on simulator (no Neural Engine)
+        // Return basic tags based on image properties
+        return simulatorFallbackTags(cgImage)
+        #else
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         let request = VNClassifyImageRequest()
 
@@ -84,16 +91,42 @@ final class LocalVisionService {
 
             return Array(tags)
         } catch {
-            #if DEBUG
-            print("[LocalVision] Classification error: \(error)")
-            #endif
             return []
         }
+        #endif
     }
 
-    // MARK: - Text Detection
+    /// Fallback for simulator - basic image analysis without Neural Engine
+    private func simulatorFallbackTags(_ cgImage: CGImage) -> [TagSuggestion] {
+        var tags: [TagSuggestion] = []
 
-    private func detectText(_ cgImage: CGImage) async -> [TagSuggestion] {
+        // Analyze image dimensions for aspect ratio hints
+        let width = cgImage.width
+        let height = cgImage.height
+        let aspectRatio = Double(width) / Double(height)
+
+        if aspectRatio > 1.5 {
+            tags.append(TagSuggestion(tag: "Landscape", confidence: 0.7, source: "vision"))
+        } else if aspectRatio < 0.7 {
+            tags.append(TagSuggestion(tag: "Portrait", confidence: 0.7, source: "vision"))
+        } else {
+            tags.append(TagSuggestion(tag: "Square", confidence: 0.6, source: "vision"))
+        }
+
+        // Add generic photo tag
+        tags.append(TagSuggestion(tag: "Photo", confidence: 0.8, source: "vision"))
+
+        // High resolution hint
+        if width > 2000 || height > 2000 {
+            tags.append(TagSuggestion(tag: "HighRes", confidence: 0.6, source: "vision"))
+        }
+
+        return tags
+    }
+
+    // MARK: - Text Detection (Sync)
+
+    private func detectTextSync(_ cgImage: CGImage) -> [TagSuggestion] {
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .fast
@@ -122,9 +155,9 @@ final class LocalVisionService {
         }
     }
 
-    // MARK: - Face Detection
+    // MARK: - Face Detection (Sync)
 
-    private func detectFaces(_ cgImage: CGImage) async -> [TagSuggestion] {
+    private func detectFacesSync(_ cgImage: CGImage) -> [TagSuggestion] {
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         let request = VNDetectFaceRectanglesRequest()
 

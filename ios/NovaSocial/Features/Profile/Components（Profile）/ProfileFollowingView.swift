@@ -126,6 +126,12 @@ struct ProfileFollowingView: View {
         .fullScreenCover(isPresented: $showUserProfile) {
             if let userId = selectedUserId {
                 UserProfileView(showUserProfile: $showUserProfile, userId: userId)
+            } else {
+                // Fallback: auto-dismiss if userId is nil to prevent blank screen
+                Color.clear
+                    .onAppear {
+                        showUserProfile = false
+                    }
             }
         }
         .alert("操作失敗", isPresented: $showErrorAlert) {
@@ -430,7 +436,7 @@ struct ProfileFollowingView: View {
         LazyVStack(spacing: 0) {
             if isLoadingFollowing {
                 SkeletonListLoader(itemCount: 5) {
-                    AnyView(UserRowSkeleton())
+                    UserRowSkeleton()
                 }
             } else if let error = followingError {
                 // 錯誤狀態
@@ -495,7 +501,7 @@ struct ProfileFollowingView: View {
         LazyVStack(spacing: 0) {
             if isLoadingFollowers {
                 SkeletonListLoader(itemCount: 5) {
-                    AnyView(UserRowSkeleton())
+                    UserRowSkeleton()
                 }
             } else if let error = followersError {
                 // 錯誤狀態

@@ -164,6 +164,12 @@ struct NewPostView: View {
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+            } else {
+                // Fallback: auto-dismiss if suggestion is nil to prevent blank sheet
+                Color.clear
+                    .onAppear {
+                        viewModel.showEnhanceSuggestion = false
+                    }
             }
         }
         .sheet(isPresented: $viewModel.showChannelPicker) {

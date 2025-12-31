@@ -46,6 +46,12 @@ struct ChatBackupView: View {
         .sheet(isPresented: $showExportSheet) {
             if let url = exportedFileURL {
                 ShareSheet(activityItems: [url])
+            } else {
+                // Fallback: auto-dismiss if URL is nil to prevent blank sheet
+                Color.clear
+                    .onAppear {
+                        showExportSheet = false
+                    }
             }
         }
         .fileImporter(

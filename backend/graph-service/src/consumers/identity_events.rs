@@ -12,7 +12,7 @@ use anyhow::Result;
 use event_schema::{EventEnvelope, UserCreatedEvent, UserDeletedEvent, UserProfileUpdatedEvent};
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
-use rdkafka::message::{BorrowedMessage, Message};
+use rdkafka::message::{BorrowedMessage, Headers, Message};
 use serde::de::DeserializeOwned;
 use std::time::Duration;
 use tracing::{debug, error, info, warn};

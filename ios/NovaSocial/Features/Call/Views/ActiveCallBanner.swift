@@ -67,6 +67,7 @@ struct ActiveCallBanner: View {
             }
             .onDisappear {
                 durationTimer?.invalidate()
+                durationTimer = nil
             }
         }
     }
@@ -120,6 +121,12 @@ struct ActiveCallBannerModifier: ViewModifier {
                     isVideoCall: call.isVideoCall,
                     intent: call.isOutgoing ? .startCall : .joinExisting
                 )
+            } else {
+                // Fallback: auto-dismiss if call is nil to prevent blank screen
+                Color.clear
+                    .onAppear {
+                        callCoordinator.showCallView = false
+                    }
             }
         }
     }
@@ -255,6 +262,10 @@ struct MinimizedCallView: View {
                 hasSetInitialPosition = true
             }
             startDurationTimer()
+        }
+        .onDisappear {
+            durationTimer?.invalidate()
+            durationTimer = nil
         }
     }
 

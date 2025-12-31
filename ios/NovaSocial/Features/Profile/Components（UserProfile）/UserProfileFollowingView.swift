@@ -345,7 +345,7 @@ struct UserProfileFollowingView: View {
         LazyVStack(spacing: 0) {
             if isLoadingFollowing {
                 SkeletonListLoader(itemCount: 5) {
-                    AnyView(UserRowSkeleton())
+                    UserRowSkeleton()
                 }
             } else if filteredFollowing.isEmpty {
                 VStack(spacing: 12) {
@@ -380,7 +380,7 @@ struct UserProfileFollowingView: View {
         LazyVStack(spacing: 0) {
             if isLoadingFollowers {
                 SkeletonListLoader(itemCount: 5) {
-                    AnyView(UserRowSkeleton())
+                    UserRowSkeleton()
                 }
             } else if filteredFollowers.isEmpty {
                 VStack(spacing: 12) {

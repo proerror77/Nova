@@ -71,6 +71,7 @@ struct TypewriterTextView: View {
 
     @State private var displayedText: String = ""
     @State private var currentIndex: Int = 0
+    @State private var typingTimer: Timer?
 
     var body: some View {
         Text(displayedText)
@@ -80,6 +81,9 @@ struct TypewriterTextView: View {
             .onAppear {
                 startTyping()
             }
+            .onDisappear {
+                stopTyping()
+            }
             .onChange(of: fullText) { _, newValue in
                 // If text changed, update displayed text incrementally
                 if newValue.hasPrefix(displayedText) {
@@ -88,6 +92,7 @@ struct TypewriterTextView: View {
                     typeRemaining(remaining)
                 } else {
                     // Text completely changed, restart
+                    stopTyping()
                     displayedText = ""
                     currentIndex = 0
                     startTyping()
@@ -95,12 +100,19 @@ struct TypewriterTextView: View {
             }
     }
 
+    private func stopTyping() {
+        typingTimer?.invalidate()
+        typingTimer = nil
+    }
+
     private func startTyping() {
         guard currentIndex < fullText.count else { return }
+        stopTyping() // Cancel any existing timer
 
-        Timer.scheduledTimer(withTimeInterval: typingSpeed, repeats: true) { timer in
+        typingTimer = Timer.scheduledTimer(withTimeInterval: typingSpeed, repeats: true) { [self] timer in
             guard currentIndex < fullText.count else {
                 timer.invalidate()
+                typingTimer = nil
                 return
             }
 
@@ -111,11 +123,13 @@ struct TypewriterTextView: View {
     }
 
     private func typeRemaining(_ text: String) {
+        stopTyping() // Cancel any existing timer
         var charIndex = 0
 
-        Timer.scheduledTimer(withTimeInterval: typingSpeed, repeats: true) { timer in
+        typingTimer = Timer.scheduledTimer(withTimeInterval: typingSpeed, repeats: true) { [self] timer in
             guard charIndex < text.count else {
                 timer.invalidate()
+                typingTimer = nil
                 return
             }
 

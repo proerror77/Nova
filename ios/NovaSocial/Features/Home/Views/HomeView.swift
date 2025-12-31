@@ -121,10 +121,19 @@ struct HomeView: View {
                 WriteView(showWrite: $showWrite, currentPage: $currentPage)
                     .transition(.identity)
             } else if showPostDetail, let post = selectedPostForDetail {
-                PostDetailView(post: post, onDismiss: {
-                    showPostDetail = false
-                    selectedPostForDetail = nil
-                })
+                PostDetailView(
+                    post: post,
+                    onDismiss: {
+                        showPostDetail = false
+                        selectedPostForDetail = nil
+                    },
+                    onLikeChanged: { isLiked, likeCount in
+                        feedViewModel.updateLikeState(postId: post.id, isLiked: isLiked, likeCount: likeCount)
+                    },
+                    onBookmarkChanged: { isBookmarked, bookmarkCount in
+                        feedViewModel.updateBookmarkState(postId: post.id, isBookmarked: isBookmarked, bookmarkCount: bookmarkCount)
+                    }
+                )
                 .transition(.identity)
             } else {
                 homeContent
@@ -172,11 +181,23 @@ struct HomeView: View {
                         feedViewModel.updateCommentCount(postId: postId, count: actualCount)
                     }
                 )
+            } else {
+                // Fallback: auto-dismiss if post is nil to prevent blank sheet
+                Color.clear
+                    .onAppear {
+                        showComments = false
+                    }
             }
         }
         .fullScreenCover(isPresented: $showUserProfile) {
             if let userId = selectedUserId {
                 UserProfileView(showUserProfile: $showUserProfile, userId: userId)
+            } else {
+                // Fallback: auto-dismiss if userId is nil to prevent blank screen
+                Color.clear
+                    .onAppear {
+                        showUserProfile = false
+                    }
             }
         }
         // System PhotosPicker - user selects 1-5 photos, taps blue checkmark to confirm

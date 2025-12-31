@@ -306,30 +306,38 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
             }
         }
 
-        // Step 4: Fetch like status for the user
+        // Step 4: Fetch like status and social counts for the user
         let post_ids: Vec<String> = posts.iter().map(|p| p.id.clone()).collect();
-        let like_statuses = fetch_like_statuses(&self.grpc_pool, &user_id, &post_ids).await;
+        // Fetch like status and social counts in parallel for real-time accuracy
+        let (like_statuses, social_counts) = tokio::join!(
+            fetch_like_statuses(&self.grpc_pool, &user_id, &post_ids),
+            fetch_social_counts(&self.grpc_pool, &post_ids)
+        );
 
-        // Step 5: Return feed with like status
+        // Step 5: Return feed with like status and real-time counts
         guard.complete("0");
         Ok(Response::new(GetFeedResponse {
             posts: posts
                 .iter()
-                .map(|post| FeedPost {
-                    id: post.id.clone(),
-                    user_id: post.user_id.clone(),
-                    content: post.content.clone(),
-                    created_at: post.created_at,
-                    ranking_score: post.ranking_score,
-                    like_count: post.like_count,
-                    comment_count: post.comment_count,
-                    share_count: post.share_count,
-                    bookmark_count: post.bookmark_count,
-                    media_urls: post.media_urls.clone(),
-                    media_type: post.media_type.clone(),
-                    thumbnail_urls: post.thumbnail_urls.clone(),
-                    is_liked: like_statuses.get(&post.id).copied().unwrap_or(false),
-                    is_bookmarked: false, // TODO: implement bookmark status
+                .map(|post| {
+                    let counts = social_counts.get(&post.id);
+                    FeedPost {
+                        id: post.id.clone(),
+                        user_id: post.user_id.clone(),
+                        content: post.content.clone(),
+                        created_at: post.created_at,
+                        ranking_score: post.ranking_score,
+                        // Use real-time counts from social-service, fallback to post's original count
+                        like_count: counts.map(|c| c.like_count as u32).unwrap_or(post.like_count),
+                        comment_count: counts.map(|c| c.comment_count as u32).unwrap_or(post.comment_count),
+                        share_count: counts.map(|c| c.share_count as u32).unwrap_or(post.share_count),
+                        bookmark_count: counts.map(|c| c.bookmark_count as u32).unwrap_or(post.bookmark_count),
+                        media_urls: post.media_urls.clone(),
+                        media_type: post.media_type.clone(),
+                        thumbnail_urls: post.thumbnail_urls.clone(),
+                        is_liked: like_statuses.get(&post.id).copied().unwrap_or(false),
+                        is_bookmarked: false, // TODO: implement bookmark status
+                    }
                 })
                 .collect(),
             next_cursor,

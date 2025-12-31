@@ -115,6 +115,12 @@ struct MyQRCodeView: View {
             .sheet(isPresented: $showShareSheet) {
                 if let uiImage = QRCodeGenerator.generateUserQRCode(userId: userId, size: 512) {
                     ShareSheet(items: [uiImage])
+                } else {
+                    // Fallback: auto-dismiss if QR code generation fails to prevent blank sheet
+                    Color.clear
+                        .onAppear {
+                            showShareSheet = false
+                        }
                 }
             }
         }

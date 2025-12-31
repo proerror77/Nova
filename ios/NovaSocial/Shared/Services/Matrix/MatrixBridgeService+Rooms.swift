@@ -34,7 +34,7 @@ extension MatrixBridgeService {
         return roomId
     }
 
-    /// Create a new conversation with a friend and setup Matrix room
+    /// Create or get an existing conversation with a friend
     /// This is the main entry point for starting a chat with a friend
     /// - Parameters:
     ///   - friendUserId: The user ID of the friend to chat with
@@ -52,7 +52,40 @@ extension MatrixBridgeService {
         print("[MatrixBridge] Starting \(isPrivate ? "private" : "regular") conversation with friend: \(friendUserId)")
         #endif
 
-        // Create Nova conversation first
+        // Convert to Matrix user ID format for checking existing rooms
+        let matrixUserId = matrixService.convertToMatrixUserId(novaUserId: friendUserId)
+
+        // Check if there's already an existing DM room with this user
+        if let existingRoom = try? await findExistingDirectRoom(withUserId: matrixUserId) {
+            #if DEBUG
+            print("[MatrixBridge] ✅ Found existing DM room: \(existingRoom.id)")
+            #endif
+
+            // Check if we have a Nova conversation mapped to this room
+            if let conversationId = try? await queryConversationMapping(roomId: existingRoom.id),
+               let existingConversation = try? await chatService.getConversation(conversationId: conversationId) {
+                #if DEBUG
+                print("[MatrixBridge] ✅ Returning existing conversation: \(existingConversation.id)")
+                #endif
+                return existingConversation
+            }
+
+            // Room exists but no Nova conversation - create one and map it
+            #if DEBUG
+            print("[MatrixBridge] Creating Nova conversation for existing room: \(existingRoom.id)")
+            #endif
+            let conversation = try await chatService.createConversation(
+                type: .direct,
+                participantIds: [currentUserId, friendUserId],
+                name: nil,
+                isEncrypted: isPrivate
+            )
+            cacheMapping(conversationId: conversation.id, roomId: existingRoom.id)
+            try await saveRoomMapping(conversationId: conversation.id, roomId: existingRoom.id)
+            return conversation
+        }
+
+        // No existing room - create new Nova conversation and Matrix room
         let conversation = try await chatService.createConversation(
             type: .direct,
             participantIds: [currentUserId, friendUserId],
