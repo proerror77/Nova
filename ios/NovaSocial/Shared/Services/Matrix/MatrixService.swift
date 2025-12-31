@@ -2710,6 +2710,90 @@ final class MatrixService: MatrixServiceProtocol {
 
         let displayName = (await room.displayName()) ?? roomId
 
+        // Get the latest event for last message preview
+        var lastMessage: MatrixMessage?
+        var lastActivity: Date?
+
+        // Helper function to process content and create MatrixMessage
+        func processContent(_ content: TimelineItemContent, senderId: String, timestamp: Date) -> MatrixMessage? {
+            switch content {
+            case .msgLike(let msgLikeContent):
+                switch msgLikeContent.kind {
+                case .message(let messageContent):
+                    let msgType: MatrixMessageType
+                    switch messageContent.msgType {
+                    case .text: msgType = .text
+                    case .image: msgType = .image
+                    case .video: msgType = .video
+                    case .audio: msgType = .audio
+                    case .file: msgType = .file
+                    case .location: msgType = .location
+                    case .notice: msgType = .notice
+                    case .emote: msgType = .emote
+                    case .gallery, .other: msgType = .text
+                    }
+
+                    return MatrixMessage(
+                        id: UUID().uuidString,
+                        roomId: roomId,
+                        senderId: senderId,
+                        content: messageContent.body,
+                        type: msgType,
+                        timestamp: timestamp,
+                        isEdited: messageContent.isEdited,
+                        replyTo: nil,
+                        mediaURL: nil,
+                        mediaInfo: nil
+                    )
+                case .redacted:
+                    return MatrixMessage(
+                        id: UUID().uuidString,
+                        roomId: roomId,
+                        senderId: senderId,
+                        content: "Message deleted",
+                        type: .text,
+                        timestamp: timestamp,
+                        isEdited: false,
+                        replyTo: nil,
+                        mediaURL: nil,
+                        mediaInfo: nil
+                    )
+                case .unableToDecrypt:
+                    return MatrixMessage(
+                        id: UUID().uuidString,
+                        roomId: roomId,
+                        senderId: senderId,
+                        content: "🔐 Encrypted message",
+                        type: .text,
+                        timestamp: timestamp,
+                        isEdited: false,
+                        replyTo: nil,
+                        mediaURL: nil,
+                        mediaInfo: nil
+                    )
+                default:
+                    return nil
+                }
+            default:
+                return nil
+            }
+        }
+
+        // Get latest event which returns LatestEventValue enum
+        let latestEventValue = await room.latestEvent()
+        switch latestEventValue {
+        case .remote(let timestamp, let sender, _, _, let content):
+            let date = Date(timeIntervalSince1970: Double(timestamp) / 1000.0)
+            lastActivity = date
+            lastMessage = processContent(content, senderId: sender, timestamp: date)
+        case .local(let timestamp, let sender, _, let content, _):
+            let date = Date(timeIntervalSince1970: Double(timestamp) / 1000.0)
+            lastActivity = date
+            lastMessage = processContent(content, senderId: sender, timestamp: date)
+        case .none:
+            break
+        }
+
         return MatrixRoom(
             id: roomId,
             name: displayName,
@@ -2719,8 +2803,8 @@ final class MatrixService: MatrixServiceProtocol {
             isEncrypted: info.encryptionState == .encrypted,
             memberCount: Int(info.activeMembersCount),
             unreadCount: Int(info.numUnreadMessages),
-            lastMessage: nil,  // Would need timeline access
-            lastActivity: nil,
+            lastMessage: lastMessage,
+            lastActivity: lastActivity,
             novaConversationId: nil
         )
     }
