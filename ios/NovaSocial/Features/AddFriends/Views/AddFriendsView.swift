@@ -46,7 +46,7 @@ class AddFriendsViewModel {
                 print("[AddFriendsView] Recommendations endpoint not deployed yet")
                 #endif
             } else {
-                errorMessage = "加载推荐联系人失败: \(error.localizedDescription)"
+                errorMessage = "Failed to load recommendations: \(error.localizedDescription)"
                 #if DEBUG
                 print("❌ Failed to load recommendations: \(error)")
                 #endif
@@ -93,7 +93,7 @@ class AddFriendsViewModel {
                 #endif
                 await searchUserByUsernameFallback()
             } else {
-                errorMessage = "搜索失败: \(error.localizedDescription)"
+                errorMessage = "Search failed: \(error.localizedDescription)"
                 #if DEBUG
                 print("❌ Search failed: \(error)")
                 #endif
@@ -127,13 +127,13 @@ class AddFriendsViewModel {
         do {
             // 使用 GraphService 進行 Follow
             guard let currentUserId = AuthenticationManager.shared.currentUser?.id else {
-                errorMessage = "请先登录"
+                errorMessage = "Please login first"
                 return
             }
             try await graphService.followUser(followerId: currentUserId, followeeId: userId)
-            showToast("已关注")
+            showToast("Followed")
         } catch {
-            errorMessage = "关注失败: \(error.localizedDescription)"
+            errorMessage = "Failed to follow: \(error.localizedDescription)"
             #if DEBUG
             print("❌ Failed to follow user: \(error)")
             #endif
@@ -192,21 +192,21 @@ class AddFriendsViewModel {
                     #if DEBUG
                     print("❌ [AddFriends] Failed to re-initialize Matrix bridge: \(error)")
                     #endif
-                    errorMessage = "無法重新連接: \(error.localizedDescription)"
+                    errorMessage = "Unable to reconnect: \(error.localizedDescription)"
                     return
                 }
 
                 await startChat(with: user, retryCount: retryCount + 1)
                 return
             } else {
-                errorMessage = "無法開始對話: 請重新登入後再試"
+                errorMessage = "Unable to start conversation: Please login again"
                 #if DEBUG
                 print("❌ Failed to start chat after retry: session still expired")
                 #endif
             }
 
         } catch {
-            errorMessage = "無法開始對話: \(error.localizedDescription)"
+            errorMessage = "Unable to start conversation: \(error.localizedDescription)"
             #if DEBUG
             print("❌ Failed to start chat: \(error)")
             #endif
@@ -477,7 +477,7 @@ struct AddFriendsView: View {
                         // MARK: - Search Results
                         if !viewModel.searchResults.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
-                                Text("搜索结果")
+                                Text("Search Results")
                                     .font(.system(size: 17.50, weight: .bold))
                                     .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
                                     .padding(.horizontal, 24)
@@ -505,7 +505,7 @@ struct AddFriendsView: View {
                         // MARK: - Recommendations
                         if !viewModel.recommendations.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
-                                Text("推荐关注")
+                                Text("Recommended")
                                     .font(.system(size: 17.50, weight: .bold))
                                     .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
                                     .padding(.horizontal, 24)
@@ -532,7 +532,7 @@ struct AddFriendsView: View {
 
                         // MARK: - Loading
                         if viewModel.isLoadingRecommendations {
-                            ProgressView("加载推荐联系人...").padding()
+                            ProgressView("Loading recommendations...").padding()
                         }
 
                         // MARK: - Share Button
@@ -744,7 +744,7 @@ struct RecommendedCreatorCard: View {
                 if isFollowing {
                     ProgressView().scaleEffect(0.8)
                 } else if isFollowed {
-                    Text("已关注")
+                    Text("Following")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.gray)
                         .padding(.horizontal, 12)
@@ -752,7 +752,7 @@ struct RecommendedCreatorCard: View {
                         .background(Color(red: 0.9, green: 0.9, blue: 0.9))
                         .cornerRadius(14)
                 } else {
-                    Text("关注")
+                    Text("Follow")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.white)
                         .padding(.horizontal, 12)

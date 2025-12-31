@@ -41,25 +41,25 @@ struct FeedPostCard: View {
         // MARK: - Main Content (Instagram Style - No Swipe Gestures)
         mainContent
         // MARK: - Long Press Menu
-        .confirmationDialog("貼文選項", isPresented: $showingLongPressMenu, titleVisibility: .visible) {
-            Button("分享", action: onShare)
-            Button("收藏") {
+        .confirmationDialog("Post Options", isPresented: $showingLongPressMenu, titleVisibility: .visible) {
+            Button("Share", action: onShare)
+            Button("Bookmark") {
                 bookmarkAnimationTrigger.toggle()
                 onBookmark()
             }
-            Button("複製連結") {
+            Button("Copy Link") {
                 UIPasteboard.general.string = "https://nova.social/post/\(post.id)"
                 hapticLight.impactOccurred()
             }
-            Button("舉報", role: .destructive) {
+            Button("Report", role: .destructive) {
                 showReportView = true
             }
             if onDelete != nil {
-                Button("刪除", role: .destructive) {
+                Button("Delete", role: .destructive) {
                     onDelete?()
                 }
             }
-            Button("取消", role: .cancel) { }
+            Button("Cancel", role: .cancel) { }
         }
     }
 

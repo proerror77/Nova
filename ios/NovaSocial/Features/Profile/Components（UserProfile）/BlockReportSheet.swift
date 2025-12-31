@@ -34,7 +34,7 @@ struct BlockReportSheet: View {
                     mainActionsView
                 }
             }
-            .navigationTitle(showReportReasons ? "選擇舉報原因" : "")
+            .navigationTitle(showReportReasons ? "Select Report Reason" : "")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -61,18 +61,18 @@ struct BlockReportSheet: View {
                         .scaleEffect(1.2)
                 }
             }
-            .alert("確認封鎖", isPresented: $showConfirmBlock) {
-                Button("取消", role: .cancel) { }
-                Button("封鎖", role: .destructive) {
+            .alert("Confirm Block", isPresented: $showConfirmBlock) {
+                Button("Cancel", role: .cancel) { }
+                Button("Block", role: .destructive) {
                     Task {
                         await blockUser()
                     }
                 }
             } message: {
-                Text("封鎖 @\(username) 後，對方將無法查看你的個人資料、貼文，也無法向你發送訊息。")
+                Text("After blocking @\(username), they won't be able to view your profile, posts, or send you messages.")
             }
-            .alert("成功", isPresented: $showSuccess) {
-                Button("確定") {
+            .alert("Success", isPresented: $showSuccess) {
+                Button("OK") {
                     dismiss()
                 }
             } message: {
@@ -119,11 +119,11 @@ struct BlockReportSheet: View {
                             .frame(width: 28)
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("封鎖 @\(username)")
+                            Text("Block @\(username)")
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(.primary)
 
-                            Text("對方將無法與你互動")
+                            Text("They won't be able to interact with you")
                                 .font(.system(size: 13))
                                 .foregroundColor(.secondary)
                         }
@@ -154,11 +154,11 @@ struct BlockReportSheet: View {
                             .frame(width: 28)
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("舉報 @\(username)")
+                            Text("Report @\(username)")
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(.primary)
 
-                            Text("向我們檢舉違規行為")
+                            Text("Report violations to us")
                                 .font(.system(size: 13))
                                 .foregroundColor(.secondary)
                         }
@@ -232,7 +232,7 @@ struct BlockReportSheet: View {
                 // Additional details (shown when "other" is selected)
                 if selectedReason == .other {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("補充說明")
+                        Text("Additional Details")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(.secondary)
                             .padding(.horizontal, 20)
@@ -253,7 +253,7 @@ struct BlockReportSheet: View {
                         await submitReport()
                     }
                 } label: {
-                    Text("提交舉報")
+                    Text("Submit Report")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)

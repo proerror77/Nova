@@ -50,9 +50,9 @@ struct PasskeySettingsView: View {
         .task {
             await loadPasskeys()
         }
-        .alert("刪除 Passkey", isPresented: $showDeleteConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("刪除", role: .destructive) {
+        .alert("Delete Passkey", isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) {
                 if let passkey = passkeyToDelete {
                     Task {
                         await deletePasskey(passkey)
@@ -61,15 +61,15 @@ struct PasskeySettingsView: View {
             }
         } message: {
             if let passkey = passkeyToDelete {
-                Text("確定要刪除「\(passkey.credentialName ?? "Passkey")」嗎？刪除後將無法使用此 Passkey 登入。")
+                Text("Are you sure you want to delete \"\(passkey.credentialName ?? "Passkey")\"? You won't be able to sign in with this Passkey after deletion.")
             }
         }
-        .alert("重新命名 Passkey", isPresented: $showRenameDialog) {
-            TextField("Passkey 名稱", text: $newPasskeyName)
-            Button("取消", role: .cancel) {
+        .alert("Rename Passkey", isPresented: $showRenameDialog) {
+            TextField("Passkey Name", text: $newPasskeyName)
+            Button("Cancel", role: .cancel) {
                 newPasskeyName = ""
             }
-            Button("儲存") {
+            Button("Save") {
                 if let passkey = passkeyToRename {
                     Task {
                         await renamePasskey(passkey, newName: newPasskeyName)
@@ -78,7 +78,7 @@ struct PasskeySettingsView: View {
                 }
             }
         } message: {
-            Text("為這個 Passkey 輸入新名稱")
+            Text("Enter a new name for this Passkey")
         }
         .sheet(item: $selectedPasskey) { passkey in
             PasskeyDetailSheet(
@@ -151,7 +151,7 @@ struct PasskeySettingsView: View {
         VStack(spacing: 16) {
             ProgressView()
                 .scaleEffect(1.2)
-            Text("載入中...")
+            Text("Loading...")
                 .font(.system(size: 15))
                 .foregroundColor(.secondary)
         }
@@ -171,7 +171,7 @@ struct PasskeySettingsView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
 
-            Button("重試") {
+            Button("Retry") {
                 Task {
                     await loadPasskeys()
                 }
@@ -194,11 +194,11 @@ struct PasskeySettingsView: View {
                 .foregroundColor(.secondary.opacity(0.6))
 
             VStack(spacing: 8) {
-                Text("尚未設定 Passkey")
+                Text("No Passkeys Set Up")
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundColor(.primary)
 
-                Text("Passkey 讓你使用 Face ID 或 Touch ID 快速安全地登入，無需輸入密碼。")
+                Text("Passkeys let you sign in quickly and securely using Face ID or Touch ID, without needing a password.")
                     .font(.system(size: 15))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -216,7 +216,7 @@ struct PasskeySettingsView: View {
                             .tint(.white)
                     } else {
                         Image(systemName: "plus.circle.fill")
-                        Text("新增 Passkey")
+                        Text("Add Passkey")
                     }
                 }
                 .font(.system(size: 17, weight: .semibold))
@@ -238,7 +238,7 @@ struct PasskeySettingsView: View {
             VStack(spacing: 24) {
                 // Passkey 列表
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("已註冊的 PASSKEYS")
+                    Text("REGISTERED PASSKEYS")
                         .font(.system(size: 13))
                         .foregroundColor(.secondary)
                         .padding(.horizontal, 16)
@@ -268,10 +268,10 @@ struct PasskeySettingsView: View {
                             .frame(width: 32)
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("快速安全登入")
+                            Text("Fast & Secure Sign-in")
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundColor(.primary)
-                            Text("使用 Face ID 或 Touch ID 驗證身份，比密碼更安全。")
+                            Text("Use Face ID or Touch ID to verify your identity, more secure than passwords.")
                                 .font(.system(size: 13))
                                 .foregroundColor(.secondary)
                         }
@@ -284,10 +284,10 @@ struct PasskeySettingsView: View {
                             .frame(width: 32)
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("iCloud 同步")
+                            Text("iCloud Sync")
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundColor(.primary)
-                            Text("Passkey 會透過 iCloud 鑰匙圈自動同步到你的所有 Apple 裝置。")
+                            Text("Passkeys automatically sync to all your Apple devices via iCloud Keychain.")
                                 .font(.system(size: 13))
                                 .foregroundColor(.secondary)
                         }
@@ -316,7 +316,7 @@ struct PasskeySettingsView: View {
                     .font(.system(size: 24))
                     .foregroundColor(.green)
 
-                Text("Passkey 已新增")
+                Text("Passkey Added")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundColor(.white)
             }
@@ -339,7 +339,7 @@ struct PasskeySettingsView: View {
         do {
             passkeys = try await PasskeyService.shared.listPasskeys()
         } catch {
-            errorMessage = "載入失敗：\(error.localizedDescription)"
+            errorMessage = "Failed to load: \(error.localizedDescription)"
             print("[PasskeySettings] Failed to load passkeys: \(error)")
         }
 
@@ -367,7 +367,7 @@ struct PasskeySettingsView: View {
                 showAddSuccess = false
             }
         } catch {
-            errorMessage = "新增失敗：\(error.localizedDescription)"
+            errorMessage = "Failed to add: \(error.localizedDescription)"
             print("[PasskeySettings] Failed to add passkey: \(error)")
         }
 
@@ -379,7 +379,7 @@ struct PasskeySettingsView: View {
             try await PasskeyService.shared.revokePasskey(credentialId: passkey.id)
             passkeys.removeAll { $0.id == passkey.id }
         } catch {
-            errorMessage = "刪除失敗：\(error.localizedDescription)"
+            errorMessage = "Failed to delete: \(error.localizedDescription)"
             print("[PasskeySettings] Failed to delete passkey: \(error)")
         }
     }
@@ -391,7 +391,7 @@ struct PasskeySettingsView: View {
             try await PasskeyService.shared.renamePasskey(credentialId: passkey.id, newName: newName)
             await loadPasskeys()
         } catch {
-            errorMessage = "重新命名失敗：\(error.localizedDescription)"
+            errorMessage = "Failed to rename: \(error.localizedDescription)"
             print("[PasskeySettings] Failed to rename passkey: \(error)")
         }
     }
@@ -510,13 +510,13 @@ private struct PasskeyRow: View {
             let date = Date(timeIntervalSince1970: TimeInterval(lastUsed))
             let formatter = RelativeDateTimeFormatter()
             formatter.unitsStyle = .short
-            parts.append("上次使用：\(formatter.localizedString(for: date, relativeTo: Date()))")
+            parts.append("Last used: \(formatter.localizedString(for: date, relativeTo: Date()))")
         } else {
             let date = Date(timeIntervalSince1970: TimeInterval(passkey.createdAt))
             let formatter = DateFormatter()
             formatter.dateStyle = .medium
             formatter.timeStyle = .none
-            parts.append("建立於 \(formatter.string(from: date))")
+            parts.append("Created on \(formatter.string(from: date))")
         }
 
         return parts.joined(separator: " · ")
@@ -537,52 +537,52 @@ private struct PasskeyDetailSheet: View {
             List {
                 // 基本資訊
                 Section {
-                    LabeledContent("名稱", value: passkey.credentialName ?? "Passkey")
+                    LabeledContent("Name", value: passkey.credentialName ?? "Passkey")
                     if let deviceType = passkey.deviceType {
-                        LabeledContent("裝置類型", value: deviceType)
+                        LabeledContent("Device Type", value: deviceType)
                     }
                     if let osVersion = passkey.osVersion {
-                        LabeledContent("系統版本", value: osVersion)
+                        LabeledContent("OS Version", value: osVersion)
                     }
                 }
 
                 // 同步狀態
                 Section {
                     HStack {
-                        Text("iCloud 同步")
+                        Text("iCloud Sync")
                         Spacer()
                         if passkey.backupState {
-                            Label("已同步", systemImage: "checkmark.circle.fill")
+                            Label("Synced", systemImage: "checkmark.circle.fill")
                                 .foregroundColor(.green)
                         } else if passkey.backupEligible {
-                            Label("可同步", systemImage: "icloud")
+                            Label("Syncable", systemImage: "icloud")
                                 .foregroundColor(.blue)
                         } else {
-                            Label("僅限此裝置", systemImage: "iphone")
+                            Label("This Device Only", systemImage: "iphone")
                                 .foregroundColor(.orange)
                         }
                     }
                 } footer: {
                     if passkey.backupState {
-                        Text("此 Passkey 已同步到你的 iCloud 鑰匙圈，可在所有 Apple 裝置上使用。")
+                        Text("This Passkey is synced to your iCloud Keychain and available on all your Apple devices.")
                     } else if passkey.backupEligible {
-                        Text("此 Passkey 可同步到 iCloud 鑰匙圈。")
+                        Text("This Passkey can be synced to iCloud Keychain.")
                     } else {
-                        Text("此 Passkey 僅儲存在此裝置，無法同步到其他裝置。")
+                        Text("This Passkey is stored only on this device and cannot be synced to other devices.")
                     }
                 }
 
                 // 使用記錄
                 Section {
-                    LabeledContent("建立時間", value: formatDate(passkey.createdAt))
+                    LabeledContent("Created", value: formatDate(passkey.createdAt))
                     if let lastUsed = passkey.lastUsedAt {
-                        LabeledContent("上次使用", value: formatDate(lastUsed))
+                        LabeledContent("Last Used", value: formatDate(lastUsed))
                     }
                 }
 
-                // 傳輸方式
+                // Transport methods
                 if !passkey.transports.isEmpty {
-                    Section("支援的傳輸方式") {
+                    Section("Supported Transport Methods") {
                         ForEach(passkey.transports, id: \.self) { transport in
                             Label(transportName(transport), systemImage: transportIcon(transport))
                         }
@@ -595,22 +595,22 @@ private struct PasskeyDetailSheet: View {
                         dismiss()
                         onRename()
                     } label: {
-                        Label("重新命名", systemImage: "pencil")
+                        Label("Rename", systemImage: "pencil")
                     }
 
                     Button(role: .destructive) {
                         dismiss()
                         onDelete()
                     } label: {
-                        Label("刪除 Passkey", systemImage: "trash")
+                        Label("Delete Passkey", systemImage: "trash")
                     }
                 }
             }
-            .navigationTitle("Passkey 詳情")
+            .navigationTitle("Passkey Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") {
+                    Button("Done") {
                         dismiss()
                     }
                 }
@@ -629,15 +629,15 @@ private struct PasskeyDetailSheet: View {
     private func transportName(_ transport: String) -> String {
         switch transport.lowercased() {
         case "internal":
-            return "內建驗證器"
+            return "Built-in Authenticator"
         case "usb":
-            return "USB 安全金鑰"
+            return "USB Security Key"
         case "nfc":
             return "NFC"
         case "ble":
-            return "藍牙"
+            return "Bluetooth"
         case "hybrid":
-            return "跨裝置驗證"
+            return "Cross-Device"
         default:
             return transport
         }

@@ -55,7 +55,7 @@ struct MessageBubbleView: View {
                 // 時間和狀態
                 HStack(spacing: 4.w) {
                     if message.isEdited {
-                        Text("已編輯")
+                        Text("Edited")
                             .font(.system(size: 10.f))
                             .foregroundColor(DesignTokens.textMuted)
                     }
@@ -92,7 +92,7 @@ struct MessageBubbleView: View {
                         .font(.system(size: 11.f))
                         .foregroundColor(DesignTokens.textMuted)
                     if message.isEdited {
-                        Text("已編輯")
+                        Text("Edited")
                             .font(.system(size: 10.f))
                             .foregroundColor(DesignTokens.textMuted)
                     }
@@ -112,7 +112,7 @@ struct MessageBubbleView: View {
                 ProgressView()
                     .scaleEffect(0.6)
                     .frame(width: 12, height: 12)
-                Text("傳送中")
+                Text("Sending")
                     .font(.system(size: 9))
                     .foregroundColor(DesignTokens.textMuted)
             }
@@ -121,7 +121,7 @@ struct MessageBubbleView: View {
                 Image(systemName: "checkmark")
                     .font(.system(size: 9))
                     .foregroundColor(DesignTokens.textMuted)
-                Text("已傳送")
+                Text("Sent")
                     .font(.system(size: 9))
                     .foregroundColor(DesignTokens.textMuted)
             }
@@ -130,7 +130,7 @@ struct MessageBubbleView: View {
                 Image(systemName: "checkmark.circle")
                     .font(.system(size: 9))
                     .foregroundColor(DesignTokens.textMuted)
-                Text("已送達")
+                Text("Delivered")
                     .font(.system(size: 9))
                     .foregroundColor(DesignTokens.textMuted)
             }
@@ -139,7 +139,7 @@ struct MessageBubbleView: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 9))
                     .foregroundColor(.blue)
-                Text("已讀")
+                Text("Read")
                     .font(.system(size: 9, weight: .medium))
                     .foregroundColor(.blue)
             }
@@ -151,7 +151,7 @@ struct MessageBubbleView: View {
                     Image(systemName: "exclamationmark.circle.fill")
                         .font(.system(size: 12))
                         .foregroundColor(.red)
-                    Text("重試")
+                    Text("Retry")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(.red)
                 }
@@ -173,21 +173,21 @@ struct MessageBubbleView: View {
                 }
             }
         } label: {
-            Label("反應", systemImage: "face.smiling")
+            Label("React", systemImage: "face.smiling")
         }
 
         // 回覆
         Button {
             onReply?(message)
         } label: {
-            Label("回覆", systemImage: "arrowshape.turn.up.left")
+            Label("Reply", systemImage: "arrowshape.turn.up.left")
         }
 
         // 複製
         Button {
             UIPasteboard.general.string = message.text
         } label: {
-            Label("複製", systemImage: "doc.on.doc")
+            Label("Copy", systemImage: "doc.on.doc")
         }
 
         if message.isFromMe {
@@ -196,7 +196,7 @@ struct MessageBubbleView: View {
                 Button {
                     onEdit?(message)
                 } label: {
-                    Label("編輯", systemImage: "pencil")
+                    Label("Edit", systemImage: "pencil")
                 }
             }
 
@@ -205,14 +205,14 @@ struct MessageBubbleView: View {
                 Button {
                     onRecall?(message)
                 } label: {
-                    Label("撤回", systemImage: "arrow.uturn.backward")
+                    Label("Unsend", systemImage: "arrow.uturn.backward")
                 }
             }
 
             Button(role: .destructive) {
                 onLongPress?(message)
             } label: {
-                Label("刪除", systemImage: "trash")
+                Label("Delete", systemImage: "trash")
             }
         }
     }
@@ -262,7 +262,7 @@ struct MessageBubbleView: View {
                 Image(systemName: "arrow.uturn.backward.circle")
                     .font(.system(size: 14))
                     .foregroundColor(DesignTokens.textMuted)
-                Text(isFromMe ? "你撤回了一條消息" : "對方撤回了一條消息")
+                Text(isFromMe ? "You unsent a message" : "This message was unsent")
                     .font(.system(size: 14))
                     .foregroundColor(DesignTokens.textMuted)
                     .italic()
@@ -373,11 +373,11 @@ struct MessageBubbleView: View {
                 .font(.system(size: 24))
                 .foregroundColor(isFromMe ? .white : myBubbleColor)
             VStack(alignment: .leading, spacing: 2) {
-                Text(message.text.isEmpty ? "文件" : message.text)
+                Text(message.text.isEmpty ? "File" : message.text)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(isFromMe ? .white : otherTextColor)
                     .lineLimit(1)
-                Text("點擊下載")
+                Text("Tap to download")
                     .font(.system(size: 11))
                     .foregroundColor(isFromMe ? .white.opacity(0.7) : DesignTokens.textMuted)
             }

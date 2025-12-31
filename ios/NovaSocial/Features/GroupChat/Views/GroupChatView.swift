@@ -351,7 +351,7 @@ struct GroupChatView: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 24))
                         .foregroundColor(.red)
-                    Text("鬆開取消")
+                    Text("Release to cancel")
                         .font(.caption)
                         .foregroundColor(.red)
                 }
@@ -373,7 +373,7 @@ struct GroupChatView: View {
                         .font(.system(size: 10))
                         .foregroundColor(.gray)
 
-                    Text("上滑取消")
+                    Text("Swipe up to cancel")
                         .font(.system(size: 10))
                         .foregroundColor(.gray)
                 }

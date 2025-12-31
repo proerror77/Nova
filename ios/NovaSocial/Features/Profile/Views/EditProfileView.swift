@@ -48,24 +48,24 @@ struct EditProfileView: View {
                     VStack(spacing: 20) {
                         // Display Name
                         editField(
-                            title: "顯示名稱",
-                            placeholder: "輸入顯示名稱",
+                            title: "Display Name",
+                            placeholder: "Enter display name",
                             text: $displayName,
                             limit: displayNameLimit
                         )
 
                         // Bio
                         editTextArea(
-                            title: "簡介",
-                            placeholder: "介紹一下自己...",
+                            title: "Bio",
+                            placeholder: "Tell us about yourself...",
                             text: $bio,
                             limit: bioLimit
                         )
 
                         // Location
                         editField(
-                            title: "位置",
-                            placeholder: "你在哪裡？",
+                            title: "Location",
+                            placeholder: "Where are you?",
                             text: $location,
                             limit: locationLimit,
                             icon: "location.fill"
@@ -73,7 +73,7 @@ struct EditProfileView: View {
 
                         // Website
                         editField(
-                            title: "網站",
+                            title: "Website",
                             placeholder: "https://example.com",
                             text: $website,
                             limit: websiteLimit,
@@ -87,18 +87,18 @@ struct EditProfileView: View {
                 .padding(.bottom, 100)
             }
             .background(Color(UIColor.systemGroupedBackground))
-            .navigationTitle("編輯個人資料")
+            .navigationTitle("Edit Profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
+                    Button("Cancel") {
                         dismiss()
                     }
                     .foregroundColor(.primary)
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("儲存") {
+                    Button("Save") {
                         Task {
                             await saveProfile()
                         }
@@ -117,8 +117,8 @@ struct EditProfileView: View {
                         .scaleEffect(1.2)
                 }
             }
-            .alert("錯誤", isPresented: $showError) {
-                Button("確定", role: .cancel) { }
+            .alert("Error", isPresented: $showError) {
+                Button("OK", role: .cancel) { }
             } message: {
                 Text(errorMessage)
             }
@@ -190,7 +190,7 @@ struct EditProfileView: View {
                 }
             }
 
-            Text(isUploadingAvatar ? "上傳中..." : "點擊更換頭像")
+            Text(isUploadingAvatar ? "Uploading..." : "Tap to change avatar")
                 .font(.system(size: 14))
                 .foregroundColor(.secondary)
         }
@@ -214,7 +214,7 @@ struct EditProfileView: View {
             }
         } catch {
             await MainActor.run {
-                errorMessage = "無法載入圖片：\(error.localizedDescription)"
+                errorMessage = "Failed to load image: \(error.localizedDescription)"
                 showError = true
             }
         }
@@ -258,7 +258,7 @@ struct EditProfileView: View {
         } catch {
             await MainActor.run {
                 isUploadingAvatar = false
-                errorMessage = "頭像上傳失敗：\(error.localizedDescription)"
+                errorMessage = "Avatar upload failed: \(error.localizedDescription)"
                 showError = true
                 // Revert to original avatar
                 selectedAvatarImage = nil
@@ -397,20 +397,20 @@ struct EditProfileView: View {
     // MARK: - Save Profile
     private func saveProfile() async {
         guard let userId = authManager.currentUser?.id else {
-            errorMessage = "無法獲取用戶資訊"
+            errorMessage = "Unable to get user information"
             showError = true
             return
         }
 
         // Validate limits
         if displayName.count > displayNameLimit {
-            errorMessage = "顯示名稱超過字數限制"
+            errorMessage = "Display name exceeds character limit"
             showError = true
             return
         }
 
         if bio.count > bioLimit {
-            errorMessage = "簡介超過字數限制"
+            errorMessage = "Bio exceeds character limit"
             showError = true
             return
         }
@@ -442,7 +442,7 @@ struct EditProfileView: View {
         } catch {
             await MainActor.run {
                 isLoading = false
-                errorMessage = "更新失敗：\(error.localizedDescription)"
+                errorMessage = "Update failed: \(error.localizedDescription)"
                 showError = true
             }
         }

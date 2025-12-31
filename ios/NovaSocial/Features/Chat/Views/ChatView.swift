@@ -158,7 +158,7 @@ struct ChatView: View {
                             HStack(spacing: 6.s) {
                                 Image(systemName: "arrow.down")
                                     .font(.system(size: 12.f, weight: .semibold))
-                                Text("\(newMessageCount) 則新訊息")
+                                Text("\(newMessageCount) new messages")
                                     .font(.system(size: 13.f, weight: .medium))
                             }
                             .foregroundColor(.white)
@@ -470,7 +470,7 @@ struct ChatView: View {
                         .frame(width: 3.w)
 
                     VStack(alignment: .leading, spacing: 2.h) {
-                        Text("回覆 \(replyPreview.senderName)")
+                        Text("Reply to \(replyPreview.senderName)")
                             .font(.system(size: 12.f, weight: .medium))
                             .foregroundColor(DesignTokens.accentColor)
                         Text(replyPreview.content)
@@ -502,7 +502,7 @@ struct ChatView: View {
                         .frame(width: 3.w)
 
                     VStack(alignment: .leading, spacing: 2.h) {
-                        Text("編輯消息")
+                        Text("Edit Message")
                             .font(.system(size: 12.f, weight: .medium))
                             .foregroundColor(.orange)
                         Text(editingMsg.text)
@@ -547,7 +547,7 @@ struct ChatView: View {
 
                 // Text input
                 HStack(spacing: 8.w) {
-                    TextField(viewModel.editingMessage != nil ? "編輯消息..." : "Type a message...", text: $viewModel.messageText)
+                    TextField(viewModel.editingMessage != nil ? "Edit message..." : "Type a message...", text: $viewModel.messageText)
                         .font(.system(size: 16.f))
                         .padding(.horizontal, 12.w)
                         .padding(.vertical, 8.h)
