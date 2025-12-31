@@ -1971,6 +1971,7 @@
 			name = ICERED;
 			packageProductDependencies = (
 				89B16F3BD122ECA55FE121C5 /* MatrixRustSDK */,
+				LIVEKIT002 /* LiveKit */,
 			);
 			productName = ICERED;
 			productReference = C6B7EF0FCF06C5477C18E6F9 /* ICERED.app */;
@@ -2051,6 +2052,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				51265FCDDB4D71991880F8D2 /* XCRemoteSwiftPackageReference "matrix-rust-components-swift" */,
+				LIVEKIT001 /* XCRemoteSwiftPackageReference "client-sdk-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
@@ -2822,6 +2824,14 @@
 				version = 25.12.19;
 			};
 		};
+		LIVEKIT001 /* XCRemoteSwiftPackageReference "client-sdk-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/livekit/client-sdk-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -2829,6 +2839,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 51265FCDDB4D71991880F8D2 /* XCRemoteSwiftPackageReference "matrix-rust-components-swift" */;
 			productName = MatrixRustSDK;
+		};
+		LIVEKIT002 /* LiveKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = LIVEKIT001 /* XCRemoteSwiftPackageReference "client-sdk-swift" */;
+			productName = LiveKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
