@@ -367,6 +367,7 @@ extension AppCoordinator {
     private func appPageToRoute(_ page: AppPage) -> AppRoute {
         switch page {
         case .splash: return .splash
+        case .welcome: return .splash  // Welcome uses same route as splash
         case .inviteCode: return .inviteCode
         case .login: return .login
         case .phoneLogin: return .phoneLogin

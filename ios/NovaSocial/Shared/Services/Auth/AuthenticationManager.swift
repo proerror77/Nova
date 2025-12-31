@@ -294,6 +294,9 @@ class AuthenticationManager: ObservableObject, @unchecked Sendable {
         // Save authentication with refresh token
         await saveAuth(token: response.accessToken, refreshToken: response.refreshToken, user: response.user)
 
+        // Set flag to show welcome screen for first-time registration
+        UserDefaults.standard.set(true, forKey: "shouldShowWelcome")
+
         return response.user
     }
 

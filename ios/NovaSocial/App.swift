@@ -65,6 +65,11 @@ struct IceredApp: App {
                     SplashScreenView(currentPage: $currentPage)
                         .transition(.identity)
                 }
+                // Welcome Screen（在 Splash 之后显示）
+                else if currentPage == .welcome {
+                    WelcomeView(currentPage: $currentPage)
+                        .transition(.identity)
+                }
                 // Check authentication state
                 else if !authManager.isAuthenticated {
                     // 未登录时的页面切换
