@@ -48,14 +48,14 @@ struct SplashScreenView: View {
             }
             
             if isValid && authManager.isAuthenticated {
-                print("[Splash] ✅ Session valid, navigating to home")
-                currentPage = .home
+                print("[Splash] ✅ Session valid, navigating to welcome")
+                currentPage = .welcome
             } else {
-                print("[Splash] ❌ Session invalid, navigating to login")
-                currentPage = .login
+                print("[Splash] ❌ Session invalid, navigating to welcome")
+                currentPage = .welcome
             }
         } else {
-            print("[Splash] ℹ️ Not authenticated, navigating to login")
+            print("[Splash] ℹ️ Not authenticated, navigating to welcome")
             
             // Ensure minimum splash duration
             let elapsed = Date().timeIntervalSince(splashStartTime)
@@ -63,7 +63,7 @@ struct SplashScreenView: View {
                 try? await Task.sleep(for: .seconds(minimumSplashDuration - elapsed))
             }
             
-            currentPage = .login
+            currentPage = .welcome
         }
         
         print("[Splash] 🏁 Navigation complete -> \(currentPage)")

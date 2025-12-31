@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WelcomeView: View {
     @Binding var currentPage: AppPage
+    @EnvironmentObject private var authManager: AuthenticationManager
 
     var body: some View {
         ZStack {
@@ -69,9 +70,15 @@ struct WelcomeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea(.all)
         .task {
-            // 显示 2 秒后跳转到登录页
+            // 显示 2 秒后根据认证状态跳转
             try? await Task.sleep(for: .seconds(2))
-            currentPage = .login
+            if authManager.isAuthenticated {
+                print("[Welcome] ✅ User authenticated, navigating to home")
+                currentPage = .home
+            } else {
+                print("[Welcome] ℹ️ User not authenticated, navigating to login")
+                currentPage = .login
+            }
         }
     }
 }
@@ -79,6 +86,7 @@ struct WelcomeView: View {
 // MARK: - Previews
 
 #Preview("Welcome") {
-    @Previewable @State var currentPage: AppPage = .splash
+    @Previewable @State var currentPage: AppPage = .welcome
     WelcomeView(currentPage: $currentPage)
+        .environmentObject(AuthenticationManager.shared)
 }
