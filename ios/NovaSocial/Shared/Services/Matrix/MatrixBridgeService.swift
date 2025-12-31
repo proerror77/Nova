@@ -1186,8 +1186,11 @@ extension MatrixBridgeService {
     /// - Parameter userId: The Matrix user ID to search for
     /// - Returns: The existing conversation info if found, nil otherwise
     func findExistingDirectRoom(withUserId userId: String) async throws -> MatrixConversationInfo? {
+        // Convert userId to Matrix format for comparison
+        let matrixUserId = matrixService.convertToMatrixUserId(novaUserId: userId)
+
         #if DEBUG
-        print("[MatrixBridge] 🔍 Searching for existing DM with: \(userId)")
+        print("[MatrixBridge] 🔍 Searching for existing DM with: \(userId) (Matrix ID: \(matrixUserId))")
         #endif
 
         // Get all rooms from Matrix
@@ -1204,8 +1207,8 @@ extension MatrixBridgeService {
                 print("[MatrixBridge]   Checking DM room \(room.id) with members: \(memberIds)")
                 #endif
 
-                // Check if the target user is in this room
-                if memberIds.contains(userId) {
+                // Check if the target user is in this room (compare with Matrix user ID)
+                if memberIds.contains(matrixUserId) {
                     #if DEBUG
                     print("[MatrixBridge]   ✅ Found existing DM room: \(room.id)")
                     #endif

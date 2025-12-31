@@ -3,29 +3,28 @@ import SwiftUI
 // MARK: - Reusable Skeleton Loader Components
 
 /// Base shimmer effect view
+/// Optimized: Removed unnecessary GeometryReader - Rectangle fills container by default
 struct ShimmerEffect: View {
     @State private var phase: CGFloat = 0
 
     var body: some View {
-        GeometryReader { geometry in
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.gray.opacity(0.15),
-                            Color.gray.opacity(0.25),
-                            Color.gray.opacity(0.15)
-                        ]),
-                        startPoint: .init(x: phase - 0.5, y: 0.5),
-                        endPoint: .init(x: phase + 0.5, y: 0.5)
-                    )
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color.gray.opacity(0.15),
+                        Color.gray.opacity(0.25),
+                        Color.gray.opacity(0.15)
+                    ]),
+                    startPoint: .init(x: phase - 0.5, y: 0.5),
+                    endPoint: .init(x: phase + 0.5, y: 0.5)
                 )
-                .onAppear {
-                    withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
-                        phase = 1.5
-                    }
+            )
+            .onAppear {
+                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                    phase = 1.5
                 }
-        }
+            }
     }
 }
 
