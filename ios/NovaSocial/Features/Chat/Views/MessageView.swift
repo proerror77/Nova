@@ -677,6 +677,8 @@ struct MessageView: View {
                                     .resizable()
                                     .frame(width: 24.s, height: 24.s)
                             }
+                            .accessibilityLabel("Add")
+                            .accessibilityHint("Start a new chat or add friends")
                             .padding(.trailing, 16.w)
                         }
                     }
@@ -710,6 +712,8 @@ struct MessageView: View {
                                     searchResults = []
                                 }
                             }
+                            .accessibilityLabel("Search conversations")
+                            .accessibilityHint("Search for people or messages")
 
                         if !searchText.isEmpty {
                             Button(action: {
@@ -722,6 +726,7 @@ struct MessageView: View {
                                     .font(.system(size: 14.f))
                                     .foregroundColor(DesignTokens.textSecondary)
                             }
+                            .accessibilityLabel("Clear search")
                         }
                     }
                     .padding(EdgeInsets(top: 6.h, leading: 12.w, bottom: 6.h, trailing: 12.w))
@@ -867,6 +872,10 @@ struct MessageView: View {
                             }
                             .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
                             .listRowSeparator(.hidden)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("\(convo.userName), \(convo.lastMessage)")
+                            .accessibilityHint(convo.hasUnread ? "\(convo.unreadCount) unread messages. Double tap to open chat" : "Double tap to open chat")
+                            .accessibilityAddTraits(.isButton)
                         }
                     }
                     .listStyle(.plain)
