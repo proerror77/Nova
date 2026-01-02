@@ -4,9 +4,10 @@ use tracing::{error, warn};
 
 use crate::clients::proto::auth::GetUserProfilesByIdsRequest;
 use crate::clients::proto::social::{
-    BatchCheckBookmarkedRequest, CheckUserBookmarkedRequest, CheckUserLikedRequest,
-    CreateBookmarkRequest, CreateCommentRequest, CreateLikeRequest, CreateShareRequest,
-    DeleteBookmarkRequest, DeleteCommentRequest, DeleteLikeRequest, GetBookmarksRequest,
+    BatchCheckBookmarkedRequest, CheckCommentLikedRequest, CheckUserBookmarkedRequest,
+    CheckUserLikedRequest, CreateBookmarkRequest, CreateCommentLikeRequest, CreateCommentRequest,
+    CreateLikeRequest, CreateShareRequest, DeleteBookmarkRequest, DeleteCommentLikeRequest,
+    DeleteCommentRequest, DeleteLikeRequest, GetBookmarksRequest, GetCommentLikeCountRequest,
     GetCommentsRequest, GetLikesRequest, GetShareCountRequest, GetUserLikedPostsRequest,
 };
 use crate::clients::ServiceClients;
@@ -730,6 +731,141 @@ pub async fn get_user_liked_posts(
         })),
         Err(e) => {
             error!("get_user_liked_posts failed: {}", e);
+            HttpResponse::ServiceUnavailable().finish()
+        }
+    }
+}
+
+// ============================================================================
+// COMMENT LIKE ENDPOINTS (IG/小红书风格评论点赞)
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+pub struct CommentLikeBody {
+    pub comment_id: String,
+}
+
+/// Create a like on a comment
+#[post("/api/v2/social/comment/like")]
+pub async fn create_comment_like(
+    http_req: HttpRequest,
+    clients: web::Data<ServiceClients>,
+    body: web::Json<CommentLikeBody>,
+) -> HttpResponse {
+    let user_id = match http_req.extensions().get::<AuthenticatedUser>().copied() {
+        Some(AuthenticatedUser(id)) => id.to_string(),
+        None => return HttpResponse::Unauthorized().finish(),
+    };
+
+    let req = CreateCommentLikeRequest {
+        user_id,
+        comment_id: body.comment_id.clone(),
+    };
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.create_comment_like(req).await }
+        })
+        .await
+    {
+        Ok(resp) => HttpResponse::Ok().json(serde_json::json!({
+            "success": resp.success,
+            "like_count": resp.like_count
+        })),
+        Err(e) => {
+            error!("create_comment_like failed: {}", e);
+            HttpResponse::ServiceUnavailable().json(
+                serde_json::json!({"success": false, "error": "Service temporarily unavailable"}),
+            )
+        }
+    }
+}
+
+/// Delete a like from a comment - path parameter version
+#[delete("/api/v2/social/comment/unlike/{comment_id}")]
+pub async fn delete_comment_like(
+    http_req: HttpRequest,
+    clients: web::Data<ServiceClients>,
+    path: web::Path<String>,
+) -> HttpResponse {
+    let user_id = match http_req.extensions().get::<AuthenticatedUser>().copied() {
+        Some(AuthenticatedUser(id)) => id.to_string(),
+        None => return HttpResponse::Unauthorized().finish(),
+    };
+
+    let comment_id = path.into_inner();
+    let req = DeleteCommentLikeRequest { user_id, comment_id };
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.delete_comment_like(req).await }
+        })
+        .await
+    {
+        Ok(resp) => HttpResponse::Ok().json(serde_json::json!({
+            "success": resp.success,
+            "like_count": resp.like_count
+        })),
+        Err(e) => {
+            error!("delete_comment_like failed: {}", e);
+            HttpResponse::ServiceUnavailable().json(
+                serde_json::json!({"success": false, "error": "Service temporarily unavailable"}),
+            )
+        }
+    }
+}
+
+/// Get like count for a comment
+#[get("/api/v2/social/comment/likes/{comment_id}")]
+pub async fn get_comment_like_count(
+    clients: web::Data<ServiceClients>,
+    path: web::Path<String>,
+) -> HttpResponse {
+    let comment_id = path.into_inner();
+    let req = GetCommentLikeCountRequest { comment_id };
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.get_comment_like_count(req).await }
+        })
+        .await
+    {
+        Ok(resp) => HttpResponse::Ok().json(serde_json::json!({
+            "like_count": resp.like_count
+        })),
+        Err(e) => {
+            error!("get_comment_like_count failed: {}", e);
+            HttpResponse::ServiceUnavailable().finish()
+        }
+    }
+}
+
+/// Check if user has liked a comment
+#[get("/api/v2/social/comment/check-liked/{comment_id}")]
+pub async fn check_comment_liked(
+    http_req: HttpRequest,
+    clients: web::Data<ServiceClients>,
+    path: web::Path<String>,
+) -> HttpResponse {
+    let user_id = match http_req.extensions().get::<AuthenticatedUser>().copied() {
+        Some(AuthenticatedUser(id)) => id.to_string(),
+        None => return HttpResponse::Unauthorized().finish(),
+    };
+
+    let comment_id = path.into_inner();
+    let req = CheckCommentLikedRequest { user_id, comment_id };
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.check_comment_liked(req).await }
+        })
+        .await
+    {
+        Ok(resp) => HttpResponse::Ok().json(serde_json::json!({
+            "liked": resp.liked
+        })),
+        Err(e) => {
+            error!("check_comment_liked failed: {}", e);
             HttpResponse::ServiceUnavailable().finish()
         }
     }

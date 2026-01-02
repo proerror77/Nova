@@ -14,8 +14,8 @@ use crate::domain::models::{
     Like as LikeModel, Poll as PollModel, PollCandidate as PollCandidateModel, Share as ShareModel,
 };
 use crate::repository::{
-    polls::CreateCandidateInput, BookmarkRepository, CommentRepository, LikeRepository,
-    PollRepository, ShareRepository,
+    polls::CreateCandidateInput, BookmarkRepository, CommentLikeRepository, CommentRepository,
+    LikeRepository, PollRepository, ShareRepository,
 };
 use crate::services::{CounterService, FollowService, SocialEventProducer};
 use transactional_outbox::{OutboxEvent, OutboxRepository};
@@ -96,6 +96,10 @@ impl SocialServiceImpl {
 
     fn bookmark_repo(&self) -> BookmarkRepository {
         BookmarkRepository::new(self.state.pg_pool.clone())
+    }
+
+    fn comment_like_repo(&self) -> CommentLikeRepository {
+        CommentLikeRepository::new(self.state.pg_pool.clone())
     }
 }
 
@@ -473,6 +477,92 @@ impl SocialService for SocialServiceImpl {
             comments: comments.into_iter().map(to_proto_comment).collect(),
             total,
         }))
+    }
+
+    // ========= Comment Likes (IG/小红书风格评论点赞) =========
+    async fn create_comment_like(
+        &self,
+        request: Request<CreateCommentLikeRequest>,
+    ) -> Result<Response<CreateCommentLikeResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+        let comment_id = parse_uuid(&req.comment_id, "comment_id")?;
+
+        let repo = self.comment_like_repo();
+        let (_like, _was_created) = repo
+            .create_like(user_id, comment_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to create comment like: {}", e)))?;
+
+        // Get updated count from denormalized column (trigger already updated it)
+        let like_count = repo
+            .get_like_count(comment_id)
+            .await
+            .unwrap_or(0);
+
+        Ok(Response::new(CreateCommentLikeResponse {
+            success: true,
+            like_count,
+        }))
+    }
+
+    async fn delete_comment_like(
+        &self,
+        request: Request<DeleteCommentLikeRequest>,
+    ) -> Result<Response<DeleteCommentLikeResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+        let comment_id = parse_uuid(&req.comment_id, "comment_id")?;
+
+        let repo = self.comment_like_repo();
+        let _was_deleted = repo
+            .delete_like(user_id, comment_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to delete comment like: {}", e)))?;
+
+        // Get updated count from denormalized column (trigger already updated it)
+        let like_count = repo
+            .get_like_count(comment_id)
+            .await
+            .unwrap_or(0);
+
+        Ok(Response::new(DeleteCommentLikeResponse {
+            success: true,
+            like_count,
+        }))
+    }
+
+    async fn get_comment_like_count(
+        &self,
+        request: Request<GetCommentLikeCountRequest>,
+    ) -> Result<Response<GetCommentLikeCountResponse>, Status> {
+        let req = request.into_inner();
+        let comment_id = parse_uuid(&req.comment_id, "comment_id")?;
+
+        let like_count = self
+            .comment_like_repo()
+            .get_like_count(comment_id)
+            .await
+            .unwrap_or(0);
+
+        Ok(Response::new(GetCommentLikeCountResponse { like_count }))
+    }
+
+    async fn check_comment_liked(
+        &self,
+        request: Request<CheckCommentLikedRequest>,
+    ) -> Result<Response<CheckCommentLikedResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+        let comment_id = parse_uuid(&req.comment_id, "comment_id")?;
+
+        let liked = self
+            .comment_like_repo()
+            .check_user_liked(user_id, comment_id)
+            .await
+            .unwrap_or(false);
+
+        Ok(Response::new(CheckCommentLikedResponse { liked }))
     }
 
     // ========= Shares =========
