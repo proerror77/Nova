@@ -179,6 +179,18 @@ final class MatrixBridgeService: @unchecked Sendable {
             isInitialized = true
             initializationError = nil
 
+            // Sync user profile (display name and avatar) to Matrix
+            // Run in background to not block initialization
+            Task {
+                do {
+                    try await self.syncProfileToMatrix()
+                } catch {
+                    #if DEBUG
+                    print("[MatrixBridge] ⚠️ Profile sync failed (non-blocking): \(error)")
+                    #endif
+                }
+            }
+
             #if DEBUG
             print("[MatrixBridge] ═══════════════════════════════════════════")
             print("[MatrixBridge] ✅ Bridge initialized successfully!")
