@@ -647,6 +647,123 @@ final class MatrixBridgeService: @unchecked Sendable {
         }
     }
 
+    // MARK: - Profile Sync
+
+    /// Sync the current Nova user's profile (display name and avatar) to Matrix
+    /// This should be called after login and whenever the user updates their profile
+    func syncProfileToMatrix() async throws {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        guard let currentUser = AuthenticationManager.shared.currentUser else {
+            throw MatrixBridgeError.notAuthenticated
+        }
+
+        #if DEBUG
+        print("[MatrixBridge] 🔄 Syncing profile to Matrix...")
+        print("[MatrixBridge]   Display name: \(currentUser.displayName ?? currentUser.username)")
+        print("[MatrixBridge]   Avatar URL: \(currentUser.avatarUrl ?? "none")")
+        #endif
+
+        // Sync display name
+        let displayName = currentUser.displayName ?? currentUser.username
+        do {
+            try await matrixService.setDisplayName(displayName)
+            #if DEBUG
+            print("[MatrixBridge] ✅ Display name synced: \(displayName)")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[MatrixBridge] ⚠️ Failed to sync display name: \(error)")
+            #endif
+            // Continue with avatar sync even if display name fails
+        }
+
+        // Sync avatar if available
+        if let avatarUrlString = currentUser.avatarUrl,
+           !avatarUrlString.isEmpty,
+           let avatarUrl = URL(string: avatarUrlString) {
+            do {
+                // Download the avatar image from Nova's storage
+                let (data, response) = try await URLSession.shared.data(from: avatarUrl)
+
+                // Determine MIME type from response or URL
+                let mimeType: String
+                if let contentType = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type") {
+                    mimeType = contentType
+                } else if avatarUrlString.lowercased().hasSuffix(".png") {
+                    mimeType = "image/png"
+                } else if avatarUrlString.lowercased().hasSuffix(".gif") {
+                    mimeType = "image/gif"
+                } else if avatarUrlString.lowercased().hasSuffix(".webp") {
+                    mimeType = "image/webp"
+                } else {
+                    mimeType = "image/jpeg"
+                }
+
+                // Upload to Matrix
+                try await matrixService.uploadAvatar(imageData: data, mimeType: mimeType)
+
+                #if DEBUG
+                print("[MatrixBridge] ✅ Avatar synced successfully")
+                #endif
+            } catch {
+                #if DEBUG
+                print("[MatrixBridge] ⚠️ Failed to sync avatar: \(error)")
+                #endif
+                // Don't throw - avatar sync failure shouldn't break the flow
+            }
+        } else {
+            #if DEBUG
+            print("[MatrixBridge] ℹ️ No avatar URL to sync")
+            #endif
+        }
+
+        #if DEBUG
+        print("[MatrixBridge] ✅ Profile sync complete")
+        #endif
+    }
+
+    /// Update just the display name on Matrix
+    func updateDisplayName(_ displayName: String) async throws {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        try await matrixService.setDisplayName(displayName)
+
+        #if DEBUG
+        print("[MatrixBridge] ✅ Display name updated to: \(displayName)")
+        #endif
+    }
+
+    /// Update the avatar on Matrix from image data
+    func updateAvatar(imageData: Data, mimeType: String) async throws {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        try await matrixService.uploadAvatar(imageData: imageData, mimeType: mimeType)
+
+        #if DEBUG
+        print("[MatrixBridge] ✅ Avatar updated")
+        #endif
+    }
+
+    /// Remove the avatar from Matrix
+    func removeMatrixAvatar() async throws {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        try await matrixService.removeAvatar()
+
+        #if DEBUG
+        print("[MatrixBridge] ✅ Avatar removed")
+        #endif
+    }
+
     // MARK: - Conversation Mapping
 
     /// Get or create Matrix room for a Nova conversation

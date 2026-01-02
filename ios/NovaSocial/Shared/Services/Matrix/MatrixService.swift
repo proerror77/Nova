@@ -47,6 +47,12 @@ class Client {
     func availableSlidingSyncVersions() async -> [SlidingSyncVersion] { [.none] }
     /// Returns the current sliding sync version being used
     func slidingSyncVersion() -> SlidingSyncVersion { .none }
+    // Profile methods (stub implementations)
+    func setDisplayName(name: String) async throws {}
+    func uploadAvatar(mimeType: String, data: Data) async throws {}
+    func removeAvatar() async throws {}
+    func avatarUrl() async throws -> String? { nil }
+    func cachedAvatarUrl() async throws -> String? { nil }
 }
 
 /// Builder enum for sliding sync version configuration
@@ -2239,6 +2245,108 @@ final class MatrixService: MatrixServiceProtocol {
         #endif
 
         return []
+    }
+
+    // MARK: - Profile Operations
+
+    /// Set the current user's display name on Matrix
+    /// - Parameter displayName: The display name to set
+    func setDisplayName(_ displayName: String) async throws {
+        guard let client = client else {
+            throw MatrixError.notInitialized
+        }
+
+        #if DEBUG
+        print("[MatrixService] Setting display name to: \(displayName)")
+        #endif
+
+        do {
+            try await client.setDisplayName(name: displayName)
+
+            #if DEBUG
+            print("[MatrixService] ✅ Display name set successfully")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[MatrixService] ❌ Failed to set display name: \(error)")
+            #endif
+            throw MatrixError.sdkError(error.localizedDescription)
+        }
+    }
+
+    /// Upload and set the current user's avatar on Matrix
+    /// - Parameters:
+    ///   - imageData: The image data to upload (JPEG or PNG)
+    ///   - mimeType: The MIME type of the image (e.g., "image/jpeg" or "image/png")
+    func uploadAvatar(imageData: Data, mimeType: String) async throws {
+        guard let client = client else {
+            throw MatrixError.notInitialized
+        }
+
+        #if DEBUG
+        print("[MatrixService] Uploading avatar (size: \(imageData.count) bytes, type: \(mimeType))")
+        #endif
+
+        do {
+            // Matrix Rust SDK expects Data type for avatar upload
+            try await client.uploadAvatar(mimeType: mimeType, data: imageData)
+
+            #if DEBUG
+            print("[MatrixService] ✅ Avatar uploaded successfully")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[MatrixService] ❌ Failed to upload avatar: \(error)")
+            #endif
+            throw MatrixError.sdkError(error.localizedDescription)
+        }
+    }
+
+    /// Remove the current user's avatar from Matrix
+    func removeAvatar() async throws {
+        guard let client = client else {
+            throw MatrixError.notInitialized
+        }
+
+        #if DEBUG
+        print("[MatrixService] Removing avatar")
+        #endif
+
+        do {
+            try await client.removeAvatar()
+
+            #if DEBUG
+            print("[MatrixService] ✅ Avatar removed successfully")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[MatrixService] ❌ Failed to remove avatar: \(error)")
+            #endif
+            throw MatrixError.sdkError(error.localizedDescription)
+        }
+    }
+
+    /// Get the current user's avatar MXC URL from Matrix
+    /// - Returns: The MXC URL of the avatar, or nil if not set
+    func getAvatarUrl() async throws -> String? {
+        guard let client = client else {
+            throw MatrixError.notInitialized
+        }
+
+        do {
+            let url = try await client.avatarUrl()
+
+            #if DEBUG
+            print("[MatrixService] Avatar URL: \(url ?? "not set")")
+            #endif
+
+            return url
+        } catch {
+            #if DEBUG
+            print("[MatrixService] ❌ Failed to get avatar URL: \(error)")
+            #endif
+            throw MatrixError.sdkError(error.localizedDescription)
+        }
     }
 
     // MARK: - Helper Methods (internal for extension access)
