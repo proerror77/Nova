@@ -22,6 +22,18 @@ struct CommentSheetView: View {
     @EnvironmentObject private var authManager: AuthenticationManager
     private let socialService = SocialService()
 
+    /// 将评论按照父子关系分组 (IG/小红书风格嵌套回复)
+    private var groupedComments: [(parent: SocialComment, replies: [SocialComment])] {
+        // 获取所有顶级评论 (没有 parentCommentId)
+        let topLevelComments = comments.filter { $0.parentCommentId == nil }
+
+        // 为每个顶级评论找到其回复
+        return topLevelComments.map { parent in
+            let replies = comments.filter { $0.parentCommentId == parent.id }
+            return (parent: parent, replies: replies)
+        }
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -69,20 +81,39 @@ struct CommentSheetView: View {
                                 .foregroundColor(DesignTokens.textSecondary)
                                 .padding(.bottom, DesignTokens.spacing8)
 
-                            ForEach(comments) { comment in
-                                SocialCommentRow(
-                                    comment: comment,
-                                    canDelete: canDeleteComment(comment),
-                                    onAvatarTapped: { userId in
-                                        // 关闭评论弹窗，触发头像点击回调
-                                        isPresented = false
-                                        onAvatarTapped?(userId)
-                                    },
-                                    onDelete: {
-                                        commentToDelete = comment
-                                        showDeleteConfirmation = true
+                            // 使用分组评论显示嵌套回复 (IG/小红书风格)
+                            ForEach(Array(groupedComments.enumerated()), id: \.offset) { _, group in
+                                VStack(alignment: .leading, spacing: 0) {
+                                    // 父评论
+                                    SocialCommentRow(
+                                        comment: group.parent,
+                                        canDelete: canDeleteComment(group.parent),
+                                        onAvatarTapped: { userId in
+                                            isPresented = false
+                                            onAvatarTapped?(userId)
+                                        },
+                                        onDelete: {
+                                            commentToDelete = group.parent
+                                            showDeleteConfirmation = true
+                                        }
+                                    )
+
+                                    // 嵌套回复 (有缩进)
+                                    if !group.replies.isEmpty {
+                                        NestedRepliesView(
+                                            replies: group.replies,
+                                            canDeleteComment: canDeleteComment,
+                                            onAvatarTapped: { userId in
+                                                isPresented = false
+                                                onAvatarTapped?(userId)
+                                            },
+                                            onDelete: { comment in
+                                                commentToDelete = comment
+                                                showDeleteConfirmation = true
+                                            }
+                                        )
                                     }
-                                )
+                                }
                             }
                         }
                     }
@@ -97,9 +128,23 @@ struct CommentSheetView: View {
 
                 // Comment Input
                 HStack(spacing: DesignTokens.spacing12) {
-                    Circle()
-                        .fill(DesignTokens.avatarPlaceholder)
+                    // 显示当前用户真实头像 (IG/小红书风格)
+                    if let avatarUrl = authManager.currentUser?.avatarUrl, let url = URL(string: avatarUrl) {
+                        AsyncImage(url: url) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        } placeholder: {
+                            Circle()
+                                .fill(DesignTokens.avatarPlaceholder)
+                        }
                         .frame(width: 36, height: 36)
+                        .clipShape(Circle())
+                    } else {
+                        Circle()
+                            .fill(DesignTokens.avatarPlaceholder)
+                            .frame(width: 36, height: 36)
+                    }
 
                     TextField("Add a comment...", text: $commentText)
                         .font(.system(size: DesignTokens.fontMedium))
@@ -300,6 +345,7 @@ struct SocialCommentRow: View {
     var onDelete: (() -> Void)?  // 删除评论回调
 
     @State private var showDeleteMenu = false
+    @State private var isLiked = false  // 评论点赞状态
 
     var body: some View {
         HStack(alignment: .top, spacing: DesignTokens.spacing12) {
@@ -328,26 +374,49 @@ struct SocialCommentRow: View {
             }
 
             VStack(alignment: .leading, spacing: DesignTokens.spacing4) {
-                HStack {
-                    // 用户名 (点击跳转用户主页)
+                // 内联格式: 用户名 + 评论内容在同一行 (IG/小红书风格)
+                HStack(alignment: .top, spacing: 0) {
                     Text(comment.displayAuthorName)
                         .font(.system(size: DesignTokens.fontMedium, weight: .semibold))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textSecondary)
                         .onTapGesture {
                             onAvatarTapped?(comment.userId)
                         }
+                    Text(" ")
+                    Text(comment.content)
+                        .font(.system(size: DesignTokens.fontMedium))
+                        .foregroundColor(DesignTokens.textPrimary)
+                }
+                .fixedSize(horizontal: false, vertical: true)
 
+                // 时间戳和回复按钮
+                HStack(spacing: 12) {
                     Text(comment.createdDate.timeAgoDisplay())
                         .font(.system(size: DesignTokens.fontSmall))
                         .foregroundColor(DesignTokens.textSecondary)
-                }
 
-                Text(comment.content)
-                    .font(.system(size: DesignTokens.fontMedium))
-                    .foregroundColor(DesignTokens.textPrimary)
+                    Text("Reply")
+                        .font(.system(size: DesignTokens.fontSmall, weight: .medium))
+                        .foregroundColor(DesignTokens.textSecondary)
+                }
             }
 
             Spacer()
+
+            // 点赞按钮 (IG 风格 - 右侧爱心)
+            Button(action: {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    isLiked.toggle()
+                }
+                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                impactFeedback.impactOccurred()
+            }) {
+                Image(systemName: isLiked ? "heart.fill" : "heart")
+                    .font(.system(size: 14))
+                    .foregroundColor(isLiked ? .red : DesignTokens.textSecondary)
+                    .scaleEffect(isLiked ? 1.1 : 1.0)
+            }
+            .buttonStyle(.plain)
         }
         .contentShape(Rectangle())
         .simultaneousGesture(
@@ -454,5 +523,70 @@ struct DeleteCommentConfirmation: View {
         }
         .transition(.opacity.combined(with: .scale(scale: 0.9)))
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isPresented)
+    }
+}
+
+// MARK: - Nested Replies View (IG/小红书风格嵌套回复)
+
+struct NestedRepliesView: View {
+    let replies: [SocialComment]
+    let canDeleteComment: (SocialComment) -> Bool
+    var onAvatarTapped: ((String) -> Void)?
+    var onDelete: ((SocialComment) -> Void)?
+
+    @State private var isExpanded = false
+    private let maxCollapsedReplies = 1  // 收起时显示的回复数量
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // 显示的回复 (展开时显示全部，收起时只显示第一条)
+            let visibleReplies = isExpanded ? replies : Array(replies.prefix(maxCollapsedReplies))
+
+            ForEach(visibleReplies) { reply in
+                HStack(alignment: .top, spacing: DesignTokens.spacing12) {
+                    // 缩进线条 (IG 风格)
+                    Rectangle()
+                        .fill(Color.clear)
+                        .frame(width: DesignTokens.avatarSmall)
+
+                    // 回复内容
+                    SocialCommentRow(
+                        comment: reply,
+                        canDelete: canDeleteComment(reply),
+                        onAvatarTapped: onAvatarTapped,
+                        onDelete: {
+                            onDelete?(reply)
+                        }
+                    )
+                }
+            }
+
+            // "查看更多回复" 按钮
+            if replies.count > maxCollapsedReplies {
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        // 缩进对齐
+                        Rectangle()
+                            .fill(Color.clear)
+                            .frame(width: DesignTokens.avatarSmall)
+
+                        // 展开/收起线条
+                        Rectangle()
+                            .fill(DesignTokens.textSecondary)
+                            .frame(width: 20, height: 1)
+
+                        Text(isExpanded ? "Hide replies" : "View \(replies.count - maxCollapsedReplies) more \(replies.count - maxCollapsedReplies == 1 ? "reply" : "replies")")
+                            .font(.system(size: DesignTokens.fontSmall, weight: .medium))
+                            .foregroundColor(DesignTokens.textSecondary)
+                    }
+                }
+                .padding(.leading, DesignTokens.spacing12)
+            }
+        }
+        .padding(.leading, DesignTokens.spacing12)
     }
 }

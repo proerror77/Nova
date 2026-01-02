@@ -153,6 +153,7 @@ struct PostDetailView: View {
     var onPostDeleted: (() -> Void)?  // 帖子删除后回调
     var onLikeChanged: ((Bool, Int) -> Void)?  // 点赞状态变化回调 (isLiked, likeCount)
     var onBookmarkChanged: ((Bool, Int) -> Void)?  // 收藏状态变化回调 (isBookmarked, bookmarkCount)
+    var onCommentCountUpdated: ((String, Int) -> Void)?  // 评论数量同步回调 (postId, actualCount)
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var authManager: AuthenticationManager
     @State private var currentImageIndex = 0
@@ -319,6 +320,8 @@ struct PostDetailView: View {
                 onCommentCountUpdated: { postId, actualCount in
                     // 更新本地评论数量
                     commentViewModel.updateTotalCount(actualCount)
+                    // 同步回 Feed
+                    onCommentCountUpdated?(postId, actualCount)
                 }
             )
         }
@@ -926,18 +929,20 @@ struct SocialCommentItemView: View {
 
                 // Comment Content
                 VStack(alignment: .leading, spacing: 5) {
-                    // Author Name (点击跳转用户主页)
-                    Text(comment.displayAuthorName)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(DesignTokens.textSecondary)
-                        .onTapGesture {
-                            onAvatarTapped?(comment.userId)
-                        }
-
-                    // Comment Text
-                    Text(comment.content)
-                        .font(.system(size: 12))
-                        .foregroundColor(DesignTokens.textPrimary)
+                    // 内联格式: 用户名 + 评论内容在同一行 (IG/小红书风格)
+                    HStack(alignment: .top, spacing: 0) {
+                        Text(comment.displayAuthorName)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(DesignTokens.textSecondary)
+                            .onTapGesture {
+                                onAvatarTapped?(comment.userId)
+                            }
+                        Text(" ")
+                        Text(comment.content)
+                            .font(.system(size: 12))
+                            .foregroundColor(DesignTokens.textPrimary)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
 
                     // Time, Location, Reply + Like & Save (same row)
                     HStack(spacing: 14) {
