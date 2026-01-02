@@ -437,6 +437,21 @@ struct EditProfileView: View {
                 authManager.updateCurrentUser(updatedUser)
                 isLoading = false
                 onProfileUpdated?()
+
+                // Sync updated profile to Matrix (display name and avatar)
+                Task {
+                    do {
+                        try await MatrixBridgeService.shared.syncProfileToMatrix()
+                        #if DEBUG
+                        print("[EditProfileView] ✅ Profile synced to Matrix")
+                        #endif
+                    } catch {
+                        #if DEBUG
+                        print("[EditProfileView] ⚠️ Failed to sync profile to Matrix: \(error)")
+                        #endif
+                    }
+                }
+
                 dismiss()
             }
         } catch {

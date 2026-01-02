@@ -167,6 +167,20 @@ final class ProfileSettingViewModel {
                 #endif
             }
 
+            // Sync updated profile to Matrix (display name and avatar)
+            Task {
+                do {
+                    try await MatrixBridgeService.shared.syncProfileToMatrix()
+                    #if DEBUG
+                    print("[ProfileSettingViewModel] ✅ Profile synced to Matrix")
+                    #endif
+                } catch {
+                    #if DEBUG
+                    print("[ProfileSettingViewModel] ⚠️ Failed to sync profile to Matrix: \(error)")
+                    #endif
+                }
+            }
+
             isSaving = false
             return true
         } catch {
