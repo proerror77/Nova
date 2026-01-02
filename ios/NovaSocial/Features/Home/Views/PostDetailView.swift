@@ -1,6 +1,48 @@
 import SwiftUI
 import Photos
 
+// MARK: - @Mention Text Parsing (IG/小红书风格)
+
+/// 解析评论文本中的 @提及 并返回带高亮的 Text
+private func parseCommentText(_ text: String) -> Text {
+    let pattern = "@[\\w\\u4e00-\\u9fff]+"
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+        return Text(text)
+    }
+
+    let nsString = text as NSString
+    let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsString.length))
+
+    if matches.isEmpty {
+        return Text(text)
+    }
+
+    var result = Text("")
+    var lastEnd = 0
+
+    for match in matches {
+        if match.range.location > lastEnd {
+            let beforeRange = NSRange(location: lastEnd, length: match.range.location - lastEnd)
+            let beforeText = nsString.substring(with: beforeRange)
+            result = result + Text(beforeText)
+        }
+
+        let mentionText = nsString.substring(with: match.range)
+        result = result + Text(mentionText)
+            .foregroundColor(DesignTokens.accentColor)
+            .fontWeight(.medium)
+
+        lastEnd = match.range.location + match.range.length
+    }
+
+    if lastEnd < nsString.length {
+        let afterText = nsString.substring(from: lastEnd)
+        result = result + Text(afterText)
+    }
+
+    return result
+}
+
 // MARK: - Comment ViewModel
 
 /// ViewModel for managing comments on a post
@@ -912,10 +954,15 @@ struct SocialCommentItemView: View {
     let comment: SocialComment
     var onReplyTapped: (() -> Void)? = nil
     var onAvatarTapped: ((String) -> Void)? = nil  // 点击头像回调
+
+    @EnvironmentObject private var authManager: AuthenticationManager
     @State private var isLiked = false
     @State private var isSaved = false
     @State private var likeCount = 0
     @State private var saveCount = 0
+    @State private var isLikeLoading = false
+
+    private let socialService = SocialService()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -930,19 +977,20 @@ struct SocialCommentItemView: View {
                 // Comment Content
                 VStack(alignment: .leading, spacing: 5) {
                     // 内联格式: 用户名 + 评论内容在同一行 (IG/小红书风格)
-                    HStack(alignment: .top, spacing: 0) {
+                    // 使用 Text 连接以支持 @mention 高亮
+                    (
                         Text(comment.displayAuthorName)
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(DesignTokens.textSecondary)
-                            .onTapGesture {
-                                onAvatarTapped?(comment.userId)
-                            }
-                        Text(" ")
-                        Text(comment.content)
+                        + Text(" ")
+                        + parseCommentText(comment.content)
                             .font(.system(size: 12))
                             .foregroundColor(DesignTokens.textPrimary)
-                    }
+                    )
                     .fixedSize(horizontal: false, vertical: true)
+                    .onTapGesture {
+                        onAvatarTapped?(comment.userId)
+                    }
 
                     // Time, Location, Reply + Like & Save (same row)
                     HStack(spacing: 14) {
@@ -964,23 +1012,29 @@ struct SocialCommentItemView: View {
 
                         // Like & Save Buttons (Horizontal)
                         HStack(spacing: 5) {
-                            // Like Button
+                            // Like Button (连接 API)
                             Button(action: {
-                                isLiked.toggle()
-                                likeCount += isLiked ? 1 : -1
+                                Task { await toggleCommentLike() }
                             }) {
                                 HStack(spacing: 2) {
-                                    Image(isLiked ? "Like-on" : "Like-off")
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 12, height: 12)
+                                    if isLikeLoading {
+                                        ProgressView()
+                                            .scaleEffect(0.5)
+                                            .frame(width: 12, height: 12)
+                                    } else {
+                                        Image(isLiked ? "Like-on" : "Like-off")
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 12, height: 12)
+                                    }
                                     Text(likeCount.abbreviated)
                                         .font(.system(size: 12))
                                         .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                                 }
                             }
+                            .disabled(isLikeLoading)
 
-                            // Save Button
+                            // Save Button (暂时保留本地状态)
                             Button(action: {
                                 isSaved.toggle()
                                 saveCount += isSaved ? 1 : -1
@@ -1002,6 +1056,67 @@ struct SocialCommentItemView: View {
             .padding(.horizontal, 17)
             .padding(.vertical, 8)
         }
+        .task {
+            await loadCommentLikeStatus()
+        }
+    }
+
+    // MARK: - Comment Like API
+
+    private func loadCommentLikeStatus() async {
+        guard let userId = authManager.currentUser?.id else { return }
+
+        do {
+            async let likedCheck = socialService.checkCommentLiked(commentId: comment.id, userId: userId)
+            async let countCheck = socialService.getCommentLikes(commentId: comment.id)
+
+            let (liked, count) = try await (likedCheck, countCheck)
+            isLiked = liked
+            likeCount = count
+        } catch {
+            #if DEBUG
+            print("[SocialCommentItemView] Failed to load like status: \(error)")
+            #endif
+        }
+    }
+
+    private func toggleCommentLike() async {
+        guard let userId = authManager.currentUser?.id else { return }
+        guard !isLikeLoading else { return }
+
+        isLikeLoading = true
+        let wasLiked = isLiked
+
+        // 乐观更新 UI
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            isLiked.toggle()
+            likeCount = max(0, likeCount + (isLiked ? 1 : -1))
+        }
+
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
+
+        do {
+            let response: SocialService.CommentLikeResponse
+            if wasLiked {
+                response = try await socialService.deleteCommentLike(commentId: comment.id, userId: userId)
+            } else {
+                response = try await socialService.createCommentLike(commentId: comment.id, userId: userId)
+            }
+
+            likeCount = Int(response.likeCount)
+        } catch {
+            // API 失败时回滚
+            withAnimation {
+                isLiked = wasLiked
+                likeCount = max(0, likeCount + (wasLiked ? 1 : -1))
+            }
+            #if DEBUG
+            print("[SocialCommentItemView] Toggle like error: \(error)")
+            #endif
+        }
+
+        isLikeLoading = false
     }
 }
 

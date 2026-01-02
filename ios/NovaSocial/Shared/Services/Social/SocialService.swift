@@ -160,6 +160,68 @@ class SocialService {
         return (response.comments, response.total)
     }
 
+    // MARK: - Comment Likes (IG/小红书风格评论点赞)
+
+    /// Response for comment like operations
+    struct CommentLikeResponse: Codable {
+        let likeCount: Int64
+
+        enum CodingKeys: String, CodingKey {
+            case likeCount = "like_count"
+        }
+    }
+
+    /// Like a comment
+    func createCommentLike(commentId: String, userId: String) async throws -> CommentLikeResponse {
+        struct Request: Codable {
+            let comment_id: String
+            let user_id: String
+        }
+
+        let request = Request(comment_id: commentId, user_id: userId)
+        return try await client.request(
+            endpoint: APIConfig.Social.createCommentLike,
+            body: request
+        )
+    }
+
+    /// Unlike a comment
+    func deleteCommentLike(commentId: String, userId: String) async throws -> CommentLikeResponse {
+        return try await client.request(
+            endpoint: APIConfig.Social.deleteCommentLike(commentId),
+            method: "DELETE"
+        )
+    }
+
+    /// Check if user has liked a comment
+    func checkCommentLiked(commentId: String, userId: String) async throws -> Bool {
+        struct Response: Codable {
+            let liked: Bool
+        }
+
+        let response: Response = try await client.get(
+            endpoint: APIConfig.Social.checkCommentLiked(commentId),
+            queryParams: ["user_id": userId]
+        )
+        return response.liked
+    }
+
+    /// Get like count for a comment
+    func getCommentLikes(commentId: String) async throws -> Int {
+        struct Response: Codable {
+            let likeCount: Int
+
+            enum CodingKeys: String, CodingKey {
+                case likeCount = "like_count"
+            }
+        }
+
+        let response: Response = try await client.get(
+            endpoint: APIConfig.Social.getCommentLikes(commentId)
+        )
+        return response.likeCount
+    }
+
     // MARK: - Shares
 
     func createShare(postId: String, userId: String) async throws {

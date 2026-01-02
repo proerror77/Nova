@@ -95,6 +95,12 @@ struct APIConfig {
         static let createComment = "/api/v2/social/comment"
         static let deleteComment = "/api/v2/social/comment"  // comment_id goes in body
         static let getComments = "/api/v2/social/comments"
+
+        // Comment Like endpoints (IG/小红书风格评论点赞)
+        static let createCommentLike = "/api/v2/social/comment/like"
+        static func deleteCommentLike(_ commentId: String) -> String { "/api/v2/social/comment/unlike/\(commentId)" }
+        static func getCommentLikes(_ commentId: String) -> String { "/api/v2/social/comment/likes/\(commentId)" }
+        static func checkCommentLiked(_ commentId: String) -> String { "/api/v2/social/comment/check-liked/\(commentId)" }
         static let createShare = "/api/v2/social/share"
         static func getShareCount(_ postId: String) -> String { "/api/v2/social/shares/count/\(postId)" }
         static let batchGetStats = "/api/v2/social/stats/batch"

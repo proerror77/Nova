@@ -1,5 +1,51 @@
 import SwiftUI
 
+// MARK: - @Mention Text Parsing (IG/小红书风格)
+
+/// 解析评论文本中的 @提及 并返回带高亮的 AttributedString
+private func parseCommentText(_ text: String) -> Text {
+    // 正则匹配 @用户名 (支持中英文、数字、下划线)
+    let pattern = "@[\\w\\u4e00-\\u9fff]+"
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+        return Text(text)
+    }
+
+    let nsString = text as NSString
+    let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsString.length))
+
+    if matches.isEmpty {
+        return Text(text)
+    }
+
+    var result = Text("")
+    var lastEnd = 0
+
+    for match in matches {
+        // 添加 @mention 之前的普通文本
+        if match.range.location > lastEnd {
+            let beforeRange = NSRange(location: lastEnd, length: match.range.location - lastEnd)
+            let beforeText = nsString.substring(with: beforeRange)
+            result = result + Text(beforeText)
+        }
+
+        // 添加高亮的 @mention
+        let mentionText = nsString.substring(with: match.range)
+        result = result + Text(mentionText)
+            .foregroundColor(DesignTokens.accentColor)
+            .fontWeight(.medium)
+
+        lastEnd = match.range.location + match.range.length
+    }
+
+    // 添加最后一个 @mention 之后的文本
+    if lastEnd < nsString.length {
+        let afterText = nsString.substring(from: lastEnd)
+        result = result + Text(afterText)
+    }
+
+    return result
+}
+
 // MARK: - Comment Sheet View
 
 struct CommentSheetView: View {
@@ -344,8 +390,13 @@ struct SocialCommentRow: View {
     var onAvatarTapped: ((String) -> Void)?  // 点击头像回调
     var onDelete: (() -> Void)?  // 删除评论回调
 
+    @EnvironmentObject private var authManager: AuthenticationManager
     @State private var showDeleteMenu = false
     @State private var isLiked = false  // 评论点赞状态
+    @State private var likeCount = 0    // 点赞数量
+    @State private var isLikeLoading = false
+
+    private let socialService = SocialService()
 
     var body: some View {
         HStack(alignment: .top, spacing: DesignTokens.spacing12) {
@@ -375,19 +426,20 @@ struct SocialCommentRow: View {
 
             VStack(alignment: .leading, spacing: DesignTokens.spacing4) {
                 // 内联格式: 用户名 + 评论内容在同一行 (IG/小红书风格)
-                HStack(alignment: .top, spacing: 0) {
+                // 使用 Text 连接以支持 @mention 高亮
+                (
                     Text(comment.displayAuthorName)
                         .font(.system(size: DesignTokens.fontMedium, weight: .semibold))
                         .foregroundColor(DesignTokens.textSecondary)
-                        .onTapGesture {
-                            onAvatarTapped?(comment.userId)
-                        }
-                    Text(" ")
-                    Text(comment.content)
+                    + Text(" ")
+                    + parseCommentText(comment.content)
                         .font(.system(size: DesignTokens.fontMedium))
                         .foregroundColor(DesignTokens.textPrimary)
-                }
+                )
                 .fixedSize(horizontal: false, vertical: true)
+                .onTapGesture {
+                    onAvatarTapped?(comment.userId)
+                }
 
                 // 时间戳和回复按钮
                 HStack(spacing: 12) {
@@ -403,20 +455,31 @@ struct SocialCommentRow: View {
 
             Spacer()
 
-            // 点赞按钮 (IG 风格 - 右侧爱心)
+            // 点赞按钮 + 数量 (IG 风格 - 右侧爱心)
             Button(action: {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                    isLiked.toggle()
-                }
-                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                impactFeedback.impactOccurred()
+                Task { await toggleCommentLike() }
             }) {
-                Image(systemName: isLiked ? "heart.fill" : "heart")
-                    .font(.system(size: 14))
-                    .foregroundColor(isLiked ? .red : DesignTokens.textSecondary)
-                    .scaleEffect(isLiked ? 1.1 : 1.0)
+                VStack(spacing: 2) {
+                    if isLikeLoading {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                            .frame(width: 14, height: 14)
+                    } else {
+                        Image(systemName: isLiked ? "heart.fill" : "heart")
+                            .font(.system(size: 14))
+                            .foregroundColor(isLiked ? .red : DesignTokens.textSecondary)
+                            .scaleEffect(isLiked ? 1.1 : 1.0)
+                    }
+
+                    if likeCount > 0 {
+                        Text("\(likeCount)")
+                            .font(.system(size: 10))
+                            .foregroundColor(DesignTokens.textSecondary)
+                    }
+                }
             }
             .buttonStyle(.plain)
+            .disabled(isLikeLoading)
         }
         .contentShape(Rectangle())
         .simultaneousGesture(
@@ -429,6 +492,69 @@ struct SocialCommentRow: View {
                     }
                 }
         )
+        .task {
+            await loadCommentLikeStatus()
+        }
+    }
+
+    // MARK: - Comment Like API
+
+    private func loadCommentLikeStatus() async {
+        guard let userId = authManager.currentUser?.id else { return }
+
+        do {
+            async let likedCheck = socialService.checkCommentLiked(commentId: comment.id, userId: userId)
+            async let countCheck = socialService.getCommentLikes(commentId: comment.id)
+
+            let (liked, count) = try await (likedCheck, countCheck)
+            isLiked = liked
+            likeCount = count
+        } catch {
+            // 如果 API 不存在，静默失败 (本地状态仍可用)
+            #if DEBUG
+            print("[SocialCommentRow] Failed to load like status: \(error)")
+            #endif
+        }
+    }
+
+    private func toggleCommentLike() async {
+        guard let userId = authManager.currentUser?.id else { return }
+        guard !isLikeLoading else { return }
+
+        isLikeLoading = true
+        let wasLiked = isLiked
+
+        // 乐观更新 UI
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            isLiked.toggle()
+            likeCount = max(0, likeCount + (isLiked ? 1 : -1))
+        }
+
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
+
+        do {
+            let response: SocialService.CommentLikeResponse
+            if wasLiked {
+                response = try await socialService.deleteCommentLike(commentId: comment.id, userId: userId)
+            } else {
+                response = try await socialService.createCommentLike(commentId: comment.id, userId: userId)
+            }
+
+            // 使用服务器返回的准确数量
+            likeCount = Int(response.likeCount)
+        } catch {
+            // API 失败时回滚
+            withAnimation {
+                isLiked = wasLiked
+                likeCount = max(0, likeCount + (wasLiked ? 1 : -1))
+            }
+            #if DEBUG
+            print("[SocialCommentRow] Toggle like error: \(error)")
+            #endif
+        }
+
+        isLikeLoading = false
     }
 }
 
