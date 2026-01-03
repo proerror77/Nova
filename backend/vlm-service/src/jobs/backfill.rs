@@ -171,7 +171,7 @@ impl BackfillJob {
             WHERE soft_delete IS NULL
               AND (vlm_status IS NULL OR vlm_status = 'pending')
               AND media_type IS NOT NULL
-              AND media_type <> 'none'
+              AND media_type <> 'text'
               AND media_urls IS NOT NULL
               AND jsonb_array_length(media_urls) > 0
             ORDER BY created_at DESC

@@ -127,13 +127,23 @@ impl PostService {
         media_type: &str,
         media_urls: &[String],
     ) -> Result<Post> {
+        // Validate: posts must have either media or non-empty content
+        // This prevents "empty posts" that have no content and no images
+        let has_media = !media_urls.is_empty();
+        let has_content = caption.map(|c| !c.trim().is_empty()).unwrap_or(false);
+        if !has_media && !has_content {
+            return Err(crate::error::AppError::ValidationError(
+                "Post must have either media or text content".to_string(),
+            ));
+        }
+
         // Start transaction for atomic post creation + event publishing
         let mut tx = self.pool.begin().await?;
 
         // Serialize media_urls to JSON
         let media_urls_json = serde_json::to_value(media_urls).unwrap_or_default();
 
-        // Note: media_urls fallback to media_key only when media_type is NOT 'none'
+        // Note: media_urls fallback to media_key only when media_type is NOT 'text'
         let post = sqlx::query_as::<_, Post>(
             r#"
             INSERT INTO posts (user_id, caption, media_key, media_type, media_urls, status)
@@ -142,7 +152,7 @@ impl PostService {
                 $2,
                 $3,
                 $4,
-                CASE WHEN $5::jsonb = '[]'::jsonb AND $4 <> 'none' THEN jsonb_build_array($3) ELSE $5::jsonb END,
+                CASE WHEN $5::jsonb = '[]'::jsonb AND $4 <> 'text' THEN jsonb_build_array($3) ELSE $5::jsonb END,
                 'published'
             )
             RETURNING id, user_id, content, caption, media_key, media_type, media_urls, status,
@@ -162,7 +172,7 @@ impl PostService {
             publish_post_created(&mut tx, outbox.as_ref(), &post).await?;
 
             // Publish VLM event for posts with images (async processing)
-            if media_type != "none" && !media_urls.is_empty() {
+            if media_type != "text" && !media_urls.is_empty() {
                 publish_post_created_for_vlm(&mut tx, outbox.as_ref(), &post, media_urls, true)
                     .await?;
                 tracing::debug!(
@@ -196,6 +206,16 @@ impl PostService {
         media_urls: &[String],
         channel_ids: &[Uuid],
     ) -> Result<Post> {
+        // Validate: posts must have either media or non-empty content
+        // This prevents "empty posts" that have no content and no images
+        let has_media = !media_urls.is_empty();
+        let has_content = caption.map(|c| !c.trim().is_empty()).unwrap_or(false);
+        if !has_media && !has_content {
+            return Err(crate::error::AppError::ValidationError(
+                "Post must have either media or text content".to_string(),
+            ));
+        }
+
         // Start transaction for atomic post creation + channel associations + event publishing
         let mut tx = self.pool.begin().await?;
 
@@ -204,8 +224,8 @@ impl PostService {
 
         // 1. Create the post
         // Note: media_urls should only be populated with media_key as fallback when:
-        //   - media_urls is empty AND media_type is NOT 'none' (text-only posts)
-        // For text-only posts (media_type='none'), media_urls should remain empty
+        //   - media_urls is empty AND media_type is NOT 'text' (text-only posts)
+        // For text-only posts (media_type='text'), media_urls should remain empty
         let post = sqlx::query_as::<_, Post>(
             r#"
             INSERT INTO posts (user_id, caption, media_key, media_type, media_urls, status)
@@ -214,7 +234,7 @@ impl PostService {
                 $2,
                 $3,
                 $4,
-                CASE WHEN $5::jsonb = '[]'::jsonb AND $4 <> 'none' THEN jsonb_build_array($3) ELSE $5::jsonb END,
+                CASE WHEN $5::jsonb = '[]'::jsonb AND $4 <> 'text' THEN jsonb_build_array($3) ELSE $5::jsonb END,
                 'published'
             )
             RETURNING id, user_id, content, caption, media_key, media_type, media_urls, status,
@@ -260,8 +280,8 @@ impl PostService {
             publish_post_created(&mut tx, outbox.as_ref(), &post).await?;
 
             // 3a. Publish VLM event for posts with images (async processing)
-            // Only if media_type indicates actual media (not 'none' for text-only posts)
-            if media_type != "none" && !media_urls.is_empty() {
+            // Only if media_type indicates actual media (not 'text' for text-only posts)
+            if media_type != "text" && !media_urls.is_empty() {
                 // Determine if channels should be auto-assigned (if none were manually specified)
                 let auto_assign = channel_ids.is_empty();
                 publish_post_created_for_vlm(
