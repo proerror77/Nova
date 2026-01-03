@@ -1185,9 +1185,11 @@ final class MatrixService: MatrixServiceProtocol {
             throw MatrixError.sdkError("No homeserver URL configured")
         }
 
-        let appSupportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let sessionPath = appSupportURL.appendingPathComponent("matrix_session").path
-        let cachePath = appSupportURL.appendingPathComponent("matrix_cache").path
+        // Use the stored session path from initialize(), matching MatrixConfiguration.sessionPath
+        guard let storedSessionPath = self.sessionPath else {
+            throw MatrixError.sdkError("No session path configured")
+        }
+        let cachePath = storedSessionPath + "/cache"
 
         // Create session delegate for token refresh handling
         let delegate = MatrixSessionDelegateImpl(matrixService: self)
@@ -1196,7 +1198,7 @@ final class MatrixService: MatrixServiceProtocol {
         // Build new client
         let clientBuilder = ClientBuilder()
             .homeserverUrl(url: homeserverURL)
-            .sessionPaths(dataPath: sessionPath, cachePath: cachePath)
+            .sessionPaths(dataPath: storedSessionPath, cachePath: cachePath)
             .userAgent(userAgent: "NovaSocial-iOS/1.0")
             .setSessionDelegate(sessionDelegate: delegate)
             .slidingSyncVersionBuilder(versionBuilder: .discoverNative)

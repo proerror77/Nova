@@ -506,6 +506,7 @@ final class MatrixBridgeService: @unchecked Sendable {
         let sessionPath = MatrixConfiguration.sessionPath
         let fileManager = FileManager.default
 
+        // Clear main session path (Documents/matrix_session)
         do {
             if fileManager.fileExists(atPath: sessionPath) {
                 try fileManager.removeItem(atPath: sessionPath)
@@ -519,7 +520,29 @@ final class MatrixBridgeService: @unchecked Sendable {
             #endif
         }
 
-        // Also clear SSO credentials to force re-login
+        // Also clear legacy Application Support paths (from previous incorrect implementation)
+        // This ensures we don't have stale data from when reinitializeSession used wrong paths
+        if let appSupportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            let legacySessionPath = appSupportURL.appendingPathComponent("matrix_session").path
+            let legacyCachePath = appSupportURL.appendingPathComponent("matrix_cache").path
+
+            for path in [legacySessionPath, legacyCachePath] {
+                do {
+                    if fileManager.fileExists(atPath: path) {
+                        try fileManager.removeItem(atPath: path)
+                        #if DEBUG
+                        print("[MatrixBridge] Legacy data cleared at: \(path)")
+                        #endif
+                    }
+                } catch {
+                    #if DEBUG
+                    print("[MatrixBridge] Failed to clear legacy data at \(path): \(error)")
+                    #endif
+                }
+            }
+        }
+
+        // Also clear SSO credentials to force re-login (includes device ID)
         matrixSSOManager.clearCredentials()
 
         // Clear MatrixService stored credentials (UserDefaults) to force fresh token fetch
