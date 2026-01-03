@@ -1,12 +1,11 @@
 import SwiftUI
 import Photos
 
-// MARK: - @Mention Text Parsing (IG/小红书风格)
-
-/// 解析评论文本中的 @提及 并返回带高亮的 Text
+// MARK: - Text Parsing Helper
+/// Parse comment text and highlight @mentions with accent color
 private func parseCommentText(_ text: String) -> Text {
-    let pattern = "@[\\w\\u4e00-\\u9fff]+"
-    guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+    let pattern = try? NSRegularExpression(pattern: "@[\\w\\u4e00-\\u9fff]+", options: [])
+    guard let regex = pattern else {
         return Text(text)
     }
 
@@ -26,12 +25,10 @@ private func parseCommentText(_ text: String) -> Text {
             let beforeText = nsString.substring(with: beforeRange)
             result = result + Text(beforeText)
         }
-
         let mentionText = nsString.substring(with: match.range)
         result = result + Text(mentionText)
             .foregroundColor(DesignTokens.accentColor)
             .fontWeight(.medium)
-
         lastEnd = match.range.location + match.range.length
     }
 
@@ -59,32 +56,51 @@ class CommentViewModel {
     private(set) var totalCount = 0
     private(set) var hasMore = true
 
+    /// 批次載入的評論按讚狀態 (修復 N+1 API 呼叫問題)
+    private(set) var commentLikeStatus: [String: Bool] = [:]
+
     private let socialService = SocialService()
     private var currentOffset = 0
     private let pageSize = 20
 
     var postId: String = ""
+    private var currentUserId: String?
 
     // MARK: - Load Comments
 
-    func loadComments(postId: String) async {
+    func loadComments(postId: String, userId: String? = nil) async {
         guard !isLoading else { return }
 
         self.postId = postId
+        self.currentUserId = userId
         isLoading = true
         error = nil
         currentOffset = 0
 
         do {
+            // 傳遞 viewerUserId 以在回應中直接包含 likeCount 和 isLikedByViewer
+            // 這樣就不需要額外的 API 呼叫來獲取按讚資訊
             let result = try await socialService.getComments(
                 postId: postId,
                 limit: pageSize,
-                offset: 0
+                offset: 0,
+                viewerUserId: userId
             )
             comments = result.comments
             totalCount = result.totalCount
             hasMore = result.comments.count >= pageSize
             currentOffset = result.comments.count
+
+            // 從評論回應中提取按讚狀態到 cache (向後兼容現有 UI)
+            for comment in comments {
+                if let isLiked = comment.isLikedByViewer {
+                    commentLikeStatus[comment.id] = isLiked
+                }
+            }
+
+            #if DEBUG
+            print("[CommentViewModel] ✅ Loaded \(comments.count) comments with embedded like info (0 extra API calls)")
+            #endif
         } catch {
             self.error = "Failed to load comments"
             #if DEBUG
@@ -93,6 +109,11 @@ class CommentViewModel {
         }
 
         isLoading = false
+    }
+
+    /// 更新單個評論的按讚狀態（供子元件回調使用）
+    func updateCommentLikeStatus(commentId: String, isLiked: Bool) {
+        commentLikeStatus[commentId] = isLiked
     }
 
     // MARK: - Load More Comments
@@ -106,12 +127,20 @@ class CommentViewModel {
             let result = try await socialService.getComments(
                 postId: postId,
                 limit: pageSize,
-                offset: currentOffset
+                offset: currentOffset,
+                viewerUserId: currentUserId
             )
             comments.append(contentsOf: result.comments)
             totalCount = result.totalCount
             hasMore = result.comments.count >= pageSize
             currentOffset += result.comments.count
+
+            // 從新載入的評論中提取按讚狀態
+            for comment in result.comments {
+                if let isLiked = comment.isLikedByViewer {
+                    commentLikeStatus[comment.id] = isLiked
+                }
+            }
         } catch {
             #if DEBUG
             print("[CommentViewModel] Load more error: \(error)")
@@ -278,7 +307,7 @@ struct PostDetailView: View {
         }
         .navigationBarBackButtonHidden(true)
         .task {
-            await commentViewModel.loadComments(postId: post.id)
+            await commentViewModel.loadComments(postId: post.id, userId: authManager.currentUser?.id)
             await checkFollowStatus()
         }
         .onAppear {
@@ -615,10 +644,14 @@ struct PostDetailView: View {
                 ForEach(displayComments) { comment in
                     SocialCommentItemView(
                         comment: comment,
+                        initialLikedStatus: commentViewModel.commentLikeStatus[comment.id],
                         onReplyTapped: {
                             showComments = true
                         },
-                        onAvatarTapped: onAvatarTapped
+                        onAvatarTapped: onAvatarTapped,
+                        onLikeStatusChanged: { commentId, isLiked in
+                            commentViewModel.updateCommentLikeStatus(commentId: commentId, isLiked: isLiked)
+                        }
                     )
                 }
 
@@ -952,8 +985,10 @@ struct PostDetailView: View {
 
 struct SocialCommentItemView: View {
     let comment: SocialComment
+    var initialLikedStatus: Bool? = nil  // 從批次 API 預載的按讚狀態
     var onReplyTapped: (() -> Void)? = nil
     var onAvatarTapped: ((String) -> Void)? = nil  // 点击头像回调
+    var onLikeStatusChanged: ((String, Bool) -> Void)?  // 按讚狀態變更回調
 
     @EnvironmentObject private var authManager: AuthenticationManager
     @State private var isLiked = false
@@ -961,6 +996,7 @@ struct SocialCommentItemView: View {
     @State private var likeCount = 0
     @State private var saveCount = 0
     @State private var isLikeLoading = false
+    @State private var hasLoadedStatus = false  // 追蹤是否已載入狀態
 
     private let socialService = SocialService()
 
@@ -973,6 +1009,8 @@ struct SocialCommentItemView: View {
                     .onTapGesture {
                         onAvatarTapped?(comment.userId)
                     }
+                    .accessibilityLabel("View \(comment.displayAuthorName)'s profile")
+                    .accessibilityHint("Double tap to view profile")
 
                 // Comment Content
                 VStack(alignment: .leading, spacing: 5) {
@@ -991,6 +1029,7 @@ struct SocialCommentItemView: View {
                     .onTapGesture {
                         onAvatarTapped?(comment.userId)
                     }
+                    .accessibilityLabel("\(comment.displayAuthorName) commented: \(comment.content)")
 
                     // Time, Location, Reply + Like & Save (same row)
                     HStack(spacing: 14) {
@@ -998,6 +1037,7 @@ struct SocialCommentItemView: View {
                             Text(comment.createdDate.timeAgoDisplay())
                                 .font(.system(size: 12))
                                 .foregroundColor(DesignTokens.textSecondary)
+                                .accessibilityLabel("Posted \(comment.createdDate.timeAgoDisplay())")
                         }
 
                         Button(action: {
@@ -1007,6 +1047,8 @@ struct SocialCommentItemView: View {
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                         }
+                        .accessibilityLabel("Reply to comment")
+                        .accessibilityHint("Double tap to reply")
 
                         Spacer()
 
@@ -1033,6 +1075,8 @@ struct SocialCommentItemView: View {
                                 }
                             }
                             .disabled(isLikeLoading)
+                            .accessibilityLabel(isLiked ? "Unlike comment, \(likeCount) likes" : "Like comment, \(likeCount) likes")
+                            .accessibilityHint(isLiked ? "Double tap to unlike" : "Double tap to like")
 
                             // Save Button (暂时保留本地状态)
                             Button(action: {
@@ -1049,6 +1093,8 @@ struct SocialCommentItemView: View {
                                         .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                                 }
                             }
+                            .accessibilityLabel(isSaved ? "Unsave comment, \(saveCount) saves" : "Save comment, \(saveCount) saves")
+                            .accessibilityHint(isSaved ? "Double tap to unsave" : "Double tap to save")
                         }
                     }
                 }
@@ -1064,6 +1110,37 @@ struct SocialCommentItemView: View {
     // MARK: - Comment Like API
 
     private func loadCommentLikeStatus() async {
+        guard !hasLoadedStatus else { return }
+        hasLoadedStatus = true
+
+        // 優先使用嵌入在評論中的按讚資訊 (來自 GetComments API)
+        // 這樣完全不需要額外的 API 呼叫
+        if let embeddedLikeCount = comment.likeCount {
+            likeCount = Int(embeddedLikeCount)
+        }
+
+        if let embeddedIsLiked = comment.isLikedByViewer {
+            isLiked = embeddedIsLiked
+            return  // 有嵌入資料，不需要任何 API 呼叫
+        }
+
+        // 向後兼容：如果有從父元件傳入的預載狀態，使用它
+        if let preloadedStatus = initialLikedStatus {
+            isLiked = preloadedStatus
+            // 如果沒有嵌入的 likeCount，需要載入
+            if comment.likeCount == nil {
+                do {
+                    likeCount = try await socialService.getCommentLikes(commentId: comment.id)
+                } catch {
+                    #if DEBUG
+                    print("[SocialCommentItemView] Failed to load like count: \(error)")
+                    #endif
+                }
+            }
+            return
+        }
+
+        // 最後的 Fallback：沒有任何預載資料時，個別載入
         guard let userId = authManager.currentUser?.id else { return }
 
         do {
@@ -1105,6 +1182,9 @@ struct SocialCommentItemView: View {
             }
 
             likeCount = Int(response.likeCount)
+
+            // 通知父元件狀態變更
+            onLikeStatusChanged?(comment.id, isLiked)
         } catch {
             // API 失败时回滚
             withAnimation {

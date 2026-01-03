@@ -1,12 +1,12 @@
 import SwiftUI
 
-// MARK: - @Mention Text Parsing (IG/小红书风格)
+// MARK: - Comment Sheet View
 
-/// 解析评论文本中的 @提及 并返回带高亮的 AttributedString
+// MARK: - Text Parsing Helper
+/// Parse comment text and highlight @mentions with accent color
 private func parseCommentText(_ text: String) -> Text {
-    // 正则匹配 @用户名 (支持中英文、数字、下划线)
-    let pattern = "@[\\w\\u4e00-\\u9fff]+"
-    guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+    let pattern = try? NSRegularExpression(pattern: "@[\\w\\u4e00-\\u9fff]+", options: [])
+    guard let regex = pattern else {
         return Text(text)
     }
 
@@ -21,23 +21,18 @@ private func parseCommentText(_ text: String) -> Text {
     var lastEnd = 0
 
     for match in matches {
-        // 添加 @mention 之前的普通文本
         if match.range.location > lastEnd {
             let beforeRange = NSRange(location: lastEnd, length: match.range.location - lastEnd)
             let beforeText = nsString.substring(with: beforeRange)
             result = result + Text(beforeText)
         }
-
-        // 添加高亮的 @mention
         let mentionText = nsString.substring(with: match.range)
         result = result + Text(mentionText)
             .foregroundColor(DesignTokens.accentColor)
             .fontWeight(.medium)
-
         lastEnd = match.range.location + match.range.length
     }
 
-    // 添加最后一个 @mention 之后的文本
     if lastEnd < nsString.length {
         let afterText = nsString.substring(from: lastEnd)
         result = result + Text(afterText)
@@ -45,8 +40,6 @@ private func parseCommentText(_ text: String) -> Text {
 
     return result
 }
-
-// MARK: - Comment Sheet View
 
 struct CommentSheetView: View {
     let post: FeedPost
@@ -65,13 +58,17 @@ struct CommentSheetView: View {
     @State private var showDeleteConfirmation = false
     @State private var isDeleting = false
 
+    // 批次加載的評論按讚狀態 (修復 N+1 問題)
+    @State private var commentLikeStatus: [String: Bool] = [:]
+    @State private var commentLikeCounts: [String: Int] = [:]
+
     @EnvironmentObject private var authManager: AuthenticationManager
     private let socialService = SocialService()
 
     /// 将评论按照父子关系分组 (IG/小红书风格嵌套回复)
     private var groupedComments: [(parent: SocialComment, replies: [SocialComment])] {
-        // 获取所有顶级评论 (没有 parentCommentId)
-        let topLevelComments = comments.filter { $0.parentCommentId == nil }
+        // 获取所有顶级评论 (没有 parentCommentId 或是空字串)
+        let topLevelComments = comments.filter { $0.parentCommentId == nil || $0.parentCommentId?.isEmpty == true }
 
         // 为每个顶级评论找到其回复
         return topLevelComments.map { parent in
@@ -134,6 +131,7 @@ struct CommentSheetView: View {
                                     SocialCommentRow(
                                         comment: group.parent,
                                         canDelete: canDeleteComment(group.parent),
+                                        initialLikedStatus: commentLikeStatus[group.parent.id],
                                         onAvatarTapped: { userId in
                                             isPresented = false
                                             onAvatarTapped?(userId)
@@ -141,6 +139,9 @@ struct CommentSheetView: View {
                                         onDelete: {
                                             commentToDelete = group.parent
                                             showDeleteConfirmation = true
+                                        },
+                                        onLikeStatusChanged: { commentId, isLiked, count in
+                                            updateCommentLikeStatus(commentId: commentId, isLiked: isLiked, count: count)
                                         }
                                     )
 
@@ -149,6 +150,7 @@ struct CommentSheetView: View {
                                         NestedRepliesView(
                                             replies: group.replies,
                                             canDeleteComment: canDeleteComment,
+                                            commentLikeStatus: commentLikeStatus,
                                             onAvatarTapped: { userId in
                                                 isPresented = false
                                                 onAvatarTapped?(userId)
@@ -156,6 +158,9 @@ struct CommentSheetView: View {
                                             onDelete: { comment in
                                                 commentToDelete = comment
                                                 showDeleteConfirmation = true
+                                            },
+                                            onLikeStatusChanged: { commentId, isLiked, count in
+                                                updateCommentLikeStatus(commentId: commentId, isLiked: isLiked, count: count)
                                             }
                                         )
                                     }
@@ -275,7 +280,14 @@ struct CommentSheetView: View {
         error = nil
 
         do {
-            let result = try await socialService.getComments(postId: post.id, limit: 50, offset: 0)
+            // 傳遞 viewerUserId 以在回應中直接包含 likeCount 和 isLikedByViewer
+            // 這樣就不需要額外的 API 呼叫來獲取按讚資訊
+            let result = try await socialService.getComments(
+                postId: post.id,
+                limit: 50,
+                offset: 0,
+                viewerUserId: authManager.currentUser?.id
+            )
             comments = result.comments
             totalCount = result.totalCount
 
@@ -286,6 +298,17 @@ struct CommentSheetView: View {
                 #endif
                 onCommentCountUpdated?(post.id, totalCount)
             }
+
+            // 從評論回應中提取按讚狀態 (不需要額外 API 呼叫)
+            for comment in comments {
+                if let isLiked = comment.isLikedByViewer {
+                    commentLikeStatus[comment.id] = isLiked
+                }
+            }
+
+            #if DEBUG
+            print("[CommentSheet] ✅ Loaded \(comments.count) comments with embedded like info (0 extra API calls)")
+            #endif
         } catch let apiError as APIError {
             switch apiError {
             case .unauthorized:
@@ -309,6 +332,12 @@ struct CommentSheetView: View {
         }
 
         isLoading = false
+    }
+
+    /// 更新單個評論的按讚狀態（供子元件回調使用）
+    func updateCommentLikeStatus(commentId: String, isLiked: Bool, count: Int) {
+        commentLikeStatus[commentId] = isLiked
+        commentLikeCounts[commentId] = count
     }
 
     private func submitComment() async {
@@ -387,14 +416,17 @@ struct CommentSheetView: View {
 struct SocialCommentRow: View {
     let comment: SocialComment
     var canDelete: Bool = false  // 是否可以删除（评论者本人或帖子拥有者）
+    var initialLikedStatus: Bool? = nil  // 從批次 API 預載的按讚狀態
     var onAvatarTapped: ((String) -> Void)?  // 点击头像回调
     var onDelete: (() -> Void)?  // 删除评论回调
+    var onLikeStatusChanged: ((String, Bool, Int) -> Void)?  // 按讚狀態變更回調
 
     @EnvironmentObject private var authManager: AuthenticationManager
     @State private var showDeleteMenu = false
     @State private var isLiked = false  // 评论点赞状态
     @State private var likeCount = 0    // 点赞数量
     @State private var isLikeLoading = false
+    @State private var hasLoadedStatus = false  // 追蹤是否已載入狀態
 
     private let socialService = SocialService()
 
@@ -415,6 +447,8 @@ struct SocialCommentRow: View {
                 .onTapGesture {
                     onAvatarTapped?(comment.userId)
                 }
+                .accessibilityLabel("View \(comment.displayAuthorName)'s profile")
+                .accessibilityHint("Double tap to view profile")
             } else {
                 Circle()
                     .fill(DesignTokens.avatarPlaceholder)
@@ -422,6 +456,8 @@ struct SocialCommentRow: View {
                     .onTapGesture {
                         onAvatarTapped?(comment.userId)
                     }
+                    .accessibilityLabel("View \(comment.displayAuthorName)'s profile")
+                    .accessibilityHint("Double tap to view profile")
             }
 
             VStack(alignment: .leading, spacing: DesignTokens.spacing4) {
@@ -440,16 +476,20 @@ struct SocialCommentRow: View {
                 .onTapGesture {
                     onAvatarTapped?(comment.userId)
                 }
+                .accessibilityLabel("\(comment.displayAuthorName) commented: \(comment.content)")
 
                 // 时间戳和回复按钮
                 HStack(spacing: 12) {
                     Text(comment.createdDate.timeAgoDisplay())
                         .font(.system(size: DesignTokens.fontSmall))
                         .foregroundColor(DesignTokens.textSecondary)
+                        .accessibilityLabel("Posted \(comment.createdDate.timeAgoDisplay())")
 
                     Text("Reply")
                         .font(.system(size: DesignTokens.fontSmall, weight: .medium))
                         .foregroundColor(DesignTokens.textSecondary)
+                        .accessibilityLabel("Reply to comment")
+                        .accessibilityHint("Double tap to reply")
                 }
             }
 
@@ -480,6 +520,8 @@ struct SocialCommentRow: View {
             }
             .buttonStyle(.plain)
             .disabled(isLikeLoading)
+            .accessibilityLabel(isLiked ? "Unlike comment, \(likeCount) likes" : "Like comment, \(likeCount) likes")
+            .accessibilityHint(isLiked ? "Double tap to unlike" : "Double tap to like")
         }
         .contentShape(Rectangle())
         .simultaneousGesture(
@@ -500,6 +542,37 @@ struct SocialCommentRow: View {
     // MARK: - Comment Like API
 
     private func loadCommentLikeStatus() async {
+        guard !hasLoadedStatus else { return }
+        hasLoadedStatus = true
+
+        // 優先使用嵌入在評論中的按讚資訊 (來自 GetComments API)
+        // 這樣完全不需要額外的 API 呼叫
+        if let embeddedLikeCount = comment.likeCount {
+            likeCount = Int(embeddedLikeCount)
+        }
+
+        if let embeddedIsLiked = comment.isLikedByViewer {
+            isLiked = embeddedIsLiked
+            return  // 有嵌入資料，不需要任何 API 呼叫
+        }
+
+        // 向後兼容：如果有從父元件傳入的預載狀態，使用它
+        if let preloadedStatus = initialLikedStatus {
+            isLiked = preloadedStatus
+            // 如果沒有嵌入的 likeCount，需要載入
+            if comment.likeCount == nil {
+                do {
+                    likeCount = try await socialService.getCommentLikes(commentId: comment.id)
+                } catch {
+                    #if DEBUG
+                    print("[SocialCommentRow] Failed to load like count: \(error)")
+                    #endif
+                }
+            }
+            return
+        }
+
+        // 最後的 Fallback：沒有任何預載資料時，個別載入
         guard let userId = authManager.currentUser?.id else { return }
 
         do {
@@ -510,7 +583,6 @@ struct SocialCommentRow: View {
             isLiked = liked
             likeCount = count
         } catch {
-            // 如果 API 不存在，静默失败 (本地状态仍可用)
             #if DEBUG
             print("[SocialCommentRow] Failed to load like status: \(error)")
             #endif
@@ -543,6 +615,9 @@ struct SocialCommentRow: View {
 
             // 使用服务器返回的准确数量
             likeCount = Int(response.likeCount)
+
+            // 通知父元件狀態變更
+            onLikeStatusChanged?(comment.id, isLiked, likeCount)
         } catch {
             // API 失败时回滚
             withAnimation {
@@ -657,8 +732,10 @@ struct DeleteCommentConfirmation: View {
 struct NestedRepliesView: View {
     let replies: [SocialComment]
     let canDeleteComment: (SocialComment) -> Bool
+    var commentLikeStatus: [String: Bool] = [:]  // 從批次 API 預載的按讚狀態
     var onAvatarTapped: ((String) -> Void)?
     var onDelete: ((SocialComment) -> Void)?
+    var onLikeStatusChanged: ((String, Bool, Int) -> Void)?  // 按讚狀態變更回調
 
     @State private var isExpanded = false
     private let maxCollapsedReplies = 1  // 收起时显示的回复数量
@@ -679,10 +756,12 @@ struct NestedRepliesView: View {
                     SocialCommentRow(
                         comment: reply,
                         canDelete: canDeleteComment(reply),
+                        initialLikedStatus: commentLikeStatus[reply.id],
                         onAvatarTapped: onAvatarTapped,
                         onDelete: {
                             onDelete?(reply)
-                        }
+                        },
+                        onLikeStatusChanged: onLikeStatusChanged
                     )
                 }
             }

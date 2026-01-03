@@ -180,8 +180,19 @@ final class MatrixBridgeService: @unchecked Sendable {
             initializationError = nil
 
             // Sync user profile (display name and avatar) to Matrix
-            // Run in background to not block initialization
+            // Run in background with delay to allow token refresh to complete if needed
             Task {
+                // Wait for sync to stabilize and potential token refresh
+                try? await Task.sleep(nanoseconds: 8_000_000_000) // 8 seconds
+
+                // Verify we're still connected
+                guard self.isInitialized && (self.connectionState == .connected || self.connectionState == .syncing) else {
+                    #if DEBUG
+                    print("[MatrixBridge] ⚠️ Skipping profile sync - not connected")
+                    #endif
+                    return
+                }
+
                 do {
                     try await self.syncProfileToMatrix()
                 } catch {
@@ -663,7 +674,13 @@ final class MatrixBridgeService: @unchecked Sendable {
 
     /// Sync the current Nova user's profile (display name and avatar) to Matrix
     /// This should be called after login and whenever the user updates their profile
+    /// Includes retry logic for token refresh scenarios
     func syncProfileToMatrix() async throws {
+        try await syncProfileToMatrixWithRetry(attempt: 1)
+    }
+
+    /// Internal implementation with retry support
+    private func syncProfileToMatrixWithRetry(attempt: Int, maxAttempts: Int = 3) async throws {
         guard isInitialized else {
             throw MatrixBridgeError.notInitialized
         }
@@ -673,23 +690,35 @@ final class MatrixBridgeService: @unchecked Sendable {
         }
 
         #if DEBUG
-        print("[MatrixBridge] 🔄 Syncing profile to Matrix...")
+        print("[MatrixBridge] 🔄 Syncing profile to Matrix... (attempt \(attempt)/\(maxAttempts))")
         print("[MatrixBridge]   Display name: \(currentUser.displayName ?? currentUser.username)")
         print("[MatrixBridge]   Avatar URL: \(currentUser.avatarUrl ?? "none")")
         #endif
+
+        var displayNameSynced = false
+        var avatarSynced = false
+        var needsRetry = false
 
         // Sync display name
         let displayName = currentUser.displayName ?? currentUser.username
         do {
             try await matrixService.setDisplayName(displayName)
+            displayNameSynced = true
             #if DEBUG
             print("[MatrixBridge] ✅ Display name synced: \(displayName)")
             #endif
         } catch {
-            #if DEBUG
-            print("[MatrixBridge] ⚠️ Failed to sync display name: \(error)")
-            #endif
-            // Continue with avatar sync even if display name fails
+            let errorString = String(describing: error)
+            if errorString.contains("M_UNKNOWN_TOKEN") || errorString.contains("expired") || errorString.contains("notInitialized") {
+                needsRetry = true
+                #if DEBUG
+                print("[MatrixBridge] ⚠️ Display name sync failed (token issue), will retry: \(error)")
+                #endif
+            } else {
+                #if DEBUG
+                print("[MatrixBridge] ⚠️ Failed to sync display name: \(error)")
+                #endif
+            }
         }
 
         // Sync avatar if available
@@ -716,24 +745,54 @@ final class MatrixBridgeService: @unchecked Sendable {
 
                 // Upload to Matrix
                 try await matrixService.uploadAvatar(imageData: data, mimeType: mimeType)
+                avatarSynced = true
 
                 #if DEBUG
                 print("[MatrixBridge] ✅ Avatar synced successfully")
                 #endif
             } catch {
-                #if DEBUG
-                print("[MatrixBridge] ⚠️ Failed to sync avatar: \(error)")
-                #endif
-                // Don't throw - avatar sync failure shouldn't break the flow
+                let errorString = String(describing: error)
+                if errorString.contains("M_UNKNOWN_TOKEN") || errorString.contains("expired") || errorString.contains("notInitialized") {
+                    needsRetry = true
+                    #if DEBUG
+                    print("[MatrixBridge] ⚠️ Avatar sync failed (token issue), will retry: \(error)")
+                    #endif
+                } else {
+                    #if DEBUG
+                    print("[MatrixBridge] ⚠️ Failed to sync avatar: \(error)")
+                    #endif
+                }
             }
         } else {
+            avatarSynced = true // No avatar to sync
             #if DEBUG
             print("[MatrixBridge] ℹ️ No avatar URL to sync")
             #endif
         }
 
+        // Retry if needed and we haven't exceeded max attempts
+        if needsRetry && attempt < maxAttempts && (!displayNameSynced || !avatarSynced) {
+            #if DEBUG
+            print("[MatrixBridge] 🔄 Waiting for token refresh before retry...")
+            #endif
+            // Wait longer for token refresh and client reinitialization to complete
+            try await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+
+            // Check if we're connected before retrying
+            let state = connectionState
+            guard state == .connected || state == .syncing else {
+                #if DEBUG
+                print("[MatrixBridge] ⚠️ Not connected (state: \(state)), skipping retry")
+                #endif
+                return
+            }
+
+            try await syncProfileToMatrixWithRetry(attempt: attempt + 1, maxAttempts: maxAttempts)
+            return
+        }
+
         #if DEBUG
-        print("[MatrixBridge] ✅ Profile sync complete")
+        print("[MatrixBridge] ✅ Profile sync complete (displayName: \(displayNameSynced), avatar: \(avatarSynced))")
         #endif
     }
 

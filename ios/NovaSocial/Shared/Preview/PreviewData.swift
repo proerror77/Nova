@@ -269,7 +269,9 @@ enum PreviewData {
                 createdAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-1800)),
                 authorUsername: Users.regularUser.username,
                 authorDisplayName: Users.regularUser.displayName,
-                authorAvatarUrl: Users.regularUser.avatarUrl
+                authorAvatarUrl: Users.regularUser.avatarUrl,
+                likeCount: 5,
+                isLikedByViewer: false
             ),
             SocialComment(
                 id: "comment-002",
@@ -280,7 +282,9 @@ enum PreviewData {
                 createdAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-3600)),
                 authorUsername: "alice_wonder",
                 authorDisplayName: "Alice Wonder",
-                authorAvatarUrl: "https://picsum.photos/203"
+                authorAvatarUrl: "https://picsum.photos/203",
+                likeCount: 2,
+                isLikedByViewer: true
             ),
             SocialComment(
                 id: "comment-003",
@@ -291,7 +295,9 @@ enum PreviewData {
                 createdAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-1200)),
                 authorUsername: Users.currentUser.username,
                 authorDisplayName: Users.currentUser.displayName,
-                authorAvatarUrl: Users.currentUser.avatarUrl
+                authorAvatarUrl: Users.currentUser.avatarUrl,
+                likeCount: 0,
+                isLikedByViewer: false
             ),
         ]
     }
