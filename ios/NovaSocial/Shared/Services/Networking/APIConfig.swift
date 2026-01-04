@@ -101,6 +101,8 @@ struct APIConfig {
         static func deleteCommentLike(_ commentId: String) -> String { "/api/v2/social/comment/unlike/\(commentId)" }
         static func getCommentLikes(_ commentId: String) -> String { "/api/v2/social/comment/likes/\(commentId)" }
         static func checkCommentLiked(_ commentId: String) -> String { "/api/v2/social/comment/check-liked/\(commentId)" }
+        /// POST /api/v2/social/comment/batch-check-liked - 批量檢查評論按讚狀態（修復 N+1 問題）
+        static let batchCheckCommentLiked = "/api/v2/social/comment/batch-check-liked"
         static let createShare = "/api/v2/social/share"
         static func getShareCount(_ postId: String) -> String { "/api/v2/social/shares/count/\(postId)" }
         static let batchGetStats = "/api/v2/social/stats/batch"
