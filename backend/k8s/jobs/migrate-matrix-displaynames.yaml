@@ -59,8 +59,8 @@ spec:
             - name: SYNAPSE_ADMIN_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: synapse-admin-api
-                  key: SYNAPSE_ADMIN_TOKEN
+                  name: realtime-chat-service-secret
+                  key: MATRIX_ADMIN_TOKEN
             # Identity service for fetching usernames
             - name: IDENTITY_SERVICE_URL
               value: "http://identity-service:50051"
