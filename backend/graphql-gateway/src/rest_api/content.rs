@@ -363,7 +363,7 @@ pub async fn create_post(
             {
                 "image".to_string()
             } else {
-                "none".to_string()
+                "text".to_string()  // Text-only post
             }
         }),
         channel_ids,

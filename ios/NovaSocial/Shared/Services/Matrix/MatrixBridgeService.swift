@@ -179,6 +179,29 @@ final class MatrixBridgeService: @unchecked Sendable {
             isInitialized = true
             initializationError = nil
 
+            // Sync user profile (display name and avatar) to Matrix
+            // Run in background with delay to allow token refresh to complete if needed
+            Task {
+                // Wait for sync to stabilize and potential token refresh
+                try? await Task.sleep(nanoseconds: 8_000_000_000) // 8 seconds
+
+                // Verify we're still connected
+                guard self.isInitialized && (self.connectionState == .connected || self.connectionState == .syncing) else {
+                    #if DEBUG
+                    print("[MatrixBridge] ⚠️ Skipping profile sync - not connected")
+                    #endif
+                    return
+                }
+
+                do {
+                    try await self.syncProfileToMatrix()
+                } catch {
+                    #if DEBUG
+                    print("[MatrixBridge] ⚠️ Profile sync failed (non-blocking): \(error)")
+                    #endif
+                }
+            }
+
             #if DEBUG
             print("[MatrixBridge] ═══════════════════════════════════════════")
             print("[MatrixBridge] ✅ Bridge initialized successfully!")
@@ -483,6 +506,7 @@ final class MatrixBridgeService: @unchecked Sendable {
         let sessionPath = MatrixConfiguration.sessionPath
         let fileManager = FileManager.default
 
+        // Clear main session path (Documents/matrix_session)
         do {
             if fileManager.fileExists(atPath: sessionPath) {
                 try fileManager.removeItem(atPath: sessionPath)
@@ -496,7 +520,29 @@ final class MatrixBridgeService: @unchecked Sendable {
             #endif
         }
 
-        // Also clear SSO credentials to force re-login
+        // Also clear legacy Application Support paths (from previous incorrect implementation)
+        // This ensures we don't have stale data from when reinitializeSession used wrong paths
+        if let appSupportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            let legacySessionPath = appSupportURL.appendingPathComponent("matrix_session").path
+            let legacyCachePath = appSupportURL.appendingPathComponent("matrix_cache").path
+
+            for path in [legacySessionPath, legacyCachePath] {
+                do {
+                    if fileManager.fileExists(atPath: path) {
+                        try fileManager.removeItem(atPath: path)
+                        #if DEBUG
+                        print("[MatrixBridge] Legacy data cleared at: \(path)")
+                        #endif
+                    }
+                } catch {
+                    #if DEBUG
+                    print("[MatrixBridge] Failed to clear legacy data at \(path): \(error)")
+                    #endif
+                }
+            }
+        }
+
+        // Also clear SSO credentials to force re-login (includes device ID)
         matrixSSOManager.clearCredentials()
 
         // Clear MatrixService stored credentials (UserDefaults) to force fresh token fetch
@@ -645,6 +691,171 @@ final class MatrixBridgeService: @unchecked Sendable {
 
             throw error
         }
+    }
+
+    // MARK: - Profile Sync
+
+    /// Sync the current Nova user's profile (display name and avatar) to Matrix
+    /// This should be called after login and whenever the user updates their profile
+    /// Includes retry logic for token refresh scenarios
+    func syncProfileToMatrix() async throws {
+        try await syncProfileToMatrixWithRetry(attempt: 1)
+    }
+
+    /// Internal implementation with retry support
+    private func syncProfileToMatrixWithRetry(attempt: Int, maxAttempts: Int = 3) async throws {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        guard let currentUser = AuthenticationManager.shared.currentUser else {
+            throw MatrixBridgeError.notAuthenticated
+        }
+
+        #if DEBUG
+        print("[MatrixBridge] 🔄 Syncing profile to Matrix... (attempt \(attempt)/\(maxAttempts))")
+        print("[MatrixBridge]   Display name: \(currentUser.displayName ?? currentUser.username)")
+        print("[MatrixBridge]   Avatar URL: \(currentUser.avatarUrl ?? "none")")
+        #endif
+
+        var displayNameSynced = false
+        var avatarSynced = false
+        var needsRetry = false
+
+        // Sync display name
+        let displayName = currentUser.displayName ?? currentUser.username
+        do {
+            try await matrixService.setDisplayName(displayName)
+            displayNameSynced = true
+            #if DEBUG
+            print("[MatrixBridge] ✅ Display name synced: \(displayName)")
+            #endif
+        } catch {
+            let errorString = String(describing: error)
+            if errorString.contains("M_UNKNOWN_TOKEN") || errorString.contains("expired") || errorString.contains("notInitialized") {
+                needsRetry = true
+                #if DEBUG
+                print("[MatrixBridge] ⚠️ Display name sync failed (token issue), will retry: \(error)")
+                #endif
+            } else {
+                #if DEBUG
+                print("[MatrixBridge] ⚠️ Failed to sync display name: \(error)")
+                #endif
+            }
+        }
+
+        // Sync avatar if available
+        if let avatarUrlString = currentUser.avatarUrl,
+           !avatarUrlString.isEmpty,
+           let avatarUrl = URL(string: avatarUrlString) {
+            do {
+                // Download the avatar image from Nova's storage
+                let (data, response) = try await URLSession.shared.data(from: avatarUrl)
+
+                // Determine MIME type from response or URL
+                let mimeType: String
+                if let contentType = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type") {
+                    mimeType = contentType
+                } else if avatarUrlString.lowercased().hasSuffix(".png") {
+                    mimeType = "image/png"
+                } else if avatarUrlString.lowercased().hasSuffix(".gif") {
+                    mimeType = "image/gif"
+                } else if avatarUrlString.lowercased().hasSuffix(".webp") {
+                    mimeType = "image/webp"
+                } else {
+                    mimeType = "image/jpeg"
+                }
+
+                // Upload to Matrix
+                try await matrixService.uploadAvatar(imageData: data, mimeType: mimeType)
+                avatarSynced = true
+
+                #if DEBUG
+                print("[MatrixBridge] ✅ Avatar synced successfully")
+                #endif
+            } catch {
+                let errorString = String(describing: error)
+                if errorString.contains("M_UNKNOWN_TOKEN") || errorString.contains("expired") || errorString.contains("notInitialized") {
+                    needsRetry = true
+                    #if DEBUG
+                    print("[MatrixBridge] ⚠️ Avatar sync failed (token issue), will retry: \(error)")
+                    #endif
+                } else {
+                    #if DEBUG
+                    print("[MatrixBridge] ⚠️ Failed to sync avatar: \(error)")
+                    #endif
+                }
+            }
+        } else {
+            avatarSynced = true // No avatar to sync
+            #if DEBUG
+            print("[MatrixBridge] ℹ️ No avatar URL to sync")
+            #endif
+        }
+
+        // Retry if needed and we haven't exceeded max attempts
+        if needsRetry && attempt < maxAttempts && (!displayNameSynced || !avatarSynced) {
+            #if DEBUG
+            print("[MatrixBridge] 🔄 Waiting for token refresh before retry...")
+            #endif
+            // Wait longer for token refresh and client reinitialization to complete
+            try await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+
+            // Check if we're connected before retrying
+            let state = connectionState
+            guard state == .connected || state == .syncing else {
+                #if DEBUG
+                print("[MatrixBridge] ⚠️ Not connected (state: \(state)), skipping retry")
+                #endif
+                return
+            }
+
+            try await syncProfileToMatrixWithRetry(attempt: attempt + 1, maxAttempts: maxAttempts)
+            return
+        }
+
+        #if DEBUG
+        print("[MatrixBridge] ✅ Profile sync complete (displayName: \(displayNameSynced), avatar: \(avatarSynced))")
+        #endif
+    }
+
+    /// Update just the display name on Matrix
+    func updateDisplayName(_ displayName: String) async throws {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        try await matrixService.setDisplayName(displayName)
+
+        #if DEBUG
+        print("[MatrixBridge] ✅ Display name updated to: \(displayName)")
+        #endif
+    }
+
+    /// Update the avatar on Matrix from image data
+    func updateAvatar(imageData: Data, mimeType: String) async throws {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        try await matrixService.uploadAvatar(imageData: imageData, mimeType: mimeType)
+
+        #if DEBUG
+        print("[MatrixBridge] ✅ Avatar updated")
+        #endif
+    }
+
+    /// Remove the avatar from Matrix
+    func removeMatrixAvatar() async throws {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        try await matrixService.removeAvatar()
+
+        #if DEBUG
+        print("[MatrixBridge] ✅ Avatar removed")
+        #endif
     }
 
     // MARK: - Conversation Mapping
@@ -947,6 +1158,13 @@ extension MatrixBridgeService {
                 return name.range(of: pattern, options: .regularExpression) != nil
             }
 
+            // Helper function to check if name looks like "Conversation {uuid}" (legacy backend format)
+            func looksLikeConversationUUID(_ name: String) -> Bool {
+                // Pattern: "Conversation " followed by UUID (e.g., "Conversation c76f28f8-3650-422b-adcc-74a00cd68a55")
+                let pattern = #"^Conversation\s+[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(-.*)?$"#
+                return name.range(of: pattern, options: .regularExpression) != nil
+            }
+
             if room.isDirect {
                 let initialName = room.name ?? ""
                 displayName = initialName.isEmpty ? "Direct Message" : initialName
@@ -956,9 +1174,11 @@ extension MatrixBridgeService {
                 // - Empty/default name
                 // - Looks like a Matrix room ID
                 // - Looks like a member count fallback (e.g., "2 people")
+                // - Looks like legacy "Conversation {uuid}" format from backend
                 let needsEnrichment = displayName == "Direct Message" ||
                                       looksLikeRoomId(displayName) ||
-                                      looksLikeMemberCountFallback(displayName)
+                                      looksLikeMemberCountFallback(displayName) ||
+                                      looksLikeConversationUUID(displayName)
 
                 // Try to enrich from Nova conversation + identity profiles.
                 // This fixes cases where Matrix room display names/avatars are not yet configured.
@@ -984,8 +1204,8 @@ extension MatrixBridgeService {
                         }
                     }
 
-                    // If still showing room ID or member count fallback, try to get other user from Matrix room members
-                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) {
+                    // If still showing room ID, member count fallback, or "Conversation {uuid}", try to get other user from Matrix room members
+                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) {
                         #if DEBUG
                         print("[MatrixBridge]   📋 Trying Matrix room members for: \(room.id)")
                         #endif
@@ -1064,7 +1284,7 @@ extension MatrixBridgeService {
                     }
 
                     // Fallback: Try to use lastMessage sender for DM display name
-                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) {
+                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) {
                         #if DEBUG
                         print("[MatrixBridge]   📨 Trying lastMessage sender fallback")
                         #endif
@@ -1116,8 +1336,8 @@ extension MatrixBridgeService {
                         }
                     }
 
-                    // Final fallback - just show "Chat" instead of ugly room ID or member count
-                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) {
+                    // Final fallback - just show "Chat" instead of ugly room ID, member count, or "Conversation {uuid}"
+                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) {
                         displayName = "Chat"
                     }
                 }

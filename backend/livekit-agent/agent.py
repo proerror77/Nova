@@ -166,14 +166,14 @@ async def entrypoint(ctx: JobContext):
     logger.info(f"Connecting to room: {ctx.room.name}")
 
     # 配置 xAI Realtime Model
-    # turn_detection 配置可優化語音檢測，減少延遲和斷斷續續
+    # turn_detection 配置可優化語音檢測，平衡延遲和穩定性
     llm = xai.realtime.RealtimeModel(
         voice="Ara",  # 使用 Ara 女聲
         turn_detection={
             "type": "server_vad",
-            "threshold": 0.4,           # VAD 閾值 (0-1)，較低更敏感
-            "prefix_padding_ms": 100,   # 語音開始前的填充時間（減少延遲）
-            "silence_duration_ms": 300, # 靜音持續時間檢測語音結束（減少延遲）
+            "threshold": 0.5,           # VAD 閾值 (0-1)，提高到 0.5 減少誤觸發
+            "prefix_padding_ms": 150,   # 語音開始前的填充時間（增加以捕捉完整開頭）
+            "silence_duration_ms": 500, # 靜音持續時間（增加到 500ms 以容許自然停頓）
             "create_response": True,    # 自動創建回應
             "interrupt_response": True, # 允許中斷回應 (barge-in)
         },
@@ -334,12 +334,14 @@ async def entrypoint(ctx: JobContext):
             audio_input=room_io.AudioInputOptions(
                 sample_rate=24000,      # 與 xAI API 匹配
                 num_channels=1,         # 單聲道
-                # 噪音消除 - 根據參與者類型選擇
-                noise_cancellation=lambda params: (
-                    noise_cancellation.BVCTelephony()
-                    if params.participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP
-                    else noise_cancellation.BVC()
-                ),
+                # 噪音消除 - 暫時禁用以測試是否為音訊斷續原因
+                # 如果音質改善，可以嘗試使用較輕量的噪音消除
+                # noise_cancellation=lambda params: (
+                #     noise_cancellation.BVCTelephony()
+                #     if params.participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP
+                #     else noise_cancellation.BVC()
+                # ),
+                noise_cancellation=None,  # 禁用噪音消除，由 iOS 端的 noiseSuppression 處理
             ),
             # 音訊輸出配置 - 優化音質和穩定性
             audio_output=room_io.AudioOutputOptions(

@@ -148,19 +148,50 @@ final class NewPostViewModel {
             selectedMediaItems.append(contentsOf: newMedia)
             // Trigger VLM analysis when first image is added
             if !newMedia.isEmpty {
+                #if DEBUG
+                print("[NewPostViewModel] Loaded \(newMedia.count) media items")
+                for item in newMedia {
+                    switch item {
+                    case .image: print("  - Image")
+                    case .livePhoto: print("  - Live Photo")
+                    case .video: print("  - Video")
+                    }
+                }
+                #endif
                 analyzeImageWithVLM()
             }
         } catch {
+            #if DEBUG
+            print("[NewPostViewModel] Primary media loading failed: \(error)")
+            #endif
 
-            // Fallback to regular image loading (without metadata since item can't be converted to PHAsset)
+            // Fallback: try loading each item individually with proper type detection
             var addedAny = false
             for item in items {
                 guard selectedMediaItems.count < 5 else { break }
 
-                if let data = try? await item.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    selectedMediaItems.append(.image(image, .empty))
+                // Try to load through LivePhotoManager first (handles type detection)
+                do {
+                    let mediaItem = try await livePhotoManager.loadMedia(from: item)
+                    selectedMediaItems.append(mediaItem)
                     addedAny = true
+                    #if DEBUG
+                    print("[NewPostViewModel] Fallback: loaded item successfully")
+                    #endif
+                } catch {
+                    // Last resort: try as plain image data
+                    if let data = try? await item.loadTransferable(type: Data.self),
+                       let image = UIImage(data: data) {
+                        selectedMediaItems.append(.image(image, .empty))
+                        addedAny = true
+                        #if DEBUG
+                        print("[NewPostViewModel] Fallback: loaded as plain image")
+                        #endif
+                    } else {
+                        #if DEBUG
+                        print("[NewPostViewModel] Fallback: failed to load item - \(error)")
+                        #endif
+                    }
                 }
             }
             // Trigger VLM analysis for fallback path too

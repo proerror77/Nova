@@ -132,6 +132,9 @@ struct HomeView: View {
                     },
                     onBookmarkChanged: { isBookmarked, bookmarkCount in
                         feedViewModel.updateBookmarkState(postId: post.id, isBookmarked: isBookmarked, bookmarkCount: bookmarkCount)
+                    },
+                    onCommentCountUpdated: { postId, actualCount in
+                        feedViewModel.updateCommentCount(postId: postId, count: actualCount)
                     }
                 )
                 .transition(.identity)

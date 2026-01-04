@@ -130,6 +130,15 @@ impl ContentService for ContentServiceImpl {
 
         // Determine media type and key based on provided media_urls
         let has_media = !req.media_urls.is_empty();
+
+        // Validate: posts must have either media or non-empty content
+        // This prevents "empty posts" that have no content and no images
+        let has_content = !content.trim().is_empty();
+        if !has_media && !has_content {
+            return Err(Status::invalid_argument(
+                "Post must have either media or text content",
+            ));
+        }
         let media_type = if has_media {
             if req.media_type.is_empty() {
                 "image".to_string()
@@ -137,7 +146,7 @@ impl ContentService for ContentServiceImpl {
                 req.media_type.clone()
             }
         } else {
-            "none".to_string()
+            "text".to_string()  // Text-only post
         };
         let image_key = if has_media {
             format!("media-{}", Uuid::new_v4())

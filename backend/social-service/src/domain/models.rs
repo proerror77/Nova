@@ -11,6 +11,15 @@ pub struct Like {
     pub created_at: DateTime<Utc>,
 }
 
+/// CommentLike entity - represents a user liking a comment (IG/小红书风格)
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct CommentLike {
+    pub id: Uuid,
+    pub comment_id: Uuid,
+    pub user_id: Uuid,
+    pub created_at: DateTime<Utc>,
+}
+
 /// Comment entity - represents a comment on a post
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Comment {

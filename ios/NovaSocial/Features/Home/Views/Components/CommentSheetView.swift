@@ -2,6 +2,45 @@ import SwiftUI
 
 // MARK: - Comment Sheet View
 
+// MARK: - Text Parsing Helper
+/// Parse comment text and highlight @mentions with accent color
+private func parseCommentText(_ text: String) -> Text {
+    let pattern = try? NSRegularExpression(pattern: "@[\\w\\u4e00-\\u9fff]+", options: [])
+    guard let regex = pattern else {
+        return Text(text)
+    }
+
+    let nsString = text as NSString
+    let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsString.length))
+
+    if matches.isEmpty {
+        return Text(text)
+    }
+
+    var result = Text("")
+    var lastEnd = 0
+
+    for match in matches {
+        if match.range.location > lastEnd {
+            let beforeRange = NSRange(location: lastEnd, length: match.range.location - lastEnd)
+            let beforeText = nsString.substring(with: beforeRange)
+            result = result + Text(beforeText)
+        }
+        let mentionText = nsString.substring(with: match.range)
+        result = result + Text(mentionText)
+            .foregroundColor(DesignTokens.accentColor)
+            .fontWeight(.medium)
+        lastEnd = match.range.location + match.range.length
+    }
+
+    if lastEnd < nsString.length {
+        let afterText = nsString.substring(from: lastEnd)
+        result = result + Text(afterText)
+    }
+
+    return result
+}
+
 struct CommentSheetView: View {
     let post: FeedPost
     @Binding var isPresented: Bool
@@ -19,8 +58,24 @@ struct CommentSheetView: View {
     @State private var showDeleteConfirmation = false
     @State private var isDeleting = false
 
+    // 批次加載的評論按讚狀態 (修復 N+1 問題)
+    @State private var commentLikeStatus: [String: Bool] = [:]
+    @State private var commentLikeCounts: [String: Int] = [:]
+
     @EnvironmentObject private var authManager: AuthenticationManager
     private let socialService = SocialService()
+
+    /// 将评论按照父子关系分组 (IG/小红书风格嵌套回复)
+    private var groupedComments: [(parent: SocialComment, replies: [SocialComment])] {
+        // 获取所有顶级评论 (没有 parentCommentId 或是空字串)
+        let topLevelComments = comments.filter { $0.parentCommentId == nil || $0.parentCommentId?.isEmpty == true }
+
+        // 为每个顶级评论找到其回复
+        return topLevelComments.map { parent in
+            let replies = comments.filter { $0.parentCommentId == parent.id }
+            return (parent: parent, replies: replies)
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -69,20 +124,47 @@ struct CommentSheetView: View {
                                 .foregroundColor(DesignTokens.textSecondary)
                                 .padding(.bottom, DesignTokens.spacing8)
 
-                            ForEach(comments) { comment in
-                                SocialCommentRow(
-                                    comment: comment,
-                                    canDelete: canDeleteComment(comment),
-                                    onAvatarTapped: { userId in
-                                        // 关闭评论弹窗，触发头像点击回调
-                                        isPresented = false
-                                        onAvatarTapped?(userId)
-                                    },
-                                    onDelete: {
-                                        commentToDelete = comment
-                                        showDeleteConfirmation = true
+                            // 使用分组评论显示嵌套回复 (IG/小红书风格)
+                            ForEach(Array(groupedComments.enumerated()), id: \.offset) { _, group in
+                                VStack(alignment: .leading, spacing: 0) {
+                                    // 父评论
+                                    SocialCommentRow(
+                                        comment: group.parent,
+                                        canDelete: canDeleteComment(group.parent),
+                                        initialLikedStatus: commentLikeStatus[group.parent.id],
+                                        onAvatarTapped: { userId in
+                                            isPresented = false
+                                            onAvatarTapped?(userId)
+                                        },
+                                        onDelete: {
+                                            commentToDelete = group.parent
+                                            showDeleteConfirmation = true
+                                        },
+                                        onLikeStatusChanged: { commentId, isLiked, count in
+                                            updateCommentLikeStatus(commentId: commentId, isLiked: isLiked, count: count)
+                                        }
+                                    )
+
+                                    // 嵌套回复 (有缩进)
+                                    if !group.replies.isEmpty {
+                                        NestedRepliesView(
+                                            replies: group.replies,
+                                            canDeleteComment: canDeleteComment,
+                                            commentLikeStatus: commentLikeStatus,
+                                            onAvatarTapped: { userId in
+                                                isPresented = false
+                                                onAvatarTapped?(userId)
+                                            },
+                                            onDelete: { comment in
+                                                commentToDelete = comment
+                                                showDeleteConfirmation = true
+                                            },
+                                            onLikeStatusChanged: { commentId, isLiked, count in
+                                                updateCommentLikeStatus(commentId: commentId, isLiked: isLiked, count: count)
+                                            }
+                                        )
                                     }
-                                )
+                                }
                             }
                         }
                     }
@@ -97,9 +179,23 @@ struct CommentSheetView: View {
 
                 // Comment Input
                 HStack(spacing: DesignTokens.spacing12) {
-                    Circle()
-                        .fill(DesignTokens.avatarPlaceholder)
+                    // 显示当前用户真实头像 (IG/小红书风格)
+                    if let avatarUrl = authManager.currentUser?.avatarUrl, let url = URL(string: avatarUrl) {
+                        AsyncImage(url: url) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        } placeholder: {
+                            Circle()
+                                .fill(DesignTokens.avatarPlaceholder)
+                        }
                         .frame(width: 36, height: 36)
+                        .clipShape(Circle())
+                    } else {
+                        Circle()
+                            .fill(DesignTokens.avatarPlaceholder)
+                            .frame(width: 36, height: 36)
+                    }
 
                     TextField("Add a comment...", text: $commentText)
                         .font(.system(size: DesignTokens.fontMedium))
@@ -184,7 +280,14 @@ struct CommentSheetView: View {
         error = nil
 
         do {
-            let result = try await socialService.getComments(postId: post.id, limit: 50, offset: 0)
+            // 傳遞 viewerUserId 以在回應中直接包含 likeCount 和 isLikedByViewer
+            // 這樣就不需要額外的 API 呼叫來獲取按讚資訊
+            let result = try await socialService.getComments(
+                postId: post.id,
+                limit: 50,
+                offset: 0,
+                viewerUserId: authManager.currentUser?.id
+            )
             comments = result.comments
             totalCount = result.totalCount
 
@@ -195,6 +298,17 @@ struct CommentSheetView: View {
                 #endif
                 onCommentCountUpdated?(post.id, totalCount)
             }
+
+            // 從評論回應中提取按讚狀態 (不需要額外 API 呼叫)
+            for comment in comments {
+                if let isLiked = comment.isLikedByViewer {
+                    commentLikeStatus[comment.id] = isLiked
+                }
+            }
+
+            #if DEBUG
+            print("[CommentSheet] ✅ Loaded \(comments.count) comments with embedded like info (0 extra API calls)")
+            #endif
         } catch let apiError as APIError {
             switch apiError {
             case .unauthorized:
@@ -218,6 +332,12 @@ struct CommentSheetView: View {
         }
 
         isLoading = false
+    }
+
+    /// 更新單個評論的按讚狀態（供子元件回調使用）
+    func updateCommentLikeStatus(commentId: String, isLiked: Bool, count: Int) {
+        commentLikeStatus[commentId] = isLiked
+        commentLikeCounts[commentId] = count
     }
 
     private func submitComment() async {
@@ -296,10 +416,19 @@ struct CommentSheetView: View {
 struct SocialCommentRow: View {
     let comment: SocialComment
     var canDelete: Bool = false  // 是否可以删除（评论者本人或帖子拥有者）
+    var initialLikedStatus: Bool? = nil  // 從批次 API 預載的按讚狀態
     var onAvatarTapped: ((String) -> Void)?  // 点击头像回调
     var onDelete: (() -> Void)?  // 删除评论回调
+    var onLikeStatusChanged: ((String, Bool, Int) -> Void)?  // 按讚狀態變更回調
 
+    @EnvironmentObject private var authManager: AuthenticationManager
     @State private var showDeleteMenu = false
+    @State private var isLiked = false  // 评论点赞状态
+    @State private var likeCount = 0    // 点赞数量
+    @State private var isLikeLoading = false
+    @State private var hasLoadedStatus = false  // 追蹤是否已載入狀態
+
+    private let socialService = SocialService()
 
     var body: some View {
         HStack(alignment: .top, spacing: DesignTokens.spacing12) {
@@ -318,6 +447,8 @@ struct SocialCommentRow: View {
                 .onTapGesture {
                     onAvatarTapped?(comment.userId)
                 }
+                .accessibilityLabel("View \(comment.displayAuthorName)'s profile")
+                .accessibilityHint("Double tap to view profile")
             } else {
                 Circle()
                     .fill(DesignTokens.avatarPlaceholder)
@@ -325,29 +456,72 @@ struct SocialCommentRow: View {
                     .onTapGesture {
                         onAvatarTapped?(comment.userId)
                     }
+                    .accessibilityLabel("View \(comment.displayAuthorName)'s profile")
+                    .accessibilityHint("Double tap to view profile")
             }
 
             VStack(alignment: .leading, spacing: DesignTokens.spacing4) {
-                HStack {
-                    // 用户名 (点击跳转用户主页)
+                // 内联格式: 用户名 + 评论内容在同一行 (IG/小红书风格)
+                // 使用 Text 连接以支持 @mention 高亮
+                (
                     Text(comment.displayAuthorName)
                         .font(.system(size: DesignTokens.fontMedium, weight: .semibold))
-                        .foregroundColor(.black)
-                        .onTapGesture {
-                            onAvatarTapped?(comment.userId)
-                        }
+                        .foregroundColor(DesignTokens.textSecondary)
+                    + Text(" ")
+                    + parseCommentText(comment.content)
+                        .font(.system(size: DesignTokens.fontMedium))
+                        .foregroundColor(DesignTokens.textPrimary)
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                .onTapGesture {
+                    onAvatarTapped?(comment.userId)
+                }
+                .accessibilityLabel("\(comment.displayAuthorName) commented: \(comment.content)")
 
+                // 时间戳和回复按钮
+                HStack(spacing: 12) {
                     Text(comment.createdDate.timeAgoDisplay())
                         .font(.system(size: DesignTokens.fontSmall))
                         .foregroundColor(DesignTokens.textSecondary)
-                }
+                        .accessibilityLabel("Posted \(comment.createdDate.timeAgoDisplay())")
 
-                Text(comment.content)
-                    .font(.system(size: DesignTokens.fontMedium))
-                    .foregroundColor(DesignTokens.textPrimary)
+                    Text("Reply")
+                        .font(.system(size: DesignTokens.fontSmall, weight: .medium))
+                        .foregroundColor(DesignTokens.textSecondary)
+                        .accessibilityLabel("Reply to comment")
+                        .accessibilityHint("Double tap to reply")
+                }
             }
 
             Spacer()
+
+            // 点赞按钮 + 数量 (IG 风格 - 右侧爱心)
+            Button(action: {
+                Task { await toggleCommentLike() }
+            }) {
+                VStack(spacing: 2) {
+                    if isLikeLoading {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                            .frame(width: 14, height: 14)
+                    } else {
+                        Image(systemName: isLiked ? "heart.fill" : "heart")
+                            .font(.system(size: 14))
+                            .foregroundColor(isLiked ? .red : DesignTokens.textSecondary)
+                            .scaleEffect(isLiked ? 1.1 : 1.0)
+                    }
+
+                    if likeCount > 0 {
+                        Text("\(likeCount)")
+                            .font(.system(size: 10))
+                            .foregroundColor(DesignTokens.textSecondary)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(isLikeLoading)
+            .accessibilityLabel(isLiked ? "Unlike comment, \(likeCount) likes" : "Like comment, \(likeCount) likes")
+            .accessibilityHint(isLiked ? "Double tap to unlike" : "Double tap to like")
         }
         .contentShape(Rectangle())
         .simultaneousGesture(
@@ -360,6 +534,102 @@ struct SocialCommentRow: View {
                     }
                 }
         )
+        .task {
+            await loadCommentLikeStatus()
+        }
+    }
+
+    // MARK: - Comment Like API
+
+    private func loadCommentLikeStatus() async {
+        guard !hasLoadedStatus else { return }
+        hasLoadedStatus = true
+
+        // 優先使用嵌入在評論中的按讚資訊 (來自 GetComments API)
+        // 這樣完全不需要額外的 API 呼叫
+        if let embeddedLikeCount = comment.likeCount {
+            likeCount = Int(embeddedLikeCount)
+        }
+
+        if let embeddedIsLiked = comment.isLikedByViewer {
+            isLiked = embeddedIsLiked
+            return  // 有嵌入資料，不需要任何 API 呼叫
+        }
+
+        // 向後兼容：如果有從父元件傳入的預載狀態，使用它
+        if let preloadedStatus = initialLikedStatus {
+            isLiked = preloadedStatus
+            // 如果沒有嵌入的 likeCount，需要載入
+            if comment.likeCount == nil {
+                do {
+                    likeCount = try await socialService.getCommentLikes(commentId: comment.id)
+                } catch {
+                    #if DEBUG
+                    print("[SocialCommentRow] Failed to load like count: \(error)")
+                    #endif
+                }
+            }
+            return
+        }
+
+        // 最後的 Fallback：沒有任何預載資料時，個別載入
+        guard let userId = authManager.currentUser?.id else { return }
+
+        do {
+            async let likedCheck = socialService.checkCommentLiked(commentId: comment.id, userId: userId)
+            async let countCheck = socialService.getCommentLikes(commentId: comment.id)
+
+            let (liked, count) = try await (likedCheck, countCheck)
+            isLiked = liked
+            likeCount = count
+        } catch {
+            #if DEBUG
+            print("[SocialCommentRow] Failed to load like status: \(error)")
+            #endif
+        }
+    }
+
+    private func toggleCommentLike() async {
+        guard let userId = authManager.currentUser?.id else { return }
+        guard !isLikeLoading else { return }
+
+        isLikeLoading = true
+        let wasLiked = isLiked
+
+        // 乐观更新 UI
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            isLiked.toggle()
+            likeCount = max(0, likeCount + (isLiked ? 1 : -1))
+        }
+
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
+
+        do {
+            let response: SocialService.CommentLikeResponse
+            if wasLiked {
+                response = try await socialService.deleteCommentLike(commentId: comment.id, userId: userId)
+            } else {
+                response = try await socialService.createCommentLike(commentId: comment.id, userId: userId)
+            }
+
+            // 使用服务器返回的准确数量
+            likeCount = Int(response.likeCount)
+
+            // 通知父元件狀態變更
+            onLikeStatusChanged?(comment.id, isLiked, likeCount)
+        } catch {
+            // API 失败时回滚
+            withAnimation {
+                isLiked = wasLiked
+                likeCount = max(0, likeCount + (wasLiked ? 1 : -1))
+            }
+            #if DEBUG
+            print("[SocialCommentRow] Toggle like error: \(error)")
+            #endif
+        }
+
+        isLikeLoading = false
     }
 }
 
@@ -454,5 +724,74 @@ struct DeleteCommentConfirmation: View {
         }
         .transition(.opacity.combined(with: .scale(scale: 0.9)))
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isPresented)
+    }
+}
+
+// MARK: - Nested Replies View (IG/小红书风格嵌套回复)
+
+struct NestedRepliesView: View {
+    let replies: [SocialComment]
+    let canDeleteComment: (SocialComment) -> Bool
+    var commentLikeStatus: [String: Bool] = [:]  // 從批次 API 預載的按讚狀態
+    var onAvatarTapped: ((String) -> Void)?
+    var onDelete: ((SocialComment) -> Void)?
+    var onLikeStatusChanged: ((String, Bool, Int) -> Void)?  // 按讚狀態變更回調
+
+    @State private var isExpanded = false
+    private let maxCollapsedReplies = 1  // 收起时显示的回复数量
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // 显示的回复 (展开时显示全部，收起时只显示第一条)
+            let visibleReplies = isExpanded ? replies : Array(replies.prefix(maxCollapsedReplies))
+
+            ForEach(visibleReplies) { reply in
+                HStack(alignment: .top, spacing: DesignTokens.spacing12) {
+                    // 缩进线条 (IG 风格)
+                    Rectangle()
+                        .fill(Color.clear)
+                        .frame(width: DesignTokens.avatarSmall)
+
+                    // 回复内容
+                    SocialCommentRow(
+                        comment: reply,
+                        canDelete: canDeleteComment(reply),
+                        initialLikedStatus: commentLikeStatus[reply.id],
+                        onAvatarTapped: onAvatarTapped,
+                        onDelete: {
+                            onDelete?(reply)
+                        },
+                        onLikeStatusChanged: onLikeStatusChanged
+                    )
+                }
+            }
+
+            // "查看更多回复" 按钮
+            if replies.count > maxCollapsedReplies {
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        // 缩进对齐
+                        Rectangle()
+                            .fill(Color.clear)
+                            .frame(width: DesignTokens.avatarSmall)
+
+                        // 展开/收起线条
+                        Rectangle()
+                            .fill(DesignTokens.textSecondary)
+                            .frame(width: 20, height: 1)
+
+                        Text(isExpanded ? "Hide replies" : "View \(replies.count - maxCollapsedReplies) more \(replies.count - maxCollapsedReplies == 1 ? "reply" : "replies")")
+                            .font(.system(size: DesignTokens.fontSmall, weight: .medium))
+                            .foregroundColor(DesignTokens.textSecondary)
+                    }
+                }
+                .padding(.leading, DesignTokens.spacing12)
+            }
+        }
+        .padding(.leading, DesignTokens.spacing12)
     }
 }

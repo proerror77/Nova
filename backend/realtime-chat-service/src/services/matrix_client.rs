@@ -170,7 +170,9 @@ impl MatrixClient {
         let mut request = request;
         request.is_direct = true;
         request.invite = invites;
-        request.name = Some(format!("Conversation {}", conversation_id));
+        // Don't set room name for DMs - Matrix clients will display the other user's name automatically
+        // Setting a name would override this and show "Conversation {uuid}" instead
+        request.name = None;
         request.preset = Some(
             matrix_sdk::ruma::api::client::room::create_room::v3::RoomPreset::TrustedPrivateChat,
         );

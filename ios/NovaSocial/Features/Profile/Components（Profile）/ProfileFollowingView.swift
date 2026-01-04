@@ -159,14 +159,9 @@ struct ProfileFollowingView: View {
         }
     }
 
-    // MARK: - 加载 Following 列表（当前用户关注的人）
+    // MARK: - 加载 Following 列表（目标用户关注的人）
     private func loadFollowing() async {
-        guard let currentUserId = authManager.currentUser?.id else {
-            await MainActor.run {
-                followingError = "Please login first"
-            }
-            return
-        }
+        let currentUserId = authManager.currentUser?.id
 
         await MainActor.run {
             isLoadingFollowing = true
@@ -174,24 +169,34 @@ struct ProfileFollowingView: View {
         }
 
         do {
-            // 1. 获取当前用户关注的用户 ID 列表
-            let result = try await graphService.getFollowing(userId: currentUserId, limit: 50, offset: 0)
+            // 1. 获取目标用户关注的用户 ID 列表（使用传入的 userId，而非 currentUserId）
+            let result = try await graphService.getFollowing(userId: userId, limit: 50, offset: 0)
             followingHasMore = result.hasMore
 
             // 2. 批量获取用户详细信息（並行處理提升速度）
             let users = await fetchUserProfiles(userIds: result.userIds)
 
-            // 3. 转换为 FollowUser 模型
+            // 3. 检查当前登录用户是否关注了这些用户
+            var followingStatus: [String: Bool] = [:]
+            if let currentUserId = currentUserId {
+                followingStatus = (try? await graphService.batchCheckFollowing(
+                    followerId: currentUserId,
+                    followeeIds: result.userIds
+                )) ?? [:]
+            }
+
+            // 4. 转换为 FollowUser 模型
             await MainActor.run {
                 followingUsers = users.map { user in
-                    FollowUser(
+                    let isFollowingThem = followingStatus[user.id] ?? false
+                    return FollowUser(
                         id: user.id,
                         username: user.username,
                         displayName: user.displayName ?? user.username,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
-                        isFollowedByMe: true,  // 当前用户关注了他们
-                        isFollowingMe: false   // 需要额外查询
+                        isFollowedByMe: isFollowingThem,  // 当前登录用户是否关注了他们
+                        isFollowingMe: false              // 需要额外查询
                     )
                 }
                 isLoadingFollowing = false
@@ -212,14 +217,9 @@ struct ProfileFollowingView: View {
         }
     }
 
-    // MARK: - 加载 Followers 列表（关注当前用户的人）
+    // MARK: - 加载 Followers 列表（关注目标用户的人）
     private func loadFollowers() async {
-        guard let currentUserId = authManager.currentUser?.id else {
-            await MainActor.run {
-                followersError = "Please login first"
-            }
-            return
-        }
+        let currentUserId = authManager.currentUser?.id
 
         await MainActor.run {
             isLoadingFollowers = true
@@ -227,31 +227,34 @@ struct ProfileFollowingView: View {
         }
 
         do {
-            // 1. 获取关注当前用户的用户 ID 列表
-            let result = try await graphService.getFollowers(userId: currentUserId, limit: 50, offset: 0)
+            // 1. 获取关注目标用户的用户 ID 列表（使用传入的 userId，而非 currentUserId）
+            let result = try await graphService.getFollowers(userId: userId, limit: 50, offset: 0)
             followersHasMore = result.hasMore
 
             // 2. 批量获取用户详细信息（並行處理提升速度）
             let users = await fetchUserProfiles(userIds: result.userIds)
 
-            // 3. 检查当前用户是否关注了这些用户
-            let followingStatus = try? await graphService.batchCheckFollowing(
-                followerId: currentUserId,
-                followeeIds: result.userIds
-            )
+            // 3. 检查当前登录用户是否关注了这些用户
+            var followingStatus: [String: Bool] = [:]
+            if let currentUserId = currentUserId {
+                followingStatus = (try? await graphService.batchCheckFollowing(
+                    followerId: currentUserId,
+                    followeeIds: result.userIds
+                )) ?? [:]
+            }
 
             // 4. 转换为 FollowUser 模型
             await MainActor.run {
                 followerUsers = users.map { user in
-                    let isFollowingThem = followingStatus?[user.id] ?? false
+                    let isFollowingThem = followingStatus[user.id] ?? false
                     return FollowUser(
                         id: user.id,
                         username: user.username,
                         displayName: user.displayName ?? user.username,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
-                        isFollowedByMe: isFollowingThem,  // 当前用户是否关注了他们
-                        isFollowingMe: true               // 他们关注了当前用户
+                        isFollowedByMe: isFollowingThem,  // 当前登录用户是否关注了他们
+                        isFollowingMe: true               // 他们关注了目标用户
                     )
                 }
                 isLoadingFollowers = false

@@ -173,9 +173,9 @@ enum GrokVoiceConfig {
             "voice": voice.rawValue,
             "turn_detection": [
                 "type": "server_vad",
-                "threshold": 0.4,              // VAD 閾值 (0-1)，較低更敏感（降低以提高靈敏度）
-                "prefix_padding_ms": 100,       // 語音開始前的填充時間（從 300 降到 100 減少延遲）
-                "silence_duration_ms": 300,     // 靜音持續時間檢測語音結束（從 500 降到 300 減少延遲）
+                "threshold": 0.5,              // VAD 閾值 (0-1)，提高到 0.5 減少誤觸發
+                "prefix_padding_ms": 150,       // 語音開始前的填充時間（增加以捕捉完整開頭）
+                "silence_duration_ms": 500,     // 靜音持續時間（增加到 500ms 以容許自然停頓）
                 "create_response": true,        // 自動創建回應
                 "interrupt_response": true      // 允許中斷回應 (barge-in)
             ],

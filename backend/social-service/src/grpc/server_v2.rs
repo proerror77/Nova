@@ -14,8 +14,8 @@ use crate::domain::models::{
     Like as LikeModel, Poll as PollModel, PollCandidate as PollCandidateModel, Share as ShareModel,
 };
 use crate::repository::{
-    polls::CreateCandidateInput, BookmarkRepository, CommentRepository, LikeRepository,
-    PollRepository, ShareRepository,
+    polls::CreateCandidateInput, BookmarkRepository, CommentLikeRepository, CommentRepository,
+    LikeRepository, PollRepository, ShareRepository,
 };
 use crate::services::{CounterService, FollowService, SocialEventProducer};
 use transactional_outbox::{OutboxEvent, OutboxRepository};
@@ -96,6 +96,10 @@ impl SocialServiceImpl {
 
     fn bookmark_repo(&self) -> BookmarkRepository {
         BookmarkRepository::new(self.state.pg_pool.clone())
+    }
+
+    fn comment_like_repo(&self) -> CommentLikeRepository {
+        CommentLikeRepository::new(self.state.pg_pool.clone())
     }
 }
 
@@ -459,6 +463,11 @@ impl SocialService for SocialServiceImpl {
         let post_id = parse_uuid(&req.post_id, "post_id")?;
         let limit = sanitize_limit(req.limit, 1, 100, 50);
         let offset = req.offset.max(0);
+        let viewer_user_id = if req.viewer_user_id.is_empty() {
+            None
+        } else {
+            Some(parse_uuid(&req.viewer_user_id, "viewer_user_id")?)
+        };
 
         let repo = self.comment_repo();
         let comments = repo
@@ -469,10 +478,168 @@ impl SocialService for SocialServiceImpl {
         // Always use DB count for accuracy (counter cache can become stale after deletions)
         let total = repo.get_comment_count(post_id).await.unwrap_or(0) as i32;
 
+        // Batch fetch engagement data to avoid N+1 queries
+        let comment_ids: Vec<Uuid> = comments.iter().map(|c| c.id).collect();
+        let comment_like_repo = self.comment_like_repo();
+
+        // Batch get like counts for all comments
+        let like_counts = comment_like_repo
+            .batch_get_like_counts(&comment_ids)
+            .await
+            .unwrap_or_default();
+
+        // Batch check if viewer has liked these comments
+        let liked_by_viewer = if let Some(viewer_id) = viewer_user_id {
+            comment_like_repo
+                .batch_check_liked(viewer_id, &comment_ids)
+                .await
+                .unwrap_or_default()
+        } else {
+            std::collections::HashMap::new()
+        };
+
+        // Convert to proto with engagement data
+        let proto_comments: Vec<Comment> = comments
+            .into_iter()
+            .map(|c| {
+                let like_count = like_counts.get(&c.id).copied().unwrap_or(0);
+                let is_liked = liked_by_viewer.get(&c.id).copied().unwrap_or(false);
+                to_proto_comment_with_engagement(c, like_count, is_liked)
+            })
+            .collect();
+
         Ok(Response::new(GetCommentsResponse {
-            comments: comments.into_iter().map(to_proto_comment).collect(),
+            comments: proto_comments,
             total,
         }))
+    }
+
+    // ========= Comment Likes (IG/小红书风格评论点赞) =========
+    async fn create_comment_like(
+        &self,
+        request: Request<CreateCommentLikeRequest>,
+    ) -> Result<Response<CreateCommentLikeResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+        let comment_id = parse_uuid(&req.comment_id, "comment_id")?;
+
+        let repo = self.comment_like_repo();
+        let (_like, _was_created) = repo
+            .create_like(user_id, comment_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to create comment like: {}", e)))?;
+
+        // Get updated count from denormalized column (trigger already updated it)
+        let like_count = repo
+            .get_like_count(comment_id)
+            .await
+            .unwrap_or(0);
+
+        Ok(Response::new(CreateCommentLikeResponse {
+            success: true,
+            like_count,
+        }))
+    }
+
+    async fn delete_comment_like(
+        &self,
+        request: Request<DeleteCommentLikeRequest>,
+    ) -> Result<Response<DeleteCommentLikeResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+        let comment_id = parse_uuid(&req.comment_id, "comment_id")?;
+
+        let repo = self.comment_like_repo();
+        let _was_deleted = repo
+            .delete_like(user_id, comment_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to delete comment like: {}", e)))?;
+
+        // Get updated count from denormalized column (trigger already updated it)
+        let like_count = repo
+            .get_like_count(comment_id)
+            .await
+            .unwrap_or(0);
+
+        Ok(Response::new(DeleteCommentLikeResponse {
+            success: true,
+            like_count,
+        }))
+    }
+
+    async fn get_comment_like_count(
+        &self,
+        request: Request<GetCommentLikeCountRequest>,
+    ) -> Result<Response<GetCommentLikeCountResponse>, Status> {
+        let req = request.into_inner();
+        let comment_id = parse_uuid(&req.comment_id, "comment_id")?;
+
+        let like_count = self
+            .comment_like_repo()
+            .get_like_count(comment_id)
+            .await
+            .unwrap_or(0);
+
+        Ok(Response::new(GetCommentLikeCountResponse { like_count }))
+    }
+
+    async fn check_comment_liked(
+        &self,
+        request: Request<CheckCommentLikedRequest>,
+    ) -> Result<Response<CheckCommentLikedResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+        let comment_id = parse_uuid(&req.comment_id, "comment_id")?;
+
+        let liked = self
+            .comment_like_repo()
+            .check_user_liked(user_id, comment_id)
+            .await
+            .unwrap_or(false);
+
+        Ok(Response::new(CheckCommentLikedResponse { liked }))
+    }
+
+    async fn batch_check_comment_liked(
+        &self,
+        request: Request<BatchCheckCommentLikedRequest>,
+    ) -> Result<Response<BatchCheckCommentLikedResponse>, Status> {
+        let req = request.into_inner();
+
+        // Validate input
+        if req.comment_ids.is_empty() {
+            return Ok(Response::new(BatchCheckCommentLikedResponse {
+                liked_status: std::collections::HashMap::new(),
+            }));
+        }
+
+        if req.comment_ids.len() > 100 {
+            return Err(Status::invalid_argument("Maximum 100 comment_ids allowed"));
+        }
+
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+
+        // Parse UUIDs
+        let comment_ids: Vec<Uuid> = req
+            .comment_ids
+            .iter()
+            .map(|id| parse_uuid(id, "comment_id"))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Fetch like status from repository
+        let liked_map = self
+            .comment_like_repo()
+            .batch_check_liked(user_id, &comment_ids)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to batch check comment likes: {}", e)))?;
+
+        // Convert to proto response
+        let liked_status: std::collections::HashMap<String, bool> = liked_map
+            .into_iter()
+            .map(|(comment_id, is_liked)| (comment_id.to_string(), is_liked))
+            .collect();
+
+        Ok(Response::new(BatchCheckCommentLikedResponse { liked_status }))
     }
 
     // ========= Shares =========
@@ -1318,6 +1485,24 @@ fn to_proto_comment(comment: CommentModel) -> Comment {
             .map(|id| id.to_string())
             .unwrap_or_default(),
         created_at: to_ts(comment.created_at),
+        like_count: 0,
+        is_liked_by_viewer: false,
+    }
+}
+
+fn to_proto_comment_with_engagement(comment: CommentModel, like_count: i64, is_liked: bool) -> Comment {
+    Comment {
+        id: comment.id.to_string(),
+        user_id: comment.user_id.to_string(),
+        post_id: comment.post_id.to_string(),
+        content: comment.content,
+        parent_comment_id: comment
+            .parent_comment_id
+            .map(|id| id.to_string())
+            .unwrap_or_default(),
+        created_at: to_ts(comment.created_at),
+        like_count,
+        is_liked_by_viewer: is_liked,
     }
 }
 
