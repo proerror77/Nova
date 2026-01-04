@@ -218,6 +218,10 @@ urlencoding = "2.1"
 codegen-units = 1
 lto = true
 
+[[bin]]
+name = "migrate-matrix-displaynames"
+path = "src/bin/migrate_matrix_displaynames.rs"
+
 [build-dependencies]
 tonic-build = "0.12"
 
