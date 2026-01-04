@@ -265,7 +265,7 @@ ENVIRONMENT VARIABLES:
 
     // Create gRPC client for identity service
     println!("Connecting to identity service...");
-    let auth_client = AuthClient::connect(&config.identity_service_url)
+    let auth_client = AuthClient::from_url(&config.identity_service_url)
         .await
         .map_err(|e| format!("Failed to connect to identity service: {}", e))?;
     println!("Connected to identity service");
