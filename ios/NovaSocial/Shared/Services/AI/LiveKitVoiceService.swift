@@ -100,6 +100,125 @@ final class LiveKitVoiceService: NSObject {
     private override init() {
         super.init()
         liveKitLog("LiveKitVoiceService initialized")
+        setupNotificationObservers()
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    // MARK: - Notification Observers
+
+    private func setupNotificationObservers() {
+        // 監聽音訊中斷（來電、系統通知等）
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAudioInterruption(_:)),
+            name: AVAudioSession.interruptionNotification,
+            object: nil
+        )
+
+        // 監聽音訊路由變更（插拔耳機等）
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRouteChange(_:)),
+            name: AVAudioSession.routeChangeNotification,
+            object: nil
+        )
+
+        liveKitLog("Audio notification observers registered")
+    }
+
+    @objc private func handleAudioInterruption(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
+            return
+        }
+
+        switch type {
+        case .began:
+            // 音訊被中斷（來電、Siri 等）
+            liveKitLog("Audio session interrupted - pausing")
+            // 暫時靜音以避免音訊問題
+            if isConnected && !isMuted {
+                setMuted(true)
+                // 標記為系統中斷，以便恢復時自動取消靜音
+                wasInterrupted = true
+            }
+
+        case .ended:
+            // 中斷結束
+            liveKitLog("Audio session interruption ended")
+
+            // 檢查是否應該恢復
+            if let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt {
+                let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+                if options.contains(.shouldResume) {
+                    Task { @MainActor in
+                        // 重新激活音訊會話
+                        await self.reactivateAudioSession()
+                        // 如果之前是系統中斷導致的靜音，恢復麥克風
+                        if self.wasInterrupted {
+                            self.setMuted(false)
+                            self.wasInterrupted = false
+                        }
+                    }
+                }
+            }
+
+        @unknown default:
+            liveKitLog("Unknown audio interruption type")
+        }
+    }
+
+    @objc private func handleRouteChange(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else {
+            return
+        }
+
+        switch reason {
+        case .newDeviceAvailable:
+            // 新設備連接（例如耳機插入）
+            liveKitLog("New audio device available")
+            Task { @MainActor in
+                await self.reactivateAudioSession()
+            }
+
+        case .oldDeviceUnavailable:
+            // 設備斷開（例如耳機拔出）
+            liveKitLog("Audio device disconnected")
+            Task { @MainActor in
+                await self.reactivateAudioSession()
+            }
+
+        case .categoryChange:
+            liveKitLog("Audio category changed")
+
+        case .override, .routeConfigurationChange:
+            liveKitLog("Audio route configuration changed")
+
+        default:
+            break
+        }
+    }
+
+    // MARK: - Audio Session Recovery
+
+    private var wasInterrupted = false
+
+    private func reactivateAudioSession() async {
+        guard isConnected else { return }
+
+        liveKitLog("Reactivating audio session after interruption/route change")
+        do {
+            try audioSession.setActive(true)
+            liveKitLog("Audio session reactivated successfully")
+        } catch {
+            liveKitLog("Failed to reactivate audio session: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Public API (Compatible with GrokVoiceService)
@@ -167,15 +286,15 @@ final class LiveKitVoiceService: NSObject {
 
             // 設置緩衝區持續時間
             // 較高的 buffer 可以減少音訊斷斷續續，但會增加延遲
-            // 20ms 是語音對話的良好平衡點（足夠穩定，延遲可接受）
+            // 40ms 提供更好的網路抖動容忍度，適合行動網路環境
             #if targetEnvironment(simulator)
-            // 模擬器：使用較高的 buffer (25ms) 以確保穩定性
-            try audioSession.setPreferredIOBufferDuration(0.025)
+            // 模擬器：使用較高的 buffer (50ms) 以確保穩定性
+            try audioSession.setPreferredIOBufferDuration(0.05)
             liveKitLog("Running on Simulator - using higher buffer duration for stability")
             #else
-            // 真機：使用 20ms buffer 以平衡穩定性和延遲
-            // 從 10ms 增加到 20ms 以減少網路抖動導致的音訊斷續
-            try audioSession.setPreferredIOBufferDuration(0.02)
+            // 真機：使用 40ms buffer 以提高穩定性
+            // 從 20ms 增加到 40ms 以更好地處理行動網路的抖動
+            try audioSession.setPreferredIOBufferDuration(0.04)
             #endif
 
             // 設置採樣率 - 與後端 xAI API 匹配 (24000 Hz)
