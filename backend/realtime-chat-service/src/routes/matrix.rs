@@ -204,8 +204,30 @@ pub async fn get_matrix_token(
         .unwrap_or_else(|| matrix_config.homeserver_url.clone());
 
     // Provision user: create if doesn't exist, then generate device-bound token
-    // The displayname could be fetched from identity service, but for now use user ID
-    let displayname = format!("Nova User {}", &nova_user_id.to_string()[..8]);
+    // Fetch actual username from identity-service for proper Matrix display name
+    let displayname = match state.auth_client.get_user(nova_user_id).await {
+        Ok(Some(username)) => {
+            tracing::info!(
+                "Fetched username for Matrix display name: nova_user_id={}, username={}",
+                nova_user_id, username
+            );
+            username
+        }
+        Ok(None) => {
+            tracing::warn!(
+                "User not found in identity-service, using fallback: nova_user_id={}",
+                nova_user_id
+            );
+            format!("User {}", &nova_user_id.to_string()[..8])
+        }
+        Err(e) => {
+            tracing::warn!(
+                "Failed to fetch username from identity-service, using fallback: nova_user_id={}, error={}",
+                nova_user_id, e
+            );
+            format!("User {}", &nova_user_id.to_string()[..8])
+        }
+    };
 
     // Pass device_id to provision_user to get a device-bound access token
     match matrix_admin.provision_user(nova_user_id, Some(displayname), Some(device_id.clone())).await {
