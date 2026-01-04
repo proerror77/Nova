@@ -450,27 +450,28 @@ struct NewChatView: View {
                 try await matrixBridge.initialize()
             }
 
-            // Use usernames for Matrix user ID construction (not Nova UUIDs)
-            let participantUsernames = selectedUsers.map { $0.username }
+            // Use user IDs (UUIDs) for Matrix user ID construction
+            // This is critical for findExistingDirectRoom to detect existing DMs
+            let participantIds = selectedUsers.map { $0.id }
             let groupName: String? = selectedUsers.count > 1
                 ? selectedUsers.map { $0.displayName }.joined(separator: ", ")
                 : nil
 
             #if DEBUG
-            print("[NewChatView] Creating Matrix room with users: \(participantUsernames)")
+            print("[NewChatView] Creating Matrix room with user IDs: \(participantIds)")
             #endif
 
             let room: MatrixBridgeService.MatrixConversationInfo
             if selectedUsers.count == 1 {
                 room = try await matrixBridge.createDirectConversation(
-                    withUserId: participantUsernames[0],
+                    withUserId: participantIds[0],
                     displayName: selectedUsers[0].displayName,
                     isPrivate: isPrivateChat
                 )
             } else {
                 room = try await matrixBridge.createGroupConversation(
                     name: groupName ?? "Group Chat",
-                    userIds: participantUsernames,
+                    userIds: participantIds,
                     isPrivate: isPrivateChat
                 )
             }

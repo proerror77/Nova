@@ -1158,6 +1158,13 @@ extension MatrixBridgeService {
                 return name.range(of: pattern, options: .regularExpression) != nil
             }
 
+            // Helper function to check if name looks like "Conversation {uuid}" (legacy backend format)
+            func looksLikeConversationUUID(_ name: String) -> Bool {
+                // Pattern: "Conversation " followed by UUID (e.g., "Conversation c76f28f8-3650-422b-adcc-74a00cd68a55")
+                let pattern = #"^Conversation\s+[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(-.*)?$"#
+                return name.range(of: pattern, options: .regularExpression) != nil
+            }
+
             if room.isDirect {
                 let initialName = room.name ?? ""
                 displayName = initialName.isEmpty ? "Direct Message" : initialName
@@ -1167,9 +1174,11 @@ extension MatrixBridgeService {
                 // - Empty/default name
                 // - Looks like a Matrix room ID
                 // - Looks like a member count fallback (e.g., "2 people")
+                // - Looks like legacy "Conversation {uuid}" format from backend
                 let needsEnrichment = displayName == "Direct Message" ||
                                       looksLikeRoomId(displayName) ||
-                                      looksLikeMemberCountFallback(displayName)
+                                      looksLikeMemberCountFallback(displayName) ||
+                                      looksLikeConversationUUID(displayName)
 
                 // Try to enrich from Nova conversation + identity profiles.
                 // This fixes cases where Matrix room display names/avatars are not yet configured.
@@ -1195,8 +1204,8 @@ extension MatrixBridgeService {
                         }
                     }
 
-                    // If still showing room ID or member count fallback, try to get other user from Matrix room members
-                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) {
+                    // If still showing room ID, member count fallback, or "Conversation {uuid}", try to get other user from Matrix room members
+                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) {
                         #if DEBUG
                         print("[MatrixBridge]   📋 Trying Matrix room members for: \(room.id)")
                         #endif
@@ -1275,7 +1284,7 @@ extension MatrixBridgeService {
                     }
 
                     // Fallback: Try to use lastMessage sender for DM display name
-                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) {
+                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) {
                         #if DEBUG
                         print("[MatrixBridge]   📨 Trying lastMessage sender fallback")
                         #endif
@@ -1327,8 +1336,8 @@ extension MatrixBridgeService {
                         }
                     }
 
-                    // Final fallback - just show "Chat" instead of ugly room ID or member count
-                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) {
+                    // Final fallback - just show "Chat" instead of ugly room ID, member count, or "Conversation {uuid}"
+                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) {
                         displayName = "Chat"
                     }
                 }
