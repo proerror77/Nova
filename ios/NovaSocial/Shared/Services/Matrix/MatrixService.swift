@@ -1397,6 +1397,14 @@ final class MatrixService: MatrixServiceProtocol {
 
                 // Check if this is an invited DM room
                 if info.membership == .invited && info.isDirect {
+                    // Skip if user explicitly left this room before
+                    if isRoomLeftByUser(roomId) {
+                        #if DEBUG
+                        print("[MatrixService] ⏸️ Skipping invite for room user previously left: \(roomId)")
+                        #endif
+                        continue
+                    }
+
                     #if DEBUG
                     print("[MatrixService] Found pending DM invite: \(roomId)")
                     #endif
@@ -1565,11 +1573,44 @@ final class MatrixService: MatrixServiceProtocol {
             }
             try await room.leave()
             roomCache.removeValue(forKey: roomId)
+
+            // Track this room as "left by user" to prevent auto-rejoin
+            addToLeftRoomsList(roomId)
         } catch let error as MatrixError {
             throw error
         } catch {
             throw MatrixError.sdkError(error.localizedDescription)
         }
+    }
+
+    /// Rooms that user has explicitly left - don't auto-accept invites for these
+    private var userLeftRooms: Set<String> = []
+    private let leftRoomsKey = "matrix_user_left_rooms"
+
+    private func addToLeftRoomsList(_ roomId: String) {
+        userLeftRooms.insert(roomId)
+        // Persist to UserDefaults
+        var stored = UserDefaults.standard.stringArray(forKey: leftRoomsKey) ?? []
+        if !stored.contains(roomId) {
+            stored.append(roomId)
+            UserDefaults.standard.set(stored, forKey: leftRoomsKey)
+        }
+    }
+
+    func isRoomLeftByUser(_ roomId: String) -> Bool {
+        // Load from UserDefaults on first check
+        if userLeftRooms.isEmpty {
+            userLeftRooms = Set(UserDefaults.standard.stringArray(forKey: leftRoomsKey) ?? [])
+        }
+        return userLeftRooms.contains(roomId)
+    }
+
+    /// Remove room from left list (when user explicitly rejoins)
+    func removeFromLeftRoomsList(_ roomId: String) {
+        userLeftRooms.remove(roomId)
+        var stored = UserDefaults.standard.stringArray(forKey: leftRoomsKey) ?? []
+        stored.removeAll { $0 == roomId }
+        UserDefaults.standard.set(stored, forKey: leftRoomsKey)
     }
 
     // MARK: - Messaging
@@ -2775,7 +2816,16 @@ final class MatrixService: MatrixServiceProtocol {
 
             // Auto-accept DM invites (direct messages)
             // For group rooms, we might want user confirmation, but for DMs we auto-accept
+            // Skip if user explicitly left this room before
             if info.isDirect {
+                // Check if user explicitly left this room - don't auto-rejoin
+                if isRoomLeftByUser(roomId) {
+                    #if DEBUG
+                    print("[MatrixService] ⏸️ Skipping auto-accept for room user previously left: \(roomId)")
+                    #endif
+                    return
+                }
+
                 #if DEBUG
                 print("[MatrixService] ✅ Auto-accepting DM invite for room: \(roomId)")
                 #endif

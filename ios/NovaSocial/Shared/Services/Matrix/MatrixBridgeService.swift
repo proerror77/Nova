@@ -1165,6 +1165,14 @@ extension MatrixBridgeService {
                 return name.range(of: pattern, options: .regularExpression) != nil
             }
 
+            // Helper function to check if name looks like "Nova User {uuid-prefix}" (legacy display name format)
+            func looksLikeNovaUserUUID(_ name: String) -> Bool {
+                // Pattern: "Nova User " followed by hex characters (e.g., "Nova User a291bbb4")
+                // Also matches with additional text like "Nova User 5ff89416, testmatrix"
+                let pattern = #"^Nova User\s+[0-9a-fA-F]{6,}"#
+                return name.range(of: pattern, options: .regularExpression) != nil
+            }
+
             if room.isDirect {
                 let initialName = room.name ?? ""
                 displayName = initialName.isEmpty ? "Direct Message" : initialName
@@ -1175,10 +1183,12 @@ extension MatrixBridgeService {
                 // - Looks like a Matrix room ID
                 // - Looks like a member count fallback (e.g., "2 people")
                 // - Looks like legacy "Conversation {uuid}" format from backend
+                // - Looks like legacy "Nova User {uuid-prefix}" format
                 let needsEnrichment = displayName == "Direct Message" ||
                                       looksLikeRoomId(displayName) ||
                                       looksLikeMemberCountFallback(displayName) ||
-                                      looksLikeConversationUUID(displayName)
+                                      looksLikeConversationUUID(displayName) ||
+                                      looksLikeNovaUserUUID(displayName)
 
                 // Try to enrich from Nova conversation + identity profiles.
                 // This fixes cases where Matrix room display names/avatars are not yet configured.
@@ -1233,20 +1243,32 @@ extension MatrixBridgeService {
                                         avatarURL = otherMember.avatarUrl
                                     }
                                 } else {
-                                    // Try to look up via Nova UserService
+                                    // Matrix member has no displayName, try to look up via Nova UserService
                                     if let novaUserId = matrixService.convertToNovaUserId(matrixUserId: otherMember.userId) {
-                                        if let userProfile = try? await UserService.shared.getUser(userId: novaUserId) {
+                                        #if DEBUG
+                                        print("[MatrixBridge]   🔍 Looking up user profile for: \(novaUserId)")
+                                        #endif
+                                        do {
+                                            let userProfile = try await UserService.shared.getUser(userId: novaUserId)
                                             displayName = userProfile.displayName ?? userProfile.username
                                             if avatarURL == nil || avatarURL?.isEmpty == true {
                                                 avatarURL = userProfile.avatarUrl
                                             }
-                                        } else {
+                                            #if DEBUG
+                                            print("[MatrixBridge]   ✅ Found user: \(displayName)")
+                                            #endif
+                                        } catch {
+                                            #if DEBUG
+                                            print("[MatrixBridge]   ⚠️ UserService lookup failed for \(novaUserId): \(error)")
+                                            #endif
                                             // UserService lookup failed - check if UUID or username
                                             if novaUserId.count == 36 && novaUserId.contains("-") {
-                                                // UUID - shorten it
-                                                displayName = "User \(String(novaUserId.prefix(8)))"
+                                                // UUID - use a more friendly fallback, try to get username from Matrix profile
+                                                // The Matrix user ID format is @nova-{identifier}:server
+                                                // If the identifier is a UUID, we don't have the username
+                                                displayName = "Chat"  // Generic fallback for unknown users
                                             } else {
-                                                // Username - show full name
+                                                // It's a username - show it directly
                                                 displayName = novaUserId
                                             }
                                         }
@@ -1261,11 +1283,11 @@ extension MatrixBridgeService {
                                                 // Remove "nova-" prefix if present
                                                 if localpart.hasPrefix("nova-") {
                                                     let identifier = String(localpart.dropFirst(5))
-                                                    // Check if it's a UUID (36 chars with hyphens) - shorten it
-                                                    // Otherwise show full username
+                                                    // Check if it's a UUID (36 chars with hyphens)
                                                     if identifier.count == 36 && identifier.contains("-") {
-                                                        displayName = "User \(String(identifier.prefix(8)))"
+                                                        displayName = "Chat"  // Generic fallback
                                                     } else {
+                                                        // It's a username - show it
                                                         displayName = identifier
                                                     }
                                                 } else {
@@ -1284,7 +1306,7 @@ extension MatrixBridgeService {
                     }
 
                     // Fallback: Try to use lastMessage sender for DM display name
-                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) {
+                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) || looksLikeNovaUserUUID(displayName) {
                         #if DEBUG
                         print("[MatrixBridge]   📨 Trying lastMessage sender fallback")
                         #endif
@@ -1309,8 +1331,10 @@ extension MatrixBridgeService {
                                     } else {
                                         // UserService failed - check if UUID or username
                                         if novaUserId.count == 36 && novaUserId.contains("-") {
-                                            displayName = "User \(String(novaUserId.prefix(8)))"
+                                            // UUID - use generic fallback
+                                            displayName = "Chat"
                                         } else {
+                                            // Username - show it directly
                                             displayName = novaUserId
                                         }
                                     }
@@ -1321,10 +1345,12 @@ extension MatrixBridgeService {
                                         let localpart = String(withoutAt.prefix(upTo: colonIdx))
                                         if localpart.hasPrefix("nova-") {
                                             let identifier = String(localpart.dropFirst(5))
-                                            // Check if it's a UUID (36 chars with hyphens) - shorten it
+                                            // Check if it's a UUID (36 chars with hyphens)
                                             if identifier.count == 36 && identifier.contains("-") {
-                                                displayName = "User \(String(identifier.prefix(8)))"
+                                                // UUID - use generic fallback
+                                                displayName = "Chat"
                                             } else {
+                                                // Username - show it
                                                 displayName = identifier
                                             }
                                         } else {
@@ -1336,8 +1362,8 @@ extension MatrixBridgeService {
                         }
                     }
 
-                    // Final fallback - just show "Chat" instead of ugly room ID, member count, or "Conversation {uuid}"
-                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) {
+                    // Final fallback - just show "Chat" instead of ugly room ID, member count, "Conversation {uuid}", or "Nova User {uuid}"
+                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) || looksLikeNovaUserUUID(displayName) {
                         displayName = "Chat"
                     }
                 }
