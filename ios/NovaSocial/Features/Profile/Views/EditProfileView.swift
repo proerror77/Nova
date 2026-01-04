@@ -176,7 +176,7 @@ struct EditProfileView: View {
                                     .tint(.white)
                             } else {
                                 Image(systemName: "camera.fill")
-                                    .font(.system(size: 24))
+                                    .font(Font.custom("SFProDisplay-Regular", size: 24.f))
                                     .foregroundColor(.white)
                             }
                         }
@@ -191,7 +191,7 @@ struct EditProfileView: View {
             }
 
             Text(isUploadingAvatar ? "Uploading..." : "Tap to change avatar")
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(.secondary)
         }
         .padding(.vertical, 10)
@@ -279,13 +279,13 @@ struct EditProfileView: View {
             // Title with character count
             HStack {
                 Text(title)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                     .foregroundColor(.secondary)
 
                 Spacer()
 
                 Text("\(text.wrappedValue.count)/\(limit)")
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(text.wrappedValue.count > limit ? .red : .secondary)
             }
 
@@ -293,13 +293,13 @@ struct EditProfileView: View {
             HStack(spacing: 12) {
                 if let icon = icon {
                     Image(systemName: icon)
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(.secondary)
                         .frame(width: 20)
                 }
 
                 TextField(placeholder, text: text)
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .keyboardType(keyboardType)
                     .autocapitalization(keyboardType == .URL ? .none : .words)
                     .disableAutocorrection(keyboardType == .URL)
@@ -325,13 +325,13 @@ struct EditProfileView: View {
             // Title with character count
             HStack {
                 Text(title)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                     .foregroundColor(.secondary)
 
                 Spacer()
 
                 Text("\(text.wrappedValue.count)/\(limit)")
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(text.wrappedValue.count > limit ? .red : .secondary)
             }
 
@@ -339,14 +339,14 @@ struct EditProfileView: View {
             ZStack(alignment: .topLeading) {
                 if text.wrappedValue.isEmpty {
                     Text(placeholder)
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(Color(UIColor.placeholderText))
                         .padding(.horizontal, 14)
                         .padding(.vertical, 14)
                 }
 
                 TextEditor(text: text)
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .frame(minHeight: 100)
                     .padding(10)
                     .scrollContentBackground(.hidden)

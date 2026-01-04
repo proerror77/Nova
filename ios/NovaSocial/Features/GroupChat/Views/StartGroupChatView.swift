@@ -167,14 +167,14 @@ struct StartGroupChatView: View {
                         currentPage = .message
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 20))
+                            .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                             .foregroundColor(DesignTokens.textPrimary)
                     }
 
                     Spacer()
 
                     Text(NSLocalizedString("group_chat.title", comment: ""))
-                        .font(.system(size: 20, weight: .bold))
+                        .font(Font.custom("SFProDisplay-Bold", size: 20.f))
                         .foregroundColor(DesignTokens.textPrimary)
 
                     Spacer()
@@ -192,7 +192,7 @@ struct StartGroupChatView: View {
                                 .scaleEffect(0.8)
                         } else {
                             Text(NSLocalizedString("group_chat.create", comment: ""))
-                                .font(.system(size: 14, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                                 .foregroundColor(viewModel.canCreateGroup ? DesignTokens.accentColor : DesignTokens.textMuted)
                         }
                     }
@@ -207,16 +207,16 @@ struct StartGroupChatView: View {
                 // MARK: - Group Name Input
                 VStack(alignment: .leading, spacing: 8) {
                     Text(NSLocalizedString("group_chat.group_name", comment: ""))
-                        .font(.system(size: 14, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                         .foregroundColor(DesignTokens.textSecondary)
 
                     HStack(spacing: 10) {
                         Image(systemName: "person.3.fill")
-                            .font(.system(size: 15))
+                            .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                             .foregroundColor(DesignTokens.textSecondary)
 
                         TextField(NSLocalizedString("group_chat.group_name_placeholder", comment: ""), text: $viewModel.groupName)
-                            .font(.system(size: 15))
+                            .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                             .foregroundColor(DesignTokens.textPrimary)
 
                         Spacer()
@@ -233,16 +233,16 @@ struct StartGroupChatView: View {
                 HStack {
                     HStack(spacing: 8) {
                         Image(systemName: viewModel.isPrivateGroup ? "lock.fill" : "lock.open")
-                            .font(.system(size: 16))
+                            .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                             .foregroundColor(viewModel.isPrivateGroup ? DesignTokens.accentColor : DesignTokens.textSecondary)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Private Group")
-                                .font(.system(size: 15, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: 15.f))
                                 .foregroundColor(DesignTokens.textPrimary)
 
                             Text(viewModel.isPrivateGroup ? "End-to-end encrypted" : "Standard group (searchable)")
-                                .font(.system(size: 12))
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                 .foregroundColor(DesignTokens.textSecondary)
                         }
                     }
@@ -259,11 +259,11 @@ struct StartGroupChatView: View {
                 // MARK: - Search Bar
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 15))
+                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                         .foregroundColor(DesignTokens.textSecondary)
 
                     TextField(NSLocalizedString("group_chat.search_placeholder", comment: ""), text: $viewModel.searchQuery)
-                        .font(.system(size: 15))
+                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                         .foregroundColor(DesignTokens.textPrimary)
                         .onChange(of: viewModel.searchQuery) { _, newValue in
                             if !newValue.isEmpty {
@@ -309,7 +309,7 @@ struct StartGroupChatView: View {
                     // Selection info
                     HStack {
                         Text(String(format: NSLocalizedString("group_chat.selected_count", comment: ""), viewModel.selectedUsers.count))
-                            .font(.system(size: 13, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 13.f))
                             .foregroundColor(DesignTokens.textSecondary)
 
                         Spacer()
@@ -318,7 +318,7 @@ struct StartGroupChatView: View {
                             viewModel.selectedUsers.removeAll()
                         }) {
                             Text(NSLocalizedString("group_chat.clear", comment: ""))
-                                .font(.system(size: 13, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: 13.f))
                                 .foregroundColor(DesignTokens.accentColor)
                         }
                     }
@@ -349,13 +349,13 @@ struct StartGroupChatView: View {
                             // Search Results
                             if viewModel.searchResults.isEmpty && !viewModel.isSearching {
                                 Text(NSLocalizedString("group_chat.no_results", comment: ""))
-                                    .font(.system(size: 14))
+                                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                     .foregroundColor(DesignTokens.textSecondary)
                                     .padding(.top, 40)
                             } else {
                                 VStack(alignment: .leading, spacing: 12) {
                                     Text(NSLocalizedString("group_chat.search_results", comment: ""))
-                                        .font(.system(size: 17, weight: .bold))
+                                        .font(Font.custom("SFProDisplay-Bold", size: 17.f))
                                         .foregroundColor(DesignTokens.textSecondary)
                                         .padding(.horizontal, 16)
 
@@ -377,11 +377,11 @@ struct StartGroupChatView: View {
                             if viewModel.friends.isEmpty {
                                 VStack(spacing: 16) {
                                     Image(systemName: "person.2.slash")
-                                        .font(.system(size: 48))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 48.f))
                                         .foregroundColor(DesignTokens.textMuted)
 
                                     Text(NSLocalizedString("group_chat.no_friends", comment: ""))
-                                        .font(.system(size: 14))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                         .foregroundColor(DesignTokens.textSecondary)
                                         .multilineTextAlignment(.center)
                                 }
@@ -389,7 +389,7 @@ struct StartGroupChatView: View {
                             } else {
                                 VStack(alignment: .leading, spacing: 12) {
                                     Text(NSLocalizedString("group_chat.friends_section", comment: ""))
-                                        .font(.system(size: 17, weight: .bold))
+                                        .font(Font.custom("SFProDisplay-Bold", size: 17.f))
                                         .foregroundColor(DesignTokens.textSecondary)
                                         .padding(.horizontal, 16)
 
@@ -441,13 +441,13 @@ struct GroupSelectedUserChip: View {
             }
 
             Text(user.displayName ?? user.username)
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(DesignTokens.textPrimary)
                 .lineLimit(1)
 
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(DesignTokens.textMuted)
             }
         }
@@ -497,11 +497,11 @@ struct GroupSelectableUserCardView: View {
                 // User Info
                 VStack(alignment: .leading, spacing: 2) {
                     Text(user.displayName ?? user.username)
-                        .font(.system(size: 16, weight: .bold))
+                        .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                         .foregroundColor(DesignTokens.textPrimary)
 
                     Text("@\(user.username)")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                         .foregroundColor(DesignTokens.textSecondary)
                         .lineLimit(1)
                 }
@@ -511,7 +511,7 @@ struct GroupSelectableUserCardView: View {
                 // Checkmark for selected state
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 24))
+                        .font(Font.custom("SFProDisplay-Regular", size: 24.f))
                         .foregroundColor(DesignTokens.accentColor)
                 }
             }

@@ -517,7 +517,7 @@ struct HomeView: View {
                             selectTab(tab)
                         }) {
                             Text(tab.displayName)
-                                .font(.system(size: 10.f))
+                                .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                                 .foregroundColor(selectedTab == tab ? .black : Color(red: 0.53, green: 0.53, blue: 0.53))
                         }
                     }

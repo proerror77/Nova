@@ -52,7 +52,7 @@ struct CallRecordingsView: View {
         .overlay(alignment: .top) {
             if let error = errorMessage {
                 Text(error)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 13.f))
                     .foregroundColor(.white)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
@@ -83,7 +83,7 @@ struct CallRecordingsView: View {
             Spacer()
 
             Text("Call Recordings")
-                .font(.system(size: 20, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 20.f))
                 .foregroundColor(DesignTokens.textPrimary)
 
             Spacer()
@@ -114,15 +114,15 @@ struct CallRecordingsView: View {
             Spacer()
 
             Image(systemName: "waveform.circle")
-                .font(.system(size: 60))
+                .font(Font.custom("SFProDisplay-Regular", size: 60.f))
                 .foregroundColor(DesignTokens.textSecondary.opacity(0.5))
 
             Text("No Recordings")
-                .font(.system(size: 18, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
                 .foregroundColor(DesignTokens.textPrimary)
 
             Text("Call recordings will appear here.\nYou can record calls using the record button during a call.")
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(DesignTokens.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
@@ -225,22 +225,22 @@ private struct RecordingRow: View {
                 // Play/Stop button
                 Button(action: isPlaying ? onStop : onPlay) {
                     Image(systemName: isPlaying ? "stop.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 44))
+                        .font(Font.custom("SFProDisplay-Regular", size: 44.f))
                         .foregroundColor(isPlaying ? .red : DesignTokens.accentColor)
                 }
 
                 // Recording info
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Call Recording")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                         .foregroundColor(DesignTokens.textPrimary)
 
                     Text(dateFormatter.string(from: recording.createdAt))
-                        .font(.system(size: 12))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         .foregroundColor(DesignTokens.textSecondary)
 
                     Text(recording.formattedSize)
-                        .font(.system(size: 11))
+                        .font(Font.custom("SFProDisplay-Regular", size: 11.f))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
 
@@ -250,13 +250,13 @@ private struct RecordingRow: View {
                 HStack(spacing: 16) {
                     Button(action: onShare) {
                         Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 18))
+                            .font(Font.custom("SFProDisplay-Regular", size: 18.f))
                             .foregroundColor(DesignTokens.accentColor)
                     }
 
                     Button(action: onDelete) {
                         Image(systemName: "trash")
-                            .font(.system(size: 18))
+                            .font(Font.custom("SFProDisplay-Regular", size: 18.f))
                             .foregroundColor(.red)
                     }
                 }

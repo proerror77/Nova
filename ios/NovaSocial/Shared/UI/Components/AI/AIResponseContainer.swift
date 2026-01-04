@@ -79,10 +79,10 @@ struct AIResponseContainer<Content: View>: View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundColor(errorColor)
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
 
             Text(message)
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(.secondary)
 
             Spacer()

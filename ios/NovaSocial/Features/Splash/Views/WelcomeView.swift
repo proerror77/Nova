@@ -39,7 +39,7 @@ struct WelcomeView: View {
                     .frame(height: 370.h)
 
                 Text("WELCOME TO ICERED")
-                    .font(.system(size: 24.f, weight: .bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 24.f))
                     .tracking(1.20)
                     .foregroundColor(.white)
                     .lineLimit(1)
@@ -56,7 +56,7 @@ struct WelcomeView: View {
                     .frame(height: 414.h)
 
                 Text("An exclusive social platform\nfor global executives and decision\nmakers.")
-                    .font(.system(size: 16.f))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .tracking(0.80)
                     .lineSpacing(8)
                     .foregroundColor(Color(red: 0.75, green: 0.75, blue: 0.75))

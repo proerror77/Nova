@@ -31,13 +31,13 @@ struct ChannelPickerView: View {
                 if !selectedChannelIds.isEmpty {
                     HStack {
                         Text("\(selectedChannelIds.count)/\(maxChannels) selected")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 13.f))
                             .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
                         Spacer()
                         Button("Clear All") {
                             selectedChannelIds.removeAll()
                         }
-                        .font(.system(size: 13))
+                        .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                         .foregroundColor(.red)
                     }
                     .padding(.horizontal, 16)
@@ -48,11 +48,11 @@ struct ChannelPickerView: View {
                 // Search bar
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 15))
+                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                         .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
 
                     TextField("Search channels", text: $searchText)
-                        .font(.system(size: 15))
+                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                         .foregroundColor(.black)
                         .autocorrectionDisabled()
 
@@ -61,7 +61,7 @@ struct ChannelPickerView: View {
                             searchText = ""
                         }) {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 15))
+                                .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                                 .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
                         }
                     }
@@ -81,10 +81,10 @@ struct ChannelPickerView: View {
                     Spacer()
                     VStack(spacing: 12) {
                         Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 40))
+                            .font(Font.custom("SFProDisplay-Regular", size: 40.f))
                             .foregroundColor(.orange)
                         Text(error)
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(.gray)
                             .multilineTextAlignment(.center)
                         Button("Retry") {
@@ -181,19 +181,19 @@ private struct ChannelRow: View {
                         .frame(width: 40, height: 40)
 
                     Text("#")
-                        .font(.system(size: 18, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                         .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                 }
 
                 // Channel info
                 VStack(alignment: .leading, spacing: 4) {
                     Text(channel.name)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                         .foregroundColor(isDisabled ? .gray : .black)
 
                     if let description = channel.description, !description.isEmpty {
                         Text(description)
-                            .font(.system(size: 12))
+                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                             .lineLimit(1)
                     }
@@ -204,7 +204,7 @@ private struct ChannelRow: View {
                 // Selection indicator
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 22))
+                        .font(Font.custom("SFProDisplay-Regular", size: 22.f))
                         .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
                 } else if !isDisabled {
                     Circle()

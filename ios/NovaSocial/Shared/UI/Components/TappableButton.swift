@@ -72,7 +72,7 @@ struct IconButton: View {
     var body: some View {
         HStack(spacing: DesignTokens.spacing6) {
             Image(systemName: icon)
-                .font(.system(size: 18))
+                .font(Font.custom("SFProDisplay-Regular", size: 18.f))
             
             if let count = count {
                 Text("\(count)")

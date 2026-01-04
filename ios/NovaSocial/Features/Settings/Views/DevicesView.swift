@@ -30,14 +30,14 @@ struct DevicesView: View {
                         currentPage = .setting
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(Font.custom("SFProDisplay-Semibold", size: 17.f))
                             .foregroundColor(DesignTokens.accentColor)
                     }
 
                     Spacer()
 
                     Text("Devices")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 17.f))
                         .foregroundColor(DesignTokens.textPrimary)
 
                     Spacer()
@@ -58,18 +58,18 @@ struct DevicesView: View {
                             ProgressView()
                                 .scaleEffect(1.2)
                             Text("Loading devices...")
-                                .font(.system(size: 15))
+                                .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                                 .foregroundColor(.secondary)
                         }
                     } else if let errorMessage = errorMessage, devices.isEmpty {
                         // 错误状态
                         VStack(spacing: 16) {
                             Image(systemName: "exclamationmark.triangle")
-                                .font(.system(size: 48))
+                                .font(Font.custom("SFProDisplay-Regular", size: 48.f))
                                 .foregroundColor(.secondary)
 
                             Text(errorMessage)
-                                .font(.system(size: 15))
+                                .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 40)
@@ -79,7 +79,7 @@ struct DevicesView: View {
                                     await loadDevices()
                                 }
                             }
-                            .font(.system(size: 17, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 17.f))
                             .foregroundColor(.white)
                             .padding(.horizontal, 32)
                             .padding(.vertical, 12)
@@ -90,11 +90,11 @@ struct DevicesView: View {
                         // 空状态
                         VStack(spacing: 16) {
                             Image(systemName: "laptopcomputer.and.iphone")
-                                .font(.system(size: 48))
+                                .font(Font.custom("SFProDisplay-Regular", size: 48.f))
                                 .foregroundColor(.secondary)
 
                             Text("No devices found")
-                                .font(.system(size: 15))
+                                .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                                 .foregroundColor(.secondary)
                         }
                     } else {
@@ -105,7 +105,7 @@ struct DevicesView: View {
                                 if let current = currentDevice {
                                     VStack(alignment: .leading, spacing: 8) {
                                         Text("THIS DEVICE")
-                                            .font(.system(size: 13))
+                                            .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                                             .foregroundColor(.secondary)
                                             .padding(.horizontal, 16)
 
@@ -123,7 +123,7 @@ struct DevicesView: View {
                                 if !otherDevices.isEmpty {
                                     VStack(alignment: .leading, spacing: 8) {
                                         Text("OTHER DEVICES")
-                                            .font(.system(size: 13))
+                                            .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                                             .foregroundColor(.secondary)
                                             .padding(.horizontal, 16)
 
@@ -146,7 +146,7 @@ struct DevicesView: View {
 
                                 // 说明文字
                                 Text("Devices that are logged into your account are shown here. You can log out from any device remotely.")
-                                    .font(.system(size: 13))
+                                    .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                                     .foregroundColor(.secondary)
                                     .padding(.horizontal, 16)
                                     .padding(.top, 8)
@@ -237,7 +237,7 @@ struct DeviceRow: View {
                         .frame(width: 44, height: 44)
 
                     Image(systemName: deviceIconName)
-                        .font(.system(size: 20))
+                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                         .foregroundColor(.white)
                 }
 
@@ -245,19 +245,19 @@ struct DeviceRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(device.deviceName)
-                            .font(.system(size: 17))
+                            .font(Font.custom("SFProDisplay-Regular", size: 17.f))
                             .foregroundColor(.primary)
                             .lineLimit(1)
 
                         if device.isCurrent == true {
                             Text("This Device")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                                 .foregroundColor(DesignTokens.accentColor)
                         }
                     }
 
                     Text(deviceSubtitle)
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
@@ -270,13 +270,13 @@ struct DeviceRow: View {
                         onLogout?()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
+                            .font(Font.custom("SFProDisplay-Regular", size: 22.f))
                             .foregroundColor(.secondary.opacity(0.5))
                     }
                     .buttonStyle(.plain)
                 } else {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                         .foregroundColor(Color(uiColor: .tertiaryLabel))
                 }
             }

@@ -14,16 +14,16 @@ struct ThankYouModal: View {
                 HStack {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .font(.system(size: 24, weight: .semibold))
+                            .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
                             .foregroundColor(.black)
                     }
                     Spacer()
                     Text("Report")
-                        .font(.system(size: 24, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
                     Spacer()
                     Button(action: {}) {
                         Image(systemName: "xmark")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
                             .foregroundColor(.clear)
                     }
                 }
@@ -42,7 +42,7 @@ struct ThankYouModal: View {
                         .frame(width: 120, height: 120)
                         .overlay(
                             Image(systemName: "checkmark")
-                                .font(.system(size: 50, weight: .semibold))
+                                .font(Font.custom("SFProDisplay-Semibold", size: 50.f))
                                 .foregroundColor(.white)
                         )
                         .padding(.bottom, 30)
@@ -50,7 +50,7 @@ struct ThankYouModal: View {
                     // Thank you message
                     VStack(alignment: .center, spacing: 16) {
                         Text("Thank you for your feedback!")
-                            .font(.system(size: 20, weight: .bold))
+                            .font(Font.custom("SFProDisplay-Bold", size: 20.f))
                             .frame(maxWidth: .infinity, alignment: .center)
                             .multilineTextAlignment(.center)
                     }
@@ -63,7 +63,7 @@ struct ThankYouModal: View {
                         isPresented = false  // 关闭 ReportModal sheet，返回 HomeView
                     }) {
                         Text("Done")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity, maxHeight: 46)
                             .background(Color(red: 0.81, green: 0.13, blue: 0.25))

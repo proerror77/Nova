@@ -119,7 +119,7 @@ struct LiveKitVoiceChatView: View {
         HStack {
             Button(action: { showEndConfirmation = true }) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 20, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 20.f))
                     .foregroundColor(.white.opacity(0.8))
                     .frame(width: 44, height: 44)
             }
@@ -132,11 +132,11 @@ struct LiveKitVoiceChatView: View {
                     .fill(statusColor)
                     .frame(width: 8, height: 8)
                 Text(state.description)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                     .foregroundColor(.white.opacity(0.8))
 
                 Text("LiveKit")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 10.f))
                     .foregroundColor(.green)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -157,7 +157,7 @@ struct LiveKitVoiceChatView: View {
                 triggerHaptic(.light)
             }) {
                 Image(systemName: isTextInputMode ? "waveform" : "keyboard")
-                    .font(.system(size: 18, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                     .foregroundColor(.white.opacity(0.8))
                     .frame(width: 44, height: 44)
             }
@@ -213,11 +213,11 @@ struct LiveKitVoiceChatView: View {
 
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
                 Text(message.role == .user ? "You" : "Alice")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 11.f))
                     .foregroundColor(message.role == .user ? .cyan.opacity(0.7) : .purple.opacity(0.7))
 
                 Text(message.text)
-                    .font(.system(size: 15))
+                    .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                     .foregroundColor(.white.opacity(0.95))
                     .multilineTextAlignment(message.role == .user ? .trailing : .leading)
                     .padding(.horizontal, 14)
@@ -245,17 +245,17 @@ struct LiveKitVoiceChatView: View {
             VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
                 HStack(spacing: 4) {
                     Text(isUser ? "You" : "Alice")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 11.f))
                         .foregroundColor(isUser ? .cyan.opacity(0.7) : .purple.opacity(0.7))
 
                     // 打字指示器
                     Text("...")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 11.f))
                         .foregroundColor(.white.opacity(0.4))
                 }
 
                 Text(text)
-                    .font(.system(size: 15))
+                    .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                     .foregroundColor(.white.opacity(0.7))
                     .italic()
                     .multilineTextAlignment(isUser ? .trailing : .leading)
@@ -274,7 +274,7 @@ struct LiveKitVoiceChatView: View {
         HStack(spacing: 12) {
             TextField("Type a message...", text: $textInput)
                 .textFieldStyle(.plain)
-                .font(.system(size: 16))
+                .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                 .foregroundColor(.white)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -287,7 +287,7 @@ struct LiveKitVoiceChatView: View {
 
             Button(action: sendTextMessage) {
                 Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 36))
+                    .font(Font.custom("SFProDisplay-Regular", size: 36.f))
                     .foregroundColor(textInput.isEmpty ? .white.opacity(0.3) : .purple)
             }
             .disabled(textInput.isEmpty)
@@ -316,9 +316,9 @@ struct LiveKitVoiceChatView: View {
                 }) {
                     HStack(spacing: 6) {
                         Image(systemName: "bubble.left.and.bubble.right")
-                            .font(.system(size: 12))
+                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         Text("View \(messages.count) messages")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 13.f))
                     }
                     .foregroundColor(.white.opacity(0.6))
                     .padding(.horizontal, 16)
@@ -426,12 +426,12 @@ struct LiveKitVoiceChatView: View {
     private var stateIndicator: some View {
         VStack(spacing: 6) {
             Text(stateTitle)
-                .font(.system(size: 22, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 22.f))
                 .foregroundColor(.white)
                 .multilineTextAlignment(.center)
 
             Text(stateSubtitle)
-                .font(.system(size: 13))
+                .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                 .foregroundColor(.white.opacity(0.6))
                 .multilineTextAlignment(.center)
         }
@@ -468,7 +468,7 @@ struct LiveKitVoiceChatView: View {
             if !pendingUserText.isEmpty || !transcript.isEmpty {
                 HStack {
                     Text(pendingUserText.isEmpty ? transcript : pendingUserText)
-                        .font(.system(size: 15))
+                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                         .foregroundColor(.white.opacity(0.85))
                         .lineLimit(2)
                         .multilineTextAlignment(.center)
@@ -482,7 +482,7 @@ struct LiveKitVoiceChatView: View {
             if !pendingAIText.isEmpty || !aiResponse.isEmpty {
                 HStack {
                     Text(pendingAIText.isEmpty ? aiResponse : pendingAIText)
-                        .font(.system(size: 15))
+                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                         .foregroundColor(.white.opacity(0.85))
                         .lineLimit(3)
                         .multilineTextAlignment(.center)
@@ -522,7 +522,7 @@ struct LiveKitVoiceChatView: View {
                             .frame(width: 68, height: 68)
 
                         Image(systemName: "phone.down.fill")
-                            .font(.system(size: 26))
+                            .font(Font.custom("SFProDisplay-Regular", size: 26.f))
                             .foregroundColor(.white)
                     }
                 }
@@ -543,7 +543,7 @@ struct LiveKitVoiceChatView: View {
             }
 
             Text("LiveKit WebRTC • Voice interruption supported")
-                .font(.system(size: 11))
+                .font(Font.custom("SFProDisplay-Regular", size: 11.f))
                 .foregroundColor(.white.opacity(0.4))
         }
         .padding(.bottom, 40)
@@ -560,7 +560,7 @@ struct LiveKitVoiceChatView: View {
                     .frame(width: 52, height: 52)
 
                 Image(systemName: icon)
-                    .font(.system(size: 22))
+                    .font(Font.custom("SFProDisplay-Regular", size: 22.f))
                     .foregroundColor(isActive ? color : color.opacity(0.5))
             }
         }

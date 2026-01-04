@@ -79,7 +79,7 @@ struct CreateAccountView: View {
 
     private var titleSection: some View {
         Text("Create Account")
-            .font(.system(size: 24.f, weight: .semibold))
+            .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
             .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
     }
 
@@ -98,7 +98,7 @@ struct CreateAccountView: View {
                 .padding(.leading, 27.w)
 
                 Text("Use Phone number")
-                    .font(.system(size: 16.f, weight: .heavy))
+                    .font(Font.custom("SFProDisplay-Heavy", size: 16.f))
                     .tracking(0.32)
                     .foregroundColor(.black)
             }
@@ -111,7 +111,7 @@ struct CreateAccountView: View {
 
     private var orText: some View {
         Text("or")
-            .font(.system(size: 16.f))
+            .font(Font.custom("SFProDisplay-Regular", size: 16.f))
             .foregroundColor(.white)
     }
 
@@ -130,7 +130,7 @@ struct CreateAccountView: View {
                 .padding(.leading, 27.w)
 
                 Text("Continue with Google")
-                    .font(.system(size: 16.f, weight: .heavy))
+                    .font(Font.custom("SFProDisplay-Heavy", size: 16.f))
                     .tracking(0.32)
                     .foregroundColor(.black)
             }
@@ -156,7 +156,7 @@ struct CreateAccountView: View {
                 .padding(.leading, 27.w)
 
                 Text("Continue with Apple")
-                    .font(.system(size: 16.f, weight: .heavy))
+                    .font(Font.custom("SFProDisplay-Heavy", size: 16.f))
                     .tracking(0.32)
                     .foregroundColor(.black)
             }
@@ -182,7 +182,7 @@ struct CreateAccountView: View {
                 .padding(.leading, 27.w)
 
                 Text("Continue with Email")
-                    .font(.system(size: 16.f, weight: .heavy))
+                    .font(Font.custom("SFProDisplay-Heavy", size: 16.f))
                     .tracking(0.32)
                     .foregroundColor(.black)
             }
@@ -196,7 +196,7 @@ struct CreateAccountView: View {
     private var emailInput: some View {
         TextField("", text: $email, prompt: Text("Email address")
             .foregroundColor(Color(red: 0.6, green: 0.6, blue: 0.6)))
-            .font(.system(size: 16.f, weight: .light))
+            .font(Font.custom("SFProDisplay-Light", size: 16.f))
             .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
             .multilineTextAlignment(.center)
             .textInputAutocapitalization(.never)
@@ -218,7 +218,7 @@ struct CreateAccountView: View {
     private var errorMessageView: some View {
         if let errorMessage {
             Text(LocalizedStringKey(errorMessage))
-                .font(.system(size: 12.f))
+                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                 .foregroundColor(.red)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40.w)
@@ -235,7 +235,7 @@ struct CreateAccountView: View {
                         .scaleEffect(0.9)
                 }
                 Text("Continue")
-                    .font(.system(size: 16.f, weight: .heavy))
+                    .font(Font.custom("SFProDisplay-Heavy", size: 16.f))
                     .tracking(0.32)
                     .foregroundColor(.black)
             }

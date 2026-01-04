@@ -64,11 +64,11 @@ struct UploadProgressBanner: View {
 
                 if task.status == .compressing || task.status == .uploading {
                     Image(systemName: "arrow.up")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(Font.custom("SFProDisplay-Bold", size: 14.f))
                         .foregroundColor(.white)
                 } else {
                     Text("\(Int(task.progress * 100))")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(Font.custom("SFProDisplay-Bold", size: 10.f))
                         .foregroundColor(.white)
                 }
             }
@@ -76,11 +76,11 @@ struct UploadProgressBanner: View {
             // Status text
             VStack(alignment: .leading, spacing: 2) {
                 Text("Posting...")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                     .foregroundColor(.white)
 
                 Text(task.statusMessage)
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(.white.opacity(0.8))
             }
 
@@ -89,7 +89,7 @@ struct UploadProgressBanner: View {
             // Cancel button
             Button(action: onCancel) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 22))
+                    .font(Font.custom("SFProDisplay-Regular", size: 22.f))
                     .foregroundColor(.white.opacity(0.7))
             }
         }
@@ -120,18 +120,18 @@ struct UploadCompletedBanner: View {
                     .frame(width: 36, height: 36)
 
                 Image(systemName: "checkmark")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                     .foregroundColor(.white)
             }
 
             // Success text
             VStack(alignment: .leading, spacing: 2) {
                 Text("Posted!")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                     .foregroundColor(.white)
 
                 Text("Your post is now live")
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(.white.opacity(0.8))
             }
 
@@ -140,7 +140,7 @@ struct UploadCompletedBanner: View {
             // Dismiss button
             Button(action: onDismiss) {
                 Text("OK")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                     .foregroundColor(.black)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
@@ -176,18 +176,18 @@ struct UploadFailedBanner: View {
                     .frame(width: 36, height: 36)
 
                 Image(systemName: "exclamationmark")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                     .foregroundColor(.white)
             }
 
             // Error text
             VStack(alignment: .leading, spacing: 2) {
                 Text("Upload Failed")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                     .foregroundColor(.white)
 
                 Text(errorMessage)
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(.white.opacity(0.8))
                     .lineLimit(1)
             }
@@ -197,7 +197,7 @@ struct UploadFailedBanner: View {
             // Retry button
             Button(action: onRetry) {
                 Text("Retry")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                     .foregroundColor(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -208,7 +208,7 @@ struct UploadFailedBanner: View {
             // Dismiss button
             Button(action: onDismiss) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 22))
+                    .font(Font.custom("SFProDisplay-Regular", size: 22.f))
                     .foregroundColor(.white.opacity(0.7))
             }
         }

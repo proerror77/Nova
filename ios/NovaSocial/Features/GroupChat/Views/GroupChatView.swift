@@ -114,7 +114,7 @@ struct GroupChatView: View {
                 showGroupChat = false
             }) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 20, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 20.f))
                     .foregroundColor(DesignTokens.textPrimary)
                     .frame(width: 24, height: 24)
             }
@@ -132,7 +132,7 @@ struct GroupChatView: View {
                 showGroupSettings = true
             }) {
                 Image(systemName: "ellipsis")
-                    .font(.system(size: 20))
+                    .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                     .foregroundColor(DesignTokens.textPrimary)
                     .frame(width: 24, height: 24)
             }
@@ -159,9 +159,9 @@ struct GroupChatView: View {
                     if viewModel.isPreviewMode {
                         HStack {
                             Image(systemName: "eye.fill")
-                                .font(.system(size: 12))
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                             Text("Preview Mode - Mock Data")
-                                .font(.system(size: 12))
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         }
                         .foregroundColor(.orange)
                         .padding(.vertical, 8)
@@ -219,7 +219,7 @@ struct GroupChatView: View {
                             .frame(width: 30, height: 30)
 
                         Image(systemName: viewModel.showAttachmentOptions ? "xmark" : "plus")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                             .foregroundColor(DesignTokens.accentColor)
                     }
                 }
@@ -227,7 +227,7 @@ struct GroupChatView: View {
                 // Text input field
                 HStack(spacing: 8) {
                     Image(systemName: "waveform")
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .foregroundColor(DesignTokens.textMuted)
 
                     TextField("Type a message...", text: $viewModel.messageText)
@@ -259,7 +259,7 @@ struct GroupChatView: View {
                             .frame(width: 33, height: 33)
                             .overlay(
                                 Image(systemName: "paperplane.fill")
-                                    .font(.system(size: 14))
+                                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                     .foregroundColor(.white)
                             )
                     }
@@ -290,11 +290,11 @@ struct GroupChatView: View {
                         .cornerRadius(10)
                         .overlay(
                             Image(systemName: "photo.on.rectangle")
-                                .font(.system(size: 24))
+                                .font(Font.custom("SFProDisplay-Regular", size: 24.f))
                                 .foregroundColor(DesignTokens.textPrimary)
                         )
                     Text("Album")
-                        .font(.system(size: 12))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         .foregroundColor(DesignTokens.textPrimary)
                 }
                 .frame(width: 60)
@@ -338,7 +338,7 @@ struct GroupChatView: View {
                 .frame(width: 33, height: 33)
                 .overlay(
                     Image(systemName: "mic.fill")
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .foregroundColor(viewModel.isRecordingVoice ? .white : DesignTokens.textMuted)
                 )
                 .scaleEffect(viewModel.isRecordingVoice ? 1.1 : 1.0)
@@ -349,7 +349,7 @@ struct GroupChatView: View {
             if viewModel.isRecordingVoice && viewModel.voiceRecordDragOffset < viewModel.voiceCancelThreshold {
                 VStack(spacing: 4) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 24))
+                        .font(Font.custom("SFProDisplay-Regular", size: 24.f))
                         .foregroundColor(.red)
                     Text("Release to cancel")
                         .font(.caption)
@@ -370,11 +370,11 @@ struct GroupChatView: View {
                         .foregroundColor(.red)
 
                     Image(systemName: "arrow.up")
-                        .font(.system(size: 10))
+                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                         .foregroundColor(.gray)
 
                     Text("Swipe up to cancel")
-                        .font(.system(size: 10))
+                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                         .foregroundColor(.gray)
                 }
                 .padding(.horizontal, 12)
@@ -523,7 +523,7 @@ struct GroupMessageBubbleView: View {
             VStack(alignment: .leading, spacing: 2) {
                 // Sender name for group messages
                 Text(message.senderName)
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(Color(red: 0.59, green: 0.59, blue: 0.59))
 
                 messageContent
@@ -568,12 +568,12 @@ struct GroupMessageBubbleView: View {
         case .audio:
             HStack(spacing: 8) {
                 Image(systemName: "waveform")
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(message.isFromMe ? .white : otherTextColor)
 
                 if let duration = message.audioDuration {
                     Text(formatDuration(duration))
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .foregroundColor(message.isFromMe ? .white : otherTextColor)
                 }
             }
@@ -582,7 +582,7 @@ struct GroupMessageBubbleView: View {
         case .location:
             HStack(spacing: 8) {
                 Image(systemName: "location.fill")
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(message.isFromMe ? .white : otherTextColor)
 
                 Text("Location")
@@ -594,7 +594,7 @@ struct GroupMessageBubbleView: View {
         case .file:
             HStack(spacing: 8) {
                 Image(systemName: "doc.fill")
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(message.isFromMe ? .white : otherTextColor)
 
                 Text(message.text)
@@ -659,12 +659,12 @@ struct GroupAttachmentButton: View {
                 .cornerRadius(10)
                 .overlay(
                     Image(systemName: icon)
-                        .font(.system(size: 24))
+                        .font(Font.custom("SFProDisplay-Regular", size: 24.f))
                         .foregroundColor(DesignTokens.textPrimary)
                 )
 
             Text(title)
-                .font(.system(size: 12))
+                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                 .foregroundColor(DesignTokens.textPrimary)
         }
         .frame(width: 60)

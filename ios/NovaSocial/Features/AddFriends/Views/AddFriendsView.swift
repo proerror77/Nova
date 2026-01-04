@@ -294,7 +294,7 @@ struct AddFriendsView: View {
                     Spacer()
 
                     Text("Add friends")
-                        .font(.system(size: 20, weight: .bold))
+                        .font(Font.custom("SFProDisplay-Bold", size: 20.f))
                         .foregroundColor(.black)
 
                     Spacer()
@@ -317,11 +317,11 @@ struct AddFriendsView: View {
                 // MARK: - Search Bar
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 15))
+                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                         .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                     TextField("Search", text: $viewModel.searchQuery)
-                        .font(.system(size: 15))
+                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                         .foregroundColor(.black)
                         .onChange(of: viewModel.searchQuery) { _, newValue in
                             if !newValue.isEmpty {
@@ -362,7 +362,7 @@ struct AddFriendsView: View {
                         ProgressView()
                             .scaleEffect(0.8)
                         Text("Creating encrypted chat...")
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(.gray)
                     }
                     .padding(.top, 12)
@@ -378,7 +378,7 @@ struct AddFriendsView: View {
                             }) {
                                 HStack(spacing: 16) {
                                     Image(systemName: "qrcode.viewfinder")
-                                        .font(.system(size: 20))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                                         .foregroundColor(.blue)
                                         .frame(width: 40, height: 40)
                                         .background(Color.blue.opacity(0.1))
@@ -386,18 +386,18 @@ struct AddFriendsView: View {
 
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(String(localized: "scan_qr_code", defaultValue: "Scan QR Code"))
-                                            .font(.system(size: 16, weight: .medium))
+                                            .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                                             .foregroundColor(.black)
 
                                         Text(String(localized: "scan_qr_hint", defaultValue: "Scan a friend's QR code to add them"))
-                                            .font(.system(size: 12))
+                                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                             .foregroundColor(.gray)
                                     }
 
                                     Spacer()
 
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 14, weight: .medium))
+                                        .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                                         .foregroundColor(.gray)
                                 }
                                 .padding(16)
@@ -411,7 +411,7 @@ struct AddFriendsView: View {
                             }) {
                                 HStack(spacing: 16) {
                                     Image(systemName: "qrcode")
-                                        .font(.system(size: 20))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                                         .foregroundColor(.green)
                                         .frame(width: 40, height: 40)
                                         .background(Color.green.opacity(0.1))
@@ -419,18 +419,18 @@ struct AddFriendsView: View {
 
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(String(localized: "my_qr_code", defaultValue: "My QR Code"))
-                                            .font(.system(size: 16, weight: .medium))
+                                            .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                                             .foregroundColor(.black)
 
                                         Text(String(localized: "my_qr_hint", defaultValue: "Let others scan to add you"))
-                                            .font(.system(size: 12))
+                                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                             .foregroundColor(.gray)
                                     }
 
                                     Spacer()
 
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 14, weight: .medium))
+                                        .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                                         .foregroundColor(.gray)
                                 }
                                 .padding(16)
@@ -444,7 +444,7 @@ struct AddFriendsView: View {
                             }) {
                                 HStack(spacing: 16) {
                                     Image(systemName: "person.badge.clock")
-                                        .font(.system(size: 20))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                                         .foregroundColor(.orange)
                                         .frame(width: 40, height: 40)
                                         .background(Color.orange.opacity(0.1))
@@ -452,18 +452,18 @@ struct AddFriendsView: View {
 
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(String(localized: "friend_requests", defaultValue: "Friend Requests"))
-                                            .font(.system(size: 16, weight: .medium))
+                                            .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                                             .foregroundColor(.black)
 
                                         Text(String(localized: "friend_requests_hint", defaultValue: "View and manage friend requests"))
-                                            .font(.system(size: 12))
+                                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                             .foregroundColor(.gray)
                                     }
 
                                     Spacer()
 
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 14, weight: .medium))
+                                        .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                                         .foregroundColor(.gray)
                                 }
                                 .padding(16)
@@ -478,7 +478,7 @@ struct AddFriendsView: View {
                         if !viewModel.searchResults.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("Search Results")
-                                    .font(.system(size: 17.50, weight: .bold))
+                                    .font(Font.custom("SFProDisplay-Bold", size: 17.50.f))
                                     .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
                                     .padding(.horizontal, 24)
 
@@ -506,7 +506,7 @@ struct AddFriendsView: View {
                         if !viewModel.recommendations.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("Recommended")
-                                    .font(.system(size: 17.50, weight: .bold))
+                                    .font(Font.custom("SFProDisplay-Bold", size: 17.50.f))
                                     .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
                                     .padding(.horizontal, 24)
 
@@ -539,11 +539,11 @@ struct AddFriendsView: View {
                         Button(action: {}) {
                             HStack(spacing: 24) {
                                 Image(systemName: "square.and.arrow.up")
-                                    .font(.system(size: 16))
+                                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                                     .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                                 Text("Share invitation link")
-                                    .font(.system(size: 15))
+                                    .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                                     .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                                 Spacer()
@@ -568,7 +568,7 @@ struct AddFriendsView: View {
                 VStack {
                     Spacer()
                     Text(toast)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                         .foregroundColor(.white)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 12)
@@ -620,17 +620,17 @@ struct UserCardView: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(user.displayName ?? user.username)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                     .foregroundColor(.black)
 
                 if let bio = user.bio, !bio.isEmpty {
                     Text(bio)
-                        .font(.system(size: 11.50, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 11.50.f))
                         .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
                         .lineLimit(1)
                 } else {
                     Text("@\(user.username)")
-                        .font(.system(size: 11.50, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 11.50.f))
                         .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
                 }
             }
@@ -640,7 +640,7 @@ struct UserCardView: View {
             // Chat button - Start E2EE conversation
             Button(action: onChat) {
                 Image(systemName: "message.fill")
-                    .font(.system(size: 18))
+                    .font(Font.custom("SFProDisplay-Regular", size: 18.f))
                     .foregroundColor(.white)
                     .frame(width: 36, height: 36)
                     .background(Color(red: 0.87, green: 0.11, blue: 0.26))
@@ -659,11 +659,11 @@ struct UserCardView: View {
                     ProgressView().scaleEffect(0.8)
                 } else if isAdded {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 20))
+                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                         .foregroundColor(.green)
                 } else {
                     Image(systemName: "plus.circle")
-                        .font(.system(size: 20))
+                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                         .foregroundColor(.blue)
                 }
             }
@@ -699,23 +699,23 @@ struct RecommendedCreatorCard: View {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
                     Text(creator.displayName)
-                        .font(.system(size: 16, weight: .bold))
+                        .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                         .foregroundColor(.black)
 
                     if creator.isVerified {
                         Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 12))
+                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                             .foregroundColor(.blue)
                     }
                 }
 
                 Text("@\(creator.username)")
-                    .font(.system(size: 11.50, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 11.50.f))
                     .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
 
                 if let reason = creator.reason, !reason.isEmpty {
                     Text(reason)
-                        .font(.system(size: 10))
+                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                         .foregroundColor(Color(red: 0.5, green: 0.5, blue: 0.5))
                         .lineLimit(1)
                 }
@@ -726,7 +726,7 @@ struct RecommendedCreatorCard: View {
             // Chat button - Start E2EE conversation
             Button(action: onChat) {
                 Image(systemName: "message.fill")
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(.white)
                     .frame(width: 32, height: 32)
                     .background(Color(red: 0.87, green: 0.11, blue: 0.26))
@@ -745,7 +745,7 @@ struct RecommendedCreatorCard: View {
                     ProgressView().scaleEffect(0.8)
                 } else if isFollowed {
                     Text("Following")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                         .foregroundColor(.gray)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
@@ -753,7 +753,7 @@ struct RecommendedCreatorCard: View {
                         .cornerRadius(14)
                 } else {
                     Text("Follow")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                         .foregroundColor(.white)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)

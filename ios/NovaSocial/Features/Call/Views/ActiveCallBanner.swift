@@ -29,7 +29,7 @@ struct ActiveCallBanner: View {
                             .frame(width: 32, height: 32)
 
                         Image(systemName: call.isVideoCall ? "video.fill" : "phone.fill")
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(.white)
                     }
 
@@ -318,7 +318,7 @@ struct MinimizedCallView: View {
                     .frame(width: 32, height: 32)
 
                 Image(systemName: "video.fill")
-                    .font(.system(size: 14))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .foregroundColor(.white)
             }
 

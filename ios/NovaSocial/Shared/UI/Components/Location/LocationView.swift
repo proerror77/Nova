@@ -22,14 +22,14 @@ struct LocationView: View {
                     // 返回按钮
                     Button(action: { showLocation = false }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                             .foregroundColor(.black)
                     }
 
                     Spacer()
 
                     Text("Location")
-                        .font(.system(size: 24, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 24.f))
                         .foregroundColor(.black)
 
                     Spacer()
@@ -40,7 +40,7 @@ struct LocationView: View {
                         showLocation = false
                     }) {
                         Image(systemName: "paperplane.fill")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                             .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
                     }
                     .disabled(selectedLocation == nil)
@@ -58,11 +58,11 @@ struct LocationView: View {
                 // MARK: - 搜索框
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 15))
+                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                         .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
 
                     TextField("Search", text: $searchText)
-                        .font(.system(size: 15))
+                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                         .foregroundColor(.black)
                         .onChange(of: searchText) { oldValue, newValue in
                             searchLocations(query: newValue)
@@ -74,7 +74,7 @@ struct LocationView: View {
                             searchResults = []
                         }) {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 15))
+                                .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                                 .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
                         }
                     }
@@ -129,17 +129,17 @@ struct LocationView: View {
                             }) {
                                 HStack(spacing: 12) {
                                     Image(systemName: "location.fill")
-                                        .font(.system(size: 20))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                                         .foregroundColor(.blue)
 
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text("Current Location")
-                                            .font(.system(size: 20))
+                                            .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                                             .foregroundColor(.black)
 
                                         if let placemark = locationManager.currentPlacemark {
                                             Text("\(placemark.locality ?? ""), \(placemark.country ?? "")")
-                                                .font(.system(size: 16))
+                                                .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                                                 .foregroundColor(Color(red: 0.55, green: 0.55, blue: 0.55))
                                         }
                                     }
@@ -196,7 +196,7 @@ struct LocationView: View {
                         showLocation = false
                     }) {
                         Text("Add Location: \(selected.name ?? "Unknown")")
-                            .font(.system(size: 15, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 15.f))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 32)
@@ -271,29 +271,29 @@ struct LocationListItem: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "mappin.circle.fill")
-                .font(.system(size: 20))
+                .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                 .foregroundColor(isSelected ? Color(red: 0.82, green: 0.13, blue: 0.25) : .gray)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(mapItem.name ?? "Unknown Location")
-                    .font(.system(size: 20))
+                    .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                     .foregroundColor(.black)
 
                 if let thoroughfare = mapItem.placemark.thoroughfare,
                    let locality = mapItem.placemark.locality {
                     Text("\(thoroughfare), \(locality)")
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(Color(red: 0.55, green: 0.55, blue: 0.55))
                 } else if let locality = mapItem.placemark.locality,
                           let country = mapItem.placemark.country {
                     Text("\(locality), \(country)")
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(Color(red: 0.55, green: 0.55, blue: 0.55))
                 }
 
                 if !distance.isEmpty {
                     Text(distance)
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .foregroundColor(Color(red: 0.55, green: 0.55, blue: 0.55))
                 }
             }
@@ -302,7 +302,7 @@ struct LocationListItem: View {
 
             if isSelected {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 20))
+                    .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                     .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
             }
         }

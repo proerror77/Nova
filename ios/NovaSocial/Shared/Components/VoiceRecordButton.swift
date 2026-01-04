@@ -48,7 +48,7 @@ struct VoiceRecordButton: View {
                 .frame(width: 44, height: 44)
                 .overlay {
                     Image(systemName: "mic.fill")
-                        .font(.system(size: 20))
+                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                         .foregroundColor(audioRecorder.isRecording ? .white : .primary)
                 }
                 .scaleEffect(isPressed ? 1.2 : 1.0)
@@ -277,7 +277,7 @@ struct CompactVoiceRecordButton: View {
 
             // Mic button
             Image(systemName: isRecording ? "mic.fill" : "mic")
-                .font(.system(size: 20))
+                .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                 .foregroundColor(isRecording ? .red : .gray)
                 .frame(width: 44, height: 44)
                 .background(isRecording ? Color.red.opacity(0.1) : Color.clear)
@@ -372,7 +372,7 @@ struct VoiceMessageBubble: View {
                 togglePlayback()
             } label: {
                 Image(systemName: audioPlayer.isPlaying && audioPlayer.playingMessageId == messageId ? "pause.fill" : "play.fill")
-                    .font(.system(size: 20))
+                    .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                     .foregroundColor(isFromMe ? .white : .primary)
                     .frame(width: 36, height: 36)
                     .background(isFromMe ? Color.white.opacity(0.2) : Color.gray.opacity(0.2))

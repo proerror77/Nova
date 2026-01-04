@@ -17,7 +17,7 @@ struct SaveDraftModal: View {
             // 弹窗内容
             VStack(spacing: 0) {
                 Text("Do you want to save it")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 17.f))
                     .lineSpacing(20)
                     .foregroundColor(.black)
                     .padding(.top, 20)
@@ -35,7 +35,7 @@ struct SaveDraftModal: View {
                         }
                     }) {
                         Text("No")
-                            .font(.system(size: 17, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 17.f))
                             .foregroundColor(.black)
                             .frame(maxWidth: .infinity)
                             .frame(height: 44)
@@ -53,7 +53,7 @@ struct SaveDraftModal: View {
                         }
                     }) {
                         Text("Yes")
-                            .font(.system(size: 17, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 17.f))
                             .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                             .frame(maxWidth: .infinity)
                             .frame(height: 44)

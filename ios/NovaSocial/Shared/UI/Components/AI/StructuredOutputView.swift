@@ -51,7 +51,7 @@ extension StructuredOutputView {
         var body: some View {
             Button(action: onTap) {
                 Text("#\(text)")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                     .foregroundColor(isSelected ? .white : .accentColor)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
@@ -137,13 +137,13 @@ extension StructuredOutputView {
             Button(action: onTap) {
                 HStack(alignment: .top, spacing: 12) {
                     Text("\(index)")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(Font.custom("SFProDisplay-Bold", size: 12.f))
                         .foregroundColor(.white)
                         .frame(width: 24, height: 24)
                         .background(Circle().fill(Color.accentColor))
 
                     Text(text)
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .foregroundColor(.primary)
                         .multilineTextAlignment(.leading)
                         .lineLimit(3)
@@ -151,7 +151,7 @@ extension StructuredOutputView {
                     Spacer()
 
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
                         .foregroundColor(.secondary)
                 }
                 .padding(12)
@@ -218,7 +218,7 @@ extension StructuredOutputView {
                             onSelect?(reply)
                         } label: {
                             Text(reply)
-                                .font(.system(size: 14))
+                                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                 .foregroundColor(.accentColor)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 8)

@@ -44,7 +44,7 @@ struct VoiceMessageView: View {
                     .frame(width: 36, height: 36)
                     .overlay(
                         Image(systemName: isCurrentlyPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(.white)
                     )
             }

@@ -11,13 +11,13 @@ struct VLMTagChip: View {
         Button(action: onTap) {
             HStack(spacing: 4) {
                 Text(tag)
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(isSelected ? .white : Color(red: 0.27, green: 0.27, blue: 0.27))
 
                 // Confidence indicator (only show for high confidence)
                 if confidence >= 0.8 {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 10))
+                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                         .foregroundColor(isSelected ? .white.opacity(0.8) : Color(red: 0.82, green: 0.13, blue: 0.25).opacity(0.6))
                 }
             }

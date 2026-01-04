@@ -37,7 +37,7 @@ struct MyChannelsView: View {
 
                     // 居中标题（参考 NewPost 页面样式）
                     Text(LocalizedStringKey("My_Channels_Title"))
-                        .font(.system(size: 18, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                         .lineSpacing(20)
                         .foregroundColor(DesignTokens.textPrimary)
 
@@ -45,7 +45,7 @@ struct MyChannelsView: View {
 
                     // 右侧显示已选择数量（与左侧宽度一致以保持标题居中）
                     Text("\(selectedChannels.count)/\(maxChannelSelection)")
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .foregroundColor(DesignTokens.textSecondary)
                         .frame(width: 50, alignment: .trailing)
                 }
@@ -132,7 +132,7 @@ struct MyChannelsView: View {
                     currentPage = .setting
                 }) {
                     Text("Confirm")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                         .foregroundColor(.white)
                         .frame(width: 343.w, height: 46.h)
                         .background(Color(red: 0.87, green: 0.11, blue: 0.26))
@@ -183,7 +183,7 @@ struct ChannelCategory: View {
         VStack(alignment: .leading, spacing: 12) {
             // 分类标题
             Text(title)
-                .font(.system(size: 16, weight: .bold))
+                .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                 .foregroundColor(DesignTokens.textPrimary)
                 .padding(.leading, 4)
 
@@ -227,11 +227,11 @@ struct SelectableChannelTag: View {
             HStack(spacing: 5) {
                 // Plus 图标
                 Image(systemName: "plus")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 11.f))
                     .foregroundColor(isSelected ? DesignTokens.accentColor : DesignTokens.textPrimary)
 
                 Text(name)
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(isSelected ? DesignTokens.accentColor : DesignTokens.textPrimary)
                     .lineLimit(1)
             }

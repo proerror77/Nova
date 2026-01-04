@@ -59,7 +59,7 @@ struct EnhanceSuggestionView: View {
                             .scaledToFit()
                             .frame(width: 20, height: 20)
                         Text("Alice's Suggestions")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                     }
                 }
 
@@ -67,7 +67,7 @@ struct EnhanceSuggestionView: View {
                     Button("Apply") {
                         onApply(buildFinalText())
                     }
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                     .foregroundColor(.blue)
                 }
             }
@@ -82,7 +82,7 @@ struct EnhanceSuggestionView: View {
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("I analyzed your photo and here's what I suggest:")
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(.gray)
         }
     }
@@ -91,7 +91,7 @@ struct EnhanceSuggestionView: View {
     private var mainSuggestionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Suggested Caption")
-                .font(.system(size: 12, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
                 .foregroundColor(.gray)
                 .textCase(.uppercase)
 
@@ -101,10 +101,10 @@ struct EnhanceSuggestionView: View {
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: selectedDescription == suggestion.description ? "checkmark.circle.fill" : "circle")
                         .foregroundColor(selectedDescription == suggestion.description ? .blue : .gray)
-                        .font(.system(size: 20))
+                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
 
                     Text(suggestion.description)
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .foregroundColor(.black)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -126,7 +126,7 @@ struct EnhanceSuggestionView: View {
     private var hashtagsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Hashtags")
-                .font(.system(size: 12, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
                 .foregroundColor(.gray)
                 .textCase(.uppercase)
 
@@ -160,9 +160,9 @@ struct EnhanceSuggestionView: View {
             HStack(spacing: 6) {
                 Image(systemName: "flame.fill")
                     .foregroundColor(.orange)
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                 Text("Trending Topics")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
                     .foregroundColor(.gray)
                     .textCase(.uppercase)
             }
@@ -174,7 +174,7 @@ struct EnhanceSuggestionView: View {
                             .fill(Color.orange.opacity(0.3))
                             .frame(width: 6, height: 6)
                         Text(topic)
-                            .font(.system(size: 13))
+                            .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                             .foregroundColor(.black.opacity(0.8))
                     }
                 }
@@ -195,7 +195,7 @@ struct EnhanceSuggestionView: View {
     private var alternativesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Alternative Captions")
-                .font(.system(size: 12, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
                 .foregroundColor(.gray)
                 .textCase(.uppercase)
 
@@ -207,10 +207,10 @@ struct EnhanceSuggestionView: View {
                         HStack(alignment: .top, spacing: 12) {
                             Image(systemName: selectedDescription == alt ? "checkmark.circle.fill" : "circle")
                                 .foregroundColor(selectedDescription == alt ? .blue : .gray)
-                                .font(.system(size: 18))
+                                .font(Font.custom("SFProDisplay-Regular", size: 18.f))
 
                             Text(alt)
-                                .font(.system(size: 13))
+                                .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                                 .foregroundColor(.black.opacity(0.8))
                                 .multilineTextAlignment(.leading)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -239,12 +239,12 @@ struct EnhanceSuggestionView: View {
     private var previewSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Preview")
-                .font(.system(size: 12, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
                 .foregroundColor(.gray)
                 .textCase(.uppercase)
 
             Text(buildFinalText())
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(.black)
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -279,7 +279,7 @@ struct HashtagChip: View {
     var body: some View {
         Button(action: onTap) {
             Text("#\(hashtag)")
-                .font(.system(size: 13, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 13.f))
                 .foregroundColor(isSelected ? .white : .blue)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)

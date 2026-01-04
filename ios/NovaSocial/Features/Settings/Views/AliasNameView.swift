@@ -70,7 +70,7 @@ struct AliasNameView: View {
 
                             // Footer text
                             Text("Alias name can be replaced again after 45 days")
-                                .font(.system(size: 12))
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                 .lineSpacing(20)
                                 .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                                 .padding(.top, 20)
@@ -88,7 +88,7 @@ struct AliasNameView: View {
             if let error = viewModel.errorMessage {
                 VStack {
                     Text(error)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 13.f))
                         .foregroundColor(.white)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
@@ -170,7 +170,7 @@ struct AliasNameView: View {
             Spacer()
 
             Text("Profile settings")
-                .font(.system(size: 18, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                 .lineSpacing(19)
                 .foregroundColor(.black)
 
@@ -186,7 +186,7 @@ struct AliasNameView: View {
                         .scaleEffect(0.8)
                 } else {
                     Text("Save")
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .lineSpacing(20)
                         .foregroundColor(viewModel.canSave ? DesignTokens.accentColor : Color(red: 0.53, green: 0.53, blue: 0.53))
                 }
@@ -237,7 +237,7 @@ struct AliasNameView: View {
                         .frame(width: 32, height: 32)
 
                     Image(systemName: "plus")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(Font.custom("SFProDisplay-Bold", size: 14.f))
                         .foregroundColor(.white)
                 }
             }
@@ -314,7 +314,7 @@ struct AliasNameView: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
             }
             .padding(.horizontal, 20)
@@ -368,7 +368,7 @@ struct AliasNameView: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
             }
             .padding(.horizontal, 20)

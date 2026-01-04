@@ -137,7 +137,7 @@ struct FeedVideoPlayer: View {
             .fill(Color(red: 0.1, green: 0.1, blue: 0.1))
             .overlay(
                 Image(systemName: "video.fill")
-                    .font(.system(size: 40))
+                    .font(Font.custom("SFProDisplay-Regular", size: 40.f))
                     .foregroundColor(.white.opacity(0.3))
             )
     }
@@ -151,7 +151,7 @@ struct FeedVideoPlayer: View {
                 .frame(width: 60, height: 60)
                 .overlay(
                     Image(systemName: "play.fill")
-                        .font(.system(size: 24))
+                        .font(Font.custom("SFProDisplay-Regular", size: 24.f))
                         .foregroundColor(.white)
                         .offset(x: 2)
                 )
@@ -164,7 +164,7 @@ struct FeedVideoPlayer: View {
         Group {
             if viewModel.duration > 0 {
                 Text(formatDuration(viewModel.duration - viewModel.currentTime))
-                    .font(.system(size: 12, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                     .foregroundColor(.white)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -183,7 +183,7 @@ struct FeedVideoPlayer: View {
                 .frame(width: 32, height: 32)
                 .overlay(
                     Image(systemName: viewModel.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .foregroundColor(.white)
                 )
         }

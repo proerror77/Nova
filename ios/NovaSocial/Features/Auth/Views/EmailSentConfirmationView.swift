@@ -63,7 +63,7 @@ struct EmailSentConfirmationView: View {
 
                             // Success Icon
                             Image(systemName: "envelope.circle.fill")
-                                .font(.system(size: Layout.iconSize))
+                                .font(Font.custom("SFProDisplay-Regular", size: Layout.iconSize))
                                 .foregroundColor(Colors.successGreen)
 
                             Spacer()
@@ -71,7 +71,7 @@ struct EmailSentConfirmationView: View {
 
                             // Title
                             Text(LocalizedStringKey("Email_Sent_Title"))
-                                .font(.system(size: 28, weight: .bold))
+                                .font(Font.custom("SFProDisplay-Bold", size: 28.f))
                                 .foregroundColor(.white)
                                 .multilineTextAlignment(.center)
 
@@ -80,7 +80,7 @@ struct EmailSentConfirmationView: View {
 
                             // Description
                             Text(LocalizedStringKey("Email_Sent_Description"))
-                                .font(.system(size: 14, weight: .light))
+                                .font(Font.custom("SFProDisplay-Light", size: 14.f))
                                 .foregroundColor(Colors.placeholder)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 40)
@@ -90,7 +90,7 @@ struct EmailSentConfirmationView: View {
 
                             // Email display
                             Text(email)
-                                .font(.system(size: 16, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                                 .foregroundColor(.white)
                                 .multilineTextAlignment(.center)
 
@@ -163,13 +163,13 @@ struct EmailSentConfirmationView: View {
     private func instructionRow(number: String, text: LocalizedStringKey) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Text(number)
-                .font(.system(size: 14, weight: .bold))
+                .font(Font.custom("SFProDisplay-Bold", size: 14.f))
                 .foregroundColor(.white)
                 .frame(width: 24, height: 24)
                 .background(Circle().fill(Color.white.opacity(0.2)))
 
             Text(text)
-                .font(.system(size: 14, weight: .light))
+                .font(Font.custom("SFProDisplay-Light", size: 14.f))
                 .foregroundColor(Colors.placeholder)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -180,9 +180,9 @@ struct EmailSentConfirmationView: View {
         Button(action: openEmailApp) {
             HStack(spacing: 8) {
                 Image(systemName: "envelope.open")
-                    .font(.system(size: 18))
+                    .font(Font.custom("SFProDisplay-Regular", size: 18.f))
                 Text(LocalizedStringKey("Open_Email_App"))
-                    .font(.system(size: 20, weight: .bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 20.f))
             }
             .foregroundColor(.black)
             .frame(maxWidth: .infinity)
@@ -207,11 +207,11 @@ struct EmailSentConfirmationView: View {
                 }
                 if resendCooldown > 0 {
                     Text("Resend in \(resendCooldown)s")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                         .foregroundColor(Colors.placeholder)
                 } else {
                     Text(LocalizedStringKey("Resend_Email"))
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                         .foregroundColor(.white)
                 }
             }
@@ -226,7 +226,7 @@ struct EmailSentConfirmationView: View {
             currentPage = .login
         }) {
             Text(LocalizedStringKey("Back_To_Login"))
-                .font(.system(size: 12, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                 .underline()
                 .foregroundColor(.white)
         }

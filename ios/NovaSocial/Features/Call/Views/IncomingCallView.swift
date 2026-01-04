@@ -62,7 +62,7 @@ struct IncomingCallView: View {
                             .frame(width: 100, height: 100)
                             .overlay(
                                 Text(callerInitials)
-                                    .font(.system(size: 36, weight: .semibold))
+                                    .font(Font.custom("SFProDisplay-Semibold", size: 36.f))
                                     .foregroundColor(.white)
                             )
                     }

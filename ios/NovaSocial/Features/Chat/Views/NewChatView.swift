@@ -175,7 +175,7 @@ struct NewChatView: View {
                 // MARK: - Search Box
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 15))
+                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                         .foregroundColor(DesignTokens.textSecondary)
 
                     TextField("Search users...", text: $searchText)
@@ -195,7 +195,7 @@ struct NewChatView: View {
                 HStack {
                     HStack(spacing: 8) {
                         Image(systemName: isPrivateChat ? "lock.fill" : "lock.open")
-                            .font(.system(size: 16))
+                            .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                             .foregroundColor(isPrivateChat ? DesignTokens.accentColor : DesignTokens.textSecondary)
 
                         VStack(alignment: .leading, spacing: 2) {
@@ -240,7 +240,7 @@ struct NewChatView: View {
                         Image(systemName: "exclamationmark.triangle")
                             .foregroundColor(.orange)
                         Text(error)
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(.secondary)
                     }
                     .padding(.horizontal, 16)
@@ -282,7 +282,7 @@ struct NewChatView: View {
                                         .foregroundColor(DesignTokens.textPrimary)
                                     Spacer()
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 14))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                         .foregroundColor(DesignTokens.textMuted)
                                 }
                                 .padding(.horizontal, 16)
@@ -616,7 +616,7 @@ struct SelectedUserChip: View {
 
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(DesignTokens.textMuted)
             }
         }

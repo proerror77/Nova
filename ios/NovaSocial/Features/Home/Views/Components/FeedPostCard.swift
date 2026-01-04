@@ -75,7 +75,7 @@ struct FeedPostCard: View {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 3) {
                         Text(post.authorName)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                             .tracking(0.28)
                             .foregroundColor(.black)
 
@@ -88,12 +88,12 @@ struct FeedPostCard: View {
 
                     HStack(spacing: 3) {
                         Text(post.createdAt.timeAgoDisplay())
-                            .font(.system(size: 10))
+                            .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                             .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
 
                         if let location = post.location {
                             Text(location)
-                                .font(.system(size: 10))
+                                .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                                 .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                         }
                     }
@@ -142,7 +142,7 @@ struct FeedPostCard: View {
                                 .scaledToFit()
                                 .frame(width: 20, height: 20)
                             Text(post.likeCount.abbreviated)
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                                 .tracking(0.28)
                                 .foregroundColor(.black)
                                 .contentTransition(.numericText())
@@ -160,7 +160,7 @@ struct FeedPostCard: View {
                                 .scaledToFit()
                                 .frame(width: 20, height: 20)
                             Text(post.commentCount.abbreviated)
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                                 .tracking(0.28)
                                 .foregroundColor(.black)
                                 .contentTransition(.numericText())
@@ -179,7 +179,7 @@ struct FeedPostCard: View {
                                 .scaledToFit()
                                 .frame(width: 20, height: 20)
                             Text(post.bookmarkCount.abbreviated)
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                                 .tracking(0.28)
                                 .foregroundColor(.black)
                         }
@@ -239,7 +239,7 @@ struct FeedPostCard: View {
             // Instagram style double-tap heart animation
             if showDoubleTapHeart {
                 Image(systemName: "heart.fill")
-                    .font(.system(size: 80))
+                    .font(Font.custom("SFProDisplay-Regular", size: 80.f))
                     .foregroundColor(.white)
                     .shadow(color: .black.opacity(0.3), radius: 10)
                     .scaleEffect(showDoubleTapHeart ? 1.0 : 0.5)
@@ -304,9 +304,9 @@ struct FeedPostCard: View {
                 // Live Photo badge
                 HStack(spacing: 4) {
                     Image(systemName: "livephoto")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                     Text("LIVE")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 10.f))
                 }
                 .foregroundColor(.white)
                 .padding(.horizontal, 8)
@@ -601,10 +601,10 @@ struct ExpandableTextView: View {
             // 展开状态：显示完整文本 + " less"
             HStack(alignment: .lastTextBaseline, spacing: 0) {
                 Text(text)
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(.black)
                 Text(" less")
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64))
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -618,7 +618,7 @@ struct ExpandableTextView: View {
             HStack(alignment: .bottom, spacing: 0) {
                 // 文本区域
                 Text(text)
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(.black)
                     .lineLimit(lineLimit)
                     .truncationMode(.tail)
@@ -627,7 +627,7 @@ struct ExpandableTextView: View {
                 // more 按钮（仅在截断时显示）
                 if isTruncated {
                     Text("more")
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64))
                         .onTapGesture {
                             withAnimation(.easeInOut(duration: 0.2)) {
@@ -641,7 +641,7 @@ struct ExpandableTextView: View {
                 ZStack {
                     // 完整文本（不限行数）
                     Text(text)
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(width: 343.w, alignment: .leading)
                         .background(GeometryReader { geo in
@@ -775,7 +775,7 @@ struct ZoomableImageView: View {
                             onDismiss()
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 30))
+                                .font(Font.custom("SFProDisplay-Regular", size: 30.f))
                                 .foregroundStyle(.white.opacity(0.8), .black.opacity(0.3))
                         }
                         .padding()

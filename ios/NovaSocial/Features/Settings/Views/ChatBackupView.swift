@@ -97,7 +97,7 @@ struct ChatBackupView: View {
             Spacer()
 
             Text("Chat Backup")
-                .font(.system(size: 20, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 20.f))
                 .foregroundColor(DesignTokens.textPrimary)
 
             Spacer()
@@ -115,7 +115,7 @@ struct ChatBackupView: View {
     private var exportSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Export")
-                .font(.system(size: 14, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                 .foregroundColor(DesignTokens.textSecondary)
                 .padding(.horizontal, 16)
 
@@ -124,17 +124,17 @@ struct ChatBackupView: View {
                 Button(action: exportAllChats) {
                     HStack(spacing: 16) {
                         Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 18))
+                            .font(Font.custom("SFProDisplay-Regular", size: 18.f))
                             .foregroundColor(DesignTokens.accentColor)
                             .frame(width: 24)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Export All Chats")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                                 .foregroundColor(DesignTokens.textPrimary)
 
                             Text("Save all conversations to a backup file")
-                                .font(.system(size: 12))
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                 .foregroundColor(DesignTokens.textSecondary)
                         }
 
@@ -145,7 +145,7 @@ struct ChatBackupView: View {
                                 .scaleEffect(0.8)
                         } else {
                             Image(systemName: "chevron.right")
-                                .font(.system(size: 12))
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                 .foregroundColor(DesignTokens.textSecondary)
                         }
                     }
@@ -170,7 +170,7 @@ struct ChatBackupView: View {
     private var importSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Import")
-                .font(.system(size: 14, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                 .foregroundColor(DesignTokens.textSecondary)
                 .padding(.horizontal, 16)
 
@@ -178,17 +178,17 @@ struct ChatBackupView: View {
                 Button(action: { showImportPicker = true }) {
                     HStack(spacing: 16) {
                         Image(systemName: "square.and.arrow.down")
-                            .font(.system(size: 18))
+                            .font(Font.custom("SFProDisplay-Regular", size: 18.f))
                             .foregroundColor(DesignTokens.accentColor)
                             .frame(width: 24)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Import Backup")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                                 .foregroundColor(DesignTokens.textPrimary)
 
                             Text("Restore conversations from a backup file")
-                                .font(.system(size: 12))
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                 .foregroundColor(DesignTokens.textSecondary)
                         }
 
@@ -199,7 +199,7 @@ struct ChatBackupView: View {
                                 .scaleEffect(0.8)
                         } else {
                             Image(systemName: "chevron.right")
-                                .font(.system(size: 12))
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                 .foregroundColor(DesignTokens.textSecondary)
                         }
                     }
@@ -224,7 +224,7 @@ struct ChatBackupView: View {
     private var infoSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("About Backups")
-                .font(.system(size: 14, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                 .foregroundColor(DesignTokens.textSecondary)
                 .padding(.horizontal, 16)
 
@@ -302,12 +302,12 @@ private struct InfoRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(DesignTokens.accentColor)
                 .frame(width: 20)
 
             Text(text)
-                .font(.system(size: 13))
+                .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                 .foregroundColor(DesignTokens.textSecondary)
 
             Spacer()
@@ -321,7 +321,7 @@ private struct NotificationBanner: View {
 
     var body: some View {
         Text(message)
-            .font(.system(size: 13, weight: .medium))
+            .font(Font.custom("SFProDisplay-Medium", size: 13.f))
             .foregroundColor(.white)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)

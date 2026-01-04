@@ -116,10 +116,10 @@ struct LivePhotoBadge: View {
         HStack(spacing: 4) {
             // Concentric circles icon (like iOS)
             Image(systemName: "livephoto")
-                .font(.system(size: 10, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 10.f))
             
             Text("LIVE")
-                .font(.system(size: 10, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 10.f))
         }
         .foregroundColor(.white)
         .padding(.horizontal, 6)
@@ -171,7 +171,7 @@ struct LivePhotoPreviewCard: View {
                     // Hint text
                     if !isPlaying {
                         Text("Press and hold to play")
-                            .font(.system(size: 11.f))
+                            .font(Font.custom("SFProDisplay-Regular", size: 11.f))
                             .foregroundColor(.white)
                             .padding(.horizontal, 8.w)
                             .padding(.vertical, 4.h)
@@ -196,7 +196,7 @@ struct LivePhotoPreviewCard: View {
             // Delete button
             Button(action: onDelete) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 20.f))
+                    .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                     .foregroundColor(.white)
                     .background(
                         Circle()
@@ -640,7 +640,7 @@ struct MediaPreviewView: View {
                     }
                 }) {
                     Image(systemName: "play.circle.fill")
-                        .font(.system(size: 64))
+                        .font(Font.custom("SFProDisplay-Regular", size: 64.f))
                         .foregroundColor(.white.opacity(0.9))
                 }
             }
@@ -651,7 +651,7 @@ struct MediaPreviewView: View {
                 HStack {
                     Spacer()
                     Text(formatVideoDuration(data.duration))
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                         .foregroundColor(.white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
@@ -743,7 +743,7 @@ struct MediaPreviewView: View {
                 dismissPreview()
             }) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 18, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                     .foregroundColor(.white)
                     .frame(width: 40, height: 40)
                     .background(Color.black.opacity(0.5))
@@ -759,7 +759,7 @@ struct MediaPreviewView: View {
                     dismissPreview()
                 }) {
                     Image(systemName: "trash")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                         .foregroundColor(.white)
                         .frame(width: 40, height: 40)
                         .background(Color.red.opacity(0.8))
@@ -776,9 +776,9 @@ struct MediaPreviewView: View {
     private var bottomHint: some View {
         HStack {
             Image(systemName: "hand.tap.fill")
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
             Text("Long press to play Live Photo")
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
         }
         .foregroundColor(.white.opacity(0.8))
         .padding(.horizontal, 16)

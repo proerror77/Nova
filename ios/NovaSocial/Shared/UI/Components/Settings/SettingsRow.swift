@@ -12,19 +12,19 @@ struct SettingsRow: View {
         }) {
             HStack(spacing: 16) {
                 Image(systemName: icon)
-                    .font(.system(size: 18))
+                    .font(Font.custom("SFProDisplay-Regular", size: 18.f))
                     .foregroundColor(DesignTokens.accentColor)
                     .frame(width: 24)
 
                 Text(title)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                     .foregroundColor(DesignTokens.textPrimary)
 
                 Spacer()
 
                 if showChevron {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
             }

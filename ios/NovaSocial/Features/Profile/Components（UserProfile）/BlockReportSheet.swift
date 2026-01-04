@@ -93,12 +93,12 @@ struct BlockReportSheet: View {
                     .frame(width: 60, height: 60)
                     .overlay {
                         Text(username.prefix(1).uppercased())
-                            .font(.system(size: 24, weight: .semibold))
+                            .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
                             .foregroundColor(.gray)
                     }
 
                 Text("@\(username)")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                     .foregroundColor(.primary)
             }
             .padding(.top, 20)
@@ -114,24 +114,24 @@ struct BlockReportSheet: View {
                 } label: {
                     HStack(spacing: 16) {
                         Image(systemName: "hand.raised.fill")
-                            .font(.system(size: 20))
+                            .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                             .foregroundColor(.red)
                             .frame(width: 28)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Block @\(username)")
-                                .font(.system(size: 16, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                                 .foregroundColor(.primary)
 
                             Text("They won't be able to interact with you")
-                                .font(.system(size: 13))
+                                .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                                 .foregroundColor(.secondary)
                         }
 
                         Spacer()
 
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(.secondary)
                     }
                     .padding(.horizontal, 20)
@@ -149,24 +149,24 @@ struct BlockReportSheet: View {
                 } label: {
                     HStack(spacing: 16) {
                         Image(systemName: "flag.fill")
-                            .font(.system(size: 20))
+                            .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                             .foregroundColor(.orange)
                             .frame(width: 28)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Report @\(username)")
-                                .font(.system(size: 16, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                                 .foregroundColor(.primary)
 
                             Text("Report violations to us")
-                                .font(.system(size: 13))
+                                .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                                 .foregroundColor(.secondary)
                         }
 
                         Spacer()
 
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(.secondary)
                     }
                     .padding(.horizontal, 20)
@@ -194,11 +194,11 @@ struct BlockReportSheet: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(reason.displayName)
-                                        .font(.system(size: 16, weight: .medium))
+                                        .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                                         .foregroundColor(.primary)
 
                                     Text(reason.description)
-                                        .font(.system(size: 13))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                                         .foregroundColor(.secondary)
                                         .lineLimit(2)
                                 }
@@ -207,7 +207,7 @@ struct BlockReportSheet: View {
 
                                 if selectedReason == reason {
                                     Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 22))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 22.f))
                                         .foregroundColor(DesignTokens.accentColor)
                                 } else {
                                     Circle()
@@ -233,12 +233,12 @@ struct BlockReportSheet: View {
                 if selectedReason == .other {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Additional Details")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                             .foregroundColor(.secondary)
                             .padding(.horizontal, 20)
 
                         TextEditor(text: $reportDetails)
-                            .font(.system(size: 16))
+                            .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                             .frame(minHeight: 100)
                             .padding(12)
                             .background(Color(UIColor.secondarySystemGroupedBackground))
@@ -254,7 +254,7 @@ struct BlockReportSheet: View {
                     }
                 } label: {
                     Text("Submit Report")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
