@@ -477,7 +477,7 @@ struct PostDetailView: View {
 
                     // Share Button
                     Button(action: {}) {
-                        Image("card-share-icon")
+                        Image("Share-black")
                             .resizable()
                             .scaledToFit()
                             .frame(width: 18, height: 18)

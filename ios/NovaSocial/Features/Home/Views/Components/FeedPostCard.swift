@@ -67,36 +67,34 @@ struct FeedPostCard: View {
     private var mainContent: some View {
         VStack(spacing: 8.h) {
             // MARK: - User Info Header
-            HStack {
-                HStack(spacing: 10.w) {
-                    // Avatar - 显示用户头像或默认头像
-                    AvatarView(image: nil, url: post.authorAvatar, size: 30.s)
+            HStack(spacing: 8) {
+                // Avatar - 显示用户头像或默认头像
+                AvatarView(image: nil, url: post.authorAvatar, size: 30)
 
-                    // User Info
-                    VStack(alignment: .leading, spacing: 2.h) {
-                        HStack(spacing: 4.w) {
-                            Text(post.authorName)
-                                .font(.system(size: 12.f))
-                                .tracking(0.24)
-                                .foregroundColor(.black)
+                // User Info
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 3) {
+                        Text(post.authorName)
+                            .font(.system(size: 14, weight: .semibold))
+                            .tracking(0.28)
+                            .foregroundColor(.black)
 
-                            // 认证标记 (可选)
-                            Image("Blue-v")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 14.s, height: 14.s)
-                        }
+                        // 认证标记 (可选)
+                        Image("Blue-v")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 12, height: 12)
+                    }
 
-                        HStack(spacing: 9.w) {
-                            Text(post.createdAt.timeAgoDisplay())
-                                .font(.system(size: 10.f))
-                                .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                    HStack(spacing: 3) {
+                        Text(post.createdAt.timeAgoDisplay())
+                            .font(.system(size: 10))
+                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
 
-                            if let location = post.location {
-                                Text(location)
-                                    .font(.system(size: 10.f))
-                                    .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
-                            }
+                        if let location = post.location {
+                            Text(location)
+                                .font(.system(size: 10))
+                                .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                         }
                     }
                 }
@@ -105,15 +103,14 @@ struct FeedPostCard: View {
 
                 // Share Button
                 Button(action: onShare) {
-                    Image("card-share-icon")
+                    Image("Share-black")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 20.s, height: 20.s)
+                        .frame(width: 24, height: 24)
                 }
                 .accessibilityLabel("Share")
             }
-            .frame(width: 343.w)
-            .padding(.horizontal, 16.w)
+            .padding(EdgeInsets(top: 10, leading: 10, bottom: 2, trailing: 10))
 
             // MARK: - Post Media (Images/Video/Live Photo) - Instagram Style
             if !post.displayMediaUrls.isEmpty {
@@ -132,21 +129,22 @@ struct FeedPostCard: View {
                     .frame(width: 343.w, alignment: .leading)
                 }
 
-                // Interaction Buttons - 三个按钮始终保持20pt间距
-                HStack(spacing: 20.w) {
+                // Interaction Buttons
+                HStack(spacing: 20) {
                     // Like button
                     Button {
                         likeAnimationTrigger.toggle()
                         onLike()
                     } label: {
-                        HStack(spacing: 6.w) {
+                        HStack(spacing: 8) {
                             Image(post.isLiked ? "card-heart-icon-filled" : "card-heart-icon")
                                 .resizable()
                                 .scaledToFit()
-                                .frame(width: 20.s, height: 20.s)
+                                .frame(width: 20, height: 20)
                             Text(post.likeCount.abbreviated)
-                                .font(.system(size: 10.f))
-                                .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                                .font(.system(size: 14, weight: .semibold))
+                                .tracking(0.28)
+                                .foregroundColor(.black)
                                 .contentTransition(.numericText())
                         }
                         .contentShape(Rectangle())
@@ -156,32 +154,34 @@ struct FeedPostCard: View {
 
                     // Comment button
                     Button(action: onComment) {
-                        HStack(spacing: 6.w) {
+                        HStack(spacing: 8) {
                             Image("card-comment-icon")
                                 .resizable()
                                 .scaledToFit()
-                                .frame(width: 20.s, height: 20.s)
+                                .frame(width: 20, height: 20)
                             Text(post.commentCount.abbreviated)
-                                .font(.system(size: 10.f))
-                                .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                                .font(.system(size: 14, weight: .semibold))
+                                .tracking(0.28)
+                                .foregroundColor(.black)
                                 .contentTransition(.numericText())
                         }
                     }
                     .accessibilityLabel("Comments, \(post.commentCount)")
 
-                    // Collect/Star button - 使用项目 collect/collect-fill 图标
+                    // Collect/Star button
                     Button {
                         bookmarkAnimationTrigger.toggle()
                         onBookmark()
                     } label: {
-                        HStack(spacing: 6.w) {
+                        HStack(spacing: 8) {
                             Image(post.isBookmarked ? "collect-fill" : "collect")
                                 .resizable()
                                 .scaledToFit()
-                                .frame(width: 20.s, height: 20.s)
+                                .frame(width: 20, height: 20)
                             Text(post.bookmarkCount.abbreviated)
-                                .font(.system(size: 10.f))
-                                .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                                .font(.system(size: 14, weight: .semibold))
+                                .tracking(0.28)
+                                .foregroundColor(.black)
                         }
                         .contentShape(Rectangle())
                     }
@@ -191,11 +191,10 @@ struct FeedPostCard: View {
                     Spacer()
                 }
             }
-            .padding(.top, 2.h)  // 与分页指示器总间距 10pt (8 + 2)
-            .padding(.horizontal, 16.w)
-            .padding(.bottom, 20.h)
+            .padding(.top, 2)  // 与分页指示器总间距 10pt (8 + 2)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 26)
         }
-        .padding(.top, 20.h)
         .frame(width: 375.w)
         .background(.white)
         .accessibilityElement(children: .contain)
@@ -216,7 +215,7 @@ struct FeedPostCard: View {
     @ViewBuilder
     private var mediaContent: some View {
         ZStack {
-            VStack(spacing: 8.h) {
+            VStack(spacing: 10) {
                 switch post.mediaType {
                 case .video:
                     // Video post - show video player
@@ -477,7 +476,7 @@ struct FeedPostCard: View {
     // MARK: - Page Indicator
 
     private var pageIndicator: some View {
-        HStack(spacing: 5.w) {
+        HStack(spacing: 4) {
             ForEach(0..<mediaItemCount, id: \.self) { index in
                 Circle()
                     .fill(index == currentImageIndex ?
@@ -600,14 +599,14 @@ struct ExpandableTextView: View {
     var body: some View {
         if isExpanded {
             // 展开状态：显示完整文本 + " less"
-            (Text(text)
-                .font(.system(size: 12.f))
-                .tracking(0.24)
-                .foregroundColor(.black)
-            + Text(" less")
-                .font(.system(size: 12.f))
-                .tracking(0.24)
-                .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64)))
+            HStack(alignment: .lastTextBaseline, spacing: 0) {
+                Text(text)
+                    .font(.system(size: 16))
+                    .foregroundColor(.black)
+                Text(" less")
+                    .font(.system(size: 16))
+                    .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64))
+            }
             .fixedSize(horizontal: false, vertical: true)
             .onTapGesture {
                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -619,8 +618,7 @@ struct ExpandableTextView: View {
             HStack(alignment: .bottom, spacing: 0) {
                 // 文本区域
                 Text(text)
-                    .font(.system(size: 12.f))
-                    .tracking(0.24)
+                    .font(.system(size: 16))
                     .foregroundColor(.black)
                     .lineLimit(lineLimit)
                     .truncationMode(.tail)
@@ -629,8 +627,7 @@ struct ExpandableTextView: View {
                 // more 按钮（仅在截断时显示）
                 if isTruncated {
                     Text("more")
-                        .font(.system(size: 12.f))
-                        .tracking(0.24)
+                        .font(.system(size: 16))
                         .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64))
                         .onTapGesture {
                             withAnimation(.easeInOut(duration: 0.2)) {
@@ -644,19 +641,18 @@ struct ExpandableTextView: View {
                 ZStack {
                     // 完整文本（不限行数）
                     Text(text)
-                        .font(.system(size: 12.f))
-                        .tracking(0.24)
+                        .font(.system(size: 16))
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(width: 343.w, alignment: .leading)
                         .background(GeometryReader { geo in
                             Color.clear.onAppear {
-                                // 如果完整文本高度超过约 18pt（单行高度），则需要截断
-                                if geo.size.height > 18 {
+                                // 如果完整文本高度超过约 22pt（单行高度），则需要截断
+                                if geo.size.height > 22 {
                                     isTruncated = true
                                 }
                             }
                             .onChange(of: text) { _, _ in
-                                if geo.size.height > 18 {
+                                if geo.size.height > 22 {
                                     isTruncated = true
                                 } else {
                                     isTruncated = false

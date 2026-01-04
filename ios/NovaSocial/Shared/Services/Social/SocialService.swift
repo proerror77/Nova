@@ -148,14 +148,21 @@ class SocialService {
         )
     }
 
-    func getComments(postId: String, limit: Int = 20, offset: Int = 0) async throws -> (comments: [SocialComment], totalCount: Int) {
+    func getComments(postId: String, limit: Int = 20, offset: Int = 0, viewerUserId: String? = nil) async throws -> (comments: [SocialComment], totalCount: Int) {
+        var queryParams = [
+            "post_id": postId,
+            "limit": String(limit),
+            "offset": String(offset)
+        ]
+        
+        // Add viewerUserId to get embedded like info (avoids N+1 queries)
+        if let viewerUserId = viewerUserId {
+            queryParams["viewer_user_id"] = viewerUserId
+        }
+        
         let response: GetCommentsResponse = try await client.get(
             endpoint: APIConfig.Social.getComments,
-            queryParams: [
-                "post_id": postId,
-                "limit": String(limit),
-                "offset": String(offset)
-            ]
+            queryParams: queryParams
         )
         return (response.comments, response.total)
     }
@@ -602,6 +609,10 @@ struct SocialComment: Codable, Identifiable {
     let authorUsername: String?
     let authorDisplayName: String?
     let authorAvatarUrl: String?
+
+    // Like information (embedded by backend when viewerUserId is provided)
+    let likeCount: Int64?
+    let isLikedByViewer: Bool?
 
     // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase which automatically
     // converts snake_case JSON keys (user_id, post_id, etc.) to camelCase Swift properties
