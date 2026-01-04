@@ -1,7 +1,18 @@
 use crate::domain::models::CommentLike;
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
+
+/// Helper struct for create_like with was_created flag
+#[derive(sqlx::FromRow)]
+struct CommentLikeWithFlag {
+    id: Uuid,
+    comment_id: Uuid,
+    user_id: Uuid,
+    created_at: DateTime<Utc>,
+    was_created: i64,
+}
 
 /// Repository for CommentLike operations (IG/小红书风格评论点赞)
 #[derive(Clone)]
@@ -17,16 +28,15 @@ impl CommentLikeRepository {
     /// Create a new comment like (idempotent - returns success if already exists)
     /// Returns (CommentLike, was_created) where was_created is true if this is a new like
     pub async fn create_like(&self, user_id: Uuid, comment_id: Uuid) -> Result<(CommentLike, bool)> {
-        // First check if already liked
-        let already_liked = self.check_user_liked(user_id, comment_id).await?;
-
-        let like = sqlx::query_as::<_, CommentLike>(
+        // Use INSERT ... ON CONFLICT with xmax to detect if row was inserted or updated
+        // xmax = 0 means the row was newly inserted, xmax != 0 means it was updated
+        let result = sqlx::query_as::<_, CommentLikeWithFlag>(
             r#"
             INSERT INTO comment_likes (user_id, comment_id)
             VALUES ($1, $2)
             ON CONFLICT (comment_id, user_id) DO UPDATE
             SET user_id = EXCLUDED.user_id
-            RETURNING id, comment_id, user_id, created_at
+            RETURNING id, comment_id, user_id, created_at, (xmax = 0)::int8 as was_created
             "#,
         )
         .bind(user_id)
@@ -34,8 +44,15 @@ impl CommentLikeRepository {
         .fetch_one(&self.pool)
         .await?;
 
-        // was_created is true only if it didn't exist before
-        Ok((like, !already_liked))
+        let comment_like = CommentLike {
+            id: result.id,
+            comment_id: result.comment_id,
+            user_id: result.user_id,
+            created_at: result.created_at,
+        };
+
+        // was_created is true if xmax = 0 (new insert)
+        Ok((comment_like, result.was_created == 1))
     }
 
     /// Delete a comment like (idempotent - returns success if doesn't exist)
@@ -159,6 +176,37 @@ impl CommentLikeRepository {
             .iter()
             .map(|id| (*id, liked_set.contains(id)))
             .collect();
+
+        Ok(result)
+    }
+
+    /// Batch get like counts for multiple comments
+    /// Reads from comments table's denormalized like_count column
+    /// Returns a HashMap of comment_id -> like_count
+    pub async fn batch_get_like_counts(
+        &self,
+        comment_ids: &[Uuid],
+    ) -> Result<std::collections::HashMap<Uuid, i64>> {
+        use std::collections::HashMap;
+
+        if comment_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        // Query all like counts in a single batch query
+        let rows: Vec<(Uuid, i64)> = sqlx::query_as(
+            r#"
+            SELECT id, like_count
+            FROM comments
+            WHERE id = ANY($1)
+            "#,
+        )
+        .bind(comment_ids)
+        .fetch_all(&self.pool)
+        .await?;
+
+        // Build the result map
+        let result: HashMap<Uuid, i64> = rows.into_iter().collect();
 
         Ok(result)
     }

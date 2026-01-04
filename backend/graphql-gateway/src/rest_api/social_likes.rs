@@ -4,11 +4,12 @@ use tracing::{error, warn};
 
 use crate::clients::proto::auth::GetUserProfilesByIdsRequest;
 use crate::clients::proto::social::{
-    BatchCheckBookmarkedRequest, CheckCommentLikedRequest, CheckUserBookmarkedRequest,
-    CheckUserLikedRequest, CreateBookmarkRequest, CreateCommentLikeRequest, CreateCommentRequest,
-    CreateLikeRequest, CreateShareRequest, DeleteBookmarkRequest, DeleteCommentLikeRequest,
-    DeleteCommentRequest, DeleteLikeRequest, GetBookmarksRequest, GetCommentLikeCountRequest,
-    GetCommentsRequest, GetLikesRequest, GetShareCountRequest, GetUserLikedPostsRequest,
+    BatchCheckBookmarkedRequest, BatchCheckCommentLikedRequest, CheckCommentLikedRequest,
+    CheckUserBookmarkedRequest, CheckUserLikedRequest, CreateBookmarkRequest,
+    CreateCommentLikeRequest, CreateCommentRequest, CreateLikeRequest, CreateShareRequest,
+    DeleteBookmarkRequest, DeleteCommentLikeRequest, DeleteCommentRequest, DeleteLikeRequest,
+    GetBookmarksRequest, GetCommentLikeCountRequest, GetCommentsRequest, GetLikesRequest,
+    GetShareCountRequest, GetUserLikedPostsRequest,
 };
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
@@ -867,6 +868,52 @@ pub async fn check_comment_liked(
         Err(e) => {
             error!("check_comment_liked failed: {}", e);
             HttpResponse::ServiceUnavailable().finish()
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BatchCheckCommentLikedBody {
+    pub comment_ids: Vec<String>,
+}
+
+/// Batch check if user has liked multiple comments (fixes N+1 API calls)
+#[post("/api/v2/social/comment/batch-check-liked")]
+pub async fn batch_check_comment_liked(
+    http_req: HttpRequest,
+    clients: web::Data<ServiceClients>,
+    body: web::Json<BatchCheckCommentLikedBody>,
+) -> HttpResponse {
+    let user_id = match http_req.extensions().get::<AuthenticatedUser>().copied() {
+        Some(AuthenticatedUser(id)) => id.to_string(),
+        None => return HttpResponse::Unauthorized().finish(),
+    };
+
+    if body.comment_ids.len() > 100 {
+        return HttpResponse::BadRequest().json(
+            serde_json::json!({"error": "Maximum 100 comment_ids allowed"}),
+        );
+    }
+
+    let req = BatchCheckCommentLikedRequest {
+        user_id,
+        comment_ids: body.comment_ids.clone(),
+    };
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.batch_check_comment_liked(req).await }
+        })
+        .await
+    {
+        Ok(resp) => HttpResponse::Ok().json(serde_json::json!({
+            "liked_status": resp.liked_status
+        })),
+        Err(e) => {
+            error!("batch_check_comment_liked failed: {}", e);
+            HttpResponse::ServiceUnavailable().json(
+                serde_json::json!({"success": false, "error": "Service temporarily unavailable"}),
+            )
         }
     }
 }

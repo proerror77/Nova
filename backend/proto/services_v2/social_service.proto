@@ -114,6 +114,12 @@ service SocialService {
       get: "/api/v2/social/comment/check-liked/{comment_id}"
     };
   }
+  rpc BatchCheckCommentLiked(BatchCheckCommentLikedRequest) returns (BatchCheckCommentLikedResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/social/comment/batch-check-liked"
+      body: "*"
+    };
+  }
 
   // Shares
   rpc CreateShare(CreateShareRequest) returns (CreateShareResponse) {
@@ -283,7 +289,12 @@ message CreateCommentRequest {
 message CreateCommentResponse { Comment comment = 1; }
 message DeleteCommentRequest { string user_id = 1; string comment_id = 2; }
 message DeleteCommentResponse { bool success = 1; }
-message GetCommentsRequest { string post_id = 1; int32 limit = 2; int32 offset = 3; }
+message GetCommentsRequest {
+  string post_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+  string viewer_user_id = 4;  // Optional: populate is_liked_by_viewer for this user
+}
 message GetCommentsResponse { repeated Comment comments = 1; int32 total = 2; }
 
 // Comment Likes (IG/小红书风格评论点赞)
@@ -295,6 +306,13 @@ message GetCommentLikeCountRequest { string comment_id = 1; }
 message GetCommentLikeCountResponse { int64 like_count = 1; }
 message CheckCommentLikedRequest { string user_id = 1; string comment_id = 2; }
 message CheckCommentLikedResponse { bool liked = 1; }
+message BatchCheckCommentLikedRequest {
+  string user_id = 1;
+  repeated string comment_ids = 2;  // max 100
+}
+message BatchCheckCommentLikedResponse {
+  map<string, bool> liked_status = 1;  // comment_id -> is_liked mapping
+}
 
 // Shares
 message CreateShareRequest {
@@ -401,6 +419,9 @@ message Comment {
   string content = 4;
   string parent_comment_id = 5;
   google.protobuf.Timestamp created_at = 6;
+  // Engagement data (populated when viewer_user_id is provided)
+  int64 like_count = 7;           // Total likes on this comment
+  bool is_liked_by_viewer = 8;    // Whether the viewer has liked this comment
 }
 
 message FeedItem {
