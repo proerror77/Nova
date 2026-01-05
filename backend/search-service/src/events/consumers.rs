@@ -313,6 +313,7 @@ async fn handle_user_created(
         username: event.username,
         display_name: String::new(),
         bio: None,
+        avatar_url: None,
         location: None,
         interests: vec![],
         is_verified: false,
@@ -349,6 +350,7 @@ async fn handle_user_profile_updated(
         username: event.username,
         display_name: event.display_name.unwrap_or_default(),
         bio: event.bio,
+        avatar_url: event.avatar_url,
         location: None,
         interests: vec![],
         is_verified: event.is_verified,
@@ -396,18 +398,6 @@ async fn handle_user_deleted(
     }
 
     Ok(())
-}
-
-fn parse_enveloped_or_direct<T: DeserializeOwned>(payload: &[u8]) -> Result<T, EventError> {
-    #[derive(Deserialize)]
-    struct Envelope<T> {
-        data: T,
-    }
-
-    if let Ok(envelope) = serde_json::from_slice::<Envelope<T>>(payload) {
-        return Ok(envelope.data);
-    }
-    Ok(serde_json::from_slice::<T>(payload)?)
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@ use std::time::Duration;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::error::KafkaError;
-use rdkafka::message::Message;
+use rdkafka::message::{Headers, Message};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
