@@ -404,31 +404,38 @@ struct UserProfileView: View {
                         
                         // 帖子网格
                         ScrollView(.vertical, showsIndicators: false) {
-                            LazyVGrid(
-                                columns: [
-                                    GridItem(.flexible(), spacing: 5.w),
-                                    GridItem(.flexible(), spacing: 5.w)
-                                ],
-                                spacing: 5.h
-                            ) {
-                                // 使用真实帖子数据
-                                ForEach(userData.posts) { post in
-                                    PostCard(
-                                        imageUrl: post.imageUrl,
-                                        imageName: "PostCardImage",
-                                        title: "\(post.username) \(post.content)",
-                                        authorName: post.username,
-                                        authorAvatarUrl: post.avatarUrl,
-                                        likeCount: post.likeCount,
-                                        onTap: {
-                                            // 点击帖子
-                                        }
-                                    )
+                            if isLoading {
+                                // 骨架屏加载状态
+                                ProfilePostsGridSkeleton(itemCount: 6)
+                                    .padding(.horizontal, 5.w)
+                                    .padding(.top, 5.h)
+                            } else {
+                                LazyVGrid(
+                                    columns: [
+                                        GridItem(.flexible(), spacing: 5.w),
+                                        GridItem(.flexible(), spacing: 5.w)
+                                    ],
+                                    spacing: 5.h
+                                ) {
+                                    // 使用真实帖子数据
+                                    ForEach(userData.posts) { post in
+                                        PostCard(
+                                            imageUrl: post.imageUrl,
+                                            imageName: "PostCardImage",
+                                            title: "\(post.username) \(post.content)",
+                                            authorName: post.username,
+                                            authorAvatarUrl: post.avatarUrl,
+                                            likeCount: post.likeCount,
+                                            onTap: {
+                                                // 点击帖子
+                                            }
+                                        )
+                                    }
                                 }
+                                .padding(.horizontal, 5.w)
+                                .padding(.top, 5.h)
+                                .padding(.bottom, 100.h)
                             }
-                            .padding(.horizontal, 5.w)
-                            .padding(.top, 5.h)
-                            .padding(.bottom, 100.h)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .clipped()  // 裁剪超出内容，防止截断效果

@@ -87,15 +87,13 @@ struct NotificationView: View {
 
     // MARK: - Loading View
     private var loadingView: some View {
-        VStack {
-            Spacer()
-            ProgressView()
-                .scaleEffect(1.2)
-            Text("Loading notifications...")
-                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                .foregroundColor(DesignTokens.textSecondary)
-                .padding(.top, 12)
-            Spacer()
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(0..<6, id: \.self) { _ in
+                    NotificationRowSkeleton()
+                }
+            }
+            .padding(.top, 8)
         }
     }
 

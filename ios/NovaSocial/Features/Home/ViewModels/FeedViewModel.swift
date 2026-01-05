@@ -190,7 +190,11 @@ final class FeedViewModel {
         let loadStartTime = Date()
         let signpostState = performanceMonitor.beginFeedLoad(source: .initial, fromCache: false)
 
-        isLoading = true
+        // Only show loading indicator if no cached posts (prevents blank screen during refresh)
+        let showLoadingIndicator = posts.isEmpty
+        if showLoadingIndicator {
+            isLoading = true
+        }
         error = nil
         currentAlgorithm = algorithm
         currentCursor = nil

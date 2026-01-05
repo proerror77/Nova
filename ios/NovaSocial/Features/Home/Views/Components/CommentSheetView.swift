@@ -48,7 +48,7 @@ struct CommentSheetView: View {
     var onCommentCountUpdated: ((String, Int) -> Void)?  // 评论数量同步回调 (postId, actualCount)
     @State private var commentText = ""
     @State private var comments: [SocialComment] = []
-    @State private var isLoading = false
+    @State private var isLoading = true  // Start as true to show ProgressView immediately (fixes #231 white screen)
     @State private var isSubmitting = false
     @State private var error: String?
     @State private var totalCount = 0

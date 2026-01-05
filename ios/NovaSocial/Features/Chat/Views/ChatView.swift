@@ -317,9 +317,11 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 16.h) {
-                    // Loading indicator
-                    if viewModel.isLoadingHistory {
-                        ProgressView("Loading messages...")
+                    // Loading indicator with skeleton
+                    if viewModel.isLoadingHistory && viewModel.messages.isEmpty {
+                        ChatMessagesSkeleton()
+                    } else if viewModel.isLoadingHistory {
+                        ProgressView()
                             .padding()
                     }
 

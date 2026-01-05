@@ -395,6 +395,8 @@ struct PostDetailView: View {
                     onCommentCountUpdated?(postId, actualCount)
                 }
             )
+            .presentationDetents([.fraction(2.0/3.0), .large])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -635,7 +637,12 @@ struct PostDetailView: View {
             .padding(.top, 12)
 
             // Comment List
-            if displayComments.isEmpty && !commentViewModel.isLoading {
+            if commentViewModel.isLoading {
+                // Skeleton loading state
+                ForEach(0..<3, id: \.self) { _ in
+                    CommentSkeleton()
+                }
+            } else if displayComments.isEmpty {
                 Text("No comments yet. Be the first to comment!")
                     .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(DesignTokens.textSecondary)

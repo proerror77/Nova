@@ -212,16 +212,13 @@ struct SearchView: View {
 
     // MARK: - Loading View
     private var loadingView: some View {
-        VStack {
-            ProgressView()
-                .scaleEffect(1.2)
-            Text("Searching...")
-                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                .foregroundColor(DesignTokens.textSecondary)
-                .padding(.top, 12)
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(0..<5, id: \.self) { _ in
+                    SearchResultSkeleton()
+                }
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 60)
     }
 
     // MARK: - Empty Results

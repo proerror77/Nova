@@ -777,17 +777,15 @@ struct MessageView: View {
                 } else {
                 // MARK: - 消息列表
                 if isLoading {
-                    // 加载状态
-                    VStack(spacing: 16) {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle())
-                            .scaleEffect(1.2)
-                        Text(LocalizedStringKey("Loading messages..."))
-                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                            .foregroundColor(DesignTokens.textSecondary)
+                    // Skeleton loading state
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(0..<6, id: \.self) { _ in
+                                ConversationRowSkeleton()
+                            }
+                        }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.top, 60)
+                    .padding(.top, 8)
                 } else if let error = errorMessage {
                     // 错误状态
                     VStack(spacing: 16) {

@@ -128,6 +128,12 @@ struct HomeView: View {
                         showPostDetail = false
                         selectedPostForDetail = nil
                     },
+                    onAvatarTapped: { userId in
+                        // Close post detail first, then navigate to user profile
+                        showPostDetail = false
+                        selectedPostForDetail = nil
+                        navigateToUserProfile(userId: userId)
+                    },
                     onLikeChanged: { isLiked, likeCount in
                         feedViewModel.updateLikeState(postId: post.id, isLiked: isLiked, likeCount: likeCount)
                     },
@@ -184,6 +190,8 @@ struct HomeView: View {
                         feedViewModel.updateCommentCount(postId: postId, count: actualCount)
                     }
                 )
+                .presentationDetents([.fraction(2.0/3.0), .large])
+                .presentationDragIndicator(.visible)
             } else {
                 // Fallback: auto-dismiss if post is nil to prevent blank sheet
                 Color.clear
@@ -401,7 +409,12 @@ struct HomeView: View {
                                 // 配置在 FeedLayoutConfig.swift 中修改
                                 // 当前设置：每 4 个帖子后显示一次轮播图
                                 // 使用 feedViewModel.feedItems 缓存，避免每次渲染重新计算
-                                if !feedViewModel.posts.isEmpty {
+                                if feedViewModel.isLoading && feedViewModel.posts.isEmpty {
+                                    // Skeleton loading state for initial load
+                                    ForEach(0..<3, id: \.self) { _ in
+                                        FeedPostCardSkeleton()
+                                    }
+                                } else if !feedViewModel.posts.isEmpty {
                                     ForEach(feedViewModel.feedItems) { item in
                                         switch item {
                                         case .post(let index, let post):
