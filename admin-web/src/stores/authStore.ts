@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
 interface Admin {
   id: string;
   email: string;
@@ -11,58 +13,82 @@ interface Admin {
 
 interface AuthState {
   admin: Admin | null;
+  accessToken: string | null;
+  refreshToken: string | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
+  getAuthHeader: () => Record<string, string>;
 }
 
-// Mock admin accounts for development
-const MOCK_ADMINS: Record<string, { password: string; admin: Admin }> = {
-  'admin@nova.app': {
-    password: 'admin123',
-    admin: {
-      id: '1',
-      email: 'admin@nova.app',
-      name: '系统管理员',
-      role: 'super_admin',
-    },
-  },
-  'mod@nova.app': {
-    password: 'mod123',
-    admin: {
-      id: '2',
-      email: 'mod@nova.app',
-      name: '内容审核员',
-      role: 'moderator',
-    },
-  },
-};
+interface LoginResponse {
+  access_token: string;
+  refresh_token: string;
+  admin: Admin;
+}
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       admin: null,
+      accessToken: null,
+      refreshToken: null,
       isAuthenticated: false,
 
       login: async (email: string, password: string): Promise<boolean> => {
-        // Simulate network delay
-        await new Promise((resolve) => setTimeout(resolve, 800));
+        try {
+          const response = await fetch(`${API_BASE_URL}/auth/login`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email, password }),
+          });
 
-        const mockAccount = MOCK_ADMINS[email.toLowerCase()];
-        if (mockAccount && mockAccount.password === password) {
-          set({ admin: mockAccount.admin, isAuthenticated: true });
+          if (!response.ok) {
+            return false;
+          }
+
+          const data: LoginResponse = await response.json();
+          set({
+            admin: data.admin,
+            accessToken: data.access_token,
+            refreshToken: data.refresh_token,
+            isAuthenticated: true,
+          });
           return true;
+        } catch (error) {
+          console.error('Login failed:', error);
+          return false;
         }
-        return false;
       },
 
       logout: () => {
-        set({ admin: null, isAuthenticated: false });
+        const { accessToken } = get();
+        if (accessToken) {
+          fetch(`${API_BASE_URL}/auth/logout`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+            },
+          }).catch(() => {});
+        }
+        set({ admin: null, accessToken: null, refreshToken: null, isAuthenticated: false });
+      },
+
+      getAuthHeader: () => {
+        const { accessToken } = get();
+        return accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {};
       },
     }),
     {
       name: 'admin-auth',
-      partialize: (state) => ({ admin: state.admin, isAuthenticated: state.isAuthenticated }),
+      partialize: (state) => ({
+        admin: state.admin,
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
+        isAuthenticated: state.isAuthenticated,
+      }),
     }
   )
 );

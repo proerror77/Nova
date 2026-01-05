@@ -104,7 +104,7 @@ export const Login = ({ onLogin }: LoginProps) => {
 
           <div className="mt-6 pt-6 border-t border-slate-800">
             <p className="text-center text-sm text-slate-500">
-              测试账号: admin@nova.app / admin123
+              测试账号: admin@nova.app / Admin@2026
             </p>
           </div>
         </CardContent>
