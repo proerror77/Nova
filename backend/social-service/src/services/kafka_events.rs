@@ -7,15 +7,30 @@ use chrono::Utc;
 use event_schema::{EventEnvelope, LikeCreatedEvent, LikeDeletedEvent};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::message::OwnedHeaders;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::{info, warn};
 use uuid::Uuid;
+
+/// Notification event format expected by notification-service Kafka consumer
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KafkaNotification {
+    pub id: String,
+    pub user_id: Uuid,
+    pub event_type: String,
+    pub title: String,
+    pub body: String,
+    pub data: Option<serde_json::Value>,
+    pub timestamp: i64,
+}
 
 /// Configuration for the Kafka event producer
 #[derive(Debug, Clone)]
 pub struct KafkaEventProducerConfig {
     pub brokers: String,
     pub topic: String,
+    /// Topic for notification events (consumed by notification-service)
+    pub notification_topic: String,
 }
 
 impl KafkaEventProducerConfig {
@@ -34,6 +49,8 @@ impl KafkaEventProducerConfig {
             brokers,
             topic: std::env::var("KAFKA_SOCIAL_EVENTS_TOPIC")
                 .unwrap_or_else(|_| format!("{}.social.events", topic_prefix)),
+            notification_topic: std::env::var("KAFKA_NOTIFICATION_TOPIC")
+                .unwrap_or_else(|_| "PostLiked".to_string()),
         })
     }
 }
@@ -43,6 +60,7 @@ impl KafkaEventProducerConfig {
 pub struct SocialEventProducer {
     producer: FutureProducer,
     topic: String,
+    notification_topic: String,
 }
 
 impl SocialEventProducer {
@@ -62,12 +80,14 @@ impl SocialEventProducer {
         info!(
             brokers = %config.brokers,
             topic = %config.topic,
+            notification_topic = %config.notification_topic,
             "Social service Kafka producer initialized"
         );
 
         Ok(Self {
             producer,
             topic: config.topic.clone(),
+            notification_topic: config.notification_topic.clone(),
         })
     }
 
@@ -156,6 +176,81 @@ impl SocialEventProducer {
                     "Failed to publish social event to Kafka"
                 );
                 Err(anyhow::anyhow!("Failed to publish event: {}", err))
+            }
+        }
+    }
+
+    /// Publish a like notification event to notification-service
+    ///
+    /// This sends a KafkaNotification to the PostLiked topic that the
+    /// notification-service consumes to create push notifications.
+    ///
+    /// # Arguments
+    /// * `like_id` - The ID of the like
+    /// * `post_id` - The ID of the post that was liked
+    /// * `liker_id` - The ID of the user who liked the post
+    /// * `post_author_id` - The ID of the post author (notification recipient)
+    /// * `liker_username` - Optional username of the liker for notification text
+    pub async fn publish_like_notification(
+        &self,
+        like_id: Uuid,
+        post_id: Uuid,
+        liker_id: Uuid,
+        post_author_id: Uuid,
+        liker_username: Option<String>,
+    ) -> Result<()> {
+        // Don't send notification if user liked their own post
+        if liker_id == post_author_id {
+            info!(
+                liker_id = %liker_id,
+                post_id = %post_id,
+                "Skipping self-like notification"
+            );
+            return Ok(());
+        }
+
+        let username = liker_username.unwrap_or_else(|| "Someone".to_string());
+
+        let notification = KafkaNotification {
+            id: like_id.to_string(),
+            user_id: post_author_id, // Recipient of the notification
+            event_type: "Like".to_string(),
+            title: "New Like".to_string(),
+            body: format!("{} liked your post", username),
+            data: Some(serde_json::json!({
+                "sender_id": liker_id.to_string(),
+                "object_id": post_id.to_string(),
+                "object_type": "post",
+                "like_id": like_id.to_string(),
+            })),
+            timestamp: Utc::now().timestamp(),
+        };
+
+        let payload = serde_json::to_string(&notification)?;
+        let partition_key = post_author_id.to_string();
+
+        let record = FutureRecord::to(&self.notification_topic)
+            .key(&partition_key)
+            .payload(&payload);
+
+        match self.producer.send(record, Duration::from_secs(5)).await {
+            Ok(_) => {
+                info!(
+                    post_id = %post_id,
+                    liker_id = %liker_id,
+                    recipient_id = %post_author_id,
+                    topic = %self.notification_topic,
+                    "Published like notification to Kafka"
+                );
+                Ok(())
+            }
+            Err((err, _)) => {
+                warn!(
+                    error = ?err,
+                    post_id = %post_id,
+                    "Failed to publish like notification to Kafka"
+                );
+                Err(anyhow::anyhow!("Failed to publish notification: {}", err))
             }
         }
     }

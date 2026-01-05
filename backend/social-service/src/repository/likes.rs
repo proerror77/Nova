@@ -184,4 +184,21 @@ impl LikeRepository {
 
         Ok(result)
     }
+
+    /// Get post author (owner) ID for notification purposes
+    /// Returns None if post doesn't exist
+    pub async fn get_post_author(&self, post_id: Uuid) -> Result<Option<Uuid>> {
+        let author_id: Option<Uuid> = sqlx::query_scalar(
+            r#"
+            SELECT user_id
+            FROM posts
+            WHERE id = $1 AND soft_delete IS NULL
+            "#,
+        )
+        .bind(post_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(author_id)
+    }
 }

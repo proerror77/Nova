@@ -270,14 +270,41 @@ impl SocialService for SocialServiceImpl {
             .await
             .unwrap_or(0);
 
-        // Emit Kafka event asynchronously (fire-and-forget for analytics/notifications)
+        // Emit Kafka events asynchronously (fire-and-forget for analytics/notifications)
         if was_created {
             if let Some(producer) = &self.state.event_producer {
                 let producer = producer.clone();
                 let like_id = like.id;
+                let like_repo_clone = self.like_repo();
+
                 tokio::spawn(async move {
+                    // Publish analytics event
                     if let Err(e) = producer.publish_like_created(like_id, post_id, user_id).await {
                         tracing::warn!(error = ?e, "Failed to publish like created event");
+                    }
+
+                    // Get post author and publish notification
+                    match like_repo_clone.get_post_author(post_id).await {
+                        Ok(Some(post_author_id)) => {
+                            if let Err(e) = producer
+                                .publish_like_notification(
+                                    like_id,
+                                    post_id,
+                                    user_id,
+                                    post_author_id,
+                                    None, // TODO: fetch username from identity service if needed
+                                )
+                                .await
+                            {
+                                tracing::warn!(error = ?e, "Failed to publish like notification");
+                            }
+                        }
+                        Ok(None) => {
+                            tracing::warn!(post_id = %post_id, "Post not found for like notification");
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = ?e, "Failed to get post author for notification");
+                        }
                     }
                 });
             }
