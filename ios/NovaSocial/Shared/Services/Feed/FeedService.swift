@@ -639,6 +639,62 @@ struct FeedPost: Identifiable, Codable, Equatable {
         return URL(string: mediaUrls[1])
     }
 
+    /// Full resolution media URLs for detail view.
+    /// Unlike `displayMediaUrls` which prefers thumbnails (600px) for feed performance,
+    /// this returns original media URLs at full resolution for when quality matters.
+    var fullResolutionMediaUrls: [String] {
+        func normalize(_ url: String) -> String? {
+            let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+
+            let lowercased = trimmed.lowercased()
+
+            // Skip non-URL placeholders (e.g., "text-content-xxx")
+            if !(lowercased.hasPrefix("http://") || lowercased.hasPrefix("https://") || lowercased.hasPrefix("/") || lowercased.hasPrefix("//")) {
+                return nil
+            }
+
+            if lowercased.hasPrefix("http://") || lowercased.hasPrefix("https://") {
+                return trimmed
+            }
+
+            // Scheme-relative URL (e.g., //cdn.example.com/a.jpg)
+            if lowercased.hasPrefix("//") {
+                return "https:\(trimmed)"
+            }
+
+            // Relative path returned by backend (e.g., /media/abc.jpg)
+            if lowercased.hasPrefix("/") {
+                return "\(APIConfig.current.baseURL)\(trimmed)"
+            }
+
+            return nil
+        }
+
+        // Always prefer original mediaUrls for full resolution
+        var normalizedMedia = mediaUrls.compactMap(normalize)
+
+        // For video posts with [videoUrl, thumbnailUrl] pattern,
+        // only return the video URL to avoid showing thumbnail as duplicate content
+        if mediaType == .video && normalizedMedia.count == 2 {
+            let firstUrl = normalizedMedia[0].lowercased()
+            let isFirstVideo = firstUrl.contains(".mp4") ||
+                               firstUrl.contains(".m4v") ||
+                               firstUrl.contains(".mov") ||
+                               firstUrl.contains(".webm")
+            if isFirstVideo {
+                normalizedMedia = [normalizedMedia[0]]
+            }
+        }
+
+        // Fall back to thumbnails if no valid media URLs
+        if normalizedMedia.isEmpty {
+            return thumbnailUrls.compactMap(normalize)
+        }
+
+        return normalizedMedia
+    }
+
     /// Create FeedPost from raw backend response
     init(from raw: FeedPostRaw) {
         self.id = raw.id

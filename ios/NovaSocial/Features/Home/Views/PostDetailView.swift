@@ -319,7 +319,7 @@ struct PostDetailView: View {
         }
         // MARK: - Action Sheet (作者操作菜单)
         .confirmationDialog("Post Options", isPresented: $showingActionSheet, titleVisibility: .visible) {
-            if !post.displayMediaUrls.isEmpty {
+            if !post.fullResolutionMediaUrls.isEmpty {
                 Button("Save Image") {
                     Task {
                         await saveCurrentImageToPhotos()
@@ -499,11 +499,12 @@ struct PostDetailView: View {
 
     private var imageCarouselSection: some View {
         VStack(spacing: 8) {
-            if !post.displayMediaUrls.isEmpty {
+            // Use fullResolutionMediaUrls for detail view (original images, not 600px thumbnails)
+            if !post.fullResolutionMediaUrls.isEmpty {
                 GeometryReader { geometry in
                     // Image/Video Carousel with caching for better performance
                     TabView(selection: $currentImageIndex) {
-                        ForEach(Array(post.displayMediaUrls.enumerated()), id: \.element) { index, mediaUrl in
+                        ForEach(Array(post.fullResolutionMediaUrls.enumerated()), id: \.element) { index, mediaUrl in
                             Group {
                                 if isVideoUrl(mediaUrl), let videoUrl = URL(string: mediaUrl) {
                                     // Video content - use FeedVideoPlayer
@@ -545,9 +546,9 @@ struct PostDetailView: View {
                 .aspectRatio(3/4, contentMode: .fit)  // Provide aspect ratio instead of fixed height
 
                 // Page Indicators
-                if post.displayMediaUrls.count > 1 {
+                if post.fullResolutionMediaUrls.count > 1 {
                     HStack(spacing: 11) {
-                        ForEach(0..<post.displayMediaUrls.count, id: \.self) { index in
+                        ForEach(0..<post.fullResolutionMediaUrls.count, id: \.self) { index in
                             Circle()
                                 .fill(index == currentImageIndex ?
                                       Color(red: 0.81, green: 0.13, blue: 0.25) :
@@ -926,14 +927,14 @@ struct PostDetailView: View {
     // MARK: - Save Image to Photos
 
     private func saveCurrentImageToPhotos() async {
-        // 获取当前显示的图片 URL
-        guard currentImageIndex < post.displayMediaUrls.count else {
+        // 获取当前显示的图片 URL (使用原图 URL，不是縮圖)
+        guard currentImageIndex < post.fullResolutionMediaUrls.count else {
             saveErrorMessage = "No image to save"
             showingSaveError = true
             return
         }
 
-        let imageUrlString = post.displayMediaUrls[currentImageIndex]
+        let imageUrlString = post.fullResolutionMediaUrls[currentImageIndex]
 
         // Skip videos
         guard !isVideoUrl(imageUrlString) else {
