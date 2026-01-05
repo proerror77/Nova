@@ -25,7 +25,7 @@ impl TOTPGenerator {
     ///
     /// * `email` - User's email for display in authenticator app
     pub fn generate_secret_and_uri(email: &str) -> Result<(String, String)> {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut secret_bytes = [0u8; 20];
         rng.fill(&mut secret_bytes);
 
@@ -106,7 +106,7 @@ impl TOTPGenerator {
     /// - Store hashed versions in database (like passwords)
     /// - Generate new set after user uses all codes
     pub fn generate_backup_codes() -> Vec<String> {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         (0..8)
             .map(|_| {
                 (0..8)
