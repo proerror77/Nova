@@ -1473,6 +1473,66 @@ impl AuthService for IdentityServiceServer {
         let tokens = generate_token_pair(result.user.id, &result.user.email, &result.user.username)
             .map_err(anyhow_to_status)?;
 
+        // Create session for device tracking (if device_id is provided)
+        if let Some(device_id) = &req.device_id {
+            if !device_id.is_empty() {
+                // Determine device type
+                let device_type = req.device_type.as_deref();
+
+                // Parse OS name and version from os_version field (e.g., "iOS 18.0" -> "iOS", "18.0")
+                let (os_name, os_version) = if let Some(os_ver) = &req.os_version {
+                    if !os_ver.is_empty() {
+                        let parts: Vec<&str> = os_ver.splitn(2, ' ').collect();
+                        if parts.len() == 2 {
+                            (Some(parts[0]), Some(parts[1]))
+                        } else {
+                            (Some(os_ver.as_str()), None)
+                        }
+                    } else {
+                        (None, None)
+                    }
+                } else {
+                    (None, None)
+                };
+
+                match db::sessions::create_session(
+                    &self.db,
+                    result.user.id,
+                    device_id,
+                    req.device_name.as_deref(),
+                    device_type,
+                    os_name,
+                    os_version,
+                    None, // browser_name (not applicable for mobile)
+                    None, // browser_version
+                    None, // ip_address (could be extracted from request metadata)
+                    req.user_agent.as_deref(),
+                    None, // location_country
+                    None, // location_city
+                )
+                .await
+                {
+                    Ok(session) => {
+                        info!(
+                            user_id = %result.user.id,
+                            session_id = %session.id,
+                            device_id = %device_id,
+                            "Session created for Apple Sign-In device"
+                        );
+                    }
+                    Err(e) => {
+                        // Log error but don't fail the sign-in
+                        tracing::warn!(
+                            user_id = %result.user.id,
+                            device_id = %device_id,
+                            error = %e,
+                            "Failed to create session for Apple Sign-In device"
+                        );
+                    }
+                }
+            }
+        }
+
         info!(
             user_id = %result.user.id,
             is_new_user = result.is_new_user,

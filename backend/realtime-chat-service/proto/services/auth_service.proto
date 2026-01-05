@@ -617,6 +617,12 @@ message AppleNativeSignInRequest {
   optional string given_name = 5;   // First name (only provided on first sign-in)
   optional string family_name = 6;  // Last name (only provided on first sign-in)
   optional string invite_code = 7;  // Invite code for new user registration
+  // Device info for session tracking
+  optional string device_id = 8;    // Device UUID (identifierForVendor on iOS)
+  optional string device_name = 9;  // Device name (e.g., "John's iPhone")
+  optional string device_type = 10; // Device type (e.g., "iOS", "macOS")
+  optional string os_version = 11;  // OS version (e.g., "iOS 18.0")
+  optional string user_agent = 12;  // User agent string
 }
 
 message AppleNativeSignInResponse {

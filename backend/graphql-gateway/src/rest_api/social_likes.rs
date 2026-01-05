@@ -270,6 +270,7 @@ pub async fn get_comments(
         post_id: q.post_id,
         limit: q.limit.unwrap_or(50) as i32,
         offset: q.offset.unwrap_or(0) as i32,
+        viewer_user_id: String::new(), // Not authenticated on this endpoint
     };
     match clients
         .call_social(|| {
