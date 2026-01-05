@@ -1123,6 +1123,8 @@ mod tests {
             media_urls: vec![],
             media_type: String::new(),
             thumbnail_urls: vec![],
+            is_liked: false,
+            is_bookmarked: false,
         };
 
         // Verify all proto fields are set correctly
@@ -1153,6 +1155,8 @@ mod tests {
                 media_urls: vec![],
                 media_type: String::new(),
                 thumbnail_urls: vec![],
+                is_liked: false,
+                is_bookmarked: false,
             },
             FeedPost {
                 id: "post-2".to_string(),
@@ -1167,6 +1171,8 @@ mod tests {
                 media_urls: vec![],
                 media_type: String::new(),
                 thumbnail_urls: vec![],
+                is_liked: true,
+                is_bookmarked: false,
             },
         ];
 
@@ -1343,6 +1349,8 @@ mod tests {
             media_urls: vec![],
             media_type: String::new(),
             thumbnail_urls: vec![],
+            is_liked: false,
+            is_bookmarked: false,
         };
 
         // Measure construction time
@@ -1361,6 +1369,8 @@ mod tests {
                 media_urls: vec![],
                 media_type: String::new(),
                 thumbnail_urls: vec![],
+                is_liked: post.is_liked,
+                is_bookmarked: post.is_bookmarked,
             };
         }
         let elapsed = start.elapsed();
@@ -1447,6 +1457,8 @@ mod tests {
                 media_urls: vec![],
                 media_type: String::new(),
                 thumbnail_urls: vec![],
+                is_liked: i % 2 == 0,
+                is_bookmarked: i % 3 == 0,
             })
             .collect();
 
@@ -1513,6 +1525,8 @@ mod tests {
                         media_urls: vec![],
                         media_type: String::new(),
                         thumbnail_urls: vec![],
+                        is_liked: false,
+                        is_bookmarked: false,
                     })
                     .collect(),
                 next_cursor: cursor.clone(),
