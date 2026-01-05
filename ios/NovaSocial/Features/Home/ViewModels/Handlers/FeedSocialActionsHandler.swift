@@ -17,28 +17,16 @@ final class FeedSocialActionsHandler {
     /// Track ongoing bookmark operations to prevent concurrent calls for the same post
     private var ongoingBookmarkOperations: Set<String> = []
 
-    // MARK: - Debounce State
+    // MARK: - Cooldown State (Instagram-style throttle)
 
-    /// Debounce delay in nanoseconds (300ms)
-    private let debounceDelay: UInt64 = 300_000_000
+    /// Cooldown period in seconds - ignore clicks during this time
+    private let cooldownDuration: TimeInterval = 0.5
 
-    /// Pending debounced like tasks per post
-    private var pendingLikeTasks: [String: Task<Void, Never>] = [:]
+    /// Timestamp of last like action per post (for cooldown)
+    private var lastLikeTime: [String: Date] = [:]
 
-    /// Pending debounced bookmark tasks per post
-    private var pendingBookmarkTasks: [String: Task<Void, Never>] = [:]
-
-    // MARK: - Server Confirmed State (source of truth for count calculations)
-
-    /// Server-confirmed like state per post (isLiked, count) - source of truth for count calculations
-    private var confirmedLikeState: [String: (isLiked: Bool, count: Int)] = [:]
-
-    /// Server-confirmed bookmark state per post (isBookmarked, count)
-    private var confirmedBookmarkState: [String: (isBookmarked: Bool, count: Int)] = [:]
-
-    /// User's intended target state after rapid clicks
-    private var pendingLikeTarget: [String: Bool] = [:]
-    private var pendingBookmarkTarget: [String: Bool] = [:]
+    /// Timestamp of last bookmark action per post (for cooldown)
+    private var lastBookmarkTime: [String: Date] = [:]
 
     // MARK: - Callbacks
     
@@ -70,11 +58,9 @@ final class FeedSocialActionsHandler {
     
     // MARK: - Like Actions
 
-    /// Toggle like on a post with debouncing
-    /// Handles rapid clicks correctly by:
-    /// 1. Tracking server-confirmed state separately from UI state
-    /// 2. Calculating display count based on confirmed count (not cumulative)
-    /// 3. Only sending API request if final state differs from confirmed state
+    /// Toggle like on a post with cooldown (Instagram-style)
+    /// - First click: immediately updates UI and sends API request
+    /// - Subsequent clicks within cooldown period: ignored
     func toggleLike(postId: String, currentPost: FeedPost) async -> Bool {
         guard currentUserId != nil else {
             #if DEBUG
@@ -83,85 +69,50 @@ final class FeedSocialActionsHandler {
             return false
         }
 
-        // Initialize server-confirmed state if not set
-        if confirmedLikeState[postId] == nil {
-            confirmedLikeState[postId] = (currentPost.isLiked, currentPost.likeCount)
-        }
-        let confirmed = confirmedLikeState[postId]!
-
-        // Calculate new target state by toggling current target (or confirmed if no pending)
-        let currentTarget = pendingLikeTarget[postId] ?? confirmed.isLiked
-        let newTarget = !currentTarget
-        pendingLikeTarget[postId] = newTarget
-
-        // Calculate display count based on CONFIRMED count, not current UI count
-        // This prevents count drift during rapid clicking
-        let displayCount: Int
-        if newTarget == confirmed.isLiked {
-            // Target same as confirmed → show confirmed count
-            displayCount = confirmed.count
-        } else if newTarget && !confirmed.isLiked {
-            // Want to like, was not liked → confirmed + 1
-            displayCount = confirmed.count + 1
-        } else {
-            // Want to unlike, was liked → confirmed - 1
-            displayCount = max(0, confirmed.count - 1)
+        // Check cooldown - ignore clicks within cooldown period
+        if let lastTime = lastLikeTime[postId],
+           Date().timeIntervalSince(lastTime) < cooldownDuration {
+            #if DEBUG
+            print("[FeedSocialActions] toggleLike ignored - within cooldown for postId: \(postId)")
+            #endif
+            return false
         }
 
-        // Optimistic update with correct count
+        // Also check if operation already in progress
+        guard !ongoingLikeOperations.contains(postId) else {
+            #if DEBUG
+            print("[FeedSocialActions] toggleLike ignored - operation in progress for postId: \(postId)")
+            #endif
+            return false
+        }
+
+        // Update cooldown timestamp
+        lastLikeTime[postId] = Date()
+
+        let wasLiked = currentPost.isLiked
+        let newLikeCount = wasLiked ? max(0, currentPost.likeCount - 1) : currentPost.likeCount + 1
+
+        // Optimistic update - immediate UI feedback
         onPostUpdate?(postId) { post in
-            post.copying(likeCount: displayCount, isLiked: newTarget)
+            post.copying(likeCount: newLikeCount, isLiked: !wasLiked)
         }
 
-        // Cancel any pending debounce task
-        pendingLikeTasks[postId]?.cancel()
+        // Perform API call
+        await performLikeOperation(
+            postId: postId,
+            originalPost: currentPost,
+            targetLikedState: !wasLiked
+        )
 
-        // Create new debounced task
-        let task = Task { [weak self] in
-            do {
-                try await Task.sleep(nanoseconds: self?.debounceDelay ?? 300_000_000)
-            } catch {
-                return // Cancelled
-            }
-            guard !Task.isCancelled else { return }
-            await self?.performLikeOperation(postId: postId)
-        }
-
-        pendingLikeTasks[postId] = task
         return true
     }
 
-    /// Perform the actual like/unlike API call after debounce
-    private func performLikeOperation(postId: String) async {
-        // Get target and confirmed states
-        guard let targetLiked = pendingLikeTarget[postId],
-              let confirmed = confirmedLikeState[postId] else {
-            return
-        }
-
-        // Clear pending target
-        pendingLikeTarget.removeValue(forKey: postId)
-
-        // If target equals confirmed, no API call needed (user clicked even number of times)
-        if targetLiked == confirmed.isLiked {
-            #if DEBUG
-            print("[FeedSocialActions] Like state unchanged, skipping API call for postId: \(postId)")
-            #endif
-            // Ensure UI shows confirmed count
-            onPostUpdate?(postId) { post in
-                post.copying(likeCount: confirmed.count, isLiked: confirmed.isLiked)
-            }
-            return
-        }
-
-        // Prevent concurrent operations
-        guard !ongoingLikeOperations.contains(postId) else {
-            #if DEBUG
-            print("[FeedSocialActions] performLikeOperation skipped - already in progress for postId: \(postId)")
-            #endif
-            return
-        }
-
+    /// Perform the actual like/unlike API call
+    private func performLikeOperation(
+        postId: String,
+        originalPost: FeedPost,
+        targetLikedState: Bool
+    ) async {
         guard let userId = currentUserId else { return }
 
         ongoingLikeOperations.insert(postId)
@@ -169,42 +120,29 @@ final class FeedSocialActionsHandler {
 
         do {
             let response: SocialService.LikeResponse
-            if targetLiked {
+            if targetLikedState {
                 response = try await socialService.createLike(postId: postId, userId: userId)
             } else {
                 response = try await socialService.deleteLike(postId: postId, userId: userId)
             }
 
-            // Update confirmed state with server response
-            confirmedLikeState[postId] = (targetLiked, Int(response.likeCount))
-
-            // Update UI with accurate server count (only if no new pending operation)
-            if pendingLikeTarget[postId] == nil {
-                onPostUpdate?(postId) { post in
-                    post.copying(likeCount: Int(response.likeCount), isLiked: targetLiked)
-                }
+            // Update UI with server's accurate count
+            onPostUpdate?(postId) { post in
+                post.copying(likeCount: Int(response.likeCount), isLiked: targetLikedState)
             }
 
             await FeedCacheService.shared.invalidateCache()
 
             #if DEBUG
-            print("[FeedSocialActions] Like operation completed for postId: \(postId), isLiked: \(targetLiked), count: \(response.likeCount)")
+            print("[FeedSocialActions] Like operation completed for postId: \(postId), isLiked: \(targetLikedState), count: \(response.likeCount)")
             #endif
         } catch let error as APIError {
-            // Revert to confirmed state (only if no new pending operation)
-            if pendingLikeTarget[postId] == nil {
-                onPostUpdate?(postId) { post in
-                    post.copying(likeCount: confirmed.count, isLiked: confirmed.isLiked)
-                }
-            }
+            // Revert on failure
+            onPostUpdate?(postId) { _ in originalPost }
             handleError(error, action: "like")
         } catch {
-            // Revert to confirmed state (only if no new pending operation)
-            if pendingLikeTarget[postId] == nil {
-                onPostUpdate?(postId) { post in
-                    post.copying(likeCount: confirmed.count, isLiked: confirmed.isLiked)
-                }
-            }
+            // Revert on failure
+            onPostUpdate?(postId) { _ in originalPost }
             onError?("Failed to like post. Please try again.")
             #if DEBUG
             print("[FeedSocialActions] Toggle like error: \(error)")
@@ -214,8 +152,7 @@ final class FeedSocialActionsHandler {
     
     // MARK: - Bookmark Actions
 
-    /// Toggle bookmark on a post with debouncing
-    /// Same logic as toggleLike - tracks confirmed state and calculates count correctly
+    /// Toggle bookmark on a post with cooldown (Instagram-style)
     func toggleBookmark(postId: String, currentPost: FeedPost) async -> Bool {
         guard currentUserId != nil else {
             #if DEBUG
@@ -224,141 +161,80 @@ final class FeedSocialActionsHandler {
             return false
         }
 
-        // Initialize server-confirmed state if not set
-        if confirmedBookmarkState[postId] == nil {
-            confirmedBookmarkState[postId] = (currentPost.isBookmarked, currentPost.bookmarkCount)
-        }
-        let confirmed = confirmedBookmarkState[postId]!
-
-        // Calculate new target state
-        let currentTarget = pendingBookmarkTarget[postId] ?? confirmed.isBookmarked
-        let newTarget = !currentTarget
-        pendingBookmarkTarget[postId] = newTarget
-
-        // Calculate display count based on CONFIRMED count
-        let displayCount: Int
-        if newTarget == confirmed.isBookmarked {
-            displayCount = confirmed.count
-        } else if newTarget && !confirmed.isBookmarked {
-            displayCount = confirmed.count + 1
-        } else {
-            displayCount = max(0, confirmed.count - 1)
-        }
-
-        // Optimistic update with correct count
-        onPostUpdate?(postId) { post in
-            post.copying(bookmarkCount: displayCount, isBookmarked: newTarget)
-        }
-
-        // Cancel any pending debounce task
-        pendingBookmarkTasks[postId]?.cancel()
-
-        // Create new debounced task
-        let task = Task { [weak self] in
-            do {
-                try await Task.sleep(nanoseconds: self?.debounceDelay ?? 300_000_000)
-            } catch {
-                return
-            }
-            guard !Task.isCancelled else { return }
-            await self?.performBookmarkOperation(postId: postId)
-        }
-
-        pendingBookmarkTasks[postId] = task
-        return true
-    }
-
-    /// Perform the actual bookmark/unbookmark API call after debounce
-    private func performBookmarkOperation(postId: String) async {
-        guard let targetBookmarked = pendingBookmarkTarget[postId],
-              let confirmed = confirmedBookmarkState[postId] else {
-            return
-        }
-
-        pendingBookmarkTarget.removeValue(forKey: postId)
-
-        // Skip API if target equals confirmed
-        if targetBookmarked == confirmed.isBookmarked {
+        // Check cooldown
+        if let lastTime = lastBookmarkTime[postId],
+           Date().timeIntervalSince(lastTime) < cooldownDuration {
             #if DEBUG
-            print("[FeedSocialActions] Bookmark state unchanged, skipping API call for postId: \(postId)")
+            print("[FeedSocialActions] toggleBookmark ignored - within cooldown for postId: \(postId)")
             #endif
-            onPostUpdate?(postId) { post in
-                post.copying(bookmarkCount: confirmed.count, isBookmarked: confirmed.isBookmarked)
-            }
-            return
+            return false
         }
 
         guard !ongoingBookmarkOperations.contains(postId) else {
             #if DEBUG
-            print("[FeedSocialActions] performBookmarkOperation skipped - already in progress for postId: \(postId)")
+            print("[FeedSocialActions] toggleBookmark ignored - operation in progress for postId: \(postId)")
             #endif
-            return
+            return false
         }
 
+        // Update cooldown timestamp
+        lastBookmarkTime[postId] = Date()
+
+        let wasBookmarked = currentPost.isBookmarked
+        let newBookmarkCount = wasBookmarked ? max(0, currentPost.bookmarkCount - 1) : currentPost.bookmarkCount + 1
+
+        // Optimistic update
+        onPostUpdate?(postId) { post in
+            post.copying(bookmarkCount: newBookmarkCount, isBookmarked: !wasBookmarked)
+        }
+
+        // Perform API call
+        await performBookmarkOperation(
+            postId: postId,
+            originalPost: currentPost,
+            targetBookmarkedState: !wasBookmarked
+        )
+
+        return true
+    }
+
+    /// Perform the actual bookmark/unbookmark API call
+    private func performBookmarkOperation(
+        postId: String,
+        originalPost: FeedPost,
+        targetBookmarkedState: Bool
+    ) async {
         guard let userId = currentUserId else { return }
 
         ongoingBookmarkOperations.insert(postId)
         defer { ongoingBookmarkOperations.remove(postId) }
 
         do {
-            if targetBookmarked {
+            if targetBookmarkedState {
                 try await socialService.createBookmark(postId: postId, userId: userId)
             } else {
                 try await socialService.deleteBookmark(postId: postId)
             }
 
-            // Update confirmed state (bookmark API doesn't return count, so calculate it)
-            let newCount = targetBookmarked ? confirmed.count + 1 : max(0, confirmed.count - 1)
-            confirmedBookmarkState[postId] = (targetBookmarked, newCount)
-
-            if pendingBookmarkTarget[postId] == nil {
-                onPostUpdate?(postId) { post in
-                    post.copying(bookmarkCount: newCount, isBookmarked: targetBookmarked)
-                }
-            }
-
             await FeedCacheService.shared.invalidateCache()
 
             #if DEBUG
-            print("[FeedSocialActions] Bookmark operation completed for postId: \(postId), isBookmarked: \(targetBookmarked)")
+            print("[FeedSocialActions] Bookmark operation completed for postId: \(postId), isBookmarked: \(targetBookmarkedState)")
             #endif
         } catch let error as APIError {
             switch error {
-            case .unauthorized:
-                if pendingBookmarkTarget[postId] == nil {
-                    onPostUpdate?(postId) { post in
-                        post.copying(bookmarkCount: confirmed.count, isBookmarked: confirmed.isBookmarked)
-                    }
-                }
-                onError?("Please try again.")
-            case .noConnection:
-                if pendingBookmarkTarget[postId] == nil {
-                    onPostUpdate?(postId) { post in
-                        post.copying(bookmarkCount: confirmed.count, isBookmarked: confirmed.isBookmarked)
-                    }
-                }
-                onError?("No internet connection. Please try again.")
             case .notFound, .serverError, .serviceUnavailable:
                 // Backend bookmark API not deployed yet - keep local state
-                let newCount = targetBookmarked ? confirmed.count + 1 : max(0, confirmed.count - 1)
-                confirmedBookmarkState[postId] = (targetBookmarked, newCount)
                 #if DEBUG
                 print("[FeedSocialActions] Bookmark API not available (\(error)), using local state only")
                 #endif
             default:
-                if pendingBookmarkTarget[postId] == nil {
-                    onPostUpdate?(postId) { post in
-                        post.copying(bookmarkCount: confirmed.count, isBookmarked: confirmed.isBookmarked)
-                    }
-                }
-                onError?("Failed to bookmark post. Please try again.")
+                // Revert on failure
+                onPostUpdate?(postId) { _ in originalPost }
+                handleError(error, action: "bookmark")
             }
         } catch {
-            if pendingBookmarkTarget[postId] == nil {
-                onPostUpdate?(postId) { post in
-                    post.copying(bookmarkCount: confirmed.count, isBookmarked: confirmed.isBookmarked)
-                }
-            }
+            onPostUpdate?(postId) { _ in originalPost }
             onError?("Failed to bookmark post. Please try again.")
             #if DEBUG
             print("[FeedSocialActions] Toggle bookmark error: \(error)")

@@ -16,6 +16,7 @@ use crate::rest_api::search::{
     get_suggestions, get_trending_topics, search_all, search_content, search_hashtags,
     search_users_full,
 };
+use crate::rest_api::devices::{get_current_device, list_devices, logout_device};
 use crate::rest_api::settings::{get_settings, update_settings};
 use crate::rest_api::social_likes::{
     batch_check_bookmarked, batch_check_comment_liked, check_bookmarked, check_comment_liked,
@@ -774,6 +775,10 @@ async fn main() -> std::io::Result<()> {
             // ✅ User Settings API
             .route("/api/v2/settings", web::get().to(get_settings))
             .route("/api/v2/settings", web::put().to(update_settings))
+            // ✅ Device Management API
+            .route("/api/v2/devices", web::get().to(list_devices))
+            .route("/api/v2/devices/current", web::get().to(get_current_device))
+            .route("/api/v2/devices/logout", web::post().to(logout_device))
             // ✅ Account Management API (Multi-account & Alias)
             .route(
                 "/api/v2/accounts",

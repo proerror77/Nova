@@ -18,6 +18,7 @@ pub mod calls; // Video/Voice call proxy to realtime-chat-service
 pub mod channels;
 pub mod chat;
 pub mod content;
+pub mod devices;
 pub mod feed;
 pub mod graph;
 pub mod identity;
