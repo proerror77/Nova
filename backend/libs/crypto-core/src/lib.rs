@@ -15,7 +15,7 @@ pub enum CryptoError {
 
 pub fn generate_nonce() -> [u8; 24] {
     let mut nonce = [0u8; 24];
-    rand::rng().fill_bytes(&mut nonce);
+    rand::thread_rng().fill_bytes(&mut nonce);
     nonce
 }
 
