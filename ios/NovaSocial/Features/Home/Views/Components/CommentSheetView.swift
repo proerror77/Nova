@@ -48,7 +48,7 @@ struct CommentSheetView: View {
     var onCommentCountUpdated: ((String, Int) -> Void)?  // 评论数量同步回调 (postId, actualCount)
     @State private var commentText = ""
     @State private var comments: [SocialComment] = []
-    @State private var isLoading = true  // Start with loading state to show spinner on first open
+    @State private var isLoading = true
     @State private var isSubmitting = false
     @State private var error: String?
     @State private var totalCount = 0
@@ -80,47 +80,56 @@ struct CommentSheetView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Comments List
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: DesignTokens.spacing16) {
-                        if isLoading {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                        } else if let error = error {
-                            VStack(spacing: DesignTokens.spacing12) {
-                                Image(systemName: "exclamationmark.triangle")
-                                    .font(.system(size: 40))
-                                    .foregroundColor(.orange)
-                                Text(error)
-                                    .font(.system(size: DesignTokens.fontMedium))
-                                    .foregroundColor(DesignTokens.textSecondary)
-                                    .multilineTextAlignment(.center)
-                                Button("Retry") {
-                                    Task { await loadComments() }
-                                }
-                                .foregroundColor(DesignTokens.accentColor)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 40)
-                        } else if comments.isEmpty {
-                            VStack(spacing: DesignTokens.spacing12) {
-                                Image(systemName: "bubble.left.and.bubble.right")
-                                    .font(.system(size: 40))
-                                    .foregroundColor(DesignTokens.textMuted)
-                                Text("No comments yet")
-                                    .font(.system(size: DesignTokens.fontLarge))
-                                    .foregroundColor(DesignTokens.textSecondary)
-                                Text("Be the first to comment!")
-                                    .font(.system(size: DesignTokens.fontMedium))
-                                    .foregroundColor(DesignTokens.textMuted)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 40)
-                        } else {
+                // Content area with loading/error/empty/comments states
+                if isLoading {
+                    // Loading State - centered in available space
+                    Spacer()
+                    ProgressView()
+                        .scaleEffect(1.2)
+                    Spacer()
+                } else if let error = error {
+                    // Error State
+                    Spacer()
+                    VStack(spacing: DesignTokens.spacing12) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 40.f))
+                            .foregroundColor(.orange)
+                        Text(error)
+                            .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
+                            .foregroundColor(DesignTokens.textSecondary)
+                            .multilineTextAlignment(.center)
+                        Button("Retry") {
+                            Task { await loadComments() }
+                        }
+                        .foregroundColor(DesignTokens.accentColor)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                    Spacer()
+                } else if comments.isEmpty {
+                    // Empty State
+                    Spacer()
+                    VStack(spacing: DesignTokens.spacing12) {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.system(size: 40.f))
+                            .foregroundColor(DesignTokens.textMuted)
+                        Text("No comments yet")
+                            .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontLarge))
+                            .foregroundColor(DesignTokens.textSecondary)
+                        Text("Be the first to comment!")
+                            .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
+                            .foregroundColor(DesignTokens.textMuted)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                    Spacer()
+                } else {
+                    // Comments List
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: DesignTokens.spacing16) {
                             // Comment count header
                             Text("\(totalCount) comments")
-                                .font(.system(size: DesignTokens.fontBody, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontBody))
                                 .foregroundColor(DesignTokens.textSecondary)
                                 .padding(.bottom, DesignTokens.spacing8)
 
@@ -167,28 +176,38 @@ struct CommentSheetView: View {
                                 }
                             }
                         }
+                        .padding()
                     }
-                    .padding()
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
                 }
 
                 Divider()
 
                 // Comment Input
                 HStack(spacing: DesignTokens.spacing12) {
-                    // 显示当前用户真实头像 (IG/小红书风格) - 使用带缓存的 AvatarView
-                    AvatarView(
-                        image: nil,
-                        url: authManager.currentUser?.avatarUrl,
-                        size: 36,
-                        name: authManager.currentUser?.displayName
-                    )
+                    // 显示当前用户真实头像 (IG/小红书风格)
+                    if let avatarUrl = authManager.currentUser?.avatarUrl, let url = URL(string: avatarUrl) {
+                        AsyncImage(url: url) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        } placeholder: {
+                            Circle()
+                                .fill(DesignTokens.avatarPlaceholder)
+                        }
+                        .frame(width: 36, height: 36)
+                        .clipShape(Circle())
+                    } else {
+                        Circle()
+                            .fill(DesignTokens.avatarPlaceholder)
+                            .frame(width: 36, height: 36)
+                    }
 
                     TextField("Add a comment...", text: $commentText)
-                        .font(.system(size: DesignTokens.fontMedium))
+                        .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
                         .textFieldStyle(.plain)
                         .disabled(isSubmitting)
 
@@ -212,7 +231,6 @@ struct CommentSheetView: View {
                 .padding(.vertical, DesignTokens.spacing12)
                 .background(DesignTokens.cardBackground)
             }
-            .background(Color(.systemBackground))
             .navigationTitle("Comments")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -423,29 +441,44 @@ struct SocialCommentRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: DesignTokens.spacing12) {
-            // Avatar (点击跳转用户主页) - 使用带缓存的 AvatarView
-            AvatarView(
-                image: nil,
-                url: comment.authorAvatarUrl,
-                size: DesignTokens.avatarSmall,
-                name: comment.displayAuthorName
-            )
-            .onTapGesture {
-                onAvatarTapped?(comment.userId)
+            // Avatar (点击跳转用户主页)
+            if let avatarUrl = comment.authorAvatarUrl, let url = URL(string: avatarUrl) {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Circle()
+                        .fill(DesignTokens.avatarPlaceholder)
+                }
+                .frame(width: DesignTokens.avatarSmall, height: DesignTokens.avatarSmall)
+                .clipShape(Circle())
+                .onTapGesture {
+                    onAvatarTapped?(comment.userId)
+                }
+                .accessibilityLabel("View \(comment.displayAuthorName)'s profile")
+                .accessibilityHint("Double tap to view profile")
+            } else {
+                Circle()
+                    .fill(DesignTokens.avatarPlaceholder)
+                    .frame(width: DesignTokens.avatarSmall, height: DesignTokens.avatarSmall)
+                    .onTapGesture {
+                        onAvatarTapped?(comment.userId)
+                    }
+                    .accessibilityLabel("View \(comment.displayAuthorName)'s profile")
+                    .accessibilityHint("Double tap to view profile")
             }
-            .accessibilityLabel("View \(comment.displayAuthorName)'s profile")
-            .accessibilityHint("Double tap to view profile")
 
             VStack(alignment: .leading, spacing: DesignTokens.spacing4) {
                 // 内联格式: 用户名 + 评论内容在同一行 (IG/小红书风格)
                 // 使用 Text 连接以支持 @mention 高亮
                 (
                     Text(comment.displayAuthorName)
-                        .font(.system(size: DesignTokens.fontMedium, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: DesignTokens.fontMedium))
                         .foregroundColor(DesignTokens.textSecondary)
                     + Text(" ")
                     + parseCommentText(comment.content)
-                        .font(.system(size: DesignTokens.fontMedium))
+                        .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
                         .foregroundColor(DesignTokens.textPrimary)
                 )
                 .fixedSize(horizontal: false, vertical: true)
@@ -457,12 +490,12 @@ struct SocialCommentRow: View {
                 // 时间戳和回复按钮
                 HStack(spacing: 12) {
                     Text(comment.createdDate.timeAgoDisplay())
-                        .font(.system(size: DesignTokens.fontSmall))
+                        .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontSmall))
                         .foregroundColor(DesignTokens.textSecondary)
                         .accessibilityLabel("Posted \(comment.createdDate.timeAgoDisplay())")
 
                     Text("Reply")
-                        .font(.system(size: DesignTokens.fontSmall, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontSmall))
                         .foregroundColor(DesignTokens.textSecondary)
                         .accessibilityLabel("Reply to comment")
                         .accessibilityHint("Double tap to reply")
@@ -482,14 +515,14 @@ struct SocialCommentRow: View {
                             .frame(width: 14, height: 14)
                     } else {
                         Image(systemName: isLiked ? "heart.fill" : "heart")
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(isLiked ? .red : DesignTokens.textSecondary)
                             .scaleEffect(isLiked ? 1.1 : 1.0)
                     }
 
                     if likeCount > 0 {
                         Text("\(likeCount)")
-                            .font(.system(size: 10))
+                            .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                             .foregroundColor(DesignTokens.textSecondary)
                     }
                 }
@@ -633,19 +666,19 @@ struct DeleteCommentConfirmation: View {
             VStack(spacing: 0) {
                 // 图标
                 Image(systemName: "trash.circle.fill")
-                    .font(.system(size: 48))
+                    .font(.system(size: 48.f))
                     .foregroundStyle(.white, .red)
                     .padding(.top, 24)
 
                 // 标题
                 Text("Delete Comment?")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
                     .foregroundColor(.primary)
                     .padding(.top, 16)
 
                 // 描述
                 Text("This comment will be permanently deleted and cannot be recovered.")
-                    .font(.system(size: 14))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
@@ -659,7 +692,7 @@ struct DeleteCommentConfirmation: View {
                         onCancel()
                     } label: {
                         Text("Cancel")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                             .foregroundColor(.primary)
                             .frame(maxWidth: .infinity)
                             .frame(height: 44)
@@ -679,7 +712,7 @@ struct DeleteCommentConfirmation: View {
                                     .scaleEffect(0.8)
                             }
                             Text(isDeleting ? "Deleting..." : "Delete")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                         }
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
@@ -761,7 +794,7 @@ struct NestedRepliesView: View {
                             .frame(width: 20, height: 1)
 
                         Text(isExpanded ? "Hide replies" : "View \(replies.count - maxCollapsedReplies) more \(replies.count - maxCollapsedReplies == 1 ? "reply" : "replies")")
-                            .font(.system(size: DesignTokens.fontSmall, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontSmall))
                             .foregroundColor(DesignTokens.textSecondary)
                     }
                 }

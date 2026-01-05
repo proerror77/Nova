@@ -63,7 +63,6 @@ struct HomeView: View {
     @State private var showSearch = false
     @State private var showNotification = false
     @State private var showPhotoOptions = false
-    @State private var showComments = false
     @State private var selectedPostForComment: FeedPost?
     @State private var showPhotoPicker = false  // Multi-photo picker
     @State private var selectedPhotos: [PhotosPickerItem] = []  // PhotosPicker selection
@@ -171,26 +170,22 @@ struct HomeView: View {
         .sheet(isPresented: $showReportView) {
             ReportModal(isPresented: $showReportView, showThankYouView: $showThankYouView)
         }
-        .sheet(isPresented: $showComments) {
-            if let post = selectedPostForComment {
-                CommentSheetView(
-                    post: post,
-                    isPresented: $showComments,
-                    onAvatarTapped: { userId in
-                        selectedUserId = userId
-                        showUserProfile = true
-                    },
-                    onCommentCountUpdated: { postId, actualCount in
-                        feedViewModel.updateCommentCount(postId: postId, count: actualCount)
-                    }
-                )
-            } else {
-                // Fallback: auto-dismiss if post is nil to prevent blank sheet
-                Color.clear
-                    .onAppear {
-                        showComments = false
-                    }
-            }
+        .sheet(item: $selectedPostForComment) { post in
+            CommentSheetView(
+                post: post,
+                isPresented: Binding(
+                    get: { selectedPostForComment != nil },
+                    set: { if !$0 { selectedPostForComment = nil } }
+                ),
+                onAvatarTapped: { userId in
+                    selectedPostForComment = nil
+                    selectedUserId = userId
+                    showUserProfile = true
+                },
+                onCommentCountUpdated: { postId, actualCount in
+                    feedViewModel.updateCommentCount(postId: postId, count: actualCount)
+                }
+            )
         }
         .fullScreenCover(isPresented: $showUserProfile) {
             if let userId = selectedUserId {
@@ -403,7 +398,6 @@ struct HomeView: View {
                                                 onLike: { Task { await feedViewModel.toggleLike(postId: post.id) } },
                                                 onComment: {
                                                     selectedPostForComment = post
-                                                    showComments = true
                                                 },
                                                 onShare: { Task { await feedViewModel.sharePost(postId: post.id) } },
                                                 onBookmark: { Task { await feedViewModel.toggleBookmark(postId: post.id) } }
