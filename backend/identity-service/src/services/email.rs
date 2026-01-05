@@ -4,7 +4,7 @@ use crate::error::{IdentityError, Result};
 use lettre::message::{header, Mailbox, Message};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric, Rng};
 use std::sync::Arc;
 use tracing::{info, warn};
 

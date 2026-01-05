@@ -1,6 +1,6 @@
 use crate::error::{IdentityError, Result};
 use chrono::{DateTime, Duration, Utc};
-use rand::distributions::Alphanumeric;
+use rand::distr::Alphanumeric;
 use rand::Rng;
 use sqlx::PgPool;
 use uuid::Uuid;

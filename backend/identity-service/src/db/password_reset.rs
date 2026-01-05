@@ -1,7 +1,7 @@
 /// Password reset database operations
 use crate::error::{IdentityError, Result};
 use chrono::{DateTime, Duration, Utc};
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric, Rng};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use uuid::Uuid;
