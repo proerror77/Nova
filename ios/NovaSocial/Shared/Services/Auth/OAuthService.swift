@@ -85,6 +85,7 @@ class OAuthService: NSObject {
     ///   - provider: OAuth provider (Google or Apple)
     ///   - inviteCode: Optional invite code for new user registration
     /// - Returns: OAuth start response with authorization URL
+    @MainActor
     func startOAuthFlow(provider: OAuthProvider, inviteCode: String? = nil) async throws -> OAuthStartResponse {
         let redirectUri = getRedirectUri(for: provider)
 
@@ -93,8 +94,17 @@ class OAuthService: NSObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
+        // Get device information for session tracking
+        let deviceInfo = getDeviceInfo()
+
         var body: [String: Any] = [
-            "redirect_uri": redirectUri
+            "redirect_uri": redirectUri,
+            // Device info for session tracking (stored with OAuth state, used on callback)
+            "device_id": deviceInfo.deviceId ?? "",
+            "device_name": deviceInfo.deviceName,
+            "device_type": deviceInfo.deviceType,
+            "os_version": deviceInfo.osVersion,
+            "user_agent": deviceInfo.userAgent
         ]
 
         // Add invite code if provided
