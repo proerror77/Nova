@@ -472,8 +472,21 @@ struct HomeView: View {
                                         Spacer()
                                     }
                                     .padding()
+                                } else if !feedViewModel.hasMore && !feedViewModel.posts.isEmpty {
+                                    // MARK: - No More Content Indicator
+                                    HStack {
+                                        Spacer()
+                                        Text("— No more posts —")
+                                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                                            .foregroundColor(DesignTokens.textMuted)
+                                        Spacer()
+                                    }
+                                    .padding(.vertical, 16)
                                 }
 
+                                // MARK: - Bottom Padding for TabBar (fixes #252)
+                                Color.clear
+                                    .frame(height: 80.h)  // TabBar height (72) + extra padding
                             }
                             .background(DesignTokens.backgroundColor)
                         }
