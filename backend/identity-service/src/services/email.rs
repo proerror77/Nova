@@ -141,7 +141,7 @@ impl EmailService {
     ///
     /// Returns 32-character alphanumeric code for manual verification flows.
     pub fn generate_backup_code(&self) -> String {
-        rand::thread_rng()
+        rand::rng()
             .sample_iter(&Alphanumeric)
             .take(32)
             .map(char::from)

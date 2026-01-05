@@ -300,7 +300,7 @@ pub async fn update_post_metadata(
 #[allow(dead_code)]
 pub async fn create_test_upload_session(pool: &PgPool, post_id: Uuid) -> String {
     use rand::Rng;
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let token_bytes: [u8; 32] = rng.gen();
     let upload_token = hex::encode(token_bytes);
 

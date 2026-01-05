@@ -80,7 +80,7 @@ where
 
 fn calculate_backoff(base: Duration, jitter: bool) -> Duration {
     if jitter {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let jitter_factor = 1.0 + rng.gen_range(-0.3..0.3); // ±30%
         Duration::from_millis((base.as_millis() as f64 * jitter_factor) as u64)
     } else {
