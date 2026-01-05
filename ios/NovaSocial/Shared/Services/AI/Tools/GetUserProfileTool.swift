@@ -15,7 +15,7 @@ struct GetUserProfileArguments: Sendable {
 
 // MARK: - Get User Profile Tool
 
-/// Tool for looking up user profiles on the ICERED platform
+/// Tool for looking up user profiles on the Icered platform
 @available(iOS 26.0, *)
 struct GetUserProfileTool: Tool {
 
@@ -23,7 +23,7 @@ struct GetUserProfileTool: Tool {
 
     let name = "get_user_profile"
     let description = """
-        Look up a user's profile information on ICERED by their username.
+        Look up a user's profile information on Icered by their username.
         Use this tool when the user asks about a specific person, wants to know about a creator,
         or needs information about someone on the platform.
         Returns the user's display name, verification status, and basic profile information.
@@ -67,7 +67,7 @@ struct GetUserProfileTool: Tool {
 
             // Find exact or close match
             guard let firstResult = results.first else {
-                return "User @\(username) was not found on ICERED."
+                return "User @\(username) was not found on Icered."
             }
 
             // Check for exact match

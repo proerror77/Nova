@@ -28,7 +28,7 @@ struct FeedRecommendationsTool: Tool {
     let description = """
         Get personalized recommendations for creators to follow, posts to engage with, or channels to join.
         Use this tool when the user asks for suggestions, wants to discover new content or creators,
-        or needs help finding interesting things on ICERED.
+        or needs help finding interesting things on Icered.
         Returns a list of personalized recommendations based on the user's interests.
         """
 

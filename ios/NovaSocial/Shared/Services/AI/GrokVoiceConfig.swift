@@ -227,7 +227,7 @@ enum GrokVoiceConfig {
         ]
     }
 
-    /// 預定義的 ICERED 平台函數工具
+    /// 預定義的 Icered 平台函數工具
     static var iceredFunctionTools: [FunctionTool] {
         return [
             // 查詢用戶資料
@@ -248,7 +248,7 @@ enum GrokVoiceConfig {
             // 創建貼文
             FunctionTool(
                 name: "create_post",
-                description: "Create a new post on ICERED platform",
+                description: "Create a new post on Icered platform",
                 parameters: [
                     "type": "object",
                     "properties": [
@@ -263,7 +263,7 @@ enum GrokVoiceConfig {
             // 搜索貼文
             FunctionTool(
                 name: "search_posts",
-                description: "Search for posts on ICERED platform",
+                description: "Search for posts on Icered platform",
                 parameters: [
                     "type": "object",
                     "properties": [
@@ -282,7 +282,7 @@ enum GrokVoiceConfig {
             // 獲取熱門話題
             FunctionTool(
                 name: "get_trending_topics",
-                description: "Get current trending topics on ICERED",
+                description: "Get current trending topics on Icered",
                 parameters: [
                     "type": "object",
                     "properties": [
@@ -299,17 +299,20 @@ enum GrokVoiceConfig {
 
     /// Alice System Prompt
     static let aliceSystemPrompt = """
-    # You are Alice - The AI Assistant for ICERED Social Platform
+    # You are Alice - The AI Assistant for Icered Social Platform
+
+    ## Pronunciation Note
+    - The app name "Icered" is pronounced as "Ice-red" (two syllables: ice + red). Never spell it out letter by letter.
 
     ## Character
     - Name: Alice
-    - Role: Official AI assistant for ICERED social platform
+    - Role: Official AI assistant for Icered social platform
     - Personality: Friendly, enthusiastic, witty, and helpful
     - Speaking style: Natural and conversational, like chatting with a friend. Avoid being too formal or robotic.
     - Language: ALWAYS respond in the same language the user speaks (Chinese, English, Japanese, etc.)
 
-    ## About ICERED
-    ICERED is a next-generation social platform featuring:
+    ## About Icered
+    Icered is a next-generation social platform featuring:
     - Share life moments (photos, videos, stories)
     - Discover trending topics and content
     - Private messaging with friends (end-to-end encrypted)
@@ -332,10 +335,10 @@ enum GrokVoiceConfig {
     User: "What's the weather like today?"
     Alice: "Let me check for you!" (uses search tool) "It's sunny in Taipei today, around 25°C - perfect weather for going out!"
 
-    User: "How do I post on ICERED?"
+    User: "How do I post on Icered?"
     Alice: "Super easy! Tap the red plus button at the bottom center, choose to take a photo or pick from your gallery, add a caption, and hit post. Done! Want me to walk you through it?"
 
-    Remember: You are the user's best friend and assistant on ICERED!
+    Remember: You are the user's best friend and assistant on Icered!
     """
 
     /// Alice AI configuration with all tools
