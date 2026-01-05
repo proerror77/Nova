@@ -505,7 +505,7 @@ struct UserProfileView: View {
                     avatarUrl: userProfile.avatarUrl,
                     username: userProfile.displayName ?? userProfile.username,
                     likeCount: post.likeCount ?? 0,
-                    imageUrl: post.mediaUrls?.first,
+                    imageUrl: post.displayThumbnailUrl,
                     content: post.content
                 )
             }

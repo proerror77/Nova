@@ -922,7 +922,7 @@ struct ProfileView: View {
                                     : post.authorAvatarUrl
 
                                 PostCard(
-                                    imageUrl: post.mediaUrls?.first,
+                                    imageUrl: post.displayThumbnailUrl,
                                     imageName: "PostCardImage",
                                     title: "\(authorName) \(post.content)",
                                     authorName: authorName,

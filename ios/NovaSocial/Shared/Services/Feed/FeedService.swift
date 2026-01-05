@@ -477,6 +477,16 @@ enum FeedMediaType: String, Codable {
             return .none
         }
 
+        // Special case: Video post with thumbnail
+        // Pattern: [videoUrl, thumbnailUrl] where first is video and second is image
+        // This should be treated as "video", not "mixed"
+        if urls.count == 2 && hasVideo && hasImage {
+            let firstType = FeedMediaType.from(url: urls[0])
+            if firstType == .video {
+                return .video  // Video + thumbnail pattern
+            }
+        }
+
         if hasVideo && hasImage {
             return .mixed
         } else if hasVideo {
@@ -532,6 +542,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
     /// Prefer thumbnails for list performance; fall back to originals when missing.
     /// Normalizes relative URLs and filters out invalid URLs (e.g., "text-content-xxx" placeholders).
     /// If thumbnails are present but unusable, falls back to original media URLs.
+    /// For video posts with [videoUrl, thumbnailUrl] pattern, returns only the video URL.
     var displayMediaUrls: [String] {
         func normalize(_ url: String) -> String? {
             let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -566,7 +577,22 @@ struct FeedPost: Identifiable, Codable, Equatable {
             return normalizedThumbnails
         }
 
-        let normalizedMedia = mediaUrls.compactMap(normalize)
+        var normalizedMedia = mediaUrls.compactMap(normalize)
+
+        // For video posts with [videoUrl, thumbnailUrl] pattern,
+        // only return the video URL to avoid showing thumbnail as duplicate content
+        if mediaType == .video && normalizedMedia.count == 2 {
+            let firstUrl = normalizedMedia[0].lowercased()
+            let isFirstVideo = firstUrl.contains(".mp4") ||
+                               firstUrl.contains(".m4v") ||
+                               firstUrl.contains(".mov") ||
+                               firstUrl.contains(".webm")
+            if isFirstVideo {
+                // Only return the video URL, not the thumbnail
+                normalizedMedia = [normalizedMedia[0]]
+            }
+        }
+
         #if DEBUG
         if normalizedThumbnails.isEmpty, !thumbnailUrls.isEmpty {
             print("[Feed] ⚠️ Thumbnails unusable for post \(id.prefix(8)): thumbnailUrls=\(thumbnailUrls)")
