@@ -17,17 +17,86 @@
 //! Use `E2eeMessageService` with `MegolmService` for encryption_version=2 messages.
 
 use crate::models::message::Message as MessageRow;
+use crate::routes::messages::{MessageAttachment, MessageDto, MessageReaction};
 use crate::services::conversation_service::PrivacyMode;
 #[allow(deprecated)]
 use crate::services::encryption::EncryptionService;
 use chrono::Utc;
 use deadpool_postgres::Pool;
+use matrix_sdk::ruma::OwnedRoomId;
 use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct MessageService;
 
+/// Result of preparing a Matrix room for message sending
+struct MatrixRoomContext {
+    room_id: OwnedRoomId,
+}
+
 impl MessageService {
+    /// Extracts filename from a URL, handling query parameters and fragments.
+    /// Returns default_name if extraction fails.
+    fn extract_filename_from_url<'a>(url: &'a str, default_name: &'a str) -> &'a str {
+        url.split('/')
+            .next_back()
+            .unwrap_or(default_name)
+            .split('?')
+            .next()
+            .unwrap_or(default_name)
+            .split('#')
+            .next()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(default_name)
+    }
+
+    /// Prepares a Matrix room for sending messages.
+    /// Gets conversation participants, creates/gets room, and saves mapping.
+    /// Returns None if any step fails (errors are logged).
+    async fn prepare_matrix_room(
+        db: &Pool,
+        matrix: &super::matrix_client::MatrixClient,
+        conversation_id: Uuid,
+    ) -> Option<MatrixRoomContext> {
+        // Get conversation participants for room creation
+        let participants = match super::matrix_db::get_conversation_participants(db, conversation_id).await {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    conversation_id = %conversation_id,
+                    "Failed to get conversation participants for Matrix room"
+                );
+                return None;
+            }
+        };
+
+        // Get or create Matrix room
+        let room_id = match matrix.get_or_create_room(conversation_id, &participants).await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    conversation_id = %conversation_id,
+                    "Failed to get/create Matrix room"
+                );
+                return None;
+            }
+        };
+
+        // Save room mapping to DB
+        if let Err(e) = super::matrix_db::save_room_mapping(db, conversation_id, &room_id).await {
+            tracing::warn!(
+                error = %e,
+                conversation_id = %conversation_id,
+                room_id = %room_id,
+                "Failed to save room mapping to DB"
+            );
+        }
+
+        Some(MatrixRoomContext { room_id })
+    }
+
     async fn fetch_conversation_privacy(
         db: &Pool,
         conversation_id: Uuid,
@@ -252,75 +321,41 @@ impl MessageService {
 
         // 2. Optionally send to Matrix (best-effort, non-blocking)
         if let Some(matrix) = matrix_client {
-            // Get conversation participants for room creation
-            let participants = match super::matrix_db::get_conversation_participants(db, conversation_id).await {
-                Ok(p) => p,
-                Err(e) => {
-                    tracing::warn!(
-                        error = %e,
-                        conversation_id = %conversation_id,
-                        "Failed to get conversation participants for Matrix room, skipping Matrix send"
-                    );
-                    return Ok(message);
-                }
-            };
+            if let Some(ctx) = Self::prepare_matrix_room(db, &matrix, conversation_id).await {
+                // Send message to Matrix
+                let content = String::from_utf8_lossy(plaintext).to_string();
+                match matrix.send_message(conversation_id, ctx.room_id.as_ref(), &content).await {
+                    Ok(event_id) => {
+                        tracing::info!(
+                            message_id = %message.id,
+                            event_id = %event_id,
+                            room_id = %ctx.room_id,
+                            "Message sent to Matrix"
+                        );
 
-            // Get or create Matrix room
-            let room_id = match matrix.get_or_create_room(conversation_id, &participants).await {
-                Ok(r) => r,
-                Err(e) => {
-                    tracing::error!(
-                        error = %e,
-                        conversation_id = %conversation_id,
-                        "Failed to get/create Matrix room, message saved to DB only"
-                    );
-                    return Ok(message);
-                }
-            };
-
-            // Save room mapping to DB
-            if let Err(e) = super::matrix_db::save_room_mapping(db, conversation_id, &room_id).await {
-                tracing::warn!(
-                    error = %e,
-                    conversation_id = %conversation_id,
-                    room_id = %room_id,
-                    "Failed to save room mapping to DB"
-                );
-            }
-
-            // Send message to Matrix
-            let content = String::from_utf8_lossy(plaintext).to_string();
-            match matrix.send_message(conversation_id, &room_id, &content).await {
-                Ok(event_id) => {
-                    tracing::info!(
-                        message_id = %message.id,
-                        event_id = %event_id,
-                        room_id = %room_id,
-                        "Message sent to Matrix"
-                    );
-
-                    // Update message with Matrix event_id
-                    if let Err(e) = super::matrix_db::update_message_matrix_event_id(
-                        db,
-                        message.id,
-                        &event_id,
-                    )
-                    .await
-                    {
-                        tracing::warn!(
+                        // Update message with Matrix event_id
+                        if let Err(e) = super::matrix_db::update_message_matrix_event_id(
+                            db,
+                            message.id,
+                            &event_id,
+                        )
+                        .await
+                        {
+                            tracing::warn!(
+                                error = %e,
+                                message_id = %message.id,
+                                "Failed to update message with matrix_event_id"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!(
                             error = %e,
                             message_id = %message.id,
-                            "Failed to update message with matrix_event_id"
+                            room_id = %ctx.room_id,
+                            "Failed to send message to Matrix, message saved to DB only"
                         );
                     }
-                }
-                Err(e) => {
-                    tracing::error!(
-                        error = %e,
-                        message_id = %message.id,
-                        room_id = %room_id,
-                        "Failed to send message to Matrix, message saved to DB only"
-                    );
                 }
             }
         }
@@ -358,81 +393,46 @@ impl MessageService {
 
         // 2. Optionally send to Matrix (best-effort, non-blocking)
         if let Some(matrix) = matrix_client {
-            // Get conversation participants for room creation
-            let participants = match super::matrix_db::get_conversation_participants(db, conversation_id).await {
-                Ok(p) => p,
-                Err(e) => {
-                    tracing::warn!(
-                        error = %e,
-                        conversation_id = %conversation_id,
-                        "Failed to get conversation participants for Matrix room, skipping Matrix send"
-                    );
-                    return Ok((message_id, seq));
-                }
-            };
-
-            // Get or create Matrix room
-            let room_id = match matrix.get_or_create_room(conversation_id, &participants).await {
-                Ok(r) => r,
-                Err(e) => {
-                    tracing::error!(
-                        error = %e,
-                        conversation_id = %conversation_id,
-                        "Failed to get/create Matrix room, audio message saved to DB only"
-                    );
-                    return Ok((message_id, seq));
-                }
-            };
-
-            // Save room mapping to DB
-            if let Err(e) = super::matrix_db::save_room_mapping(db, conversation_id, &room_id).await {
-                tracing::warn!(
-                    error = %e,
-                    conversation_id = %conversation_id,
-                    room_id = %room_id,
-                    "Failed to save room mapping to DB"
-                );
-            }
-
-            // Send audio as media to Matrix
-            // Use audio_url as the media URL, extract filename
-            let filename = audio_url.split('/').next_back().unwrap_or("audio.opus");
-            // Set upload_to_matrix to true to enable full Matrix media upload
-            // This uploads the media to Matrix server and sends as proper media message
-            match matrix
-                .send_media(conversation_id, &room_id, audio_url, "audio", filename, true)
-                .await
-            {
-                Ok(event_id) => {
-                    tracing::info!(
-                        message_id = %message_id,
-                        event_id = %event_id,
-                        room_id = %room_id,
-                        "Audio message sent to Matrix"
-                    );
-
-                    // Update message with Matrix event_id
-                    if let Err(e) = super::matrix_db::update_message_matrix_event_id(
-                        db,
-                        message_id,
-                        &event_id,
-                    )
+            if let Some(ctx) = Self::prepare_matrix_room(db, &matrix, conversation_id).await {
+                // Send audio as media to Matrix
+                let filename = Self::extract_filename_from_url(audio_url, "audio.opus");
+                // Set upload_to_matrix to true to enable full Matrix media upload
+                // This uploads the media to Matrix server and sends as proper media message
+                match matrix
+                    .send_media(conversation_id, ctx.room_id.as_ref(), audio_url, "audio", filename, true)
                     .await
-                    {
-                        tracing::warn!(
+                {
+                    Ok(event_id) => {
+                        tracing::info!(
+                            message_id = %message_id,
+                            event_id = %event_id,
+                            room_id = %ctx.room_id,
+                            "Audio message sent to Matrix"
+                        );
+
+                        // Update message with Matrix event_id
+                        if let Err(e) = super::matrix_db::update_message_matrix_event_id(
+                            db,
+                            message_id,
+                            &event_id,
+                        )
+                        .await
+                        {
+                            tracing::warn!(
+                                error = %e,
+                                message_id = %message_id,
+                                "Failed to update audio message with matrix_event_id"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!(
                             error = %e,
                             message_id = %message_id,
-                            "Failed to update audio message with matrix_event_id"
+                            room_id = %ctx.room_id,
+                            "Failed to send audio to Matrix, message saved to DB only"
                         );
                     }
-                }
-                Err(e) => {
-                    tracing::error!(
-                        error = %e,
-                        message_id = %message_id,
-                        room_id = %room_id,
-                        "Failed to send audio to Matrix, message saved to DB only"
-                    );
                 }
             }
         }
@@ -547,7 +547,7 @@ impl MessageService {
     pub async fn get_message_history_db(
         db: &Pool,
         conversation_id: Uuid,
-    ) -> Result<Vec<super::super::routes::messages::MessageDto>, crate::error::AppError> {
+    ) -> Result<Vec<MessageDto>, crate::error::AppError> {
         let client = db.get().await.map_err(|e| {
             crate::error::AppError::StartServer(format!("get client: {e}"))
         })?;
@@ -582,7 +582,7 @@ impl MessageService {
             let version_number: i64 = r.get("version_number");
             let content: String = r.get("content");
 
-            out.push(super::super::routes::messages::MessageDto {
+            out.push(MessageDto {
                 id,
                 sender_id,
                 sequence_number: seq,
@@ -611,8 +611,7 @@ impl MessageService {
         limit: i64,
         offset: i64,
         include_recalled: bool,
-    ) -> Result<Vec<super::super::routes::messages::MessageDto>, crate::error::AppError> {
-        use super::super::routes::messages::{MessageAttachment, MessageDto, MessageReaction};
+    ) -> Result<Vec<MessageDto>, crate::error::AppError> {
         use std::collections::HashMap;
 
         let limit = limit.min(200); // Cap at 200
@@ -819,7 +818,7 @@ impl MessageService {
         limit: i64,
         offset: i64,
         sort_by: Option<&str>,
-    ) -> Result<(Vec<super::super::routes::messages::MessageDto>, i64), crate::error::AppError>
+    ) -> Result<(Vec<MessageDto>, i64), crate::error::AppError>
     {
         let limit = limit.min(500); // Cap at 500 to prevent memory issues
         let sort_by = sort_by.unwrap_or("recent");
@@ -853,23 +852,11 @@ impl MessageService {
         let total: i64 = count_result.get("total");
 
         // Build sort clause based on sort_by parameter
-        let (sort_clause, search_condition) = match sort_by {
-            "oldest" => (
-                "m.created_at ASC",
-                "m.content IS NOT NULL AND m.content_tsv @@ plainto_tsquery('english', $2)",
-            ),
-            "relevance" => (
-                "ts_rank(m.content_tsv, plainto_tsquery('english', $2)) DESC, m.created_at DESC",
-                "m.content IS NOT NULL AND m.content_tsv @@ plainto_tsquery('english', $2)",
-            ),
-            "recent" => (
-                "m.created_at DESC",
-                "m.content IS NOT NULL AND m.content_tsv @@ plainto_tsquery('english', $2)",
-            ),
-            _ => (
-                "m.created_at DESC",
-                "m.content IS NOT NULL AND m.content_tsv @@ plainto_tsquery('english', $2)",
-            ),
+        let search_condition = "m.content IS NOT NULL AND m.content_tsv @@ plainto_tsquery('english', $2)";
+        let sort_clause = match sort_by {
+            "oldest" => "m.created_at ASC",
+            "relevance" => "ts_rank(m.content_tsv, plainto_tsquery('english', $2)) DESC, m.created_at DESC",
+            _ => "m.created_at DESC", // "recent" or default
         };
 
         // Build the query with proper sorting - include all message fields
@@ -903,7 +890,7 @@ impl MessageService {
                 let edited_at: Option<chrono::DateTime<Utc>> = r.get("edited_at");
                 let version_number: i32 = r.get("version_number");
 
-                super::super::routes::messages::MessageDto {
+                MessageDto {
                     id,
                     sender_id,
                     sequence_number: seq,
