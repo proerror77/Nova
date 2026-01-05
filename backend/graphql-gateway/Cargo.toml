@@ -18,7 +18,7 @@ thiserror = { workspace = true }
 
 # GraphQL
 async-graphql = { version = "7.0", features = ["dataloader", "boxed-trait"] }
-async-graphql-actix-web = "7.0"
+async-graphql-actix-web = "7.1"
 
 # Web framework
 actix-web = { workspace = true }
