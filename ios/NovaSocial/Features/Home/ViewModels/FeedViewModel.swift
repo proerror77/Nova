@@ -554,6 +554,26 @@ final class FeedViewModel {
         #endif
     }
 
+    /// Remove a post from the feed (called when post is deleted)
+    /// Issue #243: Ensures UI updates immediately after post deletion
+    func removePost(postId: String) {
+        #if DEBUG
+        print("[Feed] 🗑️ removePost called - postId: \(postId)")
+        #endif
+        guard let index = posts.firstIndex(where: { $0.id == postId }) else {
+            #if DEBUG
+            print("[Feed] ❌ removePost - post not found in array")
+            #endif
+            return
+        }
+        posts.remove(at: index)
+        // Clear cache since array was modified
+        _cachedFeedItems = nil
+        #if DEBUG
+        print("[Feed] ✅ removePost - post removed successfully, cache invalidated")
+        #endif
+    }
+
     private func fetchFeed(algorithm: FeedAlgorithm) async throws -> FeedResponse {
         if isAuthenticated {
             return try await feedService.getFeed(algo: algorithm, limit: 20, cursor: nil, channelId: selectedChannelId)

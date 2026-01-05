@@ -134,6 +134,10 @@ struct HomeView: View {
                         selectedPostForDetail = nil
                         navigateToUserProfile(userId: userId)
                     },
+                    onPostDeleted: {
+                        // Issue #243: Remove deleted post from feed immediately
+                        feedViewModel.removePost(postId: post.id)
+                    },
                     onLikeChanged: { isLiked, likeCount in
                         feedViewModel.updateLikeState(postId: post.id, isLiked: isLiked, likeCount: likeCount)
                     },
