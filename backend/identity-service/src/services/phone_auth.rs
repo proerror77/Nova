@@ -305,7 +305,7 @@ impl PhoneAuthService {
     fn generate_otp(&self) -> String {
         let mut rng = rand::rng();
         (0..OTP_LENGTH)
-            .map(|_| rng.gen_range(0..10).to_string())
+            .map(|_| rng.random_range(0..10).to_string())
             .collect()
     }
 

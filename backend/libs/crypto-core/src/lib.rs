@@ -1,4 +1,4 @@
-use rand::{rngs::OsRng, RngCore};
+use rand::RngCore;
 use std::os::raw::{c_uchar, c_ulong};
 use std::ptr;
 use std::slice;
@@ -15,7 +15,7 @@ pub enum CryptoError {
 
 pub fn generate_nonce() -> [u8; 24] {
     let mut nonce = [0u8; 24];
-    OsRng.fill_bytes(&mut nonce);
+    rand::rng().fill_bytes(&mut nonce);
     nonce
 }
 

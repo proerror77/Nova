@@ -111,7 +111,7 @@ impl TOTPGenerator {
             .map(|_| {
                 (0..8)
                     .map(|_| {
-                        let idx = rng.gen_range(0..10);
+                        let idx = rng.random_range(0..10);
                         (b'0' + idx as u8) as char
                     })
                     .collect()
