@@ -560,6 +560,12 @@ message StartOAuthFlowRequest {
   OAuthProvider provider = 1;       // OAuth provider to authenticate with
   string redirect_uri = 2;          // Client callback URL after OAuth completes
   optional string invite_code = 3;  // Optional invite code for new user registration
+  // Device info for session tracking (stored with state, used on callback)
+  optional string device_id = 4;    // Device UUID (identifierForVendor on iOS)
+  optional string device_name = 5;  // Device name (e.g., "John's iPhone")
+  optional string device_type = 6;  // Device type (e.g., "iOS", "macOS")
+  optional string os_version = 7;   // OS version (e.g., "iOS 18.0")
+  optional string user_agent = 8;   // User agent string
 }
 
 message StartOAuthFlowResponse {

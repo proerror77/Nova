@@ -27,6 +27,17 @@ pub struct StartOAuthRequest {
     pub redirect_uri: String,
     #[serde(default)]
     pub invite_code: Option<String>,
+    // Device info for session tracking
+    #[serde(default)]
+    pub device_id: Option<String>,
+    #[serde(default)]
+    pub device_name: Option<String>,
+    #[serde(default)]
+    pub device_type: Option<String>,
+    #[serde(default)]
+    pub os_version: Option<String>,
+    #[serde(default)]
+    pub user_agent: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -111,6 +122,12 @@ pub async fn start_google_oauth(
         provider: OAuthProvider::OauthProviderGoogle as i32,
         redirect_uri: req.redirect_uri.clone(),
         invite_code: req.invite_code.clone(),
+        // Device info for session tracking
+        device_id: req.device_id.clone(),
+        device_name: req.device_name.clone(),
+        device_type: req.device_type.clone(),
+        os_version: req.os_version.clone(),
+        user_agent: req.user_agent.clone(),
     });
 
     match auth_client.start_o_auth_flow(grpc_request).await {
@@ -292,6 +309,12 @@ pub async fn start_apple_oauth(
         provider: OAuthProvider::OauthProviderApple as i32,
         redirect_uri: req.redirect_uri.clone(),
         invite_code: req.invite_code.clone(),
+        // Device info for session tracking
+        device_id: req.device_id.clone(),
+        device_name: req.device_name.clone(),
+        device_type: req.device_type.clone(),
+        os_version: req.os_version.clone(),
+        user_agent: req.user_agent.clone(),
     });
 
     match auth_client.start_o_auth_flow(grpc_request).await {

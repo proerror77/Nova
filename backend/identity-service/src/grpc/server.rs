@@ -1299,9 +1299,22 @@ impl AuthService for IdentityServiceServer {
         let provider = proto_provider_to_oauth(req.provider())
             .ok_or_else(|| Status::invalid_argument("Invalid or unsupported OAuth provider"))?;
 
+        // Extract device info for session tracking (stored with OAuth state)
+        let device_info = if req.device_id.is_some() || req.device_name.is_some() {
+            Some(crate::services::oauth::OAuthDeviceInfo {
+                device_id: req.device_id,
+                device_name: req.device_name,
+                device_type: req.device_type,
+                os_version: req.os_version,
+                user_agent: req.user_agent,
+            })
+        } else {
+            None
+        };
+
         let result = self
             .oauth
-            .start_flow(provider, &req.redirect_uri)
+            .start_flow(provider, &req.redirect_uri, device_info)
             .await
             .map_err(to_status)?;
 
@@ -1333,6 +1346,68 @@ impl AuthService for IdentityServiceServer {
         // Generate token pair for the user
         let tokens = generate_token_pair(result.user.id, &result.user.email, &result.user.username)
             .map_err(anyhow_to_status)?;
+
+        // Create session for device tracking (if device_id was provided during start_flow)
+        if let Some(ref device_info) = result.device_info {
+            if let Some(ref device_id) = device_info.device_id {
+                if !device_id.is_empty() {
+                    // Determine device type
+                    let device_type = device_info.device_type.as_deref();
+
+                    // Parse OS name and version from os_version field (e.g., "iOS 18.0" -> "iOS", "18.0")
+                    let (os_name, os_version) = if let Some(ref os_ver) = device_info.os_version {
+                        if !os_ver.is_empty() {
+                            let parts: Vec<&str> = os_ver.splitn(2, ' ').collect();
+                            if parts.len() == 2 {
+                                (Some(parts[0]), Some(parts[1]))
+                            } else {
+                                (Some(os_ver.as_str()), None)
+                            }
+                        } else {
+                            (None, None)
+                        }
+                    } else {
+                        (None, None)
+                    };
+
+                    match db::sessions::create_session(
+                        &self.db,
+                        result.user.id,
+                        device_id,
+                        device_info.device_name.as_deref(),
+                        device_type,
+                        os_name,
+                        os_version,
+                        None, // browser_name (not applicable for mobile)
+                        None, // browser_version
+                        None, // ip_address (could be extracted from request metadata)
+                        device_info.user_agent.as_deref(),
+                        None, // location_country
+                        None, // location_city
+                    )
+                    .await
+                    {
+                        Ok(session) => {
+                            info!(
+                                user_id = %result.user.id,
+                                session_id = %session.id,
+                                device_id = %device_id,
+                                "Session created for OAuth device"
+                            );
+                        }
+                        Err(e) => {
+                            // Log error but don't fail the sign-in
+                            tracing::warn!(
+                                user_id = %result.user.id,
+                                device_id = %device_id,
+                                error = %e,
+                                "Failed to create session for OAuth device"
+                            );
+                        }
+                    }
+                }
+            }
+        }
 
         info!(
             user_id = %result.user.id,
