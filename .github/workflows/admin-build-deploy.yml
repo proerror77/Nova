@@ -1,0 +1,374 @@
+name: Admin System - Build & Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - feature/admin-system
+    paths:
+      - 'admin-api/**'
+      - 'admin-web/**'
+      - '.github/workflows/admin-build-deploy.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'admin-api/**'
+      - 'admin-web/**'
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to build'
+        required: true
+        type: choice
+        options:
+          - all
+          - admin-api
+          - admin-web
+      deploy:
+        description: 'Deploy after build'
+        type: boolean
+        default: true
+      environment:
+        description: 'Target environment'
+        type: choice
+        default: staging
+        options:
+          - staging
+          - production
+
+concurrency:
+  group: admin-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GCP_REGION: asia-northeast1
+  GCP_PROJECT_ID: banded-pad-479802-k9
+  REGISTRY: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova
+  NAMESPACE_STAGING: nova-staging
+  NAMESPACE_PROD: nova
+
+jobs:
+  # ========================================
+  # Detect which services changed
+  # ========================================
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      admin-api: ${{ steps.changes.outputs.admin-api }}
+      admin-web: ${{ steps.changes.outputs.admin-web }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for changes
+        id: changes
+        env:
+          SERVICE_INPUT: ${{ inputs.service }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            if [[ "$SERVICE_INPUT" == "all" || "$SERVICE_INPUT" == "admin-api" ]]; then
+              echo "admin-api=true" >> $GITHUB_OUTPUT
+            else
+              echo "admin-api=false" >> $GITHUB_OUTPUT
+            fi
+            if [[ "$SERVICE_INPUT" == "all" || "$SERVICE_INPUT" == "admin-web" ]]; then
+              echo "admin-web=true" >> $GITHUB_OUTPUT
+            else
+              echo "admin-web=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
+
+            if echo "$CHANGED" | grep -q "^admin-api/"; then
+              echo "admin-api=true" >> $GITHUB_OUTPUT
+            else
+              echo "admin-api=false" >> $GITHUB_OUTPUT
+            fi
+
+            if echo "$CHANGED" | grep -q "^admin-web/"; then
+              echo "admin-web=true" >> $GITHUB_OUTPUT
+            else
+              echo "admin-web=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  # ========================================
+  # Build Admin API (Rust)
+  # ========================================
+  build-admin-api:
+    name: Build admin-api
+    needs: detect-changes
+    if: needs.detect-changes.outputs.admin-api == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+
+      - name: Login to Artifact Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.GCP_REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/admin-api
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./admin-api/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha,scope=admin-api
+          cache-to: type=gha,mode=max,scope=admin-api
+
+      - name: Output image
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          SHORT_SHA=$(echo "$COMMIT_SHA" | cut -c1-7)
+          echo "### Admin API Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "- Image: ${{ env.REGISTRY }}/admin-api:${SHORT_SHA}" >> $GITHUB_STEP_SUMMARY
+
+  # ========================================
+  # Build Admin Web (React)
+  # ========================================
+  build-admin-web:
+    name: Build admin-web
+    needs: detect-changes
+    if: needs.detect-changes.outputs.admin-web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+
+      - name: Login to Artifact Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.GCP_REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/admin-web
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./admin-web
+          file: ./admin-web/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha,scope=admin-web
+          cache-to: type=gha,mode=max,scope=admin-web
+          build-args: |
+            VITE_API_URL=/api/v1
+
+      - name: Output image
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          SHORT_SHA=$(echo "$COMMIT_SHA" | cut -c1-7)
+          echo "### Admin Web Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "- Image: ${{ env.REGISTRY }}/admin-web:${SHORT_SHA}" >> $GITHUB_STEP_SUMMARY
+
+  # ========================================
+  # Deploy to Staging
+  # ========================================
+  deploy-staging:
+    name: Deploy to Staging
+    needs: [detect-changes, build-admin-api, build-admin-web]
+    if: |
+      always() &&
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/feature/admin-system' &&
+      (needs.build-admin-api.result == 'success' || needs.build-admin-api.result == 'skipped') &&
+      (needs.build-admin-web.result == 'success' || needs.build-admin-web.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    environment: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: nova-staging-gke
+          location: ${{ env.GCP_REGION }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Deploy admin-api
+        if: needs.detect-changes.outputs.admin-api == 'true'
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          SHORT_SHA=$(echo "$COMMIT_SHA" | cut -c1-7)
+          IMAGE="${{ env.REGISTRY }}/admin-api:${SHORT_SHA}"
+          echo "Deploying admin-api: ${IMAGE}"
+          kubectl set image deployment/admin-api admin-api=${IMAGE} -n ${{ env.NAMESPACE_STAGING }} || \
+            echo "Deployment not found, apply manifests first"
+
+      - name: Deploy admin-web
+        if: needs.detect-changes.outputs.admin-web == 'true'
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          SHORT_SHA=$(echo "$COMMIT_SHA" | cut -c1-7)
+          IMAGE="${{ env.REGISTRY }}/admin-web:${SHORT_SHA}"
+          echo "Deploying admin-web: ${IMAGE}"
+          kubectl set image deployment/admin-web admin-web=${IMAGE} -n ${{ env.NAMESPACE_STAGING }} || \
+            echo "Deployment not found, apply manifests first"
+
+      - name: Wait for rollout
+        env:
+          API_CHANGED: ${{ needs.detect-changes.outputs.admin-api }}
+          WEB_CHANGED: ${{ needs.detect-changes.outputs.admin-web }}
+        run: |
+          if [[ "$API_CHANGED" == "true" ]]; then
+            kubectl rollout status deployment/admin-api -n ${{ env.NAMESPACE_STAGING }} --timeout=300s || true
+          fi
+          if [[ "$WEB_CHANGED" == "true" ]]; then
+            kubectl rollout status deployment/admin-web -n ${{ env.NAMESPACE_STAGING }} --timeout=300s || true
+          fi
+
+      - name: Deployment Summary
+        run: |
+          echo "### Staging Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "Admin UI: https://admin-staging.nova.social" >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -n ${{ env.NAMESPACE_STAGING }} -l "app in (admin-api,admin-web)" >> $GITHUB_STEP_SUMMARY
+
+  # ========================================
+  # Deploy to Production (manual trigger only)
+  # ========================================
+  deploy-production:
+    name: Deploy to Production
+    needs: [detect-changes, build-admin-api, build-admin-web]
+    if: |
+      always() &&
+      github.event_name == 'workflow_dispatch' &&
+      inputs.environment == 'production' &&
+      inputs.deploy == true &&
+      (needs.build-admin-api.result == 'success' || needs.build-admin-api.result == 'skipped') &&
+      (needs.build-admin-web.result == 'success' || needs.build-admin-web.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: nova-prod-gke
+          location: ${{ env.GCP_REGION }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Deploy admin-api
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          SERVICE_INPUT: ${{ inputs.service }}
+          API_CHANGED: ${{ needs.detect-changes.outputs.admin-api }}
+        run: |
+          if [[ "$API_CHANGED" == "true" || "$SERVICE_INPUT" == "all" || "$SERVICE_INPUT" == "admin-api" ]]; then
+            SHORT_SHA=$(echo "$COMMIT_SHA" | cut -c1-7)
+            IMAGE="${{ env.REGISTRY }}/admin-api:${SHORT_SHA}"
+            echo "Deploying admin-api: ${IMAGE}"
+            kubectl set image deployment/admin-api admin-api=${IMAGE} -n ${{ env.NAMESPACE_PROD }}
+          fi
+
+      - name: Deploy admin-web
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          SERVICE_INPUT: ${{ inputs.service }}
+          WEB_CHANGED: ${{ needs.detect-changes.outputs.admin-web }}
+        run: |
+          if [[ "$WEB_CHANGED" == "true" || "$SERVICE_INPUT" == "all" || "$SERVICE_INPUT" == "admin-web" ]]; then
+            SHORT_SHA=$(echo "$COMMIT_SHA" | cut -c1-7)
+            IMAGE="${{ env.REGISTRY }}/admin-web:${SHORT_SHA}"
+            echo "Deploying admin-web: ${IMAGE}"
+            kubectl set image deployment/admin-web admin-web=${IMAGE} -n ${{ env.NAMESPACE_PROD }}
+          fi
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/admin-api -n ${{ env.NAMESPACE_PROD }} --timeout=300s || true
+          kubectl rollout status deployment/admin-web -n ${{ env.NAMESPACE_PROD }} --timeout=300s || true
+
+      - name: Deployment Summary
+        run: |
+          echo "### Production Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "Admin UI: https://admin.nova.social" >> $GITHUB_STEP_SUMMARY
