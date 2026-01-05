@@ -248,7 +248,7 @@ jobs:
           echo "color=$COLOR" >> $GITHUB_OUTPUT
 
       - name: Send Slack notification
-        if: secrets.SLACK_WEBHOOK != ''
+        if: ${{ secrets.SLACK_WEBHOOK != '' }}
         uses: slackapi/slack-github-action@v1
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK }}
