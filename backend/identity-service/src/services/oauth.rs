@@ -238,8 +238,9 @@ impl OAuthService {
         // Support both old format (plain provider string) and new format (JSON)
         let (provider_str, device_info) = if state_json.starts_with('{') {
             // New JSON format
-            let state_data: OAuthStateData = serde_json::from_str(&state_json)
-                .map_err(|e| IdentityError::Internal(format!("Failed to parse OAuth state: {}", e)))?;
+            let state_data: OAuthStateData = serde_json::from_str(&state_json).map_err(|e| {
+                IdentityError::Internal(format!("Failed to parse OAuth state: {}", e))
+            })?;
             let device_info = if state_data.device_id.is_some() {
                 Some(OAuthDeviceInfo {
                     device_id: state_data.device_id,
@@ -282,7 +283,11 @@ impl OAuthService {
         // Create or link user (with invite code validation for new users)
         let (user, is_new_user) = self.upsert_user(oauth_user, provider, invite_code).await?;
 
-        Ok(OAuthCallbackResult { user, is_new_user, device_info })
+        Ok(OAuthCallbackResult {
+            user,
+            is_new_user,
+            device_info,
+        })
     }
 
     fn google_auth_url(&self, state: &str, redirect_uri: &str) -> String {
@@ -492,7 +497,9 @@ impl OAuthService {
         };
 
         // 4. Create or link user (with invite code validation for new users)
-        let (user, is_new_user) = self.upsert_user(oauth_user, OAuthProvider::Apple, invite_code).await?;
+        let (user, is_new_user) = self
+            .upsert_user(oauth_user, OAuthProvider::Apple, invite_code)
+            .await?;
 
         info!(
             user_id = %user.id,
@@ -501,7 +508,11 @@ impl OAuthService {
         );
 
         // Device info is passed separately through gRPC for native sign-in
-        Ok(OAuthCallbackResult { user, is_new_user, device_info: None })
+        Ok(OAuthCallbackResult {
+            user,
+            is_new_user,
+            device_info: None,
+        })
     }
 
     async fn upsert_user(
@@ -561,7 +572,9 @@ impl OAuthService {
             // Validate invite code
             let validation = crate::db::invitations::validate_invite(&self.db, code).await?;
             if !validation.is_valid {
-                let error_msg = validation.error.unwrap_or_else(|| "Invalid invite code".into());
+                let error_msg = validation
+                    .error
+                    .unwrap_or_else(|| "Invalid invite code".into());
                 warn!(
                     provider = provider.as_str(),
                     email = %oauth_user.email,
@@ -584,7 +597,8 @@ impl OAuthService {
             .await?;
 
             // Redeem the invite code (triggers referral chain via DB trigger)
-            if let Err(e) = crate::db::invitations::redeem_invite(&self.db, code, new_user.id).await {
+            if let Err(e) = crate::db::invitations::redeem_invite(&self.db, code, new_user.id).await
+            {
                 warn!(
                     user_id = %new_user.id,
                     invite_code = %code,

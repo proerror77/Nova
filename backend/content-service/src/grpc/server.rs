@@ -8,8 +8,6 @@ use base64::Engine;
 use grpc_clients::nova::content_service::v2::content_service_server::{
     ContentService, ContentServiceServer,
 };
-use grpc_clients::nova::feed_service::v2::InvalidateFeedCacheRequest;
-use grpc_clients::GrpcClientPool;
 use grpc_clients::nova::content_service::v2::{
     Channel, ContentStatus, CreatePostRequest, CreatePostResponse, DeletePostRequest,
     DeletePostResponse, GetChannelRequest, GetChannelResponse, GetPostRequest, GetPostResponse,
@@ -21,6 +19,8 @@ use grpc_clients::nova::content_service::v2::{
     ListTrendingPostsRequest, ListTrendingPostsResponse, Post, PostWithTimestamp,
     UpdatePostRequest, UpdatePostResponse, Visibility,
 };
+use grpc_clients::nova::feed_service::v2::InvalidateFeedCacheRequest;
+use grpc_clients::GrpcClientPool;
 use grpc_metrics::layer::RequestGuard;
 use sqlx::{PgPool, QueryBuilder, Row};
 use std::fs;
@@ -146,7 +146,7 @@ impl ContentService for ContentServiceImpl {
                 req.media_type.clone()
             }
         } else {
-            "text".to_string()  // Text-only post
+            "text".to_string() // Text-only post
         };
         let image_key = if has_media {
             format!("media-{}", Uuid::new_v4())

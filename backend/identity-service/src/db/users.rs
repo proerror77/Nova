@@ -134,11 +134,7 @@ pub async fn find_by_usernames(
     }
 
     // Limit to 100 usernames to prevent abuse
-    let usernames_to_query: Vec<&str> = usernames
-        .iter()
-        .take(100)
-        .map(|s| s.as_str())
-        .collect();
+    let usernames_to_query: Vec<&str> = usernames.iter().take(100).map(|s| s.as_str()).collect();
 
     let rows: Vec<(String, Uuid)> = sqlx::query_as(
         "SELECT LOWER(username), id FROM users WHERE LOWER(username) = ANY($1) AND deleted_at IS NULL",
@@ -490,13 +486,7 @@ pub async fn verify_totp(pool: &PgPool, user_id: Uuid) -> Result<()> {
         "method": "totp",
     });
 
-    insert_identity_outbox_event(
-        &mut tx,
-        user_id,
-        "identity.user.two_fa_enabled",
-        payload,
-    )
-    .await?;
+    insert_identity_outbox_event(&mut tx, user_id, "identity.user.two_fa_enabled", payload).await?;
 
     tx.commit().await?;
 
@@ -540,13 +530,8 @@ pub async fn update_password(pool: &PgPool, user_id: Uuid, password_hash: &str) 
         "invalidate_all_sessions": true,
     });
 
-    insert_identity_outbox_event(
-        &mut tx,
-        user_id,
-        "identity.user.password_changed",
-        payload,
-    )
-    .await?;
+    insert_identity_outbox_event(&mut tx, user_id, "identity.user.password_changed", payload)
+        .await?;
 
     tx.commit().await?;
 

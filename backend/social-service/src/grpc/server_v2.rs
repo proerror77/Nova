@@ -316,7 +316,10 @@ impl SocialService for SocialServiceImpl {
 
                 tokio::spawn(async move {
                     // Publish analytics event
-                    if let Err(e) = producer.publish_like_created(like_id, post_id, user_id).await {
+                    if let Err(e) = producer
+                        .publish_like_created(like_id, post_id, user_id)
+                        .await
+                    {
                         tracing::warn!(error = ?e, "Failed to publish like created event");
                     }
 
@@ -330,7 +333,8 @@ impl SocialService for SocialServiceImpl {
                                 let resp = response.into_inner();
                                 if resp.found {
                                     if let Some(post) = resp.post {
-                                        if let Ok(post_author_id) = Uuid::parse_str(&post.author_id) {
+                                        if let Ok(post_author_id) = Uuid::parse_str(&post.author_id)
+                                        {
                                             if let Err(e) = producer
                                                 .publish_like_notification(
                                                     like_id,
@@ -562,9 +566,11 @@ impl SocialService for SocialServiceImpl {
                 tokio::spawn(async move {
                     // Resolve usernames to user IDs via identity-service
                     match identity_client
-                        .batch_resolve_usernames(tonic::Request::new(BatchResolveUsernamesRequest {
-                            usernames: mentions.clone(),
-                        }))
+                        .batch_resolve_usernames(tonic::Request::new(
+                            BatchResolveUsernamesRequest {
+                                usernames: mentions.clone(),
+                            },
+                        ))
                         .await
                     {
                         Ok(response) => {
@@ -708,10 +714,7 @@ impl SocialService for SocialServiceImpl {
             .map_err(|e| Status::internal(format!("Failed to create comment like: {}", e)))?;
 
         // Get updated count from denormalized column (trigger already updated it)
-        let like_count = repo
-            .get_like_count(comment_id)
-            .await
-            .unwrap_or(0);
+        let like_count = repo.get_like_count(comment_id).await.unwrap_or(0);
 
         // Send comment like notification (fire-and-forget)
         if was_created {
@@ -769,10 +772,7 @@ impl SocialService for SocialServiceImpl {
             .map_err(|e| Status::internal(format!("Failed to delete comment like: {}", e)))?;
 
         // Get updated count from denormalized column (trigger already updated it)
-        let like_count = repo
-            .get_like_count(comment_id)
-            .await
-            .unwrap_or(0);
+        let like_count = repo.get_like_count(comment_id).await.unwrap_or(0);
 
         Ok(Response::new(DeleteCommentLikeResponse {
             success: true,
@@ -852,7 +852,9 @@ impl SocialService for SocialServiceImpl {
             .map(|(comment_id, is_liked)| (comment_id.to_string(), is_liked))
             .collect();
 
-        Ok(Response::new(BatchCheckCommentLikedResponse { liked_status }))
+        Ok(Response::new(BatchCheckCommentLikedResponse {
+            liked_status,
+        }))
     }
 
     // ========= Shares =========
@@ -864,7 +866,8 @@ impl SocialService for SocialServiceImpl {
         let user_id = parse_uuid(&req.user_id, "user_id")?;
         let post_id = parse_uuid(&req.post_id, "post_id")?;
 
-        let share = self.share_repo()
+        let share = self
+            .share_repo()
             .create_share(user_id, post_id, "repost".to_string())
             .await
             .map_err(|e| Status::internal(format!("Failed to create share: {}", e)))?;
@@ -1749,7 +1752,11 @@ fn to_proto_comment(comment: CommentModel) -> Comment {
     }
 }
 
-fn to_proto_comment_with_engagement(comment: CommentModel, like_count: i64, is_liked: bool) -> Comment {
+fn to_proto_comment_with_engagement(
+    comment: CommentModel,
+    like_count: i64,
+    is_liked: bool,
+) -> Comment {
     Comment {
         id: comment.id.to_string(),
         user_id: comment.user_id.to_string(),

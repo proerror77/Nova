@@ -22,6 +22,7 @@ pub mod devices;
 pub mod feed;
 pub mod graph;
 pub mod identity;
+pub mod livekit; // LiveKit voice agent token generation
 pub mod matrix; // Matrix E2EE integration proxy
 pub mod media;
 pub mod models;
@@ -31,13 +32,12 @@ pub mod passkey;
 pub mod phone_auth;
 pub mod photo_analysis; // iOS Vision photo analysis for ranking
 pub mod poll;
-pub mod vlm; // VLM (Vision Language Model) for image tagging
-pub mod livekit; // LiveKit voice agent token generation
 pub mod search;
 pub mod settings;
 pub mod social;
 pub mod social_likes;
 pub mod user_profile;
+pub mod vlm; // VLM (Vision Language Model) for image tagging
 pub mod xai; // X.AI (Grok) API proxy
              // users module requires user-service gRPC - will be re-implemented when user-service v2 is available
              // pub mod users;

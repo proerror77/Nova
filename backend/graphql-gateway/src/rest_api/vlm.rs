@@ -33,10 +33,29 @@ const CACHE_MAX_ENTRIES: usize = 500;
 
 /// Tags that are too generic to be useful
 const TAG_BLOCKLIST: &[&str] = &[
-    "image", "photo", "picture", "screenshot", "snapshot", "photography",
-    "person", "people", "human", "man", "woman", "adult", "child", "face",
-    "day", "night", "indoor", "outdoor", "daytime",
-    "close-up", "closeup", "background", "foreground",
+    "image",
+    "photo",
+    "picture",
+    "screenshot",
+    "snapshot",
+    "photography",
+    "person",
+    "people",
+    "human",
+    "man",
+    "woman",
+    "adult",
+    "child",
+    "face",
+    "day",
+    "night",
+    "indoor",
+    "outdoor",
+    "daytime",
+    "close-up",
+    "closeup",
+    "background",
+    "foreground",
 ];
 
 // ============================================
@@ -278,7 +297,9 @@ fn generate_cache_key(image_url: &str) -> String {
 
 /// Get Google Vision API key from environment
 fn get_vision_api_key() -> Option<String> {
-    env::var("GOOGLE_VISION_API_KEY").ok().filter(|k| !k.is_empty())
+    env::var("GOOGLE_VISION_API_KEY")
+        .ok()
+        .filter(|k| !k.is_empty())
 }
 
 /// Normalize a tag string
@@ -330,10 +351,7 @@ pub async fn analyze_image(
     {
         let cache = VLM_CACHE.read().await;
         if let Some(cached) = cache.get(&cache_key) {
-            info!(
-                elapsed_ms = start.elapsed().as_millis(),
-                "VLM cache hit"
-            );
+            info!(elapsed_ms = start.elapsed().as_millis(), "VLM cache hit");
             return Ok(HttpResponse::Ok().json(cached.clone()));
         }
     }
@@ -415,7 +433,11 @@ pub async fn analyze_image(
     };
 
     // Process response
-    let annotate = vision_response.responses.into_iter().next().unwrap_or_default();
+    let annotate = vision_response
+        .responses
+        .into_iter()
+        .next()
+        .unwrap_or_default();
 
     if let Some(error) = annotate.error {
         error!(code = error.code, message = %error.message, "Vision API returned error");

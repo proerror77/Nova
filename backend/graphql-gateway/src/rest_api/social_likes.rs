@@ -796,7 +796,10 @@ pub async fn delete_comment_like(
     };
 
     let comment_id = path.into_inner();
-    let req = DeleteCommentLikeRequest { user_id, comment_id };
+    let req = DeleteCommentLikeRequest {
+        user_id,
+        comment_id,
+    };
     match clients
         .call_social(|| {
             let mut social = clients.social_client();
@@ -855,7 +858,10 @@ pub async fn check_comment_liked(
     };
 
     let comment_id = path.into_inner();
-    let req = CheckCommentLikedRequest { user_id, comment_id };
+    let req = CheckCommentLikedRequest {
+        user_id,
+        comment_id,
+    };
     match clients
         .call_social(|| {
             let mut social = clients.social_client();
@@ -891,9 +897,8 @@ pub async fn batch_check_comment_liked(
     };
 
     if body.comment_ids.len() > 100 {
-        return HttpResponse::BadRequest().json(
-            serde_json::json!({"error": "Maximum 100 comment_ids allowed"}),
-        );
+        return HttpResponse::BadRequest()
+            .json(serde_json::json!({"error": "Maximum 100 comment_ids allowed"}));
     }
 
     let req = BatchCheckCommentLikedRequest {

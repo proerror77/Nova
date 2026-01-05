@@ -12,7 +12,9 @@ use identity_service::{
     grpc::{nova::auth_service::auth_service_server::AuthServiceServer, IdentityServiceServer},
     http::{start_http_server, HttpServerState},
     security::initialize_jwt_keys,
-    services::{spawn_outbox_consumer, EmailService, IdentityOutboxPublisher, OutboxConsumerConfig},
+    services::{
+        spawn_outbox_consumer, EmailService, IdentityOutboxPublisher, OutboxConsumerConfig,
+    },
 };
 use once_cell::sync::OnceCell;
 use opentelemetry_config::{init_tracing, TracingConfig};

@@ -5,8 +5,8 @@
 use anyhow::Result;
 use chrono::Utc;
 use event_schema::{EventEnvelope, LikeCreatedEvent, LikeDeletedEvent};
-use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::message::OwnedHeaders;
+use rdkafka::producer::{FutureProducer, FutureRecord};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::{info, warn};
@@ -106,22 +106,14 @@ impl SocialEventProducer {
             created_at: Utc::now(),
         };
 
-        let envelope = EventEnvelope::new_with_type(
-            "social-service",
-            "social.like.created",
-            event,
-        )
-        .with_correlation_id(Uuid::new_v4());
+        let envelope = EventEnvelope::new_with_type("social-service", "social.like.created", event)
+            .with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, post_id).await
     }
 
     /// Publish a like deleted event
-    pub async fn publish_like_deleted(
-        &self,
-        like_id: Uuid,
-        post_id: Uuid,
-    ) -> Result<()> {
+    pub async fn publish_like_deleted(&self, like_id: Uuid, post_id: Uuid) -> Result<()> {
         let event = LikeDeletedEvent {
             like_id,
             target_id: post_id,
@@ -129,12 +121,8 @@ impl SocialEventProducer {
             deleted_at: Utc::now(),
         };
 
-        let envelope = EventEnvelope::new_with_type(
-            "social-service",
-            "social.like.deleted",
-            event,
-        )
-        .with_correlation_id(Uuid::new_v4());
+        let envelope = EventEnvelope::new_with_type("social-service", "social.like.deleted", event)
+            .with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, post_id).await
     }
@@ -149,11 +137,10 @@ impl SocialEventProducer {
         let partition_key = partition_key_id.to_string();
 
         // Add event_type header for consumer routing
-        let headers = OwnedHeaders::new()
-            .insert(rdkafka::message::Header {
-                key: "event_type",
-                value: envelope.event_type.as_deref(),
-            });
+        let headers = OwnedHeaders::new().insert(rdkafka::message::Header {
+            key: "event_type",
+            value: envelope.event_type.as_deref(),
+        });
 
         let record = FutureRecord::to(&self.topic)
             .key(&partition_key)

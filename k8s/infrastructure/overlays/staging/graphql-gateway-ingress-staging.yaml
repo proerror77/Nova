@@ -72,7 +72,7 @@ spec:
           service:
             name: alice-voice-service
             port:
-              number: 8080
+              number: 8081
         path: /alice-voice
         pathType: Prefix
   # Catch-all rule for direct IP access
@@ -131,6 +131,6 @@ spec:
           service:
             name: alice-voice-service
             port:
-              number: 8080
+              number: 8081
         path: /alice-voice
         pathType: Prefix

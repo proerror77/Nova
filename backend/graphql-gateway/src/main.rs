@@ -1,3 +1,4 @@
+use crate::rest_api::devices::{get_current_device, list_devices, logout_device};
 use crate::rest_api::graph::{
     check_is_following, follow_user, get_my_followers, get_my_following, get_user_followers,
     get_user_following, unfollow_user,
@@ -16,7 +17,6 @@ use crate::rest_api::search::{
     get_suggestions, get_trending_topics, search_all, search_content, search_hashtags,
     search_users_full,
 };
-use crate::rest_api::devices::{get_current_device, list_devices, logout_device};
 use crate::rest_api::settings::{get_settings, update_settings};
 use crate::rest_api::social_likes::{
     batch_check_bookmarked, batch_check_comment_liked, check_bookmarked, check_comment_liked,

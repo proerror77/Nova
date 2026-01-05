@@ -256,11 +256,8 @@ impl CounterService {
         }
 
         // Try Redis first, fallback to PostgreSQL on error
-        let redis_result: std::result::Result<Vec<Option<i64>>, _> = self
-            .redis
-            .clone()
-            .get(&keys)
-            .await;
+        let redis_result: std::result::Result<Vec<Option<i64>>, _> =
+            self.redis.clone().get(&keys).await;
 
         let result = match redis_result {
             Ok(values) => {
@@ -600,7 +597,7 @@ impl CounterService {
     /// Refresh comment count from PostgreSQL and update Redis cache
     pub async fn refresh_comment_count(&self, post_id: Uuid) -> Result<i64> {
         let count = self.load_comment_count_from_pg(post_id).await?;
-        
+
         if let Err(e) = self.set_comment_count(post_id, count).await {
             tracing::warn!(
                 post_id = %post_id,
@@ -608,14 +605,14 @@ impl CounterService {
                 "Failed to update Redis cache for comment count"
             );
         }
-        
+
         Ok(count)
     }
 
     /// Refresh share count from PostgreSQL and update Redis cache
     pub async fn refresh_share_count(&self, post_id: Uuid) -> Result<i64> {
         let count = self.load_share_count_from_pg(post_id).await?;
-        
+
         if let Err(e) = self.set_share_count(post_id, count).await {
             tracing::warn!(
                 post_id = %post_id,
@@ -623,7 +620,7 @@ impl CounterService {
                 "Failed to update Redis cache for share count"
             );
         }
-        
+
         Ok(count)
     }
 

@@ -365,7 +365,7 @@ pub async fn create_post(
             {
                 "image".to_string()
             } else {
-                "text".to_string()  // Text-only post
+                "text".to_string() // Text-only post
             }
         }),
         channel_ids,
@@ -476,15 +476,16 @@ pub async fn create_post(
                         tonic::Code::InvalidArgument => HttpResponse::BadRequest().json(
                             ErrorResponse::with_message("Invalid request", status.message()),
                         ),
-                        tonic::Code::Unavailable => HttpResponse::ServiceUnavailable().json(
-                            ErrorResponse::with_message(
+                        tonic::Code::Unavailable => {
+                            HttpResponse::ServiceUnavailable().json(ErrorResponse::with_message(
                                 "Service temporarily unavailable",
                                 status.message(),
-                            ),
-                        ),
-                        _ => HttpResponse::InternalServerError().json(
-                            ErrorResponse::with_message("Failed to create post", status.message()),
-                        ),
+                            ))
+                        }
+                        _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                            "Failed to create post",
+                            status.message(),
+                        )),
                     }
                 }
             };

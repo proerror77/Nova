@@ -81,11 +81,7 @@ impl IdentityEventsConsumer {
     }
 
     /// Process a single Kafka message
-    async fn process_message(
-        &self,
-        message: &BorrowedMessage<'_>,
-        payload: &[u8],
-    ) -> Result<()> {
+    async fn process_message(&self, message: &BorrowedMessage<'_>, payload: &[u8]) -> Result<()> {
         let payload_str = std::str::from_utf8(payload)?;
         let header_event_type = header_value(message, "event_type");
 
@@ -93,8 +89,8 @@ impl IdentityEventsConsumer {
         let envelope_value: serde_json::Value = serde_json::from_str(payload_str)?;
 
         // Prefer Kafka header event_type; fall back to envelope field if present.
-        if let Some(event_type) = header_event_type
-            .or_else(|| envelope_value.get("event_type").and_then(|v| v.as_str()))
+        if let Some(event_type) =
+            header_event_type.or_else(|| envelope_value.get("event_type").and_then(|v| v.as_str()))
         {
             return match event_type {
                 "identity.user.created" | "UserCreatedEvent" => {

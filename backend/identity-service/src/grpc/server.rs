@@ -2622,9 +2622,7 @@ fn to_status(err: IdentityError) -> Status {
         // Zitadel errors
         IdentityError::ZitadelError(msg) => Status::internal(format!("Zitadel error: {}", msg)),
         // OAuth invite code errors
-        IdentityError::InviteCodeRequired => {
-            Status::failed_precondition("INVITE_CODE_REQUIRED")
-        }
+        IdentityError::InviteCodeRequired => Status::failed_precondition("INVITE_CODE_REQUIRED"),
         IdentityError::InvalidInviteCode(msg) => {
             Status::invalid_argument(format!("Invalid invite code: {}", msg))
         }

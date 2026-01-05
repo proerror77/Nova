@@ -27,7 +27,11 @@ impl CommentLikeRepository {
 
     /// Create a new comment like (idempotent - returns success if already exists)
     /// Returns (CommentLike, was_created) where was_created is true if this is a new like
-    pub async fn create_like(&self, user_id: Uuid, comment_id: Uuid) -> Result<(CommentLike, bool)> {
+    pub async fn create_like(
+        &self,
+        user_id: Uuid,
+        comment_id: Uuid,
+    ) -> Result<(CommentLike, bool)> {
         // Use INSERT ... ON CONFLICT with xmax to detect if row was inserted or updated
         // xmax = 0 means the row was newly inserted, xmax != 0 means it was updated
         let result = sqlx::query_as::<_, CommentLikeWithFlag>(
