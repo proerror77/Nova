@@ -22,16 +22,17 @@ enum VideoConstants {
 /// - Auto-plays when visible (muted by default)
 /// - Shows play/pause overlay on tap
 /// - Displays video duration badge
+/// - Shows error state with retry button when loading fails
 struct FeedVideoPlayer: View {
     let url: URL
     let thumbnailUrl: URL?
     let autoPlay: Bool
     let isMuted: Bool
     let height: CGFloat
-    
+
     @StateObject private var viewModel: FeedVideoPlayerViewModel
     @State private var userPaused = false  // Track if user manually paused
-    
+
     init(
         url: URL,
         thumbnailUrl: URL? = nil,
@@ -45,6 +46,11 @@ struct FeedVideoPlayer: View {
         self.isMuted = isMuted
         self.height = height
         _viewModel = StateObject(wrappedValue: FeedVideoPlayerViewModel(url: url, autoPlay: autoPlay, isMuted: isMuted))
+    }
+
+    /// Whether to show error overlay with retry
+    private var showErrorOverlay: Bool {
+        viewModel.hasError && !viewModel.isLoading
     }
     
     var body: some View {
@@ -70,9 +76,12 @@ struct FeedVideoPlayer: View {
             if userPaused {
                 playPauseOverlay
             }
-            
 
-            
+            // Error overlay with retry button
+            if showErrorOverlay {
+                errorOverlay
+            }
+
             // Mute indicator (bottom right)
             VStack {
                 Spacer()
@@ -158,6 +167,34 @@ struct FeedVideoPlayer: View {
         }
         .transition(.opacity)
         .animation(.easeInOut(duration: 0.2), value: userPaused)
+    }
+
+    private var errorOverlay: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 32.f))
+                .foregroundColor(.white.opacity(0.8))
+
+            Text("Video unavailable")
+                .font(Font.custom("SFProDisplay-Medium", size: 14.f))
+                .foregroundColor(.white.opacity(0.9))
+
+            Button {
+                viewModel.retry()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 14.f))
+                    Text("Retry")
+                        .font(Font.custom("SFProDisplay-Medium", size: 14.f))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color.white.opacity(0.2))
+                .cornerRadius(20)
+            }
+        }
     }
     
     private var durationBadge: some View {
@@ -252,11 +289,16 @@ final class FeedVideoPlayerViewModel: ObservableObject {
     @Published private(set) var currentTime: TimeInterval = 0
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var isCached = false
+    @Published private(set) var hasError = false
 
     private var timeObserver: Any?
     private var statusObserver: NSKeyValueObservation?
     private var prefetchTask: Task<Void, Never>?
     private var loopObserver: NSObjectProtocol?  // NotificationCenter observer for video loop
+    private var loadingTimeoutTask: Task<Void, Never>?
+
+    /// Loading timeout in seconds - show error if video doesn't load within this time
+    private let loadingTimeout: TimeInterval = 10
 
     // Network monitoring for prefetch priority (nonisolated for cross-actor access)
     nonisolated(unsafe) private static let networkMonitor = NWPathMonitor()
@@ -290,11 +332,35 @@ final class FeedVideoPlayerViewModel: ObservableObject {
     func prepare() {
         guard player == nil else { return }
 
+        hasError = false
+        isLoading = true
+
+        // Start loading timeout
+        loadingTimeoutTask?.cancel()
+        loadingTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64((self?.loadingTimeout ?? 10) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            // If still loading after timeout, show error
+            if self?.isLoading == true && self?.isReady == false {
+                self?.isLoading = false
+                self?.hasError = true
+                #if DEBUG
+                print("[FeedVideoPlayer] Loading timeout for URL: \(self?.url.absoluteString ?? "unknown")")
+                #endif
+            }
+        }
+
         // Check video cache first for faster loading
         Task {
             let videoURL = await getVideoURL()
             await setupPlayer(with: videoURL)
         }
+    }
+
+    /// Retry loading the video after an error
+    func retry() {
+        cleanup()
+        prepare()
     }
 
     private func getVideoURL() async -> URL {
@@ -333,14 +399,21 @@ final class FeedVideoPlayerViewModel: ObservableObject {
             Task { @MainActor in
                 switch item.status {
                 case .readyToPlay:
+                    self?.loadingTimeoutTask?.cancel()
                     self?.isReady = true
                     self?.isLoading = false
+                    self?.hasError = false
                     self?.duration = CMTimeGetSeconds(item.duration)
                     if self?.autoPlay == true {
                         self?.play()
                     }
                 case .failed:
+                    self?.loadingTimeoutTask?.cancel()
                     self?.isLoading = false
+                    self?.hasError = true
+                    #if DEBUG
+                    print("[FeedVideoPlayer] Failed to load video: \(item.error?.localizedDescription ?? "unknown error")")
+                    #endif
                 default:
                     break
                 }
@@ -387,6 +460,8 @@ final class FeedVideoPlayerViewModel: ObservableObject {
     
     func cleanup() {
         pause()
+        loadingTimeoutTask?.cancel()
+        loadingTimeoutTask = nil
         prefetchTask?.cancel()
         prefetchTask = nil
         if let observer = timeObserver {
@@ -401,6 +476,7 @@ final class FeedVideoPlayerViewModel: ObservableObject {
         }
         loopObserver = nil
         player = nil
+        isReady = false
     }
     
 }
