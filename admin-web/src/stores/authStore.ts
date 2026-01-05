@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 // API base URL - uses relative path for same-origin requests via ingress
-const API_BASE_URL = '/api';
+const API_BASE_URL = '/api/admin/v1';
 
 interface Admin {
   id: string;

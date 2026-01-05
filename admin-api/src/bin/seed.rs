@@ -40,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Check if admin exists
     let existing: Option<(String,)> = sqlx::query_as(
-        "SELECT email FROM admins WHERE email = $1"
+        "SELECT email FROM admin_users WHERE email = $1"
     )
     .bind(&email)
     .fetch_optional(&pool)
@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
         // Update existing admin's password
         println!("Updating existing admin password...");
         sqlx::query(
-            "UPDATE admins SET password_hash = $1, updated_at = NOW() WHERE email = $2"
+            "UPDATE admin_users SET password_hash = $1, updated_at = NOW() WHERE email = $2"
         )
         .bind(&password_hash)
         .bind(&email)
@@ -62,8 +62,8 @@ async fn main() -> anyhow::Result<()> {
         println!("Creating new admin...");
         sqlx::query(
             r#"
-            INSERT INTO admins (email, password_hash, name, role, is_active)
-            VALUES ($1, $2, $3, 'super_admin', true)
+            INSERT INTO admin_users (email, password_hash, name, role, status)
+            VALUES ($1, $2, $3, 'super_admin', 'active')
             "#
         )
         .bind(&email)

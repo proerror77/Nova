@@ -160,7 +160,7 @@ async fn refresh_token(
 
     // Fetch admin from database to ensure still active
     let admin: crate::models::Admin = sqlx::query_as(
-        "SELECT * FROM admins WHERE id = $1 AND is_active = true"
+        "SELECT * FROM admin_users WHERE id = $1 AND status = 'active'"
     )
     .bind(uuid::Uuid::parse_str(&claims.sub).map_err(|_| AppError::Unauthorized)?)
     .fetch_optional(&state.db.pg)
@@ -181,7 +181,7 @@ async fn get_current_admin(
 ) -> Result<Json<AdminInfo>> {
     // Fetch full admin details from database
     let admin: crate::models::Admin = sqlx::query_as(
-        "SELECT * FROM admins WHERE id = $1"
+        "SELECT * FROM admin_users WHERE id = $1"
     )
     .bind(uuid::Uuid::parse_str(&current_admin.id).map_err(|_| AppError::Unauthorized)?)
     .fetch_optional(&state.db.pg)

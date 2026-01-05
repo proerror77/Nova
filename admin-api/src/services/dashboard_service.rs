@@ -179,7 +179,7 @@ impl DashboardService {
                 a.name as admin_name,
                 a.email as admin_email
             FROM audit_logs al
-            JOIN admins a ON al.admin_id = a.id
+            JOIN admin_users a ON al.admin_id = a.id
             ORDER BY al.created_at DESC
             LIMIT $1
             "#

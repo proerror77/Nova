@@ -26,24 +26,38 @@ impl AuthService {
     }
 
     pub async fn authenticate(&self, email: &str, password: &str) -> Result<(Admin, String, String)> {
-        // Query admin by email
+        // Query admin by email (using admin_users table per spec)
         let admin: Admin = sqlx::query_as(
-            "SELECT * FROM admins WHERE email = $1 AND is_active = true"
+            "SELECT * FROM admin_users WHERE email = $1 AND status = 'active'"
         )
         .bind(email)
         .fetch_optional(&self.db.pg)
         .await?
         .ok_or(AppError::Unauthorized)?;
 
+        // Check if account is locked
+        if let Some(locked_until) = admin.locked_until {
+            if locked_until > Utc::now() {
+                return Err(AppError::Unauthorized);
+            }
+        }
+
         // Verify password
-        self.verify_password(password, &admin.password_hash)?;
+        if let Err(_) = self.verify_password(password, &admin.password_hash) {
+            // Increment login attempts on failed password
+            sqlx::query("UPDATE admin_users SET login_attempts = login_attempts + 1 WHERE id = $1")
+                .bind(admin.id)
+                .execute(&self.db.pg)
+                .await?;
+            return Err(AppError::Unauthorized);
+        }
 
         // Generate tokens
         let access_token = self.generate_access_token(&admin)?;
         let refresh_token = self.generate_refresh_token(&admin)?;
 
-        // Update last login time
-        sqlx::query("UPDATE admins SET last_login_at = NOW() WHERE id = $1")
+        // Reset login attempts and update last login time on success
+        sqlx::query("UPDATE admin_users SET last_login_at = NOW(), login_attempts = 0 WHERE id = $1")
             .bind(admin.id)
             .execute(&self.db.pg)
             .await?;

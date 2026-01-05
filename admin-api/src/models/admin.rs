@@ -16,7 +16,10 @@ pub struct Admin {
     pub name: String,
     pub role: String,
     pub avatar: Option<String>,
-    pub is_active: bool,
+    pub status: String,
+    pub login_attempts: i32,
+    pub locked_until: Option<DateTime<Utc>>,
+    pub permissions: serde_json::Value,
     pub last_login_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -44,5 +47,6 @@ pub struct CreateAdmin {
 pub struct UpdateAdmin {
     pub name: Option<String>,
     pub role: Option<String>,
-    pub is_active: Option<bool>,
+    pub status: Option<String>,
+    pub permissions: Option<serde_json::Value>,
 }
