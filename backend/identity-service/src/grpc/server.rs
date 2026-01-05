@@ -2516,6 +2516,42 @@ impl AuthService for IdentityServiceServer {
 
         Ok(Response::new(()))
     }
+
+    async fn batch_resolve_usernames(
+        &self,
+        request: Request<BatchResolveUsernamesRequest>,
+    ) -> std::result::Result<Response<BatchResolveUsernamesResponse>, Status> {
+        let req = request.into_inner();
+
+        // Validate input - limit to 100 usernames
+        if req.usernames.len() > 100 {
+            return Err(Status::invalid_argument(
+                "Maximum 100 usernames allowed per request",
+            ));
+        }
+
+        let username_map = db::users::find_by_usernames(&self.db, &req.usernames)
+            .await
+            .map_err(to_status)?;
+
+        let users: Vec<ResolvedUser> = req
+            .usernames
+            .iter()
+            .map(|username| {
+                let lower_username = username.to_lowercase();
+                ResolvedUser {
+                    username: username.clone(),
+                    user_id: username_map
+                        .get(&lower_username)
+                        .map(|id| id.to_string())
+                        .unwrap_or_default(),
+                    found: username_map.contains_key(&lower_username),
+                }
+            })
+            .collect();
+
+        Ok(Response::new(BatchResolveUsernamesResponse { users }))
+    }
 }
 
 // ===== Helper Functions =====

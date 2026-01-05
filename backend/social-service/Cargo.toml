@@ -34,6 +34,9 @@ serde_json.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 
+# Text processing
+regex = "1"
+
 # Events
 rdkafka.workspace = true
 

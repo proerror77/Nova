@@ -123,6 +123,34 @@ pub async fn find_by_ids(pool: &PgPool, user_ids: &[Uuid]) -> Result<Vec<User>> 
     Ok(users)
 }
 
+/// Batch find users by usernames (for @mention resolution)
+/// Returns a map of username -> user_id for found users
+pub async fn find_by_usernames(
+    pool: &PgPool,
+    usernames: &[String],
+) -> Result<std::collections::HashMap<String, Uuid>> {
+    if usernames.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+
+    // Limit to 100 usernames to prevent abuse
+    let usernames_to_query: Vec<&str> = usernames
+        .iter()
+        .take(100)
+        .map(|s| s.as_str())
+        .collect();
+
+    let rows: Vec<(String, Uuid)> = sqlx::query_as(
+        "SELECT LOWER(username), id FROM users WHERE LOWER(username) = ANY($1) AND deleted_at IS NULL",
+    )
+    .bind(&usernames_to_query)
+    .fetch_all(pool)
+    .await?;
+
+    let result: std::collections::HashMap<String, Uuid> = rows.into_iter().collect();
+    Ok(result)
+}
+
 /// Create a new user
 pub async fn create_user(
     pool: &PgPool,

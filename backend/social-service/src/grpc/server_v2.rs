@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use grpc_clients::nova::graph_service::v2::graph_service_client::GraphServiceClient;
+use grpc_clients::nova::identity_service::v2::auth_service_client::AuthServiceClient;
+use grpc_clients::nova::identity_service::v2::BatchResolveUsernamesRequest;
 use pbjson_types::{Empty, Timestamp};
 use sqlx::PgPool;
 use tonic::transport::Channel;
@@ -17,7 +19,7 @@ use crate::repository::{
     polls::CreateCandidateInput, BookmarkRepository, CommentLikeRepository, CommentRepository,
     LikeRepository, PollRepository, ShareRepository,
 };
-use crate::services::{CounterService, FollowService, SocialEventProducer};
+use crate::services::{extract_mentions, CounterService, FollowService, SocialEventProducer};
 use transactional_outbox::{OutboxEvent, OutboxRepository};
 
 fn outbox_error_to_status(err: OutboxError) -> Status {
@@ -39,6 +41,8 @@ pub struct AppState {
     pub counter_service: CounterService,
     pub outbox_repo: Arc<SqlxOutboxRepository>,
     pub graph_client: GraphServiceClient<Channel>,
+    /// Optional identity service client for @mention resolution
+    pub identity_client: Option<AuthServiceClient<Channel>>,
     /// Optional Kafka event producer for social events
     pub event_producer: Option<Arc<SocialEventProducer>>,
 }
@@ -55,8 +59,14 @@ impl AppState {
             counter_service,
             outbox_repo,
             graph_client,
+            identity_client: None,
             event_producer: None,
         }
+    }
+
+    pub fn with_identity_client(mut self, client: AuthServiceClient<Channel>) -> Self {
+        self.identity_client = Some(client);
+        self
     }
 
     pub fn with_event_producer(mut self, producer: SocialEventProducer) -> Self {
@@ -457,7 +467,7 @@ impl SocialService for SocialServiceImpl {
 
         let comment = self
             .comment_repo()
-            .create_comment(post_id, user_id, req.content, parent_comment_id)
+            .create_comment(post_id, user_id, req.content.clone(), parent_comment_id)
             .await
             .map_err(|e| Status::internal(format!("Failed to create comment: {}", e)))?;
 
@@ -466,6 +476,94 @@ impl SocialService for SocialServiceImpl {
             .counter_service
             .increment_comment_count(post_id)
             .await;
+
+        // Send comment notification (fire-and-forget)
+        if let Some(producer) = &self.state.event_producer {
+            let producer = producer.clone();
+            let comment_id = comment.id;
+            let content_preview = Some(comment.content.clone());
+            let like_repo = self.like_repo();
+
+            tokio::spawn(async move {
+                // Get post author for notification
+                match like_repo.get_post_author(post_id).await {
+                    Ok(Some(post_author_id)) => {
+                        if let Err(e) = producer
+                            .publish_comment_notification(
+                                comment_id,
+                                post_id,
+                                user_id,
+                                post_author_id,
+                                None, // TODO: fetch username from identity service if needed
+                                content_preview,
+                            )
+                            .await
+                        {
+                            tracing::warn!(error = ?e, "Failed to publish comment notification");
+                        }
+                    }
+                    Ok(None) => {
+                        tracing::warn!(post_id = %post_id, "Post not found for comment notification");
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = ?e, "Failed to get post author for comment notification");
+                    }
+                }
+            });
+        }
+
+        // Send mention notifications (fire-and-forget)
+        let mentions = extract_mentions(&req.content);
+        if !mentions.is_empty() {
+            if let (Some(producer), Some(identity_client)) =
+                (&self.state.event_producer, &self.state.identity_client)
+            {
+                let producer = producer.clone();
+                let mut identity_client = identity_client.clone();
+                let comment_id = comment.id;
+                let content_preview = Some(comment.content.chars().take(100).collect::<String>());
+
+                tokio::spawn(async move {
+                    // Resolve usernames to user IDs via identity-service
+                    match identity_client
+                        .batch_resolve_usernames(tonic::Request::new(BatchResolveUsernamesRequest {
+                            usernames: mentions.clone(),
+                        }))
+                        .await
+                    {
+                        Ok(response) => {
+                            let resolved = response.into_inner();
+                            let mentioned_user_ids: Vec<Uuid> = resolved
+                                .users
+                                .iter()
+                                .filter(|u| u.found)
+                                .filter_map(|u| Uuid::parse_str(&u.user_id).ok())
+                                .filter(|id| *id != user_id) // Don't notify self-mentions
+                                .collect();
+
+                            if !mentioned_user_ids.is_empty() {
+                                if let Err(e) = producer
+                                    .publish_mention_notifications(
+                                        comment_id,
+                                        "comment",
+                                        user_id,
+                                        mentioned_user_ids,
+                                        None, // TODO: fetch commenter username if needed
+                                        content_preview,
+                                    )
+                                    .await
+                                {
+                                    tracing::warn!(error = ?e, "Failed to publish mention notifications");
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = ?e, "Failed to resolve usernames for mentions");
+                        }
+                    }
+                });
+            }
+        }
 
         Ok(Response::new(CreateCommentResponse {
             comment: Some(to_proto_comment(comment)),
@@ -568,7 +666,7 @@ impl SocialService for SocialServiceImpl {
         let comment_id = parse_uuid(&req.comment_id, "comment_id")?;
 
         let repo = self.comment_like_repo();
-        let (_like, _was_created) = repo
+        let (like, was_created) = repo
             .create_like(user_id, comment_id)
             .await
             .map_err(|e| Status::internal(format!("Failed to create comment like: {}", e)))?;
@@ -578,6 +676,41 @@ impl SocialService for SocialServiceImpl {
             .get_like_count(comment_id)
             .await
             .unwrap_or(0);
+
+        // Send comment like notification (fire-and-forget)
+        if was_created {
+            if let Some(producer) = &self.state.event_producer {
+                let producer = producer.clone();
+                let like_id = like.id;
+                let comment_repo = self.comment_repo();
+
+                tokio::spawn(async move {
+                    // Get comment author for notification
+                    match comment_repo.get_comment_author(comment_id).await {
+                        Ok(Some(comment_author_id)) => {
+                            if let Err(e) = producer
+                                .publish_comment_like_notification(
+                                    like_id,
+                                    comment_id,
+                                    user_id,
+                                    comment_author_id,
+                                    None, // TODO: fetch username from identity service if needed
+                                )
+                                .await
+                            {
+                                tracing::warn!(error = ?e, "Failed to publish comment like notification");
+                            }
+                        }
+                        Ok(None) => {
+                            tracing::warn!(comment_id = %comment_id, "Comment not found for like notification");
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = ?e, "Failed to get comment author for notification");
+                        }
+                    }
+                });
+            }
+        }
 
         Ok(Response::new(CreateCommentLikeResponse {
             success: true,
@@ -695,7 +828,7 @@ impl SocialService for SocialServiceImpl {
         let user_id = parse_uuid(&req.user_id, "user_id")?;
         let post_id = parse_uuid(&req.post_id, "post_id")?;
 
-        self.share_repo()
+        let share = self.share_repo()
             .create_share(user_id, post_id, "repost".to_string())
             .await
             .map_err(|e| Status::internal(format!("Failed to create share: {}", e)))?;
@@ -705,6 +838,39 @@ impl SocialService for SocialServiceImpl {
             .counter_service
             .increment_share_count(post_id)
             .await;
+
+        // Send share notification (fire-and-forget)
+        if let Some(producer) = &self.state.event_producer {
+            let producer = producer.clone();
+            let share_id = share.id;
+            let like_repo = self.like_repo();
+
+            tokio::spawn(async move {
+                // Get post author for notification
+                match like_repo.get_post_author(post_id).await {
+                    Ok(Some(post_author_id)) => {
+                        if let Err(e) = producer
+                            .publish_share_notification(
+                                share_id,
+                                post_id,
+                                user_id,
+                                post_author_id,
+                                None, // TODO: fetch username from identity service if needed
+                            )
+                            .await
+                        {
+                            tracing::warn!(error = ?e, "Failed to publish share notification");
+                        }
+                    }
+                    Ok(None) => {
+                        tracing::warn!(post_id = %post_id, "Post not found for share notification");
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = ?e, "Failed to get post author for share notification");
+                    }
+                }
+            });
+        }
 
         Ok(Response::new(CreateShareResponse { success: true }))
     }

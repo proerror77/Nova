@@ -798,6 +798,14 @@ service AuthService {
     };
   }
 
+  // Batch resolve usernames to user IDs (for @mention functionality)
+  rpc BatchResolveUsernames(BatchResolveUsernamesRequest) returns (BatchResolveUsernamesResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/users/resolve-usernames"
+      body: "*"
+    };
+  }
+
   // List users with pagination and search
   rpc ListUsers(ListUsersRequest) returns (ListUsersResponse) {
     option (google.api.http) = {
@@ -1347,4 +1355,23 @@ message RenamePasskeyRequest {
   string user_id = 1;
   string credential_id = 2;
   string new_name = 3;
+}
+
+// ============================================================================
+// Batch Username Resolution (for @mention functionality)
+// ============================================================================
+
+message BatchResolveUsernamesRequest {
+  // List of usernames to resolve (max 100)
+  repeated string usernames = 1;
+}
+
+message ResolvedUser {
+  string username = 1;  // Original username from request
+  string user_id = 2;   // Resolved user ID (empty if not found)
+  bool found = 3;       // Whether the username was found
+}
+
+message BatchResolveUsernamesResponse {
+  repeated ResolvedUser users = 1;
 }

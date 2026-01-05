@@ -209,12 +209,16 @@ async fn main() -> Result<()> {
         });
 
     // Create AppState
+    let identity_client = grpc_pool.auth();
     let mut app_state = AppState::new(
         pg_pool.clone(),
         counter_service,
         outbox_repo,
         graph_client,
-    );
+    )
+    .with_identity_client(identity_client);
+    info!("✅ Identity service client initialized (for @mention resolution)");
+
     if let Some(producer) = event_producer {
         app_state = app_state.with_event_producer(producer);
     }

@@ -150,4 +150,20 @@ impl CommentRepository {
 
         Ok(count)
     }
+
+    /// Get comment author ID for notification purposes
+    pub async fn get_comment_author(&self, comment_id: Uuid) -> Result<Option<Uuid>> {
+        let author_id: Option<Uuid> = sqlx::query_scalar(
+            r#"
+            SELECT user_id
+            FROM comments
+            WHERE id = $1
+            "#,
+        )
+        .bind(comment_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(author_id)
+    }
 }
