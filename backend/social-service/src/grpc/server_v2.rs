@@ -505,32 +505,45 @@ impl SocialService for SocialServiceImpl {
             let producer = producer.clone();
             let comment_id = comment.id;
             let content_preview = Some(comment.content.clone());
-            let like_repo = self.like_repo();
+            let content_client = self.state.content_client.clone();
 
             tokio::spawn(async move {
-                // Get post author for notification
-                match like_repo.get_post_author(post_id).await {
-                    Ok(Some(post_author_id)) => {
-                        if let Err(e) = producer
-                            .publish_comment_notification(
-                                comment_id,
-                                post_id,
-                                user_id,
-                                post_author_id,
-                                None, // TODO: fetch username from identity service if needed
-                                content_preview,
-                            )
-                            .await
-                        {
-                            tracing::warn!(error = ?e, "Failed to publish comment notification");
+                // Get post author via gRPC for notification
+                if let Some(mut client) = content_client {
+                    let request = tonic::Request::new(GetPostRequest {
+                        post_id: post_id.to_string(),
+                    });
+                    match client.get_post(request).await {
+                        Ok(response) => {
+                            let resp = response.into_inner();
+                            if resp.found {
+                                if let Some(post) = resp.post {
+                                    if let Ok(post_author_id) = Uuid::parse_str(&post.author_id) {
+                                        if let Err(e) = producer
+                                            .publish_comment_notification(
+                                                comment_id,
+                                                post_id,
+                                                user_id,
+                                                post_author_id,
+                                                None,
+                                                content_preview,
+                                            )
+                                            .await
+                                        {
+                                            tracing::warn!(error = ?e, "Failed to publish comment notification");
+                                        }
+                                    }
+                                }
+                            } else {
+                                tracing::warn!(post_id = %post_id, "Post not found for comment notification");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = ?e, "Failed to get post from content-service for comment notification");
                         }
                     }
-                    Ok(None) => {
-                        tracing::warn!(post_id = %post_id, "Post not found for comment notification");
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = ?e, "Failed to get post author for comment notification");
-                    }
+                } else {
+                    tracing::warn!("Content client not available for comment notification");
                 }
             });
         }
@@ -866,31 +879,44 @@ impl SocialService for SocialServiceImpl {
         if let Some(producer) = &self.state.event_producer {
             let producer = producer.clone();
             let share_id = share.id;
-            let like_repo = self.like_repo();
+            let content_client = self.state.content_client.clone();
 
             tokio::spawn(async move {
-                // Get post author for notification
-                match like_repo.get_post_author(post_id).await {
-                    Ok(Some(post_author_id)) => {
-                        if let Err(e) = producer
-                            .publish_share_notification(
-                                share_id,
-                                post_id,
-                                user_id,
-                                post_author_id,
-                                None, // TODO: fetch username from identity service if needed
-                            )
-                            .await
-                        {
-                            tracing::warn!(error = ?e, "Failed to publish share notification");
+                // Get post author via gRPC for notification
+                if let Some(mut client) = content_client {
+                    let request = tonic::Request::new(GetPostRequest {
+                        post_id: post_id.to_string(),
+                    });
+                    match client.get_post(request).await {
+                        Ok(response) => {
+                            let resp = response.into_inner();
+                            if resp.found {
+                                if let Some(post) = resp.post {
+                                    if let Ok(post_author_id) = Uuid::parse_str(&post.author_id) {
+                                        if let Err(e) = producer
+                                            .publish_share_notification(
+                                                share_id,
+                                                post_id,
+                                                user_id,
+                                                post_author_id,
+                                                None,
+                                            )
+                                            .await
+                                        {
+                                            tracing::warn!(error = ?e, "Failed to publish share notification");
+                                        }
+                                    }
+                                }
+                            } else {
+                                tracing::warn!(post_id = %post_id, "Post not found for share notification");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = ?e, "Failed to get post from content-service for share notification");
                         }
                     }
-                    Ok(None) => {
-                        tracing::warn!(post_id = %post_id, "Post not found for share notification");
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = ?e, "Failed to get post author for share notification");
-                    }
+                } else {
+                    tracing::warn!("Content client not available for share notification");
                 }
             });
         }
