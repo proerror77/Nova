@@ -48,7 +48,7 @@ struct CommentSheetView: View {
     var onCommentCountUpdated: ((String, Int) -> Void)?  // 评论数量同步回调 (postId, actualCount)
     @State private var commentText = ""
     @State private var comments: [SocialComment] = []
-    @State private var isLoading = false
+    @State private var isLoading = true  // Start with loading state to show spinner on first open
     @State private var isSubmitting = false
     @State private var error: String?
     @State private var totalCount = 0
@@ -179,23 +179,13 @@ struct CommentSheetView: View {
 
                 // Comment Input
                 HStack(spacing: DesignTokens.spacing12) {
-                    // 显示当前用户真实头像 (IG/小红书风格)
-                    if let avatarUrl = authManager.currentUser?.avatarUrl, let url = URL(string: avatarUrl) {
-                        AsyncImage(url: url) { image in
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        } placeholder: {
-                            Circle()
-                                .fill(DesignTokens.avatarPlaceholder)
-                        }
-                        .frame(width: 36, height: 36)
-                        .clipShape(Circle())
-                    } else {
-                        Circle()
-                            .fill(DesignTokens.avatarPlaceholder)
-                            .frame(width: 36, height: 36)
-                    }
+                    // 显示当前用户真实头像 (IG/小红书风格) - 使用带缓存的 AvatarView
+                    AvatarView(
+                        image: nil,
+                        url: authManager.currentUser?.avatarUrl,
+                        size: 36,
+                        name: authManager.currentUser?.displayName
+                    )
 
                     TextField("Add a comment...", text: $commentText)
                         .font(.system(size: DesignTokens.fontMedium))
@@ -222,6 +212,7 @@ struct CommentSheetView: View {
                 .padding(.vertical, DesignTokens.spacing12)
                 .background(DesignTokens.cardBackground)
             }
+            .background(Color(.systemBackground))
             .navigationTitle("Comments")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -432,33 +423,18 @@ struct SocialCommentRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: DesignTokens.spacing12) {
-            // Avatar (点击跳转用户主页)
-            if let avatarUrl = comment.authorAvatarUrl, let url = URL(string: avatarUrl) {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
-                    Circle()
-                        .fill(DesignTokens.avatarPlaceholder)
-                }
-                .frame(width: DesignTokens.avatarSmall, height: DesignTokens.avatarSmall)
-                .clipShape(Circle())
-                .onTapGesture {
-                    onAvatarTapped?(comment.userId)
-                }
-                .accessibilityLabel("View \(comment.displayAuthorName)'s profile")
-                .accessibilityHint("Double tap to view profile")
-            } else {
-                Circle()
-                    .fill(DesignTokens.avatarPlaceholder)
-                    .frame(width: DesignTokens.avatarSmall, height: DesignTokens.avatarSmall)
-                    .onTapGesture {
-                        onAvatarTapped?(comment.userId)
-                    }
-                    .accessibilityLabel("View \(comment.displayAuthorName)'s profile")
-                    .accessibilityHint("Double tap to view profile")
+            // Avatar (点击跳转用户主页) - 使用带缓存的 AvatarView
+            AvatarView(
+                image: nil,
+                url: comment.authorAvatarUrl,
+                size: DesignTokens.avatarSmall,
+                name: comment.displayAuthorName
+            )
+            .onTapGesture {
+                onAvatarTapped?(comment.userId)
             }
+            .accessibilityLabel("View \(comment.displayAuthorName)'s profile")
+            .accessibilityHint("Double tap to view profile")
 
             VStack(alignment: .leading, spacing: DesignTokens.spacing4) {
                 // 内联格式: 用户名 + 评论内容在同一行 (IG/小红书风格)
