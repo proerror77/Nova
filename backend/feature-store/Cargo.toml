@@ -31,7 +31,7 @@ ndarray = "0.16"  # Vector operations for feature vectors
 tract-onnx = "0.21"  # ONNX model serving
 
 # ClickHouse client
-clickhouse = { version = "0.12", features = ["watch", "uuid", "time"] }
+clickhouse = { version = "0.12", features = ["watch", "uuid", "time", "rustls-tls"] }
 time = "0.3"  # Required for ClickHouse datetime serialization
 
 # Shared internal libraries

@@ -70,7 +70,7 @@ serde_json = "1.0"
 # Database
 # Enable `macros` so that sqlx::migrate! and other macros are available.
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "chrono", "uuid", "migrate", "macros"], default-features = false }
-clickhouse = "0.11"
+clickhouse = { version = "0.12", features = ["rustls-tls"] }
 
 # gRPC
 tonic = "0.12"
