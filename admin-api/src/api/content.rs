@@ -1,11 +1,17 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{ConnectInfo, Path, Query, State},
+    http::HeaderMap,
     routing::{get, post},
-    Json, Router,
+    Extension, Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
+use uuid::Uuid;
 
 use crate::error::{AppError, Result};
+use crate::middleware::CurrentAdmin;
+use crate::models::{AuditAction, CreateAuditLog, ResourceType};
+use crate::services::{AuditService, ContentService, ListContentParams};
 use crate::AppState;
 
 pub fn routes() -> Router<AppState> {
@@ -29,18 +35,16 @@ pub struct ListContentQuery {
 
 #[derive(Debug, Serialize)]
 pub struct PostListResponse {
-    pub posts: Vec<PostSummary>,
+    pub posts: Vec<PostSummaryResponse>,
     pub total: i64,
     pub page: u32,
     pub limit: u32,
 }
 
 #[derive(Debug, Serialize)]
-pub struct PostSummary {
+pub struct PostSummaryResponse {
     pub id: String,
     pub author_id: String,
-    pub author_name: String,
-    pub title: Option<String>,
     pub content_preview: String,
     pub status: String,
     pub images_count: i32,
@@ -51,64 +55,77 @@ pub struct PostSummary {
 }
 
 async fn list_posts(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Query(query): Query<ListContentQuery>,
 ) -> Result<Json<PostListResponse>> {
-    let page = query.page.unwrap_or(1);
+    let page = query.page.unwrap_or(1).max(1);
     let limit = query.limit.unwrap_or(20).min(100);
-    let _status = query.status.clone();
-    let _search = query.search.clone();
 
-    // TODO: Query real posts from database
+    let content_service = ContentService::new(state.db.clone());
+    let (posts, total) = content_service.list_posts(ListContentParams {
+        page,
+        limit,
+        status: query.status,
+        search: query.search,
+    }).await?;
+
+    // Get report counts for each post
+    let mut posts_response = Vec::new();
+    for post in posts {
+        let reports_count = content_service.get_reports_count("post", post.id).await.unwrap_or(0);
+
+        // Create content preview (first 100 chars)
+        let content_preview = if post.content.len() > 100 {
+            format!("{}...", &post.content[..100])
+        } else {
+            post.content.clone()
+        };
+
+        posts_response.push(PostSummaryResponse {
+            id: post.id.to_string(),
+            author_id: post.user_id.to_string(),
+            content_preview,
+            status: post.status,
+            images_count: post.images_count,
+            likes_count: post.likes_count,
+            comments_count: post.comments_count,
+            reports_count,
+            created_at: post.created_at.to_rfc3339(),
+        });
+    }
 
     Ok(Json(PostListResponse {
-        posts: vec![
-            PostSummary {
-                id: "post_1".to_string(),
-                author_id: "user_1".to_string(),
-                author_name: "测试用户".to_string(),
-                title: Some("测试帖子".to_string()),
-                content_preview: "这是一条测试帖子的内容预览...".to_string(),
-                status: "pending".to_string(),
-                images_count: 3,
-                likes_count: 42,
-                comments_count: 12,
-                reports_count: 1,
-                created_at: "2024-01-15T10:30:00Z".to_string(),
-            },
-        ],
-        total: 1,
+        posts: posts_response,
+        total,
         page,
         limit,
     }))
 }
 
 #[derive(Debug, Serialize)]
-pub struct PostDetail {
+pub struct PostDetailResponse {
     pub id: String,
-    pub author: AuthorInfo,
-    pub title: Option<String>,
+    pub author: Option<AuthorInfoResponse>,
     pub content: String,
     pub images: Vec<String>,
     pub status: String,
-    pub moderation_notes: Option<String>,
-    pub stats: PostStats,
-    pub reports: Vec<ReportSummary>,
+    pub stats: PostStatsResponse,
+    pub reports: Vec<ReportSummaryResponse>,
     pub created_at: String,
     pub updated_at: String,
 }
 
 #[derive(Debug, Serialize)]
-pub struct AuthorInfo {
+pub struct AuthorInfoResponse {
     pub id: String,
     pub nickname: String,
     pub avatar: Option<String>,
-    pub risk_level: String,
+    pub warnings_count: i64,
+    pub is_banned: bool,
 }
 
 #[derive(Debug, Serialize)]
-pub struct PostStats {
-    pub views_count: i64,
+pub struct PostStatsResponse {
     pub likes_count: i64,
     pub comments_count: i64,
     pub shares_count: i64,
@@ -116,49 +133,67 @@ pub struct PostStats {
 }
 
 #[derive(Debug, Serialize)]
-pub struct ReportSummary {
+pub struct ReportSummaryResponse {
     pub id: String,
     pub reason: String,
     pub reporter_id: String,
+    pub status: String,
     pub created_at: String,
 }
 
 async fn get_post(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
+    Extension(current_admin): Extension<CurrentAdmin>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Path(id): Path<String>,
-) -> Result<Json<PostDetail>> {
-    // TODO: Query real post from database
+) -> Result<Json<PostDetailResponse>> {
+    let post_id = Uuid::parse_str(&id)
+        .map_err(|_| AppError::BadRequest("Invalid post ID".to_string()))?;
 
-    Ok(Json(PostDetail {
-        id,
-        author: AuthorInfo {
-            id: "user_1".to_string(),
-            nickname: "测试用户".to_string(),
-            avatar: None,
-            risk_level: "low".to_string(),
+    let content_service = ContentService::new(state.db.clone());
+    let post = content_service.get_post(post_id).await?;
+
+    // Log audit event
+    let audit_service = AuditService::new(state.db.clone());
+    let admin_id = current_admin.id.parse().unwrap_or_default();
+    let _ = audit_service.log(CreateAuditLog {
+        admin_id,
+        action: AuditAction::ViewContent,
+        resource_type: ResourceType::Post,
+        resource_id: Some(id.clone()),
+        details: None,
+        ip_address: Some(addr.ip().to_string()),
+        user_agent: headers.get("user-agent").and_then(|v| v.to_str().ok()).map(String::from),
+    }).await;
+
+    Ok(Json(PostDetailResponse {
+        id: post.id.to_string(),
+        author: post.author.map(|a| AuthorInfoResponse {
+            id: a.id.to_string(),
+            nickname: a.nickname,
+            avatar: a.avatar,
+            warnings_count: a.warnings_count,
+            is_banned: a.is_banned,
+        }),
+        content: post.content,
+        images: post.images,
+        status: post.status,
+        stats: PostStatsResponse {
+            likes_count: post.likes_count,
+            comments_count: post.comments_count,
+            shares_count: post.shares_count,
+            reports_count: post.reports.len() as i64,
         },
-        title: Some("测试帖子".to_string()),
-        content: "这是一条测试帖子的完整内容。".to_string(),
-        images: vec![],
-        status: "pending".to_string(),
-        moderation_notes: None,
-        stats: PostStats {
-            views_count: 1200,
-            likes_count: 42,
-            comments_count: 12,
-            shares_count: 5,
-            reports_count: 1,
-        },
-        reports: vec![
-            ReportSummary {
-                id: "report_1".to_string(),
-                reason: "不当内容".to_string(),
-                reporter_id: "user_2".to_string(),
-                created_at: "2024-01-15T11:00:00Z".to_string(),
-            },
-        ],
-        created_at: "2024-01-15T10:30:00Z".to_string(),
-        updated_at: "2024-01-15T10:30:00Z".to_string(),
+        reports: post.reports.into_iter().map(|r| ReportSummaryResponse {
+            id: r.id.to_string(),
+            reason: r.reason,
+            reporter_id: r.reporter_id.to_string(),
+            status: r.status,
+            created_at: r.created_at.to_rfc3339(),
+        }).collect(),
+        created_at: post.created_at.to_rfc3339(),
+        updated_at: post.updated_at.to_rfc3339(),
     }))
 }
 
@@ -168,18 +203,41 @@ pub struct ModerationRequest {
 }
 
 async fn approve_post(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
+    Extension(current_admin): Extension<CurrentAdmin>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<ModerationRequest>,
 ) -> Result<Json<serde_json::Value>> {
-    // TODO: Implement post approval
-    // 1. Update post status
-    // 2. Log audit event
-    // 3. Notify author if needed
+    let post_id = Uuid::parse_str(&id)
+        .map_err(|_| AppError::BadRequest("Invalid post ID".to_string()))?;
+    let admin_id: Uuid = current_admin.id.parse()
+        .map_err(|_| AppError::BadRequest("Invalid admin ID".to_string()))?;
+
+    // Check permission
+    if !current_admin.role.can_moderate_content() {
+        return Err(AppError::Forbidden);
+    }
+
+    let content_service = ContentService::new(state.db.clone());
+    content_service.approve_post(post_id, admin_id, payload.notes.as_deref()).await?;
+
+    // Log audit event
+    let audit_service = AuditService::new(state.db.clone());
+    let _ = audit_service.log(CreateAuditLog {
+        admin_id,
+        action: AuditAction::ApproveContent,
+        resource_type: ResourceType::Post,
+        resource_id: Some(id.clone()),
+        details: payload.notes.map(|n| serde_json::json!({ "notes": n })),
+        ip_address: Some(addr.ip().to_string()),
+        user_agent: headers.get("user-agent").and_then(|v| v.to_str().ok()).map(String::from),
+    }).await;
 
     Ok(Json(serde_json::json!({
+        "success": true,
         "message": format!("Post {} has been approved", id),
-        "notes": payload.notes,
     })))
 }
 
@@ -190,40 +248,65 @@ pub struct RejectRequest {
 }
 
 async fn reject_post(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
+    Extension(current_admin): Extension<CurrentAdmin>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<RejectRequest>,
 ) -> Result<Json<serde_json::Value>> {
-    if payload.reason.is_empty() {
+    if payload.reason.trim().is_empty() {
         return Err(AppError::BadRequest("Rejection reason is required".to_string()));
     }
 
-    // TODO: Implement post rejection
-    // 1. Update post status
-    // 2. Log audit event
-    // 3. Notify author
+    let post_id = Uuid::parse_str(&id)
+        .map_err(|_| AppError::BadRequest("Invalid post ID".to_string()))?;
+    let admin_id: Uuid = current_admin.id.parse()
+        .map_err(|_| AppError::BadRequest("Invalid admin ID".to_string()))?;
+
+    // Check permission
+    if !current_admin.role.can_moderate_content() {
+        return Err(AppError::Forbidden);
+    }
+
+    let content_service = ContentService::new(state.db.clone());
+    content_service.reject_post(post_id, admin_id, &payload.reason, payload.notes.as_deref()).await?;
+
+    // Log audit event
+    let audit_service = AuditService::new(state.db.clone());
+    let _ = audit_service.log(CreateAuditLog {
+        admin_id,
+        action: AuditAction::RejectContent,
+        resource_type: ResourceType::Post,
+        resource_id: Some(id.clone()),
+        details: Some(serde_json::json!({
+            "reason": payload.reason,
+            "notes": payload.notes,
+        })),
+        ip_address: Some(addr.ip().to_string()),
+        user_agent: headers.get("user-agent").and_then(|v| v.to_str().ok()).map(String::from),
+    }).await;
 
     Ok(Json(serde_json::json!({
+        "success": true,
         "message": format!("Post {} has been rejected", id),
         "reason": payload.reason,
-        "notes": payload.notes,
     })))
 }
 
 #[derive(Debug, Serialize)]
 pub struct CommentListResponse {
-    pub comments: Vec<CommentSummary>,
+    pub comments: Vec<CommentSummaryResponse>,
     pub total: i64,
     pub page: u32,
     pub limit: u32,
 }
 
 #[derive(Debug, Serialize)]
-pub struct CommentSummary {
+pub struct CommentSummaryResponse {
     pub id: String,
     pub post_id: String,
     pub author_id: String,
-    pub author_name: String,
     pub content: String,
     pub status: String,
     pub reports_count: i64,
@@ -231,62 +314,123 @@ pub struct CommentSummary {
 }
 
 async fn list_comments(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Query(query): Query<ListContentQuery>,
 ) -> Result<Json<CommentListResponse>> {
-    let page = query.page.unwrap_or(1);
+    let page = query.page.unwrap_or(1).max(1);
     let limit = query.limit.unwrap_or(20).min(100);
-    let _status = query.status;
-    let _search = query.search;
 
-    // TODO: Query real comments from database
+    let content_service = ContentService::new(state.db.clone());
+    let (comments, total) = content_service.list_comments(ListContentParams {
+        page,
+        limit,
+        status: query.status,
+        search: query.search,
+    }).await?;
+
+    let mut comments_response = Vec::new();
+    for comment in comments {
+        let reports_count = content_service.get_reports_count("comment", comment.id).await.unwrap_or(0);
+
+        comments_response.push(CommentSummaryResponse {
+            id: comment.id.to_string(),
+            post_id: comment.post_id.to_string(),
+            author_id: comment.user_id.to_string(),
+            content: comment.content,
+            status: comment.status,
+            reports_count,
+            created_at: comment.created_at.to_rfc3339(),
+        });
+    }
 
     Ok(Json(CommentListResponse {
-        comments: vec![
-            CommentSummary {
-                id: "comment_1".to_string(),
-                post_id: "post_1".to_string(),
-                author_id: "user_2".to_string(),
-                author_name: "评论用户".to_string(),
-                content: "这是一条待审核的评论内容".to_string(),
-                status: "pending".to_string(),
-                reports_count: 0,
-                created_at: "2024-01-15T11:30:00Z".to_string(),
-            },
-        ],
-        total: 1,
+        comments: comments_response,
+        total,
         page,
         limit,
     }))
 }
 
 async fn approve_comment(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
+    Extension(current_admin): Extension<CurrentAdmin>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<ModerationRequest>,
 ) -> Result<Json<serde_json::Value>> {
-    // TODO: Implement comment approval
+    let comment_id = Uuid::parse_str(&id)
+        .map_err(|_| AppError::BadRequest("Invalid comment ID".to_string()))?;
+    let admin_id: Uuid = current_admin.id.parse()
+        .map_err(|_| AppError::BadRequest("Invalid admin ID".to_string()))?;
+
+    if !current_admin.role.can_moderate_content() {
+        return Err(AppError::Forbidden);
+    }
+
+    let content_service = ContentService::new(state.db.clone());
+    content_service.approve_comment(comment_id, admin_id, payload.notes.as_deref()).await?;
+
+    // Log audit event
+    let audit_service = AuditService::new(state.db.clone());
+    let _ = audit_service.log(CreateAuditLog {
+        admin_id,
+        action: AuditAction::ApproveContent,
+        resource_type: ResourceType::Comment,
+        resource_id: Some(id.clone()),
+        details: payload.notes.map(|n| serde_json::json!({ "notes": n })),
+        ip_address: Some(addr.ip().to_string()),
+        user_agent: headers.get("user-agent").and_then(|v| v.to_str().ok()).map(String::from),
+    }).await;
 
     Ok(Json(serde_json::json!({
+        "success": true,
         "message": format!("Comment {} has been approved", id),
-        "notes": payload.notes,
     })))
 }
 
 async fn reject_comment(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
+    Extension(current_admin): Extension<CurrentAdmin>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<RejectRequest>,
 ) -> Result<Json<serde_json::Value>> {
-    if payload.reason.is_empty() {
+    if payload.reason.trim().is_empty() {
         return Err(AppError::BadRequest("Rejection reason is required".to_string()));
     }
 
-    // TODO: Implement comment rejection
+    let comment_id = Uuid::parse_str(&id)
+        .map_err(|_| AppError::BadRequest("Invalid comment ID".to_string()))?;
+    let admin_id: Uuid = current_admin.id.parse()
+        .map_err(|_| AppError::BadRequest("Invalid admin ID".to_string()))?;
+
+    if !current_admin.role.can_moderate_content() {
+        return Err(AppError::Forbidden);
+    }
+
+    let content_service = ContentService::new(state.db.clone());
+    content_service.reject_comment(comment_id, admin_id, &payload.reason, payload.notes.as_deref()).await?;
+
+    // Log audit event
+    let audit_service = AuditService::new(state.db.clone());
+    let _ = audit_service.log(CreateAuditLog {
+        admin_id,
+        action: AuditAction::RejectContent,
+        resource_type: ResourceType::Comment,
+        resource_id: Some(id.clone()),
+        details: Some(serde_json::json!({
+            "reason": payload.reason,
+            "notes": payload.notes,
+        })),
+        ip_address: Some(addr.ip().to_string()),
+        user_agent: headers.get("user-agent").and_then(|v| v.to_str().ok()).map(String::from),
+    }).await;
 
     Ok(Json(serde_json::json!({
+        "success": true,
         "message": format!("Comment {} has been rejected", id),
         "reason": payload.reason,
-        "notes": payload.notes,
     })))
 }

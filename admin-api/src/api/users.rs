@@ -1,12 +1,17 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{ConnectInfo, Path, Query, State},
+    http::HeaderMap,
     routing::{get, post},
-    Json, Router,
+    Extension, Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use uuid::Uuid;
 
 use crate::error::{AppError, Result};
+use crate::middleware::CurrentAdmin;
+use crate::models::{AuditAction, CreateAuditLog, ResourceType};
+use crate::services::{AuditService, ListUsersParams, UserService};
 use crate::AppState;
 
 pub fn routes() -> Router<AppState> {
@@ -16,6 +21,7 @@ pub fn routes() -> Router<AppState> {
         .route("/:id/ban", post(ban_user))
         .route("/:id/unban", post(unban_user))
         .route("/:id/warn", post(warn_user))
+        .route("/:id/history", get(get_user_history))
 }
 
 #[derive(Debug, Deserialize)]
@@ -24,62 +30,62 @@ pub struct ListUsersQuery {
     pub limit: Option<u32>,
     pub status: Option<String>,
     pub search: Option<String>,
-    pub risk_level: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct UserListResponse {
-    pub users: Vec<UserSummary>,
+    pub users: Vec<UserSummaryResponse>,
     pub total: i64,
     pub page: u32,
     pub limit: u32,
 }
 
 #[derive(Debug, Serialize)]
-pub struct UserSummary {
+pub struct UserSummaryResponse {
     pub id: String,
     pub nickname: String,
     pub email: String,
     pub avatar: Option<String>,
     pub status: String,
-    pub risk_level: String,
     pub created_at: String,
     pub last_active_at: Option<String>,
 }
 
 async fn list_users(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Query(query): Query<ListUsersQuery>,
 ) -> Result<Json<UserListResponse>> {
-    let page = query.page.unwrap_or(1);
+    let page = query.page.unwrap_or(1).max(1);
     let limit = query.limit.unwrap_or(20).min(100);
-    let _status = query.status;
-    let _search = query.search;
-    let _risk_level = query.risk_level;
 
-    // TODO: Query real users from database with filters
+    let user_service = UserService::new(state.db.clone());
+    let (users, total) = user_service.list_users(ListUsersParams {
+        page,
+        limit,
+        status: query.status,
+        search: query.search,
+    }).await?;
+
+    let users_response: Vec<UserSummaryResponse> = users.into_iter().map(|u| UserSummaryResponse {
+        id: u.id.to_string(),
+        nickname: u.nickname,
+        email: u.email,
+        avatar: u.avatar,
+        status: u.status,
+        created_at: u.created_at.to_rfc3339(),
+        last_active_at: u.last_active_at.map(|t| t.to_rfc3339()),
+    }).collect();
 
     Ok(Json(UserListResponse {
-        users: vec![
-            UserSummary {
-                id: Uuid::new_v4().to_string(),
-                nickname: "测试用户".to_string(),
-                email: "user@example.com".to_string(),
-                avatar: None,
-                status: "active".to_string(),
-                risk_level: "low".to_string(),
-                created_at: "2024-01-01T00:00:00Z".to_string(),
-                last_active_at: Some("2024-01-15T10:30:00Z".to_string()),
-            },
-        ],
-        total: 1,
+        users: users_response,
+        total,
         page,
         limit,
     }))
 }
 
 #[derive(Debug, Serialize)]
-pub struct UserDetail {
+pub struct UserDetailResponse {
     pub id: String,
     pub nickname: String,
     pub email: String,
@@ -87,97 +93,146 @@ pub struct UserDetail {
     pub avatar: Option<String>,
     pub bio: Option<String>,
     pub status: String,
-    pub risk_level: String,
-    pub risk_score: f64,
-    pub verification: VerificationStatus,
-    pub stats: UserStats,
+    pub is_banned: bool,
+    pub warnings_count: i64,
     pub created_at: String,
     pub updated_at: String,
 }
 
-#[derive(Debug, Serialize)]
-pub struct VerificationStatus {
-    pub identity_verified: bool,
-    pub profession_verified: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct UserStats {
-    pub posts_count: i64,
-    pub comments_count: i64,
-    pub followers_count: i64,
-    pub following_count: i64,
-    pub reports_received: i64,
-    pub warnings_count: i64,
-}
-
 async fn get_user(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
+    Extension(current_admin): Extension<CurrentAdmin>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Path(id): Path<String>,
-) -> Result<Json<UserDetail>> {
-    // TODO: Query real user from database
+) -> Result<Json<UserDetailResponse>> {
+    let user_id = Uuid::parse_str(&id)
+        .map_err(|_| AppError::BadRequest("Invalid user ID".to_string()))?;
 
-    Ok(Json(UserDetail {
-        id,
-        nickname: "测试用户".to_string(),
-        email: "user@example.com".to_string(),
-        phone: Some("+86 138****8888".to_string()),
-        avatar: None,
-        bio: Some("这是一段个人简介".to_string()),
-        status: "active".to_string(),
-        risk_level: "low".to_string(),
-        risk_score: 15.5,
-        verification: VerificationStatus {
-            identity_verified: true,
-            profession_verified: false,
-        },
-        stats: UserStats {
-            posts_count: 42,
-            comments_count: 156,
-            followers_count: 1200,
-            following_count: 350,
-            reports_received: 2,
-            warnings_count: 0,
-        },
-        created_at: "2024-01-01T00:00:00Z".to_string(),
-        updated_at: "2024-01-15T10:30:00Z".to_string(),
+    let user_service = UserService::new(state.db.clone());
+    let user = user_service.get_user(user_id).await?;
+    let is_banned = user_service.is_user_banned(user_id).await?;
+    let warnings_count = user_service.get_warning_count(user_id).await?;
+
+    // Log audit event
+    let audit_service = AuditService::new(state.db.clone());
+    let admin_id = current_admin.id.parse().unwrap_or_default();
+    let _ = audit_service.log(CreateAuditLog {
+        admin_id,
+        action: AuditAction::ViewUser,
+        resource_type: ResourceType::User,
+        resource_id: Some(id.clone()),
+        details: None,
+        ip_address: Some(addr.ip().to_string()),
+        user_agent: headers.get("user-agent").and_then(|v| v.to_str().ok()).map(String::from),
+    }).await;
+
+    Ok(Json(UserDetailResponse {
+        id: user.id.to_string(),
+        nickname: user.nickname,
+        email: user.email,
+        phone: user.phone,
+        avatar: user.avatar,
+        bio: user.bio,
+        status: user.status,
+        is_banned,
+        warnings_count,
+        created_at: user.created_at.to_rfc3339(),
+        updated_at: user.updated_at.to_rfc3339(),
     }))
 }
 
 #[derive(Debug, Deserialize)]
 pub struct BanRequest {
     pub reason: String,
+    #[serde(default)]
     pub duration_days: Option<i32>,
 }
 
 async fn ban_user(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
+    Extension(current_admin): Extension<CurrentAdmin>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<BanRequest>,
 ) -> Result<Json<serde_json::Value>> {
-    if payload.reason.is_empty() {
+    if payload.reason.trim().is_empty() {
         return Err(AppError::BadRequest("Reason is required".to_string()));
     }
 
-    // TODO: Implement user ban
-    // 1. Update user status in database
-    // 2. Invalidate user sessions
-    // 3. Log audit event
+    let user_id = Uuid::parse_str(&id)
+        .map_err(|_| AppError::BadRequest("Invalid user ID".to_string()))?;
+    let admin_id: Uuid = current_admin.id.parse()
+        .map_err(|_| AppError::BadRequest("Invalid admin ID".to_string()))?;
+
+    // Check permission
+    if !current_admin.role.can_ban_users() {
+        return Err(AppError::Forbidden);
+    }
+
+    let user_service = UserService::new(state.db.clone());
+    let ban = user_service.ban_user(user_id, admin_id, &payload.reason, payload.duration_days).await?;
+
+    // Log audit event
+    let audit_service = AuditService::new(state.db.clone());
+    let _ = audit_service.log(CreateAuditLog {
+        admin_id,
+        action: AuditAction::BanUser,
+        resource_type: ResourceType::User,
+        resource_id: Some(id.clone()),
+        details: Some(serde_json::json!({
+            "reason": payload.reason,
+            "duration_days": payload.duration_days,
+            "ban_id": ban.id.to_string(),
+            "expires_at": ban.expires_at.map(|t| t.to_rfc3339())
+        })),
+        ip_address: Some(addr.ip().to_string()),
+        user_agent: headers.get("user-agent").and_then(|v| v.to_str().ok()).map(String::from),
+    }).await;
 
     Ok(Json(serde_json::json!({
+        "success": true,
         "message": format!("User {} has been banned", id),
-        "reason": payload.reason,
-        "duration_days": payload.duration_days,
+        "ban_id": ban.id.to_string(),
+        "expires_at": ban.expires_at.map(|t| t.to_rfc3339()),
     })))
 }
 
 async fn unban_user(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
+    Extension(current_admin): Extension<CurrentAdmin>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>> {
-    // TODO: Implement user unban
+    let user_id = Uuid::parse_str(&id)
+        .map_err(|_| AppError::BadRequest("Invalid user ID".to_string()))?;
+    let admin_id: Uuid = current_admin.id.parse()
+        .map_err(|_| AppError::BadRequest("Invalid admin ID".to_string()))?;
+
+    // Check permission
+    if !current_admin.role.can_ban_users() {
+        return Err(AppError::Forbidden);
+    }
+
+    let user_service = UserService::new(state.db.clone());
+    user_service.unban_user(user_id, admin_id).await?;
+
+    // Log audit event
+    let audit_service = AuditService::new(state.db.clone());
+    let _ = audit_service.log(CreateAuditLog {
+        admin_id,
+        action: AuditAction::UnbanUser,
+        resource_type: ResourceType::User,
+        resource_id: Some(id.clone()),
+        details: None,
+        ip_address: Some(addr.ip().to_string()),
+        user_agent: headers.get("user-agent").and_then(|v| v.to_str().ok()).map(String::from),
+    }).await;
 
     Ok(Json(serde_json::json!({
+        "success": true,
         "message": format!("User {} has been unbanned", id),
     })))
 }
@@ -185,24 +240,106 @@ async fn unban_user(
 #[derive(Debug, Deserialize)]
 pub struct WarnRequest {
     pub reason: String,
+    #[serde(default = "default_severity")]
+    pub severity: String,
+}
+
+fn default_severity() -> String {
+    "low".to_string()
 }
 
 async fn warn_user(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
+    Extension(current_admin): Extension<CurrentAdmin>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<WarnRequest>,
 ) -> Result<Json<serde_json::Value>> {
-    if payload.reason.is_empty() {
+    if payload.reason.trim().is_empty() {
         return Err(AppError::BadRequest("Reason is required".to_string()));
     }
 
-    // TODO: Implement user warning
-    // 1. Create warning record
-    // 2. Send notification to user
-    // 3. Log audit event
+    let user_id = Uuid::parse_str(&id)
+        .map_err(|_| AppError::BadRequest("Invalid user ID".to_string()))?;
+    let admin_id: Uuid = current_admin.id.parse()
+        .map_err(|_| AppError::BadRequest("Invalid admin ID".to_string()))?;
+
+    let user_service = UserService::new(state.db.clone());
+    let warning = user_service.warn_user(user_id, admin_id, &payload.reason, &payload.severity).await?;
+
+    // Log audit event
+    let audit_service = AuditService::new(state.db.clone());
+    let _ = audit_service.log(CreateAuditLog {
+        admin_id,
+        action: AuditAction::WarnUser,
+        resource_type: ResourceType::User,
+        resource_id: Some(id.clone()),
+        details: Some(serde_json::json!({
+            "reason": payload.reason,
+            "severity": payload.severity,
+            "warning_id": warning.id.to_string()
+        })),
+        ip_address: Some(addr.ip().to_string()),
+        user_agent: headers.get("user-agent").and_then(|v| v.to_str().ok()).map(String::from),
+    }).await;
 
     Ok(Json(serde_json::json!({
+        "success": true,
         "message": format!("Warning sent to user {}", id),
-        "reason": payload.reason,
+        "warning_id": warning.id.to_string(),
     })))
+}
+
+#[derive(Debug, Serialize)]
+pub struct UserHistoryResponse {
+    pub bans: Vec<BanHistoryItem>,
+    pub warnings: Vec<WarningHistoryItem>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BanHistoryItem {
+    pub id: String,
+    pub reason: String,
+    pub duration_days: Option<i32>,
+    pub banned_at: String,
+    pub expires_at: Option<String>,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WarningHistoryItem {
+    pub id: String,
+    pub reason: String,
+    pub severity: String,
+    pub created_at: String,
+}
+
+async fn get_user_history(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<UserHistoryResponse>> {
+    let user_id = Uuid::parse_str(&id)
+        .map_err(|_| AppError::BadRequest("Invalid user ID".to_string()))?;
+
+    let user_service = UserService::new(state.db.clone());
+    let bans = user_service.get_user_bans(user_id).await?;
+    let warnings = user_service.get_user_warnings(user_id).await?;
+
+    Ok(Json(UserHistoryResponse {
+        bans: bans.into_iter().map(|b| BanHistoryItem {
+            id: b.id.to_string(),
+            reason: b.reason,
+            duration_days: b.duration_days,
+            banned_at: b.banned_at.to_rfc3339(),
+            expires_at: b.expires_at.map(|t| t.to_rfc3339()),
+            is_active: b.is_active,
+        }).collect(),
+        warnings: warnings.into_iter().map(|w| WarningHistoryItem {
+            id: w.id.to_string(),
+            reason: w.reason,
+            severity: w.severity,
+            created_at: w.created_at.to_rfc3339(),
+        }).collect(),
+    }))
 }

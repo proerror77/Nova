@@ -1,97 +1,105 @@
 use axum::{
-    extract::State,
+    extract::{Query, State},
     routing::get,
     Json, Router,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
+use crate::services::DashboardService;
 use crate::AppState;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/stats", get(get_stats))
         .route("/charts/users", get(get_user_chart))
-        .route("/charts/content", get(get_content_chart))
+        .route("/charts/activity", get(get_activity_chart))
+        .route("/activity", get(get_recent_activity))
         .route("/risks", get(get_risk_alerts))
 }
 
-#[derive(Debug, Serialize)]
-pub struct DashboardStats {
-    pub total_users: i64,
-    pub active_users_today: i64,
-    pub new_users_today: i64,
-    pub pending_reviews: i64,
-    pub reports_today: i64,
-    pub revenue_today: f64,
-}
-
 async fn get_stats(
-    State(_state): State<AppState>,
-) -> Result<Json<DashboardStats>> {
-    // TODO: Query real statistics from database/ClickHouse
-
-    Ok(Json(DashboardStats {
-        total_users: 125_000,
-        active_users_today: 8_500,
-        new_users_today: 320,
-        pending_reviews: 45,
-        reports_today: 12,
-        revenue_today: 15_800.50,
-    }))
+    State(state): State<AppState>,
+) -> Result<Json<crate::services::DashboardStats>> {
+    let dashboard_service = DashboardService::new(state.db.clone());
+    let stats = dashboard_service.get_stats().await?;
+    Ok(Json(stats))
 }
 
-#[derive(Debug, Serialize)]
-pub struct ChartDataPoint {
-    pub date: String,
-    pub value: i64,
+#[derive(Debug, Deserialize)]
+pub struct ChartQuery {
+    #[serde(default = "default_days")]
+    pub days: i32,
+}
+
+fn default_days() -> i32 {
+    7
 }
 
 async fn get_user_chart(
-    State(_state): State<AppState>,
-) -> Result<Json<Vec<ChartDataPoint>>> {
-    // TODO: Query real chart data
-
-    Ok(Json(vec![
-        ChartDataPoint { date: "2024-01-01".to_string(), value: 1200 },
-        ChartDataPoint { date: "2024-01-02".to_string(), value: 1350 },
-        ChartDataPoint { date: "2024-01-03".to_string(), value: 1100 },
-    ]))
+    State(state): State<AppState>,
+    Query(query): Query<ChartQuery>,
+) -> Result<Json<Vec<crate::services::ChartDataPoint>>> {
+    let days = query.days.min(30).max(1);
+    let dashboard_service = DashboardService::new(state.db.clone());
+    let data = dashboard_service.get_user_chart(days).await?;
+    Ok(Json(data))
 }
 
-async fn get_content_chart(
-    State(_state): State<AppState>,
-) -> Result<Json<Vec<ChartDataPoint>>> {
-    // TODO: Query real chart data
+async fn get_activity_chart(
+    State(state): State<AppState>,
+    Query(query): Query<ChartQuery>,
+) -> Result<Json<Vec<crate::services::ChartDataPoint>>> {
+    let days = query.days.min(30).max(1);
+    let dashboard_service = DashboardService::new(state.db.clone());
+    let data = dashboard_service.get_activity_chart(days).await?;
+    Ok(Json(data))
+}
 
-    Ok(Json(vec![
-        ChartDataPoint { date: "2024-01-01".to_string(), value: 450 },
-        ChartDataPoint { date: "2024-01-02".to_string(), value: 520 },
-        ChartDataPoint { date: "2024-01-03".to_string(), value: 380 },
-    ]))
+#[derive(Debug, Deserialize)]
+pub struct ActivityQuery {
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+}
+
+fn default_limit() -> i64 {
+    20
+}
+
+async fn get_recent_activity(
+    State(state): State<AppState>,
+    Query(query): Query<ActivityQuery>,
+) -> Result<Json<Vec<crate::services::RecentActivity>>> {
+    let limit = query.limit.min(100).max(1);
+    let dashboard_service = DashboardService::new(state.db.clone());
+    let activities = dashboard_service.get_recent_activity(limit).await?;
+    Ok(Json(activities))
 }
 
 #[derive(Debug, Serialize)]
-pub struct RiskAlert {
+pub struct RiskAlertResponse {
     pub id: String,
     pub level: String,
     pub title: String,
     pub description: String,
+    pub user_id: Option<String>,
     pub created_at: String,
 }
 
 async fn get_risk_alerts(
-    State(_state): State<AppState>,
-) -> Result<Json<Vec<RiskAlert>>> {
-    // TODO: Query real risk alerts
+    State(state): State<AppState>,
+) -> Result<Json<Vec<RiskAlertResponse>>> {
+    let dashboard_service = DashboardService::new(state.db.clone());
+    let alerts = dashboard_service.get_risk_alerts().await?;
 
-    Ok(Json(vec![
-        RiskAlert {
-            id: "1".to_string(),
-            level: "high".to_string(),
-            title: "异常登录行为".to_string(),
-            description: "检测到 15 个账号在短时间内从不同地区登录".to_string(),
-            created_at: "2024-01-15T10:30:00Z".to_string(),
-        },
-    ]))
+    let response: Vec<RiskAlertResponse> = alerts.into_iter().map(|a| RiskAlertResponse {
+        id: a.id,
+        level: a.level,
+        title: a.title,
+        description: a.description,
+        user_id: a.user_id,
+        created_at: a.created_at.to_rfc3339(),
+    }).collect();
+
+    Ok(Json(response))
 }

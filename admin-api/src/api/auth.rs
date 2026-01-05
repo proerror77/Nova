@@ -1,12 +1,18 @@
 use axum::{
-    extract::State,
+    extract::{ConnectInfo, State},
+    http::HeaderMap,
     routing::post,
-    Json, Router,
+    Extension, Json, Router,
 };
+use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use validator::Validate;
 
 use crate::error::{AppError, Result};
+use crate::middleware::{Claims, CurrentAdmin};
+use crate::models::{AuditAction, CreateAuditLog, ResourceType};
+use crate::services::{AuditService, AuthService};
 use crate::AppState;
 
 pub fn routes() -> Router<AppState> {
@@ -14,6 +20,7 @@ pub fn routes() -> Router<AppState> {
         .route("/login", post(login))
         .route("/logout", post(logout))
         .route("/refresh", post(refresh_token))
+        .route("/me", axum::routing::get(get_current_admin))
 }
 
 #[derive(Debug, Deserialize, Validate)]
@@ -41,37 +48,89 @@ pub struct AdminInfo {
 }
 
 async fn login(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>> {
+    // Validate input
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
 
-    // TODO: Implement actual authentication
-    // 1. Query admin from database
-    // 2. Verify password with argon2
-    // 3. Generate JWT tokens
-    // 4. Log audit event
+    // Authenticate using AuthService
+    let auth_service = AuthService::new(state.db.clone(), state.config.clone());
+    let (admin, access_token, refresh_token) = auth_service
+        .authenticate(&payload.email, &payload.password)
+        .await?;
 
-    // Placeholder response
+    // Log audit event
+    let audit_service = AuditService::new(state.db.clone());
+    let user_agent = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+
+    let _ = audit_service.log(CreateAuditLog {
+        admin_id: admin.id,
+        action: AuditAction::Login,
+        resource_type: ResourceType::Session,
+        resource_id: Some(admin.id.to_string()),
+        details: Some(serde_json::json!({
+            "email": admin.email,
+            "login_time": chrono::Utc::now().to_rfc3339()
+        })),
+        ip_address: Some(addr.ip().to_string()),
+        user_agent,
+    }).await;
+
     Ok(Json(LoginResponse {
-        access_token: "placeholder_access_token".to_string(),
-        refresh_token: "placeholder_refresh_token".to_string(),
+        access_token,
+        refresh_token,
         admin: AdminInfo {
-            id: "1".to_string(),
-            email: payload.email,
-            name: "Admin".to_string(),
-            role: "super_admin".to_string(),
-            avatar: None,
+            id: admin.id.to_string(),
+            email: admin.email,
+            name: admin.name,
+            role: admin.role,
+            avatar: admin.avatar,
         },
     }))
 }
 
 async fn logout(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
+    Extension(current_admin): Extension<CurrentAdmin>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>> {
-    // TODO: Implement token invalidation
-    // 1. Add token to blacklist in Redis
-    // 2. Log audit event
+    // Get the token from Authorization header
+    let token = headers
+        .get("Authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "))
+        .ok_or(AppError::Unauthorized)?;
+
+    // Invalidate token in Redis
+    let auth_service = AuthService::new(state.db.clone(), state.config.clone());
+    auth_service.invalidate_token(token).await?;
+
+    // Log audit event
+    let audit_service = AuditService::new(state.db.clone());
+    let user_agent = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+
+    let admin_id = current_admin.id.parse().unwrap_or_default();
+    let _ = audit_service.log(CreateAuditLog {
+        admin_id,
+        action: AuditAction::Logout,
+        resource_type: ResourceType::Session,
+        resource_id: Some(current_admin.id.clone()),
+        details: Some(serde_json::json!({
+            "logout_time": chrono::Utc::now().to_rfc3339()
+        })),
+        ip_address: Some(addr.ip().to_string()),
+        user_agent,
+    }).await;
 
     Ok(Json(serde_json::json!({ "message": "Logged out successfully" })))
 }
@@ -87,17 +146,53 @@ pub struct RefreshResponse {
 }
 
 async fn refresh_token(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(payload): Json<RefreshRequest>,
 ) -> Result<Json<RefreshResponse>> {
-    let _token = &payload.refresh_token;
+    // Decode and verify the refresh token
+    let claims = decode::<Claims>(
+        &payload.refresh_token,
+        &DecodingKey::from_secret(state.config.jwt.secret.as_bytes()),
+        &Validation::default(),
+    )
+    .map_err(|_| AppError::Unauthorized)?
+    .claims;
 
-    // TODO: Implement token refresh
-    // 1. Verify refresh token
-    // 2. Check if not blacklisted
-    // 3. Generate new access token
+    // Fetch admin from database to ensure still active
+    let admin: crate::models::Admin = sqlx::query_as(
+        "SELECT * FROM admins WHERE id = $1 AND is_active = true"
+    )
+    .bind(uuid::Uuid::parse_str(&claims.sub).map_err(|_| AppError::Unauthorized)?)
+    .fetch_optional(&state.db.pg)
+    .await?
+    .ok_or(AppError::Unauthorized)?;
 
-    Ok(Json(RefreshResponse {
-        access_token: "new_placeholder_access_token".to_string(),
+    // Generate new access token
+    let auth_service = AuthService::new(state.db.clone(), state.config.clone());
+    let access_token = auth_service.generate_access_token(&admin)?;
+
+    Ok(Json(RefreshResponse { access_token }))
+}
+
+/// Get current authenticated admin info
+async fn get_current_admin(
+    State(state): State<AppState>,
+    Extension(current_admin): Extension<CurrentAdmin>,
+) -> Result<Json<AdminInfo>> {
+    // Fetch full admin details from database
+    let admin: crate::models::Admin = sqlx::query_as(
+        "SELECT * FROM admins WHERE id = $1"
+    )
+    .bind(uuid::Uuid::parse_str(&current_admin.id).map_err(|_| AppError::Unauthorized)?)
+    .fetch_optional(&state.db.pg)
+    .await?
+    .ok_or(AppError::NotFound("Admin not found".to_string()))?;
+
+    Ok(Json(AdminInfo {
+        id: admin.id.to_string(),
+        email: admin.email,
+        name: admin.name,
+        role: admin.role,
+        avatar: admin.avatar,
     }))
 }

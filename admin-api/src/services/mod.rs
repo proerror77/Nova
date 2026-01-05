@@ -1,9 +1,11 @@
 mod auth_service;
 mod audit_service;
+mod user_service;
+mod dashboard_service;
+mod content_service;
 
-// Services are defined but not yet wired into API handlers
-// Will be used when implementing real database operations
-#[allow(unused_imports)]
 pub use auth_service::*;
-#[allow(unused_imports)]
 pub use audit_service::*;
+pub use user_service::*;
+pub use dashboard_service::*;
+pub use content_service::*;
