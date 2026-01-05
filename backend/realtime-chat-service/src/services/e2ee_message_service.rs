@@ -397,7 +397,5 @@ impl E2eeMessageService {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // TODO: Add integration tests
 }

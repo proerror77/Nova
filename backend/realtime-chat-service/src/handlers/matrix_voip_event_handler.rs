@@ -515,8 +515,6 @@ impl MatrixVoipEventHandler {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_handler_creation() {
         // Test removed - handler now requires runtime dependencies (Pool, ConnectionRegistry, RedisClient)
