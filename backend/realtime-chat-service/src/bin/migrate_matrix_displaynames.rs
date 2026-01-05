@@ -43,6 +43,7 @@ use uuid::Uuid;
 
 /// Response from Synapse Admin API list users endpoint
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)] // Fields populated by serde deserialization
 struct ListUsersResponse {
     users: Vec<MatrixUser>,
     #[serde(default)]
