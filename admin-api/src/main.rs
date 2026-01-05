@@ -45,7 +45,7 @@ async fn main() -> anyhow::Result<()> {
     // Build router
     let app = Router::new()
         .route("/health", get(health_check))
-        .nest("/api/v1", api::routes())
+        .nest("/api", api::routes())
         .layer(CorsLayer::new()
             .allow_origin(Any)
             .allow_methods(Any)
