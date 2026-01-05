@@ -1,0 +1,67 @@
+# Standalone Cargo.toml for Docker builds (not using workspace)
+[workspace]
+
+[package]
+name = "admin-api"
+version = "0.1.0"
+edition = "2021"
+authors = ["Nova Team <team@nova.dev>"]
+license = "MIT"
+rust-version = "1.75"
+description = "Nova Admin Backend BFF Service"
+
+[dependencies]
+# Web framework (Axum for admin, different from main services using Actix)
+axum = { version = "0.7", features = ["macros"] }
+axum-extra = { version = "0.9", features = ["typed-header", "cookie"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace", "compression-gzip"] }
+
+# Async runtime
+tokio = { version = "1.36", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Database
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "migrate", "macros", "json"] }
+redis = { version = "0.25", features = ["tokio-comp", "connection-manager", "streams"] }
+
+# Authentication
+jsonwebtoken = "9.2"
+argon2 = "0.5"
+rand = "0.8"
+
+# Validation
+validator = { version = "0.18", features = ["derive"] }
+
+# Configuration
+config = "0.14"
+dotenvy = "0.15"
+
+# Logging & Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Time & UUID
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.7", features = ["v4", "v5", "serde"] }
+
+# Async traits
+async-trait = "0.1"
+
+[[bin]]
+name = "admin-api"
+path = "src/main.rs"
+
+[[bin]]
+name = "seed"
+path = "src/bin/seed.rs"
+
+[dev-dependencies]
+tokio-test = "0.4"

@@ -175,3 +175,10 @@ ios/NovaSocial/Frameworks/
 
 # Archive/backup directories
 ios/Archive/
+admin-api/target/
+
+# TypeScript build info (generated)
+*.tsbuildinfo
+
+# Vite generated type declarations
+vite.config.d.ts
