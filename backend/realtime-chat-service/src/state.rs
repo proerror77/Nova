@@ -4,7 +4,7 @@ use crate::{
     services::{
         graph_client::GraphClient, identity_client::IdentityClient,
         key_exchange::KeyExchangeService, matrix_admin::MatrixAdminClient, matrix_client::MatrixClient,
-        MegolmService, OlmService,
+        notification_producer::NotificationProducer, MegolmService, OlmService,
     },
     websocket::ConnectionRegistry,
 };
@@ -37,4 +37,6 @@ pub struct AppState {
     pub identity_client: Option<Arc<IdentityClient>>,
     /// Matrix Admin client for user provisioning (create users, generate login tokens)
     pub matrix_admin_client: Option<Arc<MatrixAdminClient>>,
+    /// Kafka notification producer for sending message notifications
+    pub notification_producer: Option<Arc<NotificationProducer>>,
 }

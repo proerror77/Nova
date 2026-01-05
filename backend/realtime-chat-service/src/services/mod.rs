@@ -79,6 +79,7 @@ pub mod matrix_event_handler;
 pub mod matrix_voip_service;
 pub mod megolm_service;
 pub mod message_service;
+pub mod notification_producer;
 pub mod offline_queue;
 pub mod olm_service;
 pub mod relationship_service;
@@ -94,6 +95,7 @@ pub use matrix_admin::MatrixAdminClient;
 pub use matrix_voip_service::{IceCandidate, MatrixVoipService};
 pub use megolm_service::{MegolmCiphertext, MegolmError, MegolmService, RoomKey};
 pub use olm_service::{AccountEncryptionKey, DeviceKeys, OlmError, OlmService};
+pub use notification_producer::NotificationProducer;
 pub use relationship_service::{
     CanMessageResult, RelationshipService, RelationshipServiceV2, RelationshipStatus,
 };

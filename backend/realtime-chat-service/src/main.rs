@@ -14,6 +14,7 @@ use realtime_chat_service::{
         identity_client::IdentityClient,
         key_exchange::KeyExchangeService,
         megolm_service::MegolmService,
+        notification_producer::NotificationProducer,
         olm_service::{AccountEncryptionKey, OlmService},
     },
     state::AppState,
@@ -270,6 +271,29 @@ async fn main() -> Result<(), error::AppError> {
         None
     };
 
+    // Initialize notification producer for sending push notifications via Kafka
+    let notification_producer = if cfg.kafka.enabled {
+        match NotificationProducer::new(&cfg.kafka.brokers, &cfg.kafka.message_notifications_topic) {
+            Ok(producer) => {
+                tracing::info!(
+                    "✅ Notification producer initialized (topic: {})",
+                    cfg.kafka.message_notifications_topic
+                );
+                Some(Arc::new(producer))
+            }
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    "Failed to initialize notification producer, message notifications will be disabled"
+                );
+                None
+            }
+        }
+    } else {
+        tracing::info!("Notification producer disabled (KAFKA_ENABLED=false)");
+        None
+    };
+
     let state = AppState {
         db: db.clone(),
         registry: registry.clone(),
@@ -284,6 +308,7 @@ async fn main() -> Result<(), error::AppError> {
         graph_client,
         identity_client,
         matrix_admin_client: matrix_admin_client.clone(),
+        notification_producer,
     };
 
     // Start Redis Streams listener for cross-instance fanout

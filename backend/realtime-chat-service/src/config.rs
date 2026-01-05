@@ -50,6 +50,8 @@ pub struct KafkaConfig {
     pub brokers: String,
     pub identity_events_topic: String,
     pub consumer_group_id: String,
+    /// Topic for publishing message notifications to notification-service
+    pub message_notifications_topic: String,
 }
 
 /// VoIP configuration combining ICE servers and Matrix settings
@@ -309,6 +311,8 @@ impl Config {
                 .unwrap_or_else(|_| "nova.identity.events".to_string()),
             consumer_group_id: env::var("KAFKA_CONSUMER_GROUP_ID")
                 .unwrap_or_else(|_| "realtime-chat-service".to_string()),
+            message_notifications_topic: env::var("KAFKA_MESSAGE_NOTIFICATIONS_TOPIC")
+                .unwrap_or_else(|_| "MessageCreated".to_string()),
         };
 
         Ok(Self {
@@ -427,6 +431,7 @@ mod tests {
                 brokers: "localhost:9092".to_string(),
                 identity_events_topic: "nova.identity.events".to_string(),
                 consumer_group_id: "test-group".to_string(),
+                message_notifications_topic: "MessageCreated".to_string(),
             },
         };
 
