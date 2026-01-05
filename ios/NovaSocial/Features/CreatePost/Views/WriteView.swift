@@ -37,12 +37,12 @@ struct WriteView: View {
                         "",
                         text: $textContent,
                         prompt: Text("Write something...")
-                            .font(.system(size: 25, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 25.f))
                             .italic()
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53)),
                         axis: .vertical
                     )
-                    .font(.system(size: 25, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 25.f))
                     .foregroundColor(.black)
                     .multilineTextAlignment(.leading)
                     .focused($isTextFieldFocused)
@@ -60,7 +60,7 @@ struct WriteView: View {
                     #endif
                 }) {
                     Text("Image")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                         .foregroundColor(.white)
                 }
                 .frame(width: 343.w, height: 46.h)
@@ -102,7 +102,7 @@ struct WriteView: View {
 
             // 标题
             Text("Text to Image")
-                .font(.system(size: 20, weight: .bold))
+                .font(Font.custom("SFProDisplay-Bold", size: 20.f))
                 .foregroundColor(.black)
 
             Spacer()

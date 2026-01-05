@@ -63,7 +63,7 @@ struct VoiceMessageOptionsView: View {
                 HStack(spacing: 12) {
                     // 波形圖標
                     Image(systemName: "waveform")
-                        .font(.system(size: 24))
+                        .font(.system(size: 24.f))
                         .foregroundColor(DesignTokens.accentColor)
 
                     // 時長
@@ -78,7 +78,7 @@ struct VoiceMessageOptionsView: View {
                         togglePlayback()
                     }) {
                         Image(systemName: audioPlayer.isPlaying ? "stop.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 32))
+                            .font(Font.custom("SFProDisplay-Regular", size: 32.f))
                             .foregroundColor(DesignTokens.accentColor)
                     }
                 }
@@ -146,7 +146,7 @@ struct VoiceMessageOptionsView: View {
                     isPresented = false
                 }) {
                     Text("Cancel")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                         .foregroundColor(.red)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
@@ -171,7 +171,7 @@ struct VoiceMessageOptionsView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(isEditingText ? "Edit Text" : "Recognition Result")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 13.f))
                     .foregroundColor(DesignTokens.textSecondary)
 
                 Spacer()
@@ -188,7 +188,7 @@ struct VoiceMessageOptionsView: View {
                             isEditingText = true
                         }
                     }
-                    .font(.system(size: 13, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 13.f))
                     .foregroundColor(DesignTokens.accentColor)
                 }
             }
@@ -198,19 +198,19 @@ struct VoiceMessageOptionsView: View {
                     ProgressView()
                         .scaleEffect(0.8)
                     Text("Recognizing speech...")
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
                 .padding(.vertical, 8)
             } else if recognizedText.isEmpty && !isEditingText {
                 Text("Unable to recognize speech")
-                    .font(.system(size: 14))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .foregroundColor(.orange)
                     .padding(.vertical, 8)
             } else if isEditingText {
                 // 編輯模式
                 TextEditor(text: $editableText)
-                    .font(.system(size: 15))
+                    .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                     .foregroundColor(DesignTokens.textPrimary)
                     .frame(minHeight: 60, maxHeight: 120)
                     .padding(8)
@@ -222,7 +222,7 @@ struct VoiceMessageOptionsView: View {
                     )
             } else {
                 Text(recognizedText)
-                    .font(.system(size: 15))
+                    .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                     .foregroundColor(DesignTokens.textPrimary)
                     .padding(.vertical, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -351,7 +351,7 @@ private struct OptionButton: View {
                             .scaleEffect(0.8)
                     } else {
                         Image(systemName: icon)
-                            .font(.system(size: 18))
+                            .font(Font.custom("SFProDisplay-Regular", size: 18.f))
                             .foregroundColor(color)
                     }
                 }
@@ -359,12 +359,12 @@ private struct OptionButton: View {
                 // 文字
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                         .foregroundColor(DesignTokens.textPrimary)
 
                     if let subtitle = subtitle {
                         Text(subtitle)
-                            .font(.system(size: 13))
+                            .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                             .foregroundColor(DesignTokens.textSecondary)
                             .lineLimit(1)
                     }
@@ -373,7 +373,7 @@ private struct OptionButton: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14))
+                    .font(.system(size: 14.f))
                     .foregroundColor(DesignTokens.textSecondary)
             }
             .padding(.horizontal, 16)

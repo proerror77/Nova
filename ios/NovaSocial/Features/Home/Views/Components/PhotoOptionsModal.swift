@@ -42,8 +42,8 @@ struct PhotoOptionsModal: View {
                         onChoosePhoto()
                         isPresented = false
                     } label: {
-                        Text("Choose Photo")
-                            .font(.system(size: 18, weight: .medium))
+                        Text("Upload Image")
+                            .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                             .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)
@@ -63,7 +63,7 @@ struct PhotoOptionsModal: View {
                         isPresented = false
                     } label: {
                         Text("Take Photo")
-                            .font(.system(size: 18, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                             .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)
@@ -83,7 +83,7 @@ struct PhotoOptionsModal: View {
                         isPresented = false
                     } label: {
                         Text("Generate Image")
-                            .font(.system(size: 18, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                             .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)
@@ -102,8 +102,8 @@ struct PhotoOptionsModal: View {
                         onWrite()
                         isPresented = false
                     } label: {
-                        Text("Write")
-                            .font(.system(size: 18, weight: .medium))
+                        Text("Text Post")
+                            .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                             .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)
@@ -122,7 +122,7 @@ struct PhotoOptionsModal: View {
                         isPresented = false
                     } label: {
                         Text("Cancel")
-                            .font(.system(size: 18, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                             .foregroundColor(.black)
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)
@@ -213,7 +213,7 @@ struct MultiPhotoPickerView: View {
                         ProgressView()
                             .scaleEffect(0.8)
                         Text(loadingProgress)
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                     }
                     .padding()

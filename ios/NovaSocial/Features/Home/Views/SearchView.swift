@@ -20,11 +20,11 @@ struct SearchView: View {
                         // Search field
                         HStack(spacing: 10) {
                             Image(systemName: "magnifyingglass")
-                                .font(.system(size: 15))
+                                .font(.system(size: 15.f))
                                 .foregroundColor(DesignTokens.textMuted)
 
                             TextField("Search users, posts, hashtags", text: $viewModel.searchText)
-                                .font(.system(size: 15))
+                                .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                                 .foregroundColor(DesignTokens.textPrimary)
                                 .focused($isSearchFocused)
                                 .autocapitalization(.none)
@@ -40,7 +40,7 @@ struct SearchView: View {
                                     viewModel.searchResults = []
                                 }) {
                                     Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 16))
+                                        .font(.system(size: 16.f))
                                         .foregroundColor(DesignTokens.textMuted)
                                 }
                             }
@@ -55,7 +55,7 @@ struct SearchView: View {
                             showSearch = false
                         }) {
                             Text("Cancel")
-                                .font(.system(size: 14))
+                                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                 .foregroundColor(DesignTokens.textPrimary)
                         }
                         .frame(width: 50)
@@ -124,7 +124,7 @@ struct SearchView: View {
                         viewModel.changeFilter(filter)
                     }) {
                         Text(filter.rawValue)
-                            .font(.system(size: 14, weight: viewModel.selectedFilter == filter ? .semibold : .regular))
+                            .font(Font.custom(viewModel.selectedFilter == filter ? "SFProDisplay-Semibold" : "SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(viewModel.selectedFilter == filter ? .white : DesignTokens.textPrimary)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
@@ -149,7 +149,7 @@ struct SearchView: View {
             if !viewModel.recentSearches.isEmpty {
                 HStack {
                     Text("Recent Searches")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                         .foregroundColor(DesignTokens.textPrimary)
 
                     Spacer()
@@ -158,7 +158,7 @@ struct SearchView: View {
                         viewModel.clearRecentSearches()
                     }) {
                         Text("Clear")
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                     }
                 }
@@ -167,11 +167,11 @@ struct SearchView: View {
                 ForEach(viewModel.recentSearches, id: \.self) { query in
                     HStack {
                         Image(systemName: "clock.arrow.circlepath")
-                            .font(.system(size: 16))
+                            .font(.system(size: 16.f))
                             .foregroundColor(DesignTokens.textMuted)
 
                         Text(query)
-                            .font(.system(size: 15))
+                            .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                             .foregroundColor(DesignTokens.textPrimary)
 
                         Spacer()
@@ -180,7 +180,7 @@ struct SearchView: View {
                             viewModel.deleteRecentSearch(query)
                         }) {
                             Image(systemName: "xmark")
-                                .font(.system(size: 12))
+                                .font(.system(size: 12.f))
                                 .foregroundColor(DesignTokens.textMuted)
                         }
                     }
@@ -195,11 +195,11 @@ struct SearchView: View {
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 40))
+                        .font(.system(size: 40.f))
                         .foregroundColor(DesignTokens.textMuted)
 
                     Text("Search for users, posts, or hashtags")
-                        .font(.system(size: 15))
+                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                         .foregroundColor(DesignTokens.textSecondary)
                         .multilineTextAlignment(.center)
                 }
@@ -215,7 +215,7 @@ struct SearchView: View {
             ProgressView()
                 .scaleEffect(1.2)
             Text("Searching...")
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(DesignTokens.textSecondary)
                 .padding(.top, 12)
         }
@@ -227,15 +227,15 @@ struct SearchView: View {
     private var emptyResultsView: some View {
         VStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 40))
+                .font(.system(size: 40.f))
                 .foregroundColor(DesignTokens.textMuted)
 
             Text("No results found")
-                .font(.system(size: 16, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                 .foregroundColor(DesignTokens.textPrimary)
 
             Text("Try searching for something else")
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(DesignTokens.textSecondary)
         }
         .frame(maxWidth: .infinity)
@@ -310,25 +310,25 @@ struct UserSearchResultRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
                         Text(displayName)
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(Font.custom("SFProDisplay-Semibold", size: 15.f))
                             .foregroundColor(DesignTokens.textPrimary)
 
                         if isVerified {
                             Image(systemName: "checkmark.seal.fill")
-                                .font(.system(size: 12))
+                                .font(.system(size: 12.f))
                                 .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                         }
                     }
 
                     Text("@\(username)")
-                        .font(.system(size: 13))
+                        .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14))
+                    .font(.system(size: 14.f))
                     .foregroundColor(DesignTokens.textMuted)
             }
             .padding(.horizontal, 16)
@@ -351,27 +351,27 @@ struct PostSearchResultRow: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(author)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                     .foregroundColor(DesignTokens.textPrimary)
 
                 Spacer()
 
                 Text(relativeTime)
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(DesignTokens.textSecondary)
             }
 
             Text(content)
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(DesignTokens.textPrimary)
                 .lineLimit(3)
 
             HStack(spacing: 12) {
                 HStack(spacing: 4) {
                     Image(systemName: "heart")
-                        .font(.system(size: 12))
+                        .font(.system(size: 12.f))
                     Text(likeCount.abbreviated)
-                        .font(.system(size: 12))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                 }
                 .foregroundColor(DesignTokens.textSecondary)
             }
@@ -408,24 +408,24 @@ struct HashtagSearchResultRow: View {
                     .frame(width: 48, height: 48)
 
                 Text("#")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 20.f))
                     .foregroundColor(DesignTokens.textSecondary)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("#\(tag)")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 15.f))
                     .foregroundColor(DesignTokens.textPrimary)
 
                 Text("\(postCount) posts")
-                    .font(.system(size: 13))
+                    .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                     .foregroundColor(DesignTokens.textSecondary)
             }
 
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 14))
+                .font(.system(size: 14.f))
                 .foregroundColor(DesignTokens.textMuted)
         }
         .padding(.horizontal, 16)

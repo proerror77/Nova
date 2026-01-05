@@ -2,24 +2,25 @@ import SwiftUI
 
 // MARK: - Layout Configuration
 struct ProfileNavBarLayout {
-    // ==================== 位置调整 ====================
-    var horizontalPadding: CGFloat = 20      // 左右边距
-    var topPadding: CGFloat = 60             // 顶部边距（距离安全区域）
-    var bottomPadding: CGFloat = 40          // 底部边距
-
+    // ==================== 整体布局 ====================
+    var horizontalPadding: CGFloat = 16      // 左右边距
+    var barHeight: CGFloat = 48              // 导航栏高度
+    
     // ==================== 左侧用户名区域 ====================
-    var usernameFontSize: CGFloat = 20       // 用户名字体大小
-    var chevronSize: CGFloat = 12            // 下拉箭头大小
-    var usernameChevronSpacing: CGFloat = 6  // 用户名和箭头间距
-
+    var usernameFontSize: CGFloat = 16       // 用户名字体大小
+    var chevronFontSize: CGFloat = 12        // 箭头字体大小
+    var chevronSize: CGFloat = 24            // 下拉箭头容器大小
+    var usernameChevronSpacing: CGFloat = 4  // 用户名和箭头间距
+    
     // ==================== 右侧图标区域 ====================
     var iconSize: CGFloat = 24               // 图标大小
-    var iconSpacing: CGFloat = 18            // 图标之间间距
-
+    var iconTapArea: CGFloat = 40            // 图标点击区域
+    var iconContainerSize: CGFloat = 48      // 图标容器大小
+    
     // ==================== 颜色 ====================
     var textColor: Color = .white
     var iconColor: Color = .white
-
+    
     static let `default` = ProfileNavBarLayout()
 }
 
@@ -40,40 +41,43 @@ struct ProfileTopNavigationBar: View {
         HStack {
             // MARK: - 左侧：用户名带下拉箭头
             Button(action: onUsernameTapped) {
-                HStack(spacing: layout.usernameChevronSpacing) {
+                HStack(spacing: layout.usernameChevronSpacing.s) {
                     Text(username)
-                        .font(.system(size: layout.usernameFontSize, weight: .medium))
-                        .lineSpacing(19)
+                        .font(.custom("SFProDisplay-Regular", size: layout.usernameFontSize.f).weight(.semibold))
                         .foregroundColor(layout.textColor)
-
+                    
                     Image(systemName: "chevron.down")
-                        .font(.system(size: layout.chevronSize, weight: .medium))
+                        .font(.system(size: layout.chevronFontSize.f))
                         .foregroundColor(layout.textColor)
+                        .frame(width: layout.chevronSize.s, height: layout.chevronSize.s)
                 }
             }
-
+            
             Spacer()
-
+            
             // MARK: - 右侧：分享和设置图标
-            HStack(spacing: layout.iconSpacing) {
+            HStack(spacing: 0) {
                 Button(action: onShareTapped) {
                     Image("share")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: layout.iconSize, height: layout.iconSize)
+                        .frame(width: layout.iconSize.s, height: layout.iconSize.s)
+                        .frame(width: layout.iconTapArea.s, height: layout.iconTapArea.s)
                 }
-
+                .frame(width: layout.iconContainerSize.s, height: layout.iconContainerSize.s)
+                
                 Button(action: onSettingsTapped) {
                     Image("Setting(white)")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: layout.iconSize, height: layout.iconSize)
+                        .frame(width: layout.iconSize.s, height: layout.iconSize.s)
+                        .frame(width: layout.iconTapArea.s, height: layout.iconTapArea.s)
                 }
+                .frame(width: layout.iconContainerSize.s, height: layout.iconContainerSize.s)
             }
         }
-        .padding(.horizontal, layout.horizontalPadding)
-        .padding(.top, layout.topPadding)
-        .padding(.bottom, layout.bottomPadding)
+        .padding(.horizontal, layout.horizontalPadding.w)
+        .frame(height: layout.barHeight.h)
     }
 }
 
@@ -81,45 +85,45 @@ struct ProfileTopNavigationBar: View {
 
 #Preview("ProfileNavBar - Default") {
     ZStack {
-        Color.black.opacity(0.5)
-            .ignoresSafeArea()
-
-        VStack {
+        LinearGradient(
+            colors: [.purple.opacity(0.6), .pink.opacity(0.4)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
+        
+        VStack(spacing: 0) {
             ProfileTopNavigationBar(
-                username: "Bruce Li",
-                layout: ProfileNavBarLayout(
-                    horizontalPadding: 20,
-                    topPadding: 60,
-                    bottomPadding: 40
-                ),
+                username: "Jack",
                 onShareTapped: { print("Share tapped") },
-                onSettingsTapped: { print("Settings tapped") }
+                onSettingsTapped: { print("Settings tapped") },
+                onUsernameTapped: { print("Username tapped") }
             )
-
+            
             Spacer()
         }
     }
 }
 
-#Preview("ProfileNavBar - Dark Mode") {
+#Preview("ProfileNavBar - With SafeArea") {
     ZStack {
-        Color.black.opacity(0.5)
-            .ignoresSafeArea()
-
-        VStack {
+        LinearGradient(
+            colors: [.purple.opacity(0.6), .pink.opacity(0.4)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
+        
+        VStack(spacing: 0) {
             ProfileTopNavigationBar(
                 username: "Bruce Li",
-                layout: ProfileNavBarLayout(
-                    horizontalPadding: 20,
-                    topPadding: 60,
-                    bottomPadding: 40
-                ),
                 onShareTapped: { print("Share tapped") },
-                onSettingsTapped: { print("Settings tapped") }
+                onSettingsTapped: { print("Settings tapped") },
+                onUsernameTapped: { print("Username tapped") }
             )
-
+            .padding(.top, 47.h) // 模拟安全区域
+            
             Spacer()
         }
     }
-    .preferredColorScheme(.dark)
 }

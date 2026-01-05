@@ -96,7 +96,7 @@ struct PostCardView: View, Equatable {
                         .frame(width: 17, height: 17)
 
                     Text(username)
-                        .font(.system(size: 8, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 8.f))
                         .foregroundColor(Color(red: 0.02, green: 0, blue: 0))
                         .lineLimit(1)
                 }
@@ -105,11 +105,11 @@ struct PostCardView: View, Equatable {
 
                 HStack(spacing: 2) {
                     Image(systemName: "heart")
-                        .font(.system(size: 8))
+                        .font(.system(size: 8.f))
                         .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                     Text(formattedLikeCount)
-                        .font(.system(size: 7))
+                        .font(Font.custom("SFProDisplay-Regular", size: 7.f))
                         .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
                         .contentTransition(.numericText())
                 }
@@ -127,7 +127,7 @@ struct PostCardView: View, Equatable {
             // Content preview
             if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text("\(username) \(contentPreview)")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 9.f))
                     .foregroundColor(.black)
                     .lineLimit(1)
                     .padding(.horizontal, 6)

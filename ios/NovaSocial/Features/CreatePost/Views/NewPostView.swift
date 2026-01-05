@@ -41,7 +41,7 @@ struct NewPostView: View {
                 // MARK: - Error Messages
                 if let error = viewModel.postError {
                     Text(error)
-                        .font(.system(size: 12.f))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         .foregroundColor(.red)
                         .padding(.horizontal, 16.w)
                         .padding(.vertical, 8.h)
@@ -50,7 +50,7 @@ struct NewPostView: View {
 
                 if let enhanceError = viewModel.enhanceError {
                     Text(enhanceError)
-                        .font(.system(size: 12.f))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         .foregroundColor(.orange)
                         .padding(.horizontal, 16.w)
                         .padding(.vertical, 8.h)
@@ -257,7 +257,7 @@ struct NewPostView: View {
             ZStack {
                 // 标题 - 居中摆放
                 Text("NewPost")
-                    .font(.system(size: 18.f, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                     .foregroundColor(.black)
 
                 // 两侧按钮
@@ -267,7 +267,7 @@ struct NewPostView: View {
                         viewModel.handleCancelTapped()
                     }) {
                         Text("Cancel")
-                            .font(Font.custom("SF Pro Display", size: 14.f))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .tracking(0.28)
                             .foregroundColor(.black)
                     }
@@ -287,13 +287,13 @@ struct NewPostView: View {
                                 .tint(Color(red: 0.87, green: 0.11, blue: 0.26))
                         } else {
                             Text("Post")
-                                .font(Font.custom("SF Pro Display", size: 14.f))
+                                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                 .tracking(0.28)
                                 .foregroundColor(viewModel.canPost ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.53, green: 0.53, blue: 0.53))
                         }
                     }
                     .disabled(!viewModel.canPost || viewModel.isPosting)
-                    .frame(width: 36.w, height: 24.h)
+                    .frame(height: 24.h)  // 移除宽度限制，让按钮自适应内容
                 }
             }
             .padding(.horizontal, 16.w)
@@ -333,11 +333,11 @@ struct NewPostView: View {
 
                 VStack(alignment: .leading, spacing: 4.s) {
                     Text("Invite alice")
-                        .font(.system(size: 14.f, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                         .foregroundColor(.black)
 
                     Text("Add AI in this conversation")
-                        .font(.system(size: 12.f))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                 }
 
@@ -399,7 +399,7 @@ struct NewPostView: View {
             // 显示名称 + 箭头（保持 6pt 间距）
             HStack(spacing: 6.s) {
                 Text(viewModel.displayedName)
-                    .font(.system(size: 14.f, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                     .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                 Image(systemName: "chevron.down")
@@ -434,7 +434,7 @@ struct NewPostView: View {
                             ProgressView()
                                 .scaleEffect(1.2)
                             Text("Processing...")
-                                .font(.system(size: 12.f))
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                 .foregroundColor(.gray)
                         }
                     }
@@ -474,7 +474,7 @@ struct NewPostView: View {
 
                                     // Video duration badge
                                     Text(viewModel.formatDuration(videoData.duration))
-                                        .font(.system(size: 12.f, weight: .medium))
+                                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                                         .foregroundColor(.white)
                                         .padding(.horizontal, 8.w)
                                         .padding(.vertical, 4.h)
@@ -534,7 +534,7 @@ struct NewPostView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("AI Suggested Tags")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                         .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
 
                     if viewModel.isAnalyzingImage {
@@ -546,7 +546,7 @@ struct NewPostView: View {
 
                     if !viewModel.vlmTags.isEmpty {
                         Text("\(viewModel.selectedVLMTags.count) selected")
-                            .font(.system(size: 12))
+                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                             .foregroundColor(DesignTokens.textMuted)
                     }
                 }
@@ -588,7 +588,7 @@ struct NewPostView: View {
                                 .frame(width: 14, height: 14)
 
                             Text("Enhance with alice")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                                 .foregroundColor(.black)
                         }
                         .padding(.horizontal, 16)
@@ -639,23 +639,23 @@ struct NewPostView: View {
                 }) {
                     HStack(spacing: 6) {
                         Text("#")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                             .foregroundColor(viewModel.selectedChannelIds.isEmpty
                                 ? Color(red: 0.27, green: 0.27, blue: 0.27)
                                 : Color(red: 0.82, green: 0.13, blue: 0.25))
 
                         if viewModel.selectedChannelIds.isEmpty {
                             Text("Add Channels")
-                                .font(.system(size: 12))
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                 .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                         } else {
                             Text("\(viewModel.selectedChannelIds.count) selected")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                                 .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
                         }
 
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 10))
+                            .font(.system(size: 10.f))
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                     }
                     .padding(.horizontal, 14)
@@ -674,10 +674,10 @@ struct NewPostView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 4) {
                         Image(systemName: "sparkles")
-                            .font(.system(size: 11))
+                            .font(.system(size: 11.f))
                             .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
                         Text("Suggested by Alice")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 11.f))
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                     }
 
@@ -691,10 +691,10 @@ struct NewPostView: View {
                             }) {
                                 HStack(spacing: 4) {
                                     Text("#\(suggestion.name)")
-                                        .font(.system(size: 12))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                         .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
                                     Text("\(Int(suggestion.confidence * 100))%")
-                                        .font(.system(size: 10))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                                         .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                                 }
                                 .padding(.horizontal, 10)
@@ -715,7 +715,7 @@ struct NewPostView: View {
                                 }
                             }) {
                                 Text("Use All")
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(Font.custom("SFProDisplay-Medium", size: 11.f))
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 6)
@@ -730,7 +730,7 @@ struct NewPostView: View {
                     ProgressView()
                         .scaleEffect(0.7)
                     Text("Getting suggestions...")
-                        .font(.system(size: 11))
+                        .font(Font.custom("SFProDisplay-Regular", size: 11.f))
                         .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                 }
             }

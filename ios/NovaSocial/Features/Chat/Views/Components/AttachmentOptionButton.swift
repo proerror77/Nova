@@ -15,11 +15,11 @@ struct AttachmentOptionButton: View {
                         .fill(color.opacity(0.15))
                         .frame(width: 56, height: 56)
                     Image(systemName: icon)
-                        .font(.system(size: 22))
+                        .font(Font.custom("SFProDisplay-Regular", size: 22.f))
                         .foregroundColor(color)
                 }
                 Text(title)
-                    .font(.system(size: 11))
+                    .font(Font.custom("SFProDisplay-Regular", size: 11.f))
                     .foregroundColor(DesignTokens.textMuted)
             }
             .frame(width: 70, height: 80)

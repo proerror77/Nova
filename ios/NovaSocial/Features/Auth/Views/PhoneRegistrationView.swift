@@ -82,21 +82,21 @@ struct PhoneRegistrationView: View {
         HStack {
             Button(action: handleBack) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 20, weight: .medium))
+                    .font(.system(size: 20.f))
                     .foregroundColor(.white)
             }
 
             Spacer()
 
             Text(headerTitle)
-                .font(.system(size: 18, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
                 .foregroundColor(.white)
 
             Spacer()
 
             // Placeholder for alignment
             Image(systemName: "chevron.left")
-                .font(.system(size: 20, weight: .medium))
+                .font(.system(size: 20.f))
                 .foregroundColor(.clear)
         }
         .padding(.horizontal, 20)
@@ -120,13 +120,13 @@ struct PhoneRegistrationView: View {
         VStack(spacing: 24) {
             // Icon
             Image(systemName: "phone.fill")
-                .font(.system(size: 50))
+                .font(.system(size: 50.f))
                 .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                 .padding(.bottom, 20)
 
             // Description
             Text("We'll send you a verification code to confirm your phone number")
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(.gray)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
@@ -143,10 +143,10 @@ struct PhoneRegistrationView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Text(selectedCountryCode)
-                            .font(.system(size: 16))
+                            .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                             .foregroundColor(.white)
                         Image(systemName: "chevron.down")
-                            .font(.system(size: 12))
+                            .font(.system(size: 12.f))
                             .foregroundColor(.gray)
                     }
                     .padding(.horizontal, 12)
@@ -157,7 +157,7 @@ struct PhoneRegistrationView: View {
 
                 // Phone number field
                 TextField("", text: $phoneNumber, prompt: Text("Phone Number").foregroundColor(.gray))
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(.white)
                     .keyboardType(.phonePad)
                     .padding(.horizontal, 16)
@@ -169,7 +169,7 @@ struct PhoneRegistrationView: View {
             // Error message
             if let error = errorMessage {
                 Text(error)
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(.red)
                     .multilineTextAlignment(.center)
             }
@@ -184,7 +184,7 @@ struct PhoneRegistrationView: View {
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                     }
                     Text("Send Code")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
@@ -203,13 +203,13 @@ struct PhoneRegistrationView: View {
         VStack(spacing: 24) {
             // Icon
             Image(systemName: "lock.shield.fill")
-                .font(.system(size: 50))
+                .font(.system(size: 50.f))
                 .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                 .padding(.bottom, 20)
 
             // Description
             Text("Enter the 6-digit code sent to\n\(fullPhoneNumber)")
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(.gray)
                 .multilineTextAlignment(.center)
 
@@ -224,7 +224,7 @@ struct PhoneRegistrationView: View {
             // Error message
             if let error = errorMessage {
                 Text(error)
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(.red)
                     .multilineTextAlignment(.center)
             }
@@ -240,7 +240,7 @@ struct PhoneRegistrationView: View {
                 Task { await sendVerificationCode() }
             }) {
                 Text("Resend Code")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                     .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
             }
             .disabled(isLoading)
@@ -254,18 +254,18 @@ struct PhoneRegistrationView: View {
         VStack(spacing: 20) {
             // Description
             Text("Create your account")
-                .font(.system(size: 20, weight: .bold))
+                .font(Font.custom("SFProDisplay-Bold", size: 20.f))
                 .foregroundColor(.white)
                 .padding(.bottom, 10)
 
             // Username field
             VStack(alignment: .leading, spacing: 8) {
                 Text("Username")
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(.gray)
 
                 TextField("", text: $username, prompt: Text("Choose a username").foregroundColor(.gray))
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(.white)
                     .autocapitalization(.none)
                     .autocorrectionDisabled()
@@ -278,11 +278,11 @@ struct PhoneRegistrationView: View {
             // Display name field (optional)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Display Name (optional)")
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(.gray)
 
                 TextField("", text: $displayName, prompt: Text("How should we call you?").foregroundColor(.gray))
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(.white)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
@@ -293,11 +293,11 @@ struct PhoneRegistrationView: View {
             // Password field
             VStack(alignment: .leading, spacing: 8) {
                 Text("Password")
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(.gray)
 
                 SecureField("", text: $password, prompt: Text("Create a password").foregroundColor(.gray))
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(.white)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
@@ -308,11 +308,11 @@ struct PhoneRegistrationView: View {
             // Confirm password field
             VStack(alignment: .leading, spacing: 8) {
                 Text("Confirm Password")
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(.gray)
 
                 SecureField("", text: $confirmPassword, prompt: Text("Confirm your password").foregroundColor(.gray))
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(.white)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
@@ -323,7 +323,7 @@ struct PhoneRegistrationView: View {
             // Error message
             if let error = errorMessage {
                 Text(error)
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(.red)
                     .multilineTextAlignment(.center)
             }
@@ -338,7 +338,7 @@ struct PhoneRegistrationView: View {
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                     }
                     Text("Create Account")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
@@ -453,9 +453,12 @@ struct PhoneRegistrationView: View {
                 authManager.updateCurrentUser(user)
             }
 
-            // Navigate to home
+            // Set flag to show welcome screen for first-time registration
+            UserDefaults.standard.set(true, forKey: "shouldShowWelcome")
+
+            // Navigate to welcome (will then go to home after showing)
             await MainActor.run {
-                currentPage = .home
+                currentPage = .welcome
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -522,7 +525,7 @@ struct OTPInputView: View {
                             .frame(width: 45, height: 55)
 
                         Text(digit(at: index))
-                            .font(.system(size: 24, weight: .semibold))
+                            .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
                             .foregroundColor(.white)
                     }
                 }

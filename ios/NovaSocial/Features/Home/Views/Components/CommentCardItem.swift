@@ -19,11 +19,11 @@ struct CommentCardItem: View {
                 // User info
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Simone Carter")
-                        .font(.system(size: DesignTokens.fontMedium, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: DesignTokens.fontMedium))
                         .foregroundColor(.black)
 
                     Text("1d")
-                        .font(.system(size: DesignTokens.fontCaption))
+                        .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontCaption))
                         .foregroundColor(DesignTokens.textMuted)
                 }
 
@@ -35,7 +35,7 @@ struct CommentCardItem: View {
                 }) {
                     Image(systemName: "ellipsis")
                         .foregroundColor(.black)
-                        .font(.system(size: DesignTokens.fontMedium))
+                        .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
                         .contentShape(Rectangle())
                 }
             }
@@ -70,11 +70,11 @@ struct CommentCardItem: View {
             // MARK: - Comment Text
             HStack(spacing: DesignTokens.spacing4) {
                 Text("kyleegigstead Cyborg dreams...")
-                    .font(.system(size: DesignTokens.fontBody))
+                    .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontBody))
                     .foregroundColor(.black)
 
                 Text("up")
-                    .font(.system(size: DesignTokens.fontCaption))
+                    .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontCaption))
                     .foregroundColor(DesignTokens.textMuted)
 
                 Spacer()
@@ -115,7 +115,7 @@ private struct InteractionButton: View {
                 .font(.system(size: DesignTokens.spacing10))
                 .foregroundColor(.black)
             Text(label)
-                .font(.system(size: DesignTokens.fontSmall, weight: .bold))
+                .font(Font.custom("SFProDisplay-Bold", size: DesignTokens.fontSmall))
                 .foregroundColor(.black)
         }
     }

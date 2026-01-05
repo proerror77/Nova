@@ -144,7 +144,7 @@ struct CreateAccountEmailView: View {
                                 // Text fields for input
                                 TextField("", text: $email, prompt: Text("Enter your email").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
-                                    .font(.system(size: 14.f))
+                                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                     .tracking(0.28)
                                     .padding(.horizontal, 16.w)
                                     .frame(width: 300.w, height: 48.h)
@@ -156,7 +156,7 @@ struct CreateAccountEmailView: View {
 
                                 TextField("", text: $username, prompt: Text("Your username").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
-                                    .font(.system(size: 14.f))
+                                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                     .tracking(0.28)
                                     .padding(.horizontal, 16.w)
                                     .frame(width: 300.w, height: 48.h)
@@ -170,7 +170,7 @@ struct CreateAccountEmailView: View {
                                     if showPassword {
                                         TextField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
                                             .foregroundColor(.white)
-                                            .font(.system(size: 14.f))
+                                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                             .tracking(0.28)
                                             .padding(.horizontal, 16.w)
                                             .frame(width: 300.w, height: 48.h)
@@ -182,7 +182,7 @@ struct CreateAccountEmailView: View {
                                     } else {
                                         SecureField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
                                             .foregroundColor(.white)
-                                            .font(.system(size: 14.f))
+                                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                             .tracking(0.28)
                                             .padding(.horizontal, 16.w)
                                             .frame(width: 300.w, height: 48.h)
@@ -210,7 +210,7 @@ struct CreateAccountEmailView: View {
                                     if showConfirmPassword {
                                         TextField("", text: $confirmPassword, prompt: Text("Confirm your password").foregroundColor(Color.white.opacity(0.4)))
                                             .foregroundColor(.white)
-                                            .font(.system(size: 14.f))
+                                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                             .tracking(0.28)
                                             .padding(.horizontal, 16.w)
                                             .frame(width: 300.w, height: 48.h)
@@ -222,7 +222,7 @@ struct CreateAccountEmailView: View {
                                     } else {
                                         SecureField("", text: $confirmPassword, prompt: Text("Confirm your password").foregroundColor(Color.white.opacity(0.4)))
                                             .foregroundColor(.white)
-                                            .font(.system(size: 14.f))
+                                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                             .tracking(0.28)
                                             .padding(.horizontal, 16.w)
                                             .frame(width: 300.w, height: 48.h)
@@ -257,7 +257,7 @@ struct CreateAccountEmailView: View {
                     // Error Message (如果有)
                     if let errorMessage = errorMessage {
                         Text(LocalizedStringKey(errorMessage))
-                            .font(.system(size: 12.f))
+                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                             .foregroundColor(.red)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 40.w)
@@ -286,7 +286,7 @@ struct CreateAccountEmailView: View {
             VStack {
                 Spacer().frame(height: 239.h)
                 Text("Sign in with Email")
-                    .font(.system(size: 24.f, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
                     .foregroundColor(.white)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
@@ -323,7 +323,7 @@ struct CreateAccountEmailView: View {
                                 .progressViewStyle(CircularProgressViewStyle(tint: .black))
                         }
                         Text("Next")
-                            .font(.system(size: 16.f, weight: .heavy))
+                            .font(Font.custom("SFProDisplay-Heavy", size: 16.f))
                             .tracking(0.32)
                             .foregroundColor(.black)
                     }
@@ -342,7 +342,7 @@ struct CreateAccountEmailView: View {
                 Spacer()
                 HStack(spacing: 0) {
                     Text("Already have an account? ")
-                        .font(.system(size: 14.f))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .tracking(0.28)
                         .foregroundColor(.white)
 
@@ -350,7 +350,7 @@ struct CreateAccountEmailView: View {
                         currentPage = .login
                     }) {
                         Text("Sign in")
-                            .font(.system(size: 14.f, weight: .bold))
+                            .font(Font.custom("SFProDisplay-Bold", size: 14.f))
                             .tracking(0.28)
                             .underline()
                             .foregroundColor(.white)

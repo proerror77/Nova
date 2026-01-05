@@ -20,7 +20,7 @@ struct ReplyPreviewView: View {
             VStack(alignment: .leading, spacing: 2) {
                 // 發送者名稱
                 Text(preview.senderName)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
                     .foregroundColor(DesignTokens.accentColor)
                     .lineLimit(1)
 
@@ -29,12 +29,12 @@ struct ReplyPreviewView: View {
                     // 消息類型圖標
                     if let icon = iconForMessageType(preview.messageType) {
                         Image(systemName: icon)
-                            .font(.system(size: 11))
+                            .font(Font.custom("SFProDisplay-Regular", size: 11.f))
                             .foregroundColor(DesignTokens.textSecondary)
                     }
 
                     Text(preview.content)
-                        .font(.system(size: 12))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         .foregroundColor(DesignTokens.textSecondary)
                         .lineLimit(1)
                 }
@@ -46,7 +46,7 @@ struct ReplyPreviewView: View {
             if let onDismiss = onDismiss, !isInBubble {
                 Button(action: onDismiss) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18))
+                        .font(.system(size: 18.f))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
             }
@@ -114,12 +114,12 @@ struct ReplyBubblePreview: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(preview.senderName)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 11.f))
                     .foregroundColor(DesignTokens.accentColor)
                     .lineLimit(1)
 
                 Text(preview.content)
-                    .font(.system(size: 11))
+                    .font(Font.custom("SFProDisplay-Regular", size: 11.f))
                     .foregroundColor(DesignTokens.textSecondary)
                     .lineLimit(1)
             }

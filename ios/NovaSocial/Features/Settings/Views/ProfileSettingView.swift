@@ -77,7 +77,7 @@ struct ProfileSettingView: View {
                             // Validation error message (inline errors, not full-screen)
                             if let error = viewModel.validationError {
                                 Text(error)
-                                    .font(.system(size: 14))
+                                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                     .foregroundColor(.red)
                                     .padding(.horizontal, 12)
                             }
@@ -85,7 +85,7 @@ struct ProfileSettingView: View {
                             // Success message
                             if viewModel.showSuccessMessage {
                                 Text(LocalizedStringKey("Profile updated successfully!"))
-                                    .font(.system(size: 14))
+                                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                     .foregroundColor(.green)
                                     .padding(.horizontal, 12)
                                     .onAppear {
@@ -142,7 +142,7 @@ struct ProfileSettingView: View {
             Spacer()
 
             Text("Profile settings")
-                .font(.system(size: 18, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                 .lineSpacing(19)
                 .foregroundColor(.black)
 
@@ -161,7 +161,7 @@ struct ProfileSettingView: View {
                         .scaleEffect(0.8)
                 } else {
                     Text("Save")
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .lineSpacing(20)
                         .foregroundColor(viewModel.canSave ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.53, green: 0.53, blue: 0.53))
                 }
@@ -225,7 +225,7 @@ struct ProfileSettingView: View {
                         .frame(width: 32, height: 32)
 
                     Image(systemName: "plus")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 14.f))
                         .foregroundColor(.white)
                 }
             }
@@ -326,7 +326,7 @@ struct ProfileSettingView: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12))
+                    .font(.system(size: 12.f))
                     .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
             }
             .padding(.horizontal, 20)
@@ -373,7 +373,7 @@ struct ProfileSettingView: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12))
+                    .font(.system(size: 12.f))
                     .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
             }
             .padding(.horizontal, 20)
@@ -403,7 +403,7 @@ struct ProfileSettingView: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12))
+                    .font(.system(size: 12.f))
                     .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
             }
             .padding(.horizontal, 20)

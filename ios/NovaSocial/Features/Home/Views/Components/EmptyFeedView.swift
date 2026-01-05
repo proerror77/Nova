@@ -10,17 +10,17 @@ struct EmptyFeedView: View {
         VStack(spacing: DesignTokens.spacing16) {
             // Icon
             Image(systemName: "photo.stack")
-                .font(.system(size: 50))
+                .font(.system(size: 50.f))
                 .foregroundColor(DesignTokens.accentColor.opacity(0.6))
 
             // Title
             Text("No posts yet")
-                .font(.system(size: DesignTokens.fontTitle, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: DesignTokens.fontTitle))
                 .foregroundColor(DesignTokens.textPrimary)
 
             // Subtitle
             Text("Be the first to share something!")
-                .font(.system(size: DesignTokens.fontMedium))
+                .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
                 .foregroundColor(DesignTokens.textSecondary)
                 .multilineTextAlignment(.center)
 
@@ -33,9 +33,9 @@ struct EmptyFeedView: View {
                     }) {
                         HStack(spacing: 6) {
                             Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.system(size: 14.f))
                             Text("Refresh")
-                                .font(.system(size: DesignTokens.fontMedium, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontMedium))
                         }
                         .foregroundColor(DesignTokens.accentColor)
                         .padding(.horizontal, 20)
@@ -52,9 +52,9 @@ struct EmptyFeedView: View {
                     Button(action: onCreatePost) {
                         HStack(spacing: 6) {
                             Image(systemName: "plus")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.system(size: 14.f))
                             Text("Create Post")
-                                .font(.system(size: DesignTokens.fontMedium, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontMedium))
                         }
                         .foregroundColor(DesignTokens.textOnAccent)
                         .padding(.horizontal, 20)

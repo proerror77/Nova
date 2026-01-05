@@ -662,7 +662,7 @@ struct MessageView: View {
                     ZStack {
                         // 标题文本 - 居中
                         Text(LocalizedStringKey("Message"))
-                            .font(.system(size: 18.f, weight: .semibold))
+                            .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
                             .foregroundColor(DesignTokens.textPrimary)
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
@@ -698,7 +698,7 @@ struct MessageView: View {
                             .foregroundColor(DesignTokens.textSecondary)
 
                         TextField("Search", text: $searchText)
-                            .font(.system(size: 14.f))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .tracking(0.28)
                             .foregroundColor(DesignTokens.textSecondary)
                             .focused($isSearchFocused)
@@ -752,10 +752,10 @@ struct MessageView: View {
                             } else if searchResults.isEmpty && !searchText.isEmpty {
                                 VStack(spacing: 12) {
                                     Image(systemName: "magnifyingglass")
-                                        .font(.system(size: 32))
+                                        .font(.system(size: 32.f))
                                         .foregroundColor(DesignTokens.textSecondary)
                                     Text("No results found")
-                                        .font(.system(size: 14))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                         .foregroundColor(DesignTokens.textSecondary)
                                 }
                                 .padding(.top, 60)
@@ -781,7 +781,7 @@ struct MessageView: View {
                             .progressViewStyle(CircularProgressViewStyle())
                             .scaleEffect(1.2)
                         Text(LocalizedStringKey("Loading messages..."))
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(DesignTokens.textSecondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -790,10 +790,10 @@ struct MessageView: View {
                     // 错误状态
                     VStack(spacing: 16) {
                         Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 40))
+                            .font(.system(size: 40.f))
                             .foregroundColor(DesignTokens.accentColor)
                         Text(error)
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(DesignTokens.textSecondary)
                         Button(action: {
                             Task {
@@ -801,7 +801,7 @@ struct MessageView: View {
                             }
                         }) {
                             Text(LocalizedStringKey("Retry"))
-                                .font(.system(size: 14, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                                 .foregroundColor(DesignTokens.textOnAccent)
                                 .padding(.horizontal, 24)
                                 .padding(.vertical, 8)
@@ -815,13 +815,13 @@ struct MessageView: View {
                     // 空状态
                     VStack(spacing: 16) {
                         Image(systemName: "message")
-                            .font(.system(size: 40))
+                            .font(.system(size: 40.f))
                             .foregroundColor(DesignTokens.textSecondary)
                         Text(LocalizedStringKey("No messages yet"))
-                            .font(.system(size: 16, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                             .foregroundColor(DesignTokens.textSecondary)
                         Text(LocalizedStringKey("Start a conversation with friends"))
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(DesignTokens.textSecondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -942,7 +942,7 @@ struct MessageView: View {
                                         .scaledToFit()
                                         .frame(width: 24.s, height: 24.s)
                                     Text(LocalizedStringKey("Add Friends"))
-                                        .font(.system(size: 12.f))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                         .tracking(0.24)
                                         .foregroundColor(DesignTokens.textPrimary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -968,7 +968,7 @@ struct MessageView: View {
                                         .scaledToFit()
                                         .frame(width: 24.s, height: 24.s)
                                     Text(LocalizedStringKey("New Chat"))
-                                        .font(.system(size: 12.f))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                         .tracking(0.24)
                                         .foregroundColor(DesignTokens.textPrimary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -994,7 +994,7 @@ struct MessageView: View {
                                         .scaledToFit()
                                         .frame(width: 24.s, height: 24.s)
                                     Text(LocalizedStringKey("Scan QR Code"))
-                                        .font(.system(size: 12.f))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                         .tracking(0.24)
                                         .foregroundColor(DesignTokens.textPrimary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1062,7 +1062,7 @@ struct MessageListItem: View {
             VStack(alignment: .leading, spacing: 5.h) {
                 HStack(spacing: 4.w) {
                     Text(name)
-                        .font(.system(size: 16.f, weight: .heavy))
+                        .font(Font.custom("SFProDisplay-Heavy", size: 16.f))
                         .tracking(0.32)
                         .foregroundColor(DesignTokens.textPrimary)
 
@@ -1077,7 +1077,7 @@ struct MessageListItem: View {
                 // 消息预览
                 if showMessagePreview {
                     Text(messagePreview)
-                        .font(.system(size: 14.f))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .tracking(0.28)
                         .foregroundColor(DesignTokens.textSecondary)
                         .lineLimit(1)
@@ -1090,7 +1090,7 @@ struct MessageListItem: View {
             if showTimeAndBadge {
                 VStack(alignment: .trailing, spacing: 6.h) {
                     Text(time)
-                        .font(.system(size: 12.f))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         .tracking(0.24)
                         .foregroundColor(DesignTokens.textMuted)
 
@@ -1100,7 +1100,7 @@ struct MessageListItem: View {
                         let badgeWidth: CGFloat = unreadCount > 9 ? 22.s : 17.s
 
                         Text(badgeText)
-                            .font(.system(size: 12.f))
+                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                             .tracking(0.24)
                             .foregroundColor(.white)
                             .frame(width: badgeWidth, height: 17.s)

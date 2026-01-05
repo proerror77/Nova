@@ -54,7 +54,7 @@ struct QRCodeScannerView: View {
                         .padding(.bottom, 50)
                 } else {
                     Text(String(localized: "qr_scan_hint", defaultValue: "Align QR code within frame"))
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(.white)
                         .padding()
                         .background(Color.black.opacity(0.6))

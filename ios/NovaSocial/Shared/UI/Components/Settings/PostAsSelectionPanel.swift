@@ -129,14 +129,14 @@ struct PostAsSelectionPanel: View {
                     ProgressView()
                         .scaleEffect(0.8)
                     Text("Loading accounts...")
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
                 .padding(.vertical, 20)
             } else if accounts.isEmpty {
                 // Empty state - show placeholder
                 Text("No accounts available")
-                    .font(.system(size: 14))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .foregroundColor(DesignTokens.textSecondary)
                     .padding(.vertical, 20)
             } else {
@@ -268,13 +268,13 @@ struct PostAsOptionRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(displayName)
-                            .font(.system(size: 16, weight: .bold))
+                            .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                             .foregroundColor(DesignTokens.textPrimary)
 
                         // Show "Alias" badge for alias accounts
                         if isAlias && displayName != "Create Alias" {
                             Text("Alias")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: 10.f))
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
@@ -284,7 +284,7 @@ struct PostAsOptionRow: View {
                     }
 
                     Text(subtitle)
-                        .font(.system(size: 13))
+                        .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
 
@@ -293,11 +293,11 @@ struct PostAsOptionRow: View {
                 // Checkmark for selected account or chevron for navigation
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 14.f))
                         .foregroundColor(DesignTokens.accentColor)
                 } else {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
+                        .font(.system(size: 12.f))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
             }

@@ -111,14 +111,14 @@ struct PasskeySettingsView: View {
                 currentPage = .setting
             }) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 17.f))
                     .foregroundColor(DesignTokens.accentColor)
             }
 
             Spacer()
 
             Text("Passkeys")
-                .font(.system(size: 17, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 17.f))
                 .foregroundColor(DesignTokens.textPrimary)
 
             Spacer()
@@ -134,7 +134,7 @@ struct PasskeySettingsView: View {
                         .scaleEffect(0.8)
                 } else {
                     Image(systemName: "plus")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 17.f))
                         .foregroundColor(DesignTokens.accentColor)
                 }
             }
@@ -152,7 +152,7 @@ struct PasskeySettingsView: View {
             ProgressView()
                 .scaleEffect(1.2)
             Text("Loading...")
-                .font(.system(size: 15))
+                .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                 .foregroundColor(.secondary)
         }
     }
@@ -162,11 +162,11 @@ struct PasskeySettingsView: View {
     private func errorView(message: String) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 48))
+                .font(.system(size: 48.f))
                 .foregroundColor(.secondary)
 
             Text(message)
-                .font(.system(size: 15))
+                .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
@@ -176,7 +176,7 @@ struct PasskeySettingsView: View {
                     await loadPasskeys()
                 }
             }
-            .font(.system(size: 17, weight: .medium))
+            .font(Font.custom("SFProDisplay-Medium", size: 17.f))
             .foregroundColor(.white)
             .padding(.horizontal, 32)
             .padding(.vertical, 12)
@@ -190,16 +190,16 @@ struct PasskeySettingsView: View {
     private var emptyView: some View {
         VStack(spacing: 20) {
             Image(systemName: "person.badge.key.fill")
-                .font(.system(size: 64))
+                .font(.system(size: 64.f))
                 .foregroundColor(.secondary.opacity(0.6))
 
             VStack(spacing: 8) {
                 Text("No Passkeys Set Up")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 20.f))
                     .foregroundColor(.primary)
 
                 Text("Passkeys let you sign in quickly and securely using Face ID or Touch ID, without needing a password.")
-                    .font(.system(size: 15))
+                    .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
@@ -219,7 +219,7 @@ struct PasskeySettingsView: View {
                         Text("Add Passkey")
                     }
                 }
-                .font(.system(size: 17, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 17.f))
                 .foregroundColor(.white)
                 .padding(.horizontal, 32)
                 .padding(.vertical, 14)
@@ -239,7 +239,7 @@ struct PasskeySettingsView: View {
                 // Passkey 列表
                 VStack(alignment: .leading, spacing: 8) {
                     Text("REGISTERED PASSKEYS")
-                        .font(.system(size: 13))
+                        .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                         .foregroundColor(.secondary)
                         .padding(.horizontal, 16)
 
@@ -263,32 +263,32 @@ struct PasskeySettingsView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: "faceid")
-                            .font(.system(size: 24))
+                            .font(.system(size: 24.f))
                             .foregroundColor(DesignTokens.accentColor)
                             .frame(width: 32)
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Fast & Secure Sign-in")
-                                .font(.system(size: 15, weight: .semibold))
+                                .font(Font.custom("SFProDisplay-Semibold", size: 15.f))
                                 .foregroundColor(.primary)
                             Text("Use Face ID or Touch ID to verify your identity, more secure than passwords.")
-                                .font(.system(size: 13))
+                                .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                                 .foregroundColor(.secondary)
                         }
                     }
 
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: "icloud.fill")
-                            .font(.system(size: 24))
+                            .font(.system(size: 24.f))
                             .foregroundColor(DesignTokens.accentColor)
                             .frame(width: 32)
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text("iCloud Sync")
-                                .font(.system(size: 15, weight: .semibold))
+                                .font(Font.custom("SFProDisplay-Semibold", size: 15.f))
                                 .foregroundColor(.primary)
                             Text("Passkeys automatically sync to all your Apple devices via iCloud Keychain.")
-                                .font(.system(size: 13))
+                                .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -313,11 +313,11 @@ struct PasskeySettingsView: View {
 
             HStack(spacing: 12) {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 24))
+                    .font(.system(size: 24.f))
                     .foregroundColor(.green)
 
                 Text("Passkey Added")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 15.f))
                     .foregroundColor(.white)
             }
             .padding(.horizontal, 20)
@@ -417,7 +417,7 @@ private struct PasskeyRow: View {
                         .frame(width: 44, height: 44)
 
                     Image(systemName: passkeyIcon)
-                        .font(.system(size: 20))
+                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
                         .foregroundColor(.white)
                 }
 
@@ -425,19 +425,19 @@ private struct PasskeyRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(passkey.credentialName ?? "Passkey")
-                            .font(.system(size: 17))
+                            .font(Font.custom("SFProDisplay-Regular", size: 17.f))
                             .foregroundColor(.primary)
                             .lineLimit(1)
 
                         if passkey.backupState {
                             Image(systemName: "icloud.fill")
-                                .font(.system(size: 12))
+                                .font(.system(size: 12.f))
                                 .foregroundColor(.blue)
                         }
                     }
 
                     Text(passkeySubtitle)
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
@@ -449,14 +449,14 @@ private struct PasskeyRow: View {
                     onDelete()
                 } label: {
                     Image(systemName: "trash")
-                        .font(.system(size: 16))
+                        .font(.system(size: 16.f))
                         .foregroundColor(.red.opacity(0.7))
                 }
                 .buttonStyle(.plain)
                 .padding(.trailing, 4)
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 14.f))
                     .foregroundColor(Color(uiColor: .tertiaryLabel))
             }
             .padding(.horizontal, 16)

@@ -76,7 +76,7 @@ struct VoiceChatView: View {
         HStack {
             Button(action: { showEndConfirmation = true }) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 20, weight: .medium))
+                    .font(.system(size: 20.f))
                     .foregroundColor(.white.opacity(0.8))
                     .frame(width: 44, height: 44)
             }
@@ -89,7 +89,7 @@ struct VoiceChatView: View {
                     .fill(statusColor)
                     .frame(width: 8, height: 8)
                 Text(state.description)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                     .foregroundColor(.white.opacity(0.8))
             }
             
@@ -219,12 +219,12 @@ struct VoiceChatView: View {
     private var stateIndicator: some View {
         VStack(spacing: 8) {
             Text(stateTitle)
-                .font(.system(size: 24, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
                 .foregroundColor(.white)
                 .multilineTextAlignment(.center)
 
             Text(stateSubtitle)
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(.white.opacity(0.6))
                 .multilineTextAlignment(.center)
         }
@@ -262,10 +262,10 @@ struct VoiceChatView: View {
             if !transcript.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("You said:")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                         .foregroundColor(.white.opacity(0.5))
                     Text(transcript)
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(.white.opacity(0.9))
                         .multilineTextAlignment(.leading)
                 }
@@ -279,10 +279,10 @@ struct VoiceChatView: View {
             if !aiResponse.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Alice：")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                         .foregroundColor(.purple.opacity(0.8))
                     Text(aiResponse)
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(.white.opacity(0.9))
                         .multilineTextAlignment(.leading)
                 }
@@ -321,7 +321,7 @@ struct VoiceChatView: View {
                             .frame(width: 72, height: 72)
                         
                         Image(systemName: "phone.down.fill")
-                            .font(.system(size: 28))
+                            .font(.system(size: 28.f))
                             .foregroundColor(.white)
                     }
                 }
@@ -337,7 +337,7 @@ struct VoiceChatView: View {
             
             // 提示文字
             Text("Tap the red button to end the conversation")
-                .font(.system(size: 12))
+                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                 .foregroundColor(.white.opacity(0.4))
         }
         .padding(.bottom, 50)
@@ -351,7 +351,7 @@ struct VoiceChatView: View {
                     .frame(width: 56, height: 56)
                 
                 Image(systemName: icon)
-                    .font(.system(size: 24))
+                    .font(Font.custom("SFProDisplay-Regular", size: 24.f))
                     .foregroundColor(isActive ? .white : .white.opacity(0.5))
             }
         }

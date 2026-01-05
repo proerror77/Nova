@@ -30,7 +30,7 @@ struct SettingsView: View {
                     Spacer()
 
                     Text(LocalizedStringKey("Settings"))
-                        .font(.system(size: 24, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 24.f))
                         .foregroundColor(DesignTokens.textPrimary)
 
                     Spacer()
@@ -56,18 +56,18 @@ struct SettingsView: View {
                                 }) {
                                     HStack(spacing: 16) {
                                         Image(systemName: "person.crop.square.filled.and.at.rectangle")
-                                            .font(.system(size: 18))
+                                            .font(.system(size: 18.f))
                                             .foregroundColor(DesignTokens.accentColor)
                                             .frame(width: 24)
 
                                         Text("Choose account")
-                                            .font(.system(size: 14, weight: .medium))
+                                            .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                                             .foregroundColor(DesignTokens.textPrimary)
 
                                         Spacer()
 
                                         Image(systemName: isPostAsExpanded ? "chevron.down" : "chevron.right")
-                                            .font(.system(size: 12))
+                                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                             .foregroundColor(DesignTokens.textSecondary)
                                             .animation(.easeInOut(duration: 0.2), value: isPostAsExpanded)
                                     }
@@ -164,12 +164,12 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 0) {
                             HStack(spacing: 16) {
                                 Image(systemName: "moon.fill")
-                                    .font(.system(size: 18))
+                                    .font(.system(size: 18.f))
                                     .foregroundColor(DesignTokens.accentColor)
                                     .frame(width: 24)
 
                                 Text("Dark Mode")
-                                    .font(.system(size: 14, weight: .medium))
+                                    .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                                     .foregroundColor(DesignTokens.textPrimary)
 
                                 Spacer()
@@ -210,12 +210,12 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 0) {
                             HStack(spacing: 16) {
                                 Image(systemName: "bell.fill")
-                                    .font(.system(size: 18))
+                                    .font(.system(size: 18.f))
                                     .foregroundColor(DesignTokens.accentColor)
                                     .frame(width: 24)
 
                                 Text("Push Notifications")
-                                    .font(.system(size: 14, weight: .medium))
+                                    .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                                     .foregroundColor(DesignTokens.textPrimary)
 
                                 Spacer()
@@ -312,12 +312,12 @@ struct SettingsView: View {
                             }) {
                                 HStack(spacing: 16) {
                                     Image(systemName: "rectangle.portrait.and.arrow.right")
-                                        .font(.system(size: 18))
+                                        .font(.system(size: 18.f))
                                         .foregroundColor(DesignTokens.accentColor)
                                         .frame(width: 24)
 
                                     Text("Sign Out")
-                                        .font(.system(size: 14, weight: .medium))
+                                        .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                                         .foregroundColor(DesignTokens.textPrimary)
 
                                     Spacer()
@@ -346,7 +346,7 @@ struct SettingsView: View {
         .overlay(alignment: .top) {
             if let error = viewModel.errorMessage {
                 Text(LocalizedStringKey(error))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 13.f))
                     .foregroundColor(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)

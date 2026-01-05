@@ -204,7 +204,7 @@ struct AliceView: View {
 
                         // 模型名稱（中间）
                         Text(aliceModels.first { $0.name == selectedModel }?.displayName ?? "alice")
-                            .font(.system(size: 18.f, weight: .semibold))
+                            .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
                             .foregroundColor(DesignTokens.textPrimary)
                             .lineLimit(1)
 
@@ -301,7 +301,7 @@ struct AliceView: View {
                                 .font(.system(size: 16.f))
                                 .foregroundColor(DesignTokens.textPrimary)
                             Text("Get Super alice")
-                                .font(.system(size: 12.f))
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                 .tracking(0.24)
                                 .foregroundColor(DesignTokens.textPrimary)
                         }
@@ -323,7 +323,7 @@ struct AliceView: View {
                                     .font(.system(size: 16.f))
                                     .foregroundColor(DesignTokens.textPrimary)
                                 Text("Voice Mode")
-                                    .font(.system(size: 12.f))
+                                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                     .tracking(0.24)
                                     .foregroundColor(DesignTokens.textPrimary)
                             }
@@ -363,11 +363,11 @@ struct AliceView: View {
                     // 输入框区域
                     HStack(spacing: 10.s) {
                         Image(systemName: "plus")
-                            .font(.system(size: 16.f, weight: .medium))
+                            .font(.system(size: 16.f))
                             .foregroundColor(DesignTokens.textPrimary)
 
                         TextField("Ask any questions", text: $inputText)
-                            .font(.system(size: 12.f))
+                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                             .tracking(0.24)
                             .foregroundColor(DesignTokens.textSecondary)
                             .submitLabel(.send)

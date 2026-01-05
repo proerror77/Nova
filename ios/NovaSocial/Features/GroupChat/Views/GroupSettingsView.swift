@@ -29,10 +29,10 @@ struct GroupSettingsView: View {
                 } else if let error = errorMessage {
                     VStack(spacing: 16) {
                         Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 40))
+                            .font(.system(size: 40.f))
                             .foregroundColor(DesignTokens.accentColor)
                         Text(error)
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(DesignTokens.textSecondary)
                         Button("Retry") {
                             Task { await loadGroupDetails() }
@@ -53,7 +53,7 @@ struct GroupSettingsView: View {
                             }
                         } header: {
                             Text("Members (\(members.count))")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(Font.custom("SFProDisplay-Semibold", size: 13.f))
                                 .foregroundColor(DesignTokens.textSecondary)
                         }
 
@@ -62,7 +62,7 @@ struct GroupSettingsView: View {
                             muteToggleRow
                         } header: {
                             Text("Notifications")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(Font.custom("SFProDisplay-Semibold", size: 13.f))
                                 .foregroundColor(DesignTokens.textSecondary)
                         }
 
@@ -110,21 +110,21 @@ struct GroupSettingsView: View {
                     .frame(width: 60, height: 60)
 
                 Image(systemName: "person.3.fill")
-                    .font(.system(size: 24))
+                    .font(.system(size: 24.f))
                     .foregroundColor(DesignTokens.accentColor)
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(groupName)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
                     .foregroundColor(DesignTokens.textPrimary)
 
                 HStack(spacing: 6) {
                     Image(systemName: "lock.fill")
-                        .font(.system(size: 12))
+                        .font(.system(size: 12.f))
                         .foregroundColor(.green)
                     Text("End-to-end encrypted")
-                        .font(.system(size: 13))
+                        .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
             }
@@ -141,12 +141,12 @@ struct GroupSettingsView: View {
         Toggle(isOn: $isMuted) {
             HStack(spacing: 12) {
                 Image(systemName: isMuted ? "bell.slash.fill" : "bell.fill")
-                    .font(.system(size: 18))
+                    .font(Font.custom("SFProDisplay-Regular", size: 18.f))
                     .foregroundColor(DesignTokens.textPrimary)
                     .frame(width: 28)
 
                 Text("Mute Notifications")
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(DesignTokens.textPrimary)
             }
         }
@@ -167,7 +167,7 @@ struct GroupSettingsView: View {
                         .progressViewStyle(CircularProgressViewStyle(tint: .red))
                 } else {
                     Text("Leave Group")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                         .foregroundColor(.red)
                 }
                 Spacer()
@@ -291,12 +291,12 @@ private struct MemberRow: View {
             // Name and role
             VStack(alignment: .leading, spacing: 2) {
                 Text(member.displayName)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                     .foregroundColor(DesignTokens.textPrimary)
 
                 if member.isAdmin {
                     Text("Admin")
-                        .font(.system(size: 12))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         .foregroundColor(DesignTokens.accentColor)
                 }
             }
@@ -314,7 +314,7 @@ private struct MemberRow: View {
                 .frame(width: 44, height: 44)
 
             Text(String(member.displayName.prefix(1)).uppercased())
-                .font(.system(size: 18, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
                 .foregroundColor(DesignTokens.accentColor)
         }
     }

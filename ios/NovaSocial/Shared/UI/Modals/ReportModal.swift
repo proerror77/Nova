@@ -21,7 +21,7 @@ struct ReportModal: View {
                         isPresented = false
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 24, weight: .semibold))
+                            .font(.system(size: 24.f))
                             .foregroundColor(.black)
                     }
                     .contentShape(Rectangle())
@@ -31,7 +31,7 @@ struct ReportModal: View {
 
                     // Report Title
                     Text("Report")
-                        .font(.system(size: 25, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 25.f))
                         .foregroundColor(.black)
 
                     Spacer()
@@ -51,13 +51,13 @@ struct ReportModal: View {
                     VStack(alignment: .center, spacing: 16) {
                         // Title
                         Text("Why are you reporting this post?")
-                            .font(.system(size: 20, weight: .bold))
+                            .font(Font.custom("SFProDisplay-Bold", size: 20.f))
                             .frame(maxWidth: .infinity, alignment: .center)
                             .multilineTextAlignment(.center)
 
                         // Description
                         Text("Your report is anonymous. If someone is in immediate danger, call the local emergency services - don't wait.")
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(Color(red: 0.60, green: 0.60, blue: 0.60))
                             .frame(maxWidth: .infinity, alignment: .center)
                             .multilineTextAlignment(.center)
@@ -104,7 +104,7 @@ struct ReportOptionNavigable: View {
             VStack(spacing: 0) {
                 HStack {
                     Text(title)
-                        .font(.system(size: 18))
+                        .font(Font.custom("SFProDisplay-Regular", size: 18.f))
                         .foregroundColor(.black)
                     Spacer()
                     Image(systemName: "chevron.right")

@@ -37,11 +37,11 @@ struct NameSelectorModal: View {
                     // 标题
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Preferred name display")
-                            .font(.system(size: 20, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 20.f))
                             .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
 
                         Text("Choose how your name will appear when posting")
-                            .font(.system(size: 12))
+                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                             .foregroundColor(Color(red: 0.68, green: 0.68, blue: 0.68))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -64,11 +64,11 @@ struct NameSelectorModal: View {
 
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(authManager.currentUser?.displayName ?? authManager.currentUser?.username ?? "User")
-                                    .font(.system(size: 19, weight: .bold))
+                                    .font(Font.custom("SFProDisplay-Bold", size: 19.f))
                                     .foregroundColor(.black)
 
                                 Text(authManager.currentUser?.username ?? "username")
-                                    .font(.system(size: 15))
+                                    .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                                     .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
                             }
 
@@ -97,11 +97,11 @@ struct NameSelectorModal: View {
 
                             VStack(alignment: .leading, spacing: 5) {
                                 Text("Dreamer")
-                                    .font(.system(size: 19, weight: .bold))
+                                    .font(Font.custom("SFProDisplay-Bold", size: 19.f))
                                     .foregroundColor(.black)
 
                                 Text("Alias name")
-                                    .font(.system(size: 15))
+                                    .font(Font.custom("SFProDisplay-Regular", size: 15.f))
                                     .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
                             }
 

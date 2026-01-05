@@ -90,10 +90,10 @@ struct CommentSheetView: View {
                         } else if let error = error {
                             VStack(spacing: DesignTokens.spacing12) {
                                 Image(systemName: "exclamationmark.triangle")
-                                    .font(.system(size: 40))
+                                    .font(.system(size: 40.f))
                                     .foregroundColor(.orange)
                                 Text(error)
-                                    .font(.system(size: DesignTokens.fontMedium))
+                                    .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
                                     .foregroundColor(DesignTokens.textSecondary)
                                     .multilineTextAlignment(.center)
                                 Button("Retry") {
@@ -106,13 +106,13 @@ struct CommentSheetView: View {
                         } else if comments.isEmpty {
                             VStack(spacing: DesignTokens.spacing12) {
                                 Image(systemName: "bubble.left.and.bubble.right")
-                                    .font(.system(size: 40))
+                                    .font(.system(size: 40.f))
                                     .foregroundColor(DesignTokens.textMuted)
                                 Text("No comments yet")
-                                    .font(.system(size: DesignTokens.fontLarge))
+                                    .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontLarge))
                                     .foregroundColor(DesignTokens.textSecondary)
                                 Text("Be the first to comment!")
-                                    .font(.system(size: DesignTokens.fontMedium))
+                                    .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
                                     .foregroundColor(DesignTokens.textMuted)
                             }
                             .frame(maxWidth: .infinity)
@@ -120,7 +120,7 @@ struct CommentSheetView: View {
                         } else {
                             // Comment count header
                             Text("\(totalCount) comments")
-                                .font(.system(size: DesignTokens.fontBody, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontBody))
                                 .foregroundColor(DesignTokens.textSecondary)
                                 .padding(.bottom, DesignTokens.spacing8)
 
@@ -198,7 +198,7 @@ struct CommentSheetView: View {
                     }
 
                     TextField("Add a comment...", text: $commentText)
-                        .font(.system(size: DesignTokens.fontMedium))
+                        .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
                         .textFieldStyle(.plain)
                         .disabled(isSubmitting)
 
@@ -465,11 +465,11 @@ struct SocialCommentRow: View {
                 // 使用 Text 连接以支持 @mention 高亮
                 (
                     Text(comment.displayAuthorName)
-                        .font(.system(size: DesignTokens.fontMedium, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: DesignTokens.fontMedium))
                         .foregroundColor(DesignTokens.textSecondary)
                     + Text(" ")
                     + parseCommentText(comment.content)
-                        .font(.system(size: DesignTokens.fontMedium))
+                        .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
                         .foregroundColor(DesignTokens.textPrimary)
                 )
                 .fixedSize(horizontal: false, vertical: true)
@@ -481,12 +481,12 @@ struct SocialCommentRow: View {
                 // 时间戳和回复按钮
                 HStack(spacing: 12) {
                     Text(comment.createdDate.timeAgoDisplay())
-                        .font(.system(size: DesignTokens.fontSmall))
+                        .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontSmall))
                         .foregroundColor(DesignTokens.textSecondary)
                         .accessibilityLabel("Posted \(comment.createdDate.timeAgoDisplay())")
 
                     Text("Reply")
-                        .font(.system(size: DesignTokens.fontSmall, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontSmall))
                         .foregroundColor(DesignTokens.textSecondary)
                         .accessibilityLabel("Reply to comment")
                         .accessibilityHint("Double tap to reply")
@@ -506,14 +506,14 @@ struct SocialCommentRow: View {
                             .frame(width: 14, height: 14)
                     } else {
                         Image(systemName: isLiked ? "heart.fill" : "heart")
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(isLiked ? .red : DesignTokens.textSecondary)
                             .scaleEffect(isLiked ? 1.1 : 1.0)
                     }
 
                     if likeCount > 0 {
                         Text("\(likeCount)")
-                            .font(.system(size: 10))
+                            .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                             .foregroundColor(DesignTokens.textSecondary)
                     }
                 }
@@ -657,19 +657,19 @@ struct DeleteCommentConfirmation: View {
             VStack(spacing: 0) {
                 // 图标
                 Image(systemName: "trash.circle.fill")
-                    .font(.system(size: 48))
+                    .font(.system(size: 48.f))
                     .foregroundStyle(.white, .red)
                     .padding(.top, 24)
 
                 // 标题
                 Text("Delete Comment?")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
                     .foregroundColor(.primary)
                     .padding(.top, 16)
 
                 // 描述
                 Text("This comment will be permanently deleted and cannot be recovered.")
-                    .font(.system(size: 14))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
@@ -683,7 +683,7 @@ struct DeleteCommentConfirmation: View {
                         onCancel()
                     } label: {
                         Text("Cancel")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                             .foregroundColor(.primary)
                             .frame(maxWidth: .infinity)
                             .frame(height: 44)
@@ -703,7 +703,7 @@ struct DeleteCommentConfirmation: View {
                                     .scaleEffect(0.8)
                             }
                             Text(isDeleting ? "Deleting..." : "Delete")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                         }
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
@@ -785,7 +785,7 @@ struct NestedRepliesView: View {
                             .frame(width: 20, height: 1)
 
                         Text(isExpanded ? "Hide replies" : "View \(replies.count - maxCollapsedReplies) more \(replies.count - maxCollapsedReplies == 1 ? "reply" : "replies")")
-                            .font(.system(size: DesignTokens.fontSmall, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontSmall))
                             .foregroundColor(DesignTokens.textSecondary)
                     }
                 }

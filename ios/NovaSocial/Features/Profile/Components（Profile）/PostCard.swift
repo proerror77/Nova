@@ -44,7 +44,7 @@ struct PostCard: View {
             VStack(alignment: .leading, spacing: 6.s) {
                 // 标题
                 Text(title)
-                    .font(Font.custom("SF Pro Display", size: 10.f))
+                    .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                     .foregroundColor(.black)
                     .lineLimit(1)
 
@@ -61,7 +61,7 @@ struct PostCard: View {
                         )
 
                         Text(authorName)
-                            .font(Font.custom("SF Pro Display", size: 10.f))
+                            .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                             .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                             .lineLimit(1)
                     }
@@ -75,7 +75,7 @@ struct PostCard: View {
                             .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
 
                         Text(likeCount.abbreviated)
-                            .font(Font.custom("SF Pro Display", size: 10.f))
+                            .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                             .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                     }
                 }

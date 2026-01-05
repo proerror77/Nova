@@ -42,7 +42,7 @@ struct NotificationView: View {
                     Spacer()
 
                     Text("Notification")
-                        .font(.system(size: 24, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 24.f))
                         .foregroundColor(DesignTokens.textPrimary)
 
                     Spacer()
@@ -92,7 +92,7 @@ struct NotificationView: View {
             ProgressView()
                 .scaleEffect(1.2)
             Text("Loading notifications...")
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(DesignTokens.textSecondary)
                 .padding(.top, 12)
             Spacer()
@@ -104,10 +104,10 @@ struct NotificationView: View {
         VStack(spacing: 16) {
             Spacer()
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 48))
+                .font(.system(size: 48.f))
                 .foregroundColor(DesignTokens.textSecondary)
             Text(message)
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(DesignTokens.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
@@ -117,7 +117,7 @@ struct NotificationView: View {
                 }
             }) {
                 Text("Retry")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                     .foregroundColor(.white)
                     .padding(.horizontal, 24)
                     .padding(.vertical, 10)
@@ -133,13 +133,13 @@ struct NotificationView: View {
         VStack(spacing: 16) {
             Spacer()
             Image(systemName: "bell.slash")
-                .font(.system(size: 48))
+                .font(.system(size: 48.f))
                 .foregroundColor(DesignTokens.textSecondary)
             Text("No notifications yet")
-                .font(.system(size: 16, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                 .foregroundColor(DesignTokens.textPrimary)
             Text("When you get notifications, they'll show up here")
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(DesignTokens.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
@@ -202,7 +202,7 @@ struct NotificationView: View {
     private func notificationSection(title: String, notifications: [NotificationItem]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title)
-                .font(.system(size: 16, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                 .foregroundColor(DesignTokens.textPrimary)
                 .padding(.horizontal, 16)
 
@@ -279,16 +279,16 @@ struct NotificationListItem: View {
             // Content
             VStack(alignment: .leading, spacing: 1) {
                 Text(notification.userName ?? "User")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                     .foregroundColor(DesignTokens.textPrimary)
 
                 HStack(spacing: 4) {
                     Text(notification.actionText)
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .foregroundColor(DesignTokens.textPrimary)
 
                     Text(notification.relativeTimeString)
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
             }
@@ -321,7 +321,7 @@ struct NotificationListItem: View {
                 onMessageTap?()
             }) {
                 Text("Message")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                     .foregroundColor(DesignTokens.textPrimary)
             }
             .frame(width: 85, height: 24)
@@ -337,7 +337,7 @@ struct NotificationListItem: View {
                 onFollowTap?(isFollowing)
             }) {
                 Text(isFollowing ? "Following" : "Follow")
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(isFollowing ? DesignTokens.textSecondary : Color(red: 0.87, green: 0.11, blue: 0.26))
             }
             .frame(width: 85, height: 24)
@@ -353,7 +353,7 @@ struct NotificationListItem: View {
                 onFollowTap?(isFollowing)
             }) {
                 Text(isFollowing ? "Following" : "Follow back")
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(isFollowing ? DesignTokens.textSecondary : Color(red: 0.87, green: 0.11, blue: 0.26))
             }
             .frame(width: 85, height: 24)

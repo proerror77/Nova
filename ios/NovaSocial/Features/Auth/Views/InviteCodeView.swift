@@ -74,7 +74,7 @@ struct InviteCodeView: View {
                         .scaledToFit()
                         .frame(width: 12.s, height: 12.s)
                     Text("Join the waitlist and get notified when access opens.")
-                        .font(.system(size: 12.f))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         .tracking(0.24)
                         .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64))
                         .lineLimit(1)
@@ -102,11 +102,11 @@ struct InviteCodeView: View {
     private var titleSection: some View {
         VStack(spacing: 19.h) {  // 287 - 239 - 29(标题高度) ≈ 19
             Text("Icered is invite only")
-                .font(.system(size: 24.f, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
                 .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
 
             Text("lf you have an invite code\nEnter it below.")
-                .font(.system(size: 14.f))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .tracking(0.28)
                 .multilineTextAlignment(.center)
                 .foregroundColor(Color(red: 0.75, green: 0.75, blue: 0.75))
@@ -117,7 +117,7 @@ struct InviteCodeView: View {
         ZStack {
             // 隐藏的输入框 - 保留功能
             TextField("", text: $inviteCode)
-                .font(.system(size: 16.f, weight: .light))
+                .font(Font.custom("SFProDisplay-Light", size: 16.f))
                 .foregroundColor(.clear)
                 .accentColor(.clear)
                 .multilineTextAlignment(.center)
@@ -131,7 +131,7 @@ struct InviteCodeView: View {
             // 显示的文字
             HStack(spacing: 8.s) {
                 Text(inviteCode.isEmpty ? "—" : "\(inviteCode)\(inviteCode.count < 8 ? "—" : "")")
-                    .font(.system(size: 16.f, weight: .light))
+                    .font(Font.custom("SFProDisplay-Light", size: 16.f))
                     .tracking(4)
                     .lineSpacing(20)
                     .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
@@ -171,7 +171,7 @@ struct InviteCodeView: View {
                         .scaleEffect(0.9)
                 }
                 Text("Submit")
-                    .font(.system(size: 16.f, weight: .heavy))
+                    .font(Font.custom("SFProDisplay-Heavy", size: 16.f))
                     .tracking(0.32)
                     .foregroundColor(.black)
             }
