@@ -12,6 +12,21 @@ struct NameSelectorModal: View {
     @Binding var selectedNameType: NameDisplayType
     @EnvironmentObject private var authManager: AuthenticationManager
 
+    // Alias account state (fetched from API)
+    @State private var aliasAccount: Account?
+    @State private var isLoadingAlias = false
+    private let accountsService = AccountsService.shared
+
+    /// Alias display name - uses real data or placeholder
+    private var aliasDisplayName: String {
+        aliasAccount?.aliasName ?? aliasAccount?.effectiveDisplayName ?? "Create Alias"
+    }
+
+    /// Whether user has an alias account
+    private var hasAlias: Bool {
+        aliasAccount != nil
+    }
+
     var body: some View {
         ZStack {
             // 半透明背景
@@ -86,23 +101,28 @@ struct NameSelectorModal: View {
                         .fill(Color(red: 0.77, green: 0.77, blue: 0.77))
                         .frame(height: 0.4)
 
-                    // MARK: - 别名选项 (Dreamer)
+                    // MARK: - 别名选项 (Dynamic from API)
                     Button {
                         selectedNameType = .alias
                         isPresented = false
                     } label: {
                         HStack(spacing: 18) {
-                            // 头像
-                            avatarView(isSelected: selectedNameType == .alias)
+                            // 头像 - use alias avatar if available
+                            aliasAvatarView(isSelected: selectedNameType == .alias)
 
                             VStack(alignment: .leading, spacing: 5) {
-                                Text("Dreamer")
-                                    .font(Font.custom("SFProDisplay-Bold", size: 19.f))
-                                    .foregroundColor(.black)
+                                if isLoadingAlias {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                } else {
+                                    Text(aliasDisplayName)
+                                        .font(Font.custom("SFProDisplay-Bold", size: 19.f))
+                                        .foregroundColor(.black)
 
-                                Text("Alias name")
-                                    .font(Font.custom("SFProDisplay-Regular", size: 15.f))
-                                    .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
+                                    Text(hasAlias ? "Alias name" : "Set up your alias")
+                                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
+                                        .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
+                                }
                             }
 
                             Spacer()
@@ -113,6 +133,7 @@ struct NameSelectorModal: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .disabled(!hasAlias && !isLoadingAlias)  // Disable if no alias exists
 
                 }
                 .background(
@@ -135,6 +156,23 @@ struct NameSelectorModal: View {
             )
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isPresented)
+        .task {
+            await loadAliasAccount()
+        }
+    }
+
+    // MARK: - Load Alias Account
+    private func loadAliasAccount() async {
+        isLoadingAlias = true
+        do {
+            let response = try await accountsService.getAccounts()
+            aliasAccount = response.accounts.first(where: { $0.isAlias })
+        } catch {
+            #if DEBUG
+            print("[NameSelectorModal] Failed to load alias: \(error)")
+            #endif
+        }
+        isLoadingAlias = false
     }
 
     // MARK: - 头像视图
@@ -151,6 +189,33 @@ struct NameSelectorModal: View {
                     .clipShape(Circle())
             } else if let avatarUrl = authManager.currentUser?.avatarUrl,
                       let url = URL(string: avatarUrl) {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    DefaultAvatarView(size: 67)
+                }
+                .frame(width: 67, height: 67)
+                .clipShape(Circle())
+            } else {
+                DefaultAvatarView(size: 67)
+            }
+        }
+        .overlay(
+            Circle()
+                .stroke(borderColor, lineWidth: 1)
+        )
+    }
+
+    // MARK: - Alias Avatar View
+    @ViewBuilder
+    private func aliasAvatarView(isSelected: Bool) -> some View {
+        let borderColor = isSelected ? Color(red: 0.82, green: 0.11, blue: 0.26) : Color(red: 0.37, green: 0.37, blue: 0.37)
+
+        ZStack {
+            if let avatarUrl = aliasAccount?.avatarUrl,
+               let url = URL(string: avatarUrl) {
                 AsyncImage(url: url) { image in
                     image
                         .resizable()

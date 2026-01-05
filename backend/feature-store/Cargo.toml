@@ -34,6 +34,9 @@ tract-onnx = "0.21"  # ONNX model serving
 clickhouse = { version = "0.12", features = ["watch", "uuid", "time", "rustls-tls"] }
 time = "0.3"  # Required for ClickHouse datetime serialization
 
+# TLS crypto provider (required for rustls initialization)
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std", "tls12"] }
+
 # Shared internal libraries
 error-types = { path = "../libs/error-types" }
 db-pool = { path = "../libs/db-pool" }
