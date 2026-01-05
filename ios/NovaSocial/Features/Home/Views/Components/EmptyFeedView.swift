@@ -10,7 +10,7 @@ struct EmptyFeedView: View {
         VStack(spacing: DesignTokens.spacing16) {
             // Icon
             Image(systemName: "photo.stack")
-                .font(Font.custom("SFProDisplay-Regular", size: 50.f))
+                .font(.system(size: 50.f))
                 .foregroundColor(DesignTokens.accentColor.opacity(0.6))
 
             // Title
@@ -33,7 +33,7 @@ struct EmptyFeedView: View {
                     }) {
                         HStack(spacing: 6) {
                             Image(systemName: "arrow.clockwise")
-                                .font(Font.custom("SFProDisplay-Medium", size: 14.f))
+                                .font(.system(size: 14.f))
                             Text("Refresh")
                                 .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontMedium))
                         }
@@ -52,7 +52,7 @@ struct EmptyFeedView: View {
                     Button(action: onCreatePost) {
                         HStack(spacing: 6) {
                             Image(systemName: "plus")
-                                .font(Font.custom("SFProDisplay-Medium", size: 14.f))
+                                .font(.system(size: 14.f))
                             Text("Create Post")
                                 .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontMedium))
                         }

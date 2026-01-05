@@ -488,7 +488,7 @@ struct ProfileView: View {
                         .font(.custom("SFProDisplay-Regular", size: 16.f).weight(.semibold))
                         .foregroundColor(.white)
                     Image(systemName: "chevron.down")
-                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
+                        .font(.system(size: 12.f))
                         .foregroundColor(.white)
                         .frame(width: 24.s, height: 24.s)
                 }
@@ -658,7 +658,7 @@ struct ProfileView: View {
                                 .font(.custom("SFProDisplay-Regular", size: 16.f).weight(.semibold))
                                 .foregroundColor(.white)
                             Image(systemName: "chevron.down")
-                                .font(Font.custom("SFProDisplay-Medium", size: 12.f))
+                                .font(.system(size: 12.f))
                                 .foregroundColor(.white)
                                 .frame(width: 24.s, height: 24.s)
                         }
@@ -948,7 +948,7 @@ struct ProfileView: View {
     private var emptyStateView: some View {
         VStack(spacing: 12.h) {
             Image(systemName: "tray")
-                .font(Font.custom("SFProDisplay-Regular", size: 48.f))
+                .font(.system(size: 48.f))
                 .foregroundColor(.gray)
             Text("No posts yet")
                 .font(Font.custom("SFProDisplay-Regular", size: 16.f))
@@ -961,7 +961,7 @@ struct ProfileView: View {
     private var searchEmptyStateView: some View {
         VStack(spacing: 12.h) {
             Image(systemName: "magnifyingglass")
-                .font(Font.custom("SFProDisplay-Regular", size: 48.f))
+                .font(.system(size: 48.f))
                 .foregroundColor(.gray)
                 .symbolEffect(.pulse, options: .repeating)
             Text("No matching posts found")

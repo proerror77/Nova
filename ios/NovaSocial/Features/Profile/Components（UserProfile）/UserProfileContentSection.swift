@@ -146,7 +146,7 @@ struct UserProfilePostCardNew: View {
                 // 右侧：点赞图标 + 数量
                 HStack(spacing: 5) {
                     Image(systemName: "heart")
-                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                        .font(.system(size: 12.f))
                         .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                         .frame(width: 12, height: 12)
 

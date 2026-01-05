@@ -353,7 +353,7 @@ struct ProfileFollowingView: View {
                 isPresented = false
             }) {
                 Image(systemName: "chevron.left")
-                    .font(Font.custom("SFProDisplay-Medium", size: 18.f))
+                    .font(.system(size: 18.f))
                     .foregroundColor(.black)
             }
             .frame(width: 24, height: 24)
@@ -421,7 +421,7 @@ struct ProfileFollowingView: View {
     private var searchBar: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                .font(.system(size: 14.f))
                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
             TextField("Search", text: $searchText)
@@ -445,7 +445,7 @@ struct ProfileFollowingView: View {
                 // 錯誤狀態
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle")
-                        .font(Font.custom("SFProDisplay-Regular", size: 48.f))
+                        .font(.system(size: 48.f))
                         .foregroundColor(.orange)
                     Text(error)
                         .font(Font.custom("SFProDisplay-Regular", size: 16.f))
@@ -469,7 +469,7 @@ struct ProfileFollowingView: View {
                 // 空状态
                 VStack(spacing: 12) {
                     Image(systemName: "person.badge.plus")
-                        .font(Font.custom("SFProDisplay-Regular", size: 48.f))
+                        .font(.system(size: 48.f))
                         .foregroundColor(.gray.opacity(0.5))
                     Text("Not following anyone yet")
                         .font(Font.custom("SFProDisplay-Regular", size: 16.f))
@@ -510,7 +510,7 @@ struct ProfileFollowingView: View {
                 // 錯誤狀態
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle")
-                        .font(Font.custom("SFProDisplay-Regular", size: 48.f))
+                        .font(.system(size: 48.f))
                         .foregroundColor(.orange)
                     Text(error)
                         .font(Font.custom("SFProDisplay-Regular", size: 16.f))
@@ -534,7 +534,7 @@ struct ProfileFollowingView: View {
                 // 空状态
                 VStack(spacing: 12) {
                     Image(systemName: "person.2")
-                        .font(Font.custom("SFProDisplay-Regular", size: 48.f))
+                        .font(.system(size: 48.f))
                         .foregroundColor(.gray.opacity(0.5))
                     Text("No followers yet")
                         .font(Font.custom("SFProDisplay-Regular", size: 16.f))
@@ -605,7 +605,7 @@ struct UserRowView: View {
 
                     if user.isVerified {
                         Image(systemName: "checkmark.seal.fill")
-                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                            .font(.system(size: 14.f))
                             .foregroundColor(Color(red: 0.2, green: 0.6, blue: 1.0))
                     }
                 }

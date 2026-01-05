@@ -14,7 +14,7 @@ struct ThankYouModal: View {
                 HStack {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
+                            .font(.system(size: 24.f))
                             .foregroundColor(.black)
                     }
                     Spacer()
@@ -23,7 +23,7 @@ struct ThankYouModal: View {
                     Spacer()
                     Button(action: {}) {
                         Image(systemName: "xmark")
-                            .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
+                            .font(.system(size: 18.f))
                             .foregroundColor(.clear)
                     }
                 }
@@ -42,7 +42,7 @@ struct ThankYouModal: View {
                         .frame(width: 120, height: 120)
                         .overlay(
                             Image(systemName: "checkmark")
-                                .font(Font.custom("SFProDisplay-Semibold", size: 50.f))
+                                .font(.system(size: 50.f))
                                 .foregroundColor(.white)
                         )
                         .padding(.bottom, 30)

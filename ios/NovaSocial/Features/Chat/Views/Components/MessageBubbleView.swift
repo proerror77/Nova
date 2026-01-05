@@ -119,7 +119,7 @@ struct MessageBubbleView: View {
         case .sent:
             HStack(spacing: 2) {
                 Image(systemName: "checkmark")
-                    .font(Font.custom("SFProDisplay-Regular", size: 9.f))
+                    .font(.system(size: 9.f))
                     .foregroundColor(DesignTokens.textMuted)
                 Text("Sent")
                     .font(Font.custom("SFProDisplay-Regular", size: 9.f))
@@ -128,7 +128,7 @@ struct MessageBubbleView: View {
         case .delivered:
             HStack(spacing: 2) {
                 Image(systemName: "checkmark.circle")
-                    .font(Font.custom("SFProDisplay-Regular", size: 9.f))
+                    .font(.system(size: 9.f))
                     .foregroundColor(DesignTokens.textMuted)
                 Text("Delivered")
                     .font(Font.custom("SFProDisplay-Regular", size: 9.f))
@@ -137,7 +137,7 @@ struct MessageBubbleView: View {
         case .read:
             HStack(spacing: 2) {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 9.f))
+                    .font(.system(size: 9.f))
                     .foregroundColor(.blue)
                 Text("Read")
                     .font(Font.custom("SFProDisplay-Medium", size: 9.f))
@@ -149,7 +149,7 @@ struct MessageBubbleView: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.circle.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                        .font(.system(size: 12.f))
                         .foregroundColor(.red)
                     Text("Retry")
                         .font(Font.custom("SFProDisplay-Medium", size: 10.f))
@@ -260,7 +260,7 @@ struct MessageBubbleView: View {
         if message.isRecalled {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.uturn.backward.circle")
-                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                    .font(.system(size: 14.f))
                     .foregroundColor(DesignTokens.textMuted)
                 Text(isFromMe ? "You unsent a message" : "This message was unsent")
                     .font(Font.custom("SFProDisplay-Regular", size: 14.f))
@@ -370,7 +370,7 @@ struct MessageBubbleView: View {
     private func fileMessageView(isFromMe: Bool) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "doc.fill")
-                .font(Font.custom("SFProDisplay-Regular", size: 24.f))
+                .font(.system(size: 24.f))
                 .foregroundColor(isFromMe ? .white : myBubbleColor)
             VStack(alignment: .leading, spacing: 2) {
                 Text(message.text.isEmpty ? "File" : message.text)
@@ -395,7 +395,7 @@ struct MessageBubbleView: View {
                 .frame(width: 200, height: 150)
 
             Image(systemName: "play.circle.fill")
-                .font(Font.custom("SFProDisplay-Regular", size: 44.f))
+                .font(.system(size: 44.f))
                 .foregroundColor(.white.opacity(0.9))
         }
     }

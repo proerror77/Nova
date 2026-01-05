@@ -167,7 +167,7 @@ struct StartGroupChatView: View {
                         currentPage = .message
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                            .font(.system(size: 20.f))
                             .foregroundColor(DesignTokens.textPrimary)
                     }
 
@@ -212,7 +212,7 @@ struct StartGroupChatView: View {
 
                     HStack(spacing: 10) {
                         Image(systemName: "person.3.fill")
-                            .font(Font.custom("SFProDisplay-Regular", size: 15.f))
+                            .font(.system(size: 15.f))
                             .foregroundColor(DesignTokens.textSecondary)
 
                         TextField(NSLocalizedString("group_chat.group_name_placeholder", comment: ""), text: $viewModel.groupName)
@@ -259,7 +259,7 @@ struct StartGroupChatView: View {
                 // MARK: - Search Bar
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
-                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
+                        .font(.system(size: 15.f))
                         .foregroundColor(DesignTokens.textSecondary)
 
                     TextField(NSLocalizedString("group_chat.search_placeholder", comment: ""), text: $viewModel.searchQuery)
@@ -377,7 +377,7 @@ struct StartGroupChatView: View {
                             if viewModel.friends.isEmpty {
                                 VStack(spacing: 16) {
                                     Image(systemName: "person.2.slash")
-                                        .font(Font.custom("SFProDisplay-Regular", size: 48.f))
+                                        .font(.system(size: 48.f))
                                         .foregroundColor(DesignTokens.textMuted)
 
                                     Text(NSLocalizedString("group_chat.no_friends", comment: ""))
@@ -447,7 +447,7 @@ struct GroupSelectedUserChip: View {
 
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                    .font(.system(size: 16.f))
                     .foregroundColor(DesignTokens.textMuted)
             }
         }
@@ -511,7 +511,7 @@ struct GroupSelectableUserCardView: View {
                 // Checkmark for selected state
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 24.f))
+                        .font(.system(size: 24.f))
                         .foregroundColor(DesignTokens.accentColor)
                 }
             }

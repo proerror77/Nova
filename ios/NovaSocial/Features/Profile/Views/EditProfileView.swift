@@ -176,7 +176,7 @@ struct EditProfileView: View {
                                     .tint(.white)
                             } else {
                                 Image(systemName: "camera.fill")
-                                    .font(Font.custom("SFProDisplay-Regular", size: 24.f))
+                                    .font(.system(size: 24.f))
                                     .foregroundColor(.white)
                             }
                         }

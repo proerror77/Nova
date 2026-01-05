@@ -82,7 +82,7 @@ struct BottomTabBar: View {
                     .background(Color(red: 0.81, green: 0.13, blue: 0.25))
                     .cornerRadius(11.s)
                 Image(systemName: "plus")
-                    .font(Font.custom("SFProDisplay-Bold", size: 18.f))
+                    .font(.system(size: 18.f))
                     .foregroundColor(.white)
             }
             .frame(width: 44.s, height: 32.s)

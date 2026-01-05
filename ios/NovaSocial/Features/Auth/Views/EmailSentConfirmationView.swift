@@ -63,7 +63,7 @@ struct EmailSentConfirmationView: View {
 
                             // Success Icon
                             Image(systemName: "envelope.circle.fill")
-                                .font(Font.custom("SFProDisplay-Regular", size: Layout.iconSize))
+                                .font(.system(size: Layout.iconSize))
                                 .foregroundColor(Colors.successGreen)
 
                             Spacer()
@@ -180,7 +180,7 @@ struct EmailSentConfirmationView: View {
         Button(action: openEmailApp) {
             HStack(spacing: 8) {
                 Image(systemName: "envelope.open")
-                    .font(Font.custom("SFProDisplay-Regular", size: 18.f))
+                    .font(.system(size: 18.f))
                 Text(LocalizedStringKey("Open_Email_App"))
                     .font(Font.custom("SFProDisplay-Bold", size: 20.f))
             }

@@ -227,7 +227,7 @@ struct SelectableChannelTag: View {
             HStack(spacing: 5) {
                 // Plus 图标
                 Image(systemName: "plus")
-                    .font(Font.custom("SFProDisplay-Medium", size: 11.f))
+                    .font(.system(size: 11.f))
                     .foregroundColor(isSelected ? DesignTokens.accentColor : DesignTokens.textPrimary)
 
                 Text(name)

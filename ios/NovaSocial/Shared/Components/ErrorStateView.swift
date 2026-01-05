@@ -21,7 +21,7 @@ struct ErrorStateView: View {
         VStack(spacing: DesignTokens.spacing16) {
             // Error Icon
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(Font.custom("SFProDisplay-Regular", size: 50.f))
+                .font(.system(size: 50.f))
                 .foregroundColor(.orange)
 
             // Title
@@ -44,7 +44,7 @@ struct ErrorStateView: View {
                     Button(action: onLogin) {
                         HStack(spacing: 6) {
                             Image(systemName: "person.circle")
-                                .font(Font.custom("SFProDisplay-Medium", size: 16.f))
+                                .font(.system(size: 16.f))
                             Text("Login")
                                 .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontMedium))
                         }
@@ -64,7 +64,7 @@ struct ErrorStateView: View {
                     }) {
                         HStack(spacing: 6) {
                             Image(systemName: "arrow.clockwise")
-                                .font(Font.custom("SFProDisplay-Medium", size: 16.f))
+                                .font(.system(size: 16.f))
                             Text("Try Again")
                                 .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontMedium))
                         }

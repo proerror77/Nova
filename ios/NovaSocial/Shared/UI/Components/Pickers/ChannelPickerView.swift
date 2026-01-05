@@ -48,7 +48,7 @@ struct ChannelPickerView: View {
                 // Search bar
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
-                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
+                        .font(.system(size: 15.f))
                         .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
 
                     TextField("Search channels", text: $searchText)
@@ -61,7 +61,7 @@ struct ChannelPickerView: View {
                             searchText = ""
                         }) {
                             Image(systemName: "xmark.circle.fill")
-                                .font(Font.custom("SFProDisplay-Regular", size: 15.f))
+                                .font(.system(size: 15.f))
                                 .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
                         }
                     }
@@ -81,7 +81,7 @@ struct ChannelPickerView: View {
                     Spacer()
                     VStack(spacing: 12) {
                         Image(systemName: "exclamationmark.triangle")
-                            .font(Font.custom("SFProDisplay-Regular", size: 40.f))
+                            .font(.system(size: 40.f))
                             .foregroundColor(.orange)
                         Text(error)
                             .font(Font.custom("SFProDisplay-Regular", size: 14.f))
@@ -204,7 +204,7 @@ private struct ChannelRow: View {
                 // Selection indicator
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 22.f))
+                        .font(.system(size: 22.f))
                         .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
                 } else if !isDisabled {
                     Circle()

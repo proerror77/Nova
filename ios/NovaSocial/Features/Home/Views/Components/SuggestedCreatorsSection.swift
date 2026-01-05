@@ -74,7 +74,7 @@ struct SuggestedCreatorCard: View {
 
                     if creator.isVerified {
                         Image(systemName: "checkmark.seal.fill")
-                            .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                            .font(.system(size: 10.f))
                             .foregroundColor(.blue)
                     }
                 }

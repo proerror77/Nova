@@ -180,7 +180,7 @@ struct KeyBackupSettingsView: View {
         NavigationView {
             VStack(spacing: 24) {
                 Image(systemName: "key.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 60.f))
+                    .font(.system(size: 60.f))
                     .foregroundColor(.orange)
 
                 Text("Your Recovery Key")
@@ -241,7 +241,7 @@ struct KeyBackupSettingsView: View {
         NavigationView {
             VStack(spacing: 24) {
                 Image(systemName: "arrow.down.doc.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 60.f))
+                    .font(.system(size: 60.f))
                     .foregroundColor(.green)
 
                 Text("Enter Recovery Key")

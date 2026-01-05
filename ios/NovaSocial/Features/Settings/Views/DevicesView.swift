@@ -30,7 +30,7 @@ struct DevicesView: View {
                         currentPage = .setting
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(Font.custom("SFProDisplay-Semibold", size: 17.f))
+                            .font(.system(size: 17.f))
                             .foregroundColor(DesignTokens.accentColor)
                     }
 
@@ -65,7 +65,7 @@ struct DevicesView: View {
                         // 错误状态
                         VStack(spacing: 16) {
                             Image(systemName: "exclamationmark.triangle")
-                                .font(Font.custom("SFProDisplay-Regular", size: 48.f))
+                                .font(.system(size: 48.f))
                                 .foregroundColor(.secondary)
 
                             Text(errorMessage)
@@ -90,7 +90,7 @@ struct DevicesView: View {
                         // 空状态
                         VStack(spacing: 16) {
                             Image(systemName: "laptopcomputer.and.iphone")
-                                .font(Font.custom("SFProDisplay-Regular", size: 48.f))
+                                .font(.system(size: 48.f))
                                 .foregroundColor(.secondary)
 
                             Text("No devices found")
@@ -270,13 +270,13 @@ struct DeviceRow: View {
                         onLogout?()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(Font.custom("SFProDisplay-Regular", size: 22.f))
+                            .font(.system(size: 22.f))
                             .foregroundColor(.secondary.opacity(0.5))
                     }
                     .buttonStyle(.plain)
                 } else {
                     Image(systemName: "chevron.right")
-                        .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
+                        .font(.system(size: 14.f))
                         .foregroundColor(Color(uiColor: .tertiaryLabel))
                 }
             }

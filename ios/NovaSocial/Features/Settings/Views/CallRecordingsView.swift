@@ -114,7 +114,7 @@ struct CallRecordingsView: View {
             Spacer()
 
             Image(systemName: "waveform.circle")
-                .font(Font.custom("SFProDisplay-Regular", size: 60.f))
+                .font(.system(size: 60.f))
                 .foregroundColor(DesignTokens.textSecondary.opacity(0.5))
 
             Text("No Recordings")
@@ -250,13 +250,13 @@ private struct RecordingRow: View {
                 HStack(spacing: 16) {
                     Button(action: onShare) {
                         Image(systemName: "square.and.arrow.up")
-                            .font(Font.custom("SFProDisplay-Regular", size: 18.f))
+                            .font(.system(size: 18.f))
                             .foregroundColor(DesignTokens.accentColor)
                     }
 
                     Button(action: onDelete) {
                         Image(systemName: "trash")
-                            .font(Font.custom("SFProDisplay-Regular", size: 18.f))
+                            .font(.system(size: 18.f))
                             .foregroundColor(.red)
                     }
                 }

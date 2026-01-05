@@ -29,7 +29,7 @@ struct GroupSettingsView: View {
                 } else if let error = errorMessage {
                     VStack(spacing: 16) {
                         Image(systemName: "exclamationmark.triangle")
-                            .font(Font.custom("SFProDisplay-Regular", size: 40.f))
+                            .font(.system(size: 40.f))
                             .foregroundColor(DesignTokens.accentColor)
                         Text(error)
                             .font(Font.custom("SFProDisplay-Regular", size: 14.f))
@@ -110,7 +110,7 @@ struct GroupSettingsView: View {
                     .frame(width: 60, height: 60)
 
                 Image(systemName: "person.3.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 24.f))
+                    .font(.system(size: 24.f))
                     .foregroundColor(DesignTokens.accentColor)
             }
 
@@ -121,7 +121,7 @@ struct GroupSettingsView: View {
 
                 HStack(spacing: 6) {
                     Image(systemName: "lock.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                        .font(.system(size: 12.f))
                         .foregroundColor(.green)
                     Text("End-to-end encrypted")
                         .font(Font.custom("SFProDisplay-Regular", size: 13.f))

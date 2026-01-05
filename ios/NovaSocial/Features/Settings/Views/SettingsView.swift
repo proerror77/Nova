@@ -56,7 +56,7 @@ struct SettingsView: View {
                                 }) {
                                     HStack(spacing: 16) {
                                         Image(systemName: "person.crop.square.filled.and.at.rectangle")
-                                            .font(Font.custom("SFProDisplay-Regular", size: 18.f))
+                                            .font(.system(size: 18.f))
                                             .foregroundColor(DesignTokens.accentColor)
                                             .frame(width: 24)
 
@@ -164,7 +164,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 0) {
                             HStack(spacing: 16) {
                                 Image(systemName: "moon.fill")
-                                    .font(Font.custom("SFProDisplay-Regular", size: 18.f))
+                                    .font(.system(size: 18.f))
                                     .foregroundColor(DesignTokens.accentColor)
                                     .frame(width: 24)
 
@@ -210,7 +210,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 0) {
                             HStack(spacing: 16) {
                                 Image(systemName: "bell.fill")
-                                    .font(Font.custom("SFProDisplay-Regular", size: 18.f))
+                                    .font(.system(size: 18.f))
                                     .foregroundColor(DesignTokens.accentColor)
                                     .frame(width: 24)
 
@@ -312,7 +312,7 @@ struct SettingsView: View {
                             }) {
                                 HStack(spacing: 16) {
                                     Image(systemName: "rectangle.portrait.and.arrow.right")
-                                        .font(Font.custom("SFProDisplay-Regular", size: 18.f))
+                                        .font(.system(size: 18.f))
                                         .foregroundColor(DesignTokens.accentColor)
                                         .frame(width: 24)
 

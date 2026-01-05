@@ -56,7 +56,7 @@ struct InviteFriendsView: View {
                     // MARK: - 搜索栏
                     HStack {
                         Image(systemName: "magnifyingglass")
-                            .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                            .font(.system(size: 16.f))
                             .foregroundColor(DesignTokens.textSecondary)
 
                         TextField(LocalizedStringKey("Search_people_on_Icered"), text: $searchText)
@@ -77,7 +77,7 @@ struct InviteFriendsView: View {
                     }) {
                         HStack(spacing: 24) {
                             Image(systemName: "square.and.arrow.up")
-                                .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                                .font(.system(size: 16.f))
                                 .foregroundColor(DesignTokens.accentColor)
 
 	                            Text(LocalizedStringKey("Share_invitation_link"))

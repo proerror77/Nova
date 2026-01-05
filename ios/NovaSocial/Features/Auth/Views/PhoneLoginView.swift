@@ -87,7 +87,7 @@ struct PhoneLoginView: View {
         HStack {
             Button(action: handleBack) {
                 Image(systemName: "chevron.left")
-                    .font(Font.custom("SFProDisplay-Medium", size: 20.f))
+                    .font(.system(size: 20.f))
                     .foregroundColor(.white)
             }
 
@@ -101,7 +101,7 @@ struct PhoneLoginView: View {
 
             // Placeholder for alignment
             Image(systemName: "chevron.left")
-                .font(Font.custom("SFProDisplay-Medium", size: 20.f))
+                .font(.system(size: 20.f))
                 .foregroundColor(.clear)
         }
         .padding(.horizontal, 20)
@@ -123,7 +123,7 @@ struct PhoneLoginView: View {
         VStack(spacing: 24) {
             // Icon
             Image(systemName: "phone.fill")
-                .font(Font.custom("SFProDisplay-Regular", size: 50.f))
+                .font(.system(size: 50.f))
                 .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                 .padding(.bottom, 20)
 
@@ -149,7 +149,7 @@ struct PhoneLoginView: View {
                             .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                             .foregroundColor(.white)
                         Image(systemName: "chevron.down")
-                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                            .font(.system(size: 12.f))
                             .foregroundColor(.gray)
                     }
                     .padding(.horizontal, 12)
@@ -222,7 +222,7 @@ struct PhoneLoginView: View {
         VStack(spacing: 24) {
             // Icon
             Image(systemName: "lock.shield.fill")
-                .font(Font.custom("SFProDisplay-Regular", size: 50.f))
+                .font(.system(size: 50.f))
                 .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                 .padding(.bottom, 20)
 

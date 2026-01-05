@@ -23,7 +23,7 @@ struct GroupSelectionView: View {
                 } else if let error = errorMessage {
                     VStack(spacing: 16) {
                         Image(systemName: "exclamationmark.triangle")
-                            .font(Font.custom("SFProDisplay-Regular", size: 40.f))
+                            .font(.system(size: 40.f))
                             .foregroundColor(DesignTokens.accentColor)
                         Text(error)
                             .font(Font.custom("SFProDisplay-Regular", size: 14.f))
@@ -36,7 +36,7 @@ struct GroupSelectionView: View {
                 } else if groups.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "person.3")
-                            .font(Font.custom("SFProDisplay-Regular", size: 40.f))
+                            .font(.system(size: 40.f))
                             .foregroundColor(DesignTokens.textSecondary)
                         Text("No groups yet")
                             .font(Font.custom("SFProDisplay-Medium", size: 16.f))
@@ -118,7 +118,7 @@ private struct GroupRow: View {
                     .frame(width: 50, height: 50)
 
                 Image(systemName: "person.3.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                    .font(.system(size: 20.f))
                     .foregroundColor(DesignTokens.accentColor)
             }
 
@@ -130,7 +130,7 @@ private struct GroupRow: View {
 
                     if group.isEncrypted {
                         Image(systemName: "lock.fill")
-                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                            .font(.system(size: 12.f))
                             .foregroundColor(.green)
                     }
                 }
@@ -143,7 +143,7 @@ private struct GroupRow: View {
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                .font(.system(size: 14.f))
                 .foregroundColor(DesignTokens.textMuted)
         }
         .padding(.horizontal, 16)

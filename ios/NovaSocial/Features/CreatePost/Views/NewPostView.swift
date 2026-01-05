@@ -403,7 +403,7 @@ struct NewPostView: View {
                     .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                 Image(systemName: "chevron.down")
-                    .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                    .font(.system(size: 10.f))
                     .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
             }
 
@@ -484,7 +484,7 @@ struct NewPostView: View {
 
                                     // Play icon overlay
                                     Image(systemName: "play.circle.fill")
-                                        .font(Font.custom("SFProDisplay-Regular", size: 40.f))
+                                        .font(.system(size: 40.f))
                                         .foregroundColor(.white.opacity(0.9))
                                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                                 }
@@ -496,7 +496,7 @@ struct NewPostView: View {
                                     viewModel.removeMediaItem(at: index)
                                 }) {
                                     Image(systemName: "xmark.circle.fill")
-                                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                                        .font(.system(size: 20.f))
                                         .foregroundColor(.white)
                                         .background(
                                             Circle()
@@ -655,7 +655,7 @@ struct NewPostView: View {
                         }
 
                         Image(systemName: "chevron.right")
-                            .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                            .font(.system(size: 10.f))
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                     }
                     .padding(.horizontal, 14)
@@ -674,7 +674,7 @@ struct NewPostView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 4) {
                         Image(systemName: "sparkles")
-                            .font(Font.custom("SFProDisplay-Regular", size: 11.f))
+                            .font(.system(size: 11.f))
                             .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
                         Text("Suggested by Alice")
                             .font(Font.custom("SFProDisplay-Medium", size: 11.f))

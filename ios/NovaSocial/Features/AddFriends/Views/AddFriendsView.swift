@@ -317,7 +317,7 @@ struct AddFriendsView: View {
                 // MARK: - Search Bar
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
-                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
+                        .font(.system(size: 15.f))
                         .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                     TextField("Search", text: $viewModel.searchQuery)
@@ -378,7 +378,7 @@ struct AddFriendsView: View {
                             }) {
                                 HStack(spacing: 16) {
                                     Image(systemName: "qrcode.viewfinder")
-                                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                                        .font(.system(size: 20.f))
                                         .foregroundColor(.blue)
                                         .frame(width: 40, height: 40)
                                         .background(Color.blue.opacity(0.1))
@@ -397,7 +397,7 @@ struct AddFriendsView: View {
                                     Spacer()
 
                                     Image(systemName: "chevron.right")
-                                        .font(Font.custom("SFProDisplay-Medium", size: 14.f))
+                                        .font(.system(size: 14.f))
                                         .foregroundColor(.gray)
                                 }
                                 .padding(16)
@@ -411,7 +411,7 @@ struct AddFriendsView: View {
                             }) {
                                 HStack(spacing: 16) {
                                     Image(systemName: "qrcode")
-                                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                                        .font(.system(size: 20.f))
                                         .foregroundColor(.green)
                                         .frame(width: 40, height: 40)
                                         .background(Color.green.opacity(0.1))
@@ -430,7 +430,7 @@ struct AddFriendsView: View {
                                     Spacer()
 
                                     Image(systemName: "chevron.right")
-                                        .font(Font.custom("SFProDisplay-Medium", size: 14.f))
+                                        .font(.system(size: 14.f))
                                         .foregroundColor(.gray)
                                 }
                                 .padding(16)
@@ -444,7 +444,7 @@ struct AddFriendsView: View {
                             }) {
                                 HStack(spacing: 16) {
                                     Image(systemName: "person.badge.clock")
-                                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                                        .font(.system(size: 20.f))
                                         .foregroundColor(.orange)
                                         .frame(width: 40, height: 40)
                                         .background(Color.orange.opacity(0.1))
@@ -463,7 +463,7 @@ struct AddFriendsView: View {
                                     Spacer()
 
                                     Image(systemName: "chevron.right")
-                                        .font(Font.custom("SFProDisplay-Medium", size: 14.f))
+                                        .font(.system(size: 14.f))
                                         .foregroundColor(.gray)
                                 }
                                 .padding(16)
@@ -539,7 +539,7 @@ struct AddFriendsView: View {
                         Button(action: {}) {
                             HStack(spacing: 24) {
                                 Image(systemName: "square.and.arrow.up")
-                                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                                    .font(.system(size: 16.f))
                                     .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                                 Text("Share invitation link")
@@ -640,7 +640,7 @@ struct UserCardView: View {
             // Chat button - Start E2EE conversation
             Button(action: onChat) {
                 Image(systemName: "message.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 18.f))
+                    .font(.system(size: 18.f))
                     .foregroundColor(.white)
                     .frame(width: 36, height: 36)
                     .background(Color(red: 0.87, green: 0.11, blue: 0.26))
@@ -659,11 +659,11 @@ struct UserCardView: View {
                     ProgressView().scaleEffect(0.8)
                 } else if isAdded {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                        .font(.system(size: 20.f))
                         .foregroundColor(.green)
                 } else {
                     Image(systemName: "plus.circle")
-                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                        .font(.system(size: 20.f))
                         .foregroundColor(.blue)
                 }
             }
@@ -704,7 +704,7 @@ struct RecommendedCreatorCard: View {
 
                     if creator.isVerified {
                         Image(systemName: "checkmark.seal.fill")
-                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                            .font(.system(size: 12.f))
                             .foregroundColor(.blue)
                     }
                 }
@@ -726,7 +726,7 @@ struct RecommendedCreatorCard: View {
             // Chat button - Start E2EE conversation
             Button(action: onChat) {
                 Image(systemName: "message.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                    .font(.system(size: 16.f))
                     .foregroundColor(.white)
                     .frame(width: 32, height: 32)
                     .background(Color(red: 0.87, green: 0.11, blue: 0.26))

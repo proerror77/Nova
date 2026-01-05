@@ -225,7 +225,7 @@ struct ProfileSettingView: View {
                         .frame(width: 32, height: 32)
 
                     Image(systemName: "plus")
-                        .font(Font.custom("SFProDisplay-Bold", size: 14.f))
+                        .font(.system(size: 14.f))
                         .foregroundColor(.white)
                 }
             }
@@ -326,7 +326,7 @@ struct ProfileSettingView: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                    .font(.system(size: 12.f))
                     .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
             }
             .padding(.horizontal, 20)
@@ -373,7 +373,7 @@ struct ProfileSettingView: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                    .font(.system(size: 12.f))
                     .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
             }
             .padding(.horizontal, 20)
@@ -403,7 +403,7 @@ struct ProfileSettingView: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                    .font(.system(size: 12.f))
                     .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
             }
             .padding(.horizontal, 20)

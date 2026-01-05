@@ -47,7 +47,7 @@ struct ProfileTopNavigationBar: View {
                         .foregroundColor(layout.textColor)
                     
                     Image(systemName: "chevron.down")
-                        .font(Font.custom("SFProDisplay-Medium", size: layout.chevronFontSize.f))
+                        .font(.system(size: layout.chevronFontSize.f))
                         .foregroundColor(layout.textColor)
                         .frame(width: layout.chevronSize.s, height: layout.chevronSize.s)
                 }

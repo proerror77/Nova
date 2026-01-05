@@ -62,7 +62,7 @@ struct MessageSearchView: View {
     private var searchBar: some View {
         HStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
-                .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                .font(.system(size: 16.f))
                 .foregroundColor(DesignTokens.textSecondary)
 
             TextField("Search messages...", text: $searchQuery)
@@ -93,7 +93,7 @@ struct MessageSearchView: View {
                     searchResults = []
                 }) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                        .font(.system(size: 16.f))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
             }
@@ -148,7 +148,7 @@ struct MessageSearchView: View {
         VStack(spacing: 16) {
             Spacer()
             Image(systemName: "magnifyingglass")
-                .font(Font.custom("SFProDisplay-Regular", size: 48.f))
+                .font(.system(size: 48.f))
                 .foregroundColor(DesignTokens.textSecondary.opacity(0.5))
             Text("No messages found")
                 .font(Font.custom("SFProDisplay-Medium", size: 16.f))
@@ -166,7 +166,7 @@ struct MessageSearchView: View {
         VStack(spacing: 16) {
             Spacer()
             Image(systemName: "exclamationmark.triangle")
-                .font(Font.custom("SFProDisplay-Regular", size: 40.f))
+                .font(.system(size: 40.f))
                 .foregroundColor(DesignTokens.accentColor)
             Text(error)
                 .font(Font.custom("SFProDisplay-Regular", size: 14.f))

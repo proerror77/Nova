@@ -119,7 +119,7 @@ struct LiveKitVoiceChatView: View {
         HStack {
             Button(action: { showEndConfirmation = true }) {
                 Image(systemName: "xmark")
-                    .font(Font.custom("SFProDisplay-Medium", size: 20.f))
+                    .font(.system(size: 20.f))
                     .foregroundColor(.white.opacity(0.8))
                     .frame(width: 44, height: 44)
             }
@@ -287,7 +287,7 @@ struct LiveKitVoiceChatView: View {
 
             Button(action: sendTextMessage) {
                 Image(systemName: "arrow.up.circle.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 36.f))
+                    .font(.system(size: 36.f))
                     .foregroundColor(textInput.isEmpty ? .white.opacity(0.3) : .purple)
             }
             .disabled(textInput.isEmpty)
@@ -316,7 +316,7 @@ struct LiveKitVoiceChatView: View {
                 }) {
                     HStack(spacing: 6) {
                         Image(systemName: "bubble.left.and.bubble.right")
-                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                            .font(.system(size: 12.f))
                         Text("View \(messages.count) messages")
                             .font(Font.custom("SFProDisplay-Medium", size: 13.f))
                     }
@@ -522,7 +522,7 @@ struct LiveKitVoiceChatView: View {
                             .frame(width: 68, height: 68)
 
                         Image(systemName: "phone.down.fill")
-                            .font(Font.custom("SFProDisplay-Regular", size: 26.f))
+                            .font(.system(size: 26.f))
                             .foregroundColor(.white)
                     }
                 }

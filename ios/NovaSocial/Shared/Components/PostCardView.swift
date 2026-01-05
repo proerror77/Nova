@@ -105,7 +105,7 @@ struct PostCardView: View, Equatable {
 
                 HStack(spacing: 2) {
                     Image(systemName: "heart")
-                        .font(Font.custom("SFProDisplay-Regular", size: 8.f))
+                        .font(.system(size: 8.f))
                         .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                     Text(formattedLikeCount)

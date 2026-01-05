@@ -138,13 +138,13 @@ private struct ThinkingIndicator: View {
             let phase = Int(timeline.date.timeIntervalSinceReferenceDate / 0.4) % 4
             HStack(spacing: 4) {
                 Text("Thinking")
-                    .font(.system(size: size * 1.5, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: size * 1.5))
                     .foregroundColor(color)
 
                 HStack(spacing: 2) {
                     ForEach(0..<3, id: \.self) { index in
                         Text(".")
-                            .font(.system(size: size * 1.75, weight: .bold))
+                            .font(Font.custom("SFProDisplay-Bold", size: size * 1.75))
                             .foregroundColor(color)
                             .opacity(phase > index ? 1 : 0.3)
                             .animation(.easeInOut(duration: 0.2), value: phase)

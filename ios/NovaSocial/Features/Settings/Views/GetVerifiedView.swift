@@ -55,7 +55,7 @@ struct GetVerifiedView: View {
                 .frame(width: 100, height: 100)
                 .overlay(
                     Image(systemName: "person.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 40.f))
+                        .font(.system(size: 40.f))
                         .foregroundColor(.white.opacity(0.8))
                 )
                 .padding(.bottom, 40)

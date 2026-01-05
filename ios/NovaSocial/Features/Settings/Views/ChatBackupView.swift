@@ -124,7 +124,7 @@ struct ChatBackupView: View {
                 Button(action: exportAllChats) {
                     HStack(spacing: 16) {
                         Image(systemName: "square.and.arrow.up")
-                            .font(Font.custom("SFProDisplay-Regular", size: 18.f))
+                            .font(.system(size: 18.f))
                             .foregroundColor(DesignTokens.accentColor)
                             .frame(width: 24)
 
@@ -145,7 +145,7 @@ struct ChatBackupView: View {
                                 .scaleEffect(0.8)
                         } else {
                             Image(systemName: "chevron.right")
-                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                                .font(.system(size: 12.f))
                                 .foregroundColor(DesignTokens.textSecondary)
                         }
                     }
@@ -178,7 +178,7 @@ struct ChatBackupView: View {
                 Button(action: { showImportPicker = true }) {
                     HStack(spacing: 16) {
                         Image(systemName: "square.and.arrow.down")
-                            .font(Font.custom("SFProDisplay-Regular", size: 18.f))
+                            .font(.system(size: 18.f))
                             .foregroundColor(DesignTokens.accentColor)
                             .frame(width: 24)
 
@@ -199,7 +199,7 @@ struct ChatBackupView: View {
                                 .scaleEffect(0.8)
                         } else {
                             Image(systemName: "chevron.right")
-                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                                .font(.system(size: 12.f))
                                 .foregroundColor(DesignTokens.textSecondary)
                         }
                     }

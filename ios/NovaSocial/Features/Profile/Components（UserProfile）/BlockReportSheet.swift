@@ -114,7 +114,7 @@ struct BlockReportSheet: View {
                 } label: {
                     HStack(spacing: 16) {
                         Image(systemName: "hand.raised.fill")
-                            .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                            .font(.system(size: 20.f))
                             .foregroundColor(.red)
                             .frame(width: 28)
 
@@ -131,7 +131,7 @@ struct BlockReportSheet: View {
                         Spacer()
 
                         Image(systemName: "chevron.right")
-                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                            .font(.system(size: 14.f))
                             .foregroundColor(.secondary)
                     }
                     .padding(.horizontal, 20)
@@ -149,7 +149,7 @@ struct BlockReportSheet: View {
                 } label: {
                     HStack(spacing: 16) {
                         Image(systemName: "flag.fill")
-                            .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                            .font(.system(size: 20.f))
                             .foregroundColor(.orange)
                             .frame(width: 28)
 
@@ -166,7 +166,7 @@ struct BlockReportSheet: View {
                         Spacer()
 
                         Image(systemName: "chevron.right")
-                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                            .font(.system(size: 14.f))
                             .foregroundColor(.secondary)
                     }
                     .padding(.horizontal, 20)
@@ -207,7 +207,7 @@ struct BlockReportSheet: View {
 
                                 if selectedReason == reason {
                                     Image(systemName: "checkmark.circle.fill")
-                                        .font(Font.custom("SFProDisplay-Regular", size: 22.f))
+                                        .font(.system(size: 22.f))
                                         .foregroundColor(DesignTokens.accentColor)
                                 } else {
                                     Circle()

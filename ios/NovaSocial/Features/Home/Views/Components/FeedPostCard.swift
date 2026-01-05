@@ -239,7 +239,7 @@ struct FeedPostCard: View {
             // Instagram style double-tap heart animation
             if showDoubleTapHeart {
                 Image(systemName: "heart.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 80.f))
+                    .font(.system(size: 80.f))
                     .foregroundColor(.white)
                     .shadow(color: .black.opacity(0.3), radius: 10)
                     .scaleEffect(showDoubleTapHeart ? 1.0 : 0.5)
@@ -304,7 +304,7 @@ struct FeedPostCard: View {
                 // Live Photo badge
                 HStack(spacing: 4) {
                     Image(systemName: "livephoto")
-                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
+                        .font(.system(size: 12.f))
                     Text("LIVE")
                         .font(Font.custom("SFProDisplay-Semibold", size: 10.f))
                 }
@@ -775,7 +775,7 @@ struct ZoomableImageView: View {
                             onDismiss()
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(Font.custom("SFProDisplay-Regular", size: 30.f))
+                                .font(.system(size: 30.f))
                                 .foregroundStyle(.white.opacity(0.8), .black.opacity(0.3))
                         }
                         .padding()

@@ -25,7 +25,7 @@ struct ReactionPickerView: View {
                 onDismiss()
             } label: {
                 Image(systemName: "plus.circle")
-                    .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                    .font(.system(size: 20.f))
                     .foregroundColor(DesignTokens.textSecondary)
             }
             .buttonStyle(.plain)

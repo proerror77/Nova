@@ -151,7 +151,7 @@ extension StructuredOutputView {
                     Spacer()
 
                     Image(systemName: "chevron.right")
-                        .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
+                        .font(.system(size: 12.f))
                         .foregroundColor(.secondary)
                 }
                 .padding(12)

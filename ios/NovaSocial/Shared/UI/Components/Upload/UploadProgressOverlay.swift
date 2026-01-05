@@ -64,7 +64,7 @@ struct UploadProgressBanner: View {
 
                 if task.status == .compressing || task.status == .uploading {
                     Image(systemName: "arrow.up")
-                        .font(Font.custom("SFProDisplay-Bold", size: 14.f))
+                        .font(.system(size: 14.f))
                         .foregroundColor(.white)
                 } else {
                     Text("\(Int(task.progress * 100))")
@@ -89,7 +89,7 @@ struct UploadProgressBanner: View {
             // Cancel button
             Button(action: onCancel) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 22.f))
+                    .font(.system(size: 22.f))
                     .foregroundColor(.white.opacity(0.7))
             }
         }
@@ -120,7 +120,7 @@ struct UploadCompletedBanner: View {
                     .frame(width: 36, height: 36)
 
                 Image(systemName: "checkmark")
-                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
+                    .font(.system(size: 16.f))
                     .foregroundColor(.white)
             }
 
@@ -176,7 +176,7 @@ struct UploadFailedBanner: View {
                     .frame(width: 36, height: 36)
 
                 Image(systemName: "exclamationmark")
-                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
+                    .font(.system(size: 16.f))
                     .foregroundColor(.white)
             }
 
@@ -208,7 +208,7 @@ struct UploadFailedBanner: View {
             // Dismiss button
             Button(action: onDismiss) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 22.f))
+                    .font(.system(size: 22.f))
                     .foregroundColor(.white.opacity(0.7))
             }
         }

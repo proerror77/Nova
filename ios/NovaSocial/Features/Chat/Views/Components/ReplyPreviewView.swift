@@ -46,7 +46,7 @@ struct ReplyPreviewView: View {
             if let onDismiss = onDismiss, !isInBubble {
                 Button(action: onDismiss) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 18.f))
+                        .font(.system(size: 18.f))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
             }

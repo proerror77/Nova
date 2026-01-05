@@ -412,7 +412,7 @@ struct PostDetailView: View {
                     }
                 }) {
                     Image(systemName: "chevron.left")
-                        .font(Font.custom("SFProDisplay-Medium", size: 20.f))
+                        .font(.system(size: 20.f))
                         .foregroundColor(DesignTokens.textPrimary)
                         .frame(width: 24, height: 24)
                 }
@@ -433,7 +433,7 @@ struct PostDetailView: View {
 
                     // Verified Badge
                     Image(systemName: "checkmark.seal.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                        .font(.system(size: 12.f))
                         .foregroundColor(Color(red: 0.20, green: 0.60, blue: 1.0))
                 }
 
@@ -446,7 +446,7 @@ struct PostDetailView: View {
                         showingActionSheet = true
                     }) {
                         Image(systemName: "ellipsis")
-                            .font(Font.custom("SFProDisplay-Medium", size: 20.f))
+                            .font(.system(size: 20.f))
                             .foregroundColor(DesignTokens.textPrimary)
                             .frame(width: 24, height: 24)
                     }

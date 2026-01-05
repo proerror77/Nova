@@ -294,7 +294,7 @@ struct FriendRequestsView: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Text(title)
-                    .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
+                    .font(Font.custom(isSelected ? "SFProDisplay-Semibold" : "SFProDisplay-Regular", size: 14.f))
 
                 if count > 0 {
                     Text("\(count)")
@@ -462,7 +462,7 @@ struct FriendRequestCardView: View {
                 // Accept Button
                 Button(action: onAccept) {
                     Image(systemName: "checkmark")
-                        .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
+                        .font(.system(size: 14.f))
                         .foregroundColor(.white)
                         .frame(width: 36, height: 36)
                         .background(Color.green)
@@ -472,7 +472,7 @@ struct FriendRequestCardView: View {
                 // Reject Button
                 Button(action: onReject) {
                     Image(systemName: "xmark")
-                        .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
+                        .font(.system(size: 14.f))
                         .foregroundColor(.white)
                         .frame(width: 36, height: 36)
                         .background(Color(red: 0.87, green: 0.11, blue: 0.26))

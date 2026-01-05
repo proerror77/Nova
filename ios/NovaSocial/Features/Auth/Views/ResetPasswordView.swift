@@ -149,7 +149,7 @@ struct ResetPasswordView: View {
     private func successView(message: String) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "checkmark.circle.fill")
-                .font(Font.custom("SFProDisplay-Regular", size: 50.f))
+                .font(.system(size: 50.f))
                 .foregroundColor(.green)
 
             Text(LocalizedStringKey(message))

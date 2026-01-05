@@ -21,7 +21,7 @@ struct ReportModal: View {
                         isPresented = false
                     } label: {
                         Image(systemName: "xmark")
-                            .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
+                            .font(.system(size: 24.f))
                             .foregroundColor(.black)
                     }
                     .contentShape(Rectangle())

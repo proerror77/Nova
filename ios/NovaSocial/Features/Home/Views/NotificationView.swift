@@ -104,7 +104,7 @@ struct NotificationView: View {
         VStack(spacing: 16) {
             Spacer()
             Image(systemName: "exclamationmark.triangle")
-                .font(Font.custom("SFProDisplay-Regular", size: 48.f))
+                .font(.system(size: 48.f))
                 .foregroundColor(DesignTokens.textSecondary)
             Text(message)
                 .font(Font.custom("SFProDisplay-Regular", size: 14.f))
@@ -133,7 +133,7 @@ struct NotificationView: View {
         VStack(spacing: 16) {
             Spacer()
             Image(systemName: "bell.slash")
-                .font(Font.custom("SFProDisplay-Regular", size: 48.f))
+                .font(.system(size: 48.f))
                 .foregroundColor(DesignTokens.textSecondary)
             Text("No notifications yet")
                 .font(Font.custom("SFProDisplay-Medium", size: 16.f))

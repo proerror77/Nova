@@ -92,7 +92,7 @@ struct CommentCardItem: View {
                 Spacer()
 
                 Image(systemName: "bookmark")
-                    .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontSmall))
+                    .font(.system(size: DesignTokens.fontSmall))
                     .foregroundColor(.black)
             }
             .padding(.horizontal, DesignTokens.spacing12)

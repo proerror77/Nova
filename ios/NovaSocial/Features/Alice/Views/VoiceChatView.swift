@@ -76,7 +76,7 @@ struct VoiceChatView: View {
         HStack {
             Button(action: { showEndConfirmation = true }) {
                 Image(systemName: "xmark")
-                    .font(Font.custom("SFProDisplay-Medium", size: 20.f))
+                    .font(.system(size: 20.f))
                     .foregroundColor(.white.opacity(0.8))
                     .frame(width: 44, height: 44)
             }
@@ -321,7 +321,7 @@ struct VoiceChatView: View {
                             .frame(width: 72, height: 72)
                         
                         Image(systemName: "phone.down.fill")
-                            .font(Font.custom("SFProDisplay-Regular", size: 28.f))
+                            .font(.system(size: 28.f))
                             .foregroundColor(.white)
                     }
                 }

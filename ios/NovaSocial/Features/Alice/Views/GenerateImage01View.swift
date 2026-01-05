@@ -100,7 +100,7 @@ struct GenerateImage01View: View {
                         HStack(spacing: 12) {
                             HStack(spacing: 8) {
                                 Image(systemName: "waveform")
-                                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                                    .font(.system(size: 14.f))
                                     .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
 
                                 TextField("Describe the image to generate", text: $promptText)
@@ -124,7 +124,7 @@ struct GenerateImage01View: View {
                                     .frame(width: 33, height: 33)
                                     .overlay(
                                         Image(systemName: "paperplane.fill")
-                                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                                            .font(.system(size: 14.f))
                                             .foregroundColor(.white)
                                     )
                             }

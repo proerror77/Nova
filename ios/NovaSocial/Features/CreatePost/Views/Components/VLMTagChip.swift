@@ -17,7 +17,7 @@ struct VLMTagChip: View {
                 // Confidence indicator (only show for high confidence)
                 if confidence >= 0.8 {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                        .font(.system(size: 10.f))
                         .foregroundColor(isSelected ? .white.opacity(0.8) : Color(red: 0.82, green: 0.13, blue: 0.25).opacity(0.6))
                 }
             }

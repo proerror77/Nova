@@ -71,7 +71,7 @@ struct PostCard: View {
                     // 点赞数
                     HStack(spacing: 5.s) {
                         Image(systemName: "heart")
-                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                            .font(.system(size: 12.f))
                             .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
 
                         Text(likeCount.abbreviated)

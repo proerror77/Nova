@@ -180,7 +180,7 @@ struct ProfileUserInfoSection: View {
                             .frame(width: 28, height: 28)
                             .overlay(
                                 Image(systemName: "camera.fill")
-                                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                                    .font(.system(size: 12.f))
                                     .foregroundColor(.gray)
                             )
                             .shadow(color: .black.opacity(0.15), radius: 2, y: 1)

@@ -70,7 +70,7 @@ struct ChatView: View {
                             showChat = false
                         } label: {
                             Image(systemName: "chevron.left")
-                                .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
+                                .font(.system(size: 18.f))
                                 .foregroundColor(DesignTokens.textPrimary)
                                 .frame(width: 24.s, height: 24.s)
                         }
@@ -101,7 +101,7 @@ struct ChatView: View {
                             if viewModel.isMatrixE2EEEnabled {
                                 HStack(spacing: 4.w) {
                                     Image(systemName: "lock.fill")
-                                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                                        .font(.system(size: 10.f))
                                     Text("End-to-end encrypted")
                                         .font(Font.custom("SFProDisplay-Regular", size: 11.f))
                                 }
@@ -116,7 +116,7 @@ struct ChatView: View {
                             showMessageSearch = true
                         } label: {
                             Image(systemName: "magnifyingglass")
-                                .font(Font.custom("SFProDisplay-Regular", size: 18.f))
+                                .font(.system(size: 18.f))
                                 .foregroundColor(DesignTokens.textPrimary)
                                 .frame(width: 24.s, height: 24.s)
                         }
@@ -157,7 +157,7 @@ struct ChatView: View {
                         } label: {
                             HStack(spacing: 6.s) {
                                 Image(systemName: "arrow.down")
-                                    .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
+                                    .font(.system(size: 12.f))
                                 Text("\(newMessageCount) new messages")
                                     .font(Font.custom("SFProDisplay-Medium", size: 13.f))
                             }
@@ -324,7 +324,7 @@ struct ChatView: View {
                     if let error = viewModel.error {
                         VStack(spacing: 8.h) {
                             Image(systemName: "exclamationmark.triangle")
-                                .font(Font.custom("SFProDisplay-Regular", size: 30.f))
+                                .font(.system(size: 30.f))
                                 .foregroundColor(.orange)
                             Text(error)
                                 .font(Font.custom("SFProDisplay-Regular", size: 14.f))
@@ -485,7 +485,7 @@ struct ChatView: View {
                         viewModel.cancelReply()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(Font.custom("SFProDisplay-Regular", size: 18.f))
+                            .font(.system(size: 18.f))
                             .foregroundColor(DesignTokens.textMuted)
                     }
                 }
@@ -517,7 +517,7 @@ struct ChatView: View {
                         viewModel.cancelEdit()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(Font.custom("SFProDisplay-Regular", size: 18.f))
+                            .font(.system(size: 18.f))
                             .foregroundColor(DesignTokens.textMuted)
                     }
                 }
@@ -538,7 +538,7 @@ struct ChatView: View {
                     }
                 }) {
                     Image(systemName: "plus.circle.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 24.f))
+                        .font(.system(size: 24.f))
                         .foregroundColor(DesignTokens.accentColor)
                         .rotationEffect(.degrees(viewModel.showAttachmentOptions ? 45 : 0))
                 }
@@ -706,7 +706,7 @@ struct ChatView: View {
             if viewModel.isRecordingVoice && viewModel.voiceRecordDragOffset < viewModel.voiceCancelThreshold {
                 VStack {
                     Image(systemName: "xmark.circle.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 24.f))
+                        .font(.system(size: 24.f))
                         .foregroundColor(.red)
                     Text("Release to cancel")
                         .font(Font.custom("SFProDisplay-Regular", size: 10.f))

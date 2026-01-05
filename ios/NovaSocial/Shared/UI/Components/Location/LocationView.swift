@@ -22,7 +22,7 @@ struct LocationView: View {
                     // 返回按钮
                     Button(action: { showLocation = false }) {
                         Image(systemName: "chevron.left")
-                            .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
+                            .font(.system(size: 16.f))
                             .foregroundColor(.black)
                     }
 
@@ -40,7 +40,7 @@ struct LocationView: View {
                         showLocation = false
                     }) {
                         Image(systemName: "paperplane.fill")
-                            .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
+                            .font(.system(size: 16.f))
                             .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
                     }
                     .disabled(selectedLocation == nil)
@@ -58,7 +58,7 @@ struct LocationView: View {
                 // MARK: - 搜索框
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
-                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
+                        .font(.system(size: 15.f))
                         .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
 
                     TextField("Search", text: $searchText)
@@ -74,7 +74,7 @@ struct LocationView: View {
                             searchResults = []
                         }) {
                             Image(systemName: "xmark.circle.fill")
-                                .font(Font.custom("SFProDisplay-Regular", size: 15.f))
+                                .font(.system(size: 15.f))
                                 .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
                         }
                     }
@@ -129,7 +129,7 @@ struct LocationView: View {
                             }) {
                                 HStack(spacing: 12) {
                                     Image(systemName: "location.fill")
-                                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                                        .font(.system(size: 20.f))
                                         .foregroundColor(.blue)
 
                                     VStack(alignment: .leading, spacing: 4) {
@@ -271,7 +271,7 @@ struct LocationListItem: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "mappin.circle.fill")
-                .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                .font(.system(size: 20.f))
                 .foregroundColor(isSelected ? Color(red: 0.82, green: 0.13, blue: 0.25) : .gray)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -302,7 +302,7 @@ struct LocationListItem: View {
 
             if isSelected {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                    .font(.system(size: 20.f))
                     .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
             }
         }

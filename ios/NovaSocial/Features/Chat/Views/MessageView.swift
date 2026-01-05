@@ -694,7 +694,7 @@ struct MessageView: View {
                     // 搜索框 - 距离分割线10pt
                     HStack(spacing: 10.s) {
                         Image(systemName: "magnifyingglass")
-                            .font(Font.custom("SFProDisplay-Regular", size: 15.f))
+                            .font(.system(size: 15.f))
                             .foregroundColor(DesignTokens.textSecondary)
 
                         TextField("Search", text: $searchText)
@@ -723,7 +723,7 @@ struct MessageView: View {
                                 isSearchFocused = false
                             }) {
                                 Image(systemName: "xmark.circle.fill")
-                                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                                    .font(.system(size: 14.f))
                                     .foregroundColor(DesignTokens.textSecondary)
                             }
                             .accessibilityLabel("Clear search")
@@ -752,7 +752,7 @@ struct MessageView: View {
                             } else if searchResults.isEmpty && !searchText.isEmpty {
                                 VStack(spacing: 12) {
                                     Image(systemName: "magnifyingglass")
-                                        .font(Font.custom("SFProDisplay-Regular", size: 32.f))
+                                        .font(.system(size: 32.f))
                                         .foregroundColor(DesignTokens.textSecondary)
                                     Text("No results found")
                                         .font(Font.custom("SFProDisplay-Regular", size: 14.f))
@@ -790,7 +790,7 @@ struct MessageView: View {
                     // 错误状态
                     VStack(spacing: 16) {
                         Image(systemName: "exclamationmark.triangle")
-                            .font(Font.custom("SFProDisplay-Regular", size: 40.f))
+                            .font(.system(size: 40.f))
                             .foregroundColor(DesignTokens.accentColor)
                         Text(error)
                             .font(Font.custom("SFProDisplay-Regular", size: 14.f))
@@ -815,7 +815,7 @@ struct MessageView: View {
                     // 空状态
                     VStack(spacing: 16) {
                         Image(systemName: "message")
-                            .font(Font.custom("SFProDisplay-Regular", size: 40.f))
+                            .font(.system(size: 40.f))
                             .foregroundColor(DesignTokens.textSecondary)
                         Text(LocalizedStringKey("No messages yet"))
                             .font(Font.custom("SFProDisplay-Medium", size: 16.f))
@@ -1069,7 +1069,7 @@ struct MessageListItem: View {
                     // E2EE indicator
                     if isEncrypted {
                         Image(systemName: "lock.fill")
-                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                            .font(.system(size: 12.f))
                             .foregroundColor(.green)
                     }
                 }

@@ -111,7 +111,7 @@ struct PasskeySettingsView: View {
                 currentPage = .setting
             }) {
                 Image(systemName: "chevron.left")
-                    .font(Font.custom("SFProDisplay-Semibold", size: 17.f))
+                    .font(.system(size: 17.f))
                     .foregroundColor(DesignTokens.accentColor)
             }
 
@@ -134,7 +134,7 @@ struct PasskeySettingsView: View {
                         .scaleEffect(0.8)
                 } else {
                     Image(systemName: "plus")
-                        .font(Font.custom("SFProDisplay-Semibold", size: 17.f))
+                        .font(.system(size: 17.f))
                         .foregroundColor(DesignTokens.accentColor)
                 }
             }
@@ -162,7 +162,7 @@ struct PasskeySettingsView: View {
     private func errorView(message: String) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle")
-                .font(Font.custom("SFProDisplay-Regular", size: 48.f))
+                .font(.system(size: 48.f))
                 .foregroundColor(.secondary)
 
             Text(message)
@@ -190,7 +190,7 @@ struct PasskeySettingsView: View {
     private var emptyView: some View {
         VStack(spacing: 20) {
             Image(systemName: "person.badge.key.fill")
-                .font(Font.custom("SFProDisplay-Regular", size: 64.f))
+                .font(.system(size: 64.f))
                 .foregroundColor(.secondary.opacity(0.6))
 
             VStack(spacing: 8) {
@@ -263,7 +263,7 @@ struct PasskeySettingsView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: "faceid")
-                            .font(Font.custom("SFProDisplay-Regular", size: 24.f))
+                            .font(.system(size: 24.f))
                             .foregroundColor(DesignTokens.accentColor)
                             .frame(width: 32)
 
@@ -279,7 +279,7 @@ struct PasskeySettingsView: View {
 
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: "icloud.fill")
-                            .font(Font.custom("SFProDisplay-Regular", size: 24.f))
+                            .font(.system(size: 24.f))
                             .foregroundColor(DesignTokens.accentColor)
                             .frame(width: 32)
 
@@ -313,7 +313,7 @@ struct PasskeySettingsView: View {
 
             HStack(spacing: 12) {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 24.f))
+                    .font(.system(size: 24.f))
                     .foregroundColor(.green)
 
                 Text("Passkey Added")
@@ -431,7 +431,7 @@ private struct PasskeyRow: View {
 
                         if passkey.backupState {
                             Image(systemName: "icloud.fill")
-                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                                .font(.system(size: 12.f))
                                 .foregroundColor(.blue)
                         }
                     }
@@ -449,14 +449,14 @@ private struct PasskeyRow: View {
                     onDelete()
                 } label: {
                     Image(systemName: "trash")
-                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                        .font(.system(size: 16.f))
                         .foregroundColor(.red.opacity(0.7))
                 }
                 .buttonStyle(.plain)
                 .padding(.trailing, 4)
 
                 Image(systemName: "chevron.right")
-                    .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
+                    .font(.system(size: 14.f))
                     .foregroundColor(Color(uiColor: .tertiaryLabel))
             }
             .padding(.horizontal, 16)

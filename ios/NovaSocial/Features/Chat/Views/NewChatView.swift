@@ -175,7 +175,7 @@ struct NewChatView: View {
                 // MARK: - Search Box
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
-                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
+                        .font(.system(size: 15.f))
                         .foregroundColor(DesignTokens.textSecondary)
 
                     TextField("Search users...", text: $searchText)
@@ -282,7 +282,7 @@ struct NewChatView: View {
                                         .foregroundColor(DesignTokens.textPrimary)
                                     Spacer()
                                     Image(systemName: "chevron.right")
-                                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                                        .font(.system(size: 14.f))
                                         .foregroundColor(DesignTokens.textMuted)
                                 }
                                 .padding(.horizontal, 16)
@@ -616,7 +616,7 @@ struct SelectedUserChip: View {
 
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                    .font(.system(size: 16.f))
                     .foregroundColor(DesignTokens.textMuted)
             }
         }

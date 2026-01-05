@@ -48,7 +48,7 @@ struct VoiceRecordButton: View {
                 .frame(width: 44, height: 44)
                 .overlay {
                     Image(systemName: "mic.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                        .font(.system(size: 20.f))
                         .foregroundColor(audioRecorder.isRecording ? .white : .primary)
                 }
                 .scaleEffect(isPressed ? 1.2 : 1.0)

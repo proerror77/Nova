@@ -137,7 +137,7 @@ struct FeedVideoPlayer: View {
             .fill(Color(red: 0.1, green: 0.1, blue: 0.1))
             .overlay(
                 Image(systemName: "video.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 40.f))
+                    .font(.system(size: 40.f))
                     .foregroundColor(.white.opacity(0.3))
             )
     }
@@ -151,7 +151,7 @@ struct FeedVideoPlayer: View {
                 .frame(width: 60, height: 60)
                 .overlay(
                     Image(systemName: "play.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 24.f))
+                        .font(.system(size: 24.f))
                         .foregroundColor(.white)
                         .offset(x: 2)
                 )

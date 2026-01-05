@@ -193,7 +193,7 @@ struct AliceView: View {
                         // 清除對話按鈕（左侧）- 固定宽度以平衡右侧
                         Button(action: clearChat) {
                             Image(systemName: "trash")
-                                .font(Font.custom("SFProDisplay-Regular", size: 18.f))
+                                .font(.system(size: 18.f))
                                 .foregroundColor(messages.isEmpty ? DesignTokens.textSecondary : DesignTokens.textPrimary)
                         }
                         .disabled(messages.isEmpty)
@@ -298,7 +298,7 @@ struct AliceView: View {
                         // Get Super alice 按钮
                         HStack(spacing: 10.s) {
                             Image(systemName: "sparkles")
-                                .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                                .font(.system(size: 16.f))
                                 .foregroundColor(DesignTokens.textPrimary)
                             Text("Get Super alice")
                                 .font(Font.custom("SFProDisplay-Regular", size: 12.f))
@@ -320,7 +320,7 @@ struct AliceView: View {
                         }) {
                             HStack(spacing: 10.s) {
                                 Image(systemName: "waveform")
-                                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                                    .font(.system(size: 16.f))
                                     .foregroundColor(DesignTokens.textPrimary)
                                 Text("Voice Mode")
                                     .font(Font.custom("SFProDisplay-Regular", size: 12.f))
@@ -363,7 +363,7 @@ struct AliceView: View {
                     // 输入框区域
                     HStack(spacing: 10.s) {
                         Image(systemName: "plus")
-                            .font(Font.custom("SFProDisplay-Medium", size: 16.f))
+                            .font(.system(size: 16.f))
                             .foregroundColor(DesignTokens.textPrimary)
 
                         TextField("Ask any questions", text: $inputText)

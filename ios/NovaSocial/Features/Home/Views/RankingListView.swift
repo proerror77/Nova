@@ -60,7 +60,7 @@ struct RankingListView: View {
                         // Search bar
                         HStack(spacing: 10) {
                             Image(systemName: "magnifyingglass")
-                                .font(Font.custom("SFProDisplay-Regular", size: 15.f))
+                                .font(.system(size: 15.f))
                                 .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
                             Text("Search")
                                 .font(Font.custom("SFProDisplay-Regular", size: 15.f))
@@ -271,7 +271,7 @@ struct RankingListItem: View {
             // Heart icon and percentage - smaller
             VStack(spacing: 4) {
                 Image(systemName: "heart")
-                    .font(Font.custom("SFProDisplay-Regular", size: 24.f))
+                    .font(.system(size: 24.f))
                     .foregroundColor(Color(red: 0.2, green: 0.2, blue: 0.2))
                 Text(percentage)
                     .font(Font.custom("SFProDisplay-Regular", size: 9.f))

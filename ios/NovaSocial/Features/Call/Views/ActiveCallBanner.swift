@@ -318,7 +318,7 @@ struct MinimizedCallView: View {
                     .frame(width: 32, height: 32)
 
                 Image(systemName: "video.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                    .font(.system(size: 14.f))
                     .foregroundColor(.white)
             }
 

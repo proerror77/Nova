@@ -90,7 +90,7 @@ struct CommentSheetView: View {
                         } else if let error = error {
                             VStack(spacing: DesignTokens.spacing12) {
                                 Image(systemName: "exclamationmark.triangle")
-                                    .font(Font.custom("SFProDisplay-Regular", size: 40.f))
+                                    .font(.system(size: 40.f))
                                     .foregroundColor(.orange)
                                 Text(error)
                                     .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
@@ -106,7 +106,7 @@ struct CommentSheetView: View {
                         } else if comments.isEmpty {
                             VStack(spacing: DesignTokens.spacing12) {
                                 Image(systemName: "bubble.left.and.bubble.right")
-                                    .font(Font.custom("SFProDisplay-Regular", size: 40.f))
+                                    .font(.system(size: 40.f))
                                     .foregroundColor(DesignTokens.textMuted)
                                 Text("No comments yet")
                                     .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontLarge))
@@ -208,7 +208,7 @@ struct CommentSheetView: View {
                                 .scaleEffect(0.8)
                         } else {
                             Image(systemName: "paperplane.fill")
-                                .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontLarge))
+                                .font(.system(size: DesignTokens.fontLarge))
                                 .foregroundColor(
                                     commentText.isEmpty
                                     ? DesignTokens.textMuted
@@ -657,7 +657,7 @@ struct DeleteCommentConfirmation: View {
             VStack(spacing: 0) {
                 // 图标
                 Image(systemName: "trash.circle.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 48.f))
+                    .font(.system(size: 48.f))
                     .foregroundStyle(.white, .red)
                     .padding(.top, 24)
 

@@ -75,7 +75,7 @@ struct LocationPickerView: View {
     private var searchBar: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(Font.custom("SFProDisplay-Regular", size: 15.f))
+                .font(.system(size: 15.f))
                 .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
 
             TextField("Search location", text: $searchText)
@@ -92,7 +92,7 @@ struct LocationPickerView: View {
                     searchResults = []
                 }) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 15.f))
+                        .font(.system(size: 15.f))
                         .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
                 }
             }
@@ -203,7 +203,7 @@ struct LocationPickerView: View {
         }) {
             HStack(spacing: 12) {
                 Image(systemName: "location.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                    .font(.system(size: 20.f))
                     .foregroundColor(.blue)
                     .frame(width: 32)
 
@@ -223,7 +223,7 @@ struct LocationPickerView: View {
                 if let selected = selectedMapItem,
                    selected.name == "Current Location" {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                        .font(.system(size: 20.f))
                         .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
                 }
             }
@@ -247,7 +247,7 @@ struct LocationPickerView: View {
         }) {
             HStack(spacing: 12) {
                 Image(systemName: "mappin.circle.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                    .font(.system(size: 20.f))
                     .foregroundColor(selectedMapItem == item ? Color(red: 0.82, green: 0.13, blue: 0.25) : .gray)
                     .frame(width: 32)
 
@@ -276,7 +276,7 @@ struct LocationPickerView: View {
 
                 if selectedMapItem == item {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                        .font(.system(size: 20.f))
                         .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
                 }
             }

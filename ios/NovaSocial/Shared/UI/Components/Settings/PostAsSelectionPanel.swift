@@ -293,11 +293,11 @@ struct PostAsOptionRow: View {
                 // Checkmark for selected account or chevron for navigation
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
+                        .font(.system(size: 14.f))
                         .foregroundColor(DesignTokens.accentColor)
                 } else {
                     Image(systemName: "chevron.right")
-                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                        .font(.system(size: 12.f))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
             }

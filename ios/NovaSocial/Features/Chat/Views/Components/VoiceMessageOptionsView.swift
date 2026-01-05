@@ -63,7 +63,7 @@ struct VoiceMessageOptionsView: View {
                 HStack(spacing: 12) {
                     // 波形圖標
                     Image(systemName: "waveform")
-                        .font(Font.custom("SFProDisplay-Regular", size: 24.f))
+                        .font(.system(size: 24.f))
                         .foregroundColor(DesignTokens.accentColor)
 
                     // 時長
@@ -373,7 +373,7 @@ private struct OptionButton: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                    .font(.system(size: 14.f))
                     .foregroundColor(DesignTokens.textSecondary)
             }
             .padding(.horizontal, 16)

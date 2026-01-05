@@ -116,7 +116,7 @@ struct LivePhotoBadge: View {
         HStack(spacing: 4) {
             // Concentric circles icon (like iOS)
             Image(systemName: "livephoto")
-                .font(Font.custom("SFProDisplay-Semibold", size: 10.f))
+                .font(.system(size: 10.f))
             
             Text("LIVE")
                 .font(Font.custom("SFProDisplay-Semibold", size: 10.f))
@@ -196,7 +196,7 @@ struct LivePhotoPreviewCard: View {
             // Delete button
             Button(action: onDelete) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(Font.custom("SFProDisplay-Regular", size: 20.f))
+                    .font(.system(size: 20.f))
                     .foregroundColor(.white)
                     .background(
                         Circle()
@@ -640,7 +640,7 @@ struct MediaPreviewView: View {
                     }
                 }) {
                     Image(systemName: "play.circle.fill")
-                        .font(Font.custom("SFProDisplay-Regular", size: 64.f))
+                        .font(.system(size: 64.f))
                         .foregroundColor(.white.opacity(0.9))
                 }
             }
@@ -743,7 +743,7 @@ struct MediaPreviewView: View {
                 dismissPreview()
             }) {
                 Image(systemName: "xmark")
-                    .font(Font.custom("SFProDisplay-Medium", size: 18.f))
+                    .font(.system(size: 18.f))
                     .foregroundColor(.white)
                     .frame(width: 40, height: 40)
                     .background(Color.black.opacity(0.5))
@@ -759,7 +759,7 @@ struct MediaPreviewView: View {
                     dismissPreview()
                 }) {
                     Image(systemName: "trash")
-                        .font(Font.custom("SFProDisplay-Medium", size: 16.f))
+                        .font(.system(size: 16.f))
                         .foregroundColor(.white)
                         .frame(width: 40, height: 40)
                         .background(Color.red.opacity(0.8))
@@ -776,7 +776,7 @@ struct MediaPreviewView: View {
     private var bottomHint: some View {
         HStack {
             Image(systemName: "hand.tap.fill")
-                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                .font(.system(size: 14.f))
             Text("Long press to play Live Photo")
                 .font(Font.custom("SFProDisplay-Regular", size: 14.f))
         }

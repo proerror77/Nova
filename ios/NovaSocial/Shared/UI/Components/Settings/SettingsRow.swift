@@ -24,7 +24,7 @@ struct SettingsRow: View {
 
                 if showChevron {
                     Image(systemName: "chevron.right")
-                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                        .font(.system(size: 12.f))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
             }
