@@ -95,6 +95,18 @@ impl MessageService {
         }
     }
 
+    /// Updates message with Matrix event_id, logging any errors.
+    /// Used after successfully sending a message to Matrix.
+    async fn save_matrix_event_id(db: &Pool, message_id: Uuid, event_id: &str) {
+        if let Err(e) = super::matrix_db::update_message_matrix_event_id(db, message_id, event_id).await {
+            tracing::warn!(
+                error = %e,
+                message_id = %message_id,
+                "Failed to update message with matrix_event_id"
+            );
+        }
+    }
+
     /// Prepares a Matrix room for sending messages.
     /// Gets conversation participants, creates/gets room, and saves mapping.
     /// Returns None if any step fails (errors are logged).
@@ -178,13 +190,13 @@ impl MessageService {
         sender_id: Uuid,
         plaintext: &[u8],
         idempotency_key: Option<&str>,
-    ) -> Result<MessageRow, crate::error::AppError> {
+    ) -> Result<MessageRow, AppError> {
         let id = Uuid::new_v4();
 
         // Note: E2E encryption columns removed in migration 0009
         // Using PostgreSQL TDE for at-rest encryption instead
         let content = String::from_utf8(plaintext.to_vec())
-            .map_err(|e| crate::error::AppError::Config(format!("invalid utf8: {e}")))?;
+            .map_err(|e| AppError::Config(format!("invalid utf8: {e}")))?;
 
         let client = Self::get_db_client(db, "send message").await?;
 
@@ -218,7 +230,7 @@ impl MessageService {
             &[&id, &conversation_id, &sender_id, &content, &idempotency_key]
         )
         .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("insert msg: {e}")))?;
+        .map_err(|e| AppError::StartServer(format!("insert msg: {e}")))?;
 
         Ok(MessageRow {
             id: row.get(0),
@@ -244,7 +256,7 @@ impl MessageService {
         conversation_id: Uuid,
         sender_id: Uuid,
         plaintext: &[u8],
-    ) -> Result<Uuid, crate::error::AppError> {
+    ) -> Result<Uuid, AppError> {
         // Validate sender is a member of the conversation
         let is_member = super::conversation_service::ConversationService::is_member(
             db,
@@ -254,14 +266,14 @@ impl MessageService {
         .await?;
 
         if !is_member {
-            return Err(crate::error::AppError::Config(
+            return Err(AppError::Config(
                 "Sender is not a member of this conversation".into(),
             ));
         }
 
         // Validate plaintext is not empty
         if plaintext.is_empty() {
-            return Err(crate::error::AppError::Config(
+            return Err(AppError::Config(
                 "Message content cannot be empty".into(),
             ));
         }
@@ -287,7 +299,7 @@ impl MessageService {
         duration_ms: u32,
         audio_codec: &str,
         idempotency_key: Option<&str>,
-    ) -> Result<(Uuid, i64), crate::error::AppError> {
+    ) -> Result<(Uuid, i64), AppError> {
         let id = Uuid::new_v4();
 
         // Store audio metadata as JSON for client parsing
@@ -331,7 +343,7 @@ impl MessageService {
             &[&id, &conversation_id, &sender_id, &content, &idempotency_key]
         )
         .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("insert audio msg: {e}")))?
+        .map_err(|e| AppError::StartServer(format!("insert audio msg: {e}")))?
         .get(0);
 
         Ok((id, seq))
@@ -348,7 +360,7 @@ impl MessageService {
         sender_id: Uuid,
         plaintext: &[u8],
         idempotency_key: Option<&str>,
-    ) -> Result<MessageRow, crate::error::AppError> {
+    ) -> Result<MessageRow, AppError> {
         // 1. Insert into Nova DB first (primary storage)
         let message =
             Self::send_message_db(db, encryption, conversation_id, sender_id, plaintext, idempotency_key)
@@ -367,21 +379,7 @@ impl MessageService {
                             room_id = %ctx.room_id,
                             "Message sent to Matrix"
                         );
-
-                        // Update message with Matrix event_id
-                        if let Err(e) = super::matrix_db::update_message_matrix_event_id(
-                            db,
-                            message.id,
-                            &event_id,
-                        )
-                        .await
-                        {
-                            tracing::warn!(
-                                error = %e,
-                                message_id = %message.id,
-                                "Failed to update message with matrix_event_id"
-                            );
-                        }
+                        Self::save_matrix_event_id(db, message.id, &event_id).await;
                     }
                     Err(e) => {
                         tracing::error!(
@@ -412,7 +410,7 @@ impl MessageService {
         duration_ms: u32,
         audio_codec: &str,
         idempotency_key: Option<&str>,
-    ) -> Result<(Uuid, i64), crate::error::AppError> {
+    ) -> Result<(Uuid, i64), AppError> {
         // 1. Insert into Nova DB first (primary storage)
         let (message_id, seq) = Self::send_audio_message_db(
             db,
@@ -444,21 +442,7 @@ impl MessageService {
                             room_id = %ctx.room_id,
                             "Audio message sent to Matrix"
                         );
-
-                        // Update message with Matrix event_id
-                        if let Err(e) = super::matrix_db::update_message_matrix_event_id(
-                            db,
-                            message_id,
-                            &event_id,
-                        )
-                        .await
-                        {
-                            tracing::warn!(
-                                error = %e,
-                                message_id = %message_id,
-                                "Failed to update audio message with matrix_event_id"
-                            );
-                        }
+                        Self::save_matrix_event_id(db, message_id, &event_id).await;
                     }
                     Err(e) => {
                         tracing::error!(
@@ -484,7 +468,7 @@ impl MessageService {
         matrix_client: Option<Arc<super::matrix_client::MatrixClient>>,
         message_id: Uuid,
         plaintext: &[u8],
-    ) -> Result<(), crate::error::AppError> {
+    ) -> Result<(), AppError> {
         // 1. Update Nova DB first (primary storage)
         Self::update_message_db(db, encryption, message_id, plaintext).await?;
 
@@ -536,7 +520,7 @@ impl MessageService {
         matrix_client: Option<Arc<super::matrix_client::MatrixClient>>,
         message_id: Uuid,
         reason: Option<&str>,
-    ) -> Result<(), crate::error::AppError> {
+    ) -> Result<(), AppError> {
         // 1. Soft delete in Nova DB first (primary storage)
         Self::soft_delete_message_db(db, message_id).await?;
 
@@ -582,7 +566,7 @@ impl MessageService {
     pub async fn get_message_history_db(
         db: &Pool,
         conversation_id: Uuid,
-    ) -> Result<Vec<MessageDto>, crate::error::AppError> {
+    ) -> Result<Vec<MessageDto>, AppError> {
         let client = Self::get_db_client(db, "get message history").await?;
 
         // Note: E2E columns removed in migration 0009, message_type never existed
@@ -602,7 +586,7 @@ impl MessageService {
             &[&conversation_id]
         )
         .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("history: {e}")))?;
+        .map_err(|e| AppError::StartServer(format!("history: {e}")))?;
 
         let out = rows
             .iter()
@@ -620,7 +604,7 @@ impl MessageService {
         limit: i64,
         offset: i64,
         include_recalled: bool,
-    ) -> Result<Vec<MessageDto>, crate::error::AppError> {
+    ) -> Result<Vec<MessageDto>, AppError> {
         use std::collections::HashMap;
 
         let limit = limit.min(200); // Cap at 200
@@ -657,7 +641,7 @@ impl MessageService {
 
         let messages = client.query(&query_sql, &[&conversation_id, &limit, &offset])
             .await
-            .map_err(|e| crate::error::AppError::StartServer(format!("fetch messages: {e}")))?;
+            .map_err(|e| AppError::StartServer(format!("fetch messages: {e}")))?;
 
         if messages.is_empty() {
             return Ok(vec![]);
@@ -680,7 +664,7 @@ impl MessageService {
             &[&user_id, &message_ids]
         )
         .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("fetch reactions: {e}")))?;
+        .map_err(|e| AppError::StartServer(format!("fetch reactions: {e}")))?;
 
         // Group reactions by message_id
         let mut reactions_map: HashMap<Uuid, Vec<MessageReaction>> = HashMap::new();
@@ -708,7 +692,7 @@ impl MessageService {
             &[&message_ids]
         )
         .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("fetch attachments: {e}")))?;
+        .map_err(|e| AppError::StartServer(format!("fetch attachments: {e}")))?;
 
         // Group attachments by message_id
         let mut attachments_map: HashMap<Uuid, Vec<MessageAttachment>> = HashMap::new();
@@ -752,9 +736,9 @@ impl MessageService {
         _encryption: &EncryptionService, // Encryption handled by PostgreSQL TDE
         message_id: Uuid,
         plaintext: &[u8],
-    ) -> Result<(), crate::error::AppError> {
+    ) -> Result<(), AppError> {
         let content_plain = String::from_utf8(plaintext.to_vec())
-            .map_err(|e| crate::error::AppError::Config(format!("invalid utf8: {e}")))?;
+            .map_err(|e| AppError::Config(format!("invalid utf8: {e}")))?;
 
         let client = Self::get_db_client(db, "update message").await?;
 
@@ -765,7 +749,7 @@ impl MessageService {
             &[&content_plain, &message_id]
         )
         .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("update msg: {e}")))?;
+        .map_err(|e| AppError::StartServer(format!("update msg: {e}")))?;
 
         Ok(())
     }
@@ -773,12 +757,12 @@ impl MessageService {
     pub async fn soft_delete_message_db(
         db: &Pool,
         message_id: Uuid,
-    ) -> Result<(), crate::error::AppError> {
+    ) -> Result<(), AppError> {
         let client = Self::get_db_client(db, "soft delete message").await?;
 
         client.execute("UPDATE messages SET deleted_at=NOW() WHERE id=$1", &[&message_id])
             .await
-            .map_err(|e| crate::error::AppError::StartServer(format!("delete msg: {e}")))?;
+            .map_err(|e| AppError::StartServer(format!("delete msg: {e}")))?;
 
         // No separate search index to maintain; FTS uses generated content_tsv
 
@@ -800,7 +784,7 @@ impl MessageService {
         limit: i64,
         offset: i64,
         sort_by: Option<&str>,
-    ) -> Result<(Vec<MessageDto>, i64), crate::error::AppError>
+    ) -> Result<(Vec<MessageDto>, i64), AppError>
     {
         let limit = limit.min(500); // Cap at 500 to prevent memory issues
         let sort_by = sort_by.unwrap_or("recent");
@@ -828,7 +812,7 @@ impl MessageService {
             &[&conversation_id, &query]
         )
         .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("count search results: {e}")))?;
+        .map_err(|e| AppError::StartServer(format!("count search results: {e}")))?;
         let total: i64 = count_result.get("total");
 
         // Build sort clause based on sort_by parameter
@@ -856,7 +840,7 @@ impl MessageService {
 
         let rows = client.query(&query_sql, &[&conversation_id, &query, &limit, &offset])
             .await
-            .map_err(|e| crate::error::AppError::StartServer(format!("search: {e}")))?;
+            .map_err(|e| AppError::StartServer(format!("search: {e}")))?;
 
         let out = rows
             .iter()
