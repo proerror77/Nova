@@ -254,4 +254,76 @@ impl SocialEventProducer {
             }
         }
     }
+
+    /// Publish a follow notification event to notification-service
+    ///
+    /// This sends a KafkaNotification to the FollowAdded topic that the
+    /// notification-service consumes to create push notifications.
+    ///
+    /// # Arguments
+    /// * `follower_id` - The ID of the user who followed
+    /// * `followee_id` - The ID of the user being followed (notification recipient)
+    /// * `follower_username` - Optional username of the follower for notification text
+    pub async fn publish_follow_notification(
+        &self,
+        follower_id: Uuid,
+        followee_id: Uuid,
+        follower_username: Option<String>,
+    ) -> Result<()> {
+        // Don't send notification if user somehow followed themselves
+        if follower_id == followee_id {
+            info!(
+                follower_id = %follower_id,
+                "Skipping self-follow notification"
+            );
+            return Ok(());
+        }
+
+        let username = follower_username.unwrap_or_else(|| "Someone".to_string());
+
+        let notification = KafkaNotification {
+            id: Uuid::new_v4().to_string(),
+            user_id: followee_id, // Recipient of the notification
+            event_type: "Follow".to_string(),
+            title: "New Follower".to_string(),
+            body: format!("{} started following you", username),
+            data: Some(serde_json::json!({
+                "sender_id": follower_id.to_string(),
+                "object_id": follower_id.to_string(),
+                "object_type": "user",
+            })),
+            timestamp: Utc::now().timestamp(),
+        };
+
+        let payload = serde_json::to_string(&notification)?;
+        let partition_key = followee_id.to_string();
+
+        // Use "FollowAdded" topic for follow notifications
+        let follow_topic = "FollowAdded";
+
+        let record = FutureRecord::to(follow_topic)
+            .key(&partition_key)
+            .payload(&payload);
+
+        match self.producer.send(record, Duration::from_secs(5)).await {
+            Ok(_) => {
+                info!(
+                    follower_id = %follower_id,
+                    followee_id = %followee_id,
+                    topic = %follow_topic,
+                    "Published follow notification to Kafka"
+                );
+                Ok(())
+            }
+            Err((err, _)) => {
+                warn!(
+                    error = ?err,
+                    follower_id = %follower_id,
+                    followee_id = %followee_id,
+                    "Failed to publish follow notification to Kafka"
+                );
+                Err(anyhow::anyhow!("Failed to publish notification: {}", err))
+            }
+        }
+    }
 }

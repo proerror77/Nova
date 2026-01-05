@@ -122,6 +122,23 @@ impl SocialService for SocialServiceImpl {
 
         if created {
             publish_outbox_follow(&self.state, follower_id, followee_id, true).await?;
+
+            // Send push notification to followee (async, fire-and-forget)
+            if let Some(producer) = &self.state.event_producer {
+                let producer = producer.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = producer
+                        .publish_follow_notification(
+                            follower_id,
+                            followee_id,
+                            None, // TODO: fetch username from identity service if needed
+                        )
+                        .await
+                    {
+                        tracing::warn!(error = ?e, "Failed to publish follow notification");
+                    }
+                });
+            }
         }
 
         Ok(Response::new(Empty {}))
