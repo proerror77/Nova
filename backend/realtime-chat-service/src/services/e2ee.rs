@@ -20,6 +20,9 @@
 //!
 //! This service is kept for reference but is NOT used in production.
 
+// Allow deprecated - this entire module is deprecated but kept for reference
+#![allow(deprecated)]
+
 /// End-to-End Encryption (E2EE) Service
 ///
 /// This service provides true E2EE using X25519 ECDH key exchange and authenticated encryption.

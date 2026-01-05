@@ -10,7 +10,6 @@ use realtime_chat_service::{
     redis_client::RedisClient,
     routes,
     services::{
-        encryption::EncryptionService,
         graph_client::GraphClient,
         identity_client::IdentityClient,
         key_exchange::KeyExchangeService,
@@ -20,6 +19,8 @@ use realtime_chat_service::{
     state::AppState,
     websocket::streams::{start_streams_listener, StreamsConfig},
 };
+#[allow(deprecated)]
+use realtime_chat_service::services::encryption::EncryptionService;
 use redis_utils::{RedisPool, SentinelConfig};
 use std::env;
 use std::net::SocketAddr;
@@ -69,6 +70,7 @@ async fn main() -> Result<(), error::AppError> {
         error::AppError::StartServer(format!("Failed to initialize JWT validation: {e}"))
     })?;
 
+    #[allow(deprecated)]
     let encryption = Arc::new(EncryptionService::new(cfg.encryption_master_key));
     let key_exchange_service = Arc::new(KeyExchangeService::new(Arc::new(db.clone())));
 

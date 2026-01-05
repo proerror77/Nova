@@ -10,7 +10,6 @@ use crate::websocket::events::{broadcast_event, WebSocketEvent};
 use aws_sdk_s3::config::Region;
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::Client as S3Client;
-use base64::{engine::general_purpose, Engine as _};
 use std::time::Duration;
 
 #[derive(Deserialize)]

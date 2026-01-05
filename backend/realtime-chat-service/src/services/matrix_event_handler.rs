@@ -1,3 +1,6 @@
+// Allow deprecated EncryptionService - used as placeholder for API compatibility
+#![allow(deprecated)]
+
 use crate::error::AppError;
 use crate::redis_client::RedisClient;
 use crate::websocket::events::{broadcast_event, WebSocketEvent};
