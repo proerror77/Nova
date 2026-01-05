@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+// API base URL - uses relative path for same-origin requests via ingress
+const API_BASE_URL = '/api';
 
 interface Admin {
   id: string;
@@ -76,9 +77,12 @@ export const useAuthStore = create<AuthState>()(
         set({ admin: null, accessToken: null, refreshToken: null, isAuthenticated: false });
       },
 
-      getAuthHeader: () => {
+      getAuthHeader: (): Record<string, string> => {
         const { accessToken } = get();
-        return accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {};
+        if (accessToken) {
+          return { 'Authorization': `Bearer ${accessToken}` };
+        }
+        return {};
       },
     }),
     {
