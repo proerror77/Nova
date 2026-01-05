@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
+use grpc_clients::nova::content_service::v2::content_service_client::ContentServiceClient;
+use grpc_clients::nova::content_service::v2::GetPostRequest;
 use grpc_clients::nova::graph_service::v2::graph_service_client::GraphServiceClient;
 use grpc_clients::nova::identity_service::v2::auth_service_client::AuthServiceClient;
 use grpc_clients::nova::identity_service::v2::BatchResolveUsernamesRequest;
@@ -43,6 +45,8 @@ pub struct AppState {
     pub graph_client: GraphServiceClient<Channel>,
     /// Optional identity service client for @mention resolution
     pub identity_client: Option<AuthServiceClient<Channel>>,
+    /// Optional content service client for post author lookup
+    pub content_client: Option<ContentServiceClient<Channel>>,
     /// Optional Kafka event producer for social events
     pub event_producer: Option<Arc<SocialEventProducer>>,
 }
@@ -60,12 +64,18 @@ impl AppState {
             outbox_repo,
             graph_client,
             identity_client: None,
+            content_client: None,
             event_producer: None,
         }
     }
 
     pub fn with_identity_client(mut self, client: AuthServiceClient<Channel>) -> Self {
         self.identity_client = Some(client);
+        self
+    }
+
+    pub fn with_content_client(mut self, client: ContentServiceClient<Channel>) -> Self {
+        self.content_client = Some(client);
         self
     }
 
@@ -302,7 +312,7 @@ impl SocialService for SocialServiceImpl {
             if let Some(producer) = &self.state.event_producer {
                 let producer = producer.clone();
                 let like_id = like.id;
-                let like_repo_clone = self.like_repo();
+                let content_client = self.state.content_client.clone();
 
                 tokio::spawn(async move {
                     // Publish analytics event
@@ -310,28 +320,41 @@ impl SocialService for SocialServiceImpl {
                         tracing::warn!(error = ?e, "Failed to publish like created event");
                     }
 
-                    // Get post author and publish notification
-                    match like_repo_clone.get_post_author(post_id).await {
-                        Ok(Some(post_author_id)) => {
-                            if let Err(e) = producer
-                                .publish_like_notification(
-                                    like_id,
-                                    post_id,
-                                    user_id,
-                                    post_author_id,
-                                    None, // TODO: fetch username from identity service if needed
-                                )
-                                .await
-                            {
-                                tracing::warn!(error = ?e, "Failed to publish like notification");
+                    // Get post author via gRPC and publish notification
+                    if let Some(mut client) = content_client {
+                        let request = tonic::Request::new(GetPostRequest {
+                            post_id: post_id.to_string(),
+                        });
+                        match client.get_post(request).await {
+                            Ok(response) => {
+                                let resp = response.into_inner();
+                                if resp.found {
+                                    if let Some(post) = resp.post {
+                                        if let Ok(post_author_id) = Uuid::parse_str(&post.author_id) {
+                                            if let Err(e) = producer
+                                                .publish_like_notification(
+                                                    like_id,
+                                                    post_id,
+                                                    user_id,
+                                                    post_author_id,
+                                                    None,
+                                                )
+                                                .await
+                                            {
+                                                tracing::warn!(error = ?e, "Failed to publish like notification");
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    tracing::warn!(post_id = %post_id, "Post not found for like notification");
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = ?e, "Failed to get post from content-service");
                             }
                         }
-                        Ok(None) => {
-                            tracing::warn!(post_id = %post_id, "Post not found for like notification");
-                        }
-                        Err(e) => {
-                            tracing::warn!(error = ?e, "Failed to get post author for notification");
-                        }
+                    } else {
+                        tracing::warn!("Content client not available for like notification");
                     }
                 });
             }
