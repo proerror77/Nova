@@ -209,22 +209,79 @@ pub async fn google_oauth_callback_get(
                 ));
             }
 
-            Ok(HttpResponse::Found()
-                .append_header(("Location", redirect_url))
-                .finish())
+            // Use JavaScript-based redirect instead of HTTP 302
+            // This is required for ASWebAuthenticationSession to properly handle
+            // custom URL scheme redirects, as Safari/WebKit may block 302 redirects
+            // to custom URL schemes for security reasons
+            let html_response = format!(
+                r#"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Redirecting...</title>
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f5f5f7; }}
+        .container {{ text-align: center; padding: 20px; }}
+        .spinner {{ width: 40px; height: 40px; border: 3px solid #e0e0e0; border-top: 3px solid #007aff; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }}
+        @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
+        a {{ color: #007aff; text-decoration: none; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="spinner"></div>
+        <p>Redirecting to app...</p>
+        <p><a href="{url}" id="redirect-link">Click here if not redirected</a></p>
+    </div>
+    <script>
+        window.location.href = "{url}";
+    </script>
+</body>
+</html>"#,
+                url = redirect_url
+            );
+
+            Ok(HttpResponse::Ok()
+                .content_type("text/html; charset=utf-8")
+                .body(html_response))
         }
         Err(status) => {
             error!(error = %status, "Failed to complete Google OAuth flow");
 
-            // Redirect to iOS app with error
+            // Redirect to iOS app with error using JavaScript
             let error_url = format!(
                 "icered://oauth?error=oauth_failed&message={}",
                 urlencoding::encode(status.message())
             );
 
-            Ok(HttpResponse::Found()
-                .append_header(("Location", error_url))
-                .finish())
+            let html_response = format!(
+                r#"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Redirecting...</title>
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f5f5f7; }}
+        .container {{ text-align: center; padding: 20px; }}
+        a {{ color: #007aff; text-decoration: none; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p>Redirecting to app...</p>
+        <p><a href="{url}" id="redirect-link">Click here if not redirected</a></p>
+    </div>
+    <script>
+        window.location.href = "{url}";
+    </script>
+</body>
+</html>"#,
+                url = error_url
+            );
+
+            Ok(HttpResponse::Ok()
+                .content_type("text/html; charset=utf-8")
+                .body(html_response))
         }
     }
 }
