@@ -18,6 +18,7 @@ struct ChatView: View {
     // MARK: - ViewModel
 
     @State private var viewModel = ChatViewModel()
+    private let userService = UserService.shared  // For cache invalidation on profile navigation
     @State private var showMessageSearch = false
 
     // MARK: - View Models & Handlers
@@ -79,6 +80,8 @@ struct ChatView: View {
                         
                         // 头像 - 可点击查看个人资料
                         Button {
+                            // Invalidate cache for fresh profile data (Issue #166)
+                            userService.invalidateCache(userId: conversationId)
                             viewModel.showUserProfile = true
                         } label: {
                             AvatarView(

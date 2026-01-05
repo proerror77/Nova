@@ -6,6 +6,7 @@ struct SearchView: View {
     @FocusState private var isSearchFocused: Bool
     @State private var showUserProfile = false
     @State private var selectedUserId: String?
+    private let userService = UserService.shared  // For cache invalidation on profile navigation
 
     var body: some View {
         ZStack {
@@ -262,6 +263,8 @@ struct SearchView: View {
                 avatarUrl: avatarUrl,
                 isVerified: isVerified,
                 onTap: {
+                    // Invalidate cache before navigating to ensure fresh profile data (Issue #166)
+                    userService.invalidateCache(userId: id)
                     selectedUserId = id
                     showUserProfile = true
                 }

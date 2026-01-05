@@ -483,6 +483,8 @@ struct ProfileFollowingView: View {
                         user: user,
                         showFollowButton: false,
                         onAvatarTap: {
+                            // Invalidate cache for fresh profile data (Issue #166)
+                            userService.invalidateCache(userId: user.id)
                             selectedUserId = user.id
                             showUserProfile = true
                         },
@@ -548,6 +550,8 @@ struct ProfileFollowingView: View {
                         user: user,
                         showFollowButton: true,
                         onAvatarTap: {
+                            // Invalidate cache for fresh profile data (Issue #166)
+                            userService.invalidateCache(userId: user.id)
                             selectedUserId = user.id
                             showUserProfile = true
                         },

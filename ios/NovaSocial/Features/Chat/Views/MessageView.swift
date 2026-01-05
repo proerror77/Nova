@@ -162,6 +162,7 @@ struct MessageView: View {
     // Services
     private let friendsService = FriendsService()
     private let matrixBridge = MatrixBridgeService.shared
+    private let userService = UserService.shared  // For cache invalidation on profile navigation
 
     // Deep link navigation support
     private let coordinator = AppCoordinator.shared
@@ -619,7 +620,8 @@ struct MessageView: View {
                 return false
             }
         case .profile(let userId):
-            // Navigate to user profile from message context
+            // Navigate to user profile from message context (with cache invalidation for Issue #166)
+            userService.invalidateCache(userId: userId)
             selectedUserId = userId
             showUserProfile = true
             coordinator.messagePath.removeAll { $0 == route }
@@ -855,7 +857,10 @@ struct MessageView: View {
                                     memberAvatars: convo.memberAvatars,
                                     memberNames: convo.memberNames,
                                     onAvatarTapped: { userId in
+                                        // Skip profile navigation for Alice AI assistant
                                         if convo.userName.lowercased() != "alice" {
+                                            // Invalidate cache for fresh profile data (Issue #166)
+                                            userService.invalidateCache(userId: userId)
                                             selectedUserId = userId
                                             showUserProfile = true
                                         }
