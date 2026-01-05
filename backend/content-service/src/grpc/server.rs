@@ -286,7 +286,27 @@ impl ContentService for ContentServiceImpl {
         }
 
         // Step 5: Merge cached and DB results, preserving request order
-        let mut all_posts: std::collections::HashMap<Uuid, DbPost> = cached_posts;
+        // IMPORTANT: Filter out deleted posts from cache (deleted_at might be set in cached version)
+        let mut all_posts: std::collections::HashMap<Uuid, DbPost> = cached_posts
+            .into_iter()
+            .filter(|(id, post)| {
+                if post.deleted_at.is_some() {
+                    tracing::debug!(
+                        post_id = %id,
+                        "Filtering out deleted post from cache (stale cache entry)"
+                    );
+                    // Also invalidate this stale cache entry
+                    let cache = self.cache.clone();
+                    let post_id = *id;
+                    tokio::spawn(async move {
+                        let _ = cache.invalidate_post(post_id).await;
+                    });
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
         for post in db_posts {
             all_posts.insert(post.id, post);
         }
@@ -591,7 +611,29 @@ impl ContentService for ContentServiceImpl {
 
         match result {
             Some(ts) => {
-                let _ = self.cache.invalidate_post(post_id).await;
+                // Invalidate post cache - log errors but don't fail the request
+                if let Err(e) = self.cache.invalidate_post(post_id).await {
+                    tracing::error!(
+                        post_id = %post_id,
+                        error = %e,
+                        "Failed to invalidate post cache after deletion - may cause stale reads"
+                    );
+                }
+
+                // Invalidate feed caches via feed-service (fanout to followers)
+                let mut feed_client = self.grpc_pool.feed();
+                let invalidate_req = InvalidateFeedCacheRequest {
+                    user_id: req.user_id.clone(), // Author's ID
+                    event_type: "delete_post".to_string(),
+                };
+                if let Err(e) = feed_client.invalidate_feed_cache(invalidate_req).await {
+                    tracing::warn!(
+                        post_id = %post_id,
+                        error = %e,
+                        "Failed to invalidate feed caches (will expire via TTL)"
+                    );
+                }
+
                 guard.complete("0");
                 Ok(Response::new(DeletePostResponse {
                     post_id: post_id.to_string(),
