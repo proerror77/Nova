@@ -58,6 +58,7 @@ struct HomeView: View {
     // Deep link navigation support
     private let coordinator = AppCoordinator.shared
     private let contentService = ContentService()
+    private let userService = UserService.shared  // For cache invalidation on profile navigation
     @State private var showThankYouView = false
     @State private var showNewPost = false
     @State private var showSearch = false
@@ -177,8 +178,7 @@ struct HomeView: View {
                     post: post,
                     isPresented: $showComments,
                     onAvatarTapped: { userId in
-                        selectedUserId = userId
-                        showUserProfile = true
+                        navigateToUserProfile(userId: userId)
                     },
                     onCommentCountUpdated: { postId, actualCount in
                         feedViewModel.updateCommentCount(postId: postId, count: actualCount)
@@ -251,9 +251,8 @@ struct HomeView: View {
                 await navigateToPost(id: postId)
             }
         case .profile(let userId):
-            // Navigate to user profile
-            selectedUserId = userId
-            showUserProfile = true
+            // Navigate to user profile (with cache invalidation for fresh data)
+            navigateToUserProfile(userId: userId)
             // Remove the route after handling
             coordinator.homePath.removeAll { $0 == route }
         default:
@@ -290,6 +289,16 @@ struct HomeView: View {
             print("[HomeView] Failed to load post \(postId): \(error)")
             #endif
         }
+    }
+
+    /// Navigate to user profile with fresh data (invalidates cache to fix avatar inconsistency)
+    /// Issue #166: Comment section shows fresh avatar from API, but profile page may show cached stale avatar
+    private func navigateToUserProfile(userId: String) {
+        // Invalidate cached profile data to ensure fresh fetch
+        // This fixes the inconsistency where comment avatars (fresh) differ from profile avatars (cached)
+        userService.invalidateCache(userId: userId)
+        selectedUserId = userId
+        showUserProfile = true
     }
 
     var homeContent: some View {
@@ -383,8 +392,7 @@ struct HomeView: View {
                                             await feedViewModel.followSuggestedCreator(userId: userId)
                                         },
                                         onCreatorTap: { userId in
-                                            selectedUserId = userId
-                                            showUserProfile = true
+                                            navigateToUserProfile(userId: userId)
                                         }
                                     )
                                 }
