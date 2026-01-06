@@ -868,7 +868,7 @@ impl SocialService for SocialServiceImpl {
 
         let share = self
             .share_repo()
-            .create_share(user_id, post_id, "repost".to_string())
+            .create_share(user_id, post_id, "REPOST".to_string())
             .await
             .map_err(|e| Status::internal(format!("Failed to create share: {}", e)))?;
 
