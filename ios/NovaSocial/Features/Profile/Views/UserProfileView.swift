@@ -12,6 +12,8 @@ struct UserProfileData {
     var likesCount: Int
     var isVerified: Bool
     var posts: [UserProfilePostData]
+    var savedPosts: [UserProfilePostData]
+    var likedPosts: [UserProfilePostData]
 
     // Alias account support
     var isAlias: Bool = false
@@ -29,7 +31,9 @@ struct UserProfileData {
         followersCount: 1449,
         likesCount: 452,
         isVerified: true,
-        posts: []
+        posts: [],
+        savedPosts: [],
+        likedPosts: []
     )
 
     /// 预览用示例数据
@@ -43,11 +47,13 @@ struct UserProfileData {
         followersCount: 1449,
         likesCount: 452,
         isVerified: true,
-        posts: []
+        posts: [],
+        savedPosts: [],
+        likedPosts: []
     )
 
     /// 從 UserProfile 快取創建（用於快取優先載入，防止抖動）
-    init(from profile: UserProfile, posts: [UserProfilePostData] = []) {
+    init(from profile: UserProfile, posts: [UserProfilePostData] = [], savedPosts: [UserProfilePostData] = [], likedPosts: [UserProfilePostData] = []) {
         self.userId = profile.id
         self.username = profile.displayName ?? profile.username
         self.avatarUrl = profile.avatarUrl
@@ -58,6 +64,8 @@ struct UserProfileData {
         self.likesCount = profile.safePostCount
         self.isVerified = profile.safeIsVerified
         self.posts = posts
+        self.savedPosts = savedPosts
+        self.likedPosts = likedPosts
     }
 }
 
@@ -76,12 +84,18 @@ struct UserProfileView: View {
     @State private var isFollowing = true
     @State private var showBlockReportSheet = false
 
+    // 標記是否已載入過 Saved/Liked 數據（防止空數組時重複請求）
+    @State private var hasLoadedSaved = false
+    @State private var hasLoadedLiked = false
+
     // MARK: - Services
     private let userService = UserService.shared
     private let contentService = ContentService()
 
     enum ProfileTab {
         case posts
+        case saved
+        case liked
     }
 
     // MARK: - 便捷初始化器（兼容旧代码）
@@ -153,9 +167,23 @@ struct UserProfileView: View {
     private var displayLikesCount: Int { userData?.likesCount ?? 0 }
     private var displayIsVerified: Bool { userData?.isVerified ?? false }
     private var displayPosts: [UserProfilePostData] { userData?.posts ?? [] }
+    private var displaySavedPosts: [UserProfilePostData] { userData?.savedPosts ?? [] }
+    private var displayLikedPosts: [UserProfilePostData] { userData?.likedPosts ?? [] }
 
     /// 是否有用戶數據可顯示（快取或已載入）
     private var hasUserData: Bool { userData != nil }
+
+    /// 根据当前选中的标签返回对应的帖子数组
+    private var currentTabPosts: [UserProfilePostData] {
+        switch selectedTab {
+        case .posts:
+            return displayPosts
+        case .saved:
+            return displaySavedPosts
+        case .liked:
+            return displayLikedPosts
+        }
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -455,19 +483,21 @@ struct UserProfileView: View {
                             }
 
                             Button(action: {
-                                // Saved tab action
+                                selectedTab = .saved
+                                Task { await loadSavedPosts() }
                             }) {
                                 Text("Saved")
                                     .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
-                                    .foregroundColor(.black)
+                                    .foregroundColor(selectedTab == .saved ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
                             }
 
                             Button(action: {
-                                // Liked tab action
+                                selectedTab = .liked
+                                Task { await loadLikedPosts() }
                             }) {
                                 Text("Liked")
                                     .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
-                                    .foregroundColor(.black)
+                                    .foregroundColor(selectedTab == .liked ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
                             }
                         }
                         .frame(height: 24.h)
@@ -507,8 +537,8 @@ struct UserProfileView: View {
                                     ],
                                     spacing: 5.h
                                 ) {
-                                    // 使用真实帖子数据
-                                    ForEach(displayPosts) { post in
+                                    // 根据选中的标签显示对应内容
+                                    ForEach(currentTabPosts) { post in
                                         PostCard(
                                             imageUrl: post.imageUrl,
                                             imageName: "PostCardImage",
@@ -635,7 +665,9 @@ struct UserProfileView: View {
                     followersCount: userProfile.safeFollowerCount,
                     likesCount: userProfile.safePostCount,
                     isVerified: userProfile.safeIsVerified,
-                    posts: userPosts
+                    posts: userPosts,
+                    savedPosts: [],
+                    likedPosts: []
                 )
                 isLoading = false
                 isLoadingPosts = false
@@ -658,6 +690,88 @@ struct UserProfileView: View {
                 isLoading = false
                 isLoadingPosts = false
             }
+        }
+    }
+
+    // MARK: - 加载收藏的帖子
+    private func loadSavedPosts() async {
+        // 如果已经加载过，跳过（使用 flag 而非 isEmpty，防止空數組時重複請求）
+        guard !hasLoadedSaved else { return }
+
+        await MainActor.run { hasLoadedSaved = true }
+
+        #if DEBUG
+        print("[UserProfile] 🔖 Loading saved posts for userId: \(userId)")
+        #endif
+
+        do {
+            let response = try await contentService.getUserSavedPosts(userId: userId, limit: 50, offset: 0)
+
+            // 将 Post 转换为 UserProfilePostData
+            let savedPosts = response.posts.map { post in
+                UserProfilePostData(
+                    id: post.id,
+                    avatarUrl: post.authorAvatarUrl,
+                    username: post.displayAuthorName,
+                    likeCount: post.likeCount ?? 0,
+                    imageUrl: post.displayThumbnailUrl,
+                    content: post.content
+                )
+            }
+
+            await MainActor.run {
+                userData?.savedPosts = savedPosts
+            }
+
+            #if DEBUG
+            print("[UserProfile] ✅ Loaded \(savedPosts.count) saved posts")
+            #endif
+
+        } catch {
+            #if DEBUG
+            print("[UserProfile] ❌ Failed to load saved posts: \(error)")
+            #endif
+        }
+    }
+
+    // MARK: - 加载点赞的帖子
+    private func loadLikedPosts() async {
+        // 如果已经加载过，跳过（使用 flag 而非 isEmpty，防止空數組時重複請求）
+        guard !hasLoadedLiked else { return }
+
+        await MainActor.run { hasLoadedLiked = true }
+
+        #if DEBUG
+        print("[UserProfile] ❤️ Loading liked posts for userId: \(userId)")
+        #endif
+
+        do {
+            let response = try await contentService.getUserLikedPosts(userId: userId, limit: 50, offset: 0)
+
+            // 将 Post 转换为 UserProfilePostData
+            let likedPosts = response.posts.map { post in
+                UserProfilePostData(
+                    id: post.id,
+                    avatarUrl: post.authorAvatarUrl,
+                    username: post.displayAuthorName,
+                    likeCount: post.likeCount ?? 0,
+                    imageUrl: post.displayThumbnailUrl,
+                    content: post.content
+                )
+            }
+
+            await MainActor.run {
+                userData?.likedPosts = likedPosts
+            }
+
+            #if DEBUG
+            print("[UserProfile] ✅ Loaded \(likedPosts.count) liked posts")
+            #endif
+
+        } catch {
+            #if DEBUG
+            print("[UserProfile] ❌ Failed to load liked posts: \(error)")
+            #endif
         }
     }
 }
