@@ -1173,6 +1173,12 @@ extension MatrixBridgeService {
                 return name.range(of: pattern, options: .regularExpression) != nil
             }
 
+            // Helper function to check if name looks like Matrix localpart format "nova-{username}"
+            func looksLikeMatrixLocalpart(_ name: String) -> Bool {
+                // Pattern: "nova-" prefix (e.g., "nova-timmikins747")
+                return name.hasPrefix("nova-")
+            }
+
             // Treat as direct message if explicitly marked OR if it has exactly 2 members
             // (isDirect flag may not be synced correctly after logout/login, see findExistingDirectRoom)
             let isLikelyDirect = room.isDirect || room.memberCount == 2
@@ -1188,12 +1194,14 @@ extension MatrixBridgeService {
                 // - Looks like a member count fallback (e.g., "2 people")
                 // - Looks like legacy "Conversation {uuid}" format from backend
                 // - Looks like legacy "Nova User {uuid-prefix}" format
+                // - Looks like Matrix localpart format "nova-{username}"
                 // - Avatar URL is missing (common for DMs where room avatar isn't set)
                 let needsNameEnrichment = displayName == "Direct Message" ||
                                           looksLikeRoomId(displayName) ||
                                           looksLikeMemberCountFallback(displayName) ||
                                           looksLikeConversationUUID(displayName) ||
-                                          looksLikeNovaUserUUID(displayName)
+                                          looksLikeNovaUserUUID(displayName) ||
+                                          looksLikeMatrixLocalpart(displayName)
                 let needsAvatarEnrichment = avatarURL == nil || avatarURL?.isEmpty == true
                 let needsEnrichment = needsNameEnrichment || needsAvatarEnrichment
 
@@ -1270,37 +1278,40 @@ extension MatrixBridgeService {
                                     }
                                 } else {
                                     // Matrix member has no displayName, try to look up via Nova UserService
+                                    // But only update displayName if we actually need name enrichment
                                     if let novaUserId = matrixService.convertToNovaUserId(matrixUserId: otherMember.userId) {
                                         #if DEBUG
                                         print("[MatrixBridge]   🔍 Looking up user profile for: \(novaUserId)")
                                         #endif
                                         do {
                                             let userProfile = try await UserService.shared.getUser(userId: novaUserId)
-                                            displayName = userProfile.displayName ?? userProfile.username
-                                            if avatarURL == nil || avatarURL?.isEmpty == true {
-                                                avatarURL = userProfile.avatarUrl
+                                            if stillNeedsNameEnrichment {
+                                                displayName = userProfile.displayName ?? userProfile.username
+                                            }
+                                            if stillNeedsAvatarEnrichment, let profileAvatar = userProfile.avatarUrl, !profileAvatar.isEmpty {
+                                                avatarURL = profileAvatar
                                             }
                                             #if DEBUG
-                                            print("[MatrixBridge]   ✅ Found user: \(displayName)")
+                                            print("[MatrixBridge]   ✅ Found user: \(userProfile.displayName ?? userProfile.username)")
                                             #endif
                                         } catch {
                                             #if DEBUG
                                             print("[MatrixBridge]   ⚠️ UserService lookup failed for \(novaUserId): \(error)")
                                             #endif
-                                            // UserService lookup failed - check if UUID or username
-                                            if novaUserId.count == 36 && novaUserId.contains("-") {
-                                                // UUID - use a more friendly fallback, try to get username from Matrix profile
-                                                // The Matrix user ID format is @nova-{identifier}:server
-                                                // If the identifier is a UUID, we don't have the username
-                                                displayName = "Chat"  // Generic fallback for unknown users
-                                            } else {
-                                                // It's a username - show it directly
-                                                displayName = novaUserId
+                                            // UserService lookup failed - only update name if we need it
+                                            if stillNeedsNameEnrichment {
+                                                if novaUserId.count == 36 && novaUserId.contains("-") {
+                                                    // UUID - use generic fallback
+                                                    displayName = "Chat"
+                                                } else {
+                                                    // It's a username - show it directly
+                                                    displayName = novaUserId
+                                                }
                                             }
                                         }
-                                    } else {
+                                    } else if stillNeedsNameEnrichment {
                                         // Can't convert to Nova user ID, extract from Matrix ID
-                                        // Format: @nova-<uuid>:server or @username:server
+                                        // Only do this if we need name enrichment
                                         let matrixId = otherMember.userId
                                         if matrixId.hasPrefix("@") {
                                             let withoutAt = String(matrixId.dropFirst())
@@ -1332,7 +1343,7 @@ extension MatrixBridgeService {
                     }
 
                     // Fallback: Try to use lastMessage sender for DM display name
-                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) || looksLikeNovaUserUUID(displayName) {
+                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) || looksLikeNovaUserUUID(displayName) || looksLikeMatrixLocalpart(displayName) {
                         #if DEBUG
                         print("[MatrixBridge]   📨 Trying lastMessage sender fallback")
                         #endif
@@ -1388,9 +1399,19 @@ extension MatrixBridgeService {
                         }
                     }
 
-                    // Final fallback - just show "Chat" instead of ugly room ID, member count, "Conversation {uuid}", or "Nova User {uuid}"
+                    // Final cleanup - handle ugly display names
                     if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) || looksLikeNovaUserUUID(displayName) {
+                        // These are unrecoverable - show generic fallback
                         displayName = "Chat"
+                    } else if looksLikeMatrixLocalpart(displayName) {
+                        // Strip "nova-" prefix and show just the username
+                        let identifier = String(displayName.dropFirst(5))
+                        // Check if it's a UUID (36 chars with hyphens) - if so, show generic
+                        if identifier.count == 36 && identifier.contains("-") {
+                            displayName = "Chat"
+                        } else {
+                            displayName = identifier
+                        }
                     }
                 }
             } else {
