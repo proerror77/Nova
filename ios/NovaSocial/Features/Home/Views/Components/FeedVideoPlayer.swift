@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import AVFoundation
 import Network
 
 // MARK: - Video Constants
@@ -329,11 +330,30 @@ final class FeedVideoPlayerViewModel: ObservableObject {
         Self.networkMonitor.start(queue: Self.networkQueue)
     }
 
+    /// Configure AVAudioSession for media playback
+    /// Using .playback category ensures audio plays even when silent mode is enabled
+    /// This matches behavior of Instagram, YouTube, TikTok, etc.
+    private func configureAudioSession() {
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.playback, mode: .moviePlayback)
+            try audioSession.setActive(true)
+        } catch {
+            #if DEBUG
+            print("[FeedVideoPlayer] Failed to configure audio session: \(error.localizedDescription)")
+            #endif
+        }
+    }
+
     func prepare() {
         guard player == nil else { return }
 
         hasError = false
         isLoading = true
+
+        // Configure audio session for media playback
+        // This ensures video sound works even when silent mode is enabled (like Instagram)
+        configureAudioSession()
 
         // Start loading timeout
         loadingTimeoutTask?.cancel()
