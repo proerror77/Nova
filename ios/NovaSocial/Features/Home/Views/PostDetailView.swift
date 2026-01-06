@@ -244,8 +244,10 @@ struct PostDetailView: View {
     @State private var isPostSaved = false
     @State private var postLikeCount: Int = 0
     @State private var postSaveCount: Int = 0
-    @State private var isLikeLoading = false
-    @State private var isBookmarkLoading = false
+
+    // MARK: - Social Actions Handler (reuse same logic as Home feed)
+    /// Reuse the same debounce handler as Home feed for consistent behavior
+    @State private var socialActionsHandler: FeedSocialActionsHandler?
 
     // MARK: - Post Actions State (作者操作)
     @State private var showingActionSheet = false
@@ -316,6 +318,9 @@ struct PostDetailView: View {
             postSaveCount = post.bookmarkCount  // 修复: 应该使用 bookmarkCount 而非 shareCount
             isPostLiked = post.isLiked
             isPostSaved = post.isBookmarked
+
+            // Initialize social actions handler (reuse same logic as Home feed)
+            setupSocialActionsHandler()
         }
         // MARK: - Action Sheet (作者操作菜单)
         .confirmationDialog("Post Options", isPresented: $showingActionSheet, titleVisibility: .visible) {
@@ -701,28 +706,26 @@ struct PostDetailView: View {
 
             // Stats Row
             HStack(spacing: 16) {
-                // Like Button
+                // Like Button (Xiaohongshu-style - no loading state, instant feedback)
                 Button(action: {
-                    Task { await toggleLike() }
+                    toggleLike()
                 }) {
                     HStack(spacing: 6) {
-                        if isLikeLoading {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                                .frame(width: 20, height: 20)
-                        } else {
-                            Image(isPostLiked ? "card-heart-icon-filled" : "card-heart-icon")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 20, height: 20)
-                        }
+                        Image(isPostLiked ? "card-heart-icon-filled" : "card-heart-icon")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20)
+                            .id("detail-like-icon-\(isPostLiked)")  // Force SwiftUI re-render
+                            .transition(.scale.combined(with: .opacity))
                         Text("\(postLikeCount)")
                             .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                            .contentTransition(.numericText())
                     }
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPostLiked)
                 }
-                .disabled(isLikeLoading)
+                .buttonStyle(.plain)
 
                 // Comment Button (打开评论弹窗，与 Home 统一)
                 Button(action: {
@@ -740,28 +743,26 @@ struct PostDetailView: View {
                     }
                 }
 
-                // Bookmark Button (与 Home 一致的图标)
+                // Bookmark Button (Xiaohongshu-style - no loading state, instant feedback)
                 Button(action: {
-                    Task { await toggleBookmark() }
+                    toggleBookmark()
                 }) {
                     HStack(spacing: 6) {
-                        if isBookmarkLoading {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                                .frame(width: 20, height: 20)
-                        } else {
-                            Image(isPostSaved ? "collect-fill" : "collect")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 20, height: 20)
-                        }
+                        Image(isPostSaved ? "collect-fill" : "collect")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20)
+                            .id("detail-bookmark-icon-\(isPostSaved)")  // Force SwiftUI re-render
+                            .transition(.scale.combined(with: .opacity))
                         Text("\(postSaveCount)")
                             .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                            .contentTransition(.numericText())
                     }
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPostSaved)
                 }
-                .disabled(isBookmarkLoading)
+                .buttonStyle(.plain)
 
                 Spacer()
             }
@@ -810,82 +811,70 @@ struct PostDetailView: View {
         }
     }
 
-    // MARK: - Like Actions
+    // MARK: - Social Actions Handler Setup (reuse Home feed logic)
 
-    private func toggleLike() async {
-        guard let userId = authManager.currentUser?.id else { return }
-        guard !isLikeLoading else { return }
+    private func setupSocialActionsHandler() {
+        let handler = FeedSocialActionsHandler()
 
-        isLikeLoading = true
-        let wasLiked = isPostLiked
+        // Configure callback to update local state (same pattern as Home feed)
+        handler.onPostUpdate = { [self] postId, transform in
+            guard postId == post.id else { return }
 
-        // Optimistic update
-        isPostLiked.toggle()
-        postLikeCount = max(0, postLikeCount + (isPostLiked ? 1 : -1))
+            // Create a temporary post to apply the transform
+            var tempPost = post.copying(
+                likeCount: postLikeCount,
+                bookmarkCount: postSaveCount,
+                isLiked: isPostLiked,
+                isBookmarked: isPostSaved
+            )
+            tempPost = transform(tempPost)
 
-        do {
-            let response: SocialService.LikeResponse
-            if wasLiked {
-                response = try await socialService.deleteLike(postId: post.id, userId: userId)
-            } else {
-                response = try await socialService.createLike(postId: post.id, userId: userId)
-            }
-
-            // Sync with server's accurate count
-            postLikeCount = Int(response.likeCount)
+            // Update local state
+            isPostLiked = tempPost.isLiked
+            postLikeCount = tempPost.likeCount
+            isPostSaved = tempPost.isBookmarked
+            postSaveCount = tempPost.bookmarkCount
 
             // Notify parent to sync state
-            onLikeChanged?(isPostLiked, postLikeCount)
-
-            // Invalidate feed cache
-            await FeedCacheService.shared.invalidateCache()
-        } catch {
-            // Revert on failure
-            isPostLiked = wasLiked
-            postLikeCount = max(0, postLikeCount + (wasLiked ? 1 : -1))
-            #if DEBUG
-            print("[PostDetailView] Toggle like error: \(error)")
-            #endif
+            onLikeChanged?(tempPost.isLiked, tempPost.likeCount)
+            onBookmarkChanged?(tempPost.isBookmarked, tempPost.bookmarkCount)
         }
 
-        isLikeLoading = false
+        socialActionsHandler = handler
     }
 
-    // MARK: - Bookmark Actions
+    // MARK: - Like Actions (delegate to FeedSocialActionsHandler)
 
-    private func toggleBookmark() async {
-        guard let userId = authManager.currentUser?.id else { return }
-        guard !isBookmarkLoading else { return }
+    /// Toggle like - synchronous to prevent race conditions from async interleaving
+    private func toggleLike() {
+        guard let handler = socialActionsHandler else { return }
 
-        isBookmarkLoading = true
-        let wasBookmarked = isPostSaved
+        // Create current post state for handler
+        let currentPost = post.copying(
+            likeCount: postLikeCount,
+            bookmarkCount: postSaveCount,
+            isLiked: isPostLiked,
+            isBookmarked: isPostSaved
+        )
 
-        // Optimistic update
-        isPostSaved.toggle()
-        postSaveCount = max(0, postSaveCount + (isPostSaved ? 1 : -1))
+        _ = handler.toggleLike(postId: post.id, currentPost: currentPost)
+    }
 
-        do {
-            if wasBookmarked {
-                try await socialService.deleteBookmark(postId: post.id)
-            } else {
-                try await socialService.createBookmark(postId: post.id, userId: userId)
-            }
+    // MARK: - Bookmark Actions (delegate to FeedSocialActionsHandler)
 
-            // Notify parent to sync state
-            onBookmarkChanged?(isPostSaved, postSaveCount)
+    /// Toggle bookmark - synchronous to prevent race conditions from async interleaving
+    private func toggleBookmark() {
+        guard let handler = socialActionsHandler else { return }
 
-            // Invalidate feed cache
-            await FeedCacheService.shared.invalidateCache()
-        } catch {
-            // Revert on failure
-            isPostSaved = wasBookmarked
-            postSaveCount = max(0, postSaveCount + (wasBookmarked ? 1 : -1))
-            #if DEBUG
-            print("[PostDetailView] Toggle bookmark error: \(error)")
-            #endif
-        }
+        // Create current post state for handler
+        let currentPost = post.copying(
+            likeCount: postLikeCount,
+            bookmarkCount: postSaveCount,
+            isLiked: isPostLiked,
+            isBookmarked: isPostSaved
+        )
 
-        isBookmarkLoading = false
+        _ = handler.toggleBookmark(postId: post.id, currentPost: currentPost)
     }
 
     /// Check if URL points to a video file

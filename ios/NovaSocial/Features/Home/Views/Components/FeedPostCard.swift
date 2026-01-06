@@ -141,6 +141,8 @@ struct FeedPostCard: View {
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 20, height: 20)
+                                .id("like-icon-\(post.isLiked)")  // Force SwiftUI re-render
+                                .transition(.scale.combined(with: .opacity))
                             Text(post.likeCount.abbreviated)
                                 .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                                 .tracking(0.28)
@@ -148,6 +150,7 @@ struct FeedPostCard: View {
                                 .contentTransition(.numericText())
                         }
                         .contentShape(Rectangle())
+                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: post.isLiked)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Like, \(post.likeCount) likes")
@@ -178,12 +181,16 @@ struct FeedPostCard: View {
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 20, height: 20)
+                                .id("bookmark-icon-\(post.isBookmarked)")  // Force SwiftUI re-render
+                                .transition(.scale.combined(with: .opacity))
                             Text(post.bookmarkCount.abbreviated)
                                 .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                                 .tracking(0.28)
                                 .foregroundColor(.black)
+                                .contentTransition(.numericText())
                         }
                         .contentShape(Rectangle())
+                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: post.isBookmarked)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Collect, \(post.bookmarkCount)")

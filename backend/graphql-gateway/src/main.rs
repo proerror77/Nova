@@ -19,7 +19,7 @@ use crate::rest_api::search::{
 };
 use crate::rest_api::settings::{get_settings, update_settings};
 use crate::rest_api::social_likes::{
-    batch_check_bookmarked, batch_check_comment_liked, check_bookmarked, check_comment_liked,
+    batch_check_bookmarked, batch_check_comment_liked, batch_check_liked, check_bookmarked, check_comment_liked,
     check_liked, create_bookmark, create_comment, create_comment_like, create_like, create_share,
     delete_bookmark, delete_comment, delete_comment_like, delete_comment_v2, delete_like,
     delete_like_legacy, get_bookmarks, get_comment_like_count, get_comments, get_likes,
@@ -622,6 +622,7 @@ async fn main() -> std::io::Result<()> {
             .service(delete_like_legacy)
             .service(get_likes)
             .service(check_liked)
+            .service(batch_check_liked)
             .service(create_comment)
             .service(delete_comment)
             .service(delete_comment_v2)

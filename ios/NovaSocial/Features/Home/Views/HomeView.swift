@@ -422,13 +422,13 @@ struct HomeView: View {
                                             FeedPostCard(
                                                 post: post,
                                                 showReportView: $showReportView,
-                                                onLike: { Task { await feedViewModel.toggleLike(postId: post.id) } },
+                                                onLike: { feedViewModel.toggleLike(postId: post.id) },
                                                 onComment: {
                                                     // Setting selectedPostForComment triggers .sheet(item:) automatically
                                                     selectedPostForComment = post
                                                 },
                                                 onShare: { Task { await feedViewModel.sharePost(postId: post.id) } },
-                                                onBookmark: { Task { await feedViewModel.toggleBookmark(postId: post.id) } }
+                                                onBookmark: { feedViewModel.toggleBookmark(postId: post.id) }
                                             )
                                             // 🚀 性能優化：使用穩定的 ID 避免不必要的視圖重建
                                             // 之前用 likeCount/isLiked 等組合 ID 會導致每次狀態變化時整個卡片重建

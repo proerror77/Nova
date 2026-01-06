@@ -374,14 +374,16 @@ final class FeedViewModel {
 
     // MARK: - Social Actions (Delegated)
 
-    func toggleLike(postId: String) async {
+    /// Toggle like - synchronous to prevent race conditions from async interleaving
+    func toggleLike(postId: String) {
         guard let post = posts.first(where: { $0.id == postId }) else { return }
-        await socialActionsHandler.toggleLike(postId: postId, currentPost: post)
+        _ = socialActionsHandler.toggleLike(postId: postId, currentPost: post)
     }
 
-    func toggleBookmark(postId: String) async {
+    /// Toggle bookmark - synchronous to prevent race conditions from async interleaving
+    func toggleBookmark(postId: String) {
         guard let post = posts.first(where: { $0.id == postId }) else { return }
-        await socialActionsHandler.toggleBookmark(postId: postId, currentPost: post)
+        _ = socialActionsHandler.toggleBookmark(postId: postId, currentPost: post)
     }
 
     func sharePost(postId: String) async -> FeedPost? {
