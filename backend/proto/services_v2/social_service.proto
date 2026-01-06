@@ -422,6 +422,7 @@ message Comment {
   // Engagement data (populated when viewer_user_id is provided)
   int64 like_count = 7;           // Total likes on this comment
   bool is_liked_by_viewer = 8;    // Whether the viewer has liked this comment
+  string author_account_type = 9; // Account type when comment was created: "primary" or "alias"
 }
 
 message FeedItem {

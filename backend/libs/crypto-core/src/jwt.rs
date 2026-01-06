@@ -81,6 +81,12 @@ pub struct Claims {
     /// Unique token identifier (UUID)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub jti: Option<String>,
+    /// Account type: "primary" or "alias" (Issue #259)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_type: Option<String>,
+    /// Account ID: UUID of alias account if using alias, None if primary
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_id: Option<String>,
 }
 
 /// Token pair response structure
@@ -268,11 +274,19 @@ fn get_decoding_key() -> Result<&'static DecodingKey> {
 /// * `user_id` - User's UUID
 /// * `email` - User's email address
 /// * `username` - User's username
+/// * `account_type` - Optional account type: "primary" or "alias"
+/// * `account_id` - Optional account ID (UUID of alias if using alias)
 ///
 /// ## Returns
 ///
 /// JWT token string encoded with RS256
-pub fn generate_access_token(user_id: Uuid, email: &str, username: &str) -> Result<String> {
+pub fn generate_access_token(
+    user_id: Uuid,
+    email: &str,
+    username: &str,
+    account_type: Option<&str>,
+    account_id: Option<Uuid>,
+) -> Result<String> {
     let now = Utc::now();
     let expiry = now + Duration::hours(ACCESS_TOKEN_EXPIRY_HOURS);
     let jti = Uuid::new_v4();
@@ -286,6 +300,8 @@ pub fn generate_access_token(user_id: Uuid, email: &str, username: &str) -> Resu
         email: email.to_string(),
         username: username.to_string(),
         jti: Some(jti.to_string()),
+        account_type: account_type.map(|s| s.to_string()),
+        account_id: account_id.map(|id| id.to_string()),
     };
 
     let encoding_key = get_encoding_key()?;
@@ -302,7 +318,13 @@ pub fn generate_access_token(user_id: Uuid, email: &str, username: &str) -> Resu
 /// - Store refresh tokens securely (HttpOnly cookies, encrypted storage)
 /// - Implement refresh token rotation
 /// - Revoke refresh tokens on logout
-pub fn generate_refresh_token(user_id: Uuid, email: &str, username: &str) -> Result<String> {
+pub fn generate_refresh_token(
+    user_id: Uuid,
+    email: &str,
+    username: &str,
+    account_type: Option<&str>,
+    account_id: Option<Uuid>,
+) -> Result<String> {
     let now = Utc::now();
     let expiry = now + Duration::days(REFRESH_TOKEN_EXPIRY_DAYS);
     let jti = Uuid::new_v4();
@@ -316,6 +338,8 @@ pub fn generate_refresh_token(user_id: Uuid, email: &str, username: &str) -> Res
         email: email.to_string(),
         username: username.to_string(),
         jti: Some(jti.to_string()),
+        account_type: account_type.map(|s| s.to_string()),
+        account_id: account_id.map(|id| id.to_string()),
     };
 
     let encoding_key = get_encoding_key()?;
@@ -326,9 +350,15 @@ pub fn generate_refresh_token(user_id: Uuid, email: &str, username: &str) -> Res
 /// Generate both access and refresh tokens
 ///
 /// Convenience method to generate a token pair in one call.
-pub fn generate_token_pair(user_id: Uuid, email: &str, username: &str) -> Result<TokenResponse> {
-    let access_token = generate_access_token(user_id, email, username)?;
-    let refresh_token = generate_refresh_token(user_id, email, username)?;
+pub fn generate_token_pair(
+    user_id: Uuid,
+    email: &str,
+    username: &str,
+    account_type: Option<&str>,
+    account_id: Option<Uuid>,
+) -> Result<TokenResponse> {
+    let access_token = generate_access_token(user_id, email, username, account_type, account_id)?;
+    let refresh_token = generate_refresh_token(user_id, email, username, account_type, account_id)?;
 
     Ok(TokenResponse {
         access_token,
@@ -502,7 +532,7 @@ JwIDAQAB
         init_test_keys();
 
         let user_id = Uuid::new_v4();
-        let token = generate_access_token(user_id, "test@example.com", "testuser");
+        let token = generate_access_token(user_id, "test@example.com", "testuser", None, None);
 
         assert!(token.is_ok());
         let token_str = token.unwrap();
@@ -514,7 +544,7 @@ JwIDAQAB
         init_test_keys();
 
         let user_id = Uuid::new_v4();
-        let token = generate_access_token(user_id, "test@example.com", "testuser")
+        let token = generate_access_token(user_id, "test@example.com", "testuser", None, None)
             .expect("Failed to generate token");
 
         let validation = validate_token(&token);
@@ -539,7 +569,7 @@ JwIDAQAB
         init_test_keys();
 
         let user_id = Uuid::new_v4();
-        let token = generate_access_token(user_id, "test@example.com", "testuser")
+        let token = generate_access_token(user_id, "test@example.com", "testuser", None, None)
             .expect("Failed to generate token");
 
         // Tamper with the token by replacing a character
@@ -553,7 +583,7 @@ JwIDAQAB
         init_test_keys();
 
         let user_id = Uuid::new_v4();
-        let token = generate_access_token(user_id, "test@example.com", "testuser")
+        let token = generate_access_token(user_id, "test@example.com", "testuser", None, None)
             .expect("Failed to generate token");
 
         let is_expired = is_token_expired(&token);
@@ -566,7 +596,7 @@ JwIDAQAB
         init_test_keys();
 
         let user_id = Uuid::new_v4();
-        let token = generate_access_token(user_id, "test@example.com", "testuser")
+        let token = generate_access_token(user_id, "test@example.com", "testuser", None, None)
             .expect("Failed to generate token");
 
         let extracted = get_user_id_from_token(&token);
@@ -579,7 +609,7 @@ JwIDAQAB
         init_test_keys();
 
         let user_id = Uuid::new_v4();
-        let response = generate_token_pair(user_id, "test@example.com", "testuser");
+        let response = generate_token_pair(user_id, "test@example.com", "testuser", None, None);
 
         assert!(response.is_ok());
         let tokens = response.unwrap();
@@ -598,9 +628,9 @@ JwIDAQAB
         init_test_keys();
 
         let user_id = Uuid::new_v4();
-        let access = generate_access_token(user_id, "test@example.com", "testuser")
+        let access = generate_access_token(user_id, "test@example.com", "testuser", None, None)
             .expect("Failed to generate access token");
-        let refresh = generate_refresh_token(user_id, "test@example.com", "testuser")
+        let refresh = generate_refresh_token(user_id, "test@example.com", "testuser", None, None)
             .expect("Failed to generate refresh token");
 
         let access_claims = validate_token(&access).unwrap().claims;
@@ -616,10 +646,49 @@ JwIDAQAB
         init_test_keys();
 
         let user_id = Uuid::new_v4();
-        let token = generate_access_token(user_id, "test@example.com", "testuser")
+        let token = generate_access_token(user_id, "test@example.com", "testuser", None, None)
             .expect("Failed to generate token");
 
         // Validation should still work
         assert!(validate_token(&token).is_ok());
+    }
+
+    #[test]
+    fn test_account_type_in_token() {
+        init_test_keys();
+
+        let user_id = Uuid::new_v4();
+        let alias_id = Uuid::new_v4();
+        let token = generate_access_token(
+            user_id,
+            "test@example.com",
+            "testuser",
+            Some("alias"),
+            Some(alias_id),
+        )
+        .expect("Failed to generate token");
+
+        let token_data = validate_token(&token).unwrap();
+        assert_eq!(token_data.claims.account_type, Some("alias".to_string()));
+        assert_eq!(token_data.claims.account_id, Some(alias_id.to_string()));
+    }
+
+    #[test]
+    fn test_primary_account_type_in_token() {
+        init_test_keys();
+
+        let user_id = Uuid::new_v4();
+        let token = generate_access_token(
+            user_id,
+            "test@example.com",
+            "testuser",
+            Some("primary"),
+            None,
+        )
+        .expect("Failed to generate token");
+
+        let token_data = validate_token(&token).unwrap();
+        assert_eq!(token_data.claims.account_type, Some("primary".to_string()));
+        assert_eq!(token_data.claims.account_id, None);
     }
 }

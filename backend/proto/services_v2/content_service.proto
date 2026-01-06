@@ -35,6 +35,7 @@ message Post {
   repeated string media_urls = 9; // CDN URLs for attached media (populated by service)
   string media_type = 10;         // Type of media: "image", "video", "live_photo", "mixed", "none"
   repeated string thumbnail_urls = 11; // CDN URLs for thumbnails (fallbacks to media_urls when absent)
+  string author_account_type = 12; // Account type when post was created: "primary" or "alias"
 }
 
 message CreatePostRequest {

@@ -151,17 +151,18 @@ struct InviteCodeView: View {
                     inviteCode = String(filtered.prefix(6))
                 }
 
-            // 显示的文字 - 6 位數字邀請碼
-            HStack(spacing: 8.s) {
-                Text(inviteCode.isEmpty ? "——————" : "\(inviteCode)\(String(repeating: "—", count: max(0, 6 - inviteCode.count)))")
-                    .font(Font.custom("SFProDisplay-Light", size: 18.f))
-                    .tracking(6)
-                    .lineSpacing(20)
+            // 显示的文字 - 6 位數字邀請碼 (Fix #246: 減少 tracking 和 padding 防止文字截斷)
+            HStack(spacing: 4.s) {
+                Text(inviteCode.isEmpty ? "— — — — — —" : formatInviteCode(inviteCode))
+                    .font(Font.custom("SFProDisplay-Light", size: 20.f))
+                    .tracking(2)
                     .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
+                    .minimumScaleFactor(0.8)
+                    .lineLimit(1)
             }
             .allowsHitTesting(false)
         }
-        .padding(EdgeInsets(top: 13.h, leading: 114.w, bottom: 13.h, trailing: 114.w))
+        .padding(EdgeInsets(top: 13.h, leading: 24.w, bottom: 13.h, trailing: 24.w))
         .frame(width: 300.w, height: 48.h)
         .background(Color(red: 0.85, green: 0.85, blue: 0.85).opacity(0.25))
         .cornerRadius(43.s)
@@ -171,6 +172,14 @@ struct InviteCodeView: View {
                 .stroke(.white, lineWidth: 0.50)
         )
         .onTapGesture { isInputFocused = true }
+    }
+
+    /// 格式化邀請碼顯示，用空格分隔每個字符
+    private func formatInviteCode(_ code: String) -> String {
+        let chars = Array(code)
+        let dashes = Array(repeating: "—", count: max(0, 6 - chars.count))
+        let combined = chars.map { String($0) } + dashes
+        return combined.joined(separator: " ")
     }
 
     @ViewBuilder
