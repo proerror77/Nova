@@ -68,6 +68,7 @@
 		2BC0FCA0065C07F6AF6E0CA9 /* FeedUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3DFA0C3FE5CB60D1C84CE2A /* FeedUITests.swift */; };
 		2C0024816F931D698E7F32CD /* GroupChatMessageSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27C4B110C1EBA5A18F0F396D /* GroupChatMessageSender.swift */; };
 		2D2BA42223E9AD31575F81A1 /* FeedChannelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F02A7B24316B9AFA8E6B7FD6 /* FeedChannelManager.swift */; };
+		2D6049728A4FCB3F244658B6 /* PhoneLoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9982A40BAB9054E4E4CB5DC4 /* PhoneLoginView.swift */; };
 		2D696CFA6B92F288C11A5335 /* SF-Pro-Display-BlackItalic.otf in Resources */ = {isa = PBXBuildFile; fileRef = 92AB18627CCA26C30B65CC6D /* SF-Pro-Display-BlackItalic.otf */; };
 		2E2D3960FF255CE7B59BDE34 /* CallRecordingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E56F9F648793E5F368CACC2 /* CallRecordingService.swift */; };
 		2E624DCA569236BB8D921711 /* XAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC10E2956B60DCEAD154ABCA /* XAIService.swift */; };
@@ -206,6 +207,7 @@
 		9D65C384F5997D4E656DF8A3 /* SF-Pro-Display-MediumItalic.otf in Resources */ = {isa = PBXBuildFile; fileRef = 0580ECB0DC585964F7DF5E2A /* SF-Pro-Display-MediumItalic.otf */; };
 		9D7F9AEE30BE973B332063C6 /* AIRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F1DC3CB50728D0BCC6036BE /* AIRouter.swift */; };
 		9EB7CA6CFE1E6DD184294B59 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BBEC927960F534FBD87D8F6 /* SearchView.swift */; };
+		9EC43D88097490BFAAC6B9C1 /* PhoneRegistrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B7F3AC85701CA0A4DBCDA4F /* PhoneRegistrationView.swift */; };
 		9F4007BE87A9E709B48DF9B9 /* UserModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA8A23427CDC24E3C754293 /* UserModels.swift */; };
 		9F6BCDC560BB110D9DDE2532 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D354C7E36DF2232F9B1BDF5 /* WelcomeView.swift */; };
 		A06198F6B177E1827C3E4441 /* SF-Pro-Display-Regular.otf in Resources */ = {isa = PBXBuildFile; fileRef = 2CF50B7795E072EAEF210513 /* SF-Pro-Display-Regular.otf */; };
@@ -234,6 +236,7 @@
 		B716E2F9A85FF6B0236A7237 /* FeedMemoryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0AA6CD6C7764010FCDE2D4 /* FeedMemoryManager.swift */; };
 		B758D4147BCE8D66A7CCF166 /* FriendsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD847153CD7FA68CE04B284E /* FriendsService.swift */; };
 		B89382820C004AFA0B61E86B /* KeyboardExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D7E3C38730CAA90EB8DF00 /* KeyboardExtension.swift */; };
+		B8B04EAC37BE36179360E8B6 /* RegionDetectionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F6DA12382DD5127654CD4C0 /* RegionDetectionService.swift */; };
 		B8D76B18B9718D4B1A5EDCBE /* AddFriendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24173BE45B1DC7AA94F7016A /* AddFriendsView.swift */; };
 		B97D2AB46F960D2ABD787190 /* NewPostViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A209B73FE811D1E423F69133 /* NewPostViewModel.swift */; };
 		B9F793C84C76822E1494A59A /* AttachmentOptionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91E4CEFB0A5E2DBD3F4A3BFC /* AttachmentOptionButton.swift */; };
@@ -444,6 +447,7 @@
 		3EF00220FCD5C48C4DCF6474 /* ContentViewTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentViewTracker.swift; sourceTree = "<group>"; };
 		3F1DC3CB50728D0BCC6036BE /* AIRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIRouter.swift; sourceTree = "<group>"; };
 		3F294CF7F393CD1CFAAC56A4 /* SF-Pro-Display-RegularItalic.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "SF-Pro-Display-RegularItalic.otf"; sourceTree = "<group>"; };
+		3F6DA12382DD5127654CD4C0 /* RegionDetectionService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RegionDetectionService.swift; sourceTree = "<group>"; };
 		400B32013EC2FA3DDF1BD59E /* NewChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewChatView.swift; sourceTree = "<group>"; };
 		4064B6162320BA2946731EC5 /* DraftManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftManager.swift; sourceTree = "<group>"; };
 		40CD158DE9D82CCFD176AB84 /* TestFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestFixtures.swift; sourceTree = "<group>"; };
@@ -469,6 +473,7 @@
 		555E519181217ADA8952AB51 /* ChatLocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocationManager.swift; sourceTree = "<group>"; };
 		5A60BC5B4602B06F08DD53A8 /* BlockReportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockReportSheet.swift; sourceTree = "<group>"; };
 		5AFB663D3BC00E0EF01AAFDF /* ChatMessageSender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageSender.swift; sourceTree = "<group>"; };
+		5B7F3AC85701CA0A4DBCDA4F /* PhoneRegistrationView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PhoneRegistrationView.swift; sourceTree = "<group>"; };
 		5C33B458F9652CCE51592682 /* ReplyPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyPreviewView.swift; sourceTree = "<group>"; };
 		5CE6D2432D55B7E9FEE4622C /* GraphService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphService.swift; sourceTree = "<group>"; };
 		5D40F7AD31119B8A139662C4 /* AliceQuickProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AliceQuickProvider.swift; sourceTree = "<group>"; };
@@ -542,6 +547,7 @@
 		9807B62C70CB46565FFBC30D /* VoiceChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceChatView.swift; sourceTree = "<group>"; };
 		9810EC3E919B68F08B4B9E5A /* CallRecordingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallRecordingsView.swift; sourceTree = "<group>"; };
 		989DB2ACCF3800CD308E6C5B /* StagingE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StagingE2ETests.swift; sourceTree = "<group>"; };
+		9982A40BAB9054E4E4CB5DC4 /* PhoneLoginView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PhoneLoginView.swift; sourceTree = "<group>"; };
 		9B24BB2EE3F0021E5343878D /* MyQRCodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyQRCodeView.swift; sourceTree = "<group>"; };
 		9BDEEE63485BE337EE5B3559 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		9C7716AC8A2A67A629B5AA6D /* MyChannelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyChannelsView.swift; sourceTree = "<group>"; };
@@ -1718,6 +1724,8 @@
 				36A22EF01EE6C23DBFD7BBE2 /* CreateAccountView.swift */,
 				61ADAF4FE171A1A45165D29F /* InviteCodeView.swift */,
 				31C506816FBC6DA8C0428370 /* LoginView.swift */,
+				9982A40BAB9054E4E4CB5DC4 /* PhoneLoginView.swift */,
+				5B7F3AC85701CA0A4DBCDA4F /* PhoneRegistrationView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1749,6 +1757,7 @@
 				18618EED114C808B5657EFBD /* OAuthService.swift */,
 				C4D1D77C525B03021C70AE0D /* PasskeyService.swift */,
 				C2CAD3284489FA543E721ABA /* PhoneAuthService.swift */,
+				3F6DA12382DD5127654CD4C0 /* RegionDetectionService.swift */,
 			);
 			path = Auth;
 			sourceTree = "<group>";
@@ -2383,6 +2392,9 @@
 				21CD8665D16BDA5C7B275352 /* WidgetDataStore.swift in Sources */,
 				1648C8ED60D353785E217E14 /* WriteView.swift in Sources */,
 				2E624DCA569236BB8D921711 /* XAIService.swift in Sources */,
+				2D6049728A4FCB3F244658B6 /* PhoneLoginView.swift in Sources */,
+				9EC43D88097490BFAAC6B9C1 /* PhoneRegistrationView.swift in Sources */,
+				B8B04EAC37BE36179360E8B6 /* RegionDetectionService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

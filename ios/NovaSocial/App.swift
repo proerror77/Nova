@@ -86,6 +86,12 @@ struct IceredApp: App {
                     case .createAccountEmail:
                         CreateAccountEmailView(currentPage: $currentPage)
                             .transition(.identity)
+                    case .phoneRegistration:
+                        PhoneRegistrationView(currentPage: $currentPage)
+                            .transition(.identity)
+                    case .phoneLogin:
+                        PhoneLoginView(currentPage: $currentPage)
+                            .transition(.identity)
                     case .home:
                         // Skip 跳过登录直接进入Home
                         HomeView(currentPage: $currentPage)

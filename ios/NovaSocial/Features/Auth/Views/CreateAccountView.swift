@@ -4,8 +4,13 @@ struct CreateAccountView: View {
     @Binding var currentPage: AppPage
     @State private var email = ""
     @State private var isLoading = false
+    @State private var isGoogleLoading = false
+    @State private var isAppleLoading = false
     @State private var errorMessage: String?
     @FocusState private var isInputFocused: Bool
+
+    // Access global AuthenticationManager
+    @EnvironmentObject private var authManager: AuthenticationManager
 
     private var isEmailValid: Bool {
         let emailRegex = #"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"#
@@ -85,7 +90,7 @@ struct CreateAccountView: View {
 
     private var phoneButton: some View {
         Button(action: {
-            // TODO: Navigate to phone number input
+            currentPage = .phoneRegistration
         }) {
             ZStack {
                 HStack {
@@ -117,14 +122,21 @@ struct CreateAccountView: View {
 
     private var googleButton: some View {
         Button(action: {
-            // TODO: Google sign in
+            Task { await handleGoogleSignIn() }
         }) {
             ZStack {
                 HStack {
-                    Image("Google（B）")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 18.s, height: 18.s)
+                    if isGoogleLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                            .scaleEffect(0.8)
+                            .frame(width: 18.s, height: 18.s)
+                    } else {
+                        Image("Google（B）")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 18.s, height: 18.s)
+                    }
                     Spacer()
                 }
                 .padding(.leading, 27.w)
@@ -139,18 +151,26 @@ struct CreateAccountView: View {
             .background(.white)
             .cornerRadius(65.s)
         }
+        .disabled(isGoogleLoading || isAppleLoading)
     }
 
     private var appleButton: some View {
         Button(action: {
-            // TODO: Apple sign in
+            Task { await handleAppleSignIn() }
         }) {
             ZStack {
                 HStack {
-                    Image("Apple（B）")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 18.s, height: 18.s)
+                    if isAppleLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                            .scaleEffect(0.8)
+                            .frame(width: 18.s, height: 18.s)
+                    } else {
+                        Image("Apple（B）")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 18.s, height: 18.s)
+                    }
                     Spacer()
                 }
                 .padding(.leading, 27.w)
@@ -165,6 +185,7 @@ struct CreateAccountView: View {
             .background(.white)
             .cornerRadius(65.s)
         }
+        .disabled(isGoogleLoading || isAppleLoading)
     }
 
     private var emailButton: some View {
@@ -261,8 +282,77 @@ struct CreateAccountView: View {
 
         isLoading = false
     }
+
+    // MARK: - OAuth Sign-In
+
+    private func handleGoogleSignIn() async {
+        isGoogleLoading = true
+        errorMessage = nil
+
+        do {
+            // Use the validated invite code from the registration flow
+            let _ = try await authManager.loginWithGoogle(inviteCode: authManager.validatedInviteCode)
+            // Success - AuthenticationManager will update isAuthenticated
+            // Clear the invite code after successful registration
+            await MainActor.run {
+                authManager.validatedInviteCode = nil
+            }
+        } catch let error as OAuthError {
+            if case .userCancelled = error {
+                // User cancelled, no error message needed
+            } else if case .invalidInviteCode(let message) = error {
+                errorMessage = message
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        } catch {
+            let errorDesc = error.localizedDescription.lowercased()
+            if !errorDesc.contains("cancel") {
+                errorMessage = "Google sign in failed. Please try again."
+                #if DEBUG
+                print("[CreateAccountView] Google sign in error: \(error)")
+                #endif
+            }
+        }
+
+        isGoogleLoading = false
+    }
+
+    private func handleAppleSignIn() async {
+        isAppleLoading = true
+        errorMessage = nil
+
+        do {
+            // Use the validated invite code from the registration flow
+            let _ = try await authManager.loginWithApple(inviteCode: authManager.validatedInviteCode)
+            // Success - AuthenticationManager will update isAuthenticated
+            // Clear the invite code after successful registration
+            await MainActor.run {
+                authManager.validatedInviteCode = nil
+            }
+        } catch let error as OAuthError {
+            if case .userCancelled = error {
+                // User cancelled, no error message needed
+            } else if case .invalidInviteCode(let message) = error {
+                errorMessage = message
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        } catch {
+            let errorDesc = error.localizedDescription.lowercased()
+            if !errorDesc.contains("cancel") {
+                errorMessage = "Apple sign in failed. Please try again."
+                #if DEBUG
+                print("[CreateAccountView] Apple sign in error: \(error)")
+                #endif
+            }
+        }
+
+        isAppleLoading = false
+    }
 }
 
 #Preview {
     CreateAccountView(currentPage: .constant(.createAccount))
+        .environmentObject(AuthenticationManager.shared)
 }
