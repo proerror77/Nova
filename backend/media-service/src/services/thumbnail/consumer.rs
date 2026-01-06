@@ -168,11 +168,7 @@ impl ThumbnailConsumer {
             }
         };
 
-        let upload_id = match event
-            .upload_id
-            .as_deref()
-            .or(event.media_id.as_deref())
-        {
+        let upload_id = match event.upload_id.as_deref().or(event.media_id.as_deref()) {
             Some(id) => id.to_string(),
             None => {
                 warn!("Media upload event missing upload_id/media_id, skipping");

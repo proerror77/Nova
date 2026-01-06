@@ -6,15 +6,17 @@
 /// 3. Retries with exponential backoff
 /// 4. Dead letter queue for permanently failed events
 use chrono::{DateTime, Utc};
-use serde_json::{json, Value};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::ClientConfig;
+use serde_json::{json, Value};
 use sqlx::{FromRow, PgPool};
 use std::{env, time::Duration};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
-use transactional_outbox::{CircuitBreakerKafkaPublisher, OutboxEvent as TxOutboxEvent, OutboxPublisher};
 use tracing::{debug, error, info, warn};
+use transactional_outbox::{
+    CircuitBreakerKafkaPublisher, OutboxEvent as TxOutboxEvent, OutboxPublisher,
+};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -73,10 +75,8 @@ impl IdentityOutboxPublisher {
             .create()
             .map_err(|e| format!("Failed to create Kafka producer: {}", e))?;
 
-        let publisher = CircuitBreakerKafkaPublisher::new(
-            producer.clone(),
-            topic_prefix.to_string(),
-        );
+        let publisher =
+            CircuitBreakerKafkaPublisher::new(producer.clone(), topic_prefix.to_string());
 
         Ok(Self {
             publisher,
@@ -220,8 +220,7 @@ async fn process_batch(
                 let should_move_to_dlq = failure.is_fatal() || attempt_number >= config.max_retries;
 
                 if should_move_to_dlq {
-                    if let (Some(publisher), Some(topic)) =
-                        (publisher, config.dlq_topic.as_deref())
+                    if let (Some(publisher), Some(topic)) = (publisher, config.dlq_topic.as_deref())
                     {
                         match send_to_dlq(publisher, topic, &event, &failure).await {
                             Ok(_) => {
@@ -347,9 +346,7 @@ async fn send_to_dlq(
     let key = format!("outbox-dlq-{}", event.aggregate_id);
     let payload_str = dlq_payload.to_string();
 
-    let record = FutureRecord::to(topic)
-        .key(&key)
-        .payload(&payload_str);
+    let record = FutureRecord::to(topic).key(&key).payload(&payload_str);
 
     publisher
         .dlq_producer

@@ -87,21 +87,21 @@ struct PhoneLoginView: View {
         HStack {
             Button(action: handleBack) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 20, weight: .medium))
+                    .font(.system(size: 20.f))
                     .foregroundColor(.white)
             }
 
             Spacer()
 
             Text(headerTitle)
-                .font(.system(size: 18, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
                 .foregroundColor(.white)
 
             Spacer()
 
             // Placeholder for alignment
             Image(systemName: "chevron.left")
-                .font(.system(size: 20, weight: .medium))
+                .font(.system(size: 20.f))
                 .foregroundColor(.clear)
         }
         .padding(.horizontal, 20)
@@ -123,13 +123,13 @@ struct PhoneLoginView: View {
         VStack(spacing: 24) {
             // Icon
             Image(systemName: "phone.fill")
-                .font(.system(size: 50))
+                .font(.system(size: 50.f))
                 .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                 .padding(.bottom, 20)
 
             // Description
             Text("Enter your phone number to receive a verification code")
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(.gray)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
@@ -146,10 +146,10 @@ struct PhoneLoginView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Text(selectedCountryCode)
-                            .font(.system(size: 16))
+                            .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                             .foregroundColor(.white)
                         Image(systemName: "chevron.down")
-                            .font(.system(size: 12))
+                            .font(.system(size: 12.f))
                             .foregroundColor(.gray)
                     }
                     .padding(.horizontal, 12)
@@ -160,7 +160,7 @@ struct PhoneLoginView: View {
 
                 // Phone number field
                 TextField("", text: $phoneNumber, prompt: Text("Phone Number").foregroundColor(.gray))
-                    .font(.system(size: 16))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(.white)
                     .keyboardType(.phonePad)
                     .padding(.horizontal, 16)
@@ -172,7 +172,7 @@ struct PhoneLoginView: View {
             // Error message
             if let error = errorMessage {
                 Text(error)
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(.red)
                     .multilineTextAlignment(.center)
             }
@@ -187,7 +187,7 @@ struct PhoneLoginView: View {
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                     }
                     Text("Send Code")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
@@ -201,14 +201,14 @@ struct PhoneLoginView: View {
             // Register link
             HStack(spacing: 4) {
                 Text("Don't have an account?")
-                    .font(.system(size: 14))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .foregroundColor(.gray)
 
                 Button(action: {
                     currentPage = .phoneRegistration
                 }) {
                     Text("Register")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                         .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                 }
             }
@@ -222,13 +222,13 @@ struct PhoneLoginView: View {
         VStack(spacing: 24) {
             // Icon
             Image(systemName: "lock.shield.fill")
-                .font(.system(size: 50))
+                .font(.system(size: 50.f))
                 .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                 .padding(.bottom, 20)
 
             // Description
             Text("Enter the 6-digit code sent to\n\(fullPhoneNumber)")
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(.gray)
                 .multilineTextAlignment(.center)
 
@@ -243,7 +243,7 @@ struct PhoneLoginView: View {
             // Error message
             if let error = errorMessage {
                 Text(error)
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(.red)
                     .multilineTextAlignment(.center)
             }
@@ -264,7 +264,7 @@ struct PhoneLoginView: View {
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                     }
                     Text("Verify & Login")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
@@ -280,11 +280,11 @@ struct PhoneLoginView: View {
             }) {
                 if resendCountdown > 0 {
                     Text("Resend Code (\(resendCountdown)s)")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                         .foregroundColor(.gray)
                 } else {
                     Text("Resend Code")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                         .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                 }
             }

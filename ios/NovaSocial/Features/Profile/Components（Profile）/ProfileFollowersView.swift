@@ -365,7 +365,7 @@ struct ProfileFollowersView: View {
         ZStack {
             // 标题
             Text(displayUsername)
-                .font(.system(size: 24, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 24.f))
                 .foregroundColor(.black)
 
             // 返回按钮
@@ -374,7 +374,7 @@ struct ProfileFollowersView: View {
                     isPresented = false
                 }) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 20, weight: .medium))
+                        .font(.system(size: 20.f))
                         .foregroundColor(.black)
                 }
                 Spacer()
@@ -394,7 +394,7 @@ struct ProfileFollowersView: View {
                     selectedTab = .following
                 }) {
                     Text("Following")
-                        .font(.system(size: 18, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                         .foregroundColor(selectedTab == .following ? .black : Color(red: 0.51, green: 0.51, blue: 0.51))
                 }
 
@@ -403,7 +403,7 @@ struct ProfileFollowersView: View {
                     selectedTab = .followers
                 }) {
                     Text("Followers")
-                        .font(.system(size: 18, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                         .foregroundColor(selectedTab == .followers ? .black : Color(red: 0.51, green: 0.51, blue: 0.51))
                 }
             }
@@ -430,11 +430,11 @@ struct ProfileFollowersView: View {
     private var searchBar: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 14))
+                .font(.system(size: 14.f))
                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
             TextField("Search", text: $searchText)
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(.black)
         }
         .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
@@ -454,17 +454,17 @@ struct ProfileFollowersView: View {
                 // 錯誤狀態
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 48))
+                        .font(.system(size: 48.f))
                         .foregroundColor(.orange)
                     Text(error)
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(.gray)
                         .multilineTextAlignment(.center)
                     Button(action: {
                         Task { await loadFollowers() }
                     }) {
                         Text("Retry")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                             .foregroundColor(.white)
                             .padding(.horizontal, 24)
                             .padding(.vertical, 8)
@@ -477,10 +477,10 @@ struct ProfileFollowersView: View {
                 // 空状态
                 VStack(spacing: 12) {
                     Image(systemName: "person.2")
-                        .font(.system(size: 48))
+                        .font(.system(size: 48.f))
                         .foregroundColor(.gray.opacity(0.5))
                     Text("No followers yet")
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(.gray)
                 }
                 .padding(.top, 60)
@@ -505,10 +505,10 @@ struct ProfileFollowersView: View {
                     }) {
                         HStack(spacing: 4) {
                             Text("All")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                                 .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                             Image(systemName: "chevron.down")
-                                .font(.system(size: 10))
+                                .font(.system(size: 10.f))
                                 .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                         }
                     }
@@ -524,7 +524,7 @@ struct ProfileFollowersView: View {
                 // 你可能认识的人
                 VStack(alignment: .leading, spacing: 0) {
                     Text("People You May Know")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(Font.custom("SFProDisplay-Bold", size: 14.f))
                         .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                         .padding(.horizontal, 16)
                         .padding(.top, 16)
@@ -557,17 +557,17 @@ struct ProfileFollowersView: View {
                 // 錯誤狀態
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 48))
+                        .font(.system(size: 48.f))
                         .foregroundColor(.orange)
                     Text(error)
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(.gray)
                         .multilineTextAlignment(.center)
                     Button(action: {
                         Task { await loadFollowing() }
                     }) {
                         Text("Retry")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                             .foregroundColor(.white)
                             .padding(.horizontal, 24)
                             .padding(.vertical, 8)
@@ -580,10 +580,10 @@ struct ProfileFollowersView: View {
                 // 空状态
                 VStack(spacing: 12) {
                     Image(systemName: "person.badge.plus")
-                        .font(.system(size: 48))
+                        .font(.system(size: 48.f))
                         .foregroundColor(.gray.opacity(0.5))
                     Text("Not following anyone yet")
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(.gray)
                 }
                 .padding(.top, 60)
@@ -672,12 +672,12 @@ struct FollowerRow: View {
             // 用户名和认证标记
             HStack(spacing: 6) {
                 Text(user.name)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                     .foregroundColor(.black)
 
                 if user.isVerified {
                     Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 14))
+                        .font(.system(size: 14.f))
                         .foregroundColor(Color(red: 0.20, green: 0.60, blue: 0.86))
                 }
             }
@@ -689,7 +689,7 @@ struct FollowerRow: View {
                 switch buttonType {
                 case .followBack:
                     Text("Follow back")
-                        .font(.system(size: 12))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         .foregroundColor(.white)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 8)
@@ -698,7 +698,7 @@ struct FollowerRow: View {
 
                 case .following:
                     Text("Following")
-                        .font(.system(size: 12))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
@@ -711,7 +711,7 @@ struct FollowerRow: View {
 
                 case .follow:
                     Text("Follow")
-                        .font(.system(size: 12))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                         .frame(width: 85, height: 24)
                         .background(Color.white)
@@ -723,7 +723,7 @@ struct FollowerRow: View {
 
                 case .friend:
                     Text("Friend")
-                        .font(.system(size: 12))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)

@@ -319,7 +319,7 @@ struct PostDetailView: View {
         }
         // MARK: - Action Sheet (作者操作菜单)
         .confirmationDialog("Post Options", isPresented: $showingActionSheet, titleVisibility: .visible) {
-            if !post.displayMediaUrls.isEmpty {
+            if !post.fullResolutionMediaUrls.isEmpty {
                 Button("Save Image") {
                     Task {
                         await saveCurrentImageToPhotos()
@@ -371,7 +371,7 @@ struct PostDetailView: View {
                             .scaleEffect(1.5)
                             .tint(.white)
                         Text("Deleting...")
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(.white)
                     }
                     .padding(24)
@@ -395,6 +395,8 @@ struct PostDetailView: View {
                     onCommentCountUpdated?(postId, actualCount)
                 }
             )
+            .presentationDetents([.fraction(2.0/3.0), .large])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -412,7 +414,7 @@ struct PostDetailView: View {
                     }
                 }) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 20, weight: .medium))
+                        .font(.system(size: 20.f))
                         .foregroundColor(DesignTokens.textPrimary)
                         .frame(width: 24, height: 24)
                 }
@@ -425,7 +427,7 @@ struct PostDetailView: View {
                         }
 
                     Text(post.authorName)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                         .foregroundColor(DesignTokens.textPrimary)
                         .onTapGesture {
                             onAvatarTapped?(post.authorId)
@@ -433,7 +435,7 @@ struct PostDetailView: View {
 
                     // Verified Badge
                     Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 12))
+                        .font(.system(size: 12.f))
                         .foregroundColor(Color(red: 0.20, green: 0.60, blue: 1.0))
                 }
 
@@ -446,7 +448,7 @@ struct PostDetailView: View {
                         showingActionSheet = true
                     }) {
                         Image(systemName: "ellipsis")
-                            .font(.system(size: 20, weight: .medium))
+                            .font(.system(size: 20.f))
                             .foregroundColor(DesignTokens.textPrimary)
                             .frame(width: 24, height: 24)
                     }
@@ -463,7 +465,7 @@ struct PostDetailView: View {
                                 .frame(width: 60, height: 24)
                         } else {
                             Text(isFollowing ? "Following" : "Follow")
-                                .font(.system(size: 12))
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                 .foregroundColor(isFollowing ? DesignTokens.textSecondary : DesignTokens.accentColor)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 6)
@@ -477,7 +479,7 @@ struct PostDetailView: View {
 
                     // Share Button
                     Button(action: {}) {
-                        Image("card-share-icon")
+                        Image("Share-black")
                             .resizable()
                             .scaledToFit()
                             .frame(width: 18, height: 18)
@@ -499,11 +501,12 @@ struct PostDetailView: View {
 
     private var imageCarouselSection: some View {
         VStack(spacing: 8) {
-            if !post.displayMediaUrls.isEmpty {
+            // Use fullResolutionMediaUrls for detail view (original images, not 600px thumbnails)
+            if !post.fullResolutionMediaUrls.isEmpty {
                 GeometryReader { geometry in
                     // Image/Video Carousel with caching for better performance
                     TabView(selection: $currentImageIndex) {
-                        ForEach(Array(post.displayMediaUrls.enumerated()), id: \.element) { index, mediaUrl in
+                        ForEach(Array(post.fullResolutionMediaUrls.enumerated()), id: \.element) { index, mediaUrl in
                             Group {
                                 if isVideoUrl(mediaUrl), let videoUrl = URL(string: mediaUrl) {
                                     // Video content - use FeedVideoPlayer
@@ -545,9 +548,9 @@ struct PostDetailView: View {
                 .aspectRatio(3/4, contentMode: .fit)  // Provide aspect ratio instead of fixed height
 
                 // Page Indicators
-                if post.displayMediaUrls.count > 1 {
+                if post.fullResolutionMediaUrls.count > 1 {
                     HStack(spacing: 11) {
-                        ForEach(0..<post.displayMediaUrls.count, id: \.self) { index in
+                        ForEach(0..<post.fullResolutionMediaUrls.count, id: \.self) { index in
                             Circle()
                                 .fill(index == currentImageIndex ?
                                       Color(red: 0.81, green: 0.13, blue: 0.25) :
@@ -574,14 +577,14 @@ struct PostDetailView: View {
             // Title (from backend or VLM analysis)
             if let title = post.title, !title.isEmpty {
                 Text(title)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                     .foregroundColor(DesignTokens.textPrimary)
             }
 
             // Description
             if !post.content.isEmpty {
                 Text(post.content)
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .lineSpacing(6)
                     .foregroundColor(DesignTokens.textPrimary)
             }
@@ -589,19 +592,19 @@ struct PostDetailView: View {
             // Tags (from AI analysis or user input)
             if let formattedTags = post.formattedTags {
                 Text(formattedTags)
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(DesignTokens.accentColor)
             }
 
             // Time and Location
             HStack(spacing: 5) {
                 Text(post.createdAt.timeAgoDisplay())
-                    .font(.system(size: 10))
+                    .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                     .foregroundColor(DesignTokens.textSecondary)
 
                 if let location = post.location {
                     Text(location)
-                        .font(.system(size: 10))
+                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
             }
@@ -622,7 +625,7 @@ struct PostDetailView: View {
             // Comments Count
             HStack {
                 Text("\(displayCommentCount) comments")
-                    .font(.system(size: 14))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .foregroundColor(DesignTokens.textPrimary)
 
                 if commentViewModel.isLoading {
@@ -634,9 +637,14 @@ struct PostDetailView: View {
             .padding(.top, 12)
 
             // Comment List
-            if displayComments.isEmpty && !commentViewModel.isLoading {
+            if commentViewModel.isLoading {
+                // Skeleton loading state
+                ForEach(0..<3, id: \.self) { _ in
+                    CommentSkeleton()
+                }
+            } else if displayComments.isEmpty {
                 Text("No comments yet. Be the first to comment!")
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(DesignTokens.textSecondary)
                     .padding(.horizontal, 17)
                     .padding(.vertical, 20)
@@ -663,7 +671,7 @@ struct PostDetailView: View {
                         }
                     }) {
                         Text("Load more comments...")
-                            .font(.system(size: 12))
+                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                             .foregroundColor(DesignTokens.accentColor)
                     }
                     .padding(.horizontal, 17)
@@ -709,7 +717,7 @@ struct PostDetailView: View {
                                 .frame(width: 20, height: 20)
                         }
                         Text("\(postLikeCount)")
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                     }
@@ -726,7 +734,7 @@ struct PostDetailView: View {
                             .scaledToFit()
                             .frame(width: 20, height: 20)
                         Text("\(displayCommentCount)")
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                     }
@@ -748,7 +756,7 @@ struct PostDetailView: View {
                                 .frame(width: 20, height: 20)
                         }
                         Text("\(postSaveCount)")
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                     }
@@ -926,14 +934,14 @@ struct PostDetailView: View {
     // MARK: - Save Image to Photos
 
     private func saveCurrentImageToPhotos() async {
-        // 获取当前显示的图片 URL
-        guard currentImageIndex < post.displayMediaUrls.count else {
+        // 获取当前显示的图片 URL (使用原图 URL，不是縮圖)
+        guard currentImageIndex < post.fullResolutionMediaUrls.count else {
             saveErrorMessage = "No image to save"
             showingSaveError = true
             return
         }
 
-        let imageUrlString = post.displayMediaUrls[currentImageIndex]
+        let imageUrlString = post.fullResolutionMediaUrls[currentImageIndex]
 
         // Skip videos
         guard !isVideoUrl(imageUrlString) else {
@@ -1018,11 +1026,11 @@ struct SocialCommentItemView: View {
                     // 使用 Text 连接以支持 @mention 高亮
                     (
                         Text(comment.displayAuthorName)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
                             .foregroundColor(DesignTokens.textSecondary)
                         + Text(" ")
                         + parseCommentText(comment.content)
-                            .font(.system(size: 12))
+                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                             .foregroundColor(DesignTokens.textPrimary)
                     )
                     .fixedSize(horizontal: false, vertical: true)
@@ -1035,7 +1043,7 @@ struct SocialCommentItemView: View {
                     HStack(spacing: 14) {
                         HStack(spacing: 5) {
                             Text(comment.createdDate.timeAgoDisplay())
-                                .font(.system(size: 12))
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                 .foregroundColor(DesignTokens.textSecondary)
                                 .accessibilityLabel("Posted \(comment.createdDate.timeAgoDisplay())")
                         }
@@ -1044,7 +1052,7 @@ struct SocialCommentItemView: View {
                             onReplyTapped?()
                         }) {
                             Text("Reply")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                                 .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                         }
                         .accessibilityLabel("Reply to comment")
@@ -1070,7 +1078,7 @@ struct SocialCommentItemView: View {
                                             .frame(width: 12, height: 12)
                                     }
                                     Text(likeCount.abbreviated)
-                                        .font(.system(size: 12))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                         .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                                 }
                             }
@@ -1089,7 +1097,7 @@ struct SocialCommentItemView: View {
                                         .scaledToFit()
                                         .frame(width: 12, height: 12)
                                     Text(saveCount.abbreviated)
-                                        .font(.system(size: 12))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                         .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                                 }
                             }

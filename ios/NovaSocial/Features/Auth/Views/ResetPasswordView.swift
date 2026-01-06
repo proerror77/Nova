@@ -67,7 +67,7 @@ struct ResetPasswordView: View {
 
                             // Title
                             Text(LocalizedStringKey("Reset_Password_Title"))
-                                .font(.system(size: 28, weight: .bold))
+                                .font(Font.custom("SFProDisplay-Bold", size: 28.f))
                                 .foregroundColor(.white)
                                 .multilineTextAlignment(.center)
 
@@ -75,7 +75,7 @@ struct ResetPasswordView: View {
 
                             // Description
                             Text(LocalizedStringKey("Reset_Password_Description"))
-                                .font(.system(size: 14, weight: .light))
+                                .font(Font.custom("SFProDisplay-Light", size: 14.f))
                                 .foregroundColor(Colors.placeholder)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 40)
@@ -134,7 +134,7 @@ struct ResetPasswordView: View {
     // MARK: - Error Message View
     private var errorMessageView: some View {
         Text(errorMessage ?? " ")
-            .font(.system(size: 12))
+            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
             .foregroundColor(.red)
             .multilineTextAlignment(.center)
             .lineLimit(nil)
@@ -149,18 +149,18 @@ struct ResetPasswordView: View {
     private func successView(message: String) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 50))
+                .font(.system(size: 50.f))
                 .foregroundColor(.green)
 
             Text(LocalizedStringKey(message))
-                .font(.system(size: 14, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                 .foregroundColor(.green)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
 
             Button(action: { currentPage = .login }) {
                 Text(LocalizedStringKey("Back_To_Login"))
-                    .font(.system(size: 16, weight: .bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                     .foregroundColor(.black)
                     .frame(maxWidth: .infinity)
                     .frame(height: Layout.buttonHeight)
@@ -204,14 +204,14 @@ struct ResetPasswordView: View {
                 if showPassword {
                     TextField("", text: $newPassword, prompt: Text(LocalizedStringKey("New_Password")).foregroundColor(Colors.placeholder))
                         .foregroundColor(.white)
-                        .font(.system(size: 14, weight: .light))
+                        .font(Font.custom("SFProDisplay-Light", size: 14.f))
                         .autocapitalization(.none)
                         .autocorrectionDisabled()
                         .focused($focusedField, equals: .password)
                 } else {
                     SecureField("", text: $newPassword, prompt: Text(LocalizedStringKey("New_Password")).foregroundColor(Colors.placeholder))
                         .foregroundColor(.white)
-                        .font(.system(size: 14, weight: .light))
+                        .font(Font.custom("SFProDisplay-Light", size: 14.f))
                         .focused($focusedField, equals: .password)
                 }
 
@@ -219,7 +219,7 @@ struct ResetPasswordView: View {
                     showPassword.toggle()
                 }) {
                     Text(showPassword ? "HIDE" : "SHOW")
-                        .font(.system(size: 12, weight: .light))
+                        .font(Font.custom("SFProDisplay-Light", size: 12.f))
                         .foregroundColor(Colors.secondaryText)
                 }
             }
@@ -227,7 +227,7 @@ struct ResetPasswordView: View {
 
             if let error = passwordError {
                 Text(LocalizedStringKey(error))
-                    .font(.system(size: 11))
+                    .font(Font.custom("SFProDisplay-Regular", size: 11.f))
                     .foregroundColor(Colors.errorText)
                     .padding(.leading, 4)
                     .offset(y: Layout.errorOffset)
@@ -253,14 +253,14 @@ struct ResetPasswordView: View {
                 if showConfirmPassword {
                     TextField("", text: $confirmPassword, prompt: Text(LocalizedStringKey("Confirm_New_Password")).foregroundColor(Colors.placeholder))
                         .foregroundColor(.white)
-                        .font(.system(size: 14, weight: .light))
+                        .font(Font.custom("SFProDisplay-Light", size: 14.f))
                         .autocapitalization(.none)
                         .autocorrectionDisabled()
                         .focused($focusedField, equals: .confirmPassword)
                 } else {
                     SecureField("", text: $confirmPassword, prompt: Text(LocalizedStringKey("Confirm_New_Password")).foregroundColor(Colors.placeholder))
                         .foregroundColor(.white)
-                        .font(.system(size: 14, weight: .light))
+                        .font(Font.custom("SFProDisplay-Light", size: 14.f))
                         .focused($focusedField, equals: .confirmPassword)
                 }
 
@@ -268,7 +268,7 @@ struct ResetPasswordView: View {
                     showConfirmPassword.toggle()
                 }) {
                     Text(showConfirmPassword ? "HIDE" : "SHOW")
-                        .font(.system(size: 12, weight: .light))
+                        .font(Font.custom("SFProDisplay-Light", size: 12.f))
                         .foregroundColor(Colors.secondaryText)
                 }
             }
@@ -276,7 +276,7 @@ struct ResetPasswordView: View {
 
             if let error = confirmPasswordError {
                 Text(LocalizedStringKey(error))
-                    .font(.system(size: 11))
+                    .font(Font.custom("SFProDisplay-Regular", size: 11.f))
                     .foregroundColor(Colors.errorText)
                     .padding(.leading, 4)
                     .offset(y: Layout.errorOffset)
@@ -301,7 +301,7 @@ struct ResetPasswordView: View {
                         .scaleEffect(0.9)
                 }
                 Text(LocalizedStringKey("Reset_Password"))
-                    .font(.system(size: 20, weight: .bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 20.f))
                     .foregroundColor(.black)
             }
             .frame(maxWidth: .infinity)
@@ -319,7 +319,7 @@ struct ResetPasswordView: View {
             currentPage = .login
         }) {
             Text(LocalizedStringKey("Back_To_Login"))
-                .font(.system(size: 12, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                 .underline()
                 .foregroundColor(.white)
         }

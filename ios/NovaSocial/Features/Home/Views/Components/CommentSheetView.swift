@@ -48,7 +48,7 @@ struct CommentSheetView: View {
     var onCommentCountUpdated: ((String, Int) -> Void)?  // 评论数量同步回调 (postId, actualCount)
     @State private var commentText = ""
     @State private var comments: [SocialComment] = []
-    @State private var isLoading = true
+    @State private var isLoading = true  // Start as true to show ProgressView immediately (fixes #231 white screen)
     @State private var isSubmitting = false
     @State private var error: String?
     @State private var totalCount = 0
@@ -188,23 +188,13 @@ struct CommentSheetView: View {
 
                 // Comment Input
                 HStack(spacing: DesignTokens.spacing12) {
-                    // 显示当前用户真实头像 (IG/小红书风格)
-                    if let avatarUrl = authManager.currentUser?.avatarUrl, let url = URL(string: avatarUrl) {
-                        AsyncImage(url: url) { image in
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        } placeholder: {
-                            Circle()
-                                .fill(DesignTokens.avatarPlaceholder)
-                        }
-                        .frame(width: 36, height: 36)
-                        .clipShape(Circle())
-                    } else {
-                        Circle()
-                            .fill(DesignTokens.avatarPlaceholder)
-                            .frame(width: 36, height: 36)
-                    }
+                    // 显示当前用户真实头像 (使用 AvatarView 缓存组件 - Issue #233)
+                    AvatarView(
+                        image: nil,
+                        url: authManager.currentUser?.avatarUrl,
+                        size: 36,
+                        name: authManager.currentUser?.displayName
+                    )
 
                     TextField("Add a comment...", text: $commentText)
                         .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
@@ -289,13 +279,10 @@ struct CommentSheetView: View {
         error = nil
 
         do {
-            // 傳遞 viewerUserId 以在回應中直接包含 likeCount 和 isLikedByViewer
-            // 這樣就不需要額外的 API 呼叫來獲取按讚資訊
             let result = try await socialService.getComments(
                 postId: post.id,
                 limit: 50,
-                offset: 0,
-                viewerUserId: authManager.currentUser?.id
+                offset: 0
             )
             comments = result.comments
             totalCount = result.totalCount
@@ -308,15 +295,8 @@ struct CommentSheetView: View {
                 onCommentCountUpdated?(post.id, totalCount)
             }
 
-            // 從評論回應中提取按讚狀態 (不需要額外 API 呼叫)
-            for comment in comments {
-                if let isLiked = comment.isLikedByViewer {
-                    commentLikeStatus[comment.id] = isLiked
-                }
-            }
-
             #if DEBUG
-            print("[CommentSheet] ✅ Loaded \(comments.count) comments with embedded like info (0 extra API calls)")
+            print("[CommentSheet] ✅ Loaded \(comments.count) comments")
             #endif
         } catch let apiError as APIError {
             switch apiError {
@@ -441,33 +421,18 @@ struct SocialCommentRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: DesignTokens.spacing12) {
-            // Avatar (点击跳转用户主页)
-            if let avatarUrl = comment.authorAvatarUrl, let url = URL(string: avatarUrl) {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
-                    Circle()
-                        .fill(DesignTokens.avatarPlaceholder)
-                }
-                .frame(width: DesignTokens.avatarSmall, height: DesignTokens.avatarSmall)
-                .clipShape(Circle())
-                .onTapGesture {
-                    onAvatarTapped?(comment.userId)
-                }
-                .accessibilityLabel("View \(comment.displayAuthorName)'s profile")
-                .accessibilityHint("Double tap to view profile")
-            } else {
-                Circle()
-                    .fill(DesignTokens.avatarPlaceholder)
-                    .frame(width: DesignTokens.avatarSmall, height: DesignTokens.avatarSmall)
-                    .onTapGesture {
-                        onAvatarTapped?(comment.userId)
-                    }
-                    .accessibilityLabel("View \(comment.displayAuthorName)'s profile")
-                    .accessibilityHint("Double tap to view profile")
+            // Avatar (点击跳转用户主页 - 使用 AvatarView 缓存组件 - Issue #233)
+            AvatarView(
+                image: nil,
+                url: comment.authorAvatarUrl,
+                size: DesignTokens.avatarSmall,
+                name: comment.displayAuthorName
+            )
+            .onTapGesture {
+                onAvatarTapped?(comment.userId)
             }
+            .accessibilityLabel("View \(comment.displayAuthorName)'s profile")
+            .accessibilityHint("Double tap to view profile")
 
             VStack(alignment: .leading, spacing: DesignTokens.spacing4) {
                 // 内联格式: 用户名 + 评论内容在同一行 (IG/小红书风格)
@@ -554,34 +519,12 @@ struct SocialCommentRow: View {
         guard !hasLoadedStatus else { return }
         hasLoadedStatus = true
 
-        // 優先使用嵌入在評論中的按讚資訊 (來自 GetComments API)
-        // 這樣完全不需要額外的 API 呼叫
-        if let embeddedLikeCount = comment.likeCount {
-            likeCount = Int(embeddedLikeCount)
-        }
-
-        if let embeddedIsLiked = comment.isLikedByViewer {
-            isLiked = embeddedIsLiked
-            return  // 有嵌入資料，不需要任何 API 呼叫
-        }
-
-        // 向後兼容：如果有從父元件傳入的預載狀態，使用它
+        // 如果有從父元件傳入的預載狀態，使用它
         if let preloadedStatus = initialLikedStatus {
             isLiked = preloadedStatus
-            // 如果沒有嵌入的 likeCount，需要載入
-            if comment.likeCount == nil {
-                do {
-                    likeCount = try await socialService.getCommentLikes(commentId: comment.id)
-                } catch {
-                    #if DEBUG
-                    print("[SocialCommentRow] Failed to load like count: \(error)")
-                    #endif
-                }
-            }
-            return
         }
 
-        // 最後的 Fallback：沒有任何預載資料時，個別載入
+        // 載入按讚數量和狀態
         guard let userId = authManager.currentUser?.id else { return }
 
         do {

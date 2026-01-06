@@ -64,7 +64,7 @@ struct ForgotPasswordView: View {
 
                             // Title
                             Text(LocalizedStringKey("Forgot_Password_Title"))
-                                .font(.system(size: 28, weight: .bold))
+                                .font(Font.custom("SFProDisplay-Bold", size: 28.f))
                                 .foregroundColor(.white)
                                 .multilineTextAlignment(.center)
 
@@ -73,7 +73,7 @@ struct ForgotPasswordView: View {
 
                             // Description
                             Text(LocalizedStringKey("Forgot_Password_Description"))
-                                .font(.system(size: 14, weight: .light))
+                                .font(Font.custom("SFProDisplay-Light", size: 14.f))
                                 .foregroundColor(Colors.placeholder)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 40)
@@ -146,7 +146,7 @@ struct ForgotPasswordView: View {
 
             TextField("", text: $email, prompt: Text(LocalizedStringKey("Enter_Your_Email")).foregroundColor(Colors.placeholder))
                 .foregroundColor(.white)
-                .font(.system(size: 14, weight: .light))
+                .font(Font.custom("SFProDisplay-Light", size: 14.f))
                 .padding(.horizontal, 16)
                 .autocapitalization(.none)
                 .keyboardType(.emailAddress)
@@ -159,7 +159,7 @@ struct ForgotPasswordView: View {
 
             if let error = emailError {
                 Text(LocalizedStringKey(error))
-                    .font(.system(size: 11))
+                    .font(Font.custom("SFProDisplay-Regular", size: 11.f))
                     .foregroundColor(Colors.errorText)
                     .lineLimit(nil)
                     .fixedSize(horizontal: false, vertical: true)
@@ -183,7 +183,7 @@ struct ForgotPasswordView: View {
                         .scaleEffect(0.9)
                 }
                 Text(LocalizedStringKey("Send_Reset_Link"))
-                    .font(.system(size: 20, weight: .bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 20.f))
                     .foregroundColor(.black)
             }
             .frame(maxWidth: .infinity)
@@ -202,7 +202,7 @@ struct ForgotPasswordView: View {
             currentPage = .login
         }) {
             Text(LocalizedStringKey("Back_To_Login"))
-                .font(.system(size: 12, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                 .underline()
                 .foregroundColor(.white)
         }

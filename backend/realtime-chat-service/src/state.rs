@@ -2,12 +2,14 @@ use crate::{
     config::Config,
     redis_client::RedisClient,
     services::{
-        encryption::EncryptionService, graph_client::GraphClient, identity_client::IdentityClient,
+        graph_client::GraphClient, identity_client::IdentityClient,
         key_exchange::KeyExchangeService, matrix_admin::MatrixAdminClient, matrix_client::MatrixClient,
-        MegolmService, OlmService,
+        notification_producer::NotificationProducer, MegolmService, OlmService,
     },
     websocket::ConnectionRegistry,
 };
+#[allow(deprecated)]
+use crate::services::encryption::EncryptionService;
 use grpc_clients::AuthClient;
 use deadpool_postgres::Pool;
 use std::sync::Arc;
@@ -18,6 +20,7 @@ pub struct AppState {
     pub registry: ConnectionRegistry,
     pub redis: RedisClient,
     pub config: Arc<Config>,
+    #[allow(deprecated)]
     pub encryption: Arc<EncryptionService>,
     pub key_exchange_service: Option<Arc<KeyExchangeService>>,
     pub auth_client: Arc<AuthClient>,
@@ -34,4 +37,6 @@ pub struct AppState {
     pub identity_client: Option<Arc<IdentityClient>>,
     /// Matrix Admin client for user provisioning (create users, generate login tokens)
     pub matrix_admin_client: Option<Arc<MatrixAdminClient>>,
+    /// Kafka notification producer for sending message notifications
+    pub notification_producer: Option<Arc<NotificationProducer>>,
 }

@@ -27,6 +27,17 @@ pub struct StartOAuthRequest {
     pub redirect_uri: String,
     #[serde(default)]
     pub invite_code: Option<String>,
+    // Device info for session tracking
+    #[serde(default)]
+    pub device_id: Option<String>,
+    #[serde(default)]
+    pub device_name: Option<String>,
+    #[serde(default)]
+    pub device_type: Option<String>,
+    #[serde(default)]
+    pub os_version: Option<String>,
+    #[serde(default)]
+    pub user_agent: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -74,6 +85,17 @@ pub struct AppleNativeSignInRequest {
     pub full_name: Option<AppleFullName>,
     #[serde(default)]
     pub invite_code: Option<String>,
+    // Device info for session tracking
+    #[serde(default)]
+    pub device_id: Option<String>,
+    #[serde(default)]
+    pub device_name: Option<String>,
+    #[serde(default)]
+    pub device_type: Option<String>,
+    #[serde(default)]
+    pub os_version: Option<String>,
+    #[serde(default)]
+    pub user_agent: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -100,6 +122,12 @@ pub async fn start_google_oauth(
         provider: OAuthProvider::OauthProviderGoogle as i32,
         redirect_uri: req.redirect_uri.clone(),
         invite_code: req.invite_code.clone(),
+        // Device info for session tracking
+        device_id: req.device_id.clone(),
+        device_name: req.device_name.clone(),
+        device_type: req.device_type.clone(),
+        os_version: req.os_version.clone(),
+        user_agent: req.user_agent.clone(),
     });
 
     match auth_client.start_o_auth_flow(grpc_request).await {
@@ -181,22 +209,79 @@ pub async fn google_oauth_callback_get(
                 ));
             }
 
-            Ok(HttpResponse::Found()
-                .append_header(("Location", redirect_url))
-                .finish())
+            // Use JavaScript-based redirect instead of HTTP 302
+            // This is required for ASWebAuthenticationSession to properly handle
+            // custom URL scheme redirects, as Safari/WebKit may block 302 redirects
+            // to custom URL schemes for security reasons
+            let html_response = format!(
+                r#"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Redirecting...</title>
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f5f5f7; }}
+        .container {{ text-align: center; padding: 20px; }}
+        .spinner {{ width: 40px; height: 40px; border: 3px solid #e0e0e0; border-top: 3px solid #007aff; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }}
+        @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
+        a {{ color: #007aff; text-decoration: none; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="spinner"></div>
+        <p>Redirecting to app...</p>
+        <p><a href="{url}" id="redirect-link">Click here if not redirected</a></p>
+    </div>
+    <script>
+        window.location.href = "{url}";
+    </script>
+</body>
+</html>"#,
+                url = redirect_url
+            );
+
+            Ok(HttpResponse::Ok()
+                .content_type("text/html; charset=utf-8")
+                .body(html_response))
         }
         Err(status) => {
             error!(error = %status, "Failed to complete Google OAuth flow");
 
-            // Redirect to iOS app with error
+            // Redirect to iOS app with error using JavaScript
             let error_url = format!(
                 "icered://oauth?error=oauth_failed&message={}",
                 urlencoding::encode(status.message())
             );
 
-            Ok(HttpResponse::Found()
-                .append_header(("Location", error_url))
-                .finish())
+            let html_response = format!(
+                r#"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Redirecting...</title>
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f5f5f7; }}
+        .container {{ text-align: center; padding: 20px; }}
+        a {{ color: #007aff; text-decoration: none; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p>Redirecting to app...</p>
+        <p><a href="{url}" id="redirect-link">Click here if not redirected</a></p>
+    </div>
+    <script>
+        window.location.href = "{url}";
+    </script>
+</body>
+</html>"#,
+                url = error_url
+            );
+
+            Ok(HttpResponse::Ok()
+                .content_type("text/html; charset=utf-8")
+                .body(html_response))
         }
     }
 }
@@ -281,6 +366,12 @@ pub async fn start_apple_oauth(
         provider: OAuthProvider::OauthProviderApple as i32,
         redirect_uri: req.redirect_uri.clone(),
         invite_code: req.invite_code.clone(),
+        // Device info for session tracking
+        device_id: req.device_id.clone(),
+        device_name: req.device_name.clone(),
+        device_type: req.device_type.clone(),
+        os_version: req.os_version.clone(),
+        user_agent: req.user_agent.clone(),
     });
 
     match auth_client.start_o_auth_flow(grpc_request).await {
@@ -392,6 +483,12 @@ pub async fn apple_native_sign_in(
         given_name,
         family_name,
         invite_code: req.invite_code.clone(),
+        // Device info for session tracking
+        device_id: req.device_id.clone(),
+        device_name: req.device_name.clone(),
+        device_type: req.device_type.clone(),
+        os_version: req.os_version.clone(),
+        user_agent: req.user_agent.clone(),
     });
 
     match auth_client.apple_native_sign_in(grpc_request).await {

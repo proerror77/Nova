@@ -23,10 +23,10 @@ struct GroupSelectionView: View {
                 } else if let error = errorMessage {
                     VStack(spacing: 16) {
                         Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 40))
+                            .font(.system(size: 40.f))
                             .foregroundColor(DesignTokens.accentColor)
                         Text(error)
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(DesignTokens.textSecondary)
                         Button("Retry") {
                             Task { await loadGroups() }
@@ -36,13 +36,13 @@ struct GroupSelectionView: View {
                 } else if groups.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "person.3")
-                            .font(.system(size: 40))
+                            .font(.system(size: 40.f))
                             .foregroundColor(DesignTokens.textSecondary)
                         Text("No groups yet")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                             .foregroundColor(DesignTokens.textSecondary)
                         Text("Create a new group chat to get started")
-                            .font(.system(size: 14))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(DesignTokens.textMuted)
                     }
                 } else {
@@ -118,32 +118,32 @@ private struct GroupRow: View {
                     .frame(width: 50, height: 50)
 
                 Image(systemName: "person.3.fill")
-                    .font(.system(size: 20))
+                    .font(.system(size: 20.f))
                     .foregroundColor(DesignTokens.accentColor)
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(group.displayName)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                         .foregroundColor(DesignTokens.textPrimary)
 
                     if group.isEncrypted {
                         Image(systemName: "lock.fill")
-                            .font(.system(size: 12))
+                            .font(.system(size: 12.f))
                             .foregroundColor(.green)
                     }
                 }
 
                 Text("\(group.memberCount) members")
-                    .font(.system(size: 13))
+                    .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                     .foregroundColor(DesignTokens.textSecondary)
             }
 
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 14))
+                .font(.system(size: 14.f))
                 .foregroundColor(DesignTokens.textMuted)
         }
         .padding(.horizontal, 16)

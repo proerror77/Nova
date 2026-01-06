@@ -10,7 +10,7 @@ mod tests {
 
     /// Test helper: Hash a password using Argon2
     fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
-        let salt = SaltString::generate(rand::thread_rng());
+        let salt = SaltString::generate(rand::rng());
         let argon2 = Argon2::default();
         let password_hash = argon2
             .hash_password(password.as_bytes(), &salt)?

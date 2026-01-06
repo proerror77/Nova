@@ -65,7 +65,7 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
                     .overlay(
                         VStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle")
-                                .font(.system(size: 24))
+                                .font(.system(size: 24.f))
                                 .foregroundColor(.gray)
                             Text("Tap to retry")
                                 .font(.caption)
@@ -181,7 +181,7 @@ struct OptimizedCachedImage<Content: View, Placeholder: View>: View {
                     .fill(Color.gray.opacity(0.2))
                     .overlay(
                         Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 20))
+                            .font(.system(size: 20.f))
                             .foregroundColor(.gray)
                     )
                     .contentShape(Rectangle())
@@ -274,7 +274,7 @@ struct FeedCachedImage<Content: View, Placeholder: View>: View {
                     .overlay(
                         VStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle")
-                                .font(.system(size: 24))
+                                .font(.system(size: 24.f))
                                 .foregroundColor(.gray)
                             Text("Tap to retry")
                                 .font(.caption)

@@ -235,10 +235,15 @@ final class BackgroundUploadManager: ObservableObject {
             updateTask { $0.status = .creatingPost; $0.progress = 0.9; $0.statusMessage = "Creating post..." }
 
             let content = task.postText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Determine the correct media type based on items
+            let mediaType = Self.determineMediaType(from: task.mediaItems)
+
             let post = try await createPostWithRetry(
                 userId: userId,
                 content: content.isEmpty ? " " : content,
                 mediaUrls: mediaUrls.isEmpty ? nil : mediaUrls,
+                mediaType: mediaType,
                 channelIds: task.channelIds.isEmpty ? nil : task.channelIds,
                 location: task.location
             )
@@ -285,6 +290,49 @@ final class BackgroundUploadManager: ObservableObject {
         guard var task = currentTask else { return }
         update(&task)
         currentTask = task
+    }
+
+    // MARK: - Media Type Detection
+
+    /// Determine the correct media type string from an array of PostMediaItem
+    /// - Returns: "image", "video", "live_photo", "mixed", or nil
+    static func determineMediaType(from items: [PostMediaItem]) -> String? {
+        guard !items.isEmpty else { return nil }
+
+        // Count each type
+        var hasImage = false
+        var hasVideo = false
+        var hasLivePhoto = false
+
+        for item in items {
+            switch item {
+            case .image:
+                hasImage = true
+            case .video:
+                hasVideo = true
+            case .livePhoto:
+                hasLivePhoto = true
+            }
+        }
+
+        // Determine the type based on combinations
+        // Single Live Photo
+        if hasLivePhoto && !hasImage && !hasVideo && items.count == 1 {
+            return "live_photo"
+        }
+
+        // Single or multiple images only
+        if hasImage && !hasVideo && !hasLivePhoto {
+            return "image"
+        }
+
+        // Single or multiple videos only
+        if hasVideo && !hasImage && !hasLivePhoto {
+            return "video"
+        }
+
+        // Mixed content (any combination of different types)
+        return "mixed"
     }
 
     // MARK: - Media Compression & Upload
@@ -489,6 +537,7 @@ final class BackgroundUploadManager: ObservableObject {
         userId: String,
         content: String,
         mediaUrls: [String]?,
+        mediaType: String?,
         channelIds: [String]?,
         location: String?
     ) async throws -> Post {
@@ -522,6 +571,7 @@ final class BackgroundUploadManager: ObservableObject {
                     creatorId: userId,
                     content: content,
                     mediaUrls: mediaUrls,
+                    mediaType: mediaType,
                     channelIds: channelIds,
                     location: location
                 )

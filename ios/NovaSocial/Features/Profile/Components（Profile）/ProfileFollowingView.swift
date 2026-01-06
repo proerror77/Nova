@@ -353,7 +353,7 @@ struct ProfileFollowingView: View {
                 isPresented = false
             }) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.system(size: 18.f))
                     .foregroundColor(.black)
             }
             .frame(width: 24, height: 24)
@@ -361,7 +361,7 @@ struct ProfileFollowingView: View {
             Spacer()
 
             Text(displayUsername)
-                .font(.system(size: 24, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 24.f))
                 .foregroundColor(.black)
 
             Spacer()
@@ -386,7 +386,7 @@ struct ProfileFollowingView: View {
             }) {
                 VStack(spacing: 8) {
                     Text("Following")
-                        .font(.system(size: 18, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                         .foregroundColor(selectedTab == .following ? .black : Color(red: 0.51, green: 0.51, blue: 0.51))
 
                     Rectangle()
@@ -404,7 +404,7 @@ struct ProfileFollowingView: View {
             }) {
                 VStack(spacing: 8) {
                     Text("Followers")
-                        .font(.system(size: 18, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                         .foregroundColor(selectedTab == .followers ? .black : Color(red: 0.51, green: 0.51, blue: 0.51))
 
                     Rectangle()
@@ -421,11 +421,11 @@ struct ProfileFollowingView: View {
     private var searchBar: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 14))
+                .font(.system(size: 14.f))
                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
             TextField("Search", text: $searchText)
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
         }
         .padding(.horizontal, 12)
@@ -445,17 +445,17 @@ struct ProfileFollowingView: View {
                 // 錯誤狀態
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 48))
+                        .font(.system(size: 48.f))
                         .foregroundColor(.orange)
                     Text(error)
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(.gray)
                         .multilineTextAlignment(.center)
                     Button(action: {
                         Task { await loadFollowing() }
                     }) {
                         Text("Retry")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                             .foregroundColor(.white)
                             .padding(.horizontal, 24)
                             .padding(.vertical, 8)
@@ -469,10 +469,10 @@ struct ProfileFollowingView: View {
                 // 空状态
                 VStack(spacing: 12) {
                     Image(systemName: "person.badge.plus")
-                        .font(.system(size: 48))
+                        .font(.system(size: 48.f))
                         .foregroundColor(.gray.opacity(0.5))
                     Text("Not following anyone yet")
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(.gray)
                 }
                 .frame(maxWidth: .infinity)
@@ -483,6 +483,8 @@ struct ProfileFollowingView: View {
                         user: user,
                         showFollowButton: false,
                         onAvatarTap: {
+                            // Invalidate cache for fresh profile data (Issue #166)
+                            userService.invalidateCache(userId: user.id)
                             selectedUserId = user.id
                             showUserProfile = true
                         },
@@ -510,17 +512,17 @@ struct ProfileFollowingView: View {
                 // 錯誤狀態
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 48))
+                        .font(.system(size: 48.f))
                         .foregroundColor(.orange)
                     Text(error)
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(.gray)
                         .multilineTextAlignment(.center)
                     Button(action: {
                         Task { await loadFollowers() }
                     }) {
                         Text("Retry")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                             .foregroundColor(.white)
                             .padding(.horizontal, 24)
                             .padding(.vertical, 8)
@@ -534,10 +536,10 @@ struct ProfileFollowingView: View {
                 // 空状态
                 VStack(spacing: 12) {
                     Image(systemName: "person.2")
-                        .font(.system(size: 48))
+                        .font(.system(size: 48.f))
                         .foregroundColor(.gray.opacity(0.5))
                     Text("No followers yet")
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(.gray)
                 }
                 .frame(maxWidth: .infinity)
@@ -548,6 +550,8 @@ struct ProfileFollowingView: View {
                         user: user,
                         showFollowButton: true,
                         onAvatarTap: {
+                            // Invalidate cache for fresh profile data (Issue #166)
+                            userService.invalidateCache(userId: user.id)
                             selectedUserId = user.id
                             showUserProfile = true
                         },
@@ -600,12 +604,12 @@ struct UserRowView: View {
             Button(action: onAvatarTap) {
                 HStack(spacing: 6) {
                     Text(user.displayName)
-                        .font(.system(size: 16, weight: .bold))
+                        .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                         .foregroundColor(.black)
 
                     if user.isVerified {
                         Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 14))
+                            .font(.system(size: 14.f))
                             .foregroundColor(Color(red: 0.2, green: 0.6, blue: 1.0))
                     }
                 }
@@ -618,7 +622,7 @@ struct UserRowView: View {
                 // Following Button (已關注狀態) - 點擊可取消關注
                 Button(action: onFollowTap) {
                     Text("Following")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                         .foregroundColor(.black)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
@@ -634,7 +638,7 @@ struct UserRowView: View {
                 // Follow Button (未關注狀態) - 點擊可關注
                 Button(action: onFollowTap) {
                     Text("Follow")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                         .foregroundColor(.white)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)

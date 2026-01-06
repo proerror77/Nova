@@ -25,8 +25,8 @@ COPY src ./src
 COPY build.rs ./
 COPY proto ./proto
 
-# Build from the independent workspace
-RUN cargo build --release --bin realtime-chat-service
+# Build from the independent workspace (main service + migration tool)
+RUN cargo build --release --bin realtime-chat-service --bin migrate-matrix-displaynames
 
 # Runtime stage
 FROM debian:bookworm-slim AS runtime
@@ -43,8 +43,9 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 
 WORKDIR /app
 
-# Copy binary
+# Copy binaries
 COPY --from=builder /app/target/release/realtime-chat-service /app/realtime-chat-service
+COPY --from=builder /app/target/release/migrate-matrix-displaynames /app/migrate-matrix-displaynames
 
 # Adjust ownership
 RUN chown -R appuser:appuser /app

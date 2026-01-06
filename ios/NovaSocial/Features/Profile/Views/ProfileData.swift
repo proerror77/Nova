@@ -154,7 +154,11 @@ class ProfileData {
             return
         }
 
-        isLoading = true
+        // Only show loading indicator if no cached content (prevents blank screen during refresh)
+        let showLoadingIndicator = !hasCachedContent(for: tab)
+        if showLoadingIndicator {
+            isLoading = true
+        }
         errorMessage = nil
 
         do {

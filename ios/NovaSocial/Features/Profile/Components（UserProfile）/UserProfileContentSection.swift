@@ -122,7 +122,7 @@ struct UserProfilePostCardNew: View {
 
             // MARK: - 底部内容预览
             Text(contentPreview)
-                .font(Font.custom("SF Pro Display", size: 10))
+                .font(Font.custom("SFProDisplay-Regular", size: 10))
                 .foregroundColor(.black)
                 .lineLimit(1)
                 .padding(.horizontal, 10)
@@ -136,7 +136,7 @@ struct UserProfilePostCardNew: View {
                         .frame(width: 17, height: 17)
 
                     Text(username)
-                        .font(Font.custom("SF Pro Display", size: 10))
+                        .font(Font.custom("SFProDisplay-Regular", size: 10))
                         .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                         .lineLimit(1)
                 }
@@ -146,12 +146,12 @@ struct UserProfilePostCardNew: View {
                 // 右侧：点赞图标 + 数量
                 HStack(spacing: 5) {
                     Image(systemName: "heart")
-                        .font(.system(size: 12))
+                        .font(.system(size: 12.f))
                         .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                         .frame(width: 12, height: 12)
 
                     Text(formattedLikeCount)
-                        .font(Font.custom("SF Pro Display", size: 8.18))
+                        .font(Font.custom("SFProDisplay-Regular", size: 8.18))
                         .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                 }
                 .frame(width: 40)

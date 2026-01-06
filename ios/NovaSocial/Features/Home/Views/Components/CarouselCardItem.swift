@@ -51,7 +51,7 @@ struct CarouselCardItem: View, Equatable {
                 HStack(spacing: 10) {
                     // Rank badge
                     Text(rankNumber)
-                        .font(.system(size: 20, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 20.f))
                         .foregroundColor(.white)
                         .frame(width: 35, height: 35)
                         .background(Color(red: 0.82, green: 0.11, blue: 0.26))
@@ -60,12 +60,12 @@ struct CarouselCardItem: View, Equatable {
                     // Name and company
                     VStack(alignment: .leading, spacing: 0) {
                         Text(name)
-                            .font(.system(size: 18, weight: .bold))
+                            .font(Font.custom("SFProDisplay-Bold", size: 18.f))
                             .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
                             .lineLimit(1)
                             .truncationMode(.tail)
                         Text(company)
-                            .font(.system(size: 14, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -81,7 +81,7 @@ struct CarouselCardItem: View, Equatable {
                         .scaledToFit()
                         .frame(width: 15, height: 15)
                     Text(votes)
-                        .font(.system(size: 9))
+                        .font(Font.custom("SFProDisplay-Regular", size: 9.f))
                         .lineSpacing(13)
                         .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                 }
@@ -104,14 +104,14 @@ struct CarouselCardItem: View, Equatable {
         // MARK: - 标题部分
         HStack {
             Text("Hottest Banker in H.K.")
-                .font(.system(size: 20, weight: .bold))
+                .font(Font.custom("SFProDisplay-Bold", size: 20.f))
                 .foregroundColor(.black)
 
             Spacer()
 
             Button(action: {}) {
                 Text("View more")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 10.f))
                     .foregroundColor(.black)
             }
         }
@@ -161,14 +161,14 @@ struct CarouselCardItem: View, Equatable {
     VStack(spacing: 0) {
         HStack {
             Text("Hottest Banker in H.K.")
-                .font(.system(size: 20, weight: .bold))
+                .font(Font.custom("SFProDisplay-Bold", size: 20.f))
                 .foregroundColor(.black)
 
             Spacer()
 
             Button(action: {}) {
                 Text("View more")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 10.f))
                     .foregroundColor(.black)
             }
         }

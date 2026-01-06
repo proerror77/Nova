@@ -27,22 +27,22 @@ struct BottomTabBar: View {
     }
 
     var body: some View {
-        ZStack {
+        HStack(spacing: 36.w) {
             // Home Tab
             ZStack {
                 Image(isHome ? "home-icon" : "home-icon-black")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 24.s, height: 24.s)
+                    .frame(width: 30.s, height: 30.s)
                     .offset(y: -6.h)
                 Text("Home")
-                    .font(Font.custom("SF Pro", size: 9.f))
+                    .font(Font.custom("SFProDisplay-Regular", size: 9.f))
                     .foregroundColor(isHome ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                    .fixedSize()
                     .offset(y: 11.50.h)
             }
-            .frame(width: 50.s, height: 50.s)
+            .frame(height: 36.s)
             .contentShape(Rectangle())
-            .offset(x: -135.36.w, y: -7.h)
             .onTapGesture {
                 selectTab(.home, tab: .home)
             }
@@ -59,13 +59,13 @@ struct BottomTabBar: View {
                     .frame(width: 18.s, height: 18.s)
                     .offset(y: -6.h)
                 Text("Message")
-                    .font(Font.custom("SF Pro", size: 9.f))
+                    .font(Font.custom("SFProDisplay-Regular", size: 9.f))
                     .foregroundColor(isMessage ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                    .fixedSize()
                     .offset(y: 11.50.h)
             }
-            .frame(width: 50.s, height: 50.s)
+            .frame(height: 36.s)
             .contentShape(Rectangle())
-            .offset(x: -69.18.w, y: -7.h)
             .onTapGesture {
                 selectTab(.message, tab: .message)
             }
@@ -82,12 +82,11 @@ struct BottomTabBar: View {
                     .background(Color(red: 0.81, green: 0.13, blue: 0.25))
                     .cornerRadius(11.s)
                 Image(systemName: "plus")
-                    .font(.system(size: 18.f, weight: .bold))
+                    .font(.system(size: 18.f))
                     .foregroundColor(.white)
             }
-            .frame(width: 50.s, height: 50.s)
+            .frame(width: 44.s, height: 32.s)
             .contentShape(Rectangle())
-            .offset(x: 0.56.w, y: -7.h)
             .onTapGesture {
                 if DraftManager.hasDraft() {
                     showNewPost = true
@@ -107,9 +106,8 @@ struct BottomTabBar: View {
                     .scaledToFit()
                     .frame(width: 36.s, height: 36.s)
             }
-            .frame(width: 50.s, height: 50.s)
+            .frame(width: 36.s, height: 36.s)
             .contentShape(Rectangle())
-            .offset(x: 71.19.w, y: -7.h)
             .onTapGesture {
                 selectTab(.alice, tab: .alice)
             }
@@ -141,11 +139,10 @@ struct BottomTabBar: View {
                             .clipShape(Circle())
                     } else if let avatarUrl = authManager.currentUser?.avatarUrl,
                               let url = URL(string: avatarUrl) {
-                        // 使用 CachedAsyncImage 避免每次切換 Tab 時重新載入
                         CachedAsyncImage(
                             url: url,
-                            targetSize: CGSize(width: 40, height: 40), // 2x for Retina
-                            enableProgressiveLoading: false, // 小圖片不需要漸進式載入
+                            targetSize: CGSize(width: 40, height: 40),
+                            enableProgressiveLoading: false,
                             priority: .high
                         ) { image in
                             image
@@ -164,13 +161,13 @@ struct BottomTabBar: View {
                 .offset(y: -6.h)
 
                 Text("Account")
-                    .font(Font.custom("SF Pro", size: 9.f))
+                    .font(Font.custom("SFProDisplay-Regular", size: 9.f))
                     .foregroundColor(isAccount ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                    .fixedSize()
                     .offset(y: 11.50.h)
             }
-            .frame(width: 50.s, height: 50.s)
+            .frame(height: 36.s)
             .contentShape(Rectangle())
-            .offset(x: 136.37.w, y: -7.h)
             .onTapGesture {
                 selectTab(.account, tab: .account)
             }
@@ -179,6 +176,7 @@ struct BottomTabBar: View {
             .accessibilityHint("View your profile and account settings")
             .accessibilityAddTraits(isAccount ? [.isButton, .isSelected] : .isButton)
         }
+        .padding(EdgeInsets(top: 12.h, leading: 0, bottom: 24.h, trailing: 0))
         .frame(width: 375.w, height: 72.h)
         .background(DesignTokens.cardBackground)
         .ignoresSafeArea(edges: .bottom)
@@ -202,7 +200,7 @@ struct NewPostButtonComponent: View {
                 .opacity(isPressed ? 0.5 : 1.0)
                 .animation(.easeInOut(duration: 0.15), value: isPressed)
             Text("")
-                .font(.system(size: DesignTokens.fontCaption))
+                .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontCaption))
         }
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
@@ -251,6 +249,8 @@ struct DraftManager {
             showNewPost: .constant(false)
         )
     }
+    .environment(\.appCoordinator, AppCoordinator.shared)
+    .environmentObject(AuthenticationManager.shared)
 }
 
 #Preview("TabBar - Dark Mode") {
@@ -262,5 +262,7 @@ struct DraftManager {
             showNewPost: .constant(false)
         )
     }
+    .environment(\.appCoordinator, AppCoordinator.shared)
+    .environmentObject(AuthenticationManager.shared)
     .preferredColorScheme(.dark)
 }

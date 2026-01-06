@@ -14,14 +14,14 @@ struct SuggestedCreatorsSection: View {
             // Header
             HStack {
                 Text("Suggested for you")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                     .foregroundColor(.black)
 
                 Spacer()
 
                 Button(action: {}) {
                     Text("See All")
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .foregroundColor(DesignTokens.accentColor)
                 }
             }
@@ -68,26 +68,26 @@ struct SuggestedCreatorCard: View {
             VStack(spacing: 2) {
                 HStack(spacing: 2) {
                     Text(creator.displayName)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 13.f))
                         .foregroundColor(.black)
                         .lineLimit(1)
 
                     if creator.isVerified {
                         Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 10))
+                            .font(.system(size: 10.f))
                             .foregroundColor(.blue)
                     }
                 }
 
                 Text("@\(creator.username)")
-                    .font(.system(size: 11))
+                    .font(Font.custom("SFProDisplay-Regular", size: 11.f))
                     .foregroundColor(.gray)
                     .lineLimit(1)
             }
 
             // Follower count
             Text("\(formatFollowerCount(creator.followerCount)) followers")
-                .font(.system(size: 10))
+                .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                 .foregroundColor(.gray)
 
             // Follow button
@@ -108,14 +108,14 @@ struct SuggestedCreatorCard: View {
                         .frame(width: 70, height: 28)
                 } else if isFollowed {
                     Text("Following")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                         .foregroundColor(.gray)
                         .frame(width: 70, height: 28)
                         .background(Color(red: 0.95, green: 0.95, blue: 0.95))
                         .cornerRadius(14)
                 } else {
                     Text("Follow")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
                         .foregroundColor(.white)
                         .frame(width: 70, height: 28)
                         .background(DesignTokens.accentColor)

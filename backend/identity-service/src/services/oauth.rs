@@ -34,6 +34,27 @@ const APPLE_JWKS_URL: &str = "https://appleid.apple.com/auth/keys";
 const APPLE_ISSUER: &str = "https://appleid.apple.com";
 const APPLE_JWKS_CACHE_TTL_SECS: i64 = 3600; // 1 hour
 
+/// OAuth state data stored in Redis (includes device info for session creation)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OAuthStateData {
+    pub provider: String,
+    pub device_id: Option<String>,
+    pub device_name: Option<String>,
+    pub device_type: Option<String>,
+    pub os_version: Option<String>,
+    pub user_agent: Option<String>,
+}
+
+/// Device info for session tracking (passed to start_flow)
+#[derive(Debug, Clone, Default)]
+pub struct OAuthDeviceInfo {
+    pub device_id: Option<String>,
+    pub device_name: Option<String>,
+    pub device_type: Option<String>,
+    pub os_version: Option<String>,
+    pub user_agent: Option<String>,
+}
+
 /// Cached Apple JWKS (public keys)
 static APPLE_JWKS_CACHE: Lazy<RwLock<AppleJwksCache>> =
     Lazy::new(|| RwLock::new(AppleJwksCache::default()));
@@ -91,6 +112,8 @@ pub struct OAuthAuthorizationUrl {
 pub struct OAuthCallbackResult {
     pub user: User,
     pub is_new_user: bool,
+    /// Device info from start_flow (for session creation)
+    pub device_info: Option<OAuthDeviceInfo>,
 }
 
 /// OAuth user check result (before invite code validation)
@@ -126,6 +149,7 @@ impl OAuthService {
     ///
     /// * `provider` - OAuth provider (Google, Apple, Facebook, WeChat)
     /// * `redirect_uri` - Callback URL after authentication
+    /// * `device_info` - Optional device info for session tracking
     ///
     /// ## Returns
     ///
@@ -134,16 +158,29 @@ impl OAuthService {
         &self,
         provider: OAuthProvider,
         redirect_uri: &str,
+        device_info: Option<OAuthDeviceInfo>,
     ) -> Result<OAuthAuthorizationUrl> {
         let state = Uuid::new_v4().to_string();
 
-        // Store state in Redis with TTL
+        // Build state data with device info
+        let state_data = OAuthStateData {
+            provider: provider.as_str().to_string(),
+            device_id: device_info.as_ref().and_then(|d| d.device_id.clone()),
+            device_name: device_info.as_ref().and_then(|d| d.device_name.clone()),
+            device_type: device_info.as_ref().and_then(|d| d.device_type.clone()),
+            os_version: device_info.as_ref().and_then(|d| d.os_version.clone()),
+            user_agent: device_info.as_ref().and_then(|d| d.user_agent.clone()),
+        };
+
+        // Store state data in Redis with TTL (JSON serialized)
         let state_key = format!("nova:oauth:state:{}", state);
+        let state_json = serde_json::to_string(&state_data)
+            .map_err(|e| IdentityError::Internal(e.to_string()))?;
         let mut redis_conn = self.redis.lock().await.clone();
         redis_utils::with_timeout(async {
             redis::cmd("SET")
                 .arg(&state_key)
-                .arg(provider.as_str())
+                .arg(&state_json)
                 .arg("EX")
                 .arg(OAUTH_STATE_TTL_SECS)
                 .query_async::<_, ()>(&mut redis_conn)
@@ -186,7 +223,7 @@ impl OAuthService {
         // Verify and consume state token
         let state_key = format!("nova:oauth:state:{}", state);
         let mut redis_conn = self.redis.lock().await.clone();
-        let provider_str: Option<String> = redis_utils::with_timeout(async {
+        let state_json: Option<String> = redis_utils::with_timeout(async {
             redis::cmd("GET")
                 .arg(&state_key)
                 .query_async(&mut redis_conn)
@@ -195,7 +232,31 @@ impl OAuthService {
         .await
         .map_err(|e| IdentityError::Redis(e.to_string()))?;
 
-        let provider_str = provider_str.ok_or(IdentityError::InvalidOAuthState)?;
+        let state_json = state_json.ok_or(IdentityError::InvalidOAuthState)?;
+
+        // Parse state data (JSON with provider and device info)
+        // Support both old format (plain provider string) and new format (JSON)
+        let (provider_str, device_info) = if state_json.starts_with('{') {
+            // New JSON format
+            let state_data: OAuthStateData = serde_json::from_str(&state_json).map_err(|e| {
+                IdentityError::Internal(format!("Failed to parse OAuth state: {}", e))
+            })?;
+            let device_info = if state_data.device_id.is_some() {
+                Some(OAuthDeviceInfo {
+                    device_id: state_data.device_id,
+                    device_name: state_data.device_name,
+                    device_type: state_data.device_type,
+                    os_version: state_data.os_version,
+                    user_agent: state_data.user_agent,
+                })
+            } else {
+                None
+            };
+            (state_data.provider, device_info)
+        } else {
+            // Old plain string format (backwards compatibility)
+            (state_json.clone(), None)
+        };
 
         // Delete state token (one-time use)
         redis_utils::with_timeout(async {
@@ -222,7 +283,11 @@ impl OAuthService {
         // Create or link user (with invite code validation for new users)
         let (user, is_new_user) = self.upsert_user(oauth_user, provider, invite_code).await?;
 
-        Ok(OAuthCallbackResult { user, is_new_user })
+        Ok(OAuthCallbackResult {
+            user,
+            is_new_user,
+            device_info,
+        })
     }
 
     fn google_auth_url(&self, state: &str, redirect_uri: &str) -> String {
@@ -432,7 +497,9 @@ impl OAuthService {
         };
 
         // 4. Create or link user (with invite code validation for new users)
-        let (user, is_new_user) = self.upsert_user(oauth_user, OAuthProvider::Apple, invite_code).await?;
+        let (user, is_new_user) = self
+            .upsert_user(oauth_user, OAuthProvider::Apple, invite_code)
+            .await?;
 
         info!(
             user_id = %user.id,
@@ -440,7 +507,12 @@ impl OAuthService {
             "Apple native sign-in completed with verified token"
         );
 
-        Ok(OAuthCallbackResult { user, is_new_user })
+        // Device info is passed separately through gRPC for native sign-in
+        Ok(OAuthCallbackResult {
+            user,
+            is_new_user,
+            device_info: None,
+        })
     }
 
     async fn upsert_user(
@@ -500,7 +572,9 @@ impl OAuthService {
             // Validate invite code
             let validation = crate::db::invitations::validate_invite(&self.db, code).await?;
             if !validation.is_valid {
-                let error_msg = validation.error.unwrap_or_else(|| "Invalid invite code".into());
+                let error_msg = validation
+                    .error
+                    .unwrap_or_else(|| "Invalid invite code".into());
                 warn!(
                     provider = provider.as_str(),
                     email = %oauth_user.email,
@@ -523,7 +597,8 @@ impl OAuthService {
             .await?;
 
             // Redeem the invite code (triggers referral chain via DB trigger)
-            if let Err(e) = crate::db::invitations::redeem_invite(&self.db, code, new_user.id).await {
+            if let Err(e) = crate::db::invitations::redeem_invite(&self.db, code, new_user.id).await
+            {
                 warn!(
                     user_id = %new_user.id,
                     invite_code = %code,

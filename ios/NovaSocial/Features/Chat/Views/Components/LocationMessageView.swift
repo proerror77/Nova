@@ -17,7 +17,7 @@ struct LocationMessageView: View {
                 .cornerRadius(12)
                 .disabled(true)
             Text("My Location")
-                .font(.system(size: 12))
+                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                 .foregroundColor(DesignTokens.textPrimary)
         }
         .padding(8)

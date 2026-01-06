@@ -202,7 +202,7 @@ struct DeviceVerificationView: View {
     private var waitingView: some View {
         VStack(spacing: 20) {
             Image(systemName: "iphone.and.arrow.forward")
-                .font(.system(size: 60))
+                .font(.system(size: 60.f))
                 .foregroundColor(.blue)
 
             Text("Waiting for Other Device")
@@ -237,7 +237,7 @@ struct DeviceVerificationView: View {
     private func emojiComparisonView(emojis: [SessionVerificationEmoji]) -> some View {
         VStack(spacing: 24) {
             Image(systemName: "face.smiling")
-                .font(.system(size: 50))
+                .font(.system(size: 50.f))
                 .foregroundColor(.orange)
 
             Text("Compare Emoji")
@@ -255,7 +255,7 @@ struct DeviceVerificationView: View {
                 ForEach(0..<emojis.count, id: \.self) { index in
                     VStack(spacing: 4) {
                         Text(emojis[index].symbol())
-                            .font(.system(size: 36))
+                            .font(Font.custom("SFProDisplay-Regular", size: 36.f))
                         Text(emojis[index].description())
                             .font(.caption2)
                             .foregroundColor(.secondary)
@@ -296,7 +296,7 @@ struct DeviceVerificationView: View {
     private func decimalComparisonView(decimals: [UInt16]) -> some View {
         VStack(spacing: 24) {
             Image(systemName: "number")
-                .font(.system(size: 50))
+                .font(.system(size: 50.f))
                 .foregroundColor(.blue)
 
             Text("Compare Numbers")
@@ -349,7 +349,7 @@ struct DeviceVerificationView: View {
     private var completedView: some View {
         VStack(spacing: 24) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 80))
+                .font(.system(size: 80.f))
                 .foregroundColor(.green)
 
             Text("Verification Complete!")
@@ -378,7 +378,7 @@ struct DeviceVerificationView: View {
     private var cancelledView: some View {
         VStack(spacing: 24) {
             Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 80))
+                .font(.system(size: 80.f))
                 .foregroundColor(.red)
 
             Text("Verification Cancelled")

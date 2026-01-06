@@ -81,13 +81,13 @@ struct UserProfileUserInfoSection: View {
             // MARK: - 用户名
             HStack(spacing: 6) {
                 Text(displayName)
-                    .font(.system(size: layout.usernameFontSize, weight: .bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: layout.usernameFontSize))
                     .foregroundColor(layout.textColor)
 
                 // Alias badge
                 if isAlias {
                     Text("Alias")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 10.f))
                         .foregroundColor(.white)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -102,7 +102,7 @@ struct UserProfileUserInfoSection: View {
             // MARK: - 位置
             if let location = location, !location.isEmpty {
                 Text(location)
-                    .font(.system(size: layout.locationFontSize))
+                    .font(Font.custom("SFProDisplay-Regular", size: layout.locationFontSize))
                     .foregroundColor(layout.textColor)
                     .padding(.top, layout.locationTopPadding)
             }
@@ -110,7 +110,7 @@ struct UserProfileUserInfoSection: View {
             // MARK: - 职业
             if let profession = profession, !profession.isEmpty {
                 Text(profession)
-                    .font(.system(size: layout.professionFontSize, weight: .light))
+                    .font(Font.custom("SFProDisplay-Light", size: layout.professionFontSize))
                     .foregroundColor(layout.textColor.opacity(layout.professionOpacity))
                     .padding(.top, layout.professionTopPadding)
             }
@@ -162,10 +162,10 @@ struct UserProfileUserInfoSection: View {
             Button(action: onFollowingTapped) {
                 VStack(spacing: layout.statsVerticalSpacing) {
                     Text("Following")
-                        .font(.system(size: layout.statsLabelFontSize))
+                        .font(Font.custom("SFProDisplay-Regular", size: layout.statsLabelFontSize))
                         .foregroundColor(layout.textColor)
                     Text("\(followingCount)")
-                        .font(.system(size: layout.statsFontSize))
+                        .font(Font.custom("SFProDisplay-Regular", size: layout.statsFontSize))
                         .foregroundColor(layout.textColor)
                         .contentTransition(.numericText())  // iOS 17+ 数字变化动画
                 }
@@ -181,10 +181,10 @@ struct UserProfileUserInfoSection: View {
             Button(action: onFollowersTapped) {
                 VStack(spacing: layout.statsVerticalSpacing) {
                     Text("Followers")
-                        .font(.system(size: layout.statsLabelFontSize))
+                        .font(Font.custom("SFProDisplay-Regular", size: layout.statsLabelFontSize))
                         .foregroundColor(layout.textColor)
                     Text("\(followersCount)")
-                        .font(.system(size: layout.statsFontSize))
+                        .font(Font.custom("SFProDisplay-Regular", size: layout.statsFontSize))
                         .foregroundColor(layout.textColor)
                         .contentTransition(.numericText())  // iOS 17+ 数字变化动画
                 }
@@ -200,10 +200,10 @@ struct UserProfileUserInfoSection: View {
             Button(action: onLikesTapped) {
                 VStack(spacing: layout.statsVerticalSpacing) {
                     Text("Likes")
-                        .font(.system(size: layout.statsLabelFontSize))
+                        .font(Font.custom("SFProDisplay-Regular", size: layout.statsLabelFontSize))
                         .foregroundColor(layout.textColor)
                     Text("\(likesCount)")
-                        .font(.system(size: layout.statsFontSize))
+                        .font(Font.custom("SFProDisplay-Regular", size: layout.statsFontSize))
                         .foregroundColor(layout.textColor)
                         .contentTransition(.numericText())  // iOS 17+ 数字变化动画
                 }

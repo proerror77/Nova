@@ -1,3 +1,4 @@
+use crate::rest_api::devices::{get_current_device, list_devices, logout_device};
 use crate::rest_api::graph::{
     check_is_following, follow_user, get_my_followers, get_my_following, get_user_followers,
     get_user_following, unfollow_user,
@@ -774,6 +775,10 @@ async fn main() -> std::io::Result<()> {
             // ✅ User Settings API
             .route("/api/v2/settings", web::get().to(get_settings))
             .route("/api/v2/settings", web::put().to(update_settings))
+            // ✅ Device Management API
+            .route("/api/v2/devices", web::get().to(list_devices))
+            .route("/api/v2/devices/current", web::get().to(get_current_device))
+            .route("/api/v2/devices/logout", web::post().to(logout_device))
             // ✅ Account Management API (Multi-account & Alias)
             .route(
                 "/api/v2/accounts",

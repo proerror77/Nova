@@ -5,11 +5,11 @@ struct SimpleCarouselView: View {
         VStack(spacing: 20) {
             // 标题
             Text("Hottest Banker in H.K.")
-                .font(.system(size: 22, weight: .bold))
+                .font(Font.custom("SFProDisplay-Bold", size: 22.f))
                 .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
 
             Text("Corporate Poll")
-                .font(.system(size: 16, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                 .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
 
             // 轮播卡片
@@ -21,7 +21,7 @@ struct SimpleCarouselView: View {
 
                 HStack(spacing: 12) {
                     Text("1")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                         .foregroundColor(.white)
                         .frame(width: 35, height: 35)
                         .background(Color(red: 0.82, green: 0.11, blue: 0.26))
@@ -29,17 +29,17 @@ struct SimpleCarouselView: View {
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Lucy Liu")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                             .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
                         Text("Morgan Stanley")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
                     }
 
                     Spacer()
 
                     Text("2293")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                         .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
                 }
             }
@@ -70,7 +70,7 @@ struct SimpleCarouselView: View {
             // View more 按钮
             HStack(spacing: 8) {
                 Text("view more")
-                    .font(.system(size: 13))
+                    .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                     .foregroundColor(Color(red: 0.81, green: 0.13, blue: 0.25))
 
                 Rectangle()
@@ -90,10 +90,10 @@ struct SimpleCarouselView: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Simone Carter")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 11.f))
                             .foregroundColor(.black)
                         Text("1d")
-                            .font(.system(size: 8))
+                            .font(Font.custom("SFProDisplay-Regular", size: 8.f))
                             .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
                     }
 
@@ -104,16 +104,16 @@ struct SimpleCarouselView: View {
                 }
 
                 Text("up kyleegigstead Cyborg dreams...")
-                    .font(.system(size: 13))
+                    .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                     .foregroundColor(.black)
 
                 HStack(spacing: 24) {
                     Text("👍 0")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(Font.custom("SFProDisplay-Bold", size: 11.f))
                     Text("💬 0")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(Font.custom("SFProDisplay-Bold", size: 11.f))
                     Text("↗️ Share")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(Font.custom("SFProDisplay-Bold", size: 11.f))
                 }
                 .foregroundColor(.black)
 

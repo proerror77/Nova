@@ -1,7 +1,7 @@
 use crate::error::{IdentityError, Result};
 use chrono::{DateTime, Duration, Utc};
-use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
+use rand::distr::Alphanumeric;
+use rand::Rng;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -73,7 +73,7 @@ pub struct InviteDelivery {
 }
 
 fn generate_code() -> String {
-    let mut rng = thread_rng();
+    let mut rng = rand::rng();
     std::iter::repeat_with(|| rng.sample(Alphanumeric))
         .map(char::from)
         .filter(|c| c.is_ascii_alphanumeric())

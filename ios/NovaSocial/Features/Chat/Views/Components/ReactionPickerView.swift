@@ -15,7 +15,7 @@ struct ReactionPickerView: View {
                     onSelect(emoji)
                 } label: {
                     Text(emoji)
-                        .font(.system(size: 24))
+                        .font(Font.custom("SFProDisplay-Regular", size: 24.f))
                 }
                 .buttonStyle(.plain)
             }
@@ -25,7 +25,7 @@ struct ReactionPickerView: View {
                 onDismiss()
             } label: {
                 Image(systemName: "plus.circle")
-                    .font(.system(size: 20))
+                    .font(.system(size: 20.f))
                     .foregroundColor(DesignTokens.textSecondary)
             }
             .buttonStyle(.plain)
@@ -55,10 +55,10 @@ struct MessageReactionsView: View {
                     } label: {
                         HStack(spacing: 3) {
                             Text(reaction.emoji)
-                                .font(.system(size: 14))
+                                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             if reaction.count > 1 {
                                 Text("\(reaction.count)")
-                                    .font(.system(size: 11))
+                                    .font(Font.custom("SFProDisplay-Regular", size: 11.f))
                                     .foregroundColor(reaction.hasReacted(userId: currentUserId) ? .white : DesignTokens.textSecondary)
                             }
                         }

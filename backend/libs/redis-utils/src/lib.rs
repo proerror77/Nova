@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::{watch, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout, Duration};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// Shared Redis connection manager guarded by a Tokio mutex.
 pub type SharedConnectionManager = Arc<Mutex<ConnectionManager>>;
@@ -29,10 +29,56 @@ impl SentinelConfig {
     }
 }
 
-/// Redis connection pool with optional Sentinel supervisor.
+/// Keepalive configuration to prevent idle connection timeouts.
+///
+/// Kubernetes and cloud load balancers often have TCP idle timeouts (typically 10-30 minutes).
+/// When a connection is idle longer than this, it gets silently dropped, causing "Broken pipe" errors.
+/// The keepalive sends periodic PING commands to prevent this.
+#[derive(Clone, Debug)]
+pub struct KeepaliveConfig {
+    /// Interval between PING commands (default: 30 seconds)
+    pub interval: Duration,
+    /// Whether keepalive is enabled (default: true)
+    pub enabled: bool,
+}
+
+impl Default for KeepaliveConfig {
+    fn default() -> Self {
+        Self {
+            interval: Duration::from_secs(30),
+            enabled: true,
+        }
+    }
+}
+
+impl KeepaliveConfig {
+    /// Create keepalive config from environment variables
+    ///
+    /// - `REDIS_KEEPALIVE_ENABLED`: "true" or "false" (default: true)
+    /// - `REDIS_KEEPALIVE_INTERVAL_SECS`: interval in seconds (default: 30)
+    pub fn from_env() -> Self {
+        let enabled = std::env::var("REDIS_KEEPALIVE_ENABLED")
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+            .unwrap_or(true);
+
+        let interval_secs = std::env::var("REDIS_KEEPALIVE_INTERVAL_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(30)
+            .max(5); // Minimum 5 seconds
+
+        Self {
+            interval: Duration::from_secs(interval_secs),
+            enabled,
+        }
+    }
+}
+
+/// Redis connection pool with optional Sentinel supervisor and keepalive.
 pub struct RedisPool {
     manager: SharedConnectionManager,
     _sentinel: Option<SentinelSupervisor>,
+    _keepalive: Option<KeepaliveTask>,
 }
 
 #[derive(Clone, Copy)]
@@ -49,7 +95,17 @@ struct NodeConnectionSettings {
 }
 
 impl RedisPool {
+    /// Connect to Redis with default keepalive settings (enabled, 30s interval)
     pub async fn connect(redis_url: &str, sentinel: Option<SentinelConfig>) -> Result<Self> {
+        Self::connect_with_keepalive(redis_url, sentinel, KeepaliveConfig::from_env()).await
+    }
+
+    /// Connect to Redis with custom keepalive configuration
+    pub async fn connect_with_keepalive(
+        redis_url: &str,
+        sentinel: Option<SentinelConfig>,
+        keepalive: KeepaliveConfig,
+    ) -> Result<Self> {
         let base_info: ConnectionInfo = redis_url
             .into_connection_info()
             .context("failed to parse REDIS_URL connection string")?;
@@ -87,9 +143,21 @@ impl RedisPool {
                 SentinelSupervisor::spawn(manager.clone(), sentinel_cfg, node_settings, addr_label)
                     .await?;
 
+            // Spawn keepalive task
+            let keepalive_task = if keepalive.enabled {
+                info!(
+                    "Redis keepalive enabled with {}s interval",
+                    keepalive.interval.as_secs()
+                );
+                Some(KeepaliveTask::spawn(manager.clone(), keepalive))
+            } else {
+                None
+            };
+
             Ok(Self {
                 manager,
                 _sentinel: Some(supervisor),
+                _keepalive: keepalive_task,
             })
         } else {
             let base_client =
@@ -97,9 +165,23 @@ impl RedisPool {
             let connection_manager = ConnectionManager::new(base_client)
                 .await
                 .context("failed to initialize Redis connection manager")?;
+            let manager = Arc::new(Mutex::new(connection_manager));
+
+            // Spawn keepalive task
+            let keepalive_task = if keepalive.enabled {
+                info!(
+                    "Redis keepalive enabled with {}s interval",
+                    keepalive.interval.as_secs()
+                );
+                Some(KeepaliveTask::spawn(manager.clone(), keepalive))
+            } else {
+                None
+            };
+
             Ok(Self {
-                manager: Arc::new(Mutex::new(connection_manager)),
+                manager,
                 _sentinel: None,
+                _keepalive: keepalive_task,
             })
         }
     }
@@ -145,6 +227,83 @@ impl Drop for SentinelSupervisor {
     fn drop(&mut self) {
         let _ = self.shutdown_tx.send(());
         self.handle.abort();
+    }
+}
+
+/// Background task that sends periodic PING commands to keep Redis connections alive.
+struct KeepaliveTask {
+    shutdown_tx: watch::Sender<()>,
+    handle: JoinHandle<()>,
+}
+
+impl KeepaliveTask {
+    fn spawn(manager: SharedConnectionManager, config: KeepaliveConfig) -> Self {
+        let (shutdown_tx, shutdown_rx) = watch::channel(());
+
+        let handle = tokio::spawn(async move {
+            keepalive_loop(manager, config.interval, shutdown_rx).await;
+        });
+
+        Self {
+            shutdown_tx,
+            handle,
+        }
+    }
+}
+
+impl Drop for KeepaliveTask {
+    fn drop(&mut self) {
+        let _ = self.shutdown_tx.send(());
+        self.handle.abort();
+    }
+}
+
+/// Keepalive loop that sends periodic PING commands
+async fn keepalive_loop(
+    manager: SharedConnectionManager,
+    interval: Duration,
+    mut shutdown: watch::Receiver<()>,
+) {
+    let mut consecutive_failures = 0u32;
+    const MAX_FAILURES_BEFORE_WARN: u32 = 3;
+
+    loop {
+        tokio::select! {
+            _ = shutdown.changed() => {
+                debug!("Redis keepalive task shutting down");
+                break;
+            }
+            _ = sleep(interval) => {
+                // Send PING to keep connection alive
+                let result: Result<String, RedisError> = {
+                    let mut conn = manager.lock().await;
+                    redis::cmd("PING").query_async(&mut *conn).await
+                };
+
+                match result {
+                    Ok(response) => {
+                        if response == "PONG" {
+                            debug!("Redis keepalive PING successful");
+                            consecutive_failures = 0;
+                        } else {
+                            warn!("Redis keepalive received unexpected response: {}", response);
+                        }
+                    }
+                    Err(err) => {
+                        consecutive_failures += 1;
+                        if consecutive_failures >= MAX_FAILURES_BEFORE_WARN {
+                            warn!(
+                                "Redis keepalive PING failed ({} consecutive failures): {}",
+                                consecutive_failures, err
+                            );
+                        } else {
+                            debug!("Redis keepalive PING failed (will retry): {}", err);
+                        }
+                        // ConnectionManager should auto-reconnect on next command
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -16,25 +16,149 @@
 //!
 //! Use `E2eeMessageService` with `MegolmService` for encryption_version=2 messages.
 
+// Allow deprecated EncryptionService - kept for API compatibility (see module docs)
+#![allow(deprecated)]
+
+use crate::error::AppError;
 use crate::models::message::Message as MessageRow;
+use crate::routes::messages::{MessageAttachment, MessageDto, MessageReaction};
 use crate::services::conversation_service::PrivacyMode;
-#[allow(deprecated)]
 use crate::services::encryption::EncryptionService;
 use chrono::Utc;
-use deadpool_postgres::Pool;
+use deadpool_postgres::{Object, Pool};
+use matrix_sdk::ruma::OwnedRoomId;
 use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct MessageService;
 
+/// Result of preparing a Matrix room for message sending
+struct MatrixRoomContext {
+    room_id: OwnedRoomId,
+}
+
 impl MessageService {
+    /// Extracts filename from a URL, handling query parameters and fragments.
+    /// Returns default_name if extraction fails.
+    fn extract_filename_from_url<'a>(url: &'a str, default_name: &'a str) -> &'a str {
+        url.split('/')
+            .next_back()
+            .unwrap_or(default_name)
+            .split('?')
+            .next()
+            .unwrap_or(default_name)
+            .split('#')
+            .next()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(default_name)
+    }
+
+    /// Gets a database client from the pool with standardized error handling.
+    async fn get_db_client(db: &Pool, context: &str) -> Result<Object, AppError> {
+        db.get()
+            .await
+            .map_err(|e| AppError::StartServer(format!("{context}: {e}")))
+    }
+
+    /// Constructs a MessageDto from a database row.
+    /// Used by get_message_history_db, get_message_history_with_details, and search_messages.
+    fn row_to_message_dto(
+        row: &tokio_postgres::Row,
+        reactions: Vec<MessageReaction>,
+        attachments: Vec<MessageAttachment>,
+        encrypted: bool,
+    ) -> MessageDto {
+        let id: Uuid = row.get("id");
+        let sender_id: Uuid = row.get("sender_id");
+        let seq: i64 = row.get("sequence_number");
+        let created_at: chrono::DateTime<Utc> = row.get("created_at");
+        let recalled_at: Option<chrono::DateTime<Utc>> = row.get("recalled_at");
+        let edited_at: Option<chrono::DateTime<Utc>> = row.get("edited_at");
+        let version_number: i64 = row.get("version_number");
+        let content: String = row.get("content");
+
+        MessageDto {
+            id,
+            sender_id,
+            sequence_number: seq,
+            created_at: created_at.to_rfc3339(),
+            content,
+            encrypted,
+            encrypted_payload: None,
+            nonce: None,
+            recalled_at: recalled_at.map(|t| t.to_rfc3339()),
+            updated_at: edited_at.map(|t| t.to_rfc3339()),
+            version_number: version_number as i32,
+            message_type: None,
+            reactions,
+            attachments,
+        }
+    }
+
+    /// Updates message with Matrix event_id, logging any errors.
+    /// Used after successfully sending a message to Matrix.
+    async fn save_matrix_event_id(db: &Pool, message_id: Uuid, event_id: &str) {
+        if let Err(e) = super::matrix_db::update_message_matrix_event_id(db, message_id, event_id).await {
+            tracing::warn!(
+                error = %e,
+                message_id = %message_id,
+                "Failed to update message with matrix_event_id"
+            );
+        }
+    }
+
+    /// Prepares a Matrix room for sending messages.
+    /// Gets conversation participants, creates/gets room, and saves mapping.
+    /// Returns None if any step fails (errors are logged).
+    async fn prepare_matrix_room(
+        db: &Pool,
+        matrix: &super::matrix_client::MatrixClient,
+        conversation_id: Uuid,
+    ) -> Option<MatrixRoomContext> {
+        // Get conversation participants for room creation
+        let participants = match super::matrix_db::get_conversation_participants(db, conversation_id).await {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    conversation_id = %conversation_id,
+                    "Failed to get conversation participants for Matrix room"
+                );
+                return None;
+            }
+        };
+
+        // Get or create Matrix room
+        let room_id = match matrix.get_or_create_room(conversation_id, &participants).await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    conversation_id = %conversation_id,
+                    "Failed to get/create Matrix room"
+                );
+                return None;
+            }
+        };
+
+        // Save room mapping to DB
+        if let Err(e) = super::matrix_db::save_room_mapping(db, conversation_id, &room_id).await {
+            tracing::warn!(
+                error = %e,
+                conversation_id = %conversation_id,
+                room_id = %room_id,
+                "Failed to save room mapping to DB"
+            );
+        }
+
+        Some(MatrixRoomContext { room_id })
+    }
+
     async fn fetch_conversation_privacy(
         db: &Pool,
         conversation_id: Uuid,
-    ) -> Result<PrivacyMode, crate::error::AppError> {
-        let client = db.get().await.map_err(|e| {
-            crate::error::AppError::StartServer(format!("fetch privacy mode: {e}"))
-        })?;
+    ) -> Result<PrivacyMode, AppError> {
+        let client = Self::get_db_client(db, "fetch privacy mode").await?;
 
         let row = client
             .query_opt(
@@ -42,13 +166,9 @@ impl MessageService {
                 &[&conversation_id],
             )
             .await
-            .map_err(|e| {
-                crate::error::AppError::StartServer(format!("fetch privacy mode: {e}"))
-            })?;
+            .map_err(|e| AppError::StartServer(format!("fetch privacy mode: {e}")))?;
 
-        let mode: String = row
-            .ok_or(crate::error::AppError::NotFound)?
-            .get(0);
+        let mode: String = row.ok_or(AppError::NotFound)?.get(0);
         let privacy = match mode.as_str() {
             "strict_e2e" => PrivacyMode::StrictE2e,
             "search_enabled" => PrivacyMode::SearchEnabled,
@@ -70,17 +190,15 @@ impl MessageService {
         sender_id: Uuid,
         plaintext: &[u8],
         idempotency_key: Option<&str>,
-    ) -> Result<MessageRow, crate::error::AppError> {
+    ) -> Result<MessageRow, AppError> {
         let id = Uuid::new_v4();
 
         // Note: E2E encryption columns removed in migration 0009
         // Using PostgreSQL TDE for at-rest encryption instead
         let content = String::from_utf8(plaintext.to_vec())
-            .map_err(|e| crate::error::AppError::Config(format!("invalid utf8: {e}")))?;
+            .map_err(|e| AppError::Config(format!("invalid utf8: {e}")))?;
 
-        let client = db.get().await.map_err(|e| {
-            crate::error::AppError::StartServer(format!("get client: {e}"))
-        })?;
+        let client = Self::get_db_client(db, "send message").await?;
 
         let row = client.query_one(
             r#"
@@ -112,7 +230,7 @@ impl MessageService {
             &[&id, &conversation_id, &sender_id, &content, &idempotency_key]
         )
         .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("insert msg: {e}")))?;
+        .map_err(|e| AppError::StartServer(format!("insert msg: {e}")))?;
 
         Ok(MessageRow {
             id: row.get(0),
@@ -138,7 +256,7 @@ impl MessageService {
         conversation_id: Uuid,
         sender_id: Uuid,
         plaintext: &[u8],
-    ) -> Result<Uuid, crate::error::AppError> {
+    ) -> Result<Uuid, AppError> {
         // Validate sender is a member of the conversation
         let is_member = super::conversation_service::ConversationService::is_member(
             db,
@@ -148,14 +266,14 @@ impl MessageService {
         .await?;
 
         if !is_member {
-            return Err(crate::error::AppError::Config(
+            return Err(AppError::Config(
                 "Sender is not a member of this conversation".into(),
             ));
         }
 
         // Validate plaintext is not empty
         if plaintext.is_empty() {
-            return Err(crate::error::AppError::Config(
+            return Err(AppError::Config(
                 "Message content cannot be empty".into(),
             ));
         }
@@ -181,7 +299,7 @@ impl MessageService {
         duration_ms: u32,
         audio_codec: &str,
         idempotency_key: Option<&str>,
-    ) -> Result<(Uuid, i64), crate::error::AppError> {
+    ) -> Result<(Uuid, i64), AppError> {
         let id = Uuid::new_v4();
 
         // Store audio metadata as JSON for client parsing
@@ -193,9 +311,7 @@ impl MessageService {
             "codec": audio_codec
         }).to_string();
 
-        let client = db.get().await.map_err(|e| {
-            crate::error::AppError::StartServer(format!("get client: {e}"))
-        })?;
+        let client = Self::get_db_client(db, "send audio message").await?;
 
         let seq: i64 = client.query_one(
             r#"
@@ -227,7 +343,7 @@ impl MessageService {
             &[&id, &conversation_id, &sender_id, &content, &idempotency_key]
         )
         .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("insert audio msg: {e}")))?
+        .map_err(|e| AppError::StartServer(format!("insert audio msg: {e}")))?
         .get(0);
 
         Ok((id, seq))
@@ -244,7 +360,7 @@ impl MessageService {
         sender_id: Uuid,
         plaintext: &[u8],
         idempotency_key: Option<&str>,
-    ) -> Result<MessageRow, crate::error::AppError> {
+    ) -> Result<MessageRow, AppError> {
         // 1. Insert into Nova DB first (primary storage)
         let message =
             Self::send_message_db(db, encryption, conversation_id, sender_id, plaintext, idempotency_key)
@@ -252,75 +368,27 @@ impl MessageService {
 
         // 2. Optionally send to Matrix (best-effort, non-blocking)
         if let Some(matrix) = matrix_client {
-            // Get conversation participants for room creation
-            let participants = match super::matrix_db::get_conversation_participants(db, conversation_id).await {
-                Ok(p) => p,
-                Err(e) => {
-                    tracing::warn!(
-                        error = %e,
-                        conversation_id = %conversation_id,
-                        "Failed to get conversation participants for Matrix room, skipping Matrix send"
-                    );
-                    return Ok(message);
-                }
-            };
-
-            // Get or create Matrix room
-            let room_id = match matrix.get_or_create_room(conversation_id, &participants).await {
-                Ok(r) => r,
-                Err(e) => {
-                    tracing::error!(
-                        error = %e,
-                        conversation_id = %conversation_id,
-                        "Failed to get/create Matrix room, message saved to DB only"
-                    );
-                    return Ok(message);
-                }
-            };
-
-            // Save room mapping to DB
-            if let Err(e) = super::matrix_db::save_room_mapping(db, conversation_id, &room_id).await {
-                tracing::warn!(
-                    error = %e,
-                    conversation_id = %conversation_id,
-                    room_id = %room_id,
-                    "Failed to save room mapping to DB"
-                );
-            }
-
-            // Send message to Matrix
-            let content = String::from_utf8_lossy(plaintext).to_string();
-            match matrix.send_message(conversation_id, &room_id, &content).await {
-                Ok(event_id) => {
-                    tracing::info!(
-                        message_id = %message.id,
-                        event_id = %event_id,
-                        room_id = %room_id,
-                        "Message sent to Matrix"
-                    );
-
-                    // Update message with Matrix event_id
-                    if let Err(e) = super::matrix_db::update_message_matrix_event_id(
-                        db,
-                        message.id,
-                        &event_id,
-                    )
-                    .await
-                    {
-                        tracing::warn!(
+            if let Some(ctx) = Self::prepare_matrix_room(db, &matrix, conversation_id).await {
+                // Send message to Matrix
+                let content = String::from_utf8_lossy(plaintext).to_string();
+                match matrix.send_message(conversation_id, ctx.room_id.as_ref(), &content).await {
+                    Ok(event_id) => {
+                        tracing::info!(
+                            message_id = %message.id,
+                            event_id = %event_id,
+                            room_id = %ctx.room_id,
+                            "Message sent to Matrix"
+                        );
+                        Self::save_matrix_event_id(db, message.id, &event_id).await;
+                    }
+                    Err(e) => {
+                        tracing::error!(
                             error = %e,
                             message_id = %message.id,
-                            "Failed to update message with matrix_event_id"
+                            room_id = %ctx.room_id,
+                            "Failed to send message to Matrix, message saved to DB only"
                         );
                     }
-                }
-                Err(e) => {
-                    tracing::error!(
-                        error = %e,
-                        message_id = %message.id,
-                        room_id = %room_id,
-                        "Failed to send message to Matrix, message saved to DB only"
-                    );
                 }
             }
         }
@@ -342,7 +410,7 @@ impl MessageService {
         duration_ms: u32,
         audio_codec: &str,
         idempotency_key: Option<&str>,
-    ) -> Result<(Uuid, i64), crate::error::AppError> {
+    ) -> Result<(Uuid, i64), AppError> {
         // 1. Insert into Nova DB first (primary storage)
         let (message_id, seq) = Self::send_audio_message_db(
             db,
@@ -358,81 +426,32 @@ impl MessageService {
 
         // 2. Optionally send to Matrix (best-effort, non-blocking)
         if let Some(matrix) = matrix_client {
-            // Get conversation participants for room creation
-            let participants = match super::matrix_db::get_conversation_participants(db, conversation_id).await {
-                Ok(p) => p,
-                Err(e) => {
-                    tracing::warn!(
-                        error = %e,
-                        conversation_id = %conversation_id,
-                        "Failed to get conversation participants for Matrix room, skipping Matrix send"
-                    );
-                    return Ok((message_id, seq));
-                }
-            };
-
-            // Get or create Matrix room
-            let room_id = match matrix.get_or_create_room(conversation_id, &participants).await {
-                Ok(r) => r,
-                Err(e) => {
-                    tracing::error!(
-                        error = %e,
-                        conversation_id = %conversation_id,
-                        "Failed to get/create Matrix room, audio message saved to DB only"
-                    );
-                    return Ok((message_id, seq));
-                }
-            };
-
-            // Save room mapping to DB
-            if let Err(e) = super::matrix_db::save_room_mapping(db, conversation_id, &room_id).await {
-                tracing::warn!(
-                    error = %e,
-                    conversation_id = %conversation_id,
-                    room_id = %room_id,
-                    "Failed to save room mapping to DB"
-                );
-            }
-
-            // Send audio as media to Matrix
-            // Use audio_url as the media URL, extract filename
-            let filename = audio_url.split('/').next_back().unwrap_or("audio.opus");
-            // Set upload_to_matrix to true to enable full Matrix media upload
-            // This uploads the media to Matrix server and sends as proper media message
-            match matrix
-                .send_media(conversation_id, &room_id, audio_url, "audio", filename, true)
-                .await
-            {
-                Ok(event_id) => {
-                    tracing::info!(
-                        message_id = %message_id,
-                        event_id = %event_id,
-                        room_id = %room_id,
-                        "Audio message sent to Matrix"
-                    );
-
-                    // Update message with Matrix event_id
-                    if let Err(e) = super::matrix_db::update_message_matrix_event_id(
-                        db,
-                        message_id,
-                        &event_id,
-                    )
+            if let Some(ctx) = Self::prepare_matrix_room(db, &matrix, conversation_id).await {
+                // Send audio as media to Matrix
+                let filename = Self::extract_filename_from_url(audio_url, "audio.opus");
+                // Set upload_to_matrix to true to enable full Matrix media upload
+                // This uploads the media to Matrix server and sends as proper media message
+                match matrix
+                    .send_media(conversation_id, ctx.room_id.as_ref(), audio_url, "audio", filename, true)
                     .await
-                    {
-                        tracing::warn!(
+                {
+                    Ok(event_id) => {
+                        tracing::info!(
+                            message_id = %message_id,
+                            event_id = %event_id,
+                            room_id = %ctx.room_id,
+                            "Audio message sent to Matrix"
+                        );
+                        Self::save_matrix_event_id(db, message_id, &event_id).await;
+                    }
+                    Err(e) => {
+                        tracing::error!(
                             error = %e,
                             message_id = %message_id,
-                            "Failed to update audio message with matrix_event_id"
+                            room_id = %ctx.room_id,
+                            "Failed to send audio to Matrix, message saved to DB only"
                         );
                     }
-                }
-                Err(e) => {
-                    tracing::error!(
-                        error = %e,
-                        message_id = %message_id,
-                        room_id = %room_id,
-                        "Failed to send audio to Matrix, message saved to DB only"
-                    );
                 }
             }
         }
@@ -449,7 +468,7 @@ impl MessageService {
         matrix_client: Option<Arc<super::matrix_client::MatrixClient>>,
         message_id: Uuid,
         plaintext: &[u8],
-    ) -> Result<(), crate::error::AppError> {
+    ) -> Result<(), AppError> {
         // 1. Update Nova DB first (primary storage)
         Self::update_message_db(db, encryption, message_id, plaintext).await?;
 
@@ -501,7 +520,7 @@ impl MessageService {
         matrix_client: Option<Arc<super::matrix_client::MatrixClient>>,
         message_id: Uuid,
         reason: Option<&str>,
-    ) -> Result<(), crate::error::AppError> {
+    ) -> Result<(), AppError> {
         // 1. Soft delete in Nova DB first (primary storage)
         Self::soft_delete_message_db(db, message_id).await?;
 
@@ -547,10 +566,8 @@ impl MessageService {
     pub async fn get_message_history_db(
         db: &Pool,
         conversation_id: Uuid,
-    ) -> Result<Vec<super::super::routes::messages::MessageDto>, crate::error::AppError> {
-        let client = db.get().await.map_err(|e| {
-            crate::error::AppError::StartServer(format!("get client: {e}"))
-        })?;
+    ) -> Result<Vec<MessageDto>, AppError> {
+        let client = Self::get_db_client(db, "get message history").await?;
 
         // Note: E2E columns removed in migration 0009, message_type never existed
         let rows = client.query(
@@ -569,36 +586,12 @@ impl MessageService {
             &[&conversation_id]
         )
         .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("history: {e}")))?;
+        .map_err(|e| AppError::StartServer(format!("history: {e}")))?;
 
-        let mut out = Vec::with_capacity(rows.len());
-        for r in rows {
-            let id: Uuid = r.get("id");
-            let sender_id: Uuid = r.get("sender_id");
-            let seq: i64 = r.get("sequence_number");
-            let created_at: chrono::DateTime<Utc> = r.get("created_at");
-            let recalled_at: Option<chrono::DateTime<Utc>> = r.get("recalled_at");
-            let edited_at: Option<chrono::DateTime<Utc>> = r.get("edited_at");
-            let version_number: i64 = r.get("version_number");
-            let content: String = r.get("content");
-
-            out.push(super::super::routes::messages::MessageDto {
-                id,
-                sender_id,
-                sequence_number: seq,
-                created_at: created_at.to_rfc3339(),
-                content,
-                encrypted: false,
-                encrypted_payload: None,
-                nonce: None,
-                recalled_at: recalled_at.map(|t| t.to_rfc3339()),
-                updated_at: edited_at.map(|t| t.to_rfc3339()),
-                version_number: version_number as i32,
-                message_type: None, // Column doesn't exist in schema
-                reactions: Vec::new(),
-                attachments: Vec::new(),
-            });
-        }
+        let out = rows
+            .iter()
+            .map(|r| Self::row_to_message_dto(r, Vec::new(), Vec::new(), false))
+            .collect();
         Ok(out)
     }
 
@@ -611,8 +604,7 @@ impl MessageService {
         limit: i64,
         offset: i64,
         include_recalled: bool,
-    ) -> Result<Vec<super::super::routes::messages::MessageDto>, crate::error::AppError> {
-        use super::super::routes::messages::{MessageAttachment, MessageDto, MessageReaction};
+    ) -> Result<Vec<MessageDto>, AppError> {
         use std::collections::HashMap;
 
         let limit = limit.min(200); // Cap at 200
@@ -645,13 +637,11 @@ impl MessageService {
             where_clause
         );
 
-        let client = db.get().await.map_err(|e| {
-            crate::error::AppError::StartServer(format!("get client: {e}"))
-        })?;
+        let client = Self::get_db_client(db, "get message history with details").await?;
 
         let messages = client.query(&query_sql, &[&conversation_id, &limit, &offset])
             .await
-            .map_err(|e| crate::error::AppError::StartServer(format!("fetch messages: {e}")))?;
+            .map_err(|e| AppError::StartServer(format!("fetch messages: {e}")))?;
 
         if messages.is_empty() {
             return Ok(vec![]);
@@ -674,7 +664,7 @@ impl MessageService {
             &[&user_id, &message_ids]
         )
         .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("fetch reactions: {e}")))?;
+        .map_err(|e| AppError::StartServer(format!("fetch reactions: {e}")))?;
 
         // Group reactions by message_id
         let mut reactions_map: HashMap<Uuid, Vec<MessageReaction>> = HashMap::new();
@@ -702,7 +692,7 @@ impl MessageService {
             &[&message_ids]
         )
         .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("fetch attachments: {e}")))?;
+        .map_err(|e| AppError::StartServer(format!("fetch attachments: {e}")))?;
 
         // Group attachments by message_id
         let mut attachments_map: HashMap<Uuid, Vec<MessageAttachment>> = HashMap::new();
@@ -726,36 +716,15 @@ impl MessageService {
                 });
         }
 
-        // 4. Build final DTOs
+        // 4. Build final DTOs using helper
         // Note: PostgreSQL TDE handles encryption transparently - no separate encrypted fields
         let result = messages
-            .into_iter()
+            .iter()
             .map(|r| {
                 let id: Uuid = r.get("id");
-                let sender_id: Uuid = r.get("sender_id");
-                let seq: i64 = r.get("sequence_number");
-                let created_at: chrono::DateTime<Utc> = r.get("created_at");
-                let recalled_at: Option<chrono::DateTime<Utc>> = r.get("recalled_at");
-                let edited_at: Option<chrono::DateTime<Utc>> = r.get("edited_at");
-                let version_number: i32 = r.get("version_number");
-                let content: String = r.get("content");
-
-                MessageDto {
-                    id,
-                    sender_id,
-                    sequence_number: seq,
-                    created_at: created_at.to_rfc3339(),
-                    content,
-                    encrypted: use_encryption, // Indicates PostgreSQL TDE encryption
-                    encrypted_payload: None,
-                    nonce: None,
-                    recalled_at: recalled_at.map(|t| t.to_rfc3339()),
-                    updated_at: edited_at.map(|t| t.to_rfc3339()),
-                    version_number,
-                    message_type: None, // Column removed in schema migration
-                    reactions: reactions_map.remove(&id).unwrap_or_default(),
-                    attachments: attachments_map.remove(&id).unwrap_or_default(),
-                }
+                let reactions = reactions_map.remove(&id).unwrap_or_default();
+                let attachments = attachments_map.remove(&id).unwrap_or_default();
+                Self::row_to_message_dto(r, reactions, attachments, use_encryption)
             })
             .collect();
 
@@ -767,13 +736,11 @@ impl MessageService {
         _encryption: &EncryptionService, // Encryption handled by PostgreSQL TDE
         message_id: Uuid,
         plaintext: &[u8],
-    ) -> Result<(), crate::error::AppError> {
+    ) -> Result<(), AppError> {
         let content_plain = String::from_utf8(plaintext.to_vec())
-            .map_err(|e| crate::error::AppError::Config(format!("invalid utf8: {e}")))?;
+            .map_err(|e| AppError::Config(format!("invalid utf8: {e}")))?;
 
-        let client = db.get().await.map_err(|e| {
-            crate::error::AppError::StartServer(format!("get client: {e}"))
-        })?;
+        let client = Self::get_db_client(db, "update message").await?;
 
         // Schema note: Use only columns from migrations 0004 (base) and 0005 (content)
         // E2E encryption handled by PostgreSQL TDE - no separate encrypted columns
@@ -782,7 +749,7 @@ impl MessageService {
             &[&content_plain, &message_id]
         )
         .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("update msg: {e}")))?;
+        .map_err(|e| AppError::StartServer(format!("update msg: {e}")))?;
 
         Ok(())
     }
@@ -790,14 +757,12 @@ impl MessageService {
     pub async fn soft_delete_message_db(
         db: &Pool,
         message_id: Uuid,
-    ) -> Result<(), crate::error::AppError> {
-        let client = db.get().await.map_err(|e| {
-            crate::error::AppError::StartServer(format!("get client: {e}"))
-        })?;
+    ) -> Result<(), AppError> {
+        let client = Self::get_db_client(db, "soft delete message").await?;
 
         client.execute("UPDATE messages SET deleted_at=NOW() WHERE id=$1", &[&message_id])
             .await
-            .map_err(|e| crate::error::AppError::StartServer(format!("delete msg: {e}")))?;
+            .map_err(|e| AppError::StartServer(format!("delete msg: {e}")))?;
 
         // No separate search index to maintain; FTS uses generated content_tsv
 
@@ -819,7 +784,7 @@ impl MessageService {
         limit: i64,
         offset: i64,
         sort_by: Option<&str>,
-    ) -> Result<(Vec<super::super::routes::messages::MessageDto>, i64), crate::error::AppError>
+    ) -> Result<(Vec<MessageDto>, i64), AppError>
     {
         let limit = limit.min(500); // Cap at 500 to prevent memory issues
         let sort_by = sort_by.unwrap_or("recent");
@@ -835,9 +800,7 @@ impl MessageService {
         // Requires GIN index on content_tsv (generated column with to_tsvector)
         // See: backend/messaging-service/migrations/0011_add_search_index.sql
 
-        let client = db.get().await.map_err(|e| {
-            crate::error::AppError::StartServer(format!("get client: {e}"))
-        })?;
+        let client = Self::get_db_client(db, "search messages").await?;
 
         // Get total count for pagination metadata
         let count_result = client.query_one(
@@ -849,27 +812,15 @@ impl MessageService {
             &[&conversation_id, &query]
         )
         .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("count search results: {e}")))?;
+        .map_err(|e| AppError::StartServer(format!("count search results: {e}")))?;
         let total: i64 = count_result.get("total");
 
         // Build sort clause based on sort_by parameter
-        let (sort_clause, search_condition) = match sort_by {
-            "oldest" => (
-                "m.created_at ASC",
-                "m.content IS NOT NULL AND m.content_tsv @@ plainto_tsquery('english', $2)",
-            ),
-            "relevance" => (
-                "ts_rank(m.content_tsv, plainto_tsquery('english', $2)) DESC, m.created_at DESC",
-                "m.content IS NOT NULL AND m.content_tsv @@ plainto_tsquery('english', $2)",
-            ),
-            "recent" => (
-                "m.created_at DESC",
-                "m.content IS NOT NULL AND m.content_tsv @@ plainto_tsquery('english', $2)",
-            ),
-            _ => (
-                "m.created_at DESC",
-                "m.content IS NOT NULL AND m.content_tsv @@ plainto_tsquery('english', $2)",
-            ),
+        let search_condition = "m.content IS NOT NULL AND m.content_tsv @@ plainto_tsquery('english', $2)";
+        let sort_clause = match sort_by {
+            "oldest" => "m.created_at ASC",
+            "relevance" => "ts_rank(m.content_tsv, plainto_tsquery('english', $2)) DESC, m.created_at DESC",
+            _ => "m.created_at DESC", // "recent" or default
         };
 
         // Build the query with proper sorting - include all message fields
@@ -889,37 +840,11 @@ impl MessageService {
 
         let rows = client.query(&query_sql, &[&conversation_id, &query, &limit, &offset])
             .await
-            .map_err(|e| crate::error::AppError::StartServer(format!("search: {e}")))?;
+            .map_err(|e| AppError::StartServer(format!("search: {e}")))?;
 
         let out = rows
-            .into_iter()
-            .map(|r| {
-                let id: Uuid = r.get("id");
-                let sender_id: Uuid = r.get("sender_id");
-                let seq: i64 = r.get("sequence_number");
-                let created_at: chrono::DateTime<Utc> = r.get("created_at");
-                let content: String = r.get("content");
-                let recalled_at: Option<chrono::DateTime<Utc>> = r.get("recalled_at");
-                let edited_at: Option<chrono::DateTime<Utc>> = r.get("edited_at");
-                let version_number: i32 = r.get("version_number");
-
-                super::super::routes::messages::MessageDto {
-                    id,
-                    sender_id,
-                    sequence_number: seq,
-                    created_at: created_at.to_rfc3339(),
-                    content,
-                    encrypted: false,
-                    encrypted_payload: None,
-                    nonce: None,
-                    recalled_at: recalled_at.map(|dt| dt.to_rfc3339()),
-                    updated_at: edited_at.map(|dt| dt.to_rfc3339()),
-                    version_number,
-                    message_type: None, // Column removed in schema migration
-                    reactions: vec![],
-                    attachments: vec![],
-                }
-            })
+            .iter()
+            .map(|r| Self::row_to_message_dto(r, Vec::new(), Vec::new(), false))
             .collect();
         Ok((out, total))
     }

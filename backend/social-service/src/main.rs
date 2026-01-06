@@ -194,27 +194,27 @@ async fn main() -> Result<()> {
     info!("✅ Graph service gRPC client initialized");
 
     // Initialize Kafka event producer (optional)
-    let event_producer = KafkaEventProducerConfig::from_env()
-        .and_then(|config| {
-            match SocialEventProducer::new(&config) {
-                Ok(producer) => {
-                    info!("✅ Kafka event producer initialized");
-                    Some(producer)
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to initialize Kafka event producer: {}", e);
-                    None
-                }
+    let event_producer = KafkaEventProducerConfig::from_env().and_then(|config| {
+        match SocialEventProducer::new(&config) {
+            Ok(producer) => {
+                info!("✅ Kafka event producer initialized");
+                Some(producer)
             }
-        });
+            Err(e) => {
+                tracing::warn!("Failed to initialize Kafka event producer: {}", e);
+                None
+            }
+        }
+    });
 
     // Create AppState
-    let mut app_state = AppState::new(
-        pg_pool.clone(),
-        counter_service,
-        outbox_repo,
-        graph_client,
-    );
+    let identity_client = grpc_pool.auth();
+    let content_client = grpc_pool.content();
+    let mut app_state = AppState::new(pg_pool.clone(), counter_service, outbox_repo, graph_client)
+        .with_identity_client(identity_client)
+        .with_content_client(content_client);
+    info!("✅ Identity and Content service clients initialized");
+
     if let Some(producer) = event_producer {
         app_state = app_state.with_event_producer(producer);
     }

@@ -5,18 +5,37 @@ import Foundation
 @MainActor
 final class FeedSocialActionsHandler {
     // MARK: - Dependencies
-    
+
     private let socialService: SocialService
     private let authManager: AuthenticationManager
-    
+
     // MARK: - State
-    
+
     /// Track ongoing like operations to prevent concurrent calls for the same post
     private var ongoingLikeOperations: Set<String> = []
-    
+
     /// Track ongoing bookmark operations to prevent concurrent calls for the same post
     private var ongoingBookmarkOperations: Set<String> = []
-    
+
+    // MARK: - Cooldown State (Instagram-style throttle)
+
+    /// Cooldown period in seconds - ignore clicks during this time
+    private let cooldownDuration: TimeInterval = 0.5
+
+    /// Timestamp of last like action per post (for cooldown)
+    private var lastLikeTime: [String: Date] = [:]
+
+    /// Timestamp of last bookmark action per post (for cooldown)
+    private var lastBookmarkTime: [String: Date] = [:]
+
+    // MARK: - Generation Tracking (prevent stale API responses)
+
+    /// Generation number for like operations per post - increments on each new operation
+    private var likeGeneration: [String: Int] = [:]
+
+    /// Generation number for bookmark operations per post
+    private var bookmarkGeneration: [String: Int] = [:]
+
     // MARK: - Callbacks
     
     /// Callback to update post in the feed
@@ -46,162 +65,210 @@ final class FeedSocialActionsHandler {
     }
     
     // MARK: - Like Actions
-    
-    /// Toggle like on a post
-    /// - Parameters:
-    ///   - postId: The post ID to like/unlike
-    ///   - currentPost: The current post state
-    /// - Returns: Whether the operation was initiated (false if already in progress)
+
+    /// Toggle like on a post with cooldown (Instagram-style)
+    /// - First click: immediately updates UI and sends API request
+    /// - Subsequent clicks within cooldown period: ignored
+    /// - Uses generation tracking to prevent stale API responses from overwriting newer state
     func toggleLike(postId: String, currentPost: FeedPost) async -> Bool {
-        // Prevent concurrent like operations for the same post
-        guard !ongoingLikeOperations.contains(postId) else {
-            #if DEBUG
-            print("[FeedSocialActions] toggleLike skipped - operation already in progress for postId: \(postId)")
-            #endif
-            return false
-        }
-        
-        guard let userId = currentUserId else {
+        guard currentUserId != nil else {
             #if DEBUG
             print("[FeedSocialActions] toggleLike early return - userId is nil")
             #endif
             return false
         }
-        
-        ongoingLikeOperations.insert(postId)
-        defer { ongoingLikeOperations.remove(postId) }
-        
+
+        // Check cooldown - ignore clicks within cooldown period
+        if let lastTime = lastLikeTime[postId],
+           Date().timeIntervalSince(lastTime) < cooldownDuration {
+            #if DEBUG
+            print("[FeedSocialActions] toggleLike ignored - within cooldown for postId: \(postId)")
+            #endif
+            return false
+        }
+
+        // Update cooldown timestamp
+        lastLikeTime[postId] = Date()
+
+        // Increment generation for this post's like operations
+        let currentGen = (likeGeneration[postId] ?? 0) + 1
+        likeGeneration[postId] = currentGen
+
         let wasLiked = currentPost.isLiked
+        let newLikeCount = wasLiked ? max(0, currentPost.likeCount - 1) : currentPost.likeCount + 1
 
         // Optimistic update - immediate UI feedback
         onPostUpdate?(postId) { post in
-            post.copying(
-                likeCount: wasLiked ? post.likeCount - 1 : post.likeCount + 1,
-                isLiked: !wasLiked
-            )
+            post.copying(likeCount: newLikeCount, isLiked: !wasLiked)
         }
+
+        // Perform API call with generation tracking
+        await performLikeOperation(
+            postId: postId,
+            originalPost: currentPost,
+            targetLikedState: !wasLiked,
+            generation: currentGen
+        )
+
+        return true
+    }
+
+    /// Perform the actual like/unlike API call
+    /// - Parameter generation: The generation number when this operation was initiated
+    private func performLikeOperation(
+        postId: String,
+        originalPost: FeedPost,
+        targetLikedState: Bool,
+        generation: Int
+    ) async {
+        guard let userId = currentUserId else { return }
+
+        ongoingLikeOperations.insert(postId)
+        defer { ongoingLikeOperations.remove(postId) }
 
         do {
             let response: SocialService.LikeResponse
-            if wasLiked {
-                response = try await socialService.deleteLike(postId: postId, userId: userId)
-            } else {
+            if targetLikedState {
                 response = try await socialService.createLike(postId: postId, userId: userId)
+            } else {
+                response = try await socialService.deleteLike(postId: postId, userId: userId)
             }
 
-            // Reconcile with server's accurate count
-            // This ensures UI shows the correct count from PostgreSQL (source of truth)
+            // Only update UI if this is still the latest operation (no newer clicks happened)
+            guard likeGeneration[postId] == generation else {
+                #if DEBUG
+                print("[FeedSocialActions] Ignoring stale like response for postId: \(postId), gen: \(generation), current: \(likeGeneration[postId] ?? -1)")
+                #endif
+                return
+            }
+
+            // Update UI with server's accurate count
             onPostUpdate?(postId) { post in
-                post.copying(
-                    likeCount: Int(response.likeCount),
-                    isLiked: !wasLiked
-                )
+                post.copying(likeCount: Int(response.likeCount), isLiked: targetLikedState)
             }
 
-            // Invalidate feed cache on successful like/unlike to ensure
-            // fresh data is fetched when user navigates back to feed
             await FeedCacheService.shared.invalidateCache()
 
-            return true
+            #if DEBUG
+            print("[FeedSocialActions] Like operation completed for postId: \(postId), isLiked: \(targetLikedState), count: \(response.likeCount)")
+            #endif
         } catch let error as APIError {
-            // Revert on failure
-            onPostUpdate?(postId) { _ in currentPost }
+            // Only revert if this is still the latest operation
+            guard likeGeneration[postId] == generation else { return }
+            onPostUpdate?(postId) { _ in originalPost }
             handleError(error, action: "like")
-            return false
         } catch {
-            // Revert on failure
-            onPostUpdate?(postId) { _ in currentPost }
+            // Only revert if this is still the latest operation
+            guard likeGeneration[postId] == generation else { return }
+            onPostUpdate?(postId) { _ in originalPost }
             onError?("Failed to like post. Please try again.")
             #if DEBUG
             print("[FeedSocialActions] Toggle like error: \(error)")
             #endif
-            return false
         }
     }
     
     // MARK: - Bookmark Actions
-    
-    /// Toggle bookmark on a post
-    /// - Parameters:
-    ///   - postId: The post ID to bookmark/unbookmark
-    ///   - currentPost: The current post state
-    /// - Returns: Whether the operation was initiated (false if already in progress)
+
+    /// Toggle bookmark on a post with cooldown (Instagram-style)
+    /// Uses generation tracking to prevent stale API responses from overwriting newer state
     func toggleBookmark(postId: String, currentPost: FeedPost) async -> Bool {
-        // Prevent concurrent bookmark operations for the same post
-        guard !ongoingBookmarkOperations.contains(postId) else {
-            #if DEBUG
-            print("[FeedSocialActions] toggleBookmark skipped - operation already in progress for postId: \(postId)")
-            #endif
-            return false
-        }
-        
-        guard let userId = currentUserId else {
+        guard currentUserId != nil else {
             #if DEBUG
             print("[FeedSocialActions] toggleBookmark early return - userId is nil")
             #endif
             return false
         }
-        
+
+        // Check cooldown
+        if let lastTime = lastBookmarkTime[postId],
+           Date().timeIntervalSince(lastTime) < cooldownDuration {
+            #if DEBUG
+            print("[FeedSocialActions] toggleBookmark ignored - within cooldown for postId: \(postId)")
+            #endif
+            return false
+        }
+
+        // Update cooldown timestamp
+        lastBookmarkTime[postId] = Date()
+
+        // Increment generation for this post's bookmark operations
+        let currentGen = (bookmarkGeneration[postId] ?? 0) + 1
+        bookmarkGeneration[postId] = currentGen
+
+        let wasBookmarked = currentPost.isBookmarked
+        let newBookmarkCount = wasBookmarked ? max(0, currentPost.bookmarkCount - 1) : currentPost.bookmarkCount + 1
+
+        // Optimistic update
+        onPostUpdate?(postId) { post in
+            post.copying(bookmarkCount: newBookmarkCount, isBookmarked: !wasBookmarked)
+        }
+
+        // Perform API call with generation tracking
+        await performBookmarkOperation(
+            postId: postId,
+            originalPost: currentPost,
+            targetBookmarkedState: !wasBookmarked,
+            generation: currentGen
+        )
+
+        return true
+    }
+
+    /// Perform the actual bookmark/unbookmark API call
+    /// - Parameter generation: The generation number when this operation was initiated
+    private func performBookmarkOperation(
+        postId: String,
+        originalPost: FeedPost,
+        targetBookmarkedState: Bool,
+        generation: Int
+    ) async {
+        guard let userId = currentUserId else { return }
+
         ongoingBookmarkOperations.insert(postId)
         defer { ongoingBookmarkOperations.remove(postId) }
-        
-        let wasBookmarked = currentPost.isBookmarked
-        
-        // Optimistic update - update both isBookmarked and bookmarkCount
-        onPostUpdate?(postId) { post in
-            post.copying(
-                bookmarkCount: wasBookmarked ? post.bookmarkCount - 1 : post.bookmarkCount + 1,
-                isBookmarked: !wasBookmarked
-            )
-        }
-        
+
         do {
-            if wasBookmarked {
-                try await socialService.deleteBookmark(postId: postId)
-            } else {
+            if targetBookmarkedState {
                 try await socialService.createBookmark(postId: postId, userId: userId)
+            } else {
+                try await socialService.deleteBookmark(postId: postId)
             }
 
-            // Invalidate feed cache on successful bookmark/unbookmark
+            // Only proceed if this is still the latest operation
+            guard bookmarkGeneration[postId] == generation else {
+                #if DEBUG
+                print("[FeedSocialActions] Ignoring stale bookmark response for postId: \(postId), gen: \(generation), current: \(bookmarkGeneration[postId] ?? -1)")
+                #endif
+                return
+            }
+
             await FeedCacheService.shared.invalidateCache()
 
-            return true
+            #if DEBUG
+            print("[FeedSocialActions] Bookmark operation completed for postId: \(postId), isBookmarked: \(targetBookmarkedState)")
+            #endif
         } catch let error as APIError {
-            // Handle specific error cases - some errors should keep local state
             switch error {
-            case .unauthorized:
-                // Revert on auth error
-                onPostUpdate?(postId) { _ in currentPost }
-                onError?("Please try again.")
-                #if DEBUG
-                print("[FeedSocialActions] Toggle bookmark error: Unauthorized")
-                #endif
-            case .noConnection:
-                // Revert on connection error
-                onPostUpdate?(postId) { _ in currentPost }
-                onError?("No internet connection. Please try again.")
             case .notFound, .serverError, .serviceUnavailable:
-                // Backend bookmark API not deployed yet - keep local state (don't revert)
+                // Backend bookmark API not deployed yet - keep local state
                 #if DEBUG
                 print("[FeedSocialActions] Bookmark API not available (\(error)), using local state only")
                 #endif
             default:
-                // Revert on other errors
-                onPostUpdate?(postId) { _ in currentPost }
-                onError?("Failed to bookmark post. Please try again.")
-                #if DEBUG
-                print("[FeedSocialActions] Toggle bookmark error: \(error)")
-                #endif
+                // Only revert if this is still the latest operation
+                guard bookmarkGeneration[postId] == generation else { return }
+                onPostUpdate?(postId) { _ in originalPost }
+                handleError(error, action: "bookmark")
             }
-            return false
         } catch {
-            // Revert on unknown failure
-            onPostUpdate?(postId) { _ in currentPost }
+            // Only revert if this is still the latest operation
+            guard bookmarkGeneration[postId] == generation else { return }
+            onPostUpdate?(postId) { _ in originalPost }
             onError?("Failed to bookmark post. Please try again.")
             #if DEBUG
             print("[FeedSocialActions] Toggle bookmark error: \(error)")
             #endif
-            return false
         }
     }
     

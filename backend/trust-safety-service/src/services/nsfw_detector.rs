@@ -109,12 +109,14 @@ impl NsfwDetector {
                     InputLayout::Nchw => {
                         tensor[[0, 0, y as usize, x as usize]] = pixel[0] as f32 / 255.0; // R
                         tensor[[0, 1, y as usize, x as usize]] = pixel[1] as f32 / 255.0; // G
-                        tensor[[0, 2, y as usize, x as usize]] = pixel[2] as f32 / 255.0; // B
+                        tensor[[0, 2, y as usize, x as usize]] = pixel[2] as f32 / 255.0;
+                        // B
                     }
                     InputLayout::Nhwc => {
                         tensor[[0, y as usize, x as usize, 0]] = pixel[0] as f32 / 255.0; // R
                         tensor[[0, y as usize, x as usize, 1]] = pixel[1] as f32 / 255.0; // G
-                        tensor[[0, y as usize, x as usize, 2]] = pixel[2] as f32 / 255.0; // B
+                        tensor[[0, y as usize, x as usize, 2]] = pixel[2] as f32 / 255.0;
+                        // B
                     }
                 }
             }

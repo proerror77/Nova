@@ -43,7 +43,7 @@ struct UserProfileActionButtons: View {
                 onFollowTapped()
             }) {
                 Text(isFollowing ? "Following" : "Follow")
-                    .font(.system(size: layout.buttonFontSize))
+                    .font(Font.custom("SFProDisplay-Regular", size: layout.buttonFontSize))
                     .foregroundColor(layout.textColor)
                     .frame(width: layout.buttonWidth, height: layout.buttonHeight)
                     .background(layout.primaryButtonColor)
@@ -53,7 +53,7 @@ struct UserProfileActionButtons: View {
             // MARK: - Add friends 按钮（描边）
             Button(action: onAddFriendsTapped) {
                 Text("Add friends")
-                    .font(.system(size: layout.buttonFontSize))
+                    .font(Font.custom("SFProDisplay-Regular", size: layout.buttonFontSize))
                     .foregroundColor(layout.textColor)
                     .frame(width: layout.buttonWidth, height: layout.buttonHeight)
                     .overlay(
@@ -65,7 +65,7 @@ struct UserProfileActionButtons: View {
             // MARK: - Message 按钮（描边）
             Button(action: onMessageTapped) {
                 Text("Message")
-                    .font(.system(size: layout.buttonFontSize))
+                    .font(Font.custom("SFProDisplay-Regular", size: layout.buttonFontSize))
                     .foregroundColor(layout.textColor)
                     .frame(width: layout.buttonWidth, height: layout.buttonHeight)
                     .overlay(

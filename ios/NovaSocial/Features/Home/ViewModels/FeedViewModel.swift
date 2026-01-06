@@ -190,7 +190,11 @@ final class FeedViewModel {
         let loadStartTime = Date()
         let signpostState = performanceMonitor.beginFeedLoad(source: .initial, fromCache: false)
 
-        isLoading = true
+        // Only show loading indicator if no cached posts (prevents blank screen during refresh)
+        let showLoadingIndicator = posts.isEmpty
+        if showLoadingIndicator {
+            isLoading = true
+        }
         error = nil
         currentAlgorithm = algorithm
         currentCursor = nil
@@ -547,6 +551,26 @@ final class FeedViewModel {
         _cachedFeedItems = nil
         #if DEBUG
         print("[Feed] ✅ updateBookmarkState - state updated successfully, cache invalidated")
+        #endif
+    }
+
+    /// Remove a post from the feed (called when post is deleted)
+    /// Issue #243: Ensures UI updates immediately after post deletion
+    func removePost(postId: String) {
+        #if DEBUG
+        print("[Feed] 🗑️ removePost called - postId: \(postId)")
+        #endif
+        guard let index = posts.firstIndex(where: { $0.id == postId }) else {
+            #if DEBUG
+            print("[Feed] ❌ removePost - post not found in array")
+            #endif
+            return
+        }
+        posts.remove(at: index)
+        // Clear cache since array was modified
+        _cachedFeedItems = nil
+        #if DEBUG
+        print("[Feed] ✅ removePost - post removed successfully, cache invalidated")
         #endif
     }
 

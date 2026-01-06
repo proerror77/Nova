@@ -22,6 +22,8 @@ pub enum NotificationType {
     Video,
     /// Live stream notification
     Stream,
+    /// User shared/reposted a post
+    Share,
 }
 
 impl NotificationType {
@@ -35,6 +37,7 @@ impl NotificationType {
             NotificationType::Message => "message",
             NotificationType::Video => "video",
             NotificationType::Stream => "stream",
+            NotificationType::Share => "share",
         }
     }
 }

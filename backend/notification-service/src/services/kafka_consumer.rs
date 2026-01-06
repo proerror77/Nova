@@ -33,11 +33,13 @@ pub struct KafkaNotification {
 pub enum NotificationEventType {
     Like,
     Comment,
+    CommentLike,
     Follow,
     LiveStart,
     Message,
     MentionPost,
     MentionComment,
+    Share,
 }
 
 impl std::fmt::Display for NotificationEventType {
@@ -45,11 +47,13 @@ impl std::fmt::Display for NotificationEventType {
         match self {
             NotificationEventType::Like => write!(f, "like"),
             NotificationEventType::Comment => write!(f, "comment"),
+            NotificationEventType::CommentLike => write!(f, "comment_like"),
             NotificationEventType::Follow => write!(f, "follow"),
             NotificationEventType::LiveStart => write!(f, "live_start"),
             NotificationEventType::Message => write!(f, "message"),
             NotificationEventType::MentionPost => write!(f, "mention_post"),
             NotificationEventType::MentionComment => write!(f, "mention_comment"),
+            NotificationEventType::Share => write!(f, "share"),
         }
     }
 }
@@ -280,7 +284,7 @@ impl KafkaNotificationConsumer {
         use tokio::time::interval;
 
         tracing::info!(
-            "Starting Kafka consumer for broker: {}, topics: MessageCreated, FollowAdded, CommentCreated, PostLiked, ReplyLiked",
+            "Starting Kafka consumer for broker: {}, topics: MessageCreated, FollowAdded, CommentCreated, PostLiked, ReplyLiked, PostShared, MentionCreated",
             self.broker
         );
 
@@ -303,6 +307,8 @@ impl KafkaNotificationConsumer {
             "CommentCreated",
             "PostLiked",
             "ReplyLiked",
+            "PostShared",
+            "MentionCreated",
         ];
 
         consumer
@@ -473,11 +479,13 @@ impl KafkaNotificationConsumer {
         let notification_type = match message.event_type {
             NotificationEventType::Like => NotificationType::Like,
             NotificationEventType::Comment => NotificationType::Comment,
+            NotificationEventType::CommentLike => NotificationType::Like, // Comment likes map to Like type
             NotificationEventType::Follow => NotificationType::Follow,
             NotificationEventType::LiveStart => NotificationType::Stream,
             NotificationEventType::Message => NotificationType::Message,
             NotificationEventType::MentionPost => NotificationType::Mention,
             NotificationEventType::MentionComment => NotificationType::Mention,
+            NotificationEventType::Share => NotificationType::Share,
         };
 
         // Extract sender_id from metadata if available

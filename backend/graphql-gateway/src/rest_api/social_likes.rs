@@ -270,6 +270,7 @@ pub async fn get_comments(
         post_id: q.post_id,
         limit: q.limit.unwrap_or(50) as i32,
         offset: q.offset.unwrap_or(0) as i32,
+        viewer_user_id: String::new(), // Not authenticated on this endpoint
     };
     match clients
         .call_social(|| {
@@ -795,7 +796,10 @@ pub async fn delete_comment_like(
     };
 
     let comment_id = path.into_inner();
-    let req = DeleteCommentLikeRequest { user_id, comment_id };
+    let req = DeleteCommentLikeRequest {
+        user_id,
+        comment_id,
+    };
     match clients
         .call_social(|| {
             let mut social = clients.social_client();
@@ -854,7 +858,10 @@ pub async fn check_comment_liked(
     };
 
     let comment_id = path.into_inner();
-    let req = CheckCommentLikedRequest { user_id, comment_id };
+    let req = CheckCommentLikedRequest {
+        user_id,
+        comment_id,
+    };
     match clients
         .call_social(|| {
             let mut social = clients.social_client();
@@ -890,9 +897,8 @@ pub async fn batch_check_comment_liked(
     };
 
     if body.comment_ids.len() > 100 {
-        return HttpResponse::BadRequest().json(
-            serde_json::json!({"error": "Maximum 100 comment_ids allowed"}),
-        );
+        return HttpResponse::BadRequest()
+            .json(serde_json::json!({"error": "Maximum 100 comment_ids allowed"}));
     }
 
     let req = BatchCheckCommentLikedRequest {

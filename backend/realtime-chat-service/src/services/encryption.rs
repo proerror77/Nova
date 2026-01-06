@@ -23,6 +23,9 @@
 //! Use `MegolmService` for true E2EE where server cannot decrypt content.
 //! See `megolm_service.rs` and `e2ee_message_service.rs`.
 
+// Allow deprecated - this entire module is deprecated but kept for backward compatibility
+#![allow(deprecated)]
+
 use crate::error::AppError;
 use crypto_core::{decrypt_at_rest, encrypt_at_rest, generate_nonce};
 use hkdf::Hkdf;

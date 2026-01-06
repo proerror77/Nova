@@ -212,12 +212,12 @@ struct UserProfileView: View {
 
                             // 用户名
                             Text(userData.username)
-                                .font(.system(size: 16.f, weight: .semibold))
+                                .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                                 .foregroundColor(.white)
 
                             // 地区（保留固定位置）
                             Text(userData.location ?? " ")
-                                .font(.system(size: 14.f, weight: .light))
+                                .font(Font.custom("SFProDisplay-Light", size: 14.f))
                                 .foregroundColor(.white)
                                 .frame(height: 17.h) // 固定高度
                         }
@@ -226,7 +226,7 @@ struct UserProfileView: View {
                         // 职业（保留固定位置，带蓝标认证图标在文字后面）
                         HStack(spacing: 4.s) {
                             Text(userData.profession ?? " ")
-                                .font(.system(size: 14.f, weight: .light))
+                                .font(Font.custom("SFProDisplay-Light", size: 14.f))
                                 .foregroundColor(.white)
                             if userData.profession != nil {
                                 Image("Blue-v")
@@ -242,10 +242,10 @@ struct UserProfileView: View {
                             // Following
                             VStack(spacing: 1.h) {
                                 Text("\(userData.followingCount)")
-                                    .font(.system(size: 16.f, weight: .semibold))
+                                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                                     .foregroundColor(.white)
                                 Text("Following")
-                                    .font(.system(size: 14.f, weight: .light))
+                                    .font(Font.custom("SFProDisplay-Light", size: 14.f))
                                     .foregroundColor(.white)
                             }
                             .frame(width: 125.w, height: 40.h)
@@ -263,10 +263,10 @@ struct UserProfileView: View {
                             // Followers
                             VStack(spacing: 1.h) {
                                 Text("\(userData.followersCount)")
-                                    .font(.system(size: 16.f, weight: .semibold))
+                                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                                     .foregroundColor(.white)
                                 Text("Followers")
-                                    .font(.system(size: 14.f, weight: .light))
+                                    .font(Font.custom("SFProDisplay-Light", size: 14.f))
                                     .foregroundColor(.white)
                             }
                             .frame(width: 132.w, height: 40.h)
@@ -284,10 +284,10 @@ struct UserProfileView: View {
                             // Halo
                             VStack(spacing: 1.h) {
                                 Text("\(userData.likesCount)")
-                                    .font(.system(size: 16.f, weight: .semibold))
+                                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                                     .foregroundColor(.white)
                                 Text("Halo")
-                                    .font(.system(size: 14.f, weight: .light))
+                                    .font(Font.custom("SFProDisplay-Light", size: 14.f))
                                     .foregroundColor(.white)
                             }
                             .frame(width: 118.w, height: 40.h)
@@ -311,7 +311,7 @@ struct UserProfileView: View {
                             isFollowing.toggle()
                         }) {
                             Text(isFollowing ? "Following" : "Follow")
-                                .font(Font.custom("SF Pro Display", size: 12.f))
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                 .tracking(0.24)
                                 .foregroundColor(.white)
                         }
@@ -324,7 +324,7 @@ struct UserProfileView: View {
                             // 添加好友操作
                         }) {
                             Text("Add friends")
-                                .font(Font.custom("SF Pro Display", size: 12.f))
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                 .tracking(0.24)
                                 .foregroundColor(.white)
                         }
@@ -341,7 +341,7 @@ struct UserProfileView: View {
                             // 消息操作
                         }) {
                             Text("Message")
-                                .font(Font.custom("SF Pro Display", size: 12.f))
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                 .tracking(0.24)
                                 .foregroundColor(.white)
                         }
@@ -372,7 +372,7 @@ struct UserProfileView: View {
                                 selectedTab = .posts
                             }) {
                                 Text("Posts")
-                                    .font(.system(size: 16.f, weight: .semibold))
+                                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                                     .foregroundColor(selectedTab == .posts ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
                             }
 
@@ -380,7 +380,7 @@ struct UserProfileView: View {
                                 // Saved tab action
                             }) {
                                 Text("Saved")
-                                    .font(.system(size: 16.f, weight: .semibold))
+                                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                                     .foregroundColor(.black)
                             }
 
@@ -388,7 +388,7 @@ struct UserProfileView: View {
                                 // Liked tab action
                             }) {
                                 Text("Liked")
-                                    .font(.system(size: 16.f, weight: .semibold))
+                                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                                     .foregroundColor(.black)
                             }
                         }
@@ -404,31 +404,38 @@ struct UserProfileView: View {
                         
                         // 帖子网格
                         ScrollView(.vertical, showsIndicators: false) {
-                            LazyVGrid(
-                                columns: [
-                                    GridItem(.flexible(), spacing: 5.w),
-                                    GridItem(.flexible(), spacing: 5.w)
-                                ],
-                                spacing: 5.h
-                            ) {
-                                // 使用真实帖子数据
-                                ForEach(userData.posts) { post in
-                                    PostCard(
-                                        imageUrl: post.imageUrl,
-                                        imageName: "PostCardImage",
-                                        title: "\(post.username) \(post.content)",
-                                        authorName: post.username,
-                                        authorAvatarUrl: post.avatarUrl,
-                                        likeCount: post.likeCount,
-                                        onTap: {
-                                            // 点击帖子
-                                        }
-                                    )
+                            if isLoading {
+                                // 骨架屏加载状态
+                                ProfilePostsGridSkeleton(itemCount: 6)
+                                    .padding(.horizontal, 5.w)
+                                    .padding(.top, 5.h)
+                            } else {
+                                LazyVGrid(
+                                    columns: [
+                                        GridItem(.flexible(), spacing: 5.w),
+                                        GridItem(.flexible(), spacing: 5.w)
+                                    ],
+                                    spacing: 5.h
+                                ) {
+                                    // 使用真实帖子数据
+                                    ForEach(userData.posts) { post in
+                                        PostCard(
+                                            imageUrl: post.imageUrl,
+                                            imageName: "PostCardImage",
+                                            title: "\(post.username) \(post.content)",
+                                            authorName: post.username,
+                                            authorAvatarUrl: post.avatarUrl,
+                                            likeCount: post.likeCount,
+                                            onTap: {
+                                                // 点击帖子
+                                            }
+                                        )
+                                    }
                                 }
+                                .padding(.horizontal, 5.w)
+                                .padding(.top, 5.h)
+                                .padding(.bottom, 100.h)
                             }
-                            .padding(.horizontal, 5.w)
-                            .padding(.top, 5.h)
-                            .padding(.bottom, 100.h)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .clipped()  // 裁剪超出内容，防止截断效果
@@ -505,7 +512,7 @@ struct UserProfileView: View {
                     avatarUrl: userProfile.avatarUrl,
                     username: userProfile.displayName ?? userProfile.username,
                     likeCount: post.likeCount ?? 0,
-                    imageUrl: post.mediaUrls?.first,
+                    imageUrl: post.displayThumbnailUrl,
                     content: post.content
                 )
             }

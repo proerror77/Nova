@@ -239,7 +239,7 @@ struct FriendRequestsView: View {
             Spacer()
 
             Text("Friend Requests")
-                .font(.system(size: 20, weight: .bold))
+                .font(Font.custom("SFProDisplay-Bold", size: 20.f))
                 .foregroundColor(.black)
 
             Spacer()
@@ -247,7 +247,7 @@ struct FriendRequestsView: View {
             // Badge for pending count
             if viewModel.pendingCount > 0 {
                 Text("\(viewModel.pendingCount)")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                     .foregroundColor(.white)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -294,11 +294,11 @@ struct FriendRequestsView: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Text(title)
-                    .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
+                    .font(Font.custom(isSelected ? "SFProDisplay-Semibold" : "SFProDisplay-Regular", size: 14.f))
 
                 if count > 0 {
                     Text("\(count)")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                         .foregroundColor(isSelected ? .white : .gray)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -332,16 +332,16 @@ struct FriendRequestsView: View {
             Spacer()
 
             Image(systemName: viewModel.selectedTab == .received ? "person.badge.clock" : "paperplane")
-                .font(.system(size: 48))
+                .font(Font.custom("SFProDisplay-Regular", size: 48.f))
                 .foregroundColor(.gray.opacity(0.5))
 
             Text(viewModel.selectedTab == .received ? "No received friend requests" : "No sent friend requests")
-                .font(.system(size: 16))
+                .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                 .foregroundColor(.gray)
 
             if viewModel.selectedTab == .received {
                 Text("When someone sends you a friend request, it will appear here")
-                    .font(.system(size: 14))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .foregroundColor(.gray.opacity(0.7))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
@@ -393,7 +393,7 @@ struct FriendRequestsView: View {
         VStack {
             Spacer()
             Text(message)
-                .font(.system(size: 14, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                 .foregroundColor(.white)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
@@ -424,16 +424,16 @@ struct FriendRequestCardView: View {
             // User Info
             VStack(alignment: .leading, spacing: 2) {
                 Text(request.user.displayName ?? request.user.username)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                     .foregroundColor(.black)
 
                 Text("@\(request.user.username)")
-                    .font(.system(size: 12))
+                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                     .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
 
                 // Time ago
                 Text(timeAgoString(from: request.createdAt))
-                    .font(.system(size: 11))
+                    .font(Font.custom("SFProDisplay-Regular", size: 11.f))
                     .foregroundColor(Color(red: 0.5, green: 0.5, blue: 0.5))
             }
 
@@ -462,7 +462,7 @@ struct FriendRequestCardView: View {
                 // Accept Button
                 Button(action: onAccept) {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 14.f))
                         .foregroundColor(.white)
                         .frame(width: 36, height: 36)
                         .background(Color.green)
@@ -472,7 +472,7 @@ struct FriendRequestCardView: View {
                 // Reject Button
                 Button(action: onReject) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 14.f))
                         .foregroundColor(.white)
                         .frame(width: 36, height: 36)
                         .background(Color(red: 0.87, green: 0.11, blue: 0.26))
@@ -484,7 +484,7 @@ struct FriendRequestCardView: View {
             // Cancel Button
             Button(action: onCancel) {
                 Text("Cancel")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                     .foregroundColor(.gray)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)

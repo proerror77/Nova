@@ -259,7 +259,7 @@ struct UserProfileFollowingView: View {
                 isPresented = false
             }) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.system(size: 18.f))
                     .foregroundColor(.black)
             }
             .frame(width: 24, height: 24)
@@ -267,7 +267,7 @@ struct UserProfileFollowingView: View {
             Spacer()
 
             Text(targetUsername)
-                .font(.system(size: 24, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 24.f))
                 .foregroundColor(.black)
 
             Spacer()
@@ -292,7 +292,7 @@ struct UserProfileFollowingView: View {
             }) {
                 VStack(spacing: 8) {
                     Text("Following")
-                        .font(.system(size: 18, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                         .foregroundColor(selectedTab == .following ? .black : Color(red: 0.51, green: 0.51, blue: 0.51))
 
                     Rectangle()
@@ -310,7 +310,7 @@ struct UserProfileFollowingView: View {
             }) {
                 VStack(spacing: 8) {
                     Text("Followers")
-                        .font(.system(size: 18, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                         .foregroundColor(selectedTab == .followers ? .black : Color(red: 0.51, green: 0.51, blue: 0.51))
 
                     Rectangle()
@@ -327,11 +327,11 @@ struct UserProfileFollowingView: View {
     private var searchBar: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 14))
+                .font(.system(size: 14.f))
                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
             TextField("Search", text: $searchText)
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
         }
         .padding(.horizontal, 12)
@@ -350,10 +350,10 @@ struct UserProfileFollowingView: View {
             } else if filteredFollowing.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "person.badge.plus")
-                        .font(.system(size: 48))
+                        .font(.system(size: 48.f))
                         .foregroundColor(.gray.opacity(0.5))
                     Text("Not following anyone yet")
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(.gray)
                 }
                 .frame(maxWidth: .infinity)
@@ -385,10 +385,10 @@ struct UserProfileFollowingView: View {
             } else if filteredFollowers.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "person.2")
-                        .font(.system(size: 48))
+                        .font(.system(size: 48.f))
                         .foregroundColor(.gray.opacity(0.5))
                     Text("No followers yet")
-                        .font(.system(size: 16))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .foregroundColor(.gray)
                 }
                 .frame(maxWidth: .infinity)
@@ -455,12 +455,12 @@ struct UserProfileFollowUserRow: View {
             // Name and Verified Badge
             HStack(spacing: 6) {
                 Text(user.displayName)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                     .foregroundColor(.black)
 
                 if user.isVerified {
                     Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 14))
+                        .font(.system(size: 14.f))
                         .foregroundColor(Color(red: 0.2, green: 0.6, blue: 1.0))
                 }
             }
@@ -471,7 +471,7 @@ struct UserProfileFollowUserRow: View {
             Button(action: onFollowTap) {
                 if user.isFollowedByMe {
                     Text("Following")
-                        .font(.system(size: 12))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
@@ -483,7 +483,7 @@ struct UserProfileFollowUserRow: View {
                         )
                 } else {
                     Text("Follow")
-                        .font(.system(size: 12))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         .foregroundColor(.white)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 8)

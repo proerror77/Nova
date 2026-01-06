@@ -180,7 +180,7 @@ struct ProfileUserInfoSection: View {
                             .frame(width: 28, height: 28)
                             .overlay(
                                 Image(systemName: "camera.fill")
-                                    .font(.system(size: 12))
+                                    .font(.system(size: 12.f))
                                     .foregroundColor(.gray)
                             )
                             .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
@@ -189,13 +189,13 @@ struct ProfileUserInfoSection: View {
 
                 // 用户名（始终显示，未填写时显示 "User"）
                 Text(displayUsername)
-                    .font(.system(size: layout.usernameFontSize, weight: .bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: layout.usernameFontSize))
                     .lineSpacing(19)
                     .foregroundColor(layout.textColor)
 
                 // 位置信息（始终显示，未填写时显示占位符）- 可点击编辑
                 Text(displayLocation)
-                    .font(.system(size: layout.locationFontSize))
+                    .font(Font.custom("SFProDisplay-Regular", size: layout.locationFontSize))
                     .lineSpacing(19)
                     .foregroundColor(hasLocation ? layout.textColor : layout.textColor.opacity(0.5))
                     .onTapGesture {
@@ -206,7 +206,7 @@ struct ProfileUserInfoSection: View {
             // MARK: - 职业/身份信息 - 始终显示，未填写时显示占位符
             HStack(spacing: layout.professionIconSpacing) {
                 Text(displayProfession)
-                    .font(.system(size: layout.professionFontSize, weight: .light))
+                    .font(Font.custom("SFProDisplay-Light", size: layout.professionFontSize))
                     .lineSpacing(19)
                     .foregroundColor(hasProfession ? layout.secondaryTextColor : layout.secondaryTextColor.opacity(0.5))
 
@@ -308,12 +308,12 @@ struct ProfileUserInfoSection: View {
     private func statsItem(label: String, value: String) -> some View {
         VStack(alignment: .center, spacing: 1) {
             Text(LocalizedStringKey(label))
-                .font(.system(size: layout.statsLabelFontSize))
+                .font(Font.custom("SFProDisplay-Regular", size: layout.statsLabelFontSize))
                 .lineSpacing(19)
                 .foregroundColor(layout.textColor)
 
             Text(value)
-                .font(.system(size: layout.statsValueFontSize))
+                .font(Font.custom("SFProDisplay-Regular", size: layout.statsValueFontSize))
                 .lineSpacing(19)
                 .foregroundColor(layout.textColor)
                 .contentTransition(.numericText())  // iOS 17+ 数字变化动画

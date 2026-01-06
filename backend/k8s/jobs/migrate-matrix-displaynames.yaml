@@ -1,0 +1,76 @@
+# Migration Job: Update Matrix user display names
+#
+# This job migrates existing Matrix users from "Nova User {uuid}" placeholder
+# display names to their actual usernames fetched from identity-service.
+#
+# Prerequisites:
+# 1. realtime-chat-service must be deployed with the migration binary
+# 2. synapse-admin-api secret must exist with SYNAPSE_ADMIN_TOKEN
+# 3. identity-service must be accessible
+#
+# Usage:
+#   # Dry run (preview changes)
+#   kubectl apply -f migrate-matrix-displaynames.yaml
+#
+#   # Execute migration (uncomment --execute in args)
+#   kubectl apply -f migrate-matrix-displaynames.yaml
+#
+#   # Check logs
+#   kubectl logs -f job/migrate-matrix-displaynames -n nova-staging
+#
+#   # Cleanup after successful run
+#   kubectl delete job migrate-matrix-displaynames -n nova-staging
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate-matrix-displaynames
+  namespace: nova-staging
+  labels:
+    app: migrate-matrix-displaynames
+    type: migration
+spec:
+  # Don't retry on failure - manual intervention needed
+  backoffLimit: 0
+  # Keep completed job for 1 hour for log inspection
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: migrate-matrix-displaynames
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migration
+          # Use the same image as realtime-chat-service
+          image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/realtime-chat-service:latest
+          command: ["/app/migrate-matrix-displaynames"]
+          args:
+            # DRY RUN by default - shows what would change
+            - "--dry-run"
+            # Uncomment below and comment above to actually execute the migration:
+            # - "--execute"
+          env:
+            # Synapse configuration
+            - name: SYNAPSE_HOMESERVER_URL
+              value: "http://matrix-synapse:8008"
+            - name: SYNAPSE_SERVER_NAME
+              value: "staging.nova.app"
+            - name: SYNAPSE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: realtime-chat-service-secret
+                  key: MATRIX_ADMIN_TOKEN
+            # Identity service for fetching usernames
+            - name: IDENTITY_SERVICE_URL
+              value: "http://identity-service:50051"
+            # Logging
+            - name: RUST_LOG
+              value: "info"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"

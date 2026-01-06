@@ -310,6 +310,50 @@ impl ConversationService {
         Ok(rec.is_some())
     }
 
+    /// Check if a user is a member of a conversation with Redis caching
+    /// Cache TTL: 60 seconds - reduces DB load for rapid conversation browsing
+    pub async fn is_member_cached(
+        db: &Pool,
+        redis: &crate::redis_client::RedisClient,
+        conversation_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<bool, crate::error::AppError> {
+        use redis::AsyncCommands;
+
+        let cache_key = format!("chat:member:{}:{}", conversation_id, user_id);
+
+        // Try Redis cache first
+        if let Ok(mut conn) = redis.get_multiplexed_async_connection().await {
+            if let Ok(Some(cached)) = conn.get::<_, Option<String>>(&cache_key).await {
+                return Ok(cached == "1");
+            }
+        }
+
+        // Cache miss - query database
+        let is_member = Self::is_member(db, conversation_id, user_id).await?;
+
+        // Cache the result for 60 seconds
+        if let Ok(mut conn) = redis.get_multiplexed_async_connection().await {
+            let _: Result<(), _> = conn.set_ex(&cache_key, if is_member { "1" } else { "0" }, 60).await;
+        }
+
+        Ok(is_member)
+    }
+
+    /// Invalidate membership cache when membership changes (add/remove member)
+    pub async fn invalidate_membership_cache(
+        redis: &crate::redis_client::RedisClient,
+        conversation_id: Uuid,
+        user_id: Uuid,
+    ) {
+        use redis::AsyncCommands;
+
+        let cache_key = format!("chat:member:{}:{}", conversation_id, user_id);
+        if let Ok(mut conn) = redis.get_multiplexed_async_connection().await {
+            let _: Result<(), _> = conn.del(&cache_key).await;
+        }
+    }
+
     /// Get conversation with full member details
     /// Security: Validates that requesting user is a member before returning data
     pub async fn get_conversation_with_members(

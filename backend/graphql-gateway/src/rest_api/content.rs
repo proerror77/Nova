@@ -11,8 +11,10 @@
 #![allow(dead_code)]
 
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
+use resilience::retry::{with_retry, RetryConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::Duration;
 use tracing::{error, info, warn};
 
 use super::models::ErrorResponse;
@@ -363,13 +365,54 @@ pub async fn create_post(
             {
                 "image".to_string()
             } else {
-                "text".to_string()  // Text-only post
+                "text".to_string() // Text-only post
             }
         }),
         channel_ids,
     });
 
-    match content_client.create_post(grpc_request).await {
+    // Retry config for transient failures (503 Service Unavailable)
+    let retry_config = RetryConfig {
+        max_retries: 3,
+        initial_backoff: Duration::from_millis(100),
+        max_backoff: Duration::from_secs(2),
+        backoff_multiplier: 2.0,
+        jitter: true,
+    };
+
+    // Clone values needed for retry closure
+    let user_id_for_retry = user_id.clone();
+
+    // Execute with retry for transient errors
+    let result = with_retry(retry_config, || {
+        let mut client = clients.content_client();
+        let request = tonic::Request::new(grpc_request.get_ref().clone());
+        let user_id = user_id_for_retry.clone();
+
+        async move {
+            match client.create_post(request).await {
+                Ok(response) => Ok(response),
+                Err(status) => {
+                    // Only retry on transient errors (Unavailable = 503)
+                    match status.code() {
+                        tonic::Code::Unavailable | tonic::Code::ResourceExhausted => {
+                            warn!(
+                                user_id = %user_id,
+                                code = ?status.code(),
+                                "Content service temporarily unavailable, will retry"
+                            );
+                            Err(status)
+                        }
+                        // Don't retry other errors
+                        _ => Err(status),
+                    }
+                }
+            }
+        }
+    })
+    .await;
+
+    match result {
         Ok(response) => {
             let grpc_response = response.into_inner();
 
@@ -409,21 +452,42 @@ pub async fn create_post(
                     .json(ErrorResponse::new("Failed to create post")))
             }
         }
-        Err(status) => {
-            error!(
-                user_id = %user_id,
-                error = %status,
-                "Failed to create post"
-            );
+        Err(retry_err) => {
+            // Extract the original gRPC error if available
+            let error_response = match retry_err {
+                resilience::retry::RetryError::MaxRetriesExceeded(_) => {
+                    error!(
+                        user_id = %user_id,
+                        "Content service unavailable after retries"
+                    );
+                    HttpResponse::ServiceUnavailable().json(ErrorResponse::with_message(
+                        "Service temporarily unavailable",
+                        "Content service is not responding. Please try again later.",
+                    ))
+                }
+                resilience::retry::RetryError::OperationFailed(status) => {
+                    error!(
+                        user_id = %user_id,
+                        error = %status,
+                        "Failed to create post"
+                    );
 
-            let error_response = match status.code() {
-                tonic::Code::InvalidArgument => HttpResponse::BadRequest().json(
-                    ErrorResponse::with_message("Invalid request", status.message()),
-                ),
-                _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                    "Failed to create post",
-                    status.message(),
-                )),
+                    match status.code() {
+                        tonic::Code::InvalidArgument => HttpResponse::BadRequest().json(
+                            ErrorResponse::with_message("Invalid request", status.message()),
+                        ),
+                        tonic::Code::Unavailable => {
+                            HttpResponse::ServiceUnavailable().json(ErrorResponse::with_message(
+                                "Service temporarily unavailable",
+                                status.message(),
+                            ))
+                        }
+                        _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                            "Failed to create post",
+                            status.message(),
+                        )),
+                    }
+                }
             };
 
             Ok(error_response)

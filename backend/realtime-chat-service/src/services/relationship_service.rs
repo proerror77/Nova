@@ -271,6 +271,7 @@ impl RelationshipServiceV2 {
 
 /// Legacy implementation - uses direct PostgreSQL queries
 /// TODO: Deprecate after full migration to RelationshipServiceV2
+#[allow(deprecated)] // Internal usage of deprecated get_dm_settings within legacy block
 impl RelationshipService {
     /// Check if sender can message recipient based on blocks and privacy settings
     pub async fn can_message(

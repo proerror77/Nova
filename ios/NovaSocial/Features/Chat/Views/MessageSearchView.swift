@@ -62,11 +62,11 @@ struct MessageSearchView: View {
     private var searchBar: some View {
         HStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 16))
+                .font(.system(size: 16.f))
                 .foregroundColor(DesignTokens.textSecondary)
 
             TextField("Search messages...", text: $searchQuery)
-                .font(.system(size: 16))
+                .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                 .foregroundColor(DesignTokens.textPrimary)
                 .autocapitalization(.none)
                 .disableAutocorrection(true)
@@ -93,7 +93,7 @@ struct MessageSearchView: View {
                     searchResults = []
                 }) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16))
+                        .font(.system(size: 16.f))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
             }
@@ -136,7 +136,7 @@ struct MessageSearchView: View {
             ProgressView()
                 .scaleEffect(1.2)
             Text("Searching...")
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(DesignTokens.textSecondary)
             Spacer()
         }
@@ -148,13 +148,13 @@ struct MessageSearchView: View {
         VStack(spacing: 16) {
             Spacer()
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 48))
+                .font(.system(size: 48.f))
                 .foregroundColor(DesignTokens.textSecondary.opacity(0.5))
             Text("No messages found")
-                .font(.system(size: 16, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                 .foregroundColor(DesignTokens.textPrimary)
             Text("Try a different search term")
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(DesignTokens.textSecondary)
             Spacer()
         }
@@ -166,10 +166,10 @@ struct MessageSearchView: View {
         VStack(spacing: 16) {
             Spacer()
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 40))
+                .font(.system(size: 40.f))
                 .foregroundColor(DesignTokens.accentColor)
             Text(error)
-                .font(.system(size: 14))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(DesignTokens.textSecondary)
                 .multilineTextAlignment(.center)
             Button("Retry") {
@@ -229,7 +229,7 @@ private struct MessageSearchResultRow: View {
                 .frame(width: 40, height: 40)
                 .overlay(
                     Text(String(message.senderId.prefix(1)).uppercased())
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                         .foregroundColor(DesignTokens.accentColor)
                 )
 
@@ -237,20 +237,20 @@ private struct MessageSearchResultRow: View {
                 // Sender and date
                 HStack {
                     Text(message.senderId)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                         .foregroundColor(DesignTokens.textPrimary)
                         .lineLimit(1)
 
                     Spacer()
 
                     Text(formatDate(message.createdAt))
-                        .font(.system(size: 12))
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
 
                 // Message content with highlighted query
                 highlightedText(message.content, query: searchQuery)
-                    .font(.system(size: 14))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .foregroundColor(DesignTokens.textSecondary)
                     .lineLimit(2)
             }

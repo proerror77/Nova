@@ -33,7 +33,7 @@ message Post {
   ContentStatus status = 7;
   repeated string media_ids = 8;  // Media IDs associated with this post
   repeated string media_urls = 9; // CDN URLs for attached media (populated by service)
-  string media_type = 10;         // Type of media: "image", "video", "none"
+  string media_type = 10;         // Type of media: "image", "video", "live_photo", "mixed", "none"
   repeated string thumbnail_urls = 11; // CDN URLs for thumbnails (fallbacks to media_urls when absent)
 }
 
@@ -41,7 +41,7 @@ message CreatePostRequest {
   string author_id = 1;
   string content = 2;
   repeated string media_urls = 3;  // CDN URLs for attached media (images/videos)
-  string media_type = 4;           // Type of media: "image", "video", "none"
+  string media_type = 4;           // Type of media: "image", "video", "live_photo", "mixed", "none"
   repeated string channel_ids = 5; // Channel UUIDs or slugs to tag this post with (max 3)
 }
 

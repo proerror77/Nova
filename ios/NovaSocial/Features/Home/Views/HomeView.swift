@@ -58,6 +58,7 @@ struct HomeView: View {
     // Deep link navigation support
     private let coordinator = AppCoordinator.shared
     private let contentService = ContentService()
+    private let userService = UserService.shared  // For cache invalidation on profile navigation
     @State private var showThankYouView = false
     @State private var showNewPost = false
     @State private var showSearch = false
@@ -126,6 +127,16 @@ struct HomeView: View {
                         showPostDetail = false
                         selectedPostForDetail = nil
                     },
+                    onAvatarTapped: { userId in
+                        // Close post detail first, then navigate to user profile
+                        showPostDetail = false
+                        selectedPostForDetail = nil
+                        navigateToUserProfile(userId: userId)
+                    },
+                    onPostDeleted: {
+                        // Issue #243: Remove deleted post from feed immediately
+                        feedViewModel.removePost(postId: post.id)
+                    },
                     onLikeChanged: { isLiked, likeCount in
                         feedViewModel.updateLikeState(postId: post.id, isLiked: isLiked, likeCount: likeCount)
                     },
@@ -186,6 +197,8 @@ struct HomeView: View {
                     feedViewModel.updateCommentCount(postId: postId, count: actualCount)
                 }
             )
+            .presentationDetents([.fraction(2.0/3.0), .large])
+            .presentationDragIndicator(.visible)
         }
         .fullScreenCover(isPresented: $showUserProfile) {
             if let userId = selectedUserId {
@@ -246,9 +259,8 @@ struct HomeView: View {
                 await navigateToPost(id: postId)
             }
         case .profile(let userId):
-            // Navigate to user profile
-            selectedUserId = userId
-            showUserProfile = true
+            // Navigate to user profile (with cache invalidation for fresh data)
+            navigateToUserProfile(userId: userId)
             // Remove the route after handling
             coordinator.homePath.removeAll { $0 == route }
         default:
@@ -285,6 +297,16 @@ struct HomeView: View {
             print("[HomeView] Failed to load post \(postId): \(error)")
             #endif
         }
+    }
+
+    /// Navigate to user profile with fresh data (invalidates cache to fix avatar inconsistency)
+    /// Issue #166: Comment section shows fresh avatar from API, but profile page may show cached stale avatar
+    private func navigateToUserProfile(userId: String) {
+        // Invalidate cached profile data to ensure fresh fetch
+        // This fixes the inconsistency where comment avatars (fresh) differ from profile avatars (cached)
+        userService.invalidateCache(userId: userId)
+        selectedUserId = userId
+        showUserProfile = true
     }
 
     var homeContent: some View {
@@ -378,8 +400,7 @@ struct HomeView: View {
                                             await feedViewModel.followSuggestedCreator(userId: userId)
                                         },
                                         onCreatorTap: { userId in
-                                            selectedUserId = userId
-                                            showUserProfile = true
+                                            navigateToUserProfile(userId: userId)
                                         }
                                     )
                                 }
@@ -388,7 +409,12 @@ struct HomeView: View {
                                 // 配置在 FeedLayoutConfig.swift 中修改
                                 // 当前设置：每 4 个帖子后显示一次轮播图
                                 // 使用 feedViewModel.feedItems 缓存，避免每次渲染重新计算
-                                if !feedViewModel.posts.isEmpty {
+                                if feedViewModel.isLoading && feedViewModel.posts.isEmpty {
+                                    // Skeleton loading state for initial load
+                                    ForEach(0..<3, id: \.self) { _ in
+                                        FeedPostCardSkeleton()
+                                    }
+                                } else if !feedViewModel.posts.isEmpty {
                                     ForEach(feedViewModel.feedItems) { item in
                                         switch item {
                                         case .post(let index, let post):
@@ -445,8 +471,21 @@ struct HomeView: View {
                                         Spacer()
                                     }
                                     .padding()
+                                } else if !feedViewModel.hasMore && !feedViewModel.posts.isEmpty {
+                                    // MARK: - No More Content Indicator
+                                    HStack {
+                                        Spacer()
+                                        Text("— No more posts —")
+                                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                                            .foregroundColor(DesignTokens.textMuted)
+                                        Spacer()
+                                    }
+                                    .padding(.vertical, 16)
                                 }
 
+                                // MARK: - Bottom Padding for TabBar (fixes #252)
+                                Color.clear
+                                    .frame(height: 80.h)  // TabBar height (72) + extra padding
                             }
                             .background(DesignTokens.backgroundColor)
                         }
@@ -511,7 +550,7 @@ struct HomeView: View {
                             selectTab(tab)
                         }) {
                             Text(tab.displayName)
-                                .font(.system(size: 10.f))
+                                .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                                 .foregroundColor(selectedTab == tab ? .black : Color(red: 0.53, green: 0.53, blue: 0.53))
                         }
                     }

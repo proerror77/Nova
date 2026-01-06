@@ -85,7 +85,7 @@ struct LoginView: View {
 
                         // Or Separator
                         Text("or")
-                            .font(.system(size: 16.f))
+                            .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
 
@@ -162,7 +162,7 @@ struct LoginView: View {
                         currentPage = .forgotPassword
                     }) {
                         Text("Forgot password?")
-                            .font(.system(size: 14.f))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .tracking(0.28)
                             .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
                     }
@@ -196,10 +196,10 @@ struct LoginView: View {
                     )
 
                 TextField("", text: $email, prompt: Text("Email or phone number")
-                    .font(.system(size: 14.f))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .foregroundColor(.white))
                     .foregroundColor(.white)
-                    .font(.system(size: 14.f))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .tracking(0.28)
                     .padding(.horizontal, 16.w)
                     .autocapitalization(.none)
@@ -236,10 +236,10 @@ struct LoginView: View {
                 HStack {
                     if showPassword {
                         TextField("", text: $password, prompt: Text("Password")
-                            .font(.system(size: 14.f))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(.white))
                             .foregroundColor(.white)
-                            .font(.system(size: 14.f))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .tracking(0.28)
                             .autocapitalization(.none)
                             .autocorrectionDisabled()
@@ -247,10 +247,10 @@ struct LoginView: View {
                             .focused($focusedField, equals: .password)
                     } else {
                         SecureField("", text: $password, prompt: Text("Password")
-                            .font(.system(size: 14.f))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .foregroundColor(.white))
                             .foregroundColor(.white)
-                            .font(.system(size: 14.f))
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .tracking(0.28)
                             .accessibilityIdentifier("loginPasswordTextField")
                             .focused($focusedField, equals: .password)
@@ -323,7 +323,7 @@ struct LoginView: View {
                             .frame(width: 24.s, height: 24.s)
                     }
                     Text("Google")
-                        .font(.system(size: 10.f))
+                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                         .foregroundColor(.white)
                         .padding(.top, 8.s)
                 }
@@ -350,7 +350,7 @@ struct LoginView: View {
                             .frame(width: 24.s, height: 24.s)
                     }
                     Text("Apple")
-                        .font(.system(size: 10.f))
+                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                         .foregroundColor(.white)
                         .padding(.top, 8.s)
                 }
@@ -377,7 +377,7 @@ struct LoginView: View {
                                 .frame(width: 24.s, height: 24.s)
                         }
                         Text("Passkey")
-                            .font(.system(size: 10.f))
+                            .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                             .foregroundColor(.white)
                             .padding(.top, 8.s)
                     }
@@ -419,7 +419,7 @@ struct LoginView: View {
                 // TODO: Show Terms and Conditions
             }) {
                 Text("Terms and Conditions")
-                    .font(.system(size: 10))
+                    .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                     .underline()
                     .foregroundColor(.white)
             }
@@ -429,7 +429,7 @@ struct LoginView: View {
                 // TODO: Show Privacy Statement
             }) {
                 Text("Privacy Statement")
-                    .font(.system(size: 10))
+                    .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                     .underline()
                     .foregroundColor(.white)
             }

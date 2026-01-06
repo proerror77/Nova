@@ -4,7 +4,7 @@ use crate::error::{IdentityError, Result};
 use lettre::message::{header, Mailbox, Message};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric, Rng};
 use std::sync::Arc;
 use tracing::{info, warn};
 
@@ -141,7 +141,7 @@ impl EmailService {
     ///
     /// Returns 32-character alphanumeric code for manual verification flows.
     pub fn generate_backup_code(&self) -> String {
-        rand::thread_rng()
+        rand::rng()
             .sample_iter(&Alphanumeric)
             .take(32)
             .map(char::from)

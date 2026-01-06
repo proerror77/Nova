@@ -97,6 +97,7 @@ struct MatrixUserIdentifier {
 
 /// Response from standard Matrix login
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)] // Fields populated by serde deserialization
 struct MatrixLoginResponse {
     /// The Matrix user ID
     user_id: String,

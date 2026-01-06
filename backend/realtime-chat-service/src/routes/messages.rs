@@ -10,7 +10,6 @@ use crate::websocket::events::{broadcast_event, WebSocketEvent};
 use aws_sdk_s3::config::Region;
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::Client as S3Client;
-use base64::{engine::general_purpose, Engine as _};
 use std::time::Duration;
 
 #[derive(Deserialize)]
@@ -68,6 +67,55 @@ pub async fn send_message(
         event,
     )
     .await;
+
+    // Send push notifications to other conversation members (non-blocking)
+    if let Some(ref producer) = state.notification_producer {
+        let producer = producer.clone();
+        let db = state.db.clone();
+        let sender_id = user.id;
+        let message_id = message.id;
+        let message_preview = body.plaintext.clone();
+
+        tokio::spawn(async move {
+            // Get all conversation participants except sender
+            match crate::services::matrix_db::get_conversation_participants(&db, conversation_id).await {
+                Ok(participants) => {
+                    for recipient_id in participants {
+                        if recipient_id == sender_id {
+                            continue; // Don't notify sender
+                        }
+
+                        // Send notification (best-effort, don't block on failures)
+                        if let Err(e) = producer
+                            .publish_message_notification(
+                                recipient_id,
+                                sender_id,
+                                "New Message", // notification-service will enrich with sender name
+                                conversation_id,
+                                message_id,
+                                &message_preview,
+                            )
+                            .await
+                        {
+                            tracing::warn!(
+                                error = %e,
+                                recipient_id = %recipient_id,
+                                message_id = %message_id,
+                                "Failed to publish message notification"
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        conversation_id = %conversation_id,
+                        "Failed to get conversation participants for notifications"
+                    );
+                }
+            }
+        });
+    }
 
     Ok(HttpResponse::Ok().json(SendMessageResponse {
         id: message.id,

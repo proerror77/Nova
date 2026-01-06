@@ -148,14 +148,21 @@ class SocialService {
         )
     }
 
-    func getComments(postId: String, limit: Int = 20, offset: Int = 0) async throws -> (comments: [SocialComment], totalCount: Int) {
+    func getComments(postId: String, limit: Int = 20, offset: Int = 0, viewerUserId: String? = nil) async throws -> (comments: [SocialComment], totalCount: Int) {
+        var queryParams: [String: String] = [
+            "post_id": postId,
+            "limit": String(limit),
+            "offset": String(offset)
+        ]
+
+        // Add viewer_user_id to populate like_count and is_liked_by_viewer in response
+        if let viewerId = viewerUserId {
+            queryParams["viewer_user_id"] = viewerId
+        }
+
         let response: GetCommentsResponse = try await client.get(
             endpoint: APIConfig.Social.getComments,
-            queryParams: [
-                "post_id": postId,
-                "limit": String(limit),
-                "offset": String(offset)
-            ]
+            queryParams: queryParams
         )
         return (response.comments, response.total)
     }
@@ -220,6 +227,41 @@ class SocialService {
             endpoint: APIConfig.Social.getCommentLikes(commentId)
         )
         return response.likeCount
+    }
+
+    /// Batch check if user has liked multiple comments (fixes N+1 API calls)
+    /// Returns a dictionary mapping comment IDs to their liked status
+    func batchCheckCommentLiked(commentIds: [String], userId: String) async throws -> [String: Bool] {
+        struct Request: Codable {
+            let commentIds: [String]
+
+            enum CodingKeys: String, CodingKey {
+                case commentIds = "comment_ids"
+            }
+        }
+
+        struct Response: Codable {
+            let likedStatus: [String: Bool]
+
+            enum CodingKeys: String, CodingKey {
+                case likedStatus = "liked_status"
+            }
+        }
+
+        // Handle empty input
+        guard !commentIds.isEmpty else {
+            return [:]
+        }
+
+        // Limit to 100 comments per request
+        let limitedIds = Array(commentIds.prefix(100))
+
+        let request = Request(commentIds: limitedIds)
+        let response: Response = try await client.request(
+            endpoint: APIConfig.Social.batchCheckCommentLiked,
+            body: request
+        )
+        return response.likedStatus
     }
 
     // MARK: - Shares
@@ -602,6 +644,10 @@ struct SocialComment: Codable, Identifiable {
     let authorUsername: String?
     let authorDisplayName: String?
     let authorAvatarUrl: String?
+
+    // Engagement data (populated when viewer_user_id is provided in GetCommentsRequest)
+    let likeCount: Int64?           // Total likes on this comment
+    let isLikedByViewer: Bool?      // Whether the viewer has liked this comment
 
     // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase which automatically
     // converts snake_case JSON keys (user_id, post_id, etc.) to camelCase Swift properties

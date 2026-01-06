@@ -27,14 +27,14 @@ struct GetVerifiedView: View {
             Spacer()
 
             Text("Get verified")
-                .font(.system(size: 18, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                 .foregroundColor(DesignTokens.textPrimary)
 
             Spacer()
 
             Button(action: { /* TODO: Show help */ }) {
                 Text("Help")
-                    .font(.system(size: 14))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .foregroundColor(DesignTokens.textPrimary)
             }
             .frame(width: 50, alignment: .trailing)
@@ -55,20 +55,20 @@ struct GetVerifiedView: View {
                 .frame(width: 100, height: 100)
                 .overlay(
                     Image(systemName: "person.fill")
-                        .font(.system(size: 40))
+                        .font(.system(size: 40.f))
                         .foregroundColor(.white.opacity(0.8))
                 )
                 .padding(.bottom, 40)
 
             // Title
             Text("Profile verification required")
-                .font(.system(size: 20, weight: .bold))
+                .font(Font.custom("SFProDisplay-Bold", size: 20.f))
                 .foregroundColor(DesignTokens.textPrimary)
                 .padding(.bottom, 16)
 
             // Description
             Text("Recent activity has caused us to lock your account. To continue swiping, please verify your profile photos.")
-                .font(.system(size: 16))
+                .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                 .foregroundColor(DesignTokens.textSecondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
@@ -79,7 +79,7 @@ struct GetVerifiedView: View {
             // Action Button
             Button(action: { /* TODO: Handle verification */ }) {
                 Text("Get started")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity, minHeight: 46)
                     .background(DesignTokens.accentColor)

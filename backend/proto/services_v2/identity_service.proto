@@ -75,6 +75,10 @@ service IdentityService {
   rpc ListPasskeys(ListPasskeysRequest) returns (ListPasskeysResponse);
   rpc RevokePasskey(RevokePasskeyRequest) returns (google.protobuf.Empty);
   rpc RenamePasskey(RenamePasskeyRequest) returns (google.protobuf.Empty);
+
+  // ========== User Resolution (for @mentions, etc.) ==========
+  // Batch resolve usernames to user IDs
+  rpc BatchResolveUsernames(BatchResolveUsernamesRequest) returns (BatchResolveUsernamesResponse);
 }
 
 // ============================================================================
@@ -199,6 +203,21 @@ message Session {
 
 message ListActiveSessionsResponse {
   repeated Session sessions = 1;
+}
+
+// -------- Batch Username Resolution (for @mentions) --------
+message BatchResolveUsernamesRequest {
+  repeated string usernames = 1;  // List of usernames to resolve (max 100)
+}
+
+message ResolvedUser {
+  string username = 1;           // The username that was queried
+  string user_id = 2;            // UUID of the user (empty if not found)
+  bool found = 3;                // Whether the user was found
+}
+
+message BatchResolveUsernamesResponse {
+  repeated ResolvedUser users = 1;
 }
 
 // ============================================================================

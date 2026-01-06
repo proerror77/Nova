@@ -18,6 +18,7 @@ struct ChatView: View {
     // MARK: - ViewModel
 
     @State private var viewModel = ChatViewModel()
+    private let userService = UserService.shared  // For cache invalidation on profile navigation
     @State private var showMessageSearch = false
 
     // MARK: - View Models & Handlers
@@ -70,7 +71,7 @@ struct ChatView: View {
                             showChat = false
                         } label: {
                             Image(systemName: "chevron.left")
-                                .font(.system(size: 18.f, weight: .semibold))
+                                .font(.system(size: 18.f))
                                 .foregroundColor(DesignTokens.textPrimary)
                                 .frame(width: 24.s, height: 24.s)
                         }
@@ -79,6 +80,8 @@ struct ChatView: View {
                         
                         // 头像 - 可点击查看个人资料
                         Button {
+                            // Invalidate cache for fresh profile data (Issue #166)
+                            userService.invalidateCache(userId: conversationId)
                             viewModel.showUserProfile = true
                         } label: {
                             AvatarView(
@@ -93,7 +96,7 @@ struct ChatView: View {
                         // 用户名和 E2EE 状态
                         VStack(alignment: .leading, spacing: 2.h) {
                             Text(userName)
-                                .font(.system(size: 16.f, weight: .semibold))
+                                .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                                 .foregroundColor(DesignTokens.textPrimary)
                                 .lineLimit(1)
                             
@@ -103,7 +106,7 @@ struct ChatView: View {
                                     Image(systemName: "lock.fill")
                                         .font(.system(size: 10.f))
                                     Text("End-to-end encrypted")
-                                        .font(.system(size: 11.f))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 11.f))
                                 }
                                 .foregroundColor(DesignTokens.textMuted)
                             }
@@ -157,9 +160,9 @@ struct ChatView: View {
                         } label: {
                             HStack(spacing: 6.s) {
                                 Image(systemName: "arrow.down")
-                                    .font(.system(size: 12.f, weight: .semibold))
+                                    .font(.system(size: 12.f))
                                 Text("\(newMessageCount) new messages")
-                                    .font(.system(size: 13.f, weight: .medium))
+                                    .font(Font.custom("SFProDisplay-Medium", size: 13.f))
                             }
                             .foregroundColor(.white)
                             .padding(.horizontal, 14.w)
@@ -314,9 +317,11 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 16.h) {
-                    // Loading indicator
-                    if viewModel.isLoadingHistory {
-                        ProgressView("Loading messages...")
+                    // Loading indicator with skeleton
+                    if viewModel.isLoadingHistory && viewModel.messages.isEmpty {
+                        ChatMessagesSkeleton()
+                    } else if viewModel.isLoadingHistory {
+                        ProgressView()
                             .padding()
                     }
 
@@ -327,7 +332,7 @@ struct ChatView: View {
                                 .font(.system(size: 30.f))
                                 .foregroundColor(.orange)
                             Text(error)
-                                .font(.system(size: 14.f))
+                                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
                             Button("Retry") {
@@ -391,7 +396,7 @@ struct ChatView: View {
                             ProgressView()
                                 .scaleEffect(0.8)
                             Text("Sending...")
-                                .font(.system(size: 12.f))
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                 .foregroundColor(.secondary)
                             Spacer()
                         }
@@ -471,10 +476,10 @@ struct ChatView: View {
 
                     VStack(alignment: .leading, spacing: 2.h) {
                         Text("Reply to \(replyPreview.senderName)")
-                            .font(.system(size: 12.f, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                             .foregroundColor(DesignTokens.accentColor)
                         Text(replyPreview.content)
-                            .font(.system(size: 12.f))
+                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                             .foregroundColor(DesignTokens.textSecondary)
                             .lineLimit(1)
                     }
@@ -503,10 +508,10 @@ struct ChatView: View {
 
                     VStack(alignment: .leading, spacing: 2.h) {
                         Text("Edit Message")
-                            .font(.system(size: 12.f, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                             .foregroundColor(.orange)
                         Text(editingMsg.text)
-                            .font(.system(size: 12.f))
+                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                             .foregroundColor(DesignTokens.textSecondary)
                             .lineLimit(1)
                     }
@@ -548,7 +553,7 @@ struct ChatView: View {
                 // Text input
                 HStack(spacing: 8.w) {
                     TextField(viewModel.editingMessage != nil ? "Edit message..." : "Type a message...", text: $viewModel.messageText)
-                        .font(.system(size: 16.f))
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .padding(.horizontal, 12.w)
                         .padding(.vertical, 8.h)
                         .focused($isInputFocused)
@@ -577,7 +582,7 @@ struct ChatView: View {
                                     .frame(width: 28.s, height: 28.s)
                             } else {
                                 Image(systemName: viewModel.editingMessage != nil ? "checkmark.circle.fill" : "arrow.up.circle.fill")
-                                    .font(.system(size: 28.f))
+                                    .font(Font.custom("SFProDisplay-Regular", size: 28.f))
                                     .foregroundColor(viewModel.editingMessage != nil ? .orange : DesignTokens.accentColor)
                             }
                         }
@@ -663,9 +668,9 @@ struct ChatView: View {
     private func attachmentButton(icon: String, label: String) -> some View {
         VStack(spacing: 6.h) {
             Image(systemName: icon)
-                .font(.system(size: 24.f))
+                .font(Font.custom("SFProDisplay-Regular", size: 24.f))
             Text(label)
-                .font(.system(size: 12.f))
+                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
         }
         .foregroundColor(DesignTokens.textSecondary)
         .frame(maxWidth: .infinity)
@@ -687,7 +692,7 @@ struct ChatView: View {
 
             // Microphone button
             Image(systemName: viewModel.isRecordingVoice ? "stop.circle.fill" : "mic.circle.fill")
-                .font(.system(size: 28.f))
+                .font(Font.custom("SFProDisplay-Regular", size: 28.f))
                 .foregroundColor(viewModel.isRecordingVoice ? .red : DesignTokens.textSecondary)
                 .gesture(
                     DragGesture(minimumDistance: 0)
@@ -709,7 +714,7 @@ struct ChatView: View {
                         .font(.system(size: 24.f))
                         .foregroundColor(.red)
                     Text("Release to cancel")
-                        .font(.system(size: 10.f))
+                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                         .foregroundColor(.red)
                 }
                 .offset(y: -50.h)

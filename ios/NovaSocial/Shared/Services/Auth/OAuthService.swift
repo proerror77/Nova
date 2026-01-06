@@ -1,6 +1,7 @@
 import Foundation
 import AuthenticationServices
 import CryptoKit
+import UIKit
 
 // MARK: - OAuth Service
 
@@ -84,6 +85,7 @@ class OAuthService: NSObject {
     ///   - provider: OAuth provider (Google or Apple)
     ///   - inviteCode: Optional invite code for new user registration
     /// - Returns: OAuth start response with authorization URL
+    @MainActor
     func startOAuthFlow(provider: OAuthProvider, inviteCode: String? = nil) async throws -> OAuthStartResponse {
         let redirectUri = getRedirectUri(for: provider)
 
@@ -92,8 +94,17 @@ class OAuthService: NSObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
+        // Get device information for session tracking
+        let deviceInfo = getDeviceInfo()
+
         var body: [String: Any] = [
-            "redirect_uri": redirectUri
+            "redirect_uri": redirectUri,
+            // Device info for session tracking (stored with OAuth state, used on callback)
+            "device_id": deviceInfo.deviceId ?? "",
+            "device_name": deviceInfo.deviceName,
+            "device_type": deviceInfo.deviceType,
+            "os_version": deviceInfo.osVersion,
+            "user_agent": deviceInfo.userAgent
         ]
 
         // Add invite code if provided
@@ -389,10 +400,19 @@ class OAuthService: NSObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
+        // Get device information for session tracking
+        let deviceInfo = await getDeviceInfo()
+
         var body: [String: Any] = [
             "authorization_code": authorizationCode,
             "identity_token": identityToken,
-            "user_identifier": userIdentifier
+            "user_identifier": userIdentifier,
+            // Device info for session tracking
+            "device_id": deviceInfo.deviceId ?? "",
+            "device_name": deviceInfo.deviceName,
+            "device_type": deviceInfo.deviceType,
+            "os_version": deviceInfo.osVersion,
+            "user_agent": deviceInfo.userAgent
         ]
 
         if let email = email {
@@ -503,6 +523,51 @@ class OAuthService: NSObject {
             // Apple uses native flow, but for web-based fallback use custom scheme
             return "icered://oauth/apple/callback"
         }
+    }
+
+    /// Device information for session tracking
+    struct DeviceInfo {
+        let deviceId: String?
+        let deviceName: String
+        let deviceType: String
+        let osVersion: String
+        let userAgent: String
+    }
+
+    /// Get device information for session tracking (must be called on MainActor)
+    @MainActor
+    private func getDeviceInfo() -> DeviceInfo {
+        let device = UIDevice.current
+        let deviceId = device.identifierForVendor?.uuidString
+        let deviceName = device.name
+        let systemName = device.systemName
+        let systemVersion = device.systemVersion
+        let deviceModel = device.model
+
+        // Determine device type based on userInterfaceIdiom
+        let deviceType: String
+        switch device.userInterfaceIdiom {
+        case .phone:
+            deviceType = "iOS"
+        case .pad:
+            deviceType = "iOS" // iPad is still iOS
+        case .mac:
+            deviceType = "macOS"
+        default:
+            deviceType = "iOS"
+        }
+
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let userAgent = "NovaSocial/\(appVersion) (\(deviceModel))"
+        let osVersion = "\(systemName) \(systemVersion)"
+
+        return DeviceInfo(
+            deviceId: deviceId,
+            deviceName: deviceName,
+            deviceType: deviceType,
+            osVersion: osVersion,
+            userAgent: userAgent
+        )
     }
 }
 

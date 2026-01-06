@@ -84,6 +84,39 @@ struct Post: Codable, Identifiable {
     var needsAuthorEnrichment: Bool {
         authorDisplayName == nil && authorUsername == nil
     }
+
+    /// Returns the appropriate thumbnail URL for grid display
+    /// For video posts, returns the thumbnail URL (second in mediaUrls array)
+    /// For image/live_photo posts, returns the first media URL
+    var displayThumbnailUrl: String? {
+        guard let urls = mediaUrls, !urls.isEmpty else { return nil }
+
+        let firstUrl = urls[0].lowercased()
+
+        // Check if first URL is a video
+        let isVideo = firstUrl.contains(".mp4") ||
+                      firstUrl.contains(".m4v") ||
+                      firstUrl.contains(".mov") ||
+                      firstUrl.contains(".webm")
+
+        if isVideo {
+            // For video posts, thumbnail is the second URL
+            return urls.count > 1 ? urls[1] : nil
+        }
+
+        // For image/live_photo, use the first URL
+        return urls[0]
+    }
+
+    /// Check if this post contains video content
+    var isVideoPost: Bool {
+        guard let urls = mediaUrls, !urls.isEmpty else { return false }
+        let firstUrl = urls[0].lowercased()
+        return firstUrl.contains(".mp4") ||
+               firstUrl.contains(".m4v") ||
+               firstUrl.contains(".mov") ||
+               firstUrl.contains(".webm")
+    }
 }
 
 struct Comment: Codable, Identifiable {

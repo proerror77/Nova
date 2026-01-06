@@ -37,7 +37,7 @@ struct GenerateImage01View: View {
 
                     // 标题
                     Text("Create images")
-                        .font(.system(size: 20, weight: .bold))
+                        .font(Font.custom("SFProDisplay-Bold", size: 20.f))
                         .foregroundColor(.black)
 
                     Spacer()
@@ -63,7 +63,7 @@ struct GenerateImage01View: View {
                                     Spacer()
                                     HStack(spacing: 8) {
                                         Text(text)
-                                            .font(.system(size: 14))
+                                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                             .foregroundColor(.black)
                                     }
                                     .padding(EdgeInsets(top: 10, leading: 13, bottom: 10, trailing: 13))
@@ -100,11 +100,11 @@ struct GenerateImage01View: View {
                         HStack(spacing: 12) {
                             HStack(spacing: 8) {
                                 Image(systemName: "waveform")
-                                    .font(.system(size: 14))
+                                    .font(.system(size: 14.f))
                                     .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
 
                                 TextField("Describe the image to generate", text: $promptText)
-                                    .font(.system(size: 16))
+                                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                                     .foregroundColor(Color(red: 0.34, green: 0.34, blue: 0.34))
                                     .focused($isInputFocused)
                                     .onSubmit {
@@ -124,7 +124,7 @@ struct GenerateImage01View: View {
                                     .frame(width: 33, height: 33)
                                     .overlay(
                                         Image(systemName: "paperplane.fill")
-                                            .font(.system(size: 14))
+                                            .font(.system(size: 14.f))
                                             .foregroundColor(.white)
                                     )
                             }
@@ -156,12 +156,12 @@ struct GenerateImage01View: View {
             // Alice 标题和标签
             HStack(spacing: 8) {
                 Text("Alice")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                     .foregroundColor(.black)
 
                 HStack(spacing: 6) {
                     Text("AI agent")
-                        .font(.system(size: 10))
+                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                         .lineSpacing(14.55)
                         .foregroundColor(.black)
                 }
@@ -178,7 +178,7 @@ struct GenerateImage01View: View {
 
             // Loading 或 生成完成文本
             Text(isGenerating ? "Loading..." : "Generated 2 images")
-                .font(.system(size: 12))
+                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                 .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                 .padding(.leading, 16)
 

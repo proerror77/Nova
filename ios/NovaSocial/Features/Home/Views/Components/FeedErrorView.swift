@@ -18,17 +18,17 @@ struct FeedErrorView: View {
         VStack(spacing: DesignTokens.spacing16) {
             // Error Icon
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 50))
+                .font(.system(size: 50.f))
                 .foregroundColor(.orange)
 
             // Title
             Text("Oops!")
-                .font(.system(size: DesignTokens.fontTitle, weight: .semibold))
+                .font(Font.custom("SFProDisplay-Semibold", size: DesignTokens.fontTitle))
                 .foregroundColor(DesignTokens.textPrimary)
 
             // Error Message
             Text(errorMessage)
-                .font(.system(size: DesignTokens.fontMedium))
+                .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
                 .foregroundColor(DesignTokens.textSecondary)
                 .multilineTextAlignment(.center)
                 .lineLimit(3)
@@ -41,9 +41,9 @@ struct FeedErrorView: View {
                     Button(action: onLogin) {
                         HStack(spacing: 6) {
                             Image(systemName: "person.circle")
-                                .font(.system(size: 16, weight: .medium))
+                                .font(.system(size: 16.f))
                             Text("Login")
-                                .font(.system(size: DesignTokens.fontMedium, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontMedium))
                         }
                         .foregroundColor(DesignTokens.textOnAccent)
                         .padding(.horizontal, 32)
@@ -61,9 +61,9 @@ struct FeedErrorView: View {
                     }) {
                         HStack(spacing: 6) {
                             Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 16, weight: .medium))
+                                .font(.system(size: 16.f))
                             Text("Try Again")
-                                .font(.system(size: DesignTokens.fontMedium, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontMedium))
                         }
                         .foregroundColor(DesignTokens.textOnAccent)
                         .padding(.horizontal, 32)

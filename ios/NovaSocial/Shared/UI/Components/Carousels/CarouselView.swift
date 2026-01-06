@@ -27,7 +27,7 @@ struct CarouselCard: View {
                     VStack(spacing: 10) {
                         VStack(spacing: 10) {
                             Text(rankNumber)
-                                .font(.system(size: 20, weight: .medium))
+                                .font(Font.custom("SFProDisplay-Medium", size: 20.f))
                                 .foregroundColor(.white)
                         }
                     }
@@ -38,17 +38,17 @@ struct CarouselCard: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Lucy Liu")
-                            .font(.system(size: 18, weight: .bold))
+                            .font(Font.custom("SFProDisplay-Bold", size: 18.f))
                             .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
                         Text("Morgan Stanley")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
                     }
                     .frame(width: 99, height: 38)
 
                     HStack(alignment: .bottom, spacing: 10) {
                         Text("2293")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
                     }
                     .frame(width: 125)
@@ -94,12 +94,12 @@ struct CommentCard: View {
                     .offset(x: 0.19, y: -88.75)
 
                 Text("Simone Carter")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                     .foregroundColor(Color(red: 0.02, green: 0, blue: 0))
                     .offset(x: -93, y: -264.50)
 
                 Text("1d")
-                    .font(.system(size: 8, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 8.f))
                     .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
                     .offset(x: -109.50, y: -246.50)
 
@@ -109,12 +109,12 @@ struct CommentCard: View {
                     .offset(x: -164.75, y: -252.15)
 
                 Text("up")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                     .foregroundColor(Color(red: 0.45, green: 0.44, blue: 0.44))
                     .offset(x: 50.50, y: 227.50)
 
                 Text("kyleegigstead Cyborg dreams...")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                     .foregroundColor(.black)
                     .offset(x: -52.50, y: 227.50)
             }
@@ -128,26 +128,26 @@ struct CommentCard: View {
 
                 HStack(spacing: 30) {
                     Text("0")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(Font.custom("SFProDisplay-Bold", size: 12.f))
                         .foregroundColor(.black)
 
                     if hasExtraComment {
                         ZStack {
                             Text("0")
-                                .font(.system(size: 12, weight: .bold))
+                                .font(Font.custom("SFProDisplay-Bold", size: 12.f))
                                 .foregroundColor(.black)
                                 .offset(x: 10, y: 0)
                         }
                         .frame(width: 29, height: 15)
                     } else {
                         Text("0")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(Font.custom("SFProDisplay-Bold", size: 12.f))
                             .foregroundColor(.black)
                     }
 
                     ZStack {
                         Text("Share")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(Font.custom("SFProDisplay-Bold", size: 12.f))
                             .foregroundColor(.black)
                             .offset(x: 10.50, y: -1.07)
                     }
@@ -233,10 +233,10 @@ struct CarouselView: View {
                 // 标题
                 VStack(spacing: 8) {
                     Text("Hottest Banker in H.K.")
-                        .font(.system(size: 22, weight: .bold))
+                        .font(Font.custom("SFProDisplay-Bold", size: 22.f))
                         .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
                     Text("Corporate Poll")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                         .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
                 }
                 .frame(width: 272.69, height: 38)
@@ -257,7 +257,7 @@ struct CarouselView: View {
                 // View More 按钮
                 HStack(alignment: .bottom, spacing: 10) {
                     Text("view more")
-                        .font(.system(size: 13))
+                        .font(Font.custom("SFProDisplay-Regular", size: 13.f))
                         .foregroundColor(Color(red: 0.81, green: 0.13, blue: 0.25))
                         .offset(x: 0.19, y: -0.50)
                     Rectangle()

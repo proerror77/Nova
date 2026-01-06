@@ -1,7 +1,7 @@
 use crate::error::AppError;
 use base64::{engine::general_purpose, Engine as _};
 use deadpool_postgres::Pool;
-use rand::rngs::OsRng;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -31,8 +31,10 @@ impl KeyExchangeService {
 
     /// Generates a new X25519 key pair for a device
     pub fn generate_keypair() -> Result<(Vec<u8>, Vec<u8>), AppError> {
-        // Generate a cryptographically secure private key
-        let secret = StaticSecret::random_from_rng(OsRng);
+        // Generate a cryptographically secure private key using rand 0.9 API
+        let mut secret_bytes = [0u8; 32];
+        rand::rng().fill(&mut secret_bytes);
+        let secret = StaticSecret::from(secret_bytes);
         let public = PublicKey::from(&secret);
 
         Ok((secret.as_bytes().to_vec(), public.as_bytes().to_vec()))

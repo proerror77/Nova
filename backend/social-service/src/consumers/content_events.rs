@@ -96,7 +96,10 @@ impl ContentEventsConsumer {
                     let payload = record.payload();
 
                     if payload.is_none() {
-                        debug!("Received Kafka message with empty payload (topic: {})", topic);
+                        debug!(
+                            "Received Kafka message with empty payload (topic: {})",
+                            topic
+                        );
                         continue;
                     }
 

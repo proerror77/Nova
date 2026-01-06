@@ -28,7 +28,7 @@ struct AliceStreamingMessageView: View {
 
     private var userMessageBubble: some View {
         Text(message.content)
-            .font(.system(size: 14))
+            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
             .foregroundColor(DesignTokens.textPrimary)
             .padding(EdgeInsets(top: 10, leading: 13, bottom: 10, trailing: 13))
             .background(DesignTokens.surface)
@@ -114,11 +114,11 @@ struct AliceToolCallIndicator: View {
             } else {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundColor(.green)
-                    .font(.system(size: 14))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
             }
 
             Text(statusText)
-                .font(.system(size: 12, weight: .medium))
+                .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                 .foregroundColor(DesignTokens.textSecondary)
         }
         .padding(.horizontal, 12)
@@ -180,7 +180,7 @@ struct AliceMessageBubble: View {
                     )
                 } else {
                     Text(content)
-                        .font(.system(size: 14))
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .foregroundColor(DesignTokens.textPrimary)
                         .padding(EdgeInsets(top: 10, leading: 13, bottom: 10, trailing: 13))
                         .background(bubbleBackground)
