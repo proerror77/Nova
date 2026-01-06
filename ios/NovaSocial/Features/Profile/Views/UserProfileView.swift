@@ -120,6 +120,8 @@ struct UserProfileView: View {
     // 標記是否已載入過 Saved/Liked 數據（防止空數組時重複請求）
     @State private var hasLoadedSaved = false
     @State private var hasLoadedLiked = false
+    @State private var isLoadingSaved = false
+    @State private var isLoadingLiked = false
 
     // MARK: - Services
     private let userService = UserService.shared
@@ -215,6 +217,42 @@ struct UserProfileView: View {
             return displaySavedPosts
         case .liked:
             return displayLikedPosts
+        }
+    }
+
+    /// 當前 tab 是否正在載入
+    private var isCurrentTabLoading: Bool {
+        switch selectedTab {
+        case .posts:
+            return isLoadingPosts
+        case .saved:
+            return isLoadingSaved
+        case .liked:
+            return isLoadingLiked
+        }
+    }
+
+    /// 當前 tab 的空狀態提示文字
+    private var emptyStateMessage: String {
+        switch selectedTab {
+        case .posts:
+            return "No posts yet"
+        case .saved:
+            return "No saved posts"
+        case .liked:
+            return "No liked posts"
+        }
+    }
+
+    /// 當前 tab 的空狀態圖標
+    private var emptyStateIcon: String {
+        switch selectedTab {
+        case .posts:
+            return "photo.on.rectangle.angled"
+        case .saved:
+            return "bookmark"
+        case .liked:
+            return "heart"
         }
     }
 
@@ -545,18 +583,18 @@ struct UserProfileView: View {
                         
                         // 帖子网格
                         ScrollView(.vertical, showsIndicators: false) {
-                            if isLoadingPosts && displayPosts.isEmpty {
+                            if isCurrentTabLoading && currentTabPosts.isEmpty {
                                 // 骨架屏加载状态（只在沒有快取帖子時顯示）
                                 ProfilePostsGridSkeleton(itemCount: 6)
                                     .padding(.horizontal, 5.w)
                                     .padding(.top, 5.h)
-                            } else if displayPosts.isEmpty {
-                                // 空狀態
+                            } else if currentTabPosts.isEmpty {
+                                // 空狀態（根據當前 tab 顯示對應文字和圖標）
                                 VStack(spacing: 12.h) {
-                                    Image(systemName: "photo.on.rectangle.angled")
+                                    Image(systemName: emptyStateIcon)
                                         .font(.system(size: 40.f))
                                         .foregroundColor(.gray)
-                                    Text("No posts yet")
+                                    Text(emptyStateMessage)
                                         .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                         .foregroundColor(.gray)
                                 }
@@ -731,7 +769,10 @@ struct UserProfileView: View {
         // 如果已经加载过，跳过（使用 flag 而非 isEmpty，防止空數組時重複請求）
         guard !hasLoadedSaved else { return }
 
-        await MainActor.run { hasLoadedSaved = true }
+        await MainActor.run {
+            hasLoadedSaved = true
+            isLoadingSaved = true
+        }
 
         #if DEBUG
         print("[UserProfile] 🔖 Loading saved posts for userId: \(userId)")
@@ -754,6 +795,7 @@ struct UserProfileView: View {
 
             await MainActor.run {
                 userData?.savedPosts = savedPosts
+                isLoadingSaved = false
             }
 
             #if DEBUG
@@ -761,6 +803,7 @@ struct UserProfileView: View {
             #endif
 
         } catch {
+            await MainActor.run { isLoadingSaved = false }
             #if DEBUG
             print("[UserProfile] ❌ Failed to load saved posts: \(error)")
             #endif
@@ -772,7 +815,10 @@ struct UserProfileView: View {
         // 如果已经加载过，跳过（使用 flag 而非 isEmpty，防止空數組時重複請求）
         guard !hasLoadedLiked else { return }
 
-        await MainActor.run { hasLoadedLiked = true }
+        await MainActor.run {
+            hasLoadedLiked = true
+            isLoadingLiked = true
+        }
 
         #if DEBUG
         print("[UserProfile] ❤️ Loading liked posts for userId: \(userId)")
@@ -795,6 +841,7 @@ struct UserProfileView: View {
 
             await MainActor.run {
                 userData?.likedPosts = likedPosts
+                isLoadingLiked = false
             }
 
             #if DEBUG
@@ -802,6 +849,7 @@ struct UserProfileView: View {
             #endif
 
         } catch {
+            await MainActor.run { isLoadingLiked = false }
             #if DEBUG
             print("[UserProfile] ❌ Failed to load liked posts: \(error)")
             #endif
