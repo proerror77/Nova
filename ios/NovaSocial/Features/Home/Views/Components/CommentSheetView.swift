@@ -279,10 +279,13 @@ struct CommentSheetView: View {
         error = nil
 
         do {
+            // 傳遞 viewerUserId 以在回應中直接包含 likeCount 和 isLikedByViewer
+            // 這樣就不需要額外的 API 呼叫來獲取按讚資訊
             let result = try await socialService.getComments(
                 postId: post.id,
                 limit: 50,
-                offset: 0
+                offset: 0,
+                viewerUserId: authManager.currentUser?.id
             )
             comments = result.comments
             totalCount = result.totalCount
@@ -295,8 +298,15 @@ struct CommentSheetView: View {
                 onCommentCountUpdated?(post.id, totalCount)
             }
 
+            // 從評論回應中提取按讚狀態 (不需要額外 API 呼叫)
+            for comment in comments {
+                if let isLiked = comment.isLikedByViewer {
+                    commentLikeStatus[comment.id] = isLiked
+                }
+            }
+
             #if DEBUG
-            print("[CommentSheet] ✅ Loaded \(comments.count) comments")
+            print("[CommentSheet] ✅ Loaded \(comments.count) comments with embedded like info (0 extra API calls)")
             #endif
         } catch let apiError as APIError {
             switch apiError {
@@ -519,12 +529,34 @@ struct SocialCommentRow: View {
         guard !hasLoadedStatus else { return }
         hasLoadedStatus = true
 
-        // 如果有從父元件傳入的預載狀態，使用它
-        if let preloadedStatus = initialLikedStatus {
-            isLiked = preloadedStatus
+        // 優先使用嵌入在評論中的按讚資訊 (來自 GetComments API)
+        // 這樣完全不需要額外的 API 呼叫
+        if let embeddedLikeCount = comment.likeCount {
+            likeCount = Int(embeddedLikeCount)
         }
 
-        // 載入按讚數量和狀態
+        if let embeddedIsLiked = comment.isLikedByViewer {
+            isLiked = embeddedIsLiked
+            return  // 有嵌入資料，不需要任何 API 呼叫
+        }
+
+        // 向後兼容：如果有從父元件傳入的預載狀態，使用它
+        if let preloadedStatus = initialLikedStatus {
+            isLiked = preloadedStatus
+            // 如果沒有嵌入的 likeCount，需要載入
+            if comment.likeCount == nil {
+                do {
+                    likeCount = try await socialService.getCommentLikes(commentId: comment.id)
+                } catch {
+                    #if DEBUG
+                    print("[SocialCommentRow] Failed to load like count: \(error)")
+                    #endif
+                }
+            }
+            return
+        }
+
+        // 最後的 Fallback：沒有任何預載資料時，個別載入
         guard let userId = authManager.currentUser?.id else { return }
 
         do {
