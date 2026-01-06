@@ -1173,28 +1173,35 @@ extension MatrixBridgeService {
                 return name.range(of: pattern, options: .regularExpression) != nil
             }
 
-            if room.isDirect {
+            // Treat as direct message if explicitly marked OR if it has exactly 2 members
+            // (isDirect flag may not be synced correctly after logout/login, see findExistingDirectRoom)
+            let isLikelyDirect = room.isDirect || room.memberCount == 2
+
+            if isLikelyDirect {
                 let initialName = room.name ?? ""
                 displayName = initialName.isEmpty ? "Direct Message" : initialName
                 avatarURL = room.avatarURL
 
-                // Check if we need to enrich the display name
+                // Check if we need to enrich the display name or avatar
                 // - Empty/default name
                 // - Looks like a Matrix room ID
                 // - Looks like a member count fallback (e.g., "2 people")
                 // - Looks like legacy "Conversation {uuid}" format from backend
                 // - Looks like legacy "Nova User {uuid-prefix}" format
-                let needsEnrichment = displayName == "Direct Message" ||
-                                      looksLikeRoomId(displayName) ||
-                                      looksLikeMemberCountFallback(displayName) ||
-                                      looksLikeConversationUUID(displayName) ||
-                                      looksLikeNovaUserUUID(displayName)
+                // - Avatar URL is missing (common for DMs where room avatar isn't set)
+                let needsNameEnrichment = displayName == "Direct Message" ||
+                                          looksLikeRoomId(displayName) ||
+                                          looksLikeMemberCountFallback(displayName) ||
+                                          looksLikeConversationUUID(displayName) ||
+                                          looksLikeNovaUserUUID(displayName)
+                let needsAvatarEnrichment = avatarURL == nil || avatarURL?.isEmpty == true
+                let needsEnrichment = needsNameEnrichment || needsAvatarEnrichment
 
                 // Try to enrich from Nova conversation + identity profiles.
                 // This fixes cases where Matrix room display names/avatars are not yet configured.
                 if needsEnrichment {
                     #if DEBUG
-                    print("[MatrixBridge] 🔄 Enriching DM: \(room.id), initial name: '\(displayName)'")
+                    print("[MatrixBridge] 🔄 Enriching DM: \(room.id), initial name: '\(displayName)', needsName: \(needsNameEnrichment), needsAvatar: \(needsAvatarEnrichment)")
                     #endif
                     if let novaConversationId = try? await queryConversationMapping(roomId: room.id),
                        let conversation = try? await chatService.getConversation(conversationId: novaConversationId) {
@@ -1214,8 +1221,10 @@ extension MatrixBridgeService {
                         }
                     }
 
-                    // If still showing room ID, member count fallback, or "Conversation {uuid}", try to get other user from Matrix room members
-                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) {
+                    // If still showing room ID, member count fallback, "Conversation {uuid}", or avatar still missing, try to get other user from Matrix room members
+                    let stillNeedsNameEnrichment = looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName)
+                    let stillNeedsAvatarEnrichment = avatarURL == nil || avatarURL?.isEmpty == true
+                    if stillNeedsNameEnrichment || stillNeedsAvatarEnrichment {
                         #if DEBUG
                         print("[MatrixBridge]   📋 Trying Matrix room members for: \(room.id)")
                         #endif
@@ -1234,13 +1243,30 @@ extension MatrixBridgeService {
                                 return !member.userId.contains(currentUserId)
                             }) {
                                 #if DEBUG
-                                print("[MatrixBridge]   👤 Found other member: \(otherMember.userId), displayName: \(otherMember.displayName ?? "nil")")
+                                print("[MatrixBridge]   👤 Found other member: \(otherMember.userId), displayName: \(otherMember.displayName ?? "nil"), avatar: \(otherMember.avatarUrl ?? "nil")")
                                 #endif
                                 // Use their display name if available
                                 if let memberDisplayName = otherMember.displayName, !memberDisplayName.isEmpty {
-                                    displayName = memberDisplayName
-                                    if avatarURL == nil || avatarURL?.isEmpty == true {
-                                        avatarURL = otherMember.avatarUrl
+                                    if stillNeedsNameEnrichment {
+                                        displayName = memberDisplayName
+                                    }
+                                    if stillNeedsAvatarEnrichment {
+                                        if let memberAvatarUrl = otherMember.avatarUrl, !memberAvatarUrl.isEmpty {
+                                            avatarURL = memberAvatarUrl
+                                        } else {
+                                            // Member has displayName but no avatar - try to get avatar from UserService
+                                            if let novaUserId = matrixService.convertToNovaUserId(matrixUserId: otherMember.userId) {
+                                                #if DEBUG
+                                                print("[MatrixBridge]   🔍 Looking up avatar for: \(novaUserId)")
+                                                #endif
+                                                if let userProfile = try? await UserService.shared.getUser(userId: novaUserId) {
+                                                    avatarURL = userProfile.avatarUrl
+                                                    #if DEBUG
+                                                    print("[MatrixBridge]   ✅ Got avatar from UserService: \(avatarURL ?? "nil")")
+                                                    #endif
+                                                }
+                                            }
+                                        }
                                     }
                                 } else {
                                     // Matrix member has no displayName, try to look up via Nova UserService
@@ -1381,7 +1407,7 @@ extension MatrixBridgeService {
             var memberAvatars: [String?] = []
             var memberNames: [String] = []
 
-            if !room.isDirect {
+            if !isLikelyDirect {
                 // For groups, fetch first 3 members (excluding current user) for stacked avatars
                 do {
                     let members = try await matrixService.getRoomMembers(roomId: room.id)
@@ -1405,7 +1431,7 @@ extension MatrixBridgeService {
                     lastMessageTime: room.lastActivity,
                     unreadCount: room.unreadCount,
                     isEncrypted: room.isEncrypted,
-                    isDirect: room.isDirect,
+                    isDirect: isLikelyDirect,  // Use corrected detection, not just room.isDirect
                     avatarURL: avatarURL,
                     memberCount: room.memberCount,
                     memberAvatars: memberAvatars,
