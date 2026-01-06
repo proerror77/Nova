@@ -231,6 +231,15 @@ impl MatrixAdminClient {
             initial_device_display_name: Some(format!("Nova iOS Device")),
         };
 
+        // Record timestamp BEFORE the request to handle clock skew between backend and Synapse.
+        // Synapse returns expires_in_ms relative to when IT generated the token.
+        // If we calculate expiry AFTER the request using our clock, any clock skew
+        // or network latency will cause the token to appear expired immediately.
+        let request_time_sec = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+
         let response = self
             .client
             .post(&url)
@@ -249,13 +258,13 @@ impl MatrixAdminClient {
                 AppError::ServiceUnavailable(format!("Invalid response from Matrix: {}", e))
             })?;
 
-            // Calculate expiry timestamp if provided
+            // Calculate expiry timestamp using pre-request time and add a safety buffer
+            // to account for clock skew between servers (up to 60 seconds tolerance)
+            const CLOCK_SKEW_BUFFER_SEC: i64 = 60;
             let expires_at = login_response.expires_in_ms.map(|ms| {
-                let now_sec = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs() as i64;
-                now_sec + (ms / 1000)
+                let token_lifetime_sec = ms / 1000;
+                // Use pre-request time and subtract buffer for safety
+                request_time_sec + token_lifetime_sec - CLOCK_SKEW_BUFFER_SEC
             });
 
             info!(
