@@ -67,6 +67,10 @@ struct UserProfileView: View {
     @State private var isFollowing = true
     @State private var showBlockReportSheet = false
 
+    // 标记是否已加载过 Saved/Liked 数据（防止空数组时重复请求）
+    @State private var hasLoadedSaved = false
+    @State private var hasLoadedLiked = false
+
     // MARK: - Services
     private let userService = UserService.shared
     private let contentService = ContentService()
@@ -579,8 +583,9 @@ struct UserProfileView: View {
 
     // MARK: - 加载收藏的帖子
     private func loadSavedPosts() async {
-        // 如果已经加载过，跳过
-        guard userData.savedPosts.isEmpty else { return }
+        // 如果已经加载过，跳过（使用 flag 而非 isEmpty，防止空数组时重复请求）
+        guard !hasLoadedSaved else { return }
+        hasLoadedSaved = true
 
         #if DEBUG
         print("[UserProfile] 🔖 Loading saved posts for userId: \(userId)")
@@ -618,8 +623,9 @@ struct UserProfileView: View {
 
     // MARK: - 加载点赞的帖子
     private func loadLikedPosts() async {
-        // 如果已经加载过，跳过
-        guard userData.likedPosts.isEmpty else { return }
+        // 如果已经加载过，跳过（使用 flag 而非 isEmpty，防止空数组时重复请求）
+        guard !hasLoadedLiked else { return }
+        hasLoadedLiked = true
 
         #if DEBUG
         print("[UserProfile] ❤️ Loading liked posts for userId: \(userId)")
