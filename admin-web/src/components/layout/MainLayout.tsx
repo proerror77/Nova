@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { 
-  LayoutDashboard, Users, FileText, ShieldCheck, 
-  HeartHandshake, Bot, TrendingUp, CreditCard, 
-  MessageSquare, BarChart3, Settings, Bell, Search, 
-  LogOut, Menu, ChevronRight
+import React from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  LayoutDashboard, Users, FileText, ShieldCheck,
+  HeartHandshake, Bot, TrendingUp, CreditCard,
+  MessageSquare, BarChart3, Settings, Bell, Search,
+  LogOut, ChevronRight
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Button } from "../ui/button";
@@ -11,20 +12,11 @@ import { Input } from "../ui/input";
 import { Badge } from "../ui/badge";
 import { Separator } from "../ui/separator";
 import Logo from "../../imports/Logo";
-
-interface Admin {
-  id: string;
-  email: string;
-  name: string;
-  role: 'super_admin' | 'admin' | 'moderator';
-  avatar?: string;
-}
+import type { AdminInfo } from '../../api/types';
 
 interface MainLayoutProps {
   children: React.ReactNode;
-  currentPage: string;
-  onNavigate: (page: string) => void;
-  admin?: Admin | null;
+  admin?: AdminInfo | null;
   onLogout?: () => void;
 }
 
@@ -34,20 +26,23 @@ const roleLabels: Record<string, string> = {
   moderator: '审核员',
 };
 
-export const MainLayout = ({ children, currentPage, onNavigate, admin, onLogout }: MainLayoutProps) => {
-  const menuItems = [
-    { id: 'dashboard', label: '首页概览', icon: LayoutDashboard },
-    { id: 'users', label: '用户中心', icon: Users },
-    { id: 'content', label: '内容 & 评论', icon: FileText },
-    { id: 'verification', label: '身份 & 职业', icon: ShieldCheck },
-    { id: 'social', label: '社交 & 匹配', icon: HeartHandshake },
-    { id: 'ai', label: 'AI & Deepsearch', icon: Bot },
-    { id: 'growth', label: '运营 & 增长', icon: TrendingUp },
-    { id: 'finance', label: '支付 & 会员', icon: CreditCard },
-    { id: 'feedback', label: '反馈 & 客服', icon: MessageSquare },
-    { id: 'reports', label: '数据报表', icon: BarChart3 },
-    { id: 'system', label: '系统设置', icon: Settings },
-  ];
+const menuItems = [
+  { path: '/dashboard', label: '首页概览', icon: LayoutDashboard },
+  { path: '/users', label: '用户中心', icon: Users },
+  { path: '/content', label: '内容 & 评论', icon: FileText },
+  { path: '/verification', label: '身份 & 职业', icon: ShieldCheck },
+  { path: '/social', label: '社交 & 匹配', icon: HeartHandshake },
+  { path: '/ai', label: 'AI & Deepsearch', icon: Bot },
+  { path: '/growth', label: '运营 & 增长', icon: TrendingUp },
+  { path: '/finance', label: '支付 & 会员', icon: CreditCard },
+  { path: '/feedback', label: '反馈 & 客服', icon: MessageSquare },
+  { path: '/reports', label: '数据报表', icon: BarChart3 },
+  { path: '/system', label: '系统设置', icon: Settings },
+];
+
+export const MainLayout = ({ children, admin, onLogout }: MainLayoutProps) => {
+  const location = useLocation();
+  const navigate = useNavigate();
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans text-slate-900">
@@ -64,14 +59,15 @@ export const MainLayout = ({ children, currentPage, onNavigate, admin, onLogout 
           <nav className="space-y-1 px-3">
             {menuItems.map((item) => {
               const Icon = item.icon;
-              const isActive = currentPage === item.id;
+              const isActive = location.pathname === item.path ||
+                               location.pathname.startsWith(item.path + '/');
               return (
                 <button
-                  key={item.id}
-                  onClick={() => onNavigate(item.id)}
+                  key={item.path}
+                  onClick={() => navigate(item.path)}
                   className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-all duration-200 group ${
-                    isActive 
-                      ? 'bg-red-600 text-white shadow-md shadow-red-900/20' 
+                    isActive
+                      ? 'bg-red-600 text-white shadow-md shadow-red-900/20'
                       : 'text-slate-400 hover:bg-slate-900 hover:text-white'
                   }`}
                 >
@@ -114,13 +110,13 @@ export const MainLayout = ({ children, currentPage, onNavigate, admin, onLogout 
           <div className="flex items-center w-96">
             <div className="relative w-full">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-              <Input 
-                placeholder="全局搜索用户、内容、订单..." 
-                className="pl-9 bg-slate-50 border-slate-200 focus-visible:ring-red-500" 
+              <Input
+                placeholder="全局搜索用户、内容、订单..."
+                className="pl-9 bg-slate-50 border-slate-200 focus-visible:ring-red-500"
               />
             </div>
           </div>
-          
+
           <div className="flex items-center space-x-4">
             <Button variant="ghost" size="icon" className="relative text-slate-600">
               <Bell className="h-5 w-5" />

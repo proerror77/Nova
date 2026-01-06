@@ -214,7 +214,7 @@ jobs:
           cache-from: type=gha,scope=admin-web
           cache-to: type=gha,mode=max,scope=admin-web
           build-args: |
-            VITE_API_URL=/api/v1
+            VITE_API_URL=/api/admin/v1
 
       - name: Output image
         env:

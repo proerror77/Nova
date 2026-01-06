@@ -38,17 +38,39 @@ impl AuthService {
         // Check if account is locked
         if let Some(locked_until) = admin.locked_until {
             if locked_until > Utc::now() {
-                return Err(AppError::Unauthorized);
+                let formatted_time = locked_until.format("%Y-%m-%d %H:%M:%S UTC").to_string();
+                return Err(AppError::AccountLocked(formatted_time));
             }
+            // Lock has expired, clear it
+            sqlx::query("UPDATE admin_users SET locked_until = NULL, login_attempts = 0 WHERE id = $1")
+                .bind(admin.id)
+                .execute(&self.db.pg)
+                .await?;
         }
 
         // Verify password
         if let Err(_) = self.verify_password(password, &admin.password_hash) {
             // Increment login attempts on failed password
-            sqlx::query("UPDATE admin_users SET login_attempts = login_attempts + 1 WHERE id = $1")
-                .bind(admin.id)
-                .execute(&self.db.pg)
-                .await?;
+            let new_attempts = admin.login_attempts + 1;
+
+            // Check if we should lock the account
+            if new_attempts >= self.config.security.max_login_attempts {
+                let lock_until = Utc::now() + Duration::minutes(self.config.security.lockout_duration_minutes);
+                sqlx::query("UPDATE admin_users SET login_attempts = $1, locked_until = $2 WHERE id = $3")
+                    .bind(new_attempts)
+                    .bind(lock_until)
+                    .bind(admin.id)
+                    .execute(&self.db.pg)
+                    .await?;
+                let formatted_time = lock_until.format("%Y-%m-%d %H:%M:%S UTC").to_string();
+                return Err(AppError::AccountLocked(formatted_time));
+            } else {
+                sqlx::query("UPDATE admin_users SET login_attempts = $1 WHERE id = $2")
+                    .bind(new_attempts)
+                    .bind(admin.id)
+                    .execute(&self.db.pg)
+                    .await?;
+            }
             return Err(AppError::Unauthorized);
         }
 
@@ -56,8 +78,8 @@ impl AuthService {
         let access_token = self.generate_access_token(&admin)?;
         let refresh_token = self.generate_refresh_token(&admin)?;
 
-        // Reset login attempts and update last login time on success
-        sqlx::query("UPDATE admin_users SET last_login_at = NOW(), login_attempts = 0 WHERE id = $1")
+        // Reset login attempts, clear any lock, and update last login time on success
+        sqlx::query("UPDATE admin_users SET last_login_at = NOW(), login_attempts = 0, locked_until = NULL WHERE id = $1")
             .bind(admin.id)
             .execute(&self.db.pg)
             .await?;

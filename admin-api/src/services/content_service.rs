@@ -431,6 +431,164 @@ impl ContentService {
         Ok(count)
     }
 
+    /// Remove (soft delete) a post
+    pub async fn remove_post(&self, post_id: Uuid, admin_id: Uuid, reason: &str, notes: Option<&str>) -> Result<()> {
+        // Update post status to removed
+        sqlx::query("UPDATE posts SET status = 'removed' WHERE id = $1")
+            .bind(post_id)
+            .execute(&self.db.pg)
+            .await?;
+
+        // Log moderation action
+        self.log_moderation(admin_id, "post", post_id, "remove", Some(reason), notes).await?;
+
+        // Resolve pending reports
+        sqlx::query(
+            r#"
+            UPDATE content_reports
+            SET status = 'resolved', reviewed_by = $2, reviewed_at = NOW()
+            WHERE content_type = 'post' AND content_id = $1 AND status = 'pending'
+            "#
+        )
+        .bind(post_id)
+        .bind(admin_id)
+        .execute(&self.db.pg)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Restore a removed post
+    pub async fn restore_post(&self, post_id: Uuid, admin_id: Uuid, notes: Option<&str>) -> Result<()> {
+        // Check if post exists and is removed
+        let status: Option<String> = sqlx::query_scalar("SELECT status FROM posts WHERE id = $1")
+            .bind(post_id)
+            .fetch_optional(&self.db.pg)
+            .await?;
+
+        match status {
+            Some(s) if s == "removed" || s == "rejected" => {
+                // Restore post
+                sqlx::query("UPDATE posts SET status = 'active' WHERE id = $1")
+                    .bind(post_id)
+                    .execute(&self.db.pg)
+                    .await?;
+
+                self.log_moderation(admin_id, "post", post_id, "restore", None, notes).await?;
+                Ok(())
+            }
+            Some(_) => Err(AppError::BadRequest("Post is not in removed/rejected status".to_string())),
+            None => Err(AppError::NotFound(format!("Post {} not found", post_id))),
+        }
+    }
+
+    /// Remove (soft delete) a comment
+    pub async fn remove_comment(&self, comment_id: Uuid, admin_id: Uuid, reason: &str, notes: Option<&str>) -> Result<()> {
+        sqlx::query("UPDATE comments SET status = 'removed' WHERE id = $1")
+            .bind(comment_id)
+            .execute(&self.db.pg)
+            .await?;
+
+        self.log_moderation(admin_id, "comment", comment_id, "remove", Some(reason), notes).await?;
+
+        sqlx::query(
+            r#"
+            UPDATE content_reports
+            SET status = 'resolved', reviewed_by = $2, reviewed_at = NOW()
+            WHERE content_type = 'comment' AND content_id = $1 AND status = 'pending'
+            "#
+        )
+        .bind(comment_id)
+        .bind(admin_id)
+        .execute(&self.db.pg)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get moderation queue - pending posts and comments
+    pub async fn get_moderation_queue(&self, limit: u32) -> Result<ModerationQueue> {
+        let limit = limit as i64;
+
+        // Get pending posts (status = 'pending' or with unresolved reports)
+        let pending_posts: Vec<PostSummary> = sqlx::query_as(
+            r#"
+            SELECT DISTINCT
+                p.id,
+                p.user_id,
+                COALESCE(p.content, '') as content,
+                COALESCE(p.status, 'active') as status,
+                COALESCE(array_length(p.images, 1), 0)::int as images_count,
+                COALESCE(p.likes_count, 0) as likes_count,
+                COALESCE(p.comments_count, 0) as comments_count,
+                p.created_at
+            FROM posts p
+            LEFT JOIN content_reports cr ON cr.content_type = 'post' AND cr.content_id = p.id AND cr.status = 'pending'
+            WHERE p.status = 'pending' OR cr.id IS NOT NULL
+            ORDER BY p.created_at ASC
+            LIMIT $1
+            "#
+        )
+        .bind(limit)
+        .fetch_all(&self.db.pg)
+        .await
+        .unwrap_or_default();
+
+        // Get pending comments
+        let pending_comments: Vec<CommentSummary> = sqlx::query_as(
+            r#"
+            SELECT DISTINCT
+                c.id,
+                c.post_id,
+                c.user_id,
+                COALESCE(c.content, '') as content,
+                COALESCE(c.status, 'active') as status,
+                c.created_at
+            FROM comments c
+            LEFT JOIN content_reports cr ON cr.content_type = 'comment' AND cr.content_id = c.id AND cr.status = 'pending'
+            WHERE c.status = 'pending' OR cr.id IS NOT NULL
+            ORDER BY c.created_at ASC
+            LIMIT $1
+            "#
+        )
+        .bind(limit)
+        .fetch_all(&self.db.pg)
+        .await
+        .unwrap_or_default();
+
+        // Get total counts
+        let total_pending_posts: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(DISTINCT p.id)
+            FROM posts p
+            LEFT JOIN content_reports cr ON cr.content_type = 'post' AND cr.content_id = p.id AND cr.status = 'pending'
+            WHERE p.status = 'pending' OR cr.id IS NOT NULL
+            "#
+        )
+        .fetch_one(&self.db.pg)
+        .await
+        .unwrap_or(0);
+
+        let total_pending_comments: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(DISTINCT c.id)
+            FROM comments c
+            LEFT JOIN content_reports cr ON cr.content_type = 'comment' AND cr.content_id = c.id AND cr.status = 'pending'
+            WHERE c.status = 'pending' OR cr.id IS NOT NULL
+            "#
+        )
+        .fetch_one(&self.db.pg)
+        .await
+        .unwrap_or(0);
+
+        Ok(ModerationQueue {
+            pending_posts,
+            pending_comments,
+            total_pending_posts,
+            total_pending_comments,
+        })
+    }
+
     /// Log a moderation action
     async fn log_moderation(
         &self,
@@ -458,4 +616,13 @@ impl ContentService {
 
         Ok(())
     }
+}
+
+/// Moderation queue response
+#[derive(Debug, Clone, Serialize)]
+pub struct ModerationQueue {
+    pub pending_posts: Vec<PostSummary>,
+    pub pending_comments: Vec<CommentSummary>,
+    pub total_pending_posts: i64,
+    pub total_pending_comments: i64,
 }

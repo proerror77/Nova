@@ -6,6 +6,15 @@ pub struct Config {
     pub database: DatabaseConfig,
     pub redis: RedisConfig,
     pub jwt: JwtConfig,
+    pub security: SecurityConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SecurityConfig {
+    #[serde(default = "default_max_login_attempts")]
+    pub max_login_attempts: i32,
+    #[serde(default = "default_lockout_duration_minutes")]
+    pub lockout_duration_minutes: i64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -51,6 +60,14 @@ fn default_expiry_hours() -> u64 {
     24
 }
 
+fn default_max_login_attempts() -> i32 {
+    5
+}
+
+fn default_lockout_duration_minutes() -> i64 {
+    15
+}
+
 impl Config {
     pub fn load() -> anyhow::Result<Self> {
         dotenvy::dotenv().ok();
@@ -76,6 +93,14 @@ impl Config {
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(8080);
+        let max_login_attempts: i32 = std::env::var("MAX_LOGIN_ATTEMPTS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(5);
+        let lockout_duration_minutes: i64 = std::env::var("LOCKOUT_DURATION_MINUTES")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(15);
 
         Ok(Config {
             server: ServerConfig {
@@ -92,6 +117,10 @@ impl Config {
             jwt: JwtConfig {
                 secret: jwt_secret,
                 expiry_hours: jwt_expiry_hours,
+            },
+            security: SecurityConfig {
+                max_login_attempts,
+                lockout_duration_minutes,
             },
         })
     }

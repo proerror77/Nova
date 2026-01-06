@@ -11,6 +11,9 @@ pub enum AppError {
     #[error("Authentication required")]
     Unauthorized,
 
+    #[error("Account locked until {0}")]
+    AccountLocked(String),
+
     #[error("Access denied")]
     Forbidden,
 
@@ -34,6 +37,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_code, message) = match &self {
             AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "UNAUTHORIZED", self.to_string()),
+            AppError::AccountLocked(until) => (StatusCode::FORBIDDEN, "ACCOUNT_LOCKED", format!("Account locked until {}", until)),
             AppError::Forbidden => (StatusCode::FORBIDDEN, "FORBIDDEN", self.to_string()),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, "NOT_FOUND", msg.clone()),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, "BAD_REQUEST", msg.clone()),

@@ -20,9 +20,13 @@ pub fn routes() -> Router<AppState> {
         .route("/posts/:id", get(get_post))
         .route("/posts/:id/approve", post(approve_post))
         .route("/posts/:id/reject", post(reject_post))
+        .route("/posts/:id/remove", post(remove_post))
+        .route("/posts/:id/restore", post(restore_post))
         .route("/comments", get(list_comments))
         .route("/comments/:id/approve", post(approve_comment))
         .route("/comments/:id/reject", post(reject_comment))
+        .route("/comments/:id/remove", post(remove_comment))
+        .route("/moderation-queue", get(get_moderation_queue))
 }
 
 #[derive(Debug, Deserialize)]
@@ -433,4 +437,202 @@ async fn reject_comment(
         "message": format!("Comment {} has been rejected", id),
         "reason": payload.reason,
     })))
+}
+
+// Remove post (soft delete)
+async fn remove_post(
+    State(state): State<AppState>,
+    Extension(current_admin): Extension<CurrentAdmin>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<RejectRequest>,
+) -> Result<Json<serde_json::Value>> {
+    if payload.reason.trim().is_empty() {
+        return Err(AppError::BadRequest("Removal reason is required".to_string()));
+    }
+
+    let post_id = Uuid::parse_str(&id)
+        .map_err(|_| AppError::BadRequest("Invalid post ID".to_string()))?;
+    let admin_id: Uuid = current_admin.id.parse()
+        .map_err(|_| AppError::BadRequest("Invalid admin ID".to_string()))?;
+
+    if !current_admin.role.can_moderate_content() {
+        return Err(AppError::Forbidden);
+    }
+
+    let content_service = ContentService::new(state.db.clone());
+    content_service.remove_post(post_id, admin_id, &payload.reason, payload.notes.as_deref()).await?;
+
+    // Log audit event
+    let audit_service = AuditService::new(state.db.clone());
+    let _ = audit_service.log(CreateAuditLog {
+        admin_id,
+        action: AuditAction::RemoveContent,
+        resource_type: ResourceType::Post,
+        resource_id: Some(id.clone()),
+        details: Some(serde_json::json!({
+            "reason": payload.reason,
+            "notes": payload.notes,
+        })),
+        ip_address: Some(addr.ip().to_string()),
+        user_agent: headers.get("user-agent").and_then(|v| v.to_str().ok()).map(String::from),
+    }).await;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "message": format!("Post {} has been removed", id),
+        "reason": payload.reason,
+    })))
+}
+
+// Restore post
+async fn restore_post(
+    State(state): State<AppState>,
+    Extension(current_admin): Extension<CurrentAdmin>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<ModerationRequest>,
+) -> Result<Json<serde_json::Value>> {
+    let post_id = Uuid::parse_str(&id)
+        .map_err(|_| AppError::BadRequest("Invalid post ID".to_string()))?;
+    let admin_id: Uuid = current_admin.id.parse()
+        .map_err(|_| AppError::BadRequest("Invalid admin ID".to_string()))?;
+
+    if !current_admin.role.can_moderate_content() {
+        return Err(AppError::Forbidden);
+    }
+
+    let content_service = ContentService::new(state.db.clone());
+    content_service.restore_post(post_id, admin_id, payload.notes.as_deref()).await?;
+
+    // Log audit event
+    let audit_service = AuditService::new(state.db.clone());
+    let _ = audit_service.log(CreateAuditLog {
+        admin_id,
+        action: AuditAction::RestoreContent,
+        resource_type: ResourceType::Post,
+        resource_id: Some(id.clone()),
+        details: payload.notes.map(|n| serde_json::json!({ "notes": n })),
+        ip_address: Some(addr.ip().to_string()),
+        user_agent: headers.get("user-agent").and_then(|v| v.to_str().ok()).map(String::from),
+    }).await;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "message": format!("Post {} has been restored", id),
+    })))
+}
+
+// Remove comment (soft delete)
+async fn remove_comment(
+    State(state): State<AppState>,
+    Extension(current_admin): Extension<CurrentAdmin>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<RejectRequest>,
+) -> Result<Json<serde_json::Value>> {
+    if payload.reason.trim().is_empty() {
+        return Err(AppError::BadRequest("Removal reason is required".to_string()));
+    }
+
+    let comment_id = Uuid::parse_str(&id)
+        .map_err(|_| AppError::BadRequest("Invalid comment ID".to_string()))?;
+    let admin_id: Uuid = current_admin.id.parse()
+        .map_err(|_| AppError::BadRequest("Invalid admin ID".to_string()))?;
+
+    if !current_admin.role.can_moderate_content() {
+        return Err(AppError::Forbidden);
+    }
+
+    let content_service = ContentService::new(state.db.clone());
+    content_service.remove_comment(comment_id, admin_id, &payload.reason, payload.notes.as_deref()).await?;
+
+    // Log audit event
+    let audit_service = AuditService::new(state.db.clone());
+    let _ = audit_service.log(CreateAuditLog {
+        admin_id,
+        action: AuditAction::RemoveContent,
+        resource_type: ResourceType::Comment,
+        resource_id: Some(id.clone()),
+        details: Some(serde_json::json!({
+            "reason": payload.reason,
+            "notes": payload.notes,
+        })),
+        ip_address: Some(addr.ip().to_string()),
+        user_agent: headers.get("user-agent").and_then(|v| v.to_str().ok()).map(String::from),
+    }).await;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "message": format!("Comment {} has been removed", id),
+        "reason": payload.reason,
+    })))
+}
+
+// Moderation queue response
+#[derive(Debug, Serialize)]
+pub struct ModerationQueueResponse {
+    pub pending_posts: Vec<PostSummaryResponse>,
+    pub pending_comments: Vec<CommentSummaryResponse>,
+    pub total_pending_posts: i64,
+    pub total_pending_comments: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ModerationQueueQuery {
+    pub limit: Option<u32>,
+}
+
+// Get moderation queue
+async fn get_moderation_queue(
+    State(state): State<AppState>,
+    Query(query): Query<ModerationQueueQuery>,
+) -> Result<Json<ModerationQueueResponse>> {
+    let limit = query.limit.unwrap_or(50).min(100);
+
+    let content_service = ContentService::new(state.db.clone());
+    let queue = content_service.get_moderation_queue(limit).await?;
+
+    // Transform to response format
+    let pending_posts: Vec<PostSummaryResponse> = queue.pending_posts.into_iter().map(|post| {
+        let content_preview = if post.content.len() > 100 {
+            format!("{}...", &post.content[..100])
+        } else {
+            post.content.clone()
+        };
+
+        PostSummaryResponse {
+            id: post.id.to_string(),
+            author_id: post.user_id.to_string(),
+            content_preview,
+            status: post.status,
+            images_count: post.images_count,
+            likes_count: post.likes_count,
+            comments_count: post.comments_count,
+            reports_count: 0, // Will be fetched separately if needed
+            created_at: post.created_at.to_rfc3339(),
+        }
+    }).collect();
+
+    let pending_comments: Vec<CommentSummaryResponse> = queue.pending_comments.into_iter().map(|comment| {
+        CommentSummaryResponse {
+            id: comment.id.to_string(),
+            post_id: comment.post_id.to_string(),
+            author_id: comment.user_id.to_string(),
+            content: comment.content,
+            status: comment.status,
+            reports_count: 0,
+            created_at: comment.created_at.to_rfc3339(),
+        }
+    }).collect();
+
+    Ok(Json(ModerationQueueResponse {
+        pending_posts,
+        pending_comments,
+        total_pending_posts: queue.total_pending_posts,
+        total_pending_comments: queue.total_pending_comments,
+    }))
 }

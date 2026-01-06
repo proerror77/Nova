@@ -1,96 +1,74 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-
-// API base URL - uses relative path for same-origin requests via ingress
-const API_BASE_URL = '/api/admin/v1';
-
-interface Admin {
-  id: string;
-  email: string;
-  name: string;
-  role: 'super_admin' | 'admin' | 'moderator';
-  avatar?: string;
-}
+import { authApi, setTokens, clearTokens, getAccessToken } from '../api';
+import type { AdminInfo } from '../api/types';
 
 interface AuthState {
-  admin: Admin | null;
-  accessToken: string | null;
-  refreshToken: string | null;
+  admin: AdminInfo | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
-  getAuthHeader: () => Record<string, string>;
-}
-
-interface LoginResponse {
-  access_token: string;
-  refresh_token: string;
-  admin: Admin;
+  logout: () => Promise<void>;
+  checkAuth: () => Promise<boolean>;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       admin: null,
-      accessToken: null,
-      refreshToken: null,
       isAuthenticated: false,
+      isLoading: false,
 
       login: async (email: string, password: string): Promise<boolean> => {
+        set({ isLoading: true });
         try {
-          const response = await fetch(`${API_BASE_URL}/auth/login`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email, password }),
-          });
-
-          if (!response.ok) {
-            return false;
-          }
-
-          const data: LoginResponse = await response.json();
+          const response = await authApi.login({ email, password });
           set({
-            admin: data.admin,
-            accessToken: data.access_token,
-            refreshToken: data.refresh_token,
+            admin: response.admin,
             isAuthenticated: true,
+            isLoading: false,
           });
           return true;
         } catch (error) {
+          set({ isLoading: false });
           console.error('Login failed:', error);
           return false;
         }
       },
 
-      logout: () => {
-        const { accessToken } = get();
-        if (accessToken) {
-          fetch(`${API_BASE_URL}/auth/logout`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-            },
-          }).catch(() => {});
+      logout: async () => {
+        try {
+          await authApi.logout();
+        } catch (error) {
+          console.error('Logout error:', error);
+        } finally {
+          clearTokens();
+          set({ admin: null, isAuthenticated: false });
         }
-        set({ admin: null, accessToken: null, refreshToken: null, isAuthenticated: false });
       },
 
-      getAuthHeader: (): Record<string, string> => {
-        const { accessToken } = get();
-        if (accessToken) {
-          return { 'Authorization': `Bearer ${accessToken}` };
+      checkAuth: async (): Promise<boolean> => {
+        const token = getAccessToken();
+        if (!token) {
+          set({ admin: null, isAuthenticated: false });
+          return false;
         }
-        return {};
+
+        try {
+          const admin = await authApi.me();
+          set({ admin, isAuthenticated: true });
+          return true;
+        } catch (error) {
+          clearTokens();
+          set({ admin: null, isAuthenticated: false });
+          return false;
+        }
       },
     }),
     {
       name: 'admin-auth',
       partialize: (state) => ({
         admin: state.admin,
-        accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
     }
