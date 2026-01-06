@@ -240,8 +240,11 @@ struct MessageView: View {
     }
 
     // MARK: - 從 Matrix 載入對話列表
-    private func loadConversationsFromMatrix() async {
-        print("🚀 [MessageView] loadConversationsFromMatrix() starting...")
+    private func loadConversationsFromMatrix(retryCount: Int = 0) async {
+        let maxRetries = 3
+        let retryDelayMs: UInt64 = 1500  // 1.5 秒重試間隔
+
+        print("🚀 [MessageView] loadConversationsFromMatrix() starting... (retry: \(retryCount)/\(maxRetries))")
 
         await MainActor.run {
             self.isLoading = true
@@ -253,6 +256,15 @@ struct MessageView: View {
             let matrixConversations = try await matrixBridge.getConversationsFromMatrix()
 
             print("✅ [MessageView] Loaded \(matrixConversations.count) conversations from Matrix")
+
+            // 如果沒有對話且還有重試次數，等待後重試
+            // 這處理了 sync 還沒完成的情況
+            if matrixConversations.isEmpty && retryCount < maxRetries {
+                print("⏳ [MessageView] No conversations found, waiting \(retryDelayMs)ms before retry...")
+                try? await Task.sleep(nanoseconds: retryDelayMs * 1_000_000)
+                await loadConversationsFromMatrix(retryCount: retryCount + 1)
+                return
+            }
 
             // Convert to UI model
             let previews = matrixConversations.map { conv -> ConversationPreview in
