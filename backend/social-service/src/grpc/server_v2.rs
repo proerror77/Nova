@@ -718,27 +718,15 @@ impl SocialService for SocialServiceImpl {
 
         // Send comment like notification (fire-and-forget)
         if was_created {
-            tracing::info!(
-                like_id = %like.id,
-                comment_id = %comment_id,
-                liker_id = %user_id,
-                "Comment like created, preparing notification"
-            );
             if let Some(producer) = &self.state.event_producer {
                 let producer = producer.clone();
                 let like_id = like.id;
                 let comment_repo = self.comment_repo();
 
                 tokio::spawn(async move {
-                    tracing::info!(comment_id = %comment_id, "Fetching comment author for notification");
                     // Get comment author for notification
                     match comment_repo.get_comment_author(comment_id).await {
                         Ok(Some(comment_author_id)) => {
-                            tracing::info!(
-                                comment_author_id = %comment_author_id,
-                                liker_id = %user_id,
-                                "Publishing comment like notification"
-                            );
                             if let Err(e) = producer
                                 .publish_comment_like_notification(
                                     like_id,
@@ -750,8 +738,6 @@ impl SocialService for SocialServiceImpl {
                                 .await
                             {
                                 tracing::warn!(error = ?e, "Failed to publish comment like notification");
-                            } else {
-                                tracing::info!(like_id = %like_id, "Comment like notification published successfully");
                             }
                         }
                         Ok(None) => {
@@ -762,11 +748,7 @@ impl SocialService for SocialServiceImpl {
                         }
                     }
                 });
-            } else {
-                tracing::warn!("No event producer configured, skipping notification");
             }
-        } else {
-            tracing::debug!(comment_id = %comment_id, "Comment like already existed, no notification sent");
         }
 
         Ok(Response::new(CreateCommentLikeResponse {

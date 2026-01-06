@@ -12,34 +12,26 @@ struct PhoneLoginView: View {
     // MARK: - State
     @State private var currentStep: LoginStep = .phoneInput
     @State private var phoneNumber = ""
-    @State private var selectedCountryCode = "+886"
+    @State private var selectedCountry: CountryCodeData?
     @State private var otpCode = ""
     @State private var verificationToken = ""
     @State private var isLoading = false
+    @State private var isDetectingRegion = true
     @State private var errorMessage: String?
     @State private var showNotRegisteredAlert = false
+    @State private var showCountryPicker = false
     @State private var resendCountdown: Int = 0
     @State private var resendTimer: Timer?
+    @State private var countrySearchText = ""
 
     enum LoginStep {
         case phoneInput
         case otpVerification
     }
 
-    // Common country codes
-    let countryCodes = [
-        ("+886", "TW"),
-        ("+1", "US/CA"),
-        ("+44", "UK"),
-        ("+86", "CN"),
-        ("+852", "HK"),
-        ("+81", "JP"),
-        ("+82", "KR"),
-        ("+65", "SG"),
-        ("+61", "AU"),
-        ("+49", "DE"),
-        ("+33", "FR")
-    ]
+    // MARK: - Services
+
+    private let regionService = RegionDetectionService.shared
 
     var body: some View {
         ZStack {
@@ -76,8 +68,32 @@ struct PhoneLoginView: View {
         } message: {
             Text("This phone number is not registered. Would you like to create an account?")
         }
+        .sheet(isPresented: $showCountryPicker) {
+            CountryPickerSheet(
+                selectedCountry: $selectedCountry,
+                searchText: $countrySearchText,
+                isPresented: $showCountryPicker
+            )
+        }
+        .onAppear {
+            detectRegion()
+        }
         .onDisappear {
             resendTimer?.invalidate()
+        }
+    }
+
+    // MARK: - Region Detection
+
+    private func detectRegion() {
+        guard selectedCountry == nil else { return }
+
+        Task {
+            let detected = await regionService.detectCountryCode()
+            await MainActor.run {
+                selectedCountry = detected
+                isDetectingRegion = false
+            }
         }
     }
 
@@ -136,18 +152,20 @@ struct PhoneLoginView: View {
 
             // Phone input
             HStack(spacing: 12) {
-                // Country code picker
-                Menu {
-                    ForEach(countryCodes, id: \.0) { code, name in
-                        Button("\(code) (\(name))") {
-                            selectedCountryCode = code
+                // Country code picker with flag
+                Button(action: { showCountryPicker = true }) {
+                    HStack(spacing: 6) {
+                        if isDetectingRegion {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+                        } else if let country = selectedCountry {
+                            Text(country.flag)
+                                .font(.system(size: 20))
+                            Text(country.dialCode)
+                                .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                                .foregroundColor(.white)
                         }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(selectedCountryCode)
-                            .font(Font.custom("SFProDisplay-Regular", size: 16.f))
-                            .foregroundColor(.white)
                         Image(systemName: "chevron.down")
                             .font(.system(size: 12.f))
                             .foregroundColor(.gray)
@@ -195,7 +213,7 @@ struct PhoneLoginView: View {
                 .background(isPhoneValid ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color.gray)
                 .cornerRadius(25)
             }
-            .disabled(!isPhoneValid || isLoading)
+            .disabled(!isPhoneValid || isLoading || isDetectingRegion)
             .padding(.top, 20)
 
             // Register link
@@ -296,11 +314,14 @@ struct PhoneLoginView: View {
     // MARK: - Computed Properties
 
     private var fullPhoneNumber: String {
-        "\(selectedCountryCode)\(phoneNumber)"
+        guard let country = selectedCountry else { return phoneNumber }
+        return "\(country.dialCode)\(phoneNumber)"
     }
 
     private var isPhoneValid: Bool {
-        phoneNumber.count >= 7 && phoneNumber.allSatisfy { $0.isNumber }
+        guard let country = selectedCountry else { return false }
+        let digits = phoneNumber.filter { $0.isNumber }
+        return digits.count >= country.minLength && digits.count <= country.maxLength
     }
 
     // MARK: - Actions
@@ -420,6 +441,139 @@ struct PhoneLoginView: View {
                 timer.invalidate()
             }
         }
+    }
+}
+
+// MARK: - Country Picker Sheet
+
+struct CountryPickerSheet: View {
+    @Binding var selectedCountry: CountryCodeData?
+    @Binding var searchText: String
+    @Binding var isPresented: Bool
+
+    private let regionService = RegionDetectionService.shared
+
+    var filteredCountries: [CountryCodeData] {
+        regionService.searchCountries(searchText)
+    }
+
+    var priorityCountries: [CountryCodeData] {
+        regionService.getPriorityCountries()
+    }
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    // Search bar
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.gray)
+                        TextField("Search country or code", text: $searchText)
+                            .foregroundColor(.white)
+                            .autocorrectionDisabled()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(10)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+
+                    // Country list
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            // Priority section (when not searching)
+                            if searchText.isEmpty {
+                                Section {
+                                    ForEach(priorityCountries) { country in
+                                        countryRow(country)
+                                    }
+                                } header: {
+                                    sectionHeader("Popular")
+                                }
+
+                                Section {
+                                    ForEach(filteredCountries.filter { !priorityCountries.contains($0) }) { country in
+                                        countryRow(country)
+                                    }
+                                } header: {
+                                    sectionHeader("All Countries")
+                                }
+                            } else {
+                                ForEach(filteredCountries) { country in
+                                    countryRow(country)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                }
+            }
+            .navigationTitle("Select Country")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        isPresented = false
+                    }
+                    .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        HStack {
+            Text(title)
+                .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
+                .foregroundColor(.gray)
+            Spacer()
+        }
+        .padding(.vertical, 8)
+        .padding(.top, 8)
+    }
+
+    private func countryRow(_ country: CountryCodeData) -> some View {
+        Button(action: {
+            selectedCountry = country
+            searchText = ""
+            isPresented = false
+        }) {
+            HStack(spacing: 12) {
+                Text(country.flag)
+                    .font(.system(size: 24))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(country.name)
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                        .foregroundColor(.white)
+                    Text(country.localizedName)
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                        .foregroundColor(.gray)
+                }
+
+                Spacer()
+
+                Text(country.dialCode)
+                    .font(Font.custom("SFProDisplay-Medium", size: 16.f))
+                    .foregroundColor(.gray)
+
+                if selectedCountry?.id == country.id {
+                    Image(systemName: "checkmark")
+                        .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
+                }
+            }
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+
+        Divider()
+            .background(Color.white.opacity(0.1))
     }
 }
 

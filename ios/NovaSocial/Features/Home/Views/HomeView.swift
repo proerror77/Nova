@@ -64,7 +64,7 @@ struct HomeView: View {
     @State private var showSearch = false
     @State private var showNotification = false
     @State private var showPhotoOptions = false
-    @State private var showComments = false
+    // showComments removed - using selectedPostForComment as source of truth (#231 fix)
     @State private var selectedPostForComment: FeedPost?
     @State private var showPhotoPicker = false  // Multi-photo picker
     @State private var selectedPhotos: [PhotosPickerItem] = []  // PhotosPicker selection
@@ -182,27 +182,24 @@ struct HomeView: View {
         .sheet(isPresented: $showReportView) {
             ReportModal(isPresented: $showReportView, showThankYouView: $showThankYouView)
         }
-        .sheet(isPresented: $showComments) {
-            if let post = selectedPostForComment {
-                CommentSheetView(
-                    post: post,
-                    isPresented: $showComments,
-                    onAvatarTapped: { userId in
-                        navigateToUserProfile(userId: userId)
-                    },
-                    onCommentCountUpdated: { postId, actualCount in
-                        feedViewModel.updateCommentCount(postId: postId, count: actualCount)
-                    }
-                )
-                .presentationDetents([.fraction(2.0/3.0), .large])
-                .presentationDragIndicator(.visible)
-            } else {
-                // Fallback: auto-dismiss if post is nil to prevent blank sheet
-                Color.clear
-                    .onAppear {
-                        showComments = false
-                    }
-            }
+        // Fix #231: Use .sheet(item:) to guarantee post data availability
+        // This eliminates race condition where sheet opens before post is set
+        .sheet(item: $selectedPostForComment) { post in
+            CommentSheetView(
+                post: post,
+                isPresented: Binding(
+                    get: { selectedPostForComment != nil },
+                    set: { if !$0 { selectedPostForComment = nil } }
+                ),
+                onAvatarTapped: { userId in
+                    navigateToUserProfile(userId: userId)
+                },
+                onCommentCountUpdated: { postId, actualCount in
+                    feedViewModel.updateCommentCount(postId: postId, count: actualCount)
+                }
+            )
+            .presentationDetents([.fraction(2.0/3.0), .large])
+            .presentationDragIndicator(.visible)
         }
         .fullScreenCover(isPresented: $showUserProfile) {
             if let userId = selectedUserId {
@@ -427,8 +424,8 @@ struct HomeView: View {
                                                 showReportView: $showReportView,
                                                 onLike: { Task { await feedViewModel.toggleLike(postId: post.id) } },
                                                 onComment: {
+                                                    // Setting selectedPostForComment triggers .sheet(item:) automatically
                                                     selectedPostForComment = post
-                                                    showComments = true
                                                 },
                                                 onShare: { Task { await feedViewModel.sharePost(postId: post.id) } },
                                                 onBookmark: { Task { await feedViewModel.toggleBookmark(postId: post.id) } }

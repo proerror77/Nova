@@ -13,7 +13,7 @@ struct PhoneRegistrationView: View {
     // MARK: - State
     @State private var currentStep: RegistrationStep = .phoneInput
     @State private var phoneNumber = ""
-    @State private var selectedCountryCode = "+1"
+    @State private var selectedCountry: CountryCodeData?
     @State private var otpCode = ""
     @State private var verificationToken = ""
     @State private var username = ""
@@ -21,7 +21,10 @@ struct PhoneRegistrationView: View {
     @State private var confirmPassword = ""
     @State private var displayName = ""
     @State private var isLoading = false
+    @State private var isDetectingRegion = true
     @State private var errorMessage: String?
+    @State private var showCountryPicker = false
+    @State private var countrySearchText = ""
     @State private var codeExpiresIn: Int = 300  // 5 minutes default
 
     enum RegistrationStep {
@@ -30,20 +33,9 @@ struct PhoneRegistrationView: View {
         case profileSetup
     }
 
-    // Common country codes
-    let countryCodes = [
-        ("+1", "US/CA"),
-        ("+44", "UK"),
-        ("+86", "CN"),
-        ("+886", "TW"),
-        ("+852", "HK"),
-        ("+81", "JP"),
-        ("+82", "KR"),
-        ("+65", "SG"),
-        ("+61", "AU"),
-        ("+49", "DE"),
-        ("+33", "FR")
-    ]
+    // MARK: - Services
+
+    private let regionService = RegionDetectionService.shared
 
     var body: some View {
         ZStack {
@@ -74,6 +66,30 @@ struct PhoneRegistrationView: View {
             }
         }
         .navigationBarHidden(true)
+        .sheet(isPresented: $showCountryPicker) {
+            CountryPickerSheet(
+                selectedCountry: $selectedCountry,
+                searchText: $countrySearchText,
+                isPresented: $showCountryPicker
+            )
+        }
+        .onAppear {
+            detectRegion()
+        }
+    }
+
+    // MARK: - Region Detection
+
+    private func detectRegion() {
+        guard selectedCountry == nil else { return }
+
+        Task {
+            let detected = await regionService.detectCountryCode()
+            await MainActor.run {
+                selectedCountry = detected
+                isDetectingRegion = false
+            }
+        }
     }
 
     // MARK: - Header
@@ -133,18 +149,20 @@ struct PhoneRegistrationView: View {
 
             // Phone input
             HStack(spacing: 12) {
-                // Country code picker
-                Menu {
-                    ForEach(countryCodes, id: \.0) { code, name in
-                        Button("\(code) (\(name))") {
-                            selectedCountryCode = code
+                // Country code picker with flag
+                Button(action: { showCountryPicker = true }) {
+                    HStack(spacing: 6) {
+                        if isDetectingRegion {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+                        } else if let country = selectedCountry {
+                            Text(country.flag)
+                                .font(.system(size: 20))
+                            Text(country.dialCode)
+                                .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                                .foregroundColor(.white)
                         }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(selectedCountryCode)
-                            .font(Font.custom("SFProDisplay-Regular", size: 16.f))
-                            .foregroundColor(.white)
                         Image(systemName: "chevron.down")
                             .font(.system(size: 12.f))
                             .foregroundColor(.gray)
@@ -192,7 +210,7 @@ struct PhoneRegistrationView: View {
                 .background(isPhoneValid ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color.gray)
                 .cornerRadius(25)
             }
-            .disabled(!isPhoneValid || isLoading)
+            .disabled(!isPhoneValid || isLoading || isDetectingRegion)
             .padding(.top, 20)
         }
     }
@@ -354,11 +372,14 @@ struct PhoneRegistrationView: View {
     // MARK: - Computed Properties
 
     private var fullPhoneNumber: String {
-        "\(selectedCountryCode)\(phoneNumber)"
+        guard let country = selectedCountry else { return phoneNumber }
+        return "\(country.dialCode)\(phoneNumber)"
     }
 
     private var isPhoneValid: Bool {
-        phoneNumber.count >= 7 && phoneNumber.allSatisfy { $0.isNumber }
+        guard let country = selectedCountry else { return false }
+        let digits = phoneNumber.filter { $0.isNumber }
+        return digits.count >= country.minLength && digits.count <= country.maxLength
     }
 
     private var isProfileValid: Bool {

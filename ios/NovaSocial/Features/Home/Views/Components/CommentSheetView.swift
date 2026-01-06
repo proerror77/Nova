@@ -80,44 +80,52 @@ struct CommentSheetView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Comments List
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: DesignTokens.spacing16) {
-                        if isLoading {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                        } else if let error = error {
-                            VStack(spacing: DesignTokens.spacing12) {
-                                Image(systemName: "exclamationmark.triangle")
-                                    .font(.system(size: 40.f))
-                                    .foregroundColor(.orange)
-                                Text(error)
-                                    .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
-                                    .foregroundColor(DesignTokens.textSecondary)
-                                    .multilineTextAlignment(.center)
-                                Button("Retry") {
-                                    Task { await loadComments() }
-                                }
-                                .foregroundColor(DesignTokens.accentColor)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 40)
-                        } else if comments.isEmpty {
-                            VStack(spacing: DesignTokens.spacing12) {
-                                Image(systemName: "bubble.left.and.bubble.right")
-                                    .font(.system(size: 40.f))
-                                    .foregroundColor(DesignTokens.textMuted)
-                                Text("No comments yet")
-                                    .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontLarge))
-                                    .foregroundColor(DesignTokens.textSecondary)
-                                Text("Be the first to comment!")
-                                    .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
-                                    .foregroundColor(DesignTokens.textMuted)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 40)
-                        } else {
+                // Fix #231: Move loading/error/empty states OUTSIDE ScrollView/LazyVStack
+                // This ensures immediate rendering without LazyVStack delayed loading
+                if isLoading {
+                    // Loading state - rendered immediately outside ScrollView
+                    Spacer()
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                    Spacer()
+                } else if let error = error {
+                    // Error state - rendered immediately outside ScrollView
+                    Spacer()
+                    VStack(spacing: DesignTokens.spacing12) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 40.f))
+                            .foregroundColor(.orange)
+                        Text(error)
+                            .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
+                            .foregroundColor(DesignTokens.textSecondary)
+                            .multilineTextAlignment(.center)
+                        Button("Retry") {
+                            Task { await loadComments() }
+                        }
+                        .foregroundColor(DesignTokens.accentColor)
+                    }
+                    .frame(maxWidth: .infinity)
+                    Spacer()
+                } else if comments.isEmpty {
+                    // Empty state - rendered immediately outside ScrollView
+                    Spacer()
+                    VStack(spacing: DesignTokens.spacing12) {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.system(size: 40.f))
+                            .foregroundColor(DesignTokens.textMuted)
+                        Text("No comments yet")
+                            .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontLarge))
+                            .foregroundColor(DesignTokens.textSecondary)
+                        Text("Be the first to comment!")
+                            .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
+                            .foregroundColor(DesignTokens.textMuted)
+                    }
+                    .frame(maxWidth: .infinity)
+                    Spacer()
+                } else {
+                    // Comments List - only use ScrollView/LazyVStack when there are comments
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: DesignTokens.spacing16) {
                             // Comment count header
                             Text("\(totalCount) comments")
                                 .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontBody))
@@ -167,12 +175,12 @@ struct CommentSheetView: View {
                                 }
                             }
                         }
+                        .padding()
                     }
-                    .padding()
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
                 }
 
                 Divider()
