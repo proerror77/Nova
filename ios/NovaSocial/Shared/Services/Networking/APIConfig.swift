@@ -413,6 +413,8 @@ struct APIConfig {
         static let validate = "/api/v2/auth/invites/validate"  // GET ?code=XXXXX
         // 推薦資訊
         static let referrals = "/api/v2/auth/referrals"  // GET 獲取推薦人和被推薦人列表
+        // Waitlist - 收集無邀請碼用戶的郵箱 (無需認證)
+        static let waitlist = "/api/v2/auth/waitlist"  // POST {email: string}
     }
 
     // MARK: - Notifications API
