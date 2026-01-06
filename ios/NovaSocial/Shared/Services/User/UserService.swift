@@ -55,7 +55,29 @@ class UserService {
             profileCacheByUsername.removeAll()
         }
     }
-    
+
+    /// Get cached user profile synchronously (does not trigger network request)
+    /// Use this for cache-first UI patterns to prevent loading jitter
+    func getCachedUser(userId: String) -> UserProfile? {
+        cacheQueue.sync {
+            if let cached = profileCacheById[userId], isValidCacheEntry(cached) {
+                return cached.profile
+            }
+            return nil
+        }
+    }
+
+    /// Get cached user profile by username synchronously
+    func getCachedUserByUsername(_ username: String) -> UserProfile? {
+        let lowercasedUsername = username.lowercased()
+        return cacheQueue.sync {
+            if let cached = profileCacheByUsername[lowercasedUsername], isValidCacheEntry(cached) {
+                return cached.profile
+            }
+            return nil
+        }
+    }
+
     /// Store profile in cache (both by ID and username)
     private func cacheProfile(_ profile: UserProfile) {
         let entry = CacheEntry(profile: profile, timestamp: Date())

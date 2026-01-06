@@ -181,6 +181,14 @@ struct PhoneLoginView: View {
                     .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(.white)
                     .keyboardType(.phonePad)
+                    .textContentType(.telephoneNumber)
+                    .autocorrectionDisabled()
+                    .onChange(of: phoneNumber) { _, newValue in
+                        applyPhoneFormatting(newValue)
+                    }
+                    .onChange(of: selectedCountry) { _, _ in
+                        applyPhoneFormatting(phoneNumber)
+                    }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
                     .background(Color.white.opacity(0.1))
@@ -245,7 +253,7 @@ struct PhoneLoginView: View {
                 .padding(.bottom, 20)
 
             // Description
-            Text("Enter the 6-digit code sent to\n\(fullPhoneNumber)")
+            Text("Enter the 6-digit code sent to\n\(displayPhoneNumber)")
                 .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(.gray)
                 .multilineTextAlignment(.center)
@@ -314,14 +322,26 @@ struct PhoneLoginView: View {
     // MARK: - Computed Properties
 
     private var fullPhoneNumber: String {
-        guard let country = selectedCountry else { return phoneNumber }
-        return "\(country.dialCode)\(phoneNumber)"
+        guard let country = selectedCountry else { return phoneDigits }
+        return "\(country.dialCode)\(phoneDigits)"
     }
 
     private var isPhoneValid: Bool {
         guard let country = selectedCountry else { return false }
-        let digits = phoneNumber.filter { $0.isNumber }
-        return digits.count >= country.minLength && digits.count <= country.maxLength
+        return phoneDigits.count >= country.minLength && phoneDigits.count <= country.maxLength
+    }
+
+    private var phoneDigits: String {
+        phoneNumber.filter { $0.isNumber }
+    }
+
+    private var displayPhoneNumber: String {
+        guard let country = selectedCountry else { return phoneNumber }
+        let formatted = formatPhoneDigits(phoneDigits)
+        if formatted.isEmpty {
+            return country.dialCode
+        }
+        return "\(country.dialCode) \(formatted)"
     }
 
     // MARK: - Actions
@@ -342,6 +362,10 @@ struct PhoneLoginView: View {
     private func sendVerificationCode() async {
         isLoading = true
         errorMessage = nil
+
+        if let country = selectedCountry {
+            regionService.savePreferredCountry(country)
+        }
 
         do {
             let response = try await PhoneAuthService.shared.sendVerificationCode(phoneNumber: fullPhoneNumber)
@@ -442,6 +466,40 @@ struct PhoneLoginView: View {
             }
         }
     }
+
+    private func applyPhoneFormatting(_ newValue: String) {
+        let digits = limitPhoneDigits(newValue.filter { $0.isNumber })
+        let formatted = formatPhoneDigits(digits)
+        if formatted != newValue {
+            phoneNumber = formatted
+        }
+    }
+
+    private func limitPhoneDigits(_ digits: String) -> String {
+        guard let country = selectedCountry else { return digits }
+        return String(digits.prefix(country.maxLength))
+    }
+
+    private func formatPhoneDigits(_ digits: String) -> String {
+        guard let format = selectedCountry?.phoneFormat, !format.isEmpty else {
+            return digits
+        }
+
+        var result = ""
+        var index = digits.startIndex
+
+        for token in format {
+            if index == digits.endIndex { break }
+            if token == "X" {
+                result.append(digits[index])
+                index = digits.index(after: index)
+            } else {
+                result.append(token)
+            }
+        }
+
+        return result
+    }
 }
 
 // MARK: - Country Picker Sheet
@@ -459,6 +517,10 @@ struct CountryPickerSheet: View {
 
     var priorityCountries: [CountryCodeData] {
         regionService.getPriorityCountries()
+    }
+    
+    var recentCountries: [CountryCodeData] {
+        regionService.getRecentCountries()
     }
 
     var body: some View {
@@ -485,10 +547,21 @@ struct CountryPickerSheet: View {
                     // Country list
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            // Priority section (when not searching)
+                            // Priority sections (when not searching)
                             if searchText.isEmpty {
+                                if !recentCountries.isEmpty {
+                                    Section {
+                                        ForEach(recentCountries) { country in
+                                            countryRow(country)
+                                        }
+                                    } header: {
+                                        sectionHeader("Recent")
+                                    }
+                                }
+
                                 Section {
-                                    ForEach(priorityCountries) { country in
+                                    let filteredPriority = priorityCountries.filter { !recentCountries.contains($0) }
+                                    ForEach(filteredPriority) { country in
                                         countryRow(country)
                                     }
                                 } header: {
@@ -496,7 +569,8 @@ struct CountryPickerSheet: View {
                                 }
 
                                 Section {
-                                    ForEach(filteredCountries.filter { !priorityCountries.contains($0) }) { country in
+                                    let excluded = Set(recentCountries + priorityCountries)
+                                    ForEach(filteredCountries.filter { !excluded.contains($0) }) { country in
                                         countryRow(country)
                                     }
                                 } header: {
@@ -541,6 +615,7 @@ struct CountryPickerSheet: View {
         Button(action: {
             selectedCountry = country
             searchText = ""
+            regionService.savePreferredCountry(country)
             isPresented = false
         }) {
             HStack(spacing: 12) {

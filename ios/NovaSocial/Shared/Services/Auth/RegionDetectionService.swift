@@ -34,12 +34,22 @@ final class RegionDetectionService {
     static let shared = RegionDetectionService()
 
     // MARK: - Properties
+    private enum StorageKeys {
+        static let preferredCountryCode = "preferred_country_code"
+        static let recentCountryCodes = "recent_country_codes"
+        static let cachedDetectedCountryCode = "cached_detected_country_code"
+        static let cachedDetectedCountryTimestamp = "cached_detected_country_timestamp"
+    }
 
     /// Default country code when detection fails
     private let defaultCountryCode = "HK"
 
     /// Cached detected country code
     private var cachedCountryCode: String?
+    private var cachedCountryTimestamp: TimeInterval?
+    private let cachedCountryTTL: TimeInterval = 60 * 60 * 24 * 7
+    private let maxRecentCountries = 5
+    private let userDefaults = UserDefaults.standard
 
     /// All supported country codes
     let allCountryCodes: [CountryCodeData] = [
@@ -125,16 +135,21 @@ final class RegionDetectionService {
     // MARK: - Public Methods
 
     /// Detect user's country code using multiple methods
-    /// Priority: SIM card > Device locale > IP geolocation > Default
+    /// Priority: User preference > Cached > SIM card > Device location > Locale > IP geolocation > Default
     func detectCountryCode() async -> CountryCodeData {
         // Check cache first
-        if let cached = cachedCountryCode, let data = countryCodesByISO[cached] {
+        if let preferred = loadPreferredCountryCode(), let data = countryCodesByISO[preferred] {
+            cachedCountryCode = preferred
+            return data
+        }
+
+        if let cached = loadCachedDetectedCountryCode(), let data = countryCodesByISO[cached] {
             return data
         }
 
         // Try SIM card first (most reliable for mobile)
         if let simCountry = detectFromSIMCard() {
-            cachedCountryCode = simCountry
+            cacheDetectedCountry(simCountry)
             if let data = countryCodesByISO[simCountry] {
                 #if DEBUG
                 print("[RegionDetection] Detected from SIM: \(simCountry)")
@@ -143,9 +158,20 @@ final class RegionDetectionService {
             }
         }
 
+        // Try device location (if already authorized)
+        if let locationCountry = await detectFromDeviceLocation() {
+            cacheDetectedCountry(locationCountry)
+            if let data = countryCodesByISO[locationCountry] {
+                #if DEBUG
+                print("[RegionDetection] Detected from location: \(locationCountry)")
+                #endif
+                return data
+            }
+        }
+
         // Try device locale
         if let localeCountry = detectFromLocale() {
-            cachedCountryCode = localeCountry
+            cacheDetectedCountry(localeCountry)
             if let data = countryCodesByISO[localeCountry] {
                 #if DEBUG
                 print("[RegionDetection] Detected from locale: \(localeCountry)")
@@ -156,7 +182,7 @@ final class RegionDetectionService {
 
         // Try IP geolocation as fallback
         if let ipCountry = await detectFromIP() {
-            cachedCountryCode = ipCountry
+            cacheDetectedCountry(ipCountry)
             if let data = countryCodesByISO[ipCountry] {
                 #if DEBUG
                 print("[RegionDetection] Detected from IP: \(ipCountry)")
@@ -201,9 +227,25 @@ final class RegionDetectionService {
         return priorityIDs.compactMap { countryCodesByISO[$0] }
     }
 
+    /// Get recent countries (most recently selected by the user)
+    func getRecentCountries() -> [CountryCodeData] {
+        let recentCodes = userDefaults.stringArray(forKey: StorageKeys.recentCountryCodes) ?? []
+        return recentCodes.compactMap { countryCodesByISO[$0.uppercased()] }
+    }
+
+    /// Save user's preferred country selection
+    func savePreferredCountry(_ country: CountryCodeData) {
+        let isoCode = country.id.uppercased()
+        userDefaults.set(isoCode, forKey: StorageKeys.preferredCountryCode)
+        updateRecentCountries(with: isoCode)
+        cacheDetectedCountry(isoCode)
+    }
+
     /// Clear cached detection result
     func clearCache() {
         cachedCountryCode = nil
+        cachedCountryTimestamp = nil
+        clearCachedDetectedCountry()
     }
 
     // MARK: - Private Detection Methods
@@ -240,6 +282,18 @@ final class RegionDetectionService {
         return nil
     }
 
+    /// Detect country from device location (if permission already granted)
+    private func detectFromDeviceLocation() async -> String? {
+        guard CLLocationManager.locationServicesEnabled() else { return nil }
+        let status = CLLocationManager.authorizationStatus()
+        guard status == .authorizedAlways || status == .authorizedWhenInUse else {
+            return nil
+        }
+
+        let detector = LocationCountryDetector()
+        return await detector.detectCountry()
+    }
+
     /// Detect country from IP address using free geolocation API
     private func detectFromIP() async -> String? {
         // Use ipapi.co for free IP geolocation (no API key required for basic usage)
@@ -267,6 +321,122 @@ final class RegionDetectionService {
             #endif
             return nil
         }
+    }
+
+    // MARK: - Cached Detection + Preference
+
+    private func loadPreferredCountryCode() -> String? {
+        userDefaults.string(forKey: StorageKeys.preferredCountryCode)?.uppercased()
+    }
+
+    private func loadCachedDetectedCountryCode() -> String? {
+        let now = Date().timeIntervalSince1970
+
+        if let cached = cachedCountryCode,
+           let timestamp = cachedCountryTimestamp,
+           now - timestamp < cachedCountryTTL {
+            return cached
+        }
+
+        guard let storedCode = userDefaults.string(forKey: StorageKeys.cachedDetectedCountryCode) else {
+            return nil
+        }
+
+        let storedTimestamp = userDefaults.double(forKey: StorageKeys.cachedDetectedCountryTimestamp)
+        guard storedTimestamp > 0, now - storedTimestamp < cachedCountryTTL else {
+            clearCachedDetectedCountry()
+            return nil
+        }
+
+        cachedCountryCode = storedCode
+        cachedCountryTimestamp = storedTimestamp
+        return storedCode
+    }
+
+    private func cacheDetectedCountry(_ isoCode: String) {
+        let normalized = isoCode.uppercased()
+        let timestamp = Date().timeIntervalSince1970
+        cachedCountryCode = normalized
+        cachedCountryTimestamp = timestamp
+        userDefaults.set(normalized, forKey: StorageKeys.cachedDetectedCountryCode)
+        userDefaults.set(timestamp, forKey: StorageKeys.cachedDetectedCountryTimestamp)
+    }
+
+    private func clearCachedDetectedCountry() {
+        userDefaults.removeObject(forKey: StorageKeys.cachedDetectedCountryCode)
+        userDefaults.removeObject(forKey: StorageKeys.cachedDetectedCountryTimestamp)
+    }
+
+    private func updateRecentCountries(with isoCode: String) {
+        let normalized = isoCode.uppercased()
+        var recentCodes = userDefaults.stringArray(forKey: StorageKeys.recentCountryCodes) ?? []
+        recentCodes.removeAll { $0.uppercased() == normalized }
+        recentCodes.insert(normalized, at: 0)
+
+        if recentCodes.count > maxRecentCountries {
+            recentCodes = Array(recentCodes.prefix(maxRecentCountries))
+        }
+
+        userDefaults.set(recentCodes, forKey: StorageKeys.recentCountryCodes)
+    }
+}
+
+private final class LocationCountryDetector: NSObject, CLLocationManagerDelegate {
+    private let manager = CLLocationManager()
+    private let geocoder = CLGeocoder()
+    private var continuation: CheckedContinuation<String?, Never>?
+    private var timeoutTask: Task<Void, Never>?
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+    }
+
+    func detectCountry() async -> String? {
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+            manager.requestLocation()
+            startTimeout()
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last else {
+            finish(nil)
+            return
+        }
+
+        Task {
+            do {
+                let placemarks = try await geocoder.reverseGeocodeLocation(location)
+                let isoCode = placemarks.first?.isoCountryCode?.uppercased()
+                finish(isoCode)
+            } catch {
+                finish(nil)
+            }
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        finish(nil)
+    }
+
+    private func startTimeout() {
+        timeoutTask?.cancel()
+        timeoutTask = Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            finish(nil)
+        }
+    }
+
+    private func finish(_ isoCode: String?) {
+        timeoutTask?.cancel()
+        timeoutTask = nil
+
+        guard let continuation = continuation else { return }
+        self.continuation = nil
+        continuation.resume(returning: isoCode)
     }
 }
 
