@@ -91,7 +91,7 @@ pub use e2ee_message_service::{
 pub use graph_client::GraphClient;
 pub use identity_client::IdentityClient;
 pub use identity_event_consumer::{IdentityEventConsumer, IdentityEventConsumerConfig};
-pub use matrix_admin::MatrixAdminClient;
+pub use matrix_admin::{AdminCredentials, MatrixAdminClient};
 pub use matrix_voip_service::{IceCandidate, MatrixVoipService};
 pub use megolm_service::{MegolmCiphertext, MegolmError, MegolmService, RoomKey};
 pub use olm_service::{AccountEncryptionKey, DeviceKeys, OlmError, OlmService};

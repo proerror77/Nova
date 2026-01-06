@@ -8,18 +8,31 @@
 use crate::error::AppError;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-/// Matrix Admin API client
+/// Admin credentials for automatic token refresh
+#[derive(Clone)]
+pub struct AdminCredentials {
+    pub username: String,
+    pub password: String,
+}
+
+/// Matrix Admin API client with automatic token refresh
 #[derive(Clone)]
 pub struct MatrixAdminClient {
     /// HTTP client for making API requests
     client: Client,
     /// Synapse homeserver URL (e.g., "http://matrix-synapse:8008")
     homeserver_url: String,
-    /// Synapse admin access token
-    admin_token: String,
+    /// Synapse admin access token (thread-safe for automatic refresh)
+    admin_token: Arc<RwLock<String>>,
+    /// Token expiration timestamp (Unix seconds)
+    token_expires_at: Arc<RwLock<Option<i64>>>,
+    /// Admin credentials for automatic token refresh
+    admin_credentials: Option<AdminCredentials>,
     /// Server name for constructing Matrix User IDs (e.g., "staging.nova.app")
     server_name: String,
 }
@@ -145,6 +158,11 @@ pub struct LoginTokenResponse {
     pub access_token: String,
 }
 
+/// Token refresh buffer - refresh 5 minutes before expiry
+const TOKEN_REFRESH_BUFFER_SECS: i64 = 300;
+/// Default token lifetime (24 hours) when server doesn't provide expiry
+const DEFAULT_TOKEN_LIFETIME_SECS: i64 = 86400;
+
 impl MatrixAdminClient {
     /// Create a new Matrix Admin API client
     ///
@@ -152,13 +170,186 @@ impl MatrixAdminClient {
     /// * `homeserver_url` - Synapse homeserver URL (e.g., "http://matrix-synapse:8008")
     /// * `admin_token` - Admin access token for authentication
     /// * `server_name` - Server name for constructing MXIDs (e.g., "staging.nova.app")
-    pub fn new(homeserver_url: String, admin_token: String, server_name: String) -> Self {
+    /// * `admin_credentials` - Optional credentials for automatic token refresh
+    pub fn new(
+        homeserver_url: String,
+        admin_token: String,
+        server_name: String,
+        admin_credentials: Option<AdminCredentials>,
+    ) -> Self {
         Self {
             client: Client::new(),
             homeserver_url,
-            admin_token,
+            admin_token: Arc::new(RwLock::new(admin_token)),
+            token_expires_at: Arc::new(RwLock::new(None)),
+            admin_credentials,
             server_name,
         }
+    }
+
+    /// Get the current admin token (for read access)
+    async fn get_token(&self) -> String {
+        self.admin_token.read().await.clone()
+    }
+
+    /// Check if the token needs to be refreshed
+    async fn needs_refresh(&self) -> bool {
+        let expires_at = *self.token_expires_at.read().await;
+        if let Some(expires) = expires_at {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+            // Refresh if token expires within the buffer period
+            now >= expires - TOKEN_REFRESH_BUFFER_SECS
+        } else {
+            // No expiry known, don't refresh proactively
+            false
+        }
+    }
+
+    /// Refresh the admin token using stored credentials
+    ///
+    /// This logs in as the admin user to get a new access token.
+    /// Returns Ok(()) if refresh succeeded or credentials not available.
+    pub async fn refresh_token(&self) -> Result<(), AppError> {
+        let credentials = match &self.admin_credentials {
+            Some(creds) => creds.clone(),
+            None => {
+                warn!("Token refresh requested but no admin credentials configured");
+                return Ok(());
+            }
+        };
+
+        let url = format!("{}/_matrix/client/v3/login", self.homeserver_url);
+
+        info!("Refreshing Matrix admin token for user: {}", credentials.username);
+
+        #[derive(Serialize)]
+        struct AdminLoginRequest {
+            #[serde(rename = "type")]
+            login_type: String,
+            identifier: MatrixUserIdentifier,
+            password: String,
+            device_id: Option<String>,
+            initial_device_display_name: Option<String>,
+        }
+
+        let request_body = AdminLoginRequest {
+            login_type: "m.login.password".to_string(),
+            identifier: MatrixUserIdentifier {
+                id_type: "m.id.user".to_string(),
+                user: credentials.username.clone(),
+            },
+            password: credentials.password.clone(),
+            device_id: Some("nova-realtime-chat-service".to_string()),
+            initial_device_display_name: Some("Nova Realtime Chat Service".to_string()),
+        };
+
+        let request_time_sec = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+
+        let response = self
+            .client
+            .post(&url)
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| {
+                error!("Failed to send admin token refresh request: {}", e);
+                AppError::ServiceUnavailable(format!("Admin token refresh failed: {}", e))
+            })?;
+
+        let status = response.status();
+        if status.is_success() {
+            let login_response: MatrixLoginResponse = response.json().await.map_err(|e| {
+                error!("Failed to parse admin login response: {}", e);
+                AppError::ServiceUnavailable(format!("Invalid response from Matrix: {}", e))
+            })?;
+
+            // Update the token
+            {
+                let mut token = self.admin_token.write().await;
+                *token = login_response.access_token;
+            }
+
+            // Update expiry time
+            {
+                let mut expires = self.token_expires_at.write().await;
+                *expires = Some(login_response.expires_in_ms.map_or(
+                    request_time_sec + DEFAULT_TOKEN_LIFETIME_SECS,
+                    |ms| request_time_sec + (ms / 1000) - 60, // 60s buffer for clock skew
+                ));
+            }
+
+            info!(
+                "Successfully refreshed Matrix admin token, expires_at={:?}",
+                *self.token_expires_at.read().await
+            );
+            Ok(())
+        } else {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            error!(
+                "Admin token refresh failed: status={}, body={}",
+                status, error_text
+            );
+            Err(AppError::ServiceUnavailable(format!(
+                "Admin token refresh failed ({}): {}",
+                status, error_text
+            )))
+        }
+    }
+
+    /// Ensure the token is valid, refreshing if necessary
+    ///
+    /// This should be called before any API request that uses the admin token.
+    /// If the token is expired or about to expire, it will be refreshed.
+    async fn ensure_token_valid(&self) -> Result<(), AppError> {
+        if self.needs_refresh().await {
+            info!("Admin token needs refresh, attempting to refresh...");
+            self.refresh_token().await?;
+        }
+        Ok(())
+    }
+
+    /// Check if admin credentials are configured for automatic token refresh
+    pub fn has_auto_refresh(&self) -> bool {
+        self.admin_credentials.is_some()
+    }
+
+    /// Start a background task to periodically refresh the admin token
+    ///
+    /// This spawns a tokio task that checks token expiry every hour and refreshes
+    /// the token before it expires. The task runs indefinitely.
+    pub fn start_token_refresh_task(self: Arc<Self>) {
+        if self.admin_credentials.is_none() {
+            info!("No admin credentials configured, skipping token refresh task");
+            return;
+        }
+
+        tokio::spawn(async move {
+            let check_interval = tokio::time::Duration::from_secs(3600); // Check every hour
+
+            info!("Starting Matrix admin token refresh background task");
+
+            // Initial refresh to set expiry time
+            if let Err(e) = self.refresh_token().await {
+                error!("Initial admin token refresh failed: {}", e);
+            }
+
+            loop {
+                tokio::time::sleep(check_interval).await;
+
+                if self.needs_refresh().await {
+                    info!("Background task: refreshing admin token");
+                    if let Err(e) = self.refresh_token().await {
+                        error!("Background admin token refresh failed: {}", e);
+                    }
+                }
+            }
+        });
     }
 
     /// Convert Nova user_id (UUID) to Matrix User ID (MXID)
@@ -171,17 +362,22 @@ impl MatrixAdminClient {
 
     /// Generate a deterministic password for a Matrix user
     ///
-    /// The password is derived from the user_id and admin_token to ensure:
+    /// The password is derived from the user_id and server_name to ensure:
     /// 1. Same user always gets the same password (allows re-login)
-    /// 2. Passwords are not guessable without the admin_token
+    /// 2. Passwords are not easily guessable
     /// 3. Each user has a unique password
+    ///
+    /// Note: We use server_name instead of admin_token for determinism,
+    /// since admin_token can change during token refresh.
     fn generate_user_password(&self, user_id: Uuid) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
         let mut hasher = DefaultHasher::new();
         user_id.hash(&mut hasher);
-        self.admin_token.hash(&mut hasher);
+        self.server_name.hash(&mut hasher);
+        // Add a static salt for additional security
+        "nova_matrix_user_password_salt_v1".hash(&mut hasher);
         let hash = hasher.finish();
 
         // Create a 32-char hex password
@@ -298,6 +494,9 @@ impl MatrixAdminClient {
     /// # Returns
     /// Ok(()) if deactivation succeeded, Err otherwise
     pub async fn deactivate_user(&self, user_id: Uuid, erase: bool) -> Result<(), AppError> {
+        // Ensure token is valid before making request
+        self.ensure_token_valid().await?;
+
         let mxid = self.user_id_to_mxid(user_id);
         let url = format!(
             "{}/_synapse/admin/v1/deactivate/{}",
@@ -311,11 +510,12 @@ impl MatrixAdminClient {
         );
 
         let request_body = DeactivateUserRequest { erase };
+        let token = self.get_token().await;
 
         let response = self
             .client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.admin_token))
+            .header("Authorization", format!("Bearer {}", token))
             .json(&request_body)
             .send()
             .await
@@ -356,6 +556,9 @@ impl MatrixAdminClient {
     /// # Returns
     /// Ok(()) if update succeeded, Err otherwise
     pub async fn update_displayname(&self, user_id: Uuid, displayname: &str) -> Result<(), AppError> {
+        // Ensure token is valid before making request
+        self.ensure_token_valid().await?;
+
         let mxid = self.user_id_to_mxid(user_id);
         let url = format!(
             "{}/_matrix/client/v3/profile/{}/displayname",
@@ -371,11 +574,12 @@ impl MatrixAdminClient {
         let request_body = UpdateDisplayNameRequest {
             displayname: displayname.to_string(),
         };
+        let token = self.get_token().await;
 
         let response = self
             .client
             .put(&url)
-            .header("Authorization", format!("Bearer {}", self.admin_token))
+            .header("Authorization", format!("Bearer {}", token))
             .json(&request_body)
             .send()
             .await
@@ -413,6 +617,9 @@ impl MatrixAdminClient {
     /// # Returns
     /// Ok(()) if update succeeded, Err otherwise
     pub async fn update_avatar_url(&self, user_id: Uuid, avatar_url: &str) -> Result<(), AppError> {
+        // Ensure token is valid before making request
+        self.ensure_token_valid().await?;
+
         let mxid = self.user_id_to_mxid(user_id);
         let url = format!(
             "{}/_matrix/client/v3/profile/{}/avatar_url",
@@ -428,11 +635,12 @@ impl MatrixAdminClient {
         let request_body = UpdateAvatarRequest {
             avatar_url: avatar_url.to_string(),
         };
+        let token = self.get_token().await;
 
         let response = self
             .client
             .put(&url)
-            .header("Authorization", format!("Bearer {}", self.admin_token))
+            .header("Authorization", format!("Bearer {}", token))
             .json(&request_body)
             .send()
             .await
@@ -508,6 +716,9 @@ impl MatrixAdminClient {
     /// # Returns
     /// Ok(()) if logout succeeded, Err otherwise
     pub async fn logout_user_devices(&self, user_id: Uuid) -> Result<(), AppError> {
+        // Ensure token is valid before making request
+        self.ensure_token_valid().await?;
+
         let mxid = self.user_id_to_mxid(user_id);
 
         info!(
@@ -532,11 +743,12 @@ impl MatrixAdminClient {
         let request_body = ResetPasswordRequest {
             logout_devices: true,
         };
+        let token = self.get_token().await;
 
         let response = self
             .client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.admin_token))
+            .header("Authorization", format!("Bearer {}", token))
             .json(&request_body)
             .send()
             .await
@@ -582,6 +794,9 @@ impl MatrixAdminClient {
         user_id: Uuid,
         displayname: Option<String>,
     ) -> Result<String, AppError> {
+        // Ensure token is valid before making request
+        self.ensure_token_valid().await?;
+
         let mxid = self.user_id_to_mxid(user_id);
         let url = format!(
             "{}/_synapse/admin/v2/users/{}",
@@ -604,11 +819,12 @@ impl MatrixAdminClient {
             admin: Some(false),
             deactivated: Some(false),
         };
+        let token = self.get_token().await;
 
         let response = self
             .client
             .put(&url)
-            .header("Authorization", format!("Bearer {}", self.admin_token))
+            .header("Authorization", format!("Bearer {}", token))
             .json(&request_body)
             .send()
             .await
@@ -658,6 +874,9 @@ impl MatrixAdminClient {
         valid_for_ms: Option<i64>,
         device_id: Option<String>,
     ) -> Result<String, AppError> {
+        // Ensure token is valid before making request
+        self.ensure_token_valid().await?;
+
         let mxid = self.user_id_to_mxid(user_id);
         let url = format!(
             "{}/_synapse/admin/v1/users/{}/login",
@@ -684,11 +903,12 @@ impl MatrixAdminClient {
             valid_until_ms,
             device_id,
         };
+        let token = self.get_token().await;
 
         let response = self
             .client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.admin_token))
+            .header("Authorization", format!("Bearer {}", token))
             .json(&request_body)
             .send()
             .await
@@ -778,6 +998,7 @@ mod tests {
             "http://matrix-synapse:8008".to_string(),
             "test_token".to_string(),
             "staging.nova.app".to_string(),
+            None, // No credentials for test
         );
 
         let user_id = Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap();
@@ -791,6 +1012,7 @@ mod tests {
             "http://localhost:8008".to_string(),
             "token".to_string(),
             "nova.local".to_string(),
+            None, // No credentials for test
         );
 
         let user_id = Uuid::new_v4();
@@ -800,5 +1022,22 @@ mod tests {
         assert!(mxid.starts_with("@nova-"));
         assert!(mxid.contains(':'));
         assert!(mxid.ends_with(":nova.local"));
+    }
+
+    #[test]
+    fn test_admin_credentials_creation() {
+        let credentials = AdminCredentials {
+            username: "@admin:example.com".to_string(),
+            password: "secret".to_string(),
+        };
+
+        let client = MatrixAdminClient::new(
+            "http://localhost:8008".to_string(),
+            "initial_token".to_string(),
+            "example.com".to_string(),
+            Some(credentials),
+        );
+
+        assert!(client.admin_credentials.is_some());
     }
 }

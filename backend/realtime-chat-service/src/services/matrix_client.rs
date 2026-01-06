@@ -794,6 +794,8 @@ mod tests {
             device_name: "test_device".to_string(),
             recovery_key: None,
             admin_token: None,
+            admin_username: None,
+            admin_password: None,
             server_name: "staging.nova.internal".to_string(),
         };
 

@@ -256,13 +256,39 @@ async fn main() -> Result<(), error::AppError> {
     // This is used for user provisioning (create users, generate login tokens)
     let matrix_admin_client = if cfg.matrix.enabled {
         if let Some(admin_token) = cfg.matrix.admin_token.clone() {
-            let admin_client = realtime_chat_service::services::MatrixAdminClient::new(
+            // Create admin credentials for automatic token refresh if username and password are set
+            let admin_credentials = match (&cfg.matrix.admin_username, &cfg.matrix.admin_password) {
+                (Some(username), Some(password)) => {
+                    tracing::info!("Admin credentials configured for automatic token refresh");
+                    Some(realtime_chat_service::services::AdminCredentials {
+                        username: username.clone(),
+                        password: password.clone(),
+                    })
+                }
+                _ => {
+                    tracing::warn!(
+                        "Admin username/password not set, automatic token refresh disabled. \
+                        Set MATRIX_ADMIN_USERNAME and MATRIX_ADMIN_PASSWORD to enable auto-refresh."
+                    );
+                    None
+                }
+            };
+
+            let admin_client = Arc::new(realtime_chat_service::services::MatrixAdminClient::new(
                 cfg.matrix.homeserver_url.clone(),
                 admin_token,
                 cfg.matrix.server_name.clone(),
-            );
+                admin_credentials,
+            ));
+
+            // Start background token refresh task if credentials are available
+            if admin_client.has_auto_refresh() {
+                tracing::info!("Starting Matrix admin token refresh background task");
+                admin_client.clone().start_token_refresh_task();
+            }
+
             tracing::info!("✅ Matrix Admin client initialized for user provisioning");
-            Some(Arc::new(admin_client))
+            Some(admin_client)
         } else {
             tracing::warn!("Matrix is enabled but MATRIX_ADMIN_TOKEN not set, user provisioning disabled");
             None
