@@ -1,9 +1,9 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Users, FileText, ShieldCheck,
-  HeartHandshake, Bot, TrendingUp, CreditCard,
-  MessageSquare, BarChart3, Settings, Bell, Search,
+  LayoutDashboard, Users, MessageSquare, BadgeCheck,
+  Network, Brain, TrendingUp, CreditCard,
+  Headphones, BarChart3, Shield, Bell, Search,
   LogOut, ChevronRight
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
@@ -21,23 +21,23 @@ interface MainLayoutProps {
 }
 
 const roleLabels: Record<string, string> = {
-  super_admin: '超级管理员',
-  admin: '管理员',
-  moderator: '审核员',
+  super_admin: 'Super Admin',
+  admin: 'Admin',
+  moderator: 'Moderator',
 };
 
 const menuItems = [
-  { path: '/dashboard', label: '首页概览', icon: LayoutDashboard },
-  { path: '/users', label: '用户中心', icon: Users },
-  { path: '/content', label: '内容 & 评论', icon: FileText },
-  { path: '/verification', label: '身份 & 职业', icon: ShieldCheck },
-  { path: '/social', label: '社交 & 匹配', icon: HeartHandshake },
-  { path: '/ai', label: 'AI & Deepsearch', icon: Bot },
-  { path: '/growth', label: '运营 & 增长', icon: TrendingUp },
-  { path: '/finance', label: '支付 & 会员', icon: CreditCard },
-  { path: '/feedback', label: '反馈 & 客服', icon: MessageSquare },
-  { path: '/reports', label: '数据报表', icon: BarChart3 },
-  { path: '/system', label: '系统设置', icon: Settings },
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/users', label: 'User Center', icon: Users },
+  { path: '/content', label: 'Content & Comments', icon: MessageSquare },
+  { path: '/verification', label: 'Identity & Verification', icon: BadgeCheck },
+  { path: '/social', label: 'Social & Matching', icon: Network },
+  { path: '/ai', label: 'AI & Deep Search', icon: Brain },
+  { path: '/growth', label: 'Operations & Growth', icon: TrendingUp },
+  { path: '/finance', label: 'Payment & Membership', icon: CreditCard },
+  { path: '/feedback', label: 'Feedback & Support', icon: Headphones },
+  { path: '/reports', label: 'Data Reports', icon: BarChart3 },
+  { path: '/system', label: 'System & Logs', icon: Shield },
 ];
 
 export const MainLayout = ({ children, admin, onLogout }: MainLayoutProps) => {
@@ -95,7 +95,7 @@ export const MainLayout = ({ children, admin, onLogout }: MainLayoutProps) => {
               size="icon"
               className="ml-auto text-slate-400 hover:text-white hover:bg-slate-800"
               onClick={onLogout}
-              title="退出登录"
+              title="Logout"
             >
               <LogOut className="h-4 w-4" />
             </Button>
@@ -111,7 +111,7 @@ export const MainLayout = ({ children, admin, onLogout }: MainLayoutProps) => {
             <div className="relative w-full">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="全局搜索用户、内容、订单..."
+                placeholder="Search users, content, orders..."
                 className="pl-9 bg-slate-50 border-slate-200 focus-visible:ring-red-500"
               />
             </div>

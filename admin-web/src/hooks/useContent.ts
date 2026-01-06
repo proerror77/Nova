@@ -27,11 +27,11 @@ export const useApprovePost = () => {
     mutationFn: ({ id, data }: { id: string; data?: ModerationRequest }) =>
       contentApi.approvePost(id, data),
     onSuccess: () => {
-      toast.success('帖子已通过审核');
+      toast.success('Post approved successfully');
       queryClient.invalidateQueries({ queryKey: ['content', 'posts'] });
     },
     onError: () => {
-      toast.error('审核操作失败');
+      toast.error('Failed to approve post');
     },
   });
 };
@@ -43,11 +43,11 @@ export const useRejectPost = () => {
     mutationFn: ({ id, data }: { id: string; data: RejectRequest }) =>
       contentApi.rejectPost(id, data),
     onSuccess: () => {
-      toast.success('帖子已拒绝');
+      toast.success('Post rejected successfully');
       queryClient.invalidateQueries({ queryKey: ['content', 'posts'] });
     },
     onError: () => {
-      toast.error('拒绝操作失败');
+      toast.error('Failed to reject post');
     },
   });
 };
@@ -68,11 +68,11 @@ export const useApproveComment = () => {
     mutationFn: ({ id, data }: { id: string; data?: ModerationRequest }) =>
       contentApi.approveComment(id, data),
     onSuccess: () => {
-      toast.success('评论已通过审核');
+      toast.success('Comment approved successfully');
       queryClient.invalidateQueries({ queryKey: ['content', 'comments'] });
     },
     onError: () => {
-      toast.error('审核操作失败');
+      toast.error('Failed to approve comment');
     },
   });
 };
@@ -84,11 +84,11 @@ export const useRejectComment = () => {
     mutationFn: ({ id, data }: { id: string; data: RejectRequest }) =>
       contentApi.rejectComment(id, data),
     onSuccess: () => {
-      toast.success('评论已拒绝');
+      toast.success('Comment rejected successfully');
       queryClient.invalidateQueries({ queryKey: ['content', 'comments'] });
     },
     onError: () => {
-      toast.error('拒绝操作失败');
+      toast.error('Failed to reject comment');
     },
   });
 };

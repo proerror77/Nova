@@ -27,7 +27,7 @@ const StatCard = ({ title, value, sub, icon: Icon, trend, isLoading }: StatCardP
         </div>
       ) : (
         <>
-          <div className="text-2xl font-bold">{value.toLocaleString()}</div>
+          <div className="text-2xl font-bold">{typeof value === 'number' ? value.toLocaleString() : value}</div>
           <p className={`text-xs ${trend === 'up' ? 'text-green-500' : 'text-red-500'} flex items-center mt-1`}>
             {sub}
           </p>
@@ -50,7 +50,7 @@ export const Dashboard = () => {
 
   // Transform chart data for recharts
   const chartDataFormatted = chartData?.data?.map(item => ({
-    name: new Date(item.date).toLocaleDateString('zh-CN', { weekday: 'short' }),
+    name: new Date(item.date).toLocaleDateString('en-US', { weekday: 'short' }),
     active: item.active_users,
     new: item.new_users,
   })) || [];
@@ -79,13 +79,13 @@ export const Dashboard = () => {
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-slate-900">Dashboard</h2>
-          <p className="text-slate-500 mt-1">Icered Admin 实时数据监控中心</p>
+          <p className="text-slate-500 mt-1">Icered Admin Real-time Data Monitoring Center</p>
         </div>
         {riskAlerts?.items?.some(a => a.level === 'high') && (
           <div className="flex space-x-2">
             <div className="bg-red-50 text-red-700 px-3 py-1 rounded text-sm font-medium border border-red-100 flex items-center">
               <AlertTriangle className="w-4 h-4 mr-2"/>
-              {riskAlerts.items.filter(a => a.level === 'high').length} 个高风险警报
+              {riskAlerts.items.filter(a => a.level === 'high').length} High Risk Alerts
             </div>
           </div>
         )}
@@ -93,47 +93,47 @@ export const Dashboard = () => {
 
       {statsError && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-          无法加载统计数据，请稍后重试
+          Unable to load statistics. Please try again later.
         </div>
       )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <StatCard
-          title="新增注册用户"
+          title="New Registered Users"
           value={stats?.new_users_today || 0}
-          sub={`${stats?.new_users_change && stats.new_users_change >= 0 ? '+' : ''}${stats?.new_users_change?.toFixed(1) || 0}% 较昨日`}
+          sub={`${stats?.new_users_change && stats.new_users_change >= 0 ? '+' : ''}${stats?.new_users_change?.toFixed(1) || 0}% vs yesterday`}
           trend={stats?.new_users_change && stats.new_users_change >= 0 ? 'up' : 'down'}
           icon={Users}
           isLoading={statsLoading}
         />
         <StatCard
-          title="新增认证用户"
+          title="New Verified Users"
           value={stats?.verified_users_today || 0}
-          sub={`${stats?.verified_users_change && stats.verified_users_change >= 0 ? '+' : ''}${stats?.verified_users_change?.toFixed(1) || 0}% 较昨日`}
+          sub={`${stats?.verified_users_change && stats.verified_users_change >= 0 ? '+' : ''}${stats?.verified_users_change?.toFixed(1) || 0}% vs yesterday`}
           trend={stats?.verified_users_change && stats.verified_users_change >= 0 ? 'up' : 'down'}
           icon={UserCheck}
           isLoading={statsLoading}
         />
         <StatCard
-          title="新增评论"
+          title="New Comments"
           value={stats?.new_comments_today || 0}
-          sub={`${stats?.new_comments_change && stats.new_comments_change >= 0 ? '+' : ''}${stats?.new_comments_change?.toFixed(1) || 0}% 较昨日`}
+          sub={`${stats?.new_comments_change && stats.new_comments_change >= 0 ? '+' : ''}${stats?.new_comments_change?.toFixed(1) || 0}% vs yesterday`}
           trend={stats?.new_comments_change && stats.new_comments_change >= 0 ? 'up' : 'down'}
           icon={MessageCircle}
           isLoading={statsLoading}
         />
         <StatCard
-          title="匹配成功数"
+          title="Successful Matches"
           value={stats?.matches_today || 0}
-          sub={`${stats?.matches_change && stats.matches_change >= 0 ? '+' : ''}${stats?.matches_change?.toFixed(1) || 0}% 较昨日`}
+          sub={`${stats?.matches_change && stats.matches_change >= 0 ? '+' : ''}${stats?.matches_change?.toFixed(1) || 0}% vs yesterday`}
           trend={stats?.matches_change && stats.matches_change >= 0 ? 'up' : 'down'}
           icon={Heart}
           isLoading={statsLoading}
         />
         <StatCard
-          title="今日 DAU"
+          title="Today's DAU"
           value={stats?.dau || 0}
-          sub={`${stats?.dau_change && stats.dau_change >= 0 ? '+' : ''}${stats?.dau_change?.toFixed(1) || 0}% 较昨日`}
+          sub={`${stats?.dau_change && stats.dau_change >= 0 ? '+' : ''}${stats?.dau_change?.toFixed(1) || 0}% vs yesterday`}
           trend={stats?.dau_change && stats.dau_change >= 0 ? 'up' : 'down'}
           icon={Activity}
           isLoading={statsLoading}
@@ -143,8 +143,8 @@ export const Dashboard = () => {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <Card className="col-span-4">
           <CardHeader>
-            <CardTitle>活跃与新增趋势</CardTitle>
-            <CardDescription>近7日活跃用户与新增用户数据概览</CardDescription>
+            <CardTitle>Activity & Engagement Trends</CardTitle>
+            <CardDescription>7-day active users and new user data overview</CardDescription>
           </CardHeader>
           <CardContent className="pl-2">
             {chartLoading ? (
@@ -169,10 +169,10 @@ export const Dashboard = () => {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <Tooltip
                     formatter={(value: number) => [value.toLocaleString(), '']}
-                    labelFormatter={(label) => `日期: ${label}`}
+                    labelFormatter={(label) => `Date: ${label}`}
                   />
-                  <Area type="monotone" dataKey="active" name="活跃用户" stroke="#dc2626" fillOpacity={1} fill="url(#colorActive)" />
-                  <Area type="monotone" dataKey="new" name="新增用户" stroke="#000000" fillOpacity={1} fill="url(#colorNew)" />
+                  <Area type="monotone" dataKey="active" name="Active Users" stroke="#dc2626" fillOpacity={1} fill="url(#colorActive)" />
+                  <Area type="monotone" dataKey="new" name="New Users" stroke="#000000" fillOpacity={1} fill="url(#colorNew)" />
                 </AreaChart>
               </ResponsiveContainer>
             )}
@@ -181,8 +181,8 @@ export const Dashboard = () => {
 
         <Card className="col-span-3">
           <CardHeader>
-            <CardTitle>系统风险监控</CardTitle>
-            <CardDescription>实时举报与AI审核状态</CardDescription>
+            <CardTitle>System Risk Monitoring</CardTitle>
+            <CardDescription>Real-time reporting and AI review status</CardDescription>
           </CardHeader>
           <CardContent>
             {alertsLoading ? (
@@ -216,13 +216,13 @@ export const Dashboard = () => {
                     <div className="text-2xl font-bold text-slate-900">
                       {stats?.pending_reviews || 0}
                     </div>
-                    <div className="text-xs text-slate-500">待人工复核</div>
+                    <div className="text-xs text-slate-500">Pending Manual Review</div>
                   </div>
                   <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
                     <div className="text-2xl font-bold text-slate-900">
                       {stats?.banned_today || 0}
                     </div>
-                    <div className="text-xs text-slate-500">今日封禁</div>
+                    <div className="text-xs text-slate-500">Banned Today</div>
                   </div>
                 </div>
               </div>

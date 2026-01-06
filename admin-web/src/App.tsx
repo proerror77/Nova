@@ -4,7 +4,15 @@ import { Toaster } from 'sonner';
 import { MainLayout } from './components/layout/MainLayout';
 import { Dashboard } from './components/pages/Dashboard';
 import { UserCenter } from './components/pages/UserCenter';
-import { ContentManage } from './components/pages/ContentManage';
+import { ContentManagement } from './components/pages/ContentManagement';
+import { VerificationCenter } from './components/pages/VerificationCenter';
+import { SocialMatching } from './components/pages/SocialMatching';
+import { AIManagement } from './components/pages/AIManagement';
+import { OperationsGrowth } from './components/pages/OperationsGrowth';
+import { PaymentMembership } from './components/pages/PaymentMembership';
+import { FeedbackSupport } from './components/pages/FeedbackSupport';
+import { DataReports } from './components/pages/DataReports';
+import { SystemLogs } from './components/pages/SystemLogs';
 import { Login } from './components/pages/Login';
 import { useAuthStore } from './stores/authStore';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
@@ -29,20 +37,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   return <>{children}</>;
 }
-
-// Placeholder page component
-const PlaceholderPage = ({ title, description }: { title: string; description: string }) => (
-  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-    <div>
-      <h2 className="text-3xl font-bold tracking-tight text-slate-900">{title}</h2>
-      <p className="text-slate-500 mt-1">{description}</p>
-    </div>
-    <div className="bg-white border border-slate-200 rounded-lg p-12 text-center">
-      <div className="text-slate-400 text-lg">此页面待开发</div>
-      <div className="text-slate-500 text-sm mt-2">敬请期待...</div>
-    </div>
-  </div>
-);
 
 export default function App() {
   const { isAuthenticated, login, logout, admin } = useAuthStore();
@@ -76,79 +70,15 @@ export default function App() {
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/users" element={<UserCenter />} />
                       <Route path="/users/:id" element={<UserCenter />} />
-                      <Route path="/content" element={<ContentManage />} />
-                      <Route
-                        path="/verification"
-                        element={
-                          <PlaceholderPage
-                            title="身份 & 职业认证"
-                            description="审核用户身份证、职业资质等认证材料"
-                          />
-                        }
-                      />
-                      <Route
-                        path="/social"
-                        element={
-                          <PlaceholderPage
-                            title="社交关系 & 匹配管理"
-                            description="监控用户社交行为与匹配算法效果"
-                          />
-                        }
-                      />
-                      <Route
-                        path="/ai"
-                        element={
-                          <PlaceholderPage
-                            title="AI & Deepsearch 管理"
-                            description="配置AI审核规则与Deepsearch推荐参数"
-                          />
-                        }
-                      />
-                      <Route
-                        path="/growth"
-                        element={
-                          <PlaceholderPage
-                            title="运营 & 增长"
-                            description="推广活动、优惠券、增长漏斗分析"
-                          />
-                        }
-                      />
-                      <Route
-                        path="/finance"
-                        element={
-                          <PlaceholderPage
-                            title="支付 & 会员"
-                            description="订单管理、会员权益与财务报表"
-                          />
-                        }
-                      />
-                      <Route
-                        path="/feedback"
-                        element={
-                          <PlaceholderPage
-                            title="用户反馈 & 客服"
-                            description="处理用户工单、反馈建议与投诉"
-                          />
-                        }
-                      />
-                      <Route
-                        path="/reports"
-                        element={
-                          <PlaceholderPage
-                            title="数据报表中心"
-                            description="多维度数据分析与BI看板"
-                          />
-                        }
-                      />
-                      <Route
-                        path="/system"
-                        element={
-                          <PlaceholderPage
-                            title="系统权限 & 操作日志"
-                            description="管理员权限配置与系统操作审计"
-                          />
-                        }
-                      />
+                      <Route path="/content" element={<ContentManagement />} />
+                      <Route path="/verification" element={<VerificationCenter />} />
+                      <Route path="/social" element={<SocialMatching />} />
+                      <Route path="/ai" element={<AIManagement />} />
+                      <Route path="/growth" element={<OperationsGrowth />} />
+                      <Route path="/finance" element={<PaymentMembership />} />
+                      <Route path="/feedback" element={<FeedbackSupport />} />
+                      <Route path="/reports" element={<DataReports />} />
+                      <Route path="/system" element={<SystemLogs />} />
                       {/* Catch all - redirect to dashboard */}
                       <Route path="*" element={<Navigate to="/dashboard" replace />} />
                     </Routes>
