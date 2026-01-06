@@ -40,7 +40,7 @@ impl CommentLikeRepository {
             VALUES ($1, $2)
             ON CONFLICT (comment_id, user_id) DO UPDATE
             SET user_id = EXCLUDED.user_id
-            RETURNING id, comment_id, user_id, created_at, (xmax = 0)::int8 as was_created
+            RETURNING id, comment_id, user_id, created_at, CASE WHEN xmax = 0 THEN 1 ELSE 0 END as was_created
             "#,
         )
         .bind(user_id)
