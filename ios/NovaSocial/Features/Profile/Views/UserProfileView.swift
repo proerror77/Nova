@@ -52,6 +52,39 @@ struct UserProfileData {
         likedPosts: []
     )
 
+    /// Memberwise init（保留 Swift 默認行為）
+    init(
+        userId: String,
+        username: String,
+        avatarUrl: String? = nil,
+        location: String? = nil,
+        profession: String? = nil,
+        followingCount: Int,
+        followersCount: Int,
+        likesCount: Int,
+        isVerified: Bool,
+        posts: [UserProfilePostData],
+        savedPosts: [UserProfilePostData] = [],
+        likedPosts: [UserProfilePostData] = [],
+        isAlias: Bool = false,
+        aliasName: String? = nil
+    ) {
+        self.userId = userId
+        self.username = username
+        self.avatarUrl = avatarUrl
+        self.location = location
+        self.profession = profession
+        self.followingCount = followingCount
+        self.followersCount = followersCount
+        self.likesCount = likesCount
+        self.isVerified = isVerified
+        self.posts = posts
+        self.savedPosts = savedPosts
+        self.likedPosts = likedPosts
+        self.isAlias = isAlias
+        self.aliasName = aliasName
+    }
+
     /// 從 UserProfile 快取創建（用於快取優先載入，防止抖動）
     init(from profile: UserProfile, posts: [UserProfilePostData] = [], savedPosts: [UserProfilePostData] = [], likedPosts: [UserProfilePostData] = []) {
         self.userId = profile.id

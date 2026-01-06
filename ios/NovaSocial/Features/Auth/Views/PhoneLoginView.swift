@@ -612,43 +612,45 @@ struct CountryPickerSheet: View {
     }
 
     private func countryRow(_ country: CountryCodeData) -> some View {
-        Button(action: {
-            selectedCountry = country
-            searchText = ""
-            regionService.savePreferredCountry(country)
-            isPresented = false
-        }) {
-            HStack(spacing: 12) {
-                Text(country.flag)
-                    .font(.system(size: 24))
+        VStack(spacing: 0) {
+            Button(action: {
+                selectedCountry = country
+                searchText = ""
+                regionService.savePreferredCountry(country)
+                isPresented = false
+            }) {
+                HStack(spacing: 12) {
+                    Text(country.flag)
+                        .font(.system(size: 24))
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(country.name)
-                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
-                        .foregroundColor(.white)
-                    Text(country.localizedName)
-                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(country.name)
+                            .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                            .foregroundColor(.white)
+                        Text(country.localizedName)
+                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                            .foregroundColor(.gray)
+                    }
+
+                    Spacer()
+
+                    Text(country.dialCode)
+                        .font(Font.custom("SFProDisplay-Medium", size: 16.f))
                         .foregroundColor(.gray)
+
+                    if selectedCountry?.id == country.id {
+                        Image(systemName: "checkmark")
+                            .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
+                    }
                 }
-
-                Spacer()
-
-                Text(country.dialCode)
-                    .font(Font.custom("SFProDisplay-Medium", size: 16.f))
-                    .foregroundColor(.gray)
-
-                if selectedCountry?.id == country.id {
-                    Image(systemName: "checkmark")
-                        .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
-                }
+                .padding(.vertical, 12)
+                .contentShape(Rectangle())
             }
-            .padding(.vertical, 12)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+            .buttonStyle(.plain)
 
-        Divider()
-            .background(Color.white.opacity(0.1))
+            Divider()
+                .background(Color.white.opacity(0.1))
+        }
     }
 }
 
