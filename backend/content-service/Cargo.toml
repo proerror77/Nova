@@ -93,7 +93,7 @@ mockall = "0.12"
 actix-http = "3.9"
 tempfile = "3.8"
 testcontainers.workspace = true
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 
 [[bench]]
 name = "feed_ranking_bench"
