@@ -328,6 +328,11 @@ async fn main() -> std::io::Result<()> {
                 "/api/v2/auth/invites/validate",
                 web::get().to(rest_api::validate_invite_code),
             )
+            // Waitlist signup (public endpoint - no auth required)
+            .route(
+                "/api/v2/auth/waitlist",
+                web::post().to(rest_api::add_to_waitlist),
+            )
             // ✅ Phone Authentication API (public endpoints - no auth required)
             .route(
                 "/api/v2/auth/phone/send-code",

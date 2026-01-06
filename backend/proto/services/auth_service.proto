@@ -411,6 +411,51 @@ message ValidateInviteResponse {
 }
 
 // ============================================================================
+// Waitlist (Issue #255: "Don't have an invite?" email collection)
+// ============================================================================
+message AddToWaitlistRequest {
+  string email = 1;
+  optional string ip_address = 2;
+  optional string user_agent = 3;
+  optional string source = 4;  // "invite_page", "landing_page", etc.
+}
+
+message AddToWaitlistResponse {
+  bool success = 1;
+  bool is_new = 2;  // true if newly added, false if already existed
+  optional string message = 3;
+}
+
+message ListWaitlistRequest {
+  optional string status = 1;  // "pending", "invited", "registered"
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message WaitlistEntry {
+  string id = 1;
+  string email = 2;
+  string status = 3;
+  string source = 4;
+  int64 created_at = 5;
+  optional int64 invited_at = 6;
+}
+
+message ListWaitlistResponse {
+  repeated WaitlistEntry entries = 1;
+  int64 total = 2;
+}
+
+message GetWaitlistStatsRequest {}
+
+message GetWaitlistStatsResponse {
+  int64 total = 1;
+  int64 pending = 2;
+  int64 invited = 3;
+  int64 registered = 4;
+}
+
+// ============================================================================
 // Referral Chain Info
 // ============================================================================
 message GetReferralInfoRequest {
@@ -902,6 +947,29 @@ service AuthService {
   rpc ValidateInvite(ValidateInviteRequest) returns (ValidateInviteResponse) {
     option (google.api.http) = {
       get: "/api/v2/auth/invites/validate"
+    };
+  }
+
+  // ========== Waitlist (Issue #255) ==========
+  // Add email to waitlist (public - no auth required)
+  rpc AddToWaitlist(AddToWaitlistRequest) returns (AddToWaitlistResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/waitlist"
+      body: "*"
+    };
+  }
+
+  // List waitlist entries (admin only)
+  rpc ListWaitlist(ListWaitlistRequest) returns (ListWaitlistResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/waitlist"
+    };
+  }
+
+  // Get waitlist statistics (admin only)
+  rpc GetWaitlistStats(GetWaitlistStatsRequest) returns (GetWaitlistStatsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/waitlist/stats"
     };
   }
 

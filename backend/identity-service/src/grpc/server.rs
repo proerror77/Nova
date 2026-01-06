@@ -611,6 +611,100 @@ impl AuthService for IdentityServiceServer {
         }))
     }
 
+    /// Add email to waitlist (public - no auth required)
+    /// Issue #255: "Don't have an invite?" email collection
+    async fn add_to_waitlist(
+        &self,
+        request: Request<AddToWaitlistRequest>,
+    ) -> std::result::Result<Response<AddToWaitlistResponse>, Status> {
+        let req = request.into_inner();
+
+        if req.email.is_empty() {
+            return Err(Status::invalid_argument("Email is required"));
+        }
+
+        // Basic email validation
+        if !req.email.contains('@') || !req.email.contains('.') {
+            return Err(Status::invalid_argument("Invalid email format"));
+        }
+
+        let (is_new, _id) = db::waitlist::add_to_waitlist(
+            &self.db,
+            &req.email,
+            req.ip_address.as_deref(),
+            req.user_agent.as_deref(),
+            req.source.as_deref(),
+        )
+        .await
+        .map_err(to_status)?;
+
+        let message = if is_new {
+            Some("Successfully added to waitlist".to_string())
+        } else {
+            Some("Email already on waitlist".to_string())
+        };
+
+        Ok(Response::new(AddToWaitlistResponse {
+            success: true,
+            is_new,
+            message,
+        }))
+    }
+
+    /// List waitlist entries (admin only)
+    async fn list_waitlist(
+        &self,
+        request: Request<ListWaitlistRequest>,
+    ) -> std::result::Result<Response<ListWaitlistResponse>, Status> {
+        let req = request.into_inner();
+
+        let limit = if req.limit > 0 { req.limit as i64 } else { 50 };
+        let offset = req.offset as i64;
+
+        let (entries, total) = db::waitlist::list_waitlist(
+            &self.db,
+            req.status.as_deref(),
+            limit,
+            offset,
+        )
+        .await
+        .map_err(to_status)?;
+
+        let proto_entries: Vec<WaitlistEntry> = entries
+            .into_iter()
+            .map(|e| WaitlistEntry {
+                id: e.id.to_string(),
+                email: e.email,
+                status: e.status,
+                source: e.source,
+                created_at: e.created_at.timestamp(),
+                invited_at: e.invited_at.map(|dt| dt.timestamp()),
+            })
+            .collect();
+
+        Ok(Response::new(ListWaitlistResponse {
+            entries: proto_entries,
+            total,
+        }))
+    }
+
+    /// Get waitlist statistics (admin only)
+    async fn get_waitlist_stats(
+        &self,
+        _request: Request<GetWaitlistStatsRequest>,
+    ) -> std::result::Result<Response<GetWaitlistStatsResponse>, Status> {
+        let stats = db::waitlist::get_waitlist_stats(&self.db)
+            .await
+            .map_err(to_status)?;
+
+        Ok(Response::new(GetWaitlistStatsResponse {
+            total: stats.total,
+            pending: stats.pending,
+            invited: stats.invited,
+            registered: stats.registered,
+        }))
+    }
+
     /// Get referral chain info for a user
     async fn get_referral_info(
         &self,

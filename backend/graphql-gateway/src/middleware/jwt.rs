@@ -105,6 +105,8 @@ where
             "/api/v2/guest/feed/trending",
             // Invite code validation (pre-registration check, no auth required)
             "/api/v2/auth/invites/validate",
+            // Waitlist signup (email collection for users without invite code)
+            "/api/v2/auth/waitlist",
             // Phone authentication (SMS OTP - public endpoints for registration/login)
             "/api/v2/auth/phone",
             // Comments API (public read access for viewing comments)
