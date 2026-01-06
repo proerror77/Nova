@@ -4,12 +4,12 @@ use tracing::{error, warn};
 
 use crate::clients::proto::auth::GetUserProfilesByIdsRequest;
 use crate::clients::proto::social::{
-    BatchCheckBookmarkedRequest, BatchCheckCommentLikedRequest, CheckCommentLikedRequest,
-    CheckUserBookmarkedRequest, CheckUserLikedRequest, CreateBookmarkRequest,
-    CreateCommentLikeRequest, CreateCommentRequest, CreateLikeRequest, CreateShareRequest,
-    DeleteBookmarkRequest, DeleteCommentLikeRequest, DeleteCommentRequest, DeleteLikeRequest,
-    GetBookmarksRequest, GetCommentLikeCountRequest, GetCommentsRequest, GetLikesRequest,
-    GetShareCountRequest, GetUserLikedPostsRequest,
+    BatchCheckBookmarkedRequest, BatchCheckCommentLikedRequest, BatchGetLikeStatusRequest,
+    CheckCommentLikedRequest, CheckUserBookmarkedRequest, CheckUserLikedRequest,
+    CreateBookmarkRequest, CreateCommentLikeRequest, CreateCommentRequest, CreateLikeRequest,
+    CreateShareRequest, DeleteBookmarkRequest, DeleteCommentLikeRequest, DeleteCommentRequest,
+    DeleteLikeRequest, GetBookmarksRequest, GetCommentLikeCountRequest, GetCommentsRequest,
+    GetLikesRequest, GetShareCountRequest, GetUserLikedPostsRequest,
 };
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
@@ -692,6 +692,58 @@ pub async fn batch_check_bookmarked(
 #[derive(Debug, Deserialize)]
 pub struct BatchCheckBookmarkedBody {
     pub post_ids: Vec<String>,
+}
+
+// ============================================================================
+// BATCH CHECK LIKED ENDPOINT (fixes isLiked inconsistency after feed refresh)
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+pub struct BatchCheckLikedBody {
+    pub post_ids: Vec<String>,
+}
+
+/// Batch check if user has liked multiple posts (fixes N+1 API calls and refresh inconsistency)
+/// Returns a list of post IDs that the user has liked (for iOS client compatibility)
+#[post("/api/v2/social/batch-check-liked")]
+pub async fn batch_check_liked(
+    http_req: HttpRequest,
+    clients: web::Data<ServiceClients>,
+    body: web::Json<BatchCheckLikedBody>,
+) -> HttpResponse {
+    let user_id = match http_req.extensions().get::<AuthenticatedUser>().copied() {
+        Some(AuthenticatedUser(id)) => id.to_string(),
+        None => return HttpResponse::Unauthorized().finish(),
+    };
+
+    let req = BatchGetLikeStatusRequest {
+        user_id,
+        post_ids: body.post_ids.clone(),
+    };
+
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.batch_get_like_status(req).await }
+        })
+        .await
+    {
+        Ok(resp) => {
+            // Convert map<string, bool> to array of liked post IDs for iOS client compatibility
+            let liked_post_ids: Vec<String> = resp
+                .statuses
+                .into_iter()
+                .filter_map(|(post_id, is_liked)| if is_liked { Some(post_id) } else { None })
+                .collect();
+            HttpResponse::Ok().json(serde_json::json!({"liked_post_ids": liked_post_ids}))
+        }
+        Err(e) => {
+            error!("batch_check_liked failed: {}", e);
+            HttpResponse::ServiceUnavailable().json(
+                serde_json::json!({"success": false, "error": "Service temporarily unavailable"}),
+            )
+        }
+    }
 }
 
 // ============================================================================

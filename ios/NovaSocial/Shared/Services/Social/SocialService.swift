@@ -95,6 +95,31 @@ class SocialService {
         return response.liked
     }
 
+    /// Batch check if user has liked multiple posts (fixes like status inconsistency after refresh)
+    /// Returns a Set of post IDs that the user has liked
+    func batchCheckLiked(postIds: [String]) async throws -> Set<String> {
+        struct Request: Codable {
+            let postIds: [String]
+
+            enum CodingKeys: String, CodingKey {
+                case postIds = "post_ids"
+            }
+        }
+
+        struct Response: Codable {
+            let likedPostIds: [String]
+            // Note: APIClient uses .convertFromSnakeCase
+        }
+
+        let request = Request(postIds: postIds)
+        let response: Response = try await client.request(
+            endpoint: APIConfig.Social.batchCheckLiked,
+            body: request
+        )
+
+        return Set(response.likedPostIds)
+    }
+
     /// Get posts liked by a user (paginated)
     func getUserLikedPosts(userId: String, limit: Int = 20, offset: Int = 0) async throws -> (postIds: [String], total: Int) {
         struct Response: Codable {

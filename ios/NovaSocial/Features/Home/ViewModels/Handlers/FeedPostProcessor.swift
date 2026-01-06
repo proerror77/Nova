@@ -29,12 +29,13 @@ final class FeedPostProcessor {
     }
     
     // MARK: - Post Processing Pipeline
-    
-    /// Process posts: sync current user profile, enrich with bookmark status and deduplicate
+
+    /// Process posts: sync current user profile, enrich with like and bookmark status, and deduplicate
     func processAndDeduplicatePosts(_ posts: [FeedPost]) async -> [FeedPost] {
         let syncedPosts = syncCurrentUserProfile(posts)
-        let enrichedPosts = await enrichWithBookmarkStatus(syncedPosts)
-        return deduplicatePosts(enrichedPosts)
+        let likeEnrichedPosts = await enrichWithLikeStatus(syncedPosts)
+        let bookmarkEnrichedPosts = await enrichWithBookmarkStatus(likeEnrichedPosts)
+        return deduplicatePosts(bookmarkEnrichedPosts)
     }
     
     /// Sync current user's name/avatar for their own posts
@@ -70,7 +71,47 @@ final class FeedPostProcessor {
             return post.copying(authorName: nameOverride, authorAvatar: avatarOverride)
         }
     }
-    
+
+    /// Enrich posts with like status for authenticated users (fixes isLiked inconsistency after refresh)
+    /// Also ensures likeCount is at least 1 when user has liked the post (fixes count mismatch)
+    func enrichWithLikeStatus(_ posts: [FeedPost]) async -> [FeedPost] {
+        guard isAuthenticated, !posts.isEmpty else { return posts }
+
+        let postIds = posts.map { $0.id }
+        guard let likedIds = try? await socialService.batchCheckLiked(postIds: postIds) else {
+            return posts
+        }
+
+        #if DEBUG
+        print("[FeedPostProcessor] Enriched like status: \(likedIds.count) liked out of \(posts.count) posts")
+        #endif
+
+        return posts.map { post in
+            let userLikedThis = likedIds.contains(post.id)
+
+            if userLikedThis {
+                // User liked this post - ensure isLiked=true AND likeCount >= 1
+                let correctedCount = max(post.likeCount, 1)
+                if post.isLiked && post.likeCount >= 1 {
+                    return post  // Already correct, no change needed
+                }
+                #if DEBUG
+                if post.likeCount == 0 {
+                    print("[FeedPostProcessor] ⚠️ Correcting likeCount: post \(post.id) was 0, now 1")
+                }
+                #endif
+                return post.copying(likeCount: correctedCount, isLiked: true)
+            } else {
+                // User did NOT like this post - ensure isLiked=false
+                // Don't decrease count (other users may have liked it)
+                if post.isLiked {
+                    return post.copying(isLiked: false)
+                }
+                return post
+            }
+        }
+    }
+
     /// Enrich posts with bookmark status for authenticated users
     func enrichWithBookmarkStatus(_ posts: [FeedPost]) async -> [FeedPost] {
         guard isAuthenticated, !posts.isEmpty else { return posts }
@@ -143,9 +184,9 @@ final class FeedPostProcessor {
             }
         }
     }
-    
+
     // MARK: - Async Background Updates
-    
+
     /// Load bookmark status asynchronously without blocking the main feed display
     func loadBookmarkStatusAsync(
         for postIds: [String],
