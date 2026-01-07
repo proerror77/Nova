@@ -1,7 +1,7 @@
 /// Post handlers - HTTP endpoints for post operations
 use crate::cache::ContentCache;
 use crate::error::{AppError, Result};
-use crate::middleware::UserId;
+use crate::middleware::{AccountType, UserId};
 use crate::services::PostService;
 use actix_web::{web, HttpResponse};
 use grpc_clients::GrpcClientPool;
@@ -35,6 +35,7 @@ pub async fn create_post(
     outbox_repo: web::Data<Arc<SqlxOutboxRepository>>,
     grpc_pool: web::Data<Arc<GrpcClientPool>>,
     user_id: UserId,
+    account_type: AccountType,
     req: web::Json<CreatePostRequest>,
 ) -> Result<HttpResponse> {
     // Use default values for text-only posts
@@ -109,7 +110,13 @@ pub async fn create_post(
     );
 
     let post = service
-        .create_post(user_id.0, req.caption.as_deref(), image_key, content_type)
+        .create_post(
+            user_id.0,
+            req.caption.as_deref(),
+            image_key,
+            content_type,
+            Some(&account_type.0),
+        )
         .await?;
 
     Ok(HttpResponse::Created().json(post))

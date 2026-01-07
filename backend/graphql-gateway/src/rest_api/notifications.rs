@@ -18,7 +18,10 @@
 
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
-use tracing::{error, info};
+use std::collections::HashMap;
+use tracing::{error, info, warn};
+
+use crate::clients::proto::auth::GetUserProfilesByIdsRequest;
 
 use super::models::ErrorResponse;
 use crate::clients::proto::notification::{
@@ -189,8 +192,63 @@ pub struct BatchNotificationItem {
 // Helper Functions
 // ============================================================================
 
+/// User info for notification enrichment
+#[derive(Debug, Clone)]
+struct UserInfo {
+    display_name: Option<String>,
+    avatar_url: Option<String>,
+}
+
+/// Batch fetch user profiles for notification enrichment
+async fn fetch_user_profiles(
+    clients: &ServiceClients,
+    user_ids: Vec<String>,
+) -> HashMap<String, UserInfo> {
+    if user_ids.is_empty() {
+        return HashMap::new();
+    }
+
+    let mut auth_client = clients.auth_client();
+    let request = tonic::Request::new(GetUserProfilesByIdsRequest { user_ids });
+
+    match auth_client.get_user_profiles_by_ids(request).await {
+        Ok(response) => {
+            let profiles = response.into_inner().profiles;
+            profiles
+                .into_iter()
+                .map(|p| {
+                    // Use display_name if available, otherwise username
+                    let display_name = p.display_name.clone().or_else(|| {
+                        if !p.username.is_empty() {
+                            Some(p.username.clone())
+                        } else {
+                            None
+                        }
+                    });
+
+                    (
+                        p.user_id.clone(),
+                        UserInfo {
+                            display_name,
+                            avatar_url: p.avatar_url,
+                        },
+                    )
+                })
+                .collect()
+        }
+        Err(status) => {
+            warn!(
+                error = %status,
+                "Failed to fetch user profiles for notification enrichment"
+            );
+            HashMap::new()
+        }
+    }
+}
+
 fn convert_notification(
     n: crate::clients::proto::notification::Notification,
+    user_profiles: &HashMap<String, UserInfo>,
 ) -> NotificationResponse {
     // Combine title and body into message, or use body if title is empty
     let message = if n.title.is_empty() {
@@ -199,6 +257,13 @@ fn convert_notification(
         n.title
     } else {
         format!("{}: {}", n.title, n.body)
+    };
+
+    // Get user info from pre-fetched profiles
+    let user_info = if !n.related_user_id.is_empty() {
+        user_profiles.get(&n.related_user_id)
+    } else {
+        None
     };
 
     NotificationResponse {
@@ -218,9 +283,9 @@ fn convert_notification(
             Some(n.related_post_id)
         },
         related_comment_id: None, // Not in gRPC response yet
-        user_name: None,          // TODO: Join with user data
-        user_avatar_url: None,    // TODO: Join with user data
-        post_thumbnail_url: None, // TODO: Join with content data
+        user_name: user_info.and_then(|u| u.display_name.clone()),
+        user_avatar_url: user_info.and_then(|u| u.avatar_url.clone()),
+        post_thumbnail_url: None, // TODO: Join with content data if needed
     }
 }
 
@@ -279,10 +344,29 @@ pub async fn get_notifications(
         Ok(response) => {
             let grpc_response = response.into_inner();
             let notification_count = grpc_response.notifications.len() as i32;
+
+            // Collect unique related_user_ids for batch profile lookup
+            let related_user_ids: Vec<String> = grpc_response
+                .notifications
+                .iter()
+                .filter_map(|n| {
+                    if n.related_user_id.is_empty() {
+                        None
+                    } else {
+                        Some(n.related_user_id.clone())
+                    }
+                })
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .collect();
+
+            // Batch fetch user profiles for enrichment
+            let user_profiles = fetch_user_profiles(&clients, related_user_ids).await;
+
             let notifications = grpc_response
                 .notifications
                 .into_iter()
-                .map(convert_notification)
+                .map(|n| convert_notification(n, &user_profiles))
                 .collect();
 
             let has_more = notification_count >= limit;
@@ -345,7 +429,13 @@ pub async fn get_notification(
         Ok(response) => {
             let grpc_response = response.into_inner();
             if let Some(notification) = grpc_response.notification {
-                Ok(HttpResponse::Ok().json(convert_notification(notification)))
+                // Fetch user profile if related_user_id exists
+                let user_profiles = if !notification.related_user_id.is_empty() {
+                    fetch_user_profiles(&clients, vec![notification.related_user_id.clone()]).await
+                } else {
+                    HashMap::new()
+                };
+                Ok(HttpResponse::Ok().json(convert_notification(notification, &user_profiles)))
             } else {
                 Ok(HttpResponse::NotFound().json(ErrorResponse::new("Notification not found")))
             }
@@ -401,7 +491,13 @@ pub async fn create_notification(
         Ok(response) => {
             let grpc_response = response.into_inner();
             if let Some(notification) = grpc_response.notification {
-                Ok(HttpResponse::Created().json(convert_notification(notification)))
+                // Fetch user profile if related_user_id exists
+                let user_profiles = if !notification.related_user_id.is_empty() {
+                    fetch_user_profiles(&clients, vec![notification.related_user_id.clone()]).await
+                } else {
+                    HashMap::new()
+                };
+                Ok(HttpResponse::Created().json(convert_notification(notification, &user_profiles)))
             } else {
                 Ok(HttpResponse::InternalServerError()
                     .json(ErrorResponse::new("Failed to create notification")))

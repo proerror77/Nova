@@ -3,7 +3,7 @@ use std::time::Duration;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::error::KafkaError;
-use rdkafka::message::Message;
+use rdkafka::message::{Headers, Message};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
@@ -31,7 +31,8 @@ impl KafkaConsumerConfig {
             return None;
         }
 
-        let topic_prefix = std::env::var("KAFKA_TOPIC_PREFIX").unwrap_or_else(|_| "nova".to_string());
+        let topic_prefix =
+            std::env::var("KAFKA_TOPIC_PREFIX").unwrap_or_else(|_| "nova".to_string());
 
         Some(Self {
             brokers,
@@ -162,7 +163,10 @@ async fn run_consumer(ctx: EventContext, config: KafkaConsumerConfig) -> Result<
     }
 }
 
-fn header_value<'a>(message: &'a rdkafka::message::BorrowedMessage<'a>, key: &str) -> Option<&'a str> {
+fn header_value<'a>(
+    message: &'a rdkafka::message::BorrowedMessage<'a>,
+    key: &str,
+) -> Option<&'a str> {
     message
         .headers()
         .and_then(|headers| {

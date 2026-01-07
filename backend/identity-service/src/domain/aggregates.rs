@@ -141,12 +141,13 @@ impl User {
         // Lock after 5 failed attempts
         if self.failed_login_attempts >= 5 {
             self.is_locked = true;
-            self.locked_until = Some(Utc::now() + chrono::Duration::minutes(30));
+            let locked_until_time = Utc::now() + chrono::Duration::minutes(30);
+            self.locked_until = Some(locked_until_time);
 
             self.record_event(IdentityEvent::AccountLocked {
                 user_id: self.id.clone(),
                 locked_at: Utc::now(),
-                locked_until: self.locked_until.unwrap(),
+                locked_until: locked_until_time,
             });
         }
     }

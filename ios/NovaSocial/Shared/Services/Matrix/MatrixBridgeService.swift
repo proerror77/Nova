@@ -50,6 +50,10 @@ final class MatrixBridgeService: @unchecked Sendable {
     /// Room ID -> Conversation ID mapping (reverse lookup)
     var roomToConversationMap: [String: String] = [:]
 
+    /// Room ID -> Display Name cache for newly created DMs
+    /// Used as fallback when Matrix SDK hasn't synced member info yet
+    private var dmDisplayNameCache: [String: String] = [:]
+
     // MARK: - Callbacks
 
     /// Called when a new message arrives via Matrix
@@ -1128,6 +1132,7 @@ extension MatrixBridgeService {
         }
 
         #if DEBUG
+        let startTime = CFAbsoluteTimeGetCurrent()
         print("[MatrixBridge] 📋 Loading conversations from Matrix rooms...")
         #endif
 
@@ -1140,10 +1145,42 @@ extension MatrixBridgeService {
         // Convert MatrixRoom to MatrixConversationInfo (with optional Nova profile enrichment)
         let currentUserId = keychain.get(.userId) ?? AuthenticationManager.shared.currentUser?.id ?? ""
 
-        var conversations: [MatrixConversationInfo] = []
-        conversations.reserveCapacity(rooms.count)
+        // Process rooms in PARALLEL for much faster loading
+        let conversations: [MatrixConversationInfo] = await withTaskGroup(of: MatrixConversationInfo?.self) { group in
+            for room in rooms {
+                group.addTask {
+                    await self.enrichRoom(room, currentUserId: currentUserId)
+                }
+            }
 
-        for room in rooms {
+            var results: [MatrixConversationInfo] = []
+            results.reserveCapacity(rooms.count)
+            for await result in group {
+                if let conversation = result {
+                    results.append(conversation)
+                }
+            }
+            return results
+        }
+
+        // Sort by last activity (most recent first)
+        let sorted = conversations.sorted { conv1, conv2 in
+            guard let time1 = conv1.lastMessageTime else { return false }
+            guard let time2 = conv2.lastMessageTime else { return true }
+            return time1 > time2
+        }
+
+        #if DEBUG
+        let elapsedTime = CFAbsoluteTimeGetCurrent() - startTime
+        print("[MatrixBridge] ✅ Returning \(sorted.count) conversations (loaded in \(String(format: "%.2f", elapsedTime))s)")
+        #endif
+
+        return sorted
+    }
+
+    /// Enriches a single room with display name and avatar info
+    /// This is called in parallel for all rooms to speed up loading
+    private func enrichRoom(_ room: MatrixRoom, currentUserId: String) async -> MatrixConversationInfo? {
             var displayName: String
             var avatarURL: String?
 
@@ -1173,28 +1210,55 @@ extension MatrixBridgeService {
                 return name.range(of: pattern, options: .regularExpression) != nil
             }
 
-            if room.isDirect {
+            // Helper function to check if name looks like Matrix localpart format "nova-{username}"
+            func looksLikeMatrixLocalpart(_ name: String) -> Bool {
+                // Pattern: "nova-" prefix (e.g., "nova-timmikins747")
+                return name.hasPrefix("nova-")
+            }
+
+            // Treat as direct message if:
+            // 1. Explicitly marked as direct, OR
+            // 2. Has exactly 2 members, OR
+            // 3. Has 1 member with no room name (likely waiting for invite accept)
+            // Note: isDirect flag may not be synced correctly after logout/login
+            let isLikelyDirect = room.isDirect || room.memberCount == 2 || (room.memberCount == 1 && (room.name == nil || room.name?.isEmpty == true))
+
+            if isLikelyDirect {
                 let initialName = room.name ?? ""
                 displayName = initialName.isEmpty ? "Direct Message" : initialName
                 avatarURL = room.avatarURL
 
-                // Check if we need to enrich the display name
+                // First, check our local cache for recently created DMs
+                // This fixes the "Group Chat" display issue for newly created DMs before sync completes
+                if let cachedName = dmDisplayNameCache[room.id], !cachedName.isEmpty {
+                    displayName = cachedName
+                    #if DEBUG
+                    print("[MatrixBridge]   ✅ Using cached DM display name: \(cachedName)")
+                    #endif
+                }
+
+                // Check if we need to enrich the display name or avatar
                 // - Empty/default name
                 // - Looks like a Matrix room ID
                 // - Looks like a member count fallback (e.g., "2 people")
                 // - Looks like legacy "Conversation {uuid}" format from backend
                 // - Looks like legacy "Nova User {uuid-prefix}" format
-                let needsEnrichment = displayName == "Direct Message" ||
-                                      looksLikeRoomId(displayName) ||
-                                      looksLikeMemberCountFallback(displayName) ||
-                                      looksLikeConversationUUID(displayName) ||
-                                      looksLikeNovaUserUUID(displayName)
+                // - Looks like Matrix localpart format "nova-{username}"
+                // - Avatar URL is missing (common for DMs where room avatar isn't set)
+                let needsNameEnrichment = displayName == "Direct Message" ||
+                                          looksLikeRoomId(displayName) ||
+                                          looksLikeMemberCountFallback(displayName) ||
+                                          looksLikeConversationUUID(displayName) ||
+                                          looksLikeNovaUserUUID(displayName) ||
+                                          looksLikeMatrixLocalpart(displayName)
+                let needsAvatarEnrichment = avatarURL == nil || avatarURL?.isEmpty == true
+                let needsEnrichment = needsNameEnrichment || needsAvatarEnrichment
 
                 // Try to enrich from Nova conversation + identity profiles.
                 // This fixes cases where Matrix room display names/avatars are not yet configured.
                 if needsEnrichment {
                     #if DEBUG
-                    print("[MatrixBridge] 🔄 Enriching DM: \(room.id), initial name: '\(displayName)'")
+                    print("[MatrixBridge] 🔄 Enriching DM: \(room.id), initial name: '\(displayName)', needsName: \(needsNameEnrichment), needsAvatar: \(needsAvatarEnrichment)")
                     #endif
                     if let novaConversationId = try? await queryConversationMapping(roomId: room.id),
                        let conversation = try? await chatService.getConversation(conversationId: novaConversationId) {
@@ -1214,8 +1278,10 @@ extension MatrixBridgeService {
                         }
                     }
 
-                    // If still showing room ID, member count fallback, or "Conversation {uuid}", try to get other user from Matrix room members
-                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) {
+                    // If still showing room ID, member count fallback, "Conversation {uuid}", or avatar still missing, try to get other user from Matrix room members
+                    let stillNeedsNameEnrichment = looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName)
+                    let stillNeedsAvatarEnrichment = avatarURL == nil || avatarURL?.isEmpty == true
+                    if stillNeedsNameEnrichment || stillNeedsAvatarEnrichment {
                         #if DEBUG
                         print("[MatrixBridge]   📋 Trying Matrix room members for: \(room.id)")
                         #endif
@@ -1234,47 +1300,84 @@ extension MatrixBridgeService {
                                 return !member.userId.contains(currentUserId)
                             }) {
                                 #if DEBUG
-                                print("[MatrixBridge]   👤 Found other member: \(otherMember.userId), displayName: \(otherMember.displayName ?? "nil")")
+                                print("[MatrixBridge]   👤 Found other member: \(otherMember.userId), displayName: \(otherMember.displayName ?? "nil"), avatar: \(otherMember.avatarUrl ?? "nil")")
                                 #endif
                                 // Use their display name if available
                                 if let memberDisplayName = otherMember.displayName, !memberDisplayName.isEmpty {
-                                    displayName = memberDisplayName
-                                    if avatarURL == nil || avatarURL?.isEmpty == true {
-                                        avatarURL = otherMember.avatarUrl
+                                    if stillNeedsNameEnrichment {
+                                        displayName = memberDisplayName
+                                    }
+                                    if stillNeedsAvatarEnrichment {
+                                        if let memberAvatarUrl = otherMember.avatarUrl, !memberAvatarUrl.isEmpty {
+                                            avatarURL = memberAvatarUrl
+                                        } else {
+                                            // Member has displayName but no avatar - try to get avatar from UserService
+                                            if let novaIdentifier = matrixService.convertToNovaUserId(matrixUserId: otherMember.userId) {
+                                                #if DEBUG
+                                                print("[MatrixBridge]   🔍 Looking up avatar for: \(novaIdentifier)")
+                                                #endif
+                                                // Check if identifier is UUID or username
+                                                let isUUID = novaIdentifier.count == 36 && novaIdentifier.contains("-")
+                                                let userProfile: UserProfile? = try? await (isUUID
+                                                    ? UserService.shared.getUser(userId: novaIdentifier)
+                                                    : UserService.shared.getUserByUsername(novaIdentifier))
+                                                if let userProfile = userProfile {
+                                                    avatarURL = userProfile.avatarUrl
+                                                    #if DEBUG
+                                                    print("[MatrixBridge]   ✅ Got avatar from UserService: \(avatarURL ?? "nil")")
+                                                    #endif
+                                                }
+                                            }
+                                        }
                                     }
                                 } else {
                                     // Matrix member has no displayName, try to look up via Nova UserService
-                                    if let novaUserId = matrixService.convertToNovaUserId(matrixUserId: otherMember.userId) {
+                                    // But only update displayName if we actually need name enrichment
+                                    if let novaIdentifier = matrixService.convertToNovaUserId(matrixUserId: otherMember.userId) {
                                         #if DEBUG
-                                        print("[MatrixBridge]   🔍 Looking up user profile for: \(novaUserId)")
+                                        print("[MatrixBridge]   🔍 Looking up user profile for: \(novaIdentifier)")
                                         #endif
                                         do {
-                                            let userProfile = try await UserService.shared.getUser(userId: novaUserId)
-                                            displayName = userProfile.displayName ?? userProfile.username
-                                            if avatarURL == nil || avatarURL?.isEmpty == true {
-                                                avatarURL = userProfile.avatarUrl
+                                            // Check if identifier is UUID or username
+                                            // UUID format: 8-4-4-4-12 hex chars (36 chars total with hyphens)
+                                            let isUUID = novaIdentifier.count == 36 && novaIdentifier.contains("-")
+
+                                            let userProfile: UserProfile
+                                            if isUUID {
+                                                // Use getUser for UUID-based lookup
+                                                userProfile = try await UserService.shared.getUser(userId: novaIdentifier)
+                                            } else {
+                                                // Use getUserByUsername for username-based lookup
+                                                userProfile = try await UserService.shared.getUserByUsername(novaIdentifier)
+                                            }
+
+                                            if stillNeedsNameEnrichment {
+                                                displayName = userProfile.displayName ?? userProfile.username
+                                            }
+                                            if stillNeedsAvatarEnrichment, let profileAvatar = userProfile.avatarUrl, !profileAvatar.isEmpty {
+                                                avatarURL = profileAvatar
                                             }
                                             #if DEBUG
-                                            print("[MatrixBridge]   ✅ Found user: \(displayName)")
+                                            print("[MatrixBridge]   ✅ Found user: \(userProfile.displayName ?? userProfile.username)")
                                             #endif
                                         } catch {
                                             #if DEBUG
-                                            print("[MatrixBridge]   ⚠️ UserService lookup failed for \(novaUserId): \(error)")
+                                            print("[MatrixBridge]   ⚠️ UserService lookup failed for \(novaIdentifier): \(error)")
                                             #endif
-                                            // UserService lookup failed - check if UUID or username
-                                            if novaUserId.count == 36 && novaUserId.contains("-") {
-                                                // UUID - use a more friendly fallback, try to get username from Matrix profile
-                                                // The Matrix user ID format is @nova-{identifier}:server
-                                                // If the identifier is a UUID, we don't have the username
-                                                displayName = "Chat"  // Generic fallback for unknown users
-                                            } else {
-                                                // It's a username - show it directly
-                                                displayName = novaUserId
+                                            // UserService lookup failed - only update name if we need it
+                                            if stillNeedsNameEnrichment {
+                                                if novaIdentifier.count == 36 && novaIdentifier.contains("-") {
+                                                    // UUID - use generic fallback
+                                                    displayName = "Chat"
+                                                } else {
+                                                    // It's a username - show it directly
+                                                    displayName = novaIdentifier
+                                                }
                                             }
                                         }
-                                    } else {
+                                    } else if stillNeedsNameEnrichment {
                                         // Can't convert to Nova user ID, extract from Matrix ID
-                                        // Format: @nova-<uuid>:server or @username:server
+                                        // Only do this if we need name enrichment
                                         let matrixId = otherMember.userId
                                         if matrixId.hasPrefix("@") {
                                             let withoutAt = String(matrixId.dropFirst())
@@ -1306,7 +1409,7 @@ extension MatrixBridgeService {
                     }
 
                     // Fallback: Try to use lastMessage sender for DM display name
-                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) || looksLikeNovaUserUUID(displayName) {
+                    if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) || looksLikeNovaUserUUID(displayName) || looksLikeMatrixLocalpart(displayName) {
                         #if DEBUG
                         print("[MatrixBridge]   📨 Trying lastMessage sender fallback")
                         #endif
@@ -1322,20 +1425,26 @@ extension MatrixBridgeService {
                             // Only use sender info if it's the other user (not current user)
                             if isOtherUser {
                                 // Try to convert Matrix sender ID to Nova user ID and look up
-                                if let novaUserId = senderNovaId {
-                                    if let userProfile = try? await UserService.shared.getUser(userId: novaUserId) {
+                                if let novaIdentifier = senderNovaId {
+                                    // Check if identifier is UUID or username
+                                    let isUUID = novaIdentifier.count == 36 && novaIdentifier.contains("-")
+                                    let userProfile: UserProfile? = try? await (isUUID
+                                        ? UserService.shared.getUser(userId: novaIdentifier)
+                                        : UserService.shared.getUserByUsername(novaIdentifier))
+
+                                    if let userProfile = userProfile {
                                         displayName = userProfile.displayName ?? userProfile.username
                                         if avatarURL == nil || avatarURL?.isEmpty == true {
                                             avatarURL = userProfile.avatarUrl
                                         }
                                     } else {
                                         // UserService failed - check if UUID or username
-                                        if novaUserId.count == 36 && novaUserId.contains("-") {
+                                        if isUUID {
                                             // UUID - use generic fallback
                                             displayName = "Chat"
                                         } else {
                                             // Username - show it directly
-                                            displayName = novaUserId
+                                            displayName = novaIdentifier
                                         }
                                     }
                                 } else if senderId.hasPrefix("@") {
@@ -1362,9 +1471,19 @@ extension MatrixBridgeService {
                         }
                     }
 
-                    // Final fallback - just show "Chat" instead of ugly room ID, member count, "Conversation {uuid}", or "Nova User {uuid}"
+                    // Final cleanup - handle ugly display names
                     if looksLikeRoomId(displayName) || looksLikeMemberCountFallback(displayName) || looksLikeConversationUUID(displayName) || looksLikeNovaUserUUID(displayName) {
+                        // These are unrecoverable - show generic fallback
                         displayName = "Chat"
+                    } else if looksLikeMatrixLocalpart(displayName) {
+                        // Strip "nova-" prefix and show just the username
+                        let identifier = String(displayName.dropFirst(5))
+                        // Check if it's a UUID (36 chars with hyphens) - if so, show generic
+                        if identifier.count == 36 && identifier.contains("-") {
+                            displayName = "Chat"
+                        } else {
+                            displayName = identifier
+                        }
                     }
                 }
             } else {
@@ -1381,7 +1500,7 @@ extension MatrixBridgeService {
             var memberAvatars: [String?] = []
             var memberNames: [String] = []
 
-            if !room.isDirect {
+            if !isLikelyDirect {
                 // For groups, fetch first 3 members (excluding current user) for stacked avatars
                 do {
                     let members = try await matrixService.getRoomMembers(roomId: room.id)
@@ -1397,35 +1516,19 @@ extension MatrixBridgeService {
                 }
             }
 
-            conversations.append(
-                MatrixConversationInfo(
-                    id: room.id,
-                    displayName: displayName,
-                    lastMessage: room.lastMessage?.content,
-                    lastMessageTime: room.lastActivity,
-                    unreadCount: room.unreadCount,
-                    isEncrypted: room.isEncrypted,
-                    isDirect: room.isDirect,
-                    avatarURL: avatarURL,
-                    memberCount: room.memberCount,
-                    memberAvatars: memberAvatars,
-                    memberNames: memberNames
-                )
-            )
-        }
-
-        // Sort by last activity (most recent first)
-        let sorted = conversations.sorted { conv1, conv2 in
-            guard let time1 = conv1.lastMessageTime else { return false }
-            guard let time2 = conv2.lastMessageTime else { return true }
-            return time1 > time2
-        }
-
-        #if DEBUG
-        print("[MatrixBridge] ✅ Returning \(sorted.count) conversations")
-        #endif
-
-        return sorted
+        return MatrixConversationInfo(
+            id: room.id,
+            displayName: displayName,
+            lastMessage: room.lastMessage?.content,
+            lastMessageTime: room.lastActivity,
+            unreadCount: room.unreadCount,
+            isEncrypted: room.isEncrypted,
+            isDirect: isLikelyDirect,  // Use corrected detection, not just room.isDirect
+            avatarURL: avatarURL,
+            memberCount: room.memberCount,
+            memberAvatars: memberAvatars,
+            memberNames: memberNames
+        )
     }
 
     /// Find an existing direct room with a specific user
@@ -1441,6 +1544,13 @@ extension MatrixBridgeService {
         #if DEBUG
         print("[MatrixBridge] 🔍 Searching for existing DM with: \(userId) (Matrix ID: \(matrixUserId))")
         print("[MatrixBridge]   Current user: \(currentUserId ?? "nil")")
+        #endif
+
+        // CRITICAL: Wait for sync to be ready before checking rooms
+        // This prevents duplicate room creation when sync hasn't completed yet
+        let syncReady = await matrixService.waitForSyncReady(timeout: 5)
+        #if DEBUG
+        print("[MatrixBridge]   Sync ready: \(syncReady)")
         #endif
 
         // Get all rooms from Matrix
@@ -1499,7 +1609,85 @@ extension MatrixBridgeService {
                 #if DEBUG
                 print("[MatrixBridge]   ⚠️ Failed to get members for room \(room.id): \(error)")
                 #endif
+
+                // Fallback: If this is a direct room with 1-2 members, try to match by other criteria
+                // This handles E2EE rooms where member retrieval might fail
+                if room.isDirect && room.memberCount <= 2 {
+                    #if DEBUG
+                    print("[MatrixBridge]   🔄 Trying fallback match for isDirect room with memberCount=\(room.memberCount)")
+                    #endif
+
+                    // Check if the room name contains the target user's ID or display name
+                    // Matrix room names for DMs often contain the other user's info
+                    let roomName = room.name?.lowercased() ?? ""
+                    let targetIdPart = userId.lowercased().prefix(8)  // First 8 chars of UUID
+
+                    // Also extract the localpart from the Matrix user ID for matching
+                    // @nova-{uuid}:server -> nova-{uuid}
+                    let matrixLocalpart = matrixUserId
+                        .replacingOccurrences(of: "@", with: "")
+                        .components(separatedBy: ":").first?.lowercased() ?? ""
+
+                    if roomName.contains(String(targetIdPart)) || roomName.contains(matrixLocalpart) {
+                        #if DEBUG
+                        print("[MatrixBridge]   ✅ Fallback match found! Room name '\(room.name ?? "")' matches target user")
+                        #endif
+
+                        return MatrixConversationInfo(
+                            id: room.id,
+                            displayName: room.name ?? "Direct Message",
+                            lastMessage: room.lastMessage?.content,
+                            lastMessageTime: room.lastActivity,
+                            unreadCount: room.unreadCount,
+                            isEncrypted: room.isEncrypted,
+                            isDirect: true,
+                            avatarURL: room.avatarURL,
+                            memberCount: room.memberCount,
+                            memberAvatars: [],
+                            memberNames: []
+                        )
+                    }
+                }
                 continue
+            }
+        }
+
+        // Final fallback: Check if any isDirect room has a Nova conversation mapping
+        // that includes the target user
+        #if DEBUG
+        print("[MatrixBridge] 🔄 Final fallback: checking Nova conversation mappings for target user")
+        #endif
+
+        for room in rooms {
+            // Only check rooms that are marked as direct and have small member count
+            guard room.isDirect && room.memberCount <= 2 else { continue }
+
+            // Check if there's a Nova conversation mapped to this room
+            if let conversationId = try? await queryConversationMapping(roomId: room.id) {
+                // Get the Nova conversation to check participants
+                if let conversation = try? await chatService.getConversation(conversationId: conversationId) {
+                    // Check if the target user is a participant in this conversation
+                    // Note: participants is already [String] of user IDs
+                    if conversation.participants.contains(userId) {
+                        #if DEBUG
+                        print("[MatrixBridge] ✅ Final fallback found! Room \(room.id) has conversation with participant \(userId)")
+                        #endif
+
+                        return MatrixConversationInfo(
+                            id: room.id,
+                            displayName: room.name ?? conversation.name ?? "Direct Message",
+                            lastMessage: room.lastMessage?.content,
+                            lastMessageTime: room.lastActivity,
+                            unreadCount: room.unreadCount,
+                            isEncrypted: room.isEncrypted,
+                            isDirect: true,
+                            avatarURL: room.avatarURL,
+                            memberCount: room.memberCount,
+                            memberAvatars: [],
+                            memberNames: []
+                        )
+                    }
+                }
             }
         }
 
@@ -1566,6 +1754,14 @@ extension MatrixBridgeService {
         #if DEBUG
         print("[MatrixBridge] Created \(isPrivate ? "private" : "regular") Matrix room: \(roomId)")
         #endif
+
+        // Cache the display name for this DM so it shows correctly before sync completes
+        if let name = displayName, !name.isEmpty {
+            dmDisplayNameCache[roomId] = name
+            #if DEBUG
+            print("[MatrixBridge] Cached DM display name: \(name) for room \(roomId)")
+            #endif
+        }
 
         return MatrixConversationInfo(
             id: roomId,

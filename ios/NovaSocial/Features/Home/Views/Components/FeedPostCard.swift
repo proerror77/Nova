@@ -61,34 +61,38 @@ struct FeedPostCard: View {
             }
             Button("Cancel", role: .cancel) { }
         }
+        // MARK: - Fullscreen Image Zoom (Issue #257)
+        .fullScreenCover(item: $zoomingImageUrl) { imageUrl in
+            ZoomableImageView(imageUrl: imageUrl, onDismiss: {
+                zoomingImageUrl = nil
+            })
+        }
     }
 
     // MARK: - Main Content View
     private var mainContent: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 8.h) {
             // MARK: - User Info Header
-            HStack(spacing: 8.w) {
-                // Avatar - 显示用户头像或默认头像
-                AvatarView(image: nil, url: post.authorAvatar, size: 30)
+            HStack(spacing: 8) {
+                // Avatar - 显示用户头像或默认头像 (Issue #259: colored border based on account type)
+                AvatarView(image: nil, url: post.authorAvatar, size: 30, accountType: post.authorAccountType)
 
                 // User Info
-                VStack(alignment: .leading, spacing: 1.h) {
-                    HStack(spacing: 3.w) {
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 3) {
                         Text(post.authorName)
                             .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                             .tracking(0.28)
                             .foregroundColor(.black)
 
-                        // TODO: 认证标记 - 用户通过认证后显示
-                        // if post.isVerified {
-                        //     Image("Blue-v")
-                        //         .resizable()
-                        //         .scaledToFit()
-                        //         .frame(width: 12.s, height: 12.s)
-                        // }
+                        // 认证标记 (可选)
+                        Image("Blue-v")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 12, height: 12)
                     }
 
-                    HStack(spacing: 5.w) {
+                    HStack(spacing: 3) {
                         Text(post.createdAt.timeAgoDisplay())
                             .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                             .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
@@ -103,16 +107,16 @@ struct FeedPostCard: View {
 
                 Spacer()
 
-                // TODO: 分享按钮 - 后续添加认证功能后启用
-                // Button(action: onShare) {
-                //     Image("Share-black")
-                //         .resizable()
-                //         .scaledToFit()
-                //         .frame(width: 24.s, height: 24.s)
-                // }
-                // .accessibilityLabel("Share")
+                // Share Button
+                Button(action: onShare) {
+                    Image("Share-black")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                }
+                .accessibilityLabel("Share")
             }
-            .padding(EdgeInsets(top: 10.h, leading: 10.w, bottom: 10.h, trailing: 10.w))
+            .padding(EdgeInsets(top: 10, leading: 10, bottom: 2, trailing: 10))
 
             // MARK: - Post Media (Images/Video/Live Photo) - Instagram Style
             if !post.displayMediaUrls.isEmpty {
@@ -128,91 +132,84 @@ struct FeedPostCard: View {
                         isExpanded: $isTextExpanded,
                         lineLimit: 1
                     )
-                }
-
-                // Channel Tags
-                if let formattedTags = post.formattedTags {
-                    Text(formattedTags)
-                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                        .tracking(0.28)
-                        .foregroundColor(Color(red: 0.91, green: 0.20, blue: 0.34))
+                    .frame(width: 343.w, alignment: .leading)
                 }
 
                 // Interaction Buttons
-                HStack(spacing: 8.w) {
-                    // Left side: Like, Comment, Collect buttons
-                    HStack(spacing: 8.w) {
-                        // Like button
-                        Button {
-                            likeAnimationTrigger.toggle()
-                            onLike()
-                        } label: {
-                            HStack(spacing: 4.w) {
-                                Image(post.isLiked ? "card-heart-icon-filled" : "card-heart-icon")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 24.s, height: 24.s)
-                                Text(post.likeCount.abbreviated)
-                                    .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
-                                    .tracking(0.24)
-                                    .foregroundColor(.black)
-                                    .contentTransition(.numericText())
-                            }
-                            .contentShape(Rectangle())
+                HStack(spacing: 20) {
+                    // Like button
+                    Button {
+                        animateLikeIcon()
+                        onLike()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(post.isLiked ? "card-heart-icon-filled" : "card-heart-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                                .scaleEffect(likeAnimationTrigger ? 1.18 : 1.0)
+                                .animation(.spring(response: 0.25, dampingFraction: 0.6), value: likeAnimationTrigger)
+                            Text(post.likeCount.abbreviated)
+                                .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
+                                .tracking(0.28)
+                                .foregroundColor(.black)
+                                .monospacedDigit()
+                                .contentTransition(.numericText())
+                                .frame(minWidth: 28, alignment: .leading)
+                                .animation(.easeOut(duration: 0.5), value: post.likeCount)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Like, \(post.likeCount) likes")
-
-                        // Comment button
-                        Button(action: onComment) {
-                            HStack(spacing: 4.w) {
-                                Image("card-comment-icon")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 24.s, height: 24.s)
-                                Text(post.commentCount.abbreviated)
-                                    .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
-                                    .tracking(0.24)
-                                    .foregroundColor(.black)
-                                    .contentTransition(.numericText())
-                            }
-                        }
-                        .accessibilityLabel("Comments, \(post.commentCount)")
-
-                        // Collect/Star button
-                        Button {
-                            bookmarkAnimationTrigger.toggle()
-                            onBookmark()
-                        } label: {
-                            HStack(spacing: 4.w) {
-                                Image(post.isBookmarked ? "collect-fill" : "collect")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 24.s, height: 24.s)
-                                Text(post.bookmarkCount.abbreviated)
-                                    .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
-                                    .tracking(0.24)
-                                    .foregroundColor(.black)
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Collect, \(post.bookmarkCount)")
+                        .contentShape(Rectangle())
+                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: post.isLiked)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Like, \(post.likeCount) likes")
+
+                    // Comment button
+                    Button(action: onComment) {
+                        HStack(spacing: 8) {
+                            Image("card-comment-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                            Text(post.commentCount.abbreviated)
+                                .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
+                                .tracking(0.28)
+                                .foregroundColor(.black)
+                                .contentTransition(.numericText())
+                        }
+                    }
+                    .accessibilityLabel("Comments, \(post.commentCount)")
+
+                    // Collect/Star button
+                    Button {
+                        bookmarkAnimationTrigger.toggle()
+                        onBookmark()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(post.isBookmarked ? "collect-fill" : "collect")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                                .id("bookmark-icon-\(post.isBookmarked)")  // Force SwiftUI re-render
+                                .transition(.scale.combined(with: .opacity))
+                            Text(post.bookmarkCount.abbreviated)
+                                .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
+                                .tracking(0.28)
+                                .foregroundColor(.black)
+                                .contentTransition(.numericText())
+                        }
+                        .contentShape(Rectangle())
+                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: post.isBookmarked)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Collect, \(post.bookmarkCount)")
 
                     Spacer()
-
-                    // Right side: Share button
-                    Button(action: onShare) {
-                        Image("Share-black")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 24.s, height: 24.s)
-                    }
-                    .accessibilityLabel("Share")
                 }
             }
-            .padding(EdgeInsets(top: 10.h, leading: 14.w, bottom: 26.h, trailing: 14.w))
+            .padding(.top, 2)  // 与分页指示器总间距 10pt (8 + 2)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 26)
         }
         .frame(width: 375.w)
         .background(.white)
@@ -234,7 +231,7 @@ struct FeedPostCard: View {
     @ViewBuilder
     private var mediaContent: some View {
         ZStack {
-            VStack(spacing: 10.h) {
+            VStack(spacing: 10) {
                 switch post.mediaType {
                 case .video:
                     // Video post - show video player
@@ -321,18 +318,18 @@ struct FeedPostCard: View {
                 .clipped()
 
                 // Live Photo badge
-                HStack(spacing: 4.w) {
+                HStack(spacing: 4) {
                     Image(systemName: "livephoto")
                         .font(.system(size: 12.f))
                     Text("LIVE")
                         .font(Font.custom("SFProDisplay-Semibold", size: 10.f))
                 }
                 .foregroundColor(.white)
-                .padding(.horizontal, 8.w)
-                .padding(.vertical, 4.h)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
                 .background(Color.black.opacity(0.6))
                 .cornerRadius(4)
-                .padding(12.s)
+                .padding(12)
             }
         }
     }
@@ -455,10 +452,9 @@ struct FeedPostCard: View {
             .onTapGesture(count: 2) {
                 triggerDoubleTapLike()
             }
-            // Single tap to view full screen (optional, like Instagram)
+            // Single tap to view full screen zoom (Instagram-style)
             .onTapGesture(count: 1) {
-                // Single tap does nothing for now (Instagram behavior)
-                // Can be used to pause/play video or show/hide UI
+                zoomingImageUrl = urlString
             }
             // Long press for menu
             .onLongPressGesture(minimumDuration: 0.5) {
@@ -480,7 +476,7 @@ struct FeedPostCard: View {
 
         // 如果還沒點讚，執行點讚
         if !post.isLiked {
-            likeAnimationTrigger.toggle()
+            animateLikeIcon()
             onLike()
         }
 
@@ -492,10 +488,21 @@ struct FeedPostCard: View {
         }
     }
 
+    private func animateLikeIcon() {
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+            likeAnimationTrigger = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+                likeAnimationTrigger = false
+            }
+        }
+    }
+
     // MARK: - Page Indicator
 
     private var pageIndicator: some View {
-        HStack(spacing: 4.w) {
+        HStack(spacing: 4) {
             ForEach(0..<mediaItemCount, id: \.self) { index in
                 Circle()
                     .fill(index == currentImageIndex ?
@@ -564,9 +571,9 @@ extension FeedPost {
         FeedPost(
             id: "preview-1",
             authorId: "user-123",
-            authorName: "yuumeiart",
+            authorName: "Simone Carter",
             authorAvatar: "https://picsum.photos/100/100",
-            content: "I will come again next time to visit and experience the beautiful scenery that this place has to offer. The mountains were breathtaking and the local food was amazing!",
+            content: "I will come again next time to visit and experience the beautiful scenery that this place has to offer.",
             mediaUrls: [
                 "https://picsum.photos/400/533",
                 "https://picsum.photos/401/534",
@@ -575,14 +582,11 @@ extension FeedPost {
                 "https://picsum.photos/404/537"
             ],
             createdAt: Date().addingTimeInterval(-5400), // 1d30m ago
-            likeCount: 8049,
-            commentCount: 54,
+            likeCount: 2234,
+            commentCount: 1232,
             shareCount: 1232,
-            bookmarkCount: 227,
             isLiked: false,
-            isBookmarked: false,
-            location: "English",
-            tags: ["Fashion", "Sport", "Art", "Beautiful", "Draw", "Visual Storytelling", "Experimental Design", "Youth Culture", "City Culture"]
+            isBookmarked: false
         )
     }
 
@@ -592,16 +596,14 @@ extension FeedPost {
             authorId: "user-456",
             authorName: "Jane Smith",
             authorAvatar: nil,
-            content: "Just finished reading an amazing book! It really changed my perspective on life and inspired me to pursue my dreams.",
+            content: "Just finished reading an amazing book!",
             mediaUrls: [],
             createdAt: Date().addingTimeInterval(-7200),
             likeCount: 56,
             commentCount: 8,
             shareCount: 3,
-            bookmarkCount: 12,
             isLiked: false,
-            isBookmarked: true,
-            tags: ["Books", "Inspiration", "Life"]
+            isBookmarked: true
         )
     }
 }
@@ -614,21 +616,22 @@ struct ExpandableTextView: View {
     let lineLimit: Int
     
     @State private var isTruncated: Bool = false
-    @State private var intrinsicHeight: CGFloat = 0
-    @State private var limitedHeight: CGFloat = 0
+    
+    // "more" 按钮的预留宽度
+    private let moreButtonWidth: CGFloat = 32.w
+    // 可用宽度 (343pt - more按钮宽度)
+    private var textMaxWidth: CGFloat { 343.w - moreButtonWidth }
     
     var body: some View {
         if isExpanded {
             // 展开状态：显示完整文本 + " less"
-            VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .lastTextBaseline, spacing: 0) {
                 Text(text)
-                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                    .tracking(0.28)
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(.black)
-                + Text(" less")
-                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                    .tracking(0.28)
-                    .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                Text(" less")
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                    .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64))
             }
             .fixedSize(horizontal: false, vertical: true)
             .onTapGesture {
@@ -641,20 +644,17 @@ struct ExpandableTextView: View {
             HStack(alignment: .bottom, spacing: 0) {
                 // 文本区域
                 Text(text)
-                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                    .tracking(0.28)
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(.black)
                     .lineLimit(lineLimit)
                     .truncationMode(.tail)
-                    .layoutPriority(1)
+                    .frame(maxWidth: isTruncated ? textMaxWidth : .infinity, alignment: .leading)
                 
                 // more 按钮（仅在截断时显示）
                 if isTruncated {
-                    Text(" more")
-                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                        .tracking(0.28)
-                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
-                        .fixedSize()
+                    Text("more")
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                        .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64))
                         .onTapGesture {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 isExpanded = true
@@ -663,47 +663,32 @@ struct ExpandableTextView: View {
                 }
             }
             .background(
-                // 隐藏测量：比较受限文本高度和完整文本高度
+                // 隐藏测量：比较单行高度和完整文本高度
                 ZStack {
                     // 完整文本（不限行数）
                     Text(text)
-                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                        .tracking(0.28)
+                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                         .fixedSize(horizontal: false, vertical: true)
+                        .frame(width: 343.w, alignment: .leading)
                         .background(GeometryReader { geo in
-                            Color.clear
-                                .onAppear { intrinsicHeight = geo.size.height }
-                                .onChange(of: geo.size.height) { _, newValue in
-                                    intrinsicHeight = newValue
-                                    updateTruncationState()
+                            Color.clear.onAppear {
+                                // 如果完整文本高度超过约 22pt（单行高度），则需要截断
+                                if geo.size.height > 22 {
+                                    isTruncated = true
                                 }
-                        })
-                    
-                    // 受限文本
-                    Text(text)
-                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                        .tracking(0.28)
-                        .lineLimit(lineLimit)
-                        .background(GeometryReader { geo in
-                            Color.clear
-                                .onAppear { 
-                                    limitedHeight = geo.size.height
-                                    updateTruncationState()
+                            }
+                            .onChange(of: text) { _, _ in
+                                if geo.size.height > 22 {
+                                    isTruncated = true
+                                } else {
+                                    isTruncated = false
                                 }
-                                .onChange(of: geo.size.height) { _, newValue in
-                                    limitedHeight = newValue
-                                    updateTruncationState()
-                                }
+                            }
                         })
                 }
                 .hidden()
             )
         }
-    }
-    
-    private func updateTruncationState() {
-        // 如果完整高度大于受限高度，说明文本被截断
-        isTruncated = intrinsicHeight > limitedHeight + 1
     }
 }
 

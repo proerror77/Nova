@@ -135,7 +135,8 @@ enum PreviewData {
             authorDisplayName: Users.currentUser.displayName,
             authorAvatarUrl: Users.currentUser.avatarUrl,
             location: "Malibu, California",
-            tags: ["sunset", "beach", "photography"]
+            tags: ["sunset", "beach", "photography"],
+            authorAccountType: "primary"
         )
 
         /// Sample post with multiple images
@@ -161,7 +162,8 @@ enum PreviewData {
             authorDisplayName: Users.regularUser.displayName,
             authorAvatarUrl: Users.regularUser.avatarUrl,
             location: "Tokyo, Japan",
-            tags: ["travel", "japan", "tokyo", "diary"]
+            tags: ["travel", "japan", "tokyo", "diary"],
+            authorAccountType: "alias"
         )
 
         /// Sample text-only post
@@ -183,7 +185,8 @@ enum PreviewData {
             authorDisplayName: Users.currentUser.displayName,
             authorAvatarUrl: Users.currentUser.avatarUrl,
             location: nil,
-            tags: ["SwiftUI", "iOS", "programming", "books"]
+            tags: ["SwiftUI", "iOS", "programming", "books"],
+            authorAccountType: "primary"
         )
 
         /// Array of sample posts for feeds
@@ -191,9 +194,9 @@ enum PreviewData {
             imagePost,
             multiImagePost,
             textPost,
-            Post(id: "preview-post-004", authorId: "preview-user-004", content: "Working on something exciting! Stay tuned 🚀", title: "Sneak Peek", createdAt: Int64(Date().timeIntervalSince1970 - 3600 * 5), updatedAt: Int64(Date().timeIntervalSince1970 - 3600 * 5), status: "published", mediaUrls: ["https://picsum.photos/604/400"], mediaType: "image", likeCount: 234, commentCount: 45, shareCount: 12, bookmarkCount: nil, authorUsername: "alice_wonder", authorDisplayName: "Alice Wonder", authorAvatarUrl: "https://picsum.photos/203", location: "San Francisco, USA", tags: ["startup", "tech"]),
-            Post(id: "preview-post-005", authorId: "preview-user-005", content: "Morning coffee ☕️", title: "Coffee Time", createdAt: Int64(Date().timeIntervalSince1970 - 3600 * 8), updatedAt: Int64(Date().timeIntervalSince1970 - 3600 * 8), status: "published", mediaUrls: ["https://picsum.photos/605/400"], mediaType: "image", likeCount: 89, commentCount: 7, shareCount: 2, bookmarkCount: nil, authorUsername: "bob_builder", authorDisplayName: "Bob Builder", authorAvatarUrl: "https://picsum.photos/204", location: "Seattle, USA", tags: ["coffee", "morning"]),
-            Post(id: "preview-post-006", authorId: "preview-user-006", content: "Just hit a new personal record at the gym! 💪", title: "Personal Best", createdAt: Int64(Date().timeIntervalSince1970 - 86400 * 2), updatedAt: Int64(Date().timeIntervalSince1970 - 86400 * 2), status: "published", mediaUrls: nil, mediaType: nil, likeCount: 156, commentCount: 34, shareCount: 5, bookmarkCount: nil, authorUsername: "carol_smith", authorDisplayName: "Carol Smith", authorAvatarUrl: "https://picsum.photos/205", location: nil, tags: ["fitness", "gym", "workout"]),
+            Post(id: "preview-post-004", authorId: "preview-user-004", content: "Working on something exciting! Stay tuned 🚀", title: "Sneak Peek", createdAt: Int64(Date().timeIntervalSince1970 - 3600 * 5), updatedAt: Int64(Date().timeIntervalSince1970 - 3600 * 5), status: "published", mediaUrls: ["https://picsum.photos/604/400"], mediaType: "image", likeCount: 234, commentCount: 45, shareCount: 12, bookmarkCount: nil, authorUsername: "alice_wonder", authorDisplayName: "Alice Wonder", authorAvatarUrl: "https://picsum.photos/203", location: "San Francisco, USA", tags: ["startup", "tech"], authorAccountType: "primary"),
+            Post(id: "preview-post-005", authorId: "preview-user-005", content: "Morning coffee ☕️", title: "Coffee Time", createdAt: Int64(Date().timeIntervalSince1970 - 3600 * 8), updatedAt: Int64(Date().timeIntervalSince1970 - 3600 * 8), status: "published", mediaUrls: ["https://picsum.photos/605/400"], mediaType: "image", likeCount: 89, commentCount: 7, shareCount: 2, bookmarkCount: nil, authorUsername: "bob_builder", authorDisplayName: "Bob Builder", authorAvatarUrl: "https://picsum.photos/204", location: "Seattle, USA", tags: ["coffee", "morning"], authorAccountType: "alias"),
+            Post(id: "preview-post-006", authorId: "preview-user-006", content: "Just hit a new personal record at the gym! 💪", title: "Personal Best", createdAt: Int64(Date().timeIntervalSince1970 - 86400 * 2), updatedAt: Int64(Date().timeIntervalSince1970 - 86400 * 2), status: "published", mediaUrls: nil, mediaType: nil, likeCount: 156, commentCount: 34, shareCount: 5, bookmarkCount: nil, authorUsername: "carol_smith", authorDisplayName: "Carol Smith", authorAvatarUrl: "https://picsum.photos/205", location: nil, tags: ["fitness", "gym", "workout"], authorAccountType: "primary"),
         ]
     }
 
@@ -271,7 +274,8 @@ enum PreviewData {
                 authorDisplayName: Users.regularUser.displayName,
                 authorAvatarUrl: Users.regularUser.avatarUrl,
                 likeCount: 5,
-                isLikedByViewer: false
+                isLikedByViewer: false,
+                authorAccountType: "alias"
             ),
             SocialComment(
                 id: "comment-002",
@@ -284,7 +288,8 @@ enum PreviewData {
                 authorDisplayName: "Alice Wonder",
                 authorAvatarUrl: "https://picsum.photos/203",
                 likeCount: 2,
-                isLikedByViewer: true
+                isLikedByViewer: true,
+                authorAccountType: "primary"
             ),
             SocialComment(
                 id: "comment-003",
@@ -297,7 +302,8 @@ enum PreviewData {
                 authorDisplayName: Users.currentUser.displayName,
                 authorAvatarUrl: Users.currentUser.avatarUrl,
                 likeCount: 0,
-                isLikedByViewer: false
+                isLikedByViewer: false,
+                authorAccountType: "primary"
             ),
         ]
     }

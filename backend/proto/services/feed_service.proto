@@ -68,6 +68,7 @@ message FeedPost {
   uint32 bookmark_count = 12;
   bool is_liked = 13;  // Whether current user has liked this post
   bool is_bookmarked = 14;  // Whether current user has bookmarked this post
+  string author_account_type = 15; // Account type when post was created: "primary" or "alias"
 }
 
 // GetFeedResponse contains the personalized feed

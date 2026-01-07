@@ -8,8 +8,6 @@ use base64::Engine;
 use grpc_clients::nova::content_service::v2::content_service_server::{
     ContentService, ContentServiceServer,
 };
-use grpc_clients::nova::feed_service::v2::InvalidateFeedCacheRequest;
-use grpc_clients::GrpcClientPool;
 use grpc_clients::nova::content_service::v2::{
     Channel, ContentStatus, CreatePostRequest, CreatePostResponse, DeletePostRequest,
     DeletePostResponse, GetChannelRequest, GetChannelResponse, GetPostRequest, GetPostResponse,
@@ -21,6 +19,8 @@ use grpc_clients::nova::content_service::v2::{
     ListTrendingPostsRequest, ListTrendingPostsResponse, Post, PostWithTimestamp,
     UpdatePostRequest, UpdatePostResponse, Visibility,
 };
+use grpc_clients::nova::feed_service::v2::InvalidateFeedCacheRequest;
+use grpc_clients::GrpcClientPool;
 use grpc_metrics::layer::RequestGuard;
 use sqlx::{PgPool, QueryBuilder, Row};
 use std::fs;
@@ -65,6 +65,10 @@ fn convert_post_to_proto(post: &DbPost) -> Post {
         media_urls,
         media_type: post.media_type.clone(),
         thumbnail_urls: thumbnails,
+        author_account_type: post
+            .author_account_type
+            .clone()
+            .unwrap_or_else(|| "primary".to_string()),
     }
 }
 
@@ -146,12 +150,19 @@ impl ContentService for ContentServiceImpl {
                 req.media_type.clone()
             }
         } else {
-            "text".to_string()  // Text-only post
+            "text".to_string() // Text-only post
         };
         let image_key = if has_media {
             format!("media-{}", Uuid::new_v4())
         } else {
             format!("text-content-{}", Uuid::new_v4())
+        };
+
+        // Extract account_type from request, default to "primary" for backward compatibility
+        let account_type = if req.author_account_type.is_empty() {
+            "primary"
+        } else {
+            &req.author_account_type
         };
 
         let post = post_service
@@ -162,6 +173,7 @@ impl ContentService for ContentServiceImpl {
                 &media_type,
                 &req.media_urls,
                 &resolved_channel_ids,
+                Some(account_type),
             )
             .await
             .map_err(|e| {
@@ -266,7 +278,7 @@ impl ContentService for ContentServiceImpl {
         let mut db_posts = Vec::new();
         if !cache_misses.is_empty() {
             db_posts = sqlx::query_as::<_, DbPost>(
-                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete::text AS soft_delete \
+                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete::text AS soft_delete, author_account_type \
                  FROM posts WHERE deleted_at IS NULL AND id = ANY($1::uuid[])",
             )
             .bind(&cache_misses)
@@ -286,7 +298,27 @@ impl ContentService for ContentServiceImpl {
         }
 
         // Step 5: Merge cached and DB results, preserving request order
-        let mut all_posts: std::collections::HashMap<Uuid, DbPost> = cached_posts;
+        // IMPORTANT: Filter out deleted posts from cache (deleted_at might be set in cached version)
+        let mut all_posts: std::collections::HashMap<Uuid, DbPost> = cached_posts
+            .into_iter()
+            .filter(|(id, post)| {
+                if post.deleted_at.is_some() {
+                    tracing::debug!(
+                        post_id = %id,
+                        "Filtering out deleted post from cache (stale cache entry)"
+                    );
+                    // Also invalidate this stale cache entry
+                    let cache = self.cache.clone();
+                    let post_id = *id;
+                    tokio::spawn(async move {
+                        let _ = cache.invalidate_post(post_id).await;
+                    });
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
         for post in db_posts {
             all_posts.insert(post.id, post);
         }
@@ -356,6 +388,10 @@ impl ContentService for ContentServiceImpl {
                         media_urls,
                         media_type: post.media_type.clone(),
                         thumbnail_urls,
+                        author_account_type: post
+                            .author_account_type
+                            .clone()
+                            .unwrap_or_else(|| "primary".to_string()),
                     }
                 })
             })
@@ -388,7 +424,7 @@ impl ContentService for ContentServiceImpl {
         let (posts, total): (Vec<DbPost>, i64) = if req.status == ContentStatus::Unspecified as i32
         {
             let posts = sqlx::query_as::<_, DbPost>(
-                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete::text AS soft_delete \
+                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete::text AS soft_delete, author_account_type \
                  FROM posts WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT $2 OFFSET $3",
             )
             .bind(user_id)
@@ -417,7 +453,7 @@ impl ContentService for ContentServiceImpl {
             };
 
             let posts = sqlx::query_as::<_, DbPost>(
-                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete::text AS soft_delete \
+                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete::text AS soft_delete, author_account_type \
                  FROM posts WHERE user_id = $1 AND status = $2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT $3 OFFSET $4",
             )
             .bind(user_id)
@@ -591,7 +627,29 @@ impl ContentService for ContentServiceImpl {
 
         match result {
             Some(ts) => {
-                let _ = self.cache.invalidate_post(post_id).await;
+                // Invalidate post cache - log errors but don't fail the request
+                if let Err(e) = self.cache.invalidate_post(post_id).await {
+                    tracing::error!(
+                        post_id = %post_id,
+                        error = %e,
+                        "Failed to invalidate post cache after deletion - may cause stale reads"
+                    );
+                }
+
+                // Invalidate feed caches via feed-service (fanout to followers)
+                let mut feed_client = self.grpc_pool.feed();
+                let invalidate_req = InvalidateFeedCacheRequest {
+                    user_id: req.user_id.clone(), // Author's ID
+                    event_type: "delete_post".to_string(),
+                };
+                if let Err(e) = feed_client.invalidate_feed_cache(invalidate_req).await {
+                    tracing::warn!(
+                        post_id = %post_id,
+                        error = %e,
+                        "Failed to invalidate feed caches (will expire via TTL)"
+                    );
+                }
+
                 guard.complete("0");
                 Ok(Response::new(DeletePostResponse {
                     post_id: post_id.to_string(),
@@ -900,7 +958,7 @@ impl ContentService for ContentServiceImpl {
             r#"
             SELECT p.id, p.user_id, p.content, p.caption, p.media_key, p.media_type,
                    p.media_urls, p.status, p.created_at, p.updated_at, p.deleted_at,
-                   p.soft_delete::text AS soft_delete
+                   p.soft_delete::text AS soft_delete, p.author_account_type
             FROM posts p
             INNER JOIN likes l ON p.id = l.post_id
             WHERE l.user_id = $1 AND p.deleted_at IS NULL
@@ -966,7 +1024,7 @@ impl ContentService for ContentServiceImpl {
             r#"
             SELECT p.id, p.user_id, p.content, p.caption, p.media_key, p.media_type,
                    p.media_urls, p.status, p.created_at, p.updated_at, p.deleted_at,
-                   p.soft_delete::text AS soft_delete
+                   p.soft_delete::text AS soft_delete, p.author_account_type
             FROM posts p
             INNER JOIN bookmarks b ON p.id = b.post_id
             WHERE b.user_id = $1 AND p.deleted_at IS NULL

@@ -24,7 +24,7 @@ prometheus.workspace = true
 redis-utils = { path = "../redis-utils" }
 
 # Utilities
-rand = "0.8"
+rand = "0.9"
 
 [dev-dependencies]
 tokio-test = "0.4"

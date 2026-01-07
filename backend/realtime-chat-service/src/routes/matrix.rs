@@ -204,14 +204,15 @@ pub async fn get_matrix_token(
         .unwrap_or_else(|| matrix_config.homeserver_url.clone());
 
     // Provision user: create if doesn't exist, then generate device-bound token
-    // Fetch actual username from identity-service for proper Matrix display name
-    let displayname = match state.auth_client.get_user(nova_user_id).await {
-        Ok(Some(username)) => {
+    // Fetch display name from identity-service for proper Matrix display name
+    // Uses GetUserProfilesByIds RPC which returns UserProfile with display_name field
+    let displayname = match state.auth_client.get_user_display_name(nova_user_id).await {
+        Ok(Some(name)) => {
             tracing::info!(
-                "Fetched username for Matrix display name: nova_user_id={}, username={}",
-                nova_user_id, username
+                "Fetched display name for Matrix provisioning: nova_user_id={}, displayname={}",
+                nova_user_id, name
             );
-            username
+            name
         }
         Ok(None) => {
             tracing::warn!(
@@ -222,7 +223,7 @@ pub async fn get_matrix_token(
         }
         Err(e) => {
             tracing::warn!(
-                "Failed to fetch username from identity-service, using fallback: nova_user_id={}, error={}",
+                "Failed to fetch display name from identity-service, using fallback: nova_user_id={}, error={}",
                 nova_user_id, e
             );
             format!("User {}", &nova_user_id.to_string()[..8])

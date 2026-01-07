@@ -218,9 +218,10 @@ impl IdentityError {
             IdentityError::InviteCodeRequired => {
                 Status::new(Code::FailedPrecondition, "INVITE_CODE_REQUIRED")
             }
-            IdentityError::InvalidInviteCode(msg) => {
-                Status::new(Code::InvalidArgument, format!("Invalid invite code: {}", msg))
-            }
+            IdentityError::InvalidInviteCode(msg) => Status::new(
+                Code::InvalidArgument,
+                format!("Invalid invite code: {}", msg),
+            ),
             IdentityError::Database(_)
             | IdentityError::Redis(_)
             | IdentityError::JwtError(_)

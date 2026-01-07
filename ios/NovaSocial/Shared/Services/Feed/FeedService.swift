@@ -403,6 +403,9 @@ struct FeedPostRaw: Codable {
     // Location and tags (from VLM service or user input)
     let location: String?
     let tags: [String]?
+
+    /// Account type used when post was created: "primary" (real name) or "alias"
+    let authorAccountType: String?
 }
 
 /// Response from feed-service /api/v2/feed endpoint
@@ -477,6 +480,16 @@ enum FeedMediaType: String, Codable {
             return .none
         }
 
+        // Special case: Video post with thumbnail
+        // Pattern: [videoUrl, thumbnailUrl] where first is video and second is image
+        // This should be treated as "video", not "mixed"
+        if urls.count == 2 && hasVideo && hasImage {
+            let firstType = FeedMediaType.from(url: urls[0])
+            if firstType == .video {
+                return .video  // Video + thumbnail pattern
+            }
+        }
+
         if hasVideo && hasImage {
             return .mixed
         } else if hasVideo {
@@ -522,6 +535,8 @@ struct FeedPost: Identifiable, Codable, Equatable {
     let isBookmarked: Bool
     let location: String?
     let tags: [String]?
+    /// Account type used when post was created: "primary" (real name) or "alias"
+    let authorAccountType: String
 
     /// Formatted tags string for display (e.g., "#Fashion #Sport #Art")
     var formattedTags: String? {
@@ -532,6 +547,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
     /// Prefer thumbnails for list performance; fall back to originals when missing.
     /// Normalizes relative URLs and filters out invalid URLs (e.g., "text-content-xxx" placeholders).
     /// If thumbnails are present but unusable, falls back to original media URLs.
+    /// For video posts with [videoUrl, thumbnailUrl] pattern, returns only the video URL.
     var displayMediaUrls: [String] {
         func normalize(_ url: String) -> String? {
             let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -566,7 +582,22 @@ struct FeedPost: Identifiable, Codable, Equatable {
             return normalizedThumbnails
         }
 
-        let normalizedMedia = mediaUrls.compactMap(normalize)
+        var normalizedMedia = mediaUrls.compactMap(normalize)
+
+        // For video posts with [videoUrl, thumbnailUrl] pattern,
+        // only return the video URL to avoid showing thumbnail as duplicate content
+        if mediaType == .video && normalizedMedia.count == 2 {
+            let firstUrl = normalizedMedia[0].lowercased()
+            let isFirstVideo = firstUrl.contains(".mp4") ||
+                               firstUrl.contains(".m4v") ||
+                               firstUrl.contains(".mov") ||
+                               firstUrl.contains(".webm")
+            if isFirstVideo {
+                // Only return the video URL, not the thumbnail
+                normalizedMedia = [normalizedMedia[0]]
+            }
+        }
+
         #if DEBUG
         if normalizedThumbnails.isEmpty, !thumbnailUrls.isEmpty {
             print("[Feed] ⚠️ Thumbnails unusable for post \(id.prefix(8)): thumbnailUrls=\(thumbnailUrls)")
@@ -613,6 +644,62 @@ struct FeedPost: Identifiable, Codable, Equatable {
         return URL(string: mediaUrls[1])
     }
 
+    /// Full resolution media URLs for detail view.
+    /// Unlike `displayMediaUrls` which prefers thumbnails (600px) for feed performance,
+    /// this returns original media URLs at full resolution for when quality matters.
+    var fullResolutionMediaUrls: [String] {
+        func normalize(_ url: String) -> String? {
+            let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+
+            let lowercased = trimmed.lowercased()
+
+            // Skip non-URL placeholders (e.g., "text-content-xxx")
+            if !(lowercased.hasPrefix("http://") || lowercased.hasPrefix("https://") || lowercased.hasPrefix("/") || lowercased.hasPrefix("//")) {
+                return nil
+            }
+
+            if lowercased.hasPrefix("http://") || lowercased.hasPrefix("https://") {
+                return trimmed
+            }
+
+            // Scheme-relative URL (e.g., //cdn.example.com/a.jpg)
+            if lowercased.hasPrefix("//") {
+                return "https:\(trimmed)"
+            }
+
+            // Relative path returned by backend (e.g., /media/abc.jpg)
+            if lowercased.hasPrefix("/") {
+                return "\(APIConfig.current.baseURL)\(trimmed)"
+            }
+
+            return nil
+        }
+
+        // Always prefer original mediaUrls for full resolution
+        var normalizedMedia = mediaUrls.compactMap(normalize)
+
+        // For video posts with [videoUrl, thumbnailUrl] pattern,
+        // only return the video URL to avoid showing thumbnail as duplicate content
+        if mediaType == .video && normalizedMedia.count == 2 {
+            let firstUrl = normalizedMedia[0].lowercased()
+            let isFirstVideo = firstUrl.contains(".mp4") ||
+                               firstUrl.contains(".m4v") ||
+                               firstUrl.contains(".mov") ||
+                               firstUrl.contains(".webm")
+            if isFirstVideo {
+                normalizedMedia = [normalizedMedia[0]]
+            }
+        }
+
+        // Fall back to thumbnails if no valid media URLs
+        if normalizedMedia.isEmpty {
+            return thumbnailUrls.compactMap(normalize)
+        }
+
+        return normalizedMedia
+    }
+
     /// Create FeedPost from raw backend response
     init(from raw: FeedPostRaw) {
         self.id = raw.id
@@ -636,7 +723,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
 
         #if DEBUG
         // Always log every post creation to trace ID flow
-        print("[Feed] Created post \(raw.id.prefix(8)): mediaUrls=\(raw.mediaUrls?.count ?? -1)")
+        print("[Feed] Created post \(raw.id.prefix(8)): mediaUrls=\(raw.mediaUrls?.count ?? -1), isLiked=\(raw.isLiked?.description ?? "nil")/\(raw.likeCount ?? 0), authorAccountType=\(raw.authorAccountType ?? "NIL")")
         #endif
         self.thumbnailUrls = raw.thumbnailUrls ?? self.mediaUrls
         // Determine media type from backend or infer from URLs
@@ -656,6 +743,8 @@ struct FeedPost: Identifiable, Codable, Equatable {
         // Location and tags from VLM analysis
         self.location = raw.location
         self.tags = raw.tags
+        // Account type for avatar border display (default to "primary" for backward compatibility)
+        self.authorAccountType = raw.authorAccountType ?? "primary"
     }
 
     // Keep existing init for Codable conformance and manual creation
@@ -663,7 +752,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
         content: String, title: String? = nil, mediaUrls: [String], mediaType: FeedMediaType? = nil, createdAt: Date,
          likeCount: Int, commentCount: Int, shareCount: Int, bookmarkCount: Int = 0,
          isLiked: Bool, isBookmarked: Bool,
-         location: String? = nil, tags: [String]? = nil) {
+         location: String? = nil, tags: [String]? = nil, authorAccountType: String = "primary") {
         #if DEBUG
         print("[Feed] Created post via manual init: \(id.prefix(8)), mediaUrls=\(mediaUrls.count)")
         #endif
@@ -686,6 +775,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.isBookmarked = isBookmarked
         self.location = location
         self.tags = tags
+        self.authorAccountType = authorAccountType
     }
 
     /// Create a copy with optional field overrides (eliminates duplicate creation code)
@@ -716,7 +806,8 @@ struct FeedPost: Identifiable, Codable, Equatable {
             isLiked: isLiked ?? self.isLiked,
             isBookmarked: isBookmarked ?? self.isBookmarked,
             location: self.location,
-            tags: self.tags
+            tags: self.tags,
+            authorAccountType: self.authorAccountType
         )
     }
 
@@ -743,6 +834,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.isBookmarked = false
         self.location = post.location
         self.tags = post.tags
+        self.authorAccountType = post.authorAccountType ?? "primary"
     }
 }
 

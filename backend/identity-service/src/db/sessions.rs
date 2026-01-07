@@ -33,7 +33,7 @@ pub async fn create_session(
             ip_address, user_agent, location_country, location_city,
             last_activity_at, expires_at, created_at, updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::INET, $11, $12, $13, $14, $15, $16, $17)
         RETURNING id, user_id, device_id, device_name, device_type,
                   os_name, os_version, browser_name, browser_version,
                   ip_address, user_agent, location_country, location_city,

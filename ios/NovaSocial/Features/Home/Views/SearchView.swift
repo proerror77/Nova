@@ -6,6 +6,10 @@ struct SearchView: View {
     @FocusState private var isSearchFocused: Bool
     @State private var showUserProfile = false
     @State private var selectedUserId: String?
+    @State private var showHashtagFeed = false
+    @State private var selectedHashtag: String?
+    @State private var selectedHashtagPostCount: Int = 0
+    private let userService = UserService.shared  // For cache invalidation on profile navigation
 
     var body: some View {
         ZStack {
@@ -113,6 +117,20 @@ struct SearchView: View {
                     }
             }
         }
+        .fullScreenCover(isPresented: $showHashtagFeed) {
+            if let hashtag = selectedHashtag {
+                HashtagFeedView(
+                    isPresented: $showHashtagFeed,
+                    hashtag: hashtag,
+                    postCount: selectedHashtagPostCount
+                )
+            } else {
+                Color.clear
+                    .onAppear {
+                        showHashtagFeed = false
+                    }
+            }
+        }
     }
 
     // MARK: - Filter Tabs
@@ -211,16 +229,13 @@ struct SearchView: View {
 
     // MARK: - Loading View
     private var loadingView: some View {
-        VStack {
-            ProgressView()
-                .scaleEffect(1.2)
-            Text("Searching...")
-                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                .foregroundColor(DesignTokens.textSecondary)
-                .padding(.top, 12)
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(0..<5, id: \.self) { _ in
+                    SearchResultSkeleton()
+                }
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 60)
     }
 
     // MARK: - Empty Results
@@ -262,6 +277,8 @@ struct SearchView: View {
                 avatarUrl: avatarUrl,
                 isVerified: isVerified,
                 onTap: {
+                    // Invalidate cache before navigating to ensure fresh profile data (Issue #166)
+                    userService.invalidateCache(userId: id)
                     selectedUserId = id
                     showUserProfile = true
                 }
@@ -279,7 +296,12 @@ struct SearchView: View {
         case .hashtag(let tag, let postCount):
             HashtagSearchResultRow(
                 tag: tag,
-                postCount: postCount
+                postCount: postCount,
+                onTap: {
+                    selectedHashtag = tag
+                    selectedHashtagPostCount = postCount
+                    showHashtagFeed = true
+                }
             )
         }
     }
@@ -334,7 +356,9 @@ struct UserSearchResultRow: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .background(DesignTokens.surface)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 }
 
@@ -399,38 +423,43 @@ struct PostSearchResultRow: View {
 struct HashtagSearchResultRow: View {
     let tag: String
     let postCount: Int
+    var onTap: () -> Void = {}
 
     var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(DesignTokens.inputBackground)
-                    .frame(width: 48, height: 48)
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(DesignTokens.inputBackground)
+                        .frame(width: 48, height: 48)
 
-                Text("#")
-                    .font(Font.custom("SFProDisplay-Bold", size: 20.f))
-                    .foregroundColor(DesignTokens.textSecondary)
+                    Text("#")
+                        .font(Font.custom("SFProDisplay-Bold", size: 20.f))
+                        .foregroundColor(DesignTokens.textSecondary)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("#\(tag)")
+                        .font(Font.custom("SFProDisplay-Semibold", size: 15.f))
+                        .foregroundColor(DesignTokens.textPrimary)
+
+                    Text("\(postCount) posts")
+                        .font(Font.custom("SFProDisplay-Regular", size: 13.f))
+                        .foregroundColor(DesignTokens.textSecondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14.f))
+                    .foregroundColor(DesignTokens.textMuted)
             }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("#\(tag)")
-                    .font(Font.custom("SFProDisplay-Semibold", size: 15.f))
-                    .foregroundColor(DesignTokens.textPrimary)
-
-                Text("\(postCount) posts")
-                    .font(Font.custom("SFProDisplay-Regular", size: 13.f))
-                    .foregroundColor(DesignTokens.textSecondary)
-            }
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 14.f))
-                .foregroundColor(DesignTokens.textMuted)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(DesignTokens.surface)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(DesignTokens.surface)
+        .buttonStyle(.plain)
     }
 }
 

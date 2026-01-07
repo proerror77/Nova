@@ -177,11 +177,22 @@ struct PostAsSelectionPanel: View {
 
 extension PostAsSelectionPanel {
     /// Legacy initializer for backward compatibility
+    /// - Parameters:
+    ///   - selectedType: The selected post type binding
+    ///   - realName: User's real display name
+    ///   - username: User's username
+    ///   - avatarUrl: User's avatar URL
+    ///   - aliasName: Optional alias name (fetched from API)
+    ///   - aliasAvatarUrl: Optional alias avatar URL
+    ///   - onRealNameTap: Callback when real name option is tapped
+    ///   - onAliasTap: Callback when alias option is tapped
     init(
         selectedType: Binding<PostAsType>,
         realName: String,
         username: String,
         avatarUrl: String?,
+        aliasName: String? = nil,
+        aliasAvatarUrl: String? = nil,
         onRealNameTap: (() -> Void)? = nil,
         onAliasTap: (() -> Void)? = nil
     ) {
@@ -198,9 +209,9 @@ extension PostAsSelectionPanel {
 
         let aliasAccount = AccountDisplayData(
             id: "alias",
-            displayName: "Dreamer",
-            subtitle: "Alias name",
-            avatarUrl: nil,
+            displayName: aliasName ?? "Create Alias",
+            subtitle: aliasName != nil ? "Alias name" : "Set up your alias",
+            avatarUrl: aliasAvatarUrl,
             isAlias: true,
             isPrimary: false,
             isActive: false

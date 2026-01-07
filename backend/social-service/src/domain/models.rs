@@ -30,6 +30,9 @@ pub struct Comment {
     pub parent_comment_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Account type used when comment was created: "primary" or "alias" (Issue #259)
+    #[sqlx(default)]
+    pub author_account_type: Option<String>,
 }
 
 /// Share entity - represents a user sharing a post
@@ -43,13 +46,12 @@ pub struct Share {
 }
 
 /// Bookmark entity - represents a user bookmarking/saving a post
-/// Maps to the `saved_posts` table in the database
+/// Maps to the `bookmarks` table in the database
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Bookmark {
     pub id: Uuid,
     pub user_id: Uuid,
     pub post_id: Uuid,
-    #[sqlx(rename = "created_at")]
     pub bookmarked_at: DateTime<Utc>,
     #[sqlx(skip)]
     pub collection_id: Option<Uuid>,

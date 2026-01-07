@@ -10,16 +10,18 @@ use realtime_chat_service::{
     redis_client::RedisClient,
     routes,
     services::{
-        encryption::EncryptionService,
         graph_client::GraphClient,
         identity_client::IdentityClient,
         key_exchange::KeyExchangeService,
         megolm_service::MegolmService,
+        notification_producer::NotificationProducer,
         olm_service::{AccountEncryptionKey, OlmService},
     },
     state::AppState,
     websocket::streams::{start_streams_listener, StreamsConfig},
 };
+#[allow(deprecated)]
+use realtime_chat_service::services::encryption::EncryptionService;
 use redis_utils::{RedisPool, SentinelConfig};
 use std::env;
 use std::net::SocketAddr;
@@ -69,6 +71,7 @@ async fn main() -> Result<(), error::AppError> {
         error::AppError::StartServer(format!("Failed to initialize JWT validation: {e}"))
     })?;
 
+    #[allow(deprecated)]
     let encryption = Arc::new(EncryptionService::new(cfg.encryption_master_key));
     let key_exchange_service = Arc::new(KeyExchangeService::new(Arc::new(db.clone())));
 
@@ -251,19 +254,69 @@ async fn main() -> Result<(), error::AppError> {
 
     // Create Matrix Admin client if Matrix is enabled and admin token is available
     // This is used for user provisioning (create users, generate login tokens)
-    let matrix_admin_client = if cfg.matrix.enabled && cfg.matrix.admin_token.is_some() {
-        let admin_token = cfg.matrix.admin_token.clone().unwrap();
-        let admin_client = realtime_chat_service::services::MatrixAdminClient::new(
-            cfg.matrix.homeserver_url.clone(),
-            admin_token,
-            cfg.matrix.server_name.clone(),
-        );
-        tracing::info!("✅ Matrix Admin client initialized for user provisioning");
-        Some(Arc::new(admin_client))
-    } else {
-        if cfg.matrix.enabled && cfg.matrix.admin_token.is_none() {
+    let matrix_admin_client = if cfg.matrix.enabled {
+        if let Some(admin_token) = cfg.matrix.admin_token.clone() {
+            // Create admin credentials for automatic token refresh if username and password are set
+            let admin_credentials = match (&cfg.matrix.admin_username, &cfg.matrix.admin_password) {
+                (Some(username), Some(password)) => {
+                    tracing::info!("Admin credentials configured for automatic token refresh");
+                    Some(realtime_chat_service::services::AdminCredentials {
+                        username: username.clone(),
+                        password: password.clone(),
+                    })
+                }
+                _ => {
+                    tracing::warn!(
+                        "Admin username/password not set, automatic token refresh disabled. \
+                        Set MATRIX_ADMIN_USERNAME and MATRIX_ADMIN_PASSWORD to enable auto-refresh."
+                    );
+                    None
+                }
+            };
+
+            let admin_client = Arc::new(realtime_chat_service::services::MatrixAdminClient::new(
+                cfg.matrix.homeserver_url.clone(),
+                admin_token,
+                cfg.matrix.server_name.clone(),
+                admin_credentials,
+            ));
+
+            // Start background token refresh task if credentials are available
+            if admin_client.has_auto_refresh() {
+                tracing::info!("Starting Matrix admin token refresh background task");
+                admin_client.clone().start_token_refresh_task();
+            }
+
+            tracing::info!("✅ Matrix Admin client initialized for user provisioning");
+            Some(admin_client)
+        } else {
             tracing::warn!("Matrix is enabled but MATRIX_ADMIN_TOKEN not set, user provisioning disabled");
+            None
         }
+    } else {
+        None
+    };
+
+    // Initialize notification producer for sending push notifications via Kafka
+    let notification_producer = if cfg.kafka.enabled {
+        match NotificationProducer::new(&cfg.kafka.brokers, &cfg.kafka.message_notifications_topic) {
+            Ok(producer) => {
+                tracing::info!(
+                    "✅ Notification producer initialized (topic: {})",
+                    cfg.kafka.message_notifications_topic
+                );
+                Some(Arc::new(producer))
+            }
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    "Failed to initialize notification producer, message notifications will be disabled"
+                );
+                None
+            }
+        }
+    } else {
+        tracing::info!("Notification producer disabled (KAFKA_ENABLED=false)");
         None
     };
 
@@ -281,6 +334,7 @@ async fn main() -> Result<(), error::AppError> {
         graph_client,
         identity_client,
         matrix_admin_client: matrix_admin_client.clone(),
+        notification_producer,
     };
 
     // Start Redis Streams listener for cross-instance fanout

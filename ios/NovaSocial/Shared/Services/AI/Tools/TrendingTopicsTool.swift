@@ -18,7 +18,7 @@ struct TrendingTopicsArguments: Sendable {
 
 // MARK: - Trending Topics Tool
 
-/// Tool for getting current trending topics and hashtags on ICERED
+/// Tool for getting current trending topics and hashtags on Icered
 @available(iOS 26.0, *)
 struct TrendingTopicsTool: Tool {
 
@@ -26,7 +26,7 @@ struct TrendingTopicsTool: Tool {
 
     let name = "get_trending_topics"
     let description = """
-        Get the current trending topics and hashtags on ICERED.
+        Get the current trending topics and hashtags on Icered.
         Use this tool when the user asks what's trending, wants to know popular topics,
         or needs ideas for engaging content based on current trends.
         Returns a list of trending hashtags with their post counts.
@@ -64,7 +64,7 @@ struct TrendingTopicsTool: Tool {
             }
 
             // Format the results
-            var output = "Current trending topics on ICERED:\n"
+            var output = "Current trending topics on Icered:\n"
 
             for (index, result) in results.enumerated() {
                 if case .hashtag(let tag, let postCount) = result {

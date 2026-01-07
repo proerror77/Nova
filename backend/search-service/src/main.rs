@@ -170,7 +170,7 @@ impl From<UserDocument> for UserProfileResult {
                 Some(doc.display_name)
             },
             bio: doc.bio,
-            avatar_url: None, // Elasticsearch doesn't store avatar URLs
+            avatar_url: doc.avatar_url,
             is_verified: Some(doc.is_verified),
             follower_count: Some(doc.follower_count),
         }

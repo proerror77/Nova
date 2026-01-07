@@ -46,6 +46,11 @@ impl HealthState {
 
 #[actix_web::main]
 async fn main() -> Result<()> {
+    // Initialize rustls crypto provider (required before any TLS operations)
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     // Initialize tracing
     tracing_subscriber::registry()
         .with(

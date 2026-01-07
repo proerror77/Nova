@@ -74,6 +74,11 @@ struct ProfileView: View {
     @State private var showCameraPermissionAlert = false    // 相机权限提示
     @State private var searchDebounceTask: Task<Void, Never>?  // 搜索防抖任務
 
+    // MARK: - 用戶導航狀態 (Issue #165)
+    @State private var showUserProfile = false              // 顯示其他用戶主頁
+    @State private var selectedUserId: String?              // 選中的用戶 ID
+    private let userService = UserService.shared            // 用於 cache invalidation
+
     // MARK: - 頭像/背景圖更換狀態
     @State private var avatarPhotoItem: PhotosPickerItem?   // 頭像選擇
     @State private var backgroundPhotoItem: PhotosPickerItem? // 背景圖選擇
@@ -210,6 +215,11 @@ struct ProfileView: View {
                     ),
                     onDismiss: {
                         activeSheet = .none
+                    },
+                    onAvatarTapped: { userId in
+                        // Close post detail first, then navigate to user profile
+                        activeSheet = .none
+                        navigateToUserProfile(userId: userId)
                     }
                 )
                 .transition(.identity)
@@ -250,6 +260,24 @@ struct ProfileView: View {
                 activeSheet = .newPost(initialImage: newValue)
             }
         }
+        // MARK: - User Profile Navigation (Issue #165)
+        .fullScreenCover(isPresented: $showUserProfile) {
+            if let userId = selectedUserId {
+                UserProfileView(showUserProfile: $showUserProfile, userId: userId)
+            } else {
+                Color.clear
+                    .onAppear {
+                        showUserProfile = false
+                    }
+            }
+        }
+    }
+
+    /// Navigate to user profile with cache invalidation (Issue #165)
+    private func navigateToUserProfile(userId: String) {
+        userService.invalidateCache(userId: userId)
+        selectedUserId = userId
+        showUserProfile = true
     }
 
     // MARK: - Profile 主内容
@@ -887,11 +915,11 @@ struct ProfileView: View {
             // MARK: - 帖子网格
             // Posts: 用户发布的帖子 | Saved: 收藏的帖子 | Liked: 点赞的帖子
             if profileData.isLoading && filteredProfilePosts.isEmpty {
-                VStack {
-                    Spacer()
-                    ProgressView()
-                        .scaleEffect(1.2)
-                    Spacer()
+                // Skeleton loading state
+                ScrollView {
+                    ProfilePostsGridSkeleton(itemCount: 6)
+                        .padding(.horizontal, 5.s)
+                        .padding(.top, 5.s)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(red: 0.97, green: 0.97, blue: 0.97))
@@ -918,7 +946,7 @@ struct ProfileView: View {
                                     : post.authorAvatarUrl
 
                                 PostCard(
-                                    imageUrl: post.mediaUrls?.first,
+                                    imageUrl: post.displayThumbnailUrl,
                                     imageName: "PostCardImage",
                                     title: "\(authorName) \(post.content)",
                                     authorName: authorName,

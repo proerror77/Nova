@@ -7,13 +7,21 @@ struct InviteCodeView: View {
     @State private var errorMessage: String?
     @FocusState private var isInputFocused: Bool
 
+    // Waitlist email collection
+    @State private var showWaitlistForm = false
+    @State private var waitlistEmail = ""
+    @State private var isSubmittingWaitlist = false
+    @State private var waitlistSuccess = false
+    @State private var waitlistError: String?
+    @FocusState private var isEmailFocused: Bool
+
     // Access AuthenticationManager for pending SSO retry
     @EnvironmentObject private var authManager: AuthenticationManager
 
     /// 整体内容垂直偏移（负值上移，正值下移）
     private let contentVerticalOffset: CGFloat = -50
 
-    private var isInviteCodeValid: Bool { inviteCode.count == 8 }
+    private var isInviteCodeValid: Bool { inviteCode.count == 6 }
 
     /// Whether we're retrying a pending SSO flow
     private var isPendingSSO: Bool { authManager.hasPendingSSO }
@@ -65,21 +73,34 @@ struct InviteCodeView: View {
                 Spacer()
             }
 
-            // Bottom Notice - 底部提示
+            // Bottom Notice - "Don't have an invite?" link
             VStack {
                 Spacer()
-                HStack(spacing: 6.s) {
-                    Image("NoticeW")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 12.s, height: 12.s)
-                    Text("Join the waitlist and get notified when access opens.")
-                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
-                        .tracking(0.24)
-                        .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64))
-                        .lineLimit(1)
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showWaitlistForm = true
+                        waitlistError = nil
+                        waitlistSuccess = false
+                    }
+                }) {
+                    HStack(spacing: 6.s) {
+                        Image("NoticeW")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 12.s, height: 12.s)
+                        Text("Don't have an invite? Join the waitlist")
+                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                            .tracking(0.24)
+                            .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64))
+                            .underline()
+                    }
                 }
                 .padding(.bottom, 35.h)
+            }
+
+            // Waitlist Email Collection Sheet
+            if showWaitlistForm {
+                waitlistOverlay
             }
         }
         .contentShape(Rectangle())
@@ -115,30 +136,33 @@ struct InviteCodeView: View {
 
     private var inviteCodeInput: some View {
         ZStack {
-            // 隐藏的输入框 - 保留功能
+            // 隐藏的输入框 - 6 位數字邀請碼
             TextField("", text: $inviteCode)
                 .font(Font.custom("SFProDisplay-Light", size: 16.f))
                 .foregroundColor(.clear)
                 .accentColor(.clear)
                 .multilineTextAlignment(.center)
-                .textInputAutocapitalization(.characters)
+                .keyboardType(.numberPad)
                 .autocorrectionDisabled()
                 .focused($isInputFocused)
                 .onChange(of: inviteCode) { _, newValue in
-                    inviteCode = String(newValue.prefix(8)).uppercased()
+                    // 只允許數字，最多 6 位
+                    let filtered = newValue.filter { $0.isNumber }
+                    inviteCode = String(filtered.prefix(6))
                 }
 
-            // 显示的文字
-            HStack(spacing: 8.s) {
-                Text(inviteCode.isEmpty ? "—" : "\(inviteCode)\(inviteCode.count < 8 ? "—" : "")")
-                    .font(Font.custom("SFProDisplay-Light", size: 16.f))
-                    .tracking(4)
-                    .lineSpacing(20)
+            // 显示的文字 - 6 位數字邀請碼 (Fix #246: 減少 tracking 和 padding 防止文字截斷)
+            HStack(spacing: 4.s) {
+                Text(inviteCode.isEmpty ? "— — — — — —" : formatInviteCode(inviteCode))
+                    .font(Font.custom("SFProDisplay-Light", size: 20.f))
+                    .tracking(2)
                     .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
+                    .minimumScaleFactor(0.8)
+                    .lineLimit(1)
             }
             .allowsHitTesting(false)
         }
-        .padding(EdgeInsets(top: 13.h, leading: 114.w, bottom: 13.h, trailing: 114.w))
+        .padding(EdgeInsets(top: 13.h, leading: 24.w, bottom: 13.h, trailing: 24.w))
         .frame(width: 300.w, height: 48.h)
         .background(Color(red: 0.85, green: 0.85, blue: 0.85).opacity(0.25))
         .cornerRadius(43.s)
@@ -148,6 +172,14 @@ struct InviteCodeView: View {
                 .stroke(.white, lineWidth: 0.50)
         )
         .onTapGesture { isInputFocused = true }
+    }
+
+    /// 格式化邀請碼顯示，用空格分隔每個字符
+    private func formatInviteCode(_ code: String) -> String {
+        let chars = Array(code)
+        let dashes = Array(repeating: "—", count: max(0, 6 - chars.count))
+        let combined = chars.map { String($0) } + dashes
+        return combined.joined(separator: " ")
     }
 
     @ViewBuilder
@@ -180,6 +212,183 @@ struct InviteCodeView: View {
             .cornerRadius(43.s)
         }
         .disabled(!isInviteCodeValid || isLoading)
+    }
+
+    // MARK: - Waitlist Components
+
+    private var waitlistOverlay: some View {
+        ZStack {
+            // Dimmed background
+            Color.black.opacity(0.6)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showWaitlistForm = false
+                        isEmailFocused = false
+                    }
+                }
+
+            // Waitlist form card
+            VStack(spacing: 20.h) {
+                // Close button
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            showWaitlistForm = false
+                            isEmailFocused = false
+                        }
+                    }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
+
+                if waitlistSuccess {
+                    // Success state
+                    VStack(spacing: 16.h) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 48))
+                            .foregroundColor(.green)
+
+                        Text("You're on the list!")
+                            .font(Font.custom("SFProDisplay-Semibold", size: 20.f))
+                            .foregroundColor(.white)
+
+                        Text("We'll notify you when access opens.")
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                            .foregroundColor(.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                showWaitlistForm = false
+                            }
+                        }) {
+                            Text("Done")
+                                .font(Font.custom("SFProDisplay-Heavy", size: 16.f))
+                                .foregroundColor(.black)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 48.h)
+                                .background(Color.white)
+                                .cornerRadius(24.s)
+                        }
+                    }
+                } else {
+                    // Input state
+                    VStack(spacing: 16.h) {
+                        Text("Join the Waitlist")
+                            .font(Font.custom("SFProDisplay-Semibold", size: 20.f))
+                            .foregroundColor(.white)
+
+                        Text("Enter your email and we'll notify you\nwhen access opens.")
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                            .foregroundColor(.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+
+                        // Email input
+                        TextField("", text: $waitlistEmail, prompt: Text("Email address")
+                            .foregroundColor(.white.opacity(0.5)))
+                            .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                            .foregroundColor(.white)
+                            .keyboardType(.emailAddress)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .focused($isEmailFocused)
+                            .padding(.horizontal, 16.w)
+                            .frame(height: 48.h)
+                            .background(Color.white.opacity(0.15))
+                            .cornerRadius(24.s)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 24.s)
+                                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                            )
+
+                        // Error message
+                        if let error = waitlistError {
+                            Text(error)
+                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                                .foregroundColor(.red)
+                        }
+
+                        // Submit button
+                        Button(action: {
+                            Task { await submitWaitlistEmail() }
+                        }) {
+                            HStack(spacing: 8.s) {
+                                if isSubmittingWaitlist {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                                        .scaleEffect(0.9)
+                                }
+                                Text("Join Waitlist")
+                                    .font(Font.custom("SFProDisplay-Heavy", size: 16.f))
+                                    .foregroundColor(.black)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48.h)
+                            .background(isValidEmail ? Color.white : Color.white.opacity(0.5))
+                            .cornerRadius(24.s)
+                        }
+                        .disabled(!isValidEmail || isSubmittingWaitlist)
+                    }
+                }
+            }
+            .padding(24.s)
+            .background(
+                RoundedRectangle(cornerRadius: 20.s)
+                    .fill(Color(red: 0.1, green: 0.15, blue: 0.25))
+            )
+            .padding(.horizontal, 32.w)
+        }
+    }
+
+    private var isValidEmail: Bool {
+        let emailRegex = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,64}"
+        let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
+        return emailPredicate.evaluate(with: waitlistEmail)
+    }
+
+    private func submitWaitlistEmail() async {
+        guard isValidEmail else {
+            waitlistError = "Please enter a valid email address"
+            return
+        }
+
+        isSubmittingWaitlist = true
+        waitlistError = nil
+
+        do {
+            struct WaitlistRequest: Codable {
+                let email: String
+            }
+
+            struct WaitlistResponse: Codable {
+                let success: Bool
+                let message: String?
+            }
+
+            let request = WaitlistRequest(email: waitlistEmail)
+            let _: WaitlistResponse = try await APIClient.shared.request(
+                endpoint: APIConfig.Invitations.waitlist,
+                method: "POST",
+                body: request
+            )
+
+            await MainActor.run {
+                waitlistSuccess = true
+            }
+        } catch {
+            #if DEBUG
+            print("[InviteCodeView] Waitlist submission error: \(error)")
+            #endif
+            await MainActor.run {
+                waitlistError = "Failed to join waitlist. Please try again."
+            }
+        }
+
+        isSubmittingWaitlist = false
     }
 
     // MARK: - Validation

@@ -20,6 +20,13 @@ struct FeedPost {
     author_username: Option<String>,
     author_display_name: Option<String>,
     author_avatar: Option<String>,
+    /// Account type when post was created: "primary" or "alias" (Issue #259)
+    #[serde(default = "default_author_account_type")]
+    author_account_type: String,
+}
+
+fn default_author_account_type() -> String {
+    "primary".to_string()
 }
 
 /// GetFeedResponse model for testing

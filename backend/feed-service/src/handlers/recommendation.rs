@@ -253,6 +253,11 @@ async fn fetch_posts_with_metadata(user_id: Uuid, limit: usize) -> Result<Vec<Ca
                 media_urls: post.media_urls,
                 media_type: post.media_type,
                 thumbnail_urls: post.thumbnail_urls,
+                author_account_type: if post.author_account_type.is_empty() {
+                    "primary".to_string()
+                } else {
+                    post.author_account_type
+                },
             }
         })
         .collect();

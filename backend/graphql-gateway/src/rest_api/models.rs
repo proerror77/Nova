@@ -106,7 +106,7 @@ pub struct UpdateUserResponse {
 // ============================================================================
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub struct FeedPost {
     pub id: String,
     pub user_id: String,
@@ -129,6 +129,8 @@ pub struct FeedPost {
     pub author_display_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub author_avatar: Option<String>,
+    /// Account type when post was created: "primary" (real name) or "alias" (Issue #259)
+    pub author_account_type: String,
 }
 
 #[derive(Debug, Serialize)]

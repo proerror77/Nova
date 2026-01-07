@@ -15,7 +15,7 @@ pub struct Post {
     pub content: Option<String>,
     pub caption: Option<String>,
     pub media_key: String,
-    pub media_type: String,            // 'image', 'video', or 'text'
+    pub media_type: String, // 'image', 'video', 'live_photo', 'mixed', or 'none'
     pub media_urls: Json<Vec<String>>, // CDN URLs for attached media (JSONB in DB)
     pub status: String,
     pub created_at: DateTime<Utc>,
@@ -26,6 +26,9 @@ pub struct Post {
     /// compatibility but do not rely on it for filtering – `deleted_at` is the
     /// canonical flag for soft-deletion.
     pub soft_delete: Option<String>,
+    /// Account type used when post was created: "primary" or "alias" (Issue #259)
+    #[sqlx(default)]
+    pub author_account_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -86,7 +89,7 @@ pub struct PostResponse {
     pub medium_url: Option<String>,
     pub original_url: Option<String>,
     pub videos: Option<Vec<VideoMetadata>>,
-    pub content_type: String, // 'image', 'video', or 'mixed'
+    pub content_type: String, // 'image', 'video', 'live_photo', 'mixed', or 'none'
     pub like_count: i32,
     pub comment_count: i32,
     pub view_count: i32,

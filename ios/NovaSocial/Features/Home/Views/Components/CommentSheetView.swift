@@ -48,7 +48,7 @@ struct CommentSheetView: View {
     var onCommentCountUpdated: ((String, Int) -> Void)?  // 评论数量同步回调 (postId, actualCount)
     @State private var commentText = ""
     @State private var comments: [SocialComment] = []
-    @State private var isLoading = false
+    @State private var isLoading = true  // Start as true to show ProgressView immediately (fixes #231 white screen)
     @State private var isSubmitting = false
     @State private var error: String?
     @State private var totalCount = 0
@@ -80,44 +80,52 @@ struct CommentSheetView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Comments List
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: DesignTokens.spacing16) {
-                        if isLoading {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                        } else if let error = error {
-                            VStack(spacing: DesignTokens.spacing12) {
-                                Image(systemName: "exclamationmark.triangle")
-                                    .font(.system(size: 40.f))
-                                    .foregroundColor(.orange)
-                                Text(error)
-                                    .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
-                                    .foregroundColor(DesignTokens.textSecondary)
-                                    .multilineTextAlignment(.center)
-                                Button("Retry") {
-                                    Task { await loadComments() }
-                                }
-                                .foregroundColor(DesignTokens.accentColor)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 40)
-                        } else if comments.isEmpty {
-                            VStack(spacing: DesignTokens.spacing12) {
-                                Image(systemName: "bubble.left.and.bubble.right")
-                                    .font(.system(size: 40.f))
-                                    .foregroundColor(DesignTokens.textMuted)
-                                Text("No comments yet")
-                                    .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontLarge))
-                                    .foregroundColor(DesignTokens.textSecondary)
-                                Text("Be the first to comment!")
-                                    .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
-                                    .foregroundColor(DesignTokens.textMuted)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 40)
-                        } else {
+                // Fix #231: Move loading/error/empty states OUTSIDE ScrollView/LazyVStack
+                // This ensures immediate rendering without LazyVStack delayed loading
+                if isLoading {
+                    // Loading state - rendered immediately outside ScrollView
+                    Spacer()
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                    Spacer()
+                } else if let error = error {
+                    // Error state - rendered immediately outside ScrollView
+                    Spacer()
+                    VStack(spacing: DesignTokens.spacing12) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 40.f))
+                            .foregroundColor(.orange)
+                        Text(error)
+                            .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
+                            .foregroundColor(DesignTokens.textSecondary)
+                            .multilineTextAlignment(.center)
+                        Button("Retry") {
+                            Task { await loadComments() }
+                        }
+                        .foregroundColor(DesignTokens.accentColor)
+                    }
+                    .frame(maxWidth: .infinity)
+                    Spacer()
+                } else if comments.isEmpty {
+                    // Empty state - rendered immediately outside ScrollView
+                    Spacer()
+                    VStack(spacing: DesignTokens.spacing12) {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.system(size: 40.f))
+                            .foregroundColor(DesignTokens.textMuted)
+                        Text("No comments yet")
+                            .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontLarge))
+                            .foregroundColor(DesignTokens.textSecondary)
+                        Text("Be the first to comment!")
+                            .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
+                            .foregroundColor(DesignTokens.textMuted)
+                    }
+                    .frame(maxWidth: .infinity)
+                    Spacer()
+                } else {
+                    // Comments List - only use ScrollView/LazyVStack when there are comments
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: DesignTokens.spacing16) {
                             // Comment count header
                             Text("\(totalCount) comments")
                                 .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontBody))
@@ -167,35 +175,25 @@ struct CommentSheetView: View {
                                 }
                             }
                         }
+                        .padding()
                     }
-                    .padding()
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
                 }
 
                 Divider()
 
                 // Comment Input
                 HStack(spacing: DesignTokens.spacing12) {
-                    // 显示当前用户真实头像 (IG/小红书风格)
-                    if let avatarUrl = authManager.currentUser?.avatarUrl, let url = URL(string: avatarUrl) {
-                        AsyncImage(url: url) { image in
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        } placeholder: {
-                            Circle()
-                                .fill(DesignTokens.avatarPlaceholder)
-                        }
-                        .frame(width: 36, height: 36)
-                        .clipShape(Circle())
-                    } else {
-                        Circle()
-                            .fill(DesignTokens.avatarPlaceholder)
-                            .frame(width: 36, height: 36)
-                    }
+                    // 显示当前用户真实头像 (使用 AvatarView 缓存组件 - Issue #233)
+                    AvatarView(
+                        image: nil,
+                        url: authManager.currentUser?.avatarUrl,
+                        size: 36,
+                        name: authManager.currentUser?.displayName
+                    )
 
                     TextField("Add a comment...", text: $commentText)
                         .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
@@ -432,33 +430,20 @@ struct SocialCommentRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: DesignTokens.spacing12) {
-            // Avatar (点击跳转用户主页)
-            if let avatarUrl = comment.authorAvatarUrl, let url = URL(string: avatarUrl) {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
-                    Circle()
-                        .fill(DesignTokens.avatarPlaceholder)
-                }
-                .frame(width: DesignTokens.avatarSmall, height: DesignTokens.avatarSmall)
-                .clipShape(Circle())
-                .onTapGesture {
-                    onAvatarTapped?(comment.userId)
-                }
-                .accessibilityLabel("View \(comment.displayAuthorName)'s profile")
-                .accessibilityHint("Double tap to view profile")
-            } else {
-                Circle()
-                    .fill(DesignTokens.avatarPlaceholder)
-                    .frame(width: DesignTokens.avatarSmall, height: DesignTokens.avatarSmall)
-                    .onTapGesture {
-                        onAvatarTapped?(comment.userId)
-                    }
-                    .accessibilityLabel("View \(comment.displayAuthorName)'s profile")
-                    .accessibilityHint("Double tap to view profile")
+            // Avatar (点击跳转用户主页 - 使用 AvatarView 缓存组件 - Issue #233)
+            // Issue #259: Colored border based on account type
+            AvatarView(
+                image: nil,
+                url: comment.authorAvatarUrl,
+                size: DesignTokens.avatarSmall,
+                name: comment.displayAuthorName,
+                accountType: comment.authorAccountType
+            )
+            .onTapGesture {
+                onAvatarTapped?(comment.userId)
             }
+            .accessibilityLabel("View \(comment.displayAuthorName)'s profile")
+            .accessibilityHint("Double tap to view profile")
 
             VStack(alignment: .leading, spacing: DesignTokens.spacing4) {
                 // 内联格式: 用户名 + 评论内容在同一行 (IG/小红书风格)
