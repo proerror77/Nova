@@ -1490,6 +1490,13 @@ extension MatrixBridgeService {
         print("[MatrixBridge]   Current user: \(currentUserId ?? "nil")")
         #endif
 
+        // CRITICAL: Wait for sync to be ready before checking rooms
+        // This prevents duplicate room creation when sync hasn't completed yet
+        let syncReady = await matrixService.waitForSyncReady(timeout: 5)
+        #if DEBUG
+        print("[MatrixBridge]   Sync ready: \(syncReady)")
+        #endif
+
         // Get all rooms from Matrix
         let rooms = try await matrixService.getJoinedRooms()
 

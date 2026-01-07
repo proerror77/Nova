@@ -548,6 +548,12 @@ protocol MatrixServiceProtocol: AnyObject {
     /// Get room members
     func getRoomMembers(roomId: String) async throws -> [MatrixRoomMember]
 
+    /// Wait for the initial room sync to be ready (room list populated)
+    /// Call this before checking for existing rooms to avoid race conditions
+    /// - Parameter timeout: Maximum time to wait in seconds (default: 10)
+    /// - Returns: True if sync is ready, false if timeout occurred
+    func waitForSyncReady(timeout: TimeInterval) async -> Bool
+
     // MARK: - Message Edit/Delete/Reactions
 
     /// Edit a message
@@ -2154,6 +2160,92 @@ final class MatrixService: MatrixServiceProtocol {
         } catch {
             throw MatrixError.sdkError(error.localizedDescription)
         }
+    }
+
+    func waitForSyncReady(timeout: TimeInterval = 10) async -> Bool {
+        #if DEBUG
+        print("[MatrixService] Waiting for sync to be ready (timeout: \(timeout)s)")
+        print("[MatrixService]   Current state: roomListState=\(currentRoomListState), roomCache.count=\(roomCache.count)")
+        #endif
+
+        // If we already have rooms in cache, sync is ready
+        if !roomCache.isEmpty {
+            #if DEBUG
+            print("[MatrixService] ✅ Sync already ready - room cache has \(roomCache.count) rooms")
+            #endif
+            return true
+        }
+
+        // If room list state is already running and cache is populated, we're ready
+        if currentRoomListState == .running {
+            // Give it a moment for rooms to populate
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+            if !roomCache.isEmpty {
+                #if DEBUG
+                print("[MatrixService] ✅ Sync ready after brief wait - room cache has \(roomCache.count) rooms")
+                #endif
+                return true
+            }
+        }
+
+        // Wait for room list state to become running with timeout
+        let pollInterval: UInt64 = 200_000_000 // 200ms
+        let maxIterations = Int(timeout * 5) // 5 iterations per second
+
+        for iteration in 0..<maxIterations {
+            // Check if room list state is running and we have rooms
+            if currentRoomListState == .running || currentRoomListState == .error || currentRoomListState == .terminated {
+                // Also check if room cache is now populated
+                if !roomCache.isEmpty {
+                    #if DEBUG
+                    print("[MatrixService] ✅ Sync ready after \(Double(iteration) * 0.2)s - room cache has \(roomCache.count) rooms")
+                    #endif
+                    return true
+                }
+
+                // If state indicates sync should be done but cache is still empty,
+                // try to populate from client.rooms() as fallback
+                if iteration > 5 { // After 1 second
+                    #if DEBUG
+                    print("[MatrixService] Attempting to populate rooms from client.rooms() fallback...")
+                    #endif
+                    if let client = client {
+                        let rooms = client.rooms()
+                        if !rooms.isEmpty {
+                            #if DEBUG
+                            print("[MatrixService] client.rooms() returned \(rooms.count) rooms - populating cache")
+                            #endif
+                            for room in rooms {
+                                if let matrixRoom = await convertSDKRoomToMatrixRoom(room) {
+                                    roomCache[matrixRoom.id] = matrixRoom
+                                }
+                            }
+                            if !roomCache.isEmpty {
+                                #if DEBUG
+                                print("[MatrixService] ✅ Sync ready via fallback - room cache has \(roomCache.count) rooms")
+                                #endif
+                                return true
+                            }
+                        }
+                    }
+                }
+            }
+
+            try? await Task.sleep(nanoseconds: pollInterval)
+
+            #if DEBUG
+            if iteration > 0 && iteration % 5 == 0 {
+                print("[MatrixService]   Still waiting... state=\(currentRoomListState), cache=\(roomCache.count)")
+            }
+            #endif
+        }
+
+        #if DEBUG
+        print("[MatrixService] ⚠️ Sync wait timed out after \(timeout)s")
+        #endif
+
+        // Even if timed out, return true if we managed to get any rooms
+        return !roomCache.isEmpty
     }
 
     // MARK: - Message Edit/Delete/Reactions

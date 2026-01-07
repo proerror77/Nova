@@ -151,8 +151,14 @@ impl AuthService for IdentityServiceServer {
             // If password matches an existing account, treat this as idempotent
             // registration and simply return a fresh token pair instead of an error.
             if verify_password(&req.password, &existing.password_hash).map_err(to_status)? {
-                let tokens = generate_token_pair(existing.id, &existing.email, &existing.username, Some("primary"), None)
-                    .map_err(anyhow_to_status)?;
+                let tokens = generate_token_pair(
+                    existing.id,
+                    &existing.email,
+                    &existing.username,
+                    Some("primary"),
+                    None,
+                )
+                .map_err(anyhow_to_status)?;
 
                 info!(
                     user_id = %existing.id,
@@ -210,7 +216,8 @@ impl AuthService for IdentityServiceServer {
 
         // 7. Generate token pair
         let tokens =
-            generate_token_pair(user.id, &user.email, &user.username, Some("primary"), None).map_err(anyhow_to_status)?;
+            generate_token_pair(user.id, &user.email, &user.username, Some("primary"), None)
+                .map_err(anyhow_to_status)?;
 
         info!(
             user_id = %user.id,
@@ -270,7 +277,8 @@ impl AuthService for IdentityServiceServer {
 
         // Generate token pair
         let tokens =
-            generate_token_pair(user.id, &user.email, &user.username, Some("primary"), None).map_err(anyhow_to_status)?;
+            generate_token_pair(user.id, &user.email, &user.username, Some("primary"), None)
+                .map_err(anyhow_to_status)?;
 
         // Create session for device tracking (if device_id is provided)
         if !req.device_id.is_empty() {
@@ -370,7 +378,8 @@ impl AuthService for IdentityServiceServer {
 
         // Generate new token pair
         let tokens =
-            generate_token_pair(user.id, &user.email, &user.username, Some("primary"), None).map_err(anyhow_to_status)?;
+            generate_token_pair(user.id, &user.email, &user.username, Some("primary"), None)
+                .map_err(anyhow_to_status)?;
 
         Ok(Response::new(RefreshTokenResponse {
             token: tokens.access_token,
@@ -661,14 +670,10 @@ impl AuthService for IdentityServiceServer {
         let limit = if req.limit > 0 { req.limit as i64 } else { 50 };
         let offset = req.offset as i64;
 
-        let (entries, total) = db::waitlist::list_waitlist(
-            &self.db,
-            req.status.as_deref(),
-            limit,
-            offset,
-        )
-        .await
-        .map_err(to_status)?;
+        let (entries, total) =
+            db::waitlist::list_waitlist(&self.db, req.status.as_deref(), limit, offset)
+                .await
+                .map_err(to_status)?;
 
         let proto_entries: Vec<WaitlistEntry> = entries
             .into_iter()
@@ -1438,8 +1443,14 @@ impl AuthService for IdentityServiceServer {
             .map_err(to_status)?;
 
         // Generate token pair for the user
-        let tokens = generate_token_pair(result.user.id, &result.user.email, &result.user.username, Some("primary"), None)
-            .map_err(anyhow_to_status)?;
+        let tokens = generate_token_pair(
+            result.user.id,
+            &result.user.email,
+            &result.user.username,
+            Some("primary"),
+            None,
+        )
+        .map_err(anyhow_to_status)?;
 
         // Create session for device tracking (if device_id was provided during start_flow)
         if let Some(ref device_info) = result.device_info {
@@ -1639,8 +1650,14 @@ impl AuthService for IdentityServiceServer {
             .map_err(to_status)?;
 
         // Generate token pair for the user
-        let tokens = generate_token_pair(result.user.id, &result.user.email, &result.user.username, Some("primary"), None)
-            .map_err(anyhow_to_status)?;
+        let tokens = generate_token_pair(
+            result.user.id,
+            &result.user.email,
+            &result.user.username,
+            Some("primary"),
+            None,
+        )
+        .map_err(anyhow_to_status)?;
 
         // Create session for device tracking (if device_id is provided)
         if let Some(device_id) = &req.device_id {
@@ -2121,8 +2138,9 @@ impl AuthService for IdentityServiceServer {
                 .map_err(to_status)?;
 
             // Generate new tokens
-            let tokens = generate_token_pair(user.id, &user.email, &user.username, Some("primary"), None)
-                .map_err(anyhow_to_status)?;
+            let tokens =
+                generate_token_pair(user.id, &user.email, &user.username, Some("primary"), None)
+                    .map_err(anyhow_to_status)?;
 
             info!(user_id = %user_id, "Switched to primary account");
 
@@ -2170,8 +2188,14 @@ impl AuthService for IdentityServiceServer {
         .map_err(to_status)?;
 
         // Generate new tokens with alias account info
-        let tokens =
-            generate_token_pair(user.id, &user.email, &user.username, Some("alias"), Some(target_account_id)).map_err(anyhow_to_status)?;
+        let tokens = generate_token_pair(
+            user.id,
+            &user.email,
+            &user.username,
+            Some("alias"),
+            Some(target_account_id),
+        )
+        .map_err(anyhow_to_status)?;
 
         info!(
             user_id = %user_id,
@@ -2514,8 +2538,14 @@ impl AuthService for IdentityServiceServer {
             .map_err(to_status)?;
 
         // Generate tokens for the authenticated user
-        let tokens = generate_token_pair(result.user.id, &result.user.email, &result.user.username, Some("primary"), None)
-            .map_err(anyhow_to_status)?;
+        let tokens = generate_token_pair(
+            result.user.id,
+            &result.user.email,
+            &result.user.username,
+            Some("primary"),
+            None,
+        )
+        .map_err(anyhow_to_status)?;
 
         Ok(Response::new(CompletePasskeyAuthenticationResponse {
             user_id: result.user.id.to_string(),

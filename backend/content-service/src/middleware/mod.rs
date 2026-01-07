@@ -97,10 +97,15 @@ where
                 .map_err(|_| ErrorUnauthorized("Invalid user ID"))?;
 
             // Extract account_type (default to "primary" for backward compatibility)
-            let account_type = claims.claims.account_type.unwrap_or_else(|| "primary".to_string());
+            let account_type = claims
+                .claims
+                .account_type
+                .unwrap_or_else(|| "primary".to_string());
 
             // Extract account_id if present
-            let account_id = claims.claims.account_id
+            let account_id = claims
+                .claims
+                .account_id
                 .and_then(|id| Uuid::parse_str(&id).ok());
 
             req.extensions_mut().insert(UserId(user_id));

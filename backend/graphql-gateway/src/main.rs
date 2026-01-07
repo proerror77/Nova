@@ -19,11 +19,11 @@ use crate::rest_api::search::{
 };
 use crate::rest_api::settings::{get_settings, update_settings};
 use crate::rest_api::social_likes::{
-    batch_check_bookmarked, batch_check_comment_liked, batch_check_liked, check_bookmarked, check_comment_liked,
-    check_liked, create_bookmark, create_comment, create_comment_like, create_like, create_share,
-    delete_bookmark, delete_comment, delete_comment_like, delete_comment_v2, delete_like,
-    delete_like_legacy, get_bookmarks, get_comment_like_count, get_comments, get_likes,
-    get_share_count, get_share_count_legacy, get_user_liked_posts,
+    batch_check_bookmarked, batch_check_comment_liked, batch_check_liked, check_bookmarked,
+    check_comment_liked, check_liked, create_bookmark, create_comment, create_comment_like,
+    create_like, create_share, delete_bookmark, delete_comment, delete_comment_like,
+    delete_comment_v2, delete_like, delete_like_legacy, get_bookmarks, get_comment_like_count,
+    get_comments, get_likes, get_share_count, get_share_count_legacy, get_user_liked_posts,
 };
 use actix_web::{middleware::Logger, web, App, HttpServer};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};

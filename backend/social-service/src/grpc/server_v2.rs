@@ -501,7 +501,13 @@ impl SocialService for SocialServiceImpl {
 
         let comment = self
             .comment_repo()
-            .create_comment(post_id, user_id, req.content.clone(), parent_comment_id, account_type)
+            .create_comment(
+                post_id,
+                user_id,
+                req.content.clone(),
+                parent_comment_id,
+                account_type,
+            )
             .await
             .map_err(|e| Status::internal(format!("Failed to create comment: {}", e)))?;
 
@@ -1756,7 +1762,9 @@ fn to_proto_comment(comment: CommentModel) -> Comment {
         created_at: to_ts(comment.created_at),
         like_count: 0,
         is_liked_by_viewer: false,
-        author_account_type: comment.author_account_type.unwrap_or_else(|| "primary".to_string()),
+        author_account_type: comment
+            .author_account_type
+            .unwrap_or_else(|| "primary".to_string()),
     }
 }
 
@@ -1777,7 +1785,9 @@ fn to_proto_comment_with_engagement(
         created_at: to_ts(comment.created_at),
         like_count,
         is_liked_by_viewer: is_liked,
-        author_account_type: comment.author_account_type.unwrap_or_else(|| "primary".to_string()),
+        author_account_type: comment
+            .author_account_type
+            .unwrap_or_else(|| "primary".to_string()),
     }
 }
 

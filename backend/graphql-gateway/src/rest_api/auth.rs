@@ -348,7 +348,6 @@ pub struct InviteValidationResponse {
     pub error: Option<String>,
 }
 
-
 /// Request body for waitlist signup
 #[derive(Debug, serde::Deserialize)]
 pub struct WaitlistRequest {
