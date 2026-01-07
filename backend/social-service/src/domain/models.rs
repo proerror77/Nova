@@ -46,13 +46,12 @@ pub struct Share {
 }
 
 /// Bookmark entity - represents a user bookmarking/saving a post
-/// Maps to the `saved_posts` table in the database
+/// Maps to the `bookmarks` table in the database
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Bookmark {
     pub id: Uuid,
     pub user_id: Uuid,
     pub post_id: Uuid,
-    #[sqlx(rename = "created_at")]
     pub bookmarked_at: DateTime<Utc>,
     #[sqlx(skip)]
     pub collection_id: Option<Uuid>,
