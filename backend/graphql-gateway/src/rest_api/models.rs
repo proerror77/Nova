@@ -106,7 +106,7 @@ pub struct UpdateUserResponse {
 // ============================================================================
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub struct FeedPost {
     pub id: String,
     pub user_id: String,

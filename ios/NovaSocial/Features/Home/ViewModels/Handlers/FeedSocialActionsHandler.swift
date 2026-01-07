@@ -147,8 +147,17 @@ final class FeedSocialActionsHandler {
             guard !Task.isCancelled else { return }
 
             // Get the final target state after all clicks settled
-            guard let self = self,
-                  let finalState = self.pendingLikeUIState[postId] else { return }
+            guard let self = self else { return }
+            guard self.likeGeneration[postId] == currentGen else { return }
+            guard let finalState = self.pendingLikeUIState[postId] else {
+                self.pendingLikeTasks.removeValue(forKey: postId)
+                return
+            }
+
+            // Clean up pending state before calling API to allow server response updates
+            socialActionsLogger.info("❤️ Clearing pendingLikeUIState for postId: \(postId)")
+            self.pendingLikeUIState.removeValue(forKey: postId)
+            self.pendingLikeTasks.removeValue(forKey: postId)
 
             // Only send API if target state differs from original state
             if finalState.isLiked != originalPost.isLiked {
@@ -159,11 +168,6 @@ final class FeedSocialActionsHandler {
                     generation: currentGen
                 )
             }
-
-            // Clean up pending state
-            socialActionsLogger.info("❤️ Clearing pendingLikeUIState for postId: \(postId)")
-            self.pendingLikeUIState.removeValue(forKey: postId)
-            self.pendingLikeTasks.removeValue(forKey: postId)
         }
 
         pendingLikeTasks[postId] = task
@@ -195,12 +199,6 @@ final class FeedSocialActionsHandler {
             // Only update UI if this is still the latest operation AND no new pending clicks
             guard likeGeneration[postId] == generation else {
                 socialActionsLogger.info("Ignoring stale like response for postId: \(postId), gen: \(generation), current: \(self.likeGeneration[postId] ?? -1)")
-                return
-            }
-
-            // Check if new rapid clicks happened during API call - if so, don't overwrite pending state
-            guard pendingLikeUIState[postId] == nil else {
-                socialActionsLogger.info("Skipping UI update - new clicks pending for postId: \(postId)")
                 return
             }
 

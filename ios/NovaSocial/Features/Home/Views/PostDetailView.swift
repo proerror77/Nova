@@ -715,12 +715,11 @@ struct PostDetailView: View {
                             .resizable()
                             .scaledToFit()
                             .frame(width: 20, height: 20)
-                            .id("detail-like-icon-\(isPostLiked)")  // Force SwiftUI re-render
-                            .transition(.scale.combined(with: .opacity))
                         Text("\(postLikeCount)")
                             .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                            .monospacedDigit()
                             .contentTransition(.numericText())
                     }
                     .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPostLiked)

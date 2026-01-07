@@ -147,12 +147,11 @@ struct FeedPostCard: View {
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 20, height: 20)
-                                .id("like-icon-\(post.isLiked)")  // Force SwiftUI re-render
-                                .transition(.scale.combined(with: .opacity))
                             Text(post.likeCount.abbreviated)
                                 .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                                 .tracking(0.28)
                                 .foregroundColor(.black)
+                                .monospacedDigit()
                                 .contentTransition(.numericText())
                         }
                         .contentShape(Rectangle())
