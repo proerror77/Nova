@@ -93,7 +93,7 @@ impl NotificationService for NotificationServiceImpl {
         let query = if req.unread_only {
             r#"
                 SELECT id, recipient_id AS user_id, title, body, notification_type, data,
-                       related_user_id, related_post_id, related_message_id,
+                       sender_id AS related_user_id, object_id AS related_post_id, related_message_id,
                        is_read, read_at, status, channel, created_at, sent_at, deleted_at
                 FROM notifications
                 WHERE recipient_id = $1 AND deleted_at IS NULL AND is_read = FALSE
@@ -103,7 +103,7 @@ impl NotificationService for NotificationServiceImpl {
         } else {
             r#"
                 SELECT id, recipient_id AS user_id, title, body, notification_type, data,
-                       related_user_id, related_post_id, related_message_id,
+                       sender_id AS related_user_id, object_id AS related_post_id, related_message_id,
                        is_read, read_at, status, channel, created_at, sent_at, deleted_at
                 FROM notifications
                 WHERE recipient_id = $1 AND deleted_at IS NULL
