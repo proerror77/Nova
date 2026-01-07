@@ -21,7 +21,7 @@ impl BookmarkRepository {
             r#"
             INSERT INTO bookmarks (user_id, post_id)
             VALUES ($1, $2)
-            ON CONFLICT (post_id, user_id) DO UPDATE
+            ON CONFLICT (user_id, post_id) DO UPDATE
             SET user_id = EXCLUDED.user_id
             RETURNING id, user_id, post_id, bookmarked_at
             "#,
