@@ -1546,7 +1546,85 @@ extension MatrixBridgeService {
                 #if DEBUG
                 print("[MatrixBridge]   ⚠️ Failed to get members for room \(room.id): \(error)")
                 #endif
+
+                // Fallback: If this is a direct room with 1-2 members, try to match by other criteria
+                // This handles E2EE rooms where member retrieval might fail
+                if room.isDirect && room.memberCount <= 2 {
+                    #if DEBUG
+                    print("[MatrixBridge]   🔄 Trying fallback match for isDirect room with memberCount=\(room.memberCount)")
+                    #endif
+
+                    // Check if the room name contains the target user's ID or display name
+                    // Matrix room names for DMs often contain the other user's info
+                    let roomName = room.name?.lowercased() ?? ""
+                    let targetIdPart = userId.lowercased().prefix(8)  // First 8 chars of UUID
+
+                    // Also extract the localpart from the Matrix user ID for matching
+                    // @nova-{uuid}:server -> nova-{uuid}
+                    let matrixLocalpart = matrixUserId
+                        .replacingOccurrences(of: "@", with: "")
+                        .components(separatedBy: ":").first?.lowercased() ?? ""
+
+                    if roomName.contains(String(targetIdPart)) || roomName.contains(matrixLocalpart) {
+                        #if DEBUG
+                        print("[MatrixBridge]   ✅ Fallback match found! Room name '\(room.name ?? "")' matches target user")
+                        #endif
+
+                        return MatrixConversationInfo(
+                            id: room.id,
+                            displayName: room.name ?? "Direct Message",
+                            lastMessage: room.lastMessage?.content,
+                            lastMessageTime: room.lastActivity,
+                            unreadCount: room.unreadCount,
+                            isEncrypted: room.isEncrypted,
+                            isDirect: true,
+                            avatarURL: room.avatarURL,
+                            memberCount: room.memberCount,
+                            memberAvatars: [],
+                            memberNames: []
+                        )
+                    }
+                }
                 continue
+            }
+        }
+
+        // Final fallback: Check if any isDirect room has a Nova conversation mapping
+        // that includes the target user
+        #if DEBUG
+        print("[MatrixBridge] 🔄 Final fallback: checking Nova conversation mappings for target user")
+        #endif
+
+        for room in rooms {
+            // Only check rooms that are marked as direct and have small member count
+            guard room.isDirect && room.memberCount <= 2 else { continue }
+
+            // Check if there's a Nova conversation mapped to this room
+            if let conversationId = try? await queryConversationMapping(roomId: room.id) {
+                // Get the Nova conversation to check participants
+                if let conversation = try? await chatService.getConversation(conversationId: conversationId) {
+                    // Check if the target user is a participant in this conversation
+                    // Note: participants is already [String] of user IDs
+                    if conversation.participants.contains(userId) {
+                        #if DEBUG
+                        print("[MatrixBridge] ✅ Final fallback found! Room \(room.id) has conversation with participant \(userId)")
+                        #endif
+
+                        return MatrixConversationInfo(
+                            id: room.id,
+                            displayName: room.name ?? conversation.name ?? "Direct Message",
+                            lastMessage: room.lastMessage?.content,
+                            lastMessageTime: room.lastActivity,
+                            unreadCount: room.unreadCount,
+                            isEncrypted: room.isEncrypted,
+                            isDirect: true,
+                            avatarURL: room.avatarURL,
+                            memberCount: room.memberCount,
+                            memberAvatars: [],
+                            memberNames: []
+                        )
+                    }
+                }
             }
         }
 

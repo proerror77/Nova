@@ -61,6 +61,12 @@ struct FeedPostCard: View {
             }
             Button("Cancel", role: .cancel) { }
         }
+        // MARK: - Fullscreen Image Zoom (Issue #257)
+        .fullScreenCover(item: $zoomingImageUrl) { imageUrl in
+            ZoomableImageView(imageUrl: imageUrl, onDismiss: {
+                zoomingImageUrl = nil
+            })
+        }
     }
 
     // MARK: - Main Content View
@@ -443,10 +449,9 @@ struct FeedPostCard: View {
             .onTapGesture(count: 2) {
                 triggerDoubleTapLike()
             }
-            // Single tap to view full screen (optional, like Instagram)
+            // Single tap to view full screen zoom (Instagram-style)
             .onTapGesture(count: 1) {
-                // Single tap does nothing for now (Instagram behavior)
-                // Can be used to pause/play video or show/hide UI
+                zoomingImageUrl = urlString
             }
             // Long press for menu
             .onLongPressGesture(minimumDuration: 0.5) {
