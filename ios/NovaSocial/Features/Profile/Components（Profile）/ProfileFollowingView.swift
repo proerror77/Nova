@@ -1,3 +1,4 @@
+
 import SwiftUI
 
 // MARK: - Follow User Model
@@ -46,6 +47,15 @@ struct ProfileFollowingView: View {
     @State private var followingError: String? = nil
     @State private var followersError: String? = nil
 
+    // MARK: - Recommended Users (People You May Know)
+    @State private var recommendedUsers: [FollowUser] = []
+    @State private var isLoadingRecommended = false
+
+    // MARK: - Followers List Expand/Collapse
+    @State private var isFollowersExpanded = false
+    private let followersThreshold = 7  // 超过此数量才显示 All 按钮
+    private let collapsedFollowersCount = 7  // 收起时显示的粉丝数量
+
     // MARK: - Navigation State
     @State private var showUserProfile = false
     @State private var selectedUserId: String? = nil
@@ -87,6 +97,33 @@ struct ProfileFollowingView: View {
         }
     }
 
+    private var filteredRecommended: [FollowUser] {
+        if searchText.isEmpty {
+            return recommendedUsers
+        }
+        return recommendedUsers.filter { user in
+            user.displayName.localizedCaseInsensitiveContains(searchText) ||
+            user.username.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
+    // MARK: - Followers Display Logic
+    /// 是否显示 All 按钮（粉丝数量 > 7 时显示）
+    private var shouldShowAllButton: Bool {
+        filteredFollowers.count > followersThreshold
+    }
+
+    /// 当前显示的粉丝列表（根据展开/收起状态）
+    private var displayedFollowers: [FollowUser] {
+        if !shouldShowAllButton || isFollowersExpanded {
+            // 不需要 All 按钮，或者已展开 → 显示全部
+            return filteredFollowers
+        } else {
+            // 需要 All 按钮且收起状态 → 只显示前几个
+            return Array(filteredFollowers.prefix(collapsedFollowersCount))
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // MARK: - Top Navigation Bar
@@ -102,8 +139,7 @@ struct ProfileFollowingView: View {
 
             // MARK: - Search Bar
             searchBar
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(EdgeInsets(top: 14.h, leading: 16.w, bottom: 14.h, trailing: 16.w))
 
             // MARK: - User List
             ScrollView {
@@ -156,6 +192,7 @@ struct ProfileFollowingView: View {
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await loadFollowing() }
             group.addTask { await loadFollowers() }
+            group.addTask { await loadRecommendedUsers() }
         }
     }
 
@@ -192,7 +229,7 @@ struct ProfileFollowingView: View {
                     return FollowUser(
                         id: user.id,
                         username: user.username,
-                        displayName: user.displayName ?? user.username,
+                        displayName: user.fullName,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
                         isFollowedByMe: isFollowingThem,  // 当前登录用户是否关注了他们
@@ -250,7 +287,7 @@ struct ProfileFollowingView: View {
                     return FollowUser(
                         id: user.id,
                         username: user.username,
-                        displayName: user.displayName ?? user.username,
+                        displayName: user.fullName,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
                         isFollowedByMe: isFollowingThem,  // 当前登录用户是否关注了他们
@@ -271,6 +308,43 @@ struct ProfileFollowingView: View {
             await MainActor.run {
                 isLoadingFollowers = false
                 followersError = "Failed to load. Pull down to retry."
+            }
+        }
+    }
+
+    // MARK: - 加载推荐用户 (People You May Know)
+    private func loadRecommendedUsers() async {
+        await MainActor.run {
+            isLoadingRecommended = true
+        }
+
+        // TODO: 替换为真实的推荐用户 API
+        // 目前使用 mock 数据用于展示 UI
+        do {
+            // 模拟网络延迟
+            try await Task.sleep(nanoseconds: 500_000_000)
+
+            // Mock 推荐用户数据
+            let mockRecommended = [
+                FollowUser(id: "rec-1", username: "oliver", displayName: "Oliver", avatarUrl: nil, isVerified: true, isFollowedByMe: false, isFollowingMe: false),
+                FollowUser(id: "rec-2", username: "ava", displayName: "Ava", avatarUrl: nil, isVerified: true, isFollowedByMe: false, isFollowingMe: false),
+                FollowUser(id: "rec-3", username: "sophia", displayName: "Sophia", avatarUrl: nil, isVerified: true, isFollowedByMe: false, isFollowingMe: false),
+                FollowUser(id: "rec-4", username: "noah", displayName: "Noah", avatarUrl: nil, isVerified: true, isFollowedByMe: false, isFollowingMe: false),
+                FollowUser(id: "rec-5", username: "mua", displayName: "Mua", avatarUrl: nil, isVerified: true, isFollowedByMe: false, isFollowingMe: false),
+                FollowUser(id: "rec-6", username: "god", displayName: "God", avatarUrl: nil, isVerified: true, isFollowedByMe: false, isFollowingMe: false)
+            ]
+
+            await MainActor.run {
+                recommendedUsers = mockRecommended
+                isLoadingRecommended = false
+            }
+
+            #if DEBUG
+            print("[ProfileFollowing] Loaded \(recommendedUsers.count) recommended users")
+            #endif
+        } catch {
+            await MainActor.run {
+                isLoadingRecommended = false
             }
         }
     }
@@ -348,30 +422,28 @@ struct ProfileFollowingView: View {
 
     // MARK: - Top Navigation Bar
     private var topNavigationBar: some View {
-        HStack {
-            Button(action: {
-                isPresented = false
-            }) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 18.f))
-                    .foregroundColor(.black)
-            }
-            .frame(width: 24, height: 24)
-
-            Spacer()
-
+        ZStack {
+            // 标题居中
             Text(displayUsername)
-                .font(Font.custom("SFProDisplay-Medium", size: 24.f))
+                .font(Font.custom("SF Pro Display", size: 18.f).weight(.semibold))
                 .foregroundColor(.black)
 
-            Spacer()
+            // 返回按钮靠左
+            HStack {
+                Button(action: {
+                    isPresented = false
+                }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18.f))
+                        .foregroundColor(.black)
+                }
+                .frame(width: 24.s, height: 24.s)
 
-            // Placeholder for symmetry
-            Color.clear
-                .frame(width: 24, height: 24)
+                Spacer()
+            }
         }
-        .padding(.horizontal, 16)
-        .frame(height: 56)
+        .padding(.horizontal, 16.w)
+        .frame(height: 54.h)
         .background(Color.white)
     }
 
@@ -384,17 +456,22 @@ struct ProfileFollowingView: View {
                     selectedTab = .following
                 }
             }) {
-                VStack(spacing: 8) {
+                VStack(spacing: 14.h) {
                     Text("Following")
-                        .font(Font.custom("SFProDisplay-Medium", size: 18.f))
-                        .foregroundColor(selectedTab == .following ? .black : Color(red: 0.51, green: 0.51, blue: 0.51))
+                        .font(Font.custom("SF Pro Display", size: 18.f).weight(.semibold))
+                        .lineSpacing(20.h)
+                        .foregroundColor(selectedTab == .following ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75))
 
                     Rectangle()
-                        .fill(selectedTab == .following ? Color(red: 0.81, green: 0.13, blue: 0.25) : Color.clear)
-                        .frame(height: 2)
+                        .foregroundColor(.clear)
+                        .frame(height: 0)
+                        .overlay(
+                            Rectangle()
+                                .stroke(selectedTab == .following ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.5)
+                        )
                 }
             }
-            .frame(maxWidth: .infinity)
+            .frame(width: 188.w)
 
             // Followers Tab
             Button(action: {
@@ -402,36 +479,41 @@ struct ProfileFollowingView: View {
                     selectedTab = .followers
                 }
             }) {
-                VStack(spacing: 8) {
+                VStack(spacing: 14.h) {
                     Text("Followers")
-                        .font(Font.custom("SFProDisplay-Medium", size: 18.f))
-                        .foregroundColor(selectedTab == .followers ? .black : Color(red: 0.51, green: 0.51, blue: 0.51))
+                        .font(Font.custom("SF Pro Display", size: 18.f).weight(.semibold))
+                        .lineSpacing(20.h)
+                        .foregroundColor(selectedTab == .followers ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75))
 
                     Rectangle()
-                        .fill(selectedTab == .followers ? Color(red: 0.81, green: 0.13, blue: 0.25) : Color.clear)
-                        .frame(height: 2)
+                        .foregroundColor(.clear)
+                        .frame(height: 0)
+                        .overlay(
+                            Rectangle()
+                                .stroke(selectedTab == .followers ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.5)
+                        )
                 }
             }
-            .frame(maxWidth: .infinity)
+            .frame(width: 187.w)
         }
-        .padding(.horizontal, 16)
     }
 
     // MARK: - Search Bar
     private var searchBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 10.w) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14.f))
-                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
 
             TextField("Search", text: $searchText)
-                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                .font(Font.custom("SF Pro Display", size: 14.f))
+                .tracking(0.28)
+                .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(Color(red: 0.91, green: 0.91, blue: 0.91))
-        .cornerRadius(32)
+        .padding(EdgeInsets(top: 6.h, leading: 12.w, bottom: 6.h, trailing: 12.w))
+        .frame(width: 343.w, height: 32.h)
+        .background(Color(red: 0.90, green: 0.90, blue: 0.90))
+        .cornerRadius(32.s)
     }
 
     // MARK: - Following Content
@@ -443,7 +525,7 @@ struct ProfileFollowingView: View {
                 }
             } else if let error = followingError {
                 // 錯誤狀態
-                VStack(spacing: 16) {
+                VStack(spacing: 16.h) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: 48.f))
                         .foregroundColor(.orange)
@@ -457,17 +539,17 @@ struct ProfileFollowingView: View {
                         Text("Retry")
                             .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                             .foregroundColor(.white)
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 24.w)
+                            .padding(.vertical, 8.h)
                             .background(Color(red: 0.87, green: 0.11, blue: 0.26))
-                            .cornerRadius(20)
+                            .cornerRadius(20.s)
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 60)
+                .padding(.top, 60.h)
             } else if filteredFollowing.isEmpty {
                 // 空状态
-                VStack(spacing: 12) {
+                VStack(spacing: 12.h) {
                     Image(systemName: "person.badge.plus")
                         .font(.system(size: 48.f))
                         .foregroundColor(.gray.opacity(0.5))
@@ -476,26 +558,25 @@ struct ProfileFollowingView: View {
                         .foregroundColor(.gray)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 60)
+                .padding(.top, 60.h)
             } else {
                 ForEach(filteredFollowing) { user in
                     UserRowView(
                         user: user,
-                        showFollowButton: false,
+                        buttonType: .message,
                         onAvatarTap: {
                             // Invalidate cache for fresh profile data (Issue #166)
                             userService.invalidateCache(userId: user.id)
                             selectedUserId = user.id
                             showUserProfile = true
                         },
-                        onFollowTap: {
-                            Task {
-                                await toggleFollow(user: user)
-                            }
+                        onButtonTap: {
+                            // TODO: Navigate to chat/message screen
+                            print("[ProfileFollowing] Message tapped for user: \(user.username)")
                         }
                     )
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 16.w)
+                    .padding(.vertical, 10.h)
                 }
             }
         }
@@ -510,150 +591,308 @@ struct ProfileFollowingView: View {
                 }
             } else if let error = followersError {
                 // 錯誤狀態
-                VStack(spacing: 16) {
+                VStack(spacing: 16.h) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: 48.f))
                         .foregroundColor(.orange)
                     Text(error)
-                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                        .font(Font.custom("SF Pro Display", size: 16.f))
                         .foregroundColor(.gray)
                         .multilineTextAlignment(.center)
                     Button(action: {
                         Task { await loadFollowers() }
                     }) {
                         Text("Retry")
-                            .font(Font.custom("SFProDisplay-Medium", size: 14.f))
+                            .font(Font.custom("SF Pro Display", size: 14.f).weight(.medium))
                             .foregroundColor(.white)
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 24.w)
+                            .padding(.vertical, 8.h)
                             .background(Color(red: 0.87, green: 0.11, blue: 0.26))
-                            .cornerRadius(20)
+                            .cornerRadius(20.s)
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 60)
-            } else if filteredFollowers.isEmpty {
+                .padding(.top, 60.h)
+            } else if filteredFollowers.isEmpty && filteredRecommended.isEmpty {
                 // 空状态
-                VStack(spacing: 12) {
+                VStack(spacing: 12.h) {
                     Image(systemName: "person.2")
                         .font(.system(size: 48.f))
                         .foregroundColor(.gray.opacity(0.5))
                     Text("No followers yet")
-                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                        .font(Font.custom("SF Pro Display", size: 16.f))
                         .foregroundColor(.gray)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 60)
+                .padding(.top, 60.h)
             } else {
-                ForEach(filteredFollowers) { user in
+                // MARK: - 真正的粉丝列表 (Follow back)
+                ForEach(displayedFollowers) { user in
                     UserRowView(
                         user: user,
-                        showFollowButton: true,
+                        buttonType: user.isFollowedByMe ? .message : .followBack,
                         onAvatarTap: {
-                            // Invalidate cache for fresh profile data (Issue #166)
                             userService.invalidateCache(userId: user.id)
                             selectedUserId = user.id
                             showUserProfile = true
                         },
-                        onFollowTap: {
-                            Task {
-                                await toggleFollow(user: user)
+                        onButtonTap: {
+                            if user.isFollowedByMe {
+                                // 已关注，点击发送消息
+                                print("[ProfileFollowing] Message tapped for user: \(user.username)")
+                            } else {
+                                // 未关注，点击回关
+                                Task { await toggleFollow(user: user) }
                             }
                         }
                     )
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 16.w)
+                    .padding(.vertical, 10.h)
                 }
+
+                // MARK: - All 展开/收起按钮（仅当粉丝 > 7 时显示）
+                if shouldShowAllButton {
+                    allToggleButton
+                } else if !filteredFollowers.isEmpty && !filteredRecommended.isEmpty {
+                    // 粉丝 ≤ 7 时，用简单分隔线
+                    Rectangle()
+                        .fill(Color(red: 0.75, green: 0.75, blue: 0.75))
+                        .frame(height: 2)
+                        .padding(.vertical, 10.h)
+                }
+
+                // MARK: - People You May Know 标题
+                if !filteredRecommended.isEmpty {
+                    peopleYouMayKnowHeader
+                }
+
+                // MARK: - 推荐用户列表 (Follow)
+                ForEach(filteredRecommended) { user in
+                    UserRowView(
+                        user: user,
+                        buttonType: user.isFollowedByMe ? .message : .follow,
+                        onAvatarTap: {
+                            userService.invalidateCache(userId: user.id)
+                            selectedUserId = user.id
+                            showUserProfile = true
+                        },
+                        onButtonTap: {
+                            if user.isFollowedByMe {
+                                print("[ProfileFollowing] Message tapped for user: \(user.username)")
+                            } else {
+                                Task { await followRecommendedUser(user: user) }
+                            }
+                        }
+                    )
+                    .padding(.horizontal, 16.w)
+                    .padding(.vertical, 10.h)
+                }
+            }
+        }
+    }
+
+    // MARK: - All 展开/收起按钮
+    private var allToggleButton: some View {
+        VStack(spacing: 16.h) {
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isFollowersExpanded.toggle()
+                }
+            }) {
+                HStack(spacing: 4.w) {
+                    Text("All")
+                        .font(Font.custom("SF Pro Display", size: 14.f).weight(.semibold))
+                        .tracking(0.28)
+                        .foregroundColor(Color(red: 0.51, green: 0.51, blue: 0.51))
+                    Image(systemName: isFollowersExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10.f, weight: .semibold))
+                        .foregroundColor(Color(red: 0.51, green: 0.51, blue: 0.51))
+                }
+            }
+            .buttonStyle(.plain)
+
+            Rectangle()
+                .fill(Color(red: 0.75, green: 0.75, blue: 0.75))
+                .frame(height: 2)
+        }
+        .padding(.vertical, 10.h)
+    }
+
+    // MARK: - People You May Know 标题
+    private var peopleYouMayKnowHeader: some View {
+        HStack {
+            Text("People You May Know")
+                .font(Font.custom("SF Pro Display", size: 14.f).weight(.semibold))
+                .tracking(0.28)
+                .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+            Spacer()
+        }
+        .padding(.horizontal, 16.w)
+        .padding(.vertical, 8.h)
+    }
+
+    // MARK: - 关注推荐用户
+    private func followRecommendedUser(user: FollowUser) async {
+        guard let currentUserId = authManager.currentUser?.id else {
+            await MainActor.run {
+                errorAlertMessage = "Please login first"
+                showErrorAlert = true
+            }
+            return
+        }
+
+        do {
+            try await graphService.followUser(followerId: currentUserId, followeeId: user.id)
+
+            // 更新本地状态
+            await MainActor.run {
+                if let index = recommendedUsers.firstIndex(where: { $0.id == user.id }) {
+                    recommendedUsers[index].isFollowedByMe = true
+                }
+            }
+
+            #if DEBUG
+            print("[ProfileFollowing] Followed recommended user: \(user.username)")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[ProfileFollowing] Failed to follow recommended user: \(error)")
+            #endif
+            await MainActor.run {
+                errorAlertMessage = "Failed to follow. Please try again."
+                showErrorAlert = true
             }
         }
     }
 }
 
+// MARK: - Button Type
+enum UserRowButtonType {
+    case message      // 黑色描边 - Following tab
+    case followBack   // 红色填充 - Followers tab (粉丝)
+    case follow       // 红色描边 - People You May Know
+}
+
 // MARK: - User Row View
 struct UserRowView: View {
     let user: FollowUser
-    var showFollowButton: Bool = false
+    var buttonType: UserRowButtonType = .message
     var onAvatarTap: () -> Void = {}
-    var onFollowTap: () -> Void = {}
+    var onButtonTap: () -> Void = {}
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Avatar - 使用 CachedAsyncImage 优化性能，點擊可跳轉到用戶 profile
-            Button(action: onAvatarTap) {
-                if let avatarUrl = user.avatarUrl, let url = URL(string: avatarUrl) {
-                    CachedAsyncImage(
-                        url: url,
-                        targetSize: CGSize(width: 100, height: 100),  // 2x for retina
-                        enableProgressiveLoading: false,
-                        priority: .normal
-                    ) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } placeholder: {
+        HStack(spacing: 8.w) {
+            // Left: Avatar + Name
+            HStack(spacing: 8.w) {
+                // Avatar - 使用 CachedAsyncImage 优化性能，點擊可跳轉到用戶 profile
+                Button(action: onAvatarTap) {
+                    if let avatarUrl = user.avatarUrl, let url = URL(string: avatarUrl) {
+                        CachedAsyncImage(
+                            url: url,
+                            targetSize: CGSize(width: 100, height: 100),  // 2x for retina
+                            enableProgressiveLoading: false,
+                            priority: .normal
+                        ) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        } placeholder: {
+                            defaultAvatar
+                        }
+                        .frame(width: 50.s, height: 50.s)
+                        .clipShape(Circle())
+                    } else {
                         defaultAvatar
                     }
-                    .frame(width: 50, height: 50)
-                    .clipShape(Circle())
-                } else {
-                    defaultAvatar
                 }
-            }
+                .buttonStyle(.plain)
 
-            // Name and Verified Badge - 點擊可跳轉到用戶 profile
-            Button(action: onAvatarTap) {
-                HStack(spacing: 6) {
-                    Text(user.displayName)
-                        .font(Font.custom("SFProDisplay-Bold", size: 16.f))
-                        .foregroundColor(.black)
+                // Name and Verified Badge - 點擊可跳轉到用戶 profile
+                Button(action: onAvatarTap) {
+                    HStack(spacing: 4.w) {
+                        Text(user.displayName)
+                            .font(Font.custom("SF Pro Display", size: 16.f).weight(.heavy))
+                            .tracking(0.32)
+                            .foregroundColor(.black)
 
-                    if user.isVerified {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 14.f))
-                            .foregroundColor(Color(red: 0.2, green: 0.6, blue: 1.0))
+                        if user.isVerified {
+                            ZStack {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(.system(size: 14.f))
+                                    .foregroundColor(Color(red: 0.2, green: 0.6, blue: 1.0))
+                            }
+                            .frame(width: 14.s, height: 14.s)
+                        }
                     }
                 }
+                .buttonStyle(.plain)
             }
 
             Spacer()
 
-            // 按钮区域 - 根據關注狀態顯示不同按鈕
-            if user.isFollowedByMe {
-                // Following Button (已關注狀態) - 點擊可取消關注
-                Button(action: onFollowTap) {
-                    Text("Following")
-                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
-                        .foregroundColor(.black)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Color.white)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 66)
-                                .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.66)
-                        )
-                        .cornerRadius(66)
-                }
-                .buttonStyle(.plain)
-            } else {
-                // Follow Button (未關注狀態) - 點擊可關注
-                Button(action: onFollowTap) {
-                    Text("Follow")
-                        .font(Font.custom("SFProDisplay-Medium", size: 12.f))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Color(red: 0.87, green: 0.11, blue: 0.26))
-                        .cornerRadius(46)
-                }
-                .buttonStyle(.plain)
+            // Action Button - 根據類型顯示不同樣式
+            actionButton
+        }
+    }
+
+    @ViewBuilder
+    private var actionButton: some View {
+        switch buttonType {
+        case .message:
+            // Message Button - 黑色描边 (Figma: 105x34)
+            Button(action: onButtonTap) {
+                Text("Message")
+                    .font(Font.custom("SF Pro Display", size: 12.f))
+                    .tracking(0.24)
+                    .foregroundColor(.black)
             }
+            .buttonStyle(.plain)
+            .frame(width: 105.w, height: 34.h)
+            .cornerRadius(57.s)
+            .overlay(
+                RoundedRectangle(cornerRadius: 57.s)
+                    .inset(by: 0.75)
+                    .stroke(.black, lineWidth: 0.5)
+            )
+
+        case .followBack:
+            // Follow back Button - 红色填充 (Figma: 105x34)
+            Button(action: onButtonTap) {
+                Text("Follow back")
+                    .font(Font.custom("SF Pro Display", size: 12.f))
+                    .tracking(0.24)
+                    .foregroundColor(.white)
+            }
+            .buttonStyle(.plain)
+            .frame(width: 105.w, height: 34.h)
+            .background(Color(red: 0.87, green: 0.11, blue: 0.26))
+            .cornerRadius(57.s)
+
+        case .follow:
+            // Follow Button - 红色描边 (Figma: 105x34)
+            Button(action: onButtonTap) {
+                Text("Follow")
+                    .font(Font.custom("SF Pro Display", size: 12.f))
+                    .tracking(0.24)
+                    .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
+            }
+            .buttonStyle(.plain)
+            .frame(width: 105.w, height: 34.h)
+            .cornerRadius(57.s)
+            .overlay(
+                RoundedRectangle(cornerRadius: 57.s)
+                    .inset(by: 0.5)
+                    .stroke(Color(red: 0.87, green: 0.11, blue: 0.26), lineWidth: 0.5)
+            )
         }
     }
 
     private var defaultAvatar: some View {
-        Circle()
-            .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.5))
-            .frame(width: 50, height: 50)
+        Ellipse()
+            .foregroundColor(.clear)
+            .frame(width: 50.s, height: 50.s)
+            .background(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.5))
+            .clipShape(Circle())
     }
 }
 
@@ -676,4 +915,201 @@ struct UserRowView: View {
     )
     .environmentObject(AuthenticationManager.shared)
     .preferredColorScheme(.dark)
+}
+
+// MARK: - Mock Data Preview
+#Preview("With Mock Data") {
+    ProfileFollowingMockPreview()
+}
+
+/// 用于预览的 Mock 数据包装器
+private struct ProfileFollowingMockPreview: View {
+    var body: some View {
+        MockProfileFollowingView(
+            isPresented: .constant(true),
+            username: "Juliette"
+        )
+        .environmentObject(AuthenticationManager.shared)
+    }
+}
+
+/// 带 Mock 数据的预览视图
+private struct MockProfileFollowingView: View {
+    @Binding var isPresented: Bool
+    let username: String
+
+    @State private var selectedTab: FollowTab = .followers
+    @State private var searchText: String = ""
+    @State private var isFollowersExpanded = false
+
+    // Mock 数据
+    private let mockFollowing: [FollowUser] = [
+        FollowUser(id: "1", username: "emma_wilson", displayName: "Emma Wilson", avatarUrl: nil, isVerified: true, isFollowedByMe: true),
+        FollowUser(id: "2", username: "alex_chen", displayName: "Alex Chen", avatarUrl: nil, isVerified: false, isFollowedByMe: true),
+        FollowUser(id: "3", username: "sophia_lee", displayName: "Sophia Lee", avatarUrl: nil, isVerified: true, isFollowedByMe: false),
+        FollowUser(id: "4", username: "james_brown", displayName: "James Brown", avatarUrl: nil, isVerified: false, isFollowedByMe: true),
+        FollowUser(id: "5", username: "olivia_davis", displayName: "Olivia Davis", avatarUrl: nil, isVerified: false, isFollowedByMe: true),
+    ]
+
+    private let mockFollowers: [FollowUser] = [
+        FollowUser(id: "10", username: "mike_johnson", displayName: "Mike Johnson", avatarUrl: nil, isVerified: false, isFollowedByMe: false),
+        FollowUser(id: "11", username: "sarah_miller", displayName: "Sarah Miller", avatarUrl: nil, isVerified: true, isFollowedByMe: true),
+        FollowUser(id: "12", username: "david_wang", displayName: "David Wang", avatarUrl: nil, isVerified: false, isFollowedByMe: false),
+        FollowUser(id: "13", username: "lisa_zhang", displayName: "Lisa Zhang", avatarUrl: nil, isVerified: false, isFollowedByMe: false),
+        FollowUser(id: "14", username: "tom_harris", displayName: "Tom Harris", avatarUrl: nil, isVerified: true, isFollowedByMe: true),
+        FollowUser(id: "15", username: "amy_clark", displayName: "Amy Clark", avatarUrl: nil, isVerified: false, isFollowedByMe: false),
+        FollowUser(id: "16", username: "ryan_lewis", displayName: "Ryan Lewis", avatarUrl: nil, isVerified: false, isFollowedByMe: false),
+        FollowUser(id: "17", username: "nina_scott", displayName: "Nina Scott", avatarUrl: nil, isVerified: true, isFollowedByMe: false),
+        FollowUser(id: "18", username: "kevin_young", displayName: "Kevin Young", avatarUrl: nil, isVerified: false, isFollowedByMe: true),
+    ]
+
+    private let mockRecommended: [FollowUser] = [
+        FollowUser(id: "20", username: "chris_taylor", displayName: "Chris Taylor", avatarUrl: nil, isVerified: false, isFollowedByMe: false),
+        FollowUser(id: "21", username: "julia_anderson", displayName: "Julia Anderson", avatarUrl: nil, isVerified: true, isFollowedByMe: false),
+        FollowUser(id: "22", username: "daniel_thomas", displayName: "Daniel Thomas", avatarUrl: nil, isVerified: false, isFollowedByMe: false),
+    ]
+
+    private var displayedFollowers: [FollowUser] {
+        if mockFollowers.count <= 7 || isFollowersExpanded {
+            return mockFollowers
+        }
+        return Array(mockFollowers.prefix(2))
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Navigation Bar
+            HStack {
+                Button(action: { isPresented = false }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18.f))
+                        .foregroundColor(.black)
+                }
+                .frame(width: 24.s, height: 24.s)
+
+                Spacer()
+
+                Text(username)
+                    .font(Font.custom("SF Pro Display", size: 18.f).weight(.semibold))
+                    .foregroundColor(.black)
+
+                Spacer()
+
+                Color.clear.frame(width: 24.s, height: 24.s)
+            }
+            .padding(.horizontal, 16.w)
+            .frame(height: 56.h)
+
+            // Tab Selector
+            HStack(spacing: 0) {
+                tabButton(title: "Following", isSelected: selectedTab == .following) {
+                    selectedTab = .following
+                }
+                tabButton(title: "Followers", isSelected: selectedTab == .followers) {
+                    selectedTab = .followers
+                }
+            }
+            .padding(.horizontal, 16.w)
+
+            Rectangle()
+                .fill(Color(red: 0.9, green: 0.9, blue: 0.9))
+                .frame(height: 0.5)
+
+            // Search Bar
+            HStack(spacing: 10.w) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 14.f))
+                    .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                TextField("Search", text: $searchText)
+                    .font(Font.custom("SF Pro Display", size: 14.f))
+            }
+            .padding(.horizontal, 12.w)
+            .padding(.vertical, 6.h)
+            .background(Color(red: 0.90, green: 0.90, blue: 0.90))
+            .cornerRadius(32.s)
+            .padding(.horizontal, 16.w)
+            .padding(.vertical, 12.h)
+
+            // Content
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    if selectedTab == .following {
+                        ForEach(mockFollowing) { user in
+                            UserRowView(user: user, buttonType: .message)
+                                .padding(.horizontal, 16.w)
+                                .padding(.vertical, 10.h)
+                        }
+                    } else {
+                        // Followers
+                        ForEach(displayedFollowers) { user in
+                            UserRowView(
+                                user: user,
+                                buttonType: user.isFollowedByMe ? .message : .followBack
+                            )
+                            .padding(.horizontal, 16.w)
+                            .padding(.vertical, 10.h)
+                        }
+
+                        // All Toggle Button
+                        if mockFollowers.count > 7 {
+                            VStack(spacing: 16.h) {
+                                Button(action: {
+                                    withAnimation(.easeInOut(duration: 0.25)) {
+                                        isFollowersExpanded.toggle()
+                                    }
+                                }) {
+                                    HStack(spacing: 4.w) {
+                                        Text("All")
+                                            .font(Font.custom("SF Pro Display", size: 14.f).weight(.semibold))
+                                            .foregroundColor(Color(red: 0.51, green: 0.51, blue: 0.51))
+                                        Image(systemName: isFollowersExpanded ? "chevron.up" : "chevron.down")
+                                            .font(.system(size: 10.f, weight: .semibold))
+                                            .foregroundColor(Color(red: 0.51, green: 0.51, blue: 0.51))
+                                    }
+                                }
+                                Rectangle()
+                                    .fill(Color(red: 0.75, green: 0.75, blue: 0.75))
+                                    .frame(height: 2)
+                            }
+                            .padding(.vertical, 10.h)
+                        }
+
+                        // People You May Know Header
+                        HStack {
+                            Text("People You May Know")
+                                .font(Font.custom("SF Pro Display", size: 14.f).weight(.semibold))
+                                .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16.w)
+                        .padding(.vertical, 8.h)
+
+                        // Recommended Users
+                        ForEach(mockRecommended) { user in
+                            UserRowView(user: user, buttonType: .follow)
+                                .padding(.horizontal, 16.w)
+                                .padding(.vertical, 10.h)
+                        }
+                    }
+                }
+            }
+
+            Spacer()
+        }
+        .background(Color.white)
+    }
+
+    private func tabButton(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: { withAnimation(.easeInOut(duration: 0.2)) { action() } }) {
+            VStack(spacing: 14.h) {
+                Text(title)
+                    .font(Font.custom("SF Pro Display", size: 18.f).weight(.semibold))
+                    .foregroundColor(isSelected ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75))
+                Rectangle()
+                    .fill(isSelected ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75))
+                    .frame(height: 0.5)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
 }
