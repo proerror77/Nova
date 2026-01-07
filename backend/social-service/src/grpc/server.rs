@@ -558,8 +558,8 @@ impl SocialService for SocialServiceImpl {
             post_id: bookmark.post_id.to_string(),
             collection_id: bookmark.collection_id.map(|id| id.to_string()).unwrap_or_default(),
             bookmarked_at: Some(prost_types::Timestamp {
-                seconds: bookmark.bookmarked_at.timestamp(),
-                nanos: bookmark.bookmarked_at.timestamp_subsec_nanos() as i32,
+                seconds: bookmark.created_at.timestamp(),
+                nanos: bookmark.created_at.timestamp_subsec_nanos() as i32,
             }),
         };
 

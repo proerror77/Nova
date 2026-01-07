@@ -1571,7 +1571,7 @@ impl SocialService for SocialServiceImpl {
                 .collection_id
                 .map(|id| id.to_string())
                 .unwrap_or_default(),
-            bookmarked_at: to_ts(bookmark.bookmarked_at),
+            bookmarked_at: to_ts(bookmark.created_at),
         };
 
         Ok(Response::new(CreateBookmarkResponse {
