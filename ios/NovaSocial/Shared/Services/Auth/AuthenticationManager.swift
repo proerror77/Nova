@@ -16,6 +16,20 @@ class AuthenticationManager: ObservableObject, @unchecked Sendable {
     /// Validated invite code stored after successful validation in InviteCodeView
     /// Used by CreateAccountEmailView for registration
     @Published var validatedInviteCode: String?
+    
+    /// Phone verification token from successful OTP verification
+    /// Used by ProfileSetupView for phone-based registration
+    @Published var phoneVerificationToken: String?
+    
+    /// Verified phone number (with country code) from phone registration flow
+    @Published var verifiedPhoneNumber: String?
+    
+    /// Email verification token from successful OTP verification
+    /// Used by ProfileSetupView for email-based registration
+    @Published var emailVerificationToken: String?
+    
+    /// Verified email address from email registration flow
+    @Published var verifiedEmail: String?
 
     private let identityService = IdentityService()
     private let keychain = KeychainService.shared

@@ -8,11 +8,14 @@ enum AppPage: Equatable {
     case login
     case phoneLogin
     case phoneRegistration
+    case phoneEnterCode(phoneNumber: String)
+    case gmailEnterCode(email: String)
     case forgotPassword
     case emailSentConfirmation(email: String)
     case resetPassword(token: String)
     case createAccount
     case createAccountEmail
+    case profileSetup
     case home
     case rankingList
     case search
