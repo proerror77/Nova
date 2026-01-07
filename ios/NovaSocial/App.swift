@@ -83,8 +83,8 @@ struct IceredApp: App {
                     case .createAccount:
                         CreateAccountView(currentPage: $currentPage)
                             .transition(.identity)
-                    case .createAccountEmail:
-                        CreateAccountEmailView(currentPage: $currentPage)
+                    case .createAccountPhoneNumber:
+                        CAPhoneNumberView(currentPage: $currentPage)
                             .transition(.identity)
                     case .profileSetup:
                         CAProfileSettingView(currentPage: $currentPage)
@@ -112,7 +112,7 @@ struct IceredApp: App {
                 } else {
                     // 已登录后的页面切换
                     switch currentPage {
-                    case .login, .createAccount, .createAccountEmail, .profileSetup, .inviteCode:
+                    case .login, .createAccount, .createAccountPhoneNumber, .profileSetup, .inviteCode:
                         // 登录成功后跳转到首页
                         HomeView(currentPage: $currentPage)
                             .transition(.identity)
