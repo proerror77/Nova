@@ -129,6 +129,8 @@ pub struct FeedPost {
     pub author_display_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub author_avatar: Option<String>,
+    /// Account type when post was created: "primary" (real name) or "alias" (Issue #259)
+    pub author_account_type: String,
 }
 
 #[derive(Debug, Serialize)]
