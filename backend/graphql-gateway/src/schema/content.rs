@@ -174,6 +174,7 @@ impl ContentMutation {
             media_urls: vec![],
             media_type: String::new(),
             channel_ids: vec![],
+            author_account_type: String::new(), // Default to primary (Issue #259)
         });
 
         let response = client
