@@ -403,6 +403,9 @@ struct FeedPostRaw: Codable {
     // Location and tags (from VLM service or user input)
     let location: String?
     let tags: [String]?
+
+    /// Account type used when post was created: "primary" (real name) or "alias"
+    let authorAccountType: String?
 }
 
 /// Response from feed-service /api/v2/feed endpoint
@@ -532,6 +535,8 @@ struct FeedPost: Identifiable, Codable, Equatable {
     let isBookmarked: Bool
     let location: String?
     let tags: [String]?
+    /// Account type used when post was created: "primary" (real name) or "alias"
+    let authorAccountType: String
 
     /// Formatted tags string for display (e.g., "#Fashion #Sport #Art")
     var formattedTags: String? {
@@ -738,6 +743,8 @@ struct FeedPost: Identifiable, Codable, Equatable {
         // Location and tags from VLM analysis
         self.location = raw.location
         self.tags = raw.tags
+        // Account type for avatar border display (default to "primary" for backward compatibility)
+        self.authorAccountType = raw.authorAccountType ?? "primary"
     }
 
     // Keep existing init for Codable conformance and manual creation
@@ -745,7 +752,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
         content: String, title: String? = nil, mediaUrls: [String], mediaType: FeedMediaType? = nil, createdAt: Date,
          likeCount: Int, commentCount: Int, shareCount: Int, bookmarkCount: Int = 0,
          isLiked: Bool, isBookmarked: Bool,
-         location: String? = nil, tags: [String]? = nil) {
+         location: String? = nil, tags: [String]? = nil, authorAccountType: String = "primary") {
         #if DEBUG
         print("[Feed] Created post via manual init: \(id.prefix(8)), mediaUrls=\(mediaUrls.count)")
         #endif
@@ -768,6 +775,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.isBookmarked = isBookmarked
         self.location = location
         self.tags = tags
+        self.authorAccountType = authorAccountType
     }
 
     /// Create a copy with optional field overrides (eliminates duplicate creation code)
@@ -798,7 +806,8 @@ struct FeedPost: Identifiable, Codable, Equatable {
             isLiked: isLiked ?? self.isLiked,
             isBookmarked: isBookmarked ?? self.isBookmarked,
             location: self.location,
-            tags: self.tags
+            tags: self.tags,
+            authorAccountType: self.authorAccountType
         )
     }
 
@@ -825,6 +834,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.isBookmarked = false
         self.location = post.location
         self.tags = post.tags
+        self.authorAccountType = post.authorAccountType ?? "primary"
     }
 }
 

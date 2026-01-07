@@ -431,11 +431,13 @@ struct SocialCommentRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: DesignTokens.spacing12) {
             // Avatar (点击跳转用户主页 - 使用 AvatarView 缓存组件 - Issue #233)
+            // Issue #259: Colored border based on account type
             AvatarView(
                 image: nil,
                 url: comment.authorAvatarUrl,
                 size: DesignTokens.avatarSmall,
-                name: comment.displayAuthorName
+                name: comment.displayAuthorName,
+                accountType: comment.authorAccountType
             )
             .onTapGesture {
                 onAvatarTapped?(comment.userId)

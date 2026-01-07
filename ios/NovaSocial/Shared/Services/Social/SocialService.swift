@@ -674,6 +674,9 @@ struct SocialComment: Codable, Identifiable {
     let likeCount: Int64?           // Total likes on this comment
     let isLikedByViewer: Bool?      // Whether the viewer has liked this comment
 
+    /// Account type used when comment was created: "primary" (real name) or "alias"
+    let authorAccountType: String?
+
     // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase which automatically
     // converts snake_case JSON keys (user_id, post_id, etc.) to camelCase Swift properties
 

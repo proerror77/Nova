@@ -27,6 +27,9 @@ struct Post: Codable, Identifiable {
     let location: String?
     let tags: [String]?
 
+    /// Account type used when post was created: "primary" (real name) or "alias"
+    let authorAccountType: String?
+
     // 便利属性，保持向后兼容
     var creatorId: String { authorId }
 
@@ -70,7 +73,8 @@ struct Post: Codable, Identifiable {
             authorDisplayName: self.authorDisplayName ?? displayName,
             authorAvatarUrl: self.authorAvatarUrl ?? avatarUrl,
             location: location,
-            tags: tags
+            tags: tags,
+            authorAccountType: authorAccountType
         )
     }
 

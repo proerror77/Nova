@@ -68,8 +68,8 @@ struct FeedPostCard: View {
         VStack(spacing: 8.h) {
             // MARK: - User Info Header
             HStack(spacing: 8) {
-                // Avatar - 显示用户头像或默认头像
-                AvatarView(image: nil, url: post.authorAvatar, size: 30)
+                // Avatar - 显示用户头像或默认头像 (Issue #259: colored border based on account type)
+                AvatarView(image: nil, url: post.authorAvatar, size: 30, accountType: post.authorAccountType)
 
                 // User Info
                 VStack(alignment: .leading, spacing: 1) {

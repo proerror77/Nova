@@ -58,13 +58,55 @@ struct DefaultAvatarView: View {
     }
 }
 
+/// Account type for avatar border color indication
+/// Issue #259: Red border = Real Name (primary), Gray border = Alias
+enum AccountType: String {
+    case primary = "primary"  // Real name account - Red border
+    case alias = "alias"      // Alias/pseudonym - Gray border
+
+    /// Border color for this account type
+    var borderColor: Color {
+        switch self {
+        case .primary:
+            return Color(red: 0.82, green: 0.11, blue: 0.26)  // Red (#D11C42)
+        case .alias:
+            return Color(red: 0.6, green: 0.6, blue: 0.6)     // Gray
+        }
+    }
+
+    /// Initialize from optional string (defaults to primary)
+    init(from string: String?) {
+        if let str = string, let type = AccountType(rawValue: str) {
+            self = type
+        } else {
+            self = .primary
+        }
+    }
+}
+
 /// 通用头像视图 - 自动显示用户头像或默认头像（支持首字母占位）
+/// Issue #259: Supports colored border indicating account type
 struct AvatarView: View {
     let image: UIImage?
     let url: String?
     let size: CGFloat
     var name: String? = nil  // 用戶名（用於顯示首字母占位符）
     var backgroundColor: Color = Color(red: 0.85, green: 0.85, blue: 0.85)
+    /// Account type for border color: "primary" (red) or "alias" (gray)
+    var accountType: String? = nil
+    /// Whether to show the account type border
+    var showBorder: Bool = true
+
+    /// Border width scales with avatar size
+    private var borderWidth: CGFloat {
+        max(2, size * 0.05)  // 5% of size, minimum 2pt
+    }
+
+    /// Computed border color based on account type
+    private var borderColor: Color {
+        guard showBorder, accountType != nil else { return .clear }
+        return AccountType(from: accountType).borderColor
+    }
 
     var body: some View {
         Group {
@@ -74,6 +116,10 @@ struct AvatarView: View {
                     .scaledToFill()
                     .frame(width: size, height: size)
                     .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .stroke(borderColor, lineWidth: borderWidth)
+                    )
             } else if let urlString = url, !urlString.isEmpty, let url = URL(string: urlString) {
                 // 使用 CachedAsyncImage 替代 AsyncImage 以获得磁盘缓存和更好的性能
                 CachedAsyncImage(
@@ -90,8 +136,16 @@ struct AvatarView: View {
                 }
                 .frame(width: size, height: size)
                 .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(borderColor, lineWidth: borderWidth)
+                )
             } else {
                 DefaultAvatarView(size: size, name: name, backgroundColor: backgroundColor)
+                    .overlay(
+                        Circle()
+                            .stroke(borderColor, lineWidth: borderWidth)
+                    )
             }
         }
     }
@@ -246,6 +300,35 @@ struct DefaultGroupAvatarView: View {
 #Preview("AvatarView - Dark Mode") {
     AvatarView(image: nil, url: nil, size: 100, name: "Test")
         .preferredColorScheme(.dark)
+}
+
+#Preview("AvatarView - Account Type Borders (#259)") {
+    VStack(spacing: 20) {
+        HStack(spacing: 20) {
+            VStack {
+                AvatarView(image: nil, url: nil, size: 60, name: "Alice", accountType: "primary")
+                Text("Primary (Red)")
+                    .font(.caption)
+            }
+            VStack {
+                AvatarView(image: nil, url: nil, size: 60, name: "Bob", accountType: "alias")
+                Text("Alias (Gray)")
+                    .font(.caption)
+            }
+            VStack {
+                AvatarView(image: nil, url: nil, size: 60, name: "Charlie", accountType: nil)
+                Text("No Type")
+                    .font(.caption)
+            }
+        }
+        HStack(spacing: 20) {
+            AvatarView(image: nil, url: nil, size: 40, name: "S", accountType: "primary")
+            AvatarView(image: nil, url: nil, size: 50, name: "M", accountType: "primary")
+            AvatarView(image: nil, url: nil, size: 70, name: "L", accountType: "primary")
+        }
+    }
+    .padding()
+    .background(Color.black.opacity(0.3))
 }
 
 #Preview("StackedAvatarView - 3 Members") {

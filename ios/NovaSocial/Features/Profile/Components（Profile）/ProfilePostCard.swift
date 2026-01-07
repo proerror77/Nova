@@ -53,7 +53,8 @@ struct ProfilePostCard: View, Equatable {
             authorDisplayName: "Simone Carter",
             authorAvatarUrl: nil,
             location: nil,
-            tags: nil
+            tags: nil,
+            authorAccountType: "primary"
         ),
         username: "Simone Carter",
         avatarUrl: nil,
