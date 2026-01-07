@@ -220,11 +220,10 @@ struct ProfileUserInfoSection: View {
             }
             .padding(.top, layout.professionSpacing)  // ← 单独调整职业栏垂直位置
 
-            // MARK: - 统计数据（Following / Followers / Likes）
-            HStack(spacing: layout.statsItemSpacing) {
+            // MARK: - 统计数据（Following / Followers / Halo）
+            HStack(spacing: 36.w) {
                 // Following - 可点击
                 statsItem(label: "Following", value: "\(followingCount)")
-                    .frame(width: layout.statsItemWidth)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         onFollowingTapped?()
@@ -233,11 +232,10 @@ struct ProfileUserInfoSection: View {
                 // 分隔线
                 Rectangle()
                     .fill(layout.textColor)
-                    .frame(width: layout.statsDividerWidth, height: layout.statsDividerHeight)
+                    .frame(width: 1, height: 24.h)
 
                 // Followers - 可点击
                 statsItem(label: "Followers", value: "\(followersCount)")
-                    .frame(width: layout.statsItemWidth)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         onFollowersTapped?()
@@ -246,13 +244,13 @@ struct ProfileUserInfoSection: View {
                 // 分隔线
                 Rectangle()
                     .fill(layout.textColor)
-                    .frame(width: layout.statsDividerWidth, height: layout.statsDividerHeight)
+                    .frame(width: 1, height: 24.h)
 
-                // Likes
-                statsItem(label: "Likes", value: "\(likesCount)")
-                    .frame(width: layout.statsItemWidth)
+                // Halo
+                statsItem(label: "Halo", value: "\(likesCount)")
             }
-            .padding(.top, layout.statsTopPadding)
+            .padding(.top, 16.h)
+            .padding(.trailing, 27.w)
         }
         .frame(width: layout.containerWidth)
         .padding(.bottom, layout.bottomPadding)
@@ -306,17 +304,17 @@ struct ProfileUserInfoSection: View {
     // MARK: - Stats Item
     // 使用 contentTransition(.numericText()) 实现数字变化动画
     private func statsItem(label: String, value: String) -> some View {
-        VStack(alignment: .center, spacing: 1) {
-            Text(LocalizedStringKey(label))
-                .font(Font.custom("SFProDisplay-Regular", size: layout.statsLabelFontSize))
-                .lineSpacing(19)
-                .foregroundColor(layout.textColor)
-
+        VStack(alignment: .center, spacing: 0) {
+            // 数字在上
             Text(value)
-                .font(Font.custom("SFProDisplay-Regular", size: layout.statsValueFontSize))
-                .lineSpacing(19)
+                .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                 .foregroundColor(layout.textColor)
                 .contentTransition(.numericText())  // iOS 17+ 数字变化动画
+
+            // 标签在下
+            Text(LocalizedStringKey(label))
+                .font(Font.custom("SFProDisplay-Light", size: 14.f))
+                .foregroundColor(layout.textColor)
         }
     }
 }
