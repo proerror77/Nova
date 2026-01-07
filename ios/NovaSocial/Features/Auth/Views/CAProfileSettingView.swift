@@ -576,21 +576,86 @@ struct CAProfileSettingView: View {
         isLoading = true
         errorMessage = nil
 
-        // TODO: Implement profile submission API call
+        let profileService = ProfileSetupService.shared
 
         do {
-            try await Task.sleep(for: .milliseconds(1000))
+            let response: ProfileSetupService.ProfileSetupResponse
 
+            // Determine which flow (email or phone) based on what's verified
+            if let email = authManager.verifiedEmail,
+               let verificationToken = authManager.emailVerificationToken {
+                // Email-based registration
+                response = try await profileService.completeEmailProfileSetup(
+                    email: email,
+                    verificationToken: verificationToken,
+                    username: username,
+                    firstName: firstName.isEmpty ? nil : firstName,
+                    lastName: lastName.isEmpty ? nil : lastName,
+                    dateOfBirth: dateOfBirth,
+                    location: selectedLocation,
+                    avatarImage: selectedImage,
+                    inviteCode: authManager.validatedInviteCode
+                )
+            } else if let phoneNumber = authManager.verifiedPhoneNumber,
+                      let verificationToken = authManager.phoneVerificationToken {
+                // Phone-based registration
+                response = try await profileService.completePhoneProfileSetup(
+                    phoneNumber: phoneNumber,
+                    verificationToken: verificationToken,
+                    username: username,
+                    firstName: firstName.isEmpty ? nil : firstName,
+                    lastName: lastName.isEmpty ? nil : lastName,
+                    dateOfBirth: dateOfBirth,
+                    location: selectedLocation,
+                    avatarImage: selectedImage,
+                    inviteCode: authManager.validatedInviteCode
+                )
+            } else {
+                throw ProfileSetupError.invalidVerificationToken
+            }
+
+            // Save authentication
+            APIClient.shared.setAuthToken(response.token)
+
+            // Update auth manager with new user
             await MainActor.run {
+                authManager.updateCurrentUser(response.user)
+                authManager.isAuthenticated = true
+
+                // Clear verification tokens
+                authManager.emailVerificationToken = nil
+                authManager.verifiedEmail = nil
+                authManager.phoneVerificationToken = nil
+                authManager.verifiedPhoneNumber = nil
+                authManager.validatedInviteCode = nil
+
+                // Navigate to home
                 currentPage = .home
             }
+
+            #if DEBUG
+            print("[CAProfileSettingView] Profile created successfully: \(response.user.id)")
+            #endif
+
+        } catch let error as ProfileSetupError {
+            #if DEBUG
+            print("[CAProfileSettingView] Profile setup error: \(error)")
+            #endif
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+            }
         } catch {
+            #if DEBUG
+            print("[CAProfileSettingView] Unexpected error: \(error)")
+            #endif
             await MainActor.run {
                 errorMessage = "Failed to create profile. Please try again."
             }
         }
 
-        isLoading = false
+        await MainActor.run {
+            isLoading = false
+        }
     }
 }
 
