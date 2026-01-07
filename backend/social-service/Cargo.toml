@@ -22,7 +22,7 @@ tonic.workspace = true
 prost.workspace = true
 prost-types.workspace = true
 tonic-health.workspace = true
-pbjson-types = "0.9"
+pbjson-types = "0.7"
 
 # Database
 sqlx.workspace = true

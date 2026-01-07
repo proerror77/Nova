@@ -21,18 +21,21 @@ impl CommentRepository {
         user_id: Uuid,
         content: String,
         parent_comment_id: Option<Uuid>,
+        author_account_type: Option<&str>,
     ) -> Result<Comment> {
+        let account_type = author_account_type.unwrap_or("primary");
         let comment = sqlx::query_as::<_, Comment>(
             r#"
-            INSERT INTO comments (post_id, user_id, content, parent_comment_id)
-            VALUES ($1, $2, $3, $4)
-            RETURNING id, post_id, user_id, content, parent_comment_id, created_at, updated_at
+            INSERT INTO comments (post_id, user_id, content, parent_comment_id, author_account_type)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id, post_id, user_id, content, parent_comment_id, created_at, updated_at, author_account_type
             "#,
         )
         .bind(post_id)
         .bind(user_id)
         .bind(content)
         .bind(parent_comment_id)
+        .bind(account_type)
         .fetch_one(&self.pool)
         .await?;
 
@@ -52,7 +55,7 @@ impl CommentRepository {
             UPDATE comments
             SET content = $3, updated_at = NOW()
             WHERE id = $1 AND user_id = $2
-            RETURNING id, post_id, user_id, content, parent_comment_id, created_at, updated_at
+            RETURNING id, post_id, user_id, content, parent_comment_id, created_at, updated_at, author_account_type
             "#,
         )
         .bind(comment_id)
@@ -84,7 +87,7 @@ impl CommentRepository {
     pub async fn get_comment(&self, comment_id: Uuid) -> Result<Option<Comment>> {
         let comment = sqlx::query_as::<_, Comment>(
             r#"
-            SELECT id, post_id, user_id, content, parent_comment_id, created_at, updated_at
+            SELECT id, post_id, user_id, content, parent_comment_id, created_at, updated_at, author_account_type
             FROM comments
             WHERE id = $1
             "#,
@@ -117,7 +120,7 @@ impl CommentRepository {
 
         let query = format!(
             r#"
-            SELECT id, post_id, user_id, content, parent_comment_id, created_at, updated_at
+            SELECT id, post_id, user_id, content, parent_comment_id, created_at, updated_at, author_account_type
             FROM comments
             WHERE post_id = $1
             ORDER BY {} {}

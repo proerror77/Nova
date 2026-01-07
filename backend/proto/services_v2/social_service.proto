@@ -285,6 +285,7 @@ message CreateCommentRequest {
   string post_id = 2;
   string content = 3;
   string parent_comment_id = 4;
+  string author_account_type = 5;  // Account type: "primary" or "alias" (Issue #259)
 }
 message CreateCommentResponse { Comment comment = 1; }
 message DeleteCommentRequest { string user_id = 1; string comment_id = 2; }

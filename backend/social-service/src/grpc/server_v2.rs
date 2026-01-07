@@ -492,9 +492,16 @@ impl SocialService for SocialServiceImpl {
             Some(parse_uuid(&req.parent_comment_id, "parent_comment_id")?)
         };
 
+        // Extract account_type from request, default to "primary" for backward compatibility
+        let account_type = if req.author_account_type.is_empty() {
+            None
+        } else {
+            Some(req.author_account_type.as_str())
+        };
+
         let comment = self
             .comment_repo()
-            .create_comment(post_id, user_id, req.content.clone(), parent_comment_id)
+            .create_comment(post_id, user_id, req.content.clone(), parent_comment_id, account_type)
             .await
             .map_err(|e| Status::internal(format!("Failed to create comment: {}", e)))?;
 
@@ -1749,6 +1756,7 @@ fn to_proto_comment(comment: CommentModel) -> Comment {
         created_at: to_ts(comment.created_at),
         like_count: 0,
         is_liked_by_viewer: false,
+        author_account_type: comment.author_account_type.unwrap_or_else(|| "primary".to_string()),
     }
 }
 
@@ -1769,6 +1777,7 @@ fn to_proto_comment_with_engagement(
         created_at: to_ts(comment.created_at),
         like_count,
         is_liked_by_viewer: is_liked,
+        author_account_type: comment.author_account_type.unwrap_or_else(|| "primary".to_string()),
     }
 }
 

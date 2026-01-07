@@ -44,6 +44,7 @@ message CreatePostRequest {
   repeated string media_urls = 3;  // CDN URLs for attached media (images/videos)
   string media_type = 4;           // Type of media: "image", "video", "live_photo", "mixed", "none"
   repeated string channel_ids = 5; // Channel UUIDs or slugs to tag this post with (max 3)
+  string author_account_type = 6;  // Account type: "primary" or "alias" (Issue #259)
 }
 
 message CreatePostResponse {

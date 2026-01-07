@@ -26,6 +26,9 @@ pub struct Post {
     /// compatibility but do not rely on it for filtering – `deleted_at` is the
     /// canonical flag for soft-deletion.
     pub soft_delete: Option<String>,
+    /// Account type used when post was created: "primary" or "alias" (Issue #259)
+    #[sqlx(default)]
+    pub author_account_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

@@ -409,6 +409,9 @@ pub struct CachedFeedPost {
     pub media_type: String,
     #[serde(default)]
     pub thumbnail_urls: Vec<String>,
+    /// Account type when post was created: "primary" or "alias" (Issue #259)
+    #[serde(default)]
+    pub author_account_type: String,
 }
 
 /// Cached post metadata
@@ -481,6 +484,7 @@ mod tests {
                     media_urls: vec![],
                     media_type: String::new(),
                     thumbnail_urls: vec![],
+                    author_account_type: "primary".to_string(),
                 },
                 CachedFeedPost {
                     id: "post-2".to_string(),
@@ -495,6 +499,7 @@ mod tests {
                     media_urls: vec![],
                     media_type: String::new(),
                     thumbnail_urls: vec![],
+                    author_account_type: "alias".to_string(),
                 },
             ],
             cursor: Some("cursor-123".to_string()),

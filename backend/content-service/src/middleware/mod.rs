@@ -28,6 +28,16 @@ use uuid::Uuid;
 #[derive(Debug, Clone)]
 pub struct UserId(pub Uuid);
 
+/// Extracted account type from JWT claims (Issue #259)
+/// Values: "primary" (real name) or "alias" (pseudonym)
+#[derive(Debug, Clone)]
+pub struct AccountType(pub String);
+
+/// Extracted account ID from JWT claims (Issue #259)
+/// Only present when using an alias account
+#[derive(Debug, Clone)]
+pub struct AccountId(pub Option<Uuid>);
+
 /// Actix middleware that validates a Bearer token using shared JWT helpers.
 pub struct JwtAuthMiddleware;
 
@@ -86,7 +96,16 @@ where
             let user_id = Uuid::parse_str(&claims.claims.sub)
                 .map_err(|_| ErrorUnauthorized("Invalid user ID"))?;
 
+            // Extract account_type (default to "primary" for backward compatibility)
+            let account_type = claims.claims.account_type.unwrap_or_else(|| "primary".to_string());
+
+            // Extract account_id if present
+            let account_id = claims.claims.account_id
+                .and_then(|id| Uuid::parse_str(&id).ok());
+
             req.extensions_mut().insert(UserId(user_id));
+            req.extensions_mut().insert(AccountType(account_type));
+            req.extensions_mut().insert(AccountId(account_id));
 
             service.call(req).await
         })
@@ -103,6 +122,34 @@ impl FromRequest for UserId {
                 .get::<UserId>()
                 .cloned()
                 .ok_or_else(|| ErrorUnauthorized("User ID missing")),
+        )
+    }
+}
+
+impl FromRequest for AccountType {
+    type Error = Error;
+    type Future = Ready<Result<Self, Self::Error>>;
+
+    fn from_request(req: &HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
+        ready(
+            req.extensions()
+                .get::<AccountType>()
+                .cloned()
+                .ok_or_else(|| ErrorUnauthorized("Account type missing")),
+        )
+    }
+}
+
+impl FromRequest for AccountId {
+    type Error = Error;
+    type Future = Ready<Result<Self, Self::Error>>;
+
+    fn from_request(req: &HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
+        ready(
+            req.extensions()
+                .get::<AccountId>()
+                .cloned()
+                .ok_or_else(|| ErrorUnauthorized("Account ID missing")),
         )
     }
 }

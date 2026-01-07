@@ -426,7 +426,7 @@ struct PostDetailView: View {
 
                 // User Info (点击头像或用户名跳转用户主页)
                 HStack(spacing: 10) {
-                    AvatarView(image: nil, url: post.authorAvatar, size: 36)
+                    AvatarView(image: nil, url: post.authorAvatar, size: 36, accountType: post.authorAccountType)
                         .onTapGesture {
                             onAvatarTapped?(post.authorId)
                         }
@@ -1002,7 +1002,7 @@ struct SocialCommentItemView: View {
             // Main Comment
             HStack(alignment: .top, spacing: 10) {
                 // Avatar (点击跳转用户主页)
-                AvatarView(image: nil, url: comment.authorAvatarUrl, size: 30)
+                AvatarView(image: nil, url: comment.authorAvatarUrl, size: 30, accountType: comment.authorAccountType)
                     .onTapGesture {
                         onAvatarTapped?(comment.userId)
                     }

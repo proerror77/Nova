@@ -216,6 +216,7 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
                                     thumbnail_urls: post.thumbnail_urls.clone(),
                                     is_liked: like_statuses.get(&post.id).copied().unwrap_or(false),
                                     is_bookmarked: false, // TODO: implement bookmark status
+                                    author_account_type: post.author_account_type.clone(),
                                 }
                             })
                             .collect(),
@@ -355,6 +356,7 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
                         thumbnail_urls: post.thumbnail_urls.clone(),
                         is_liked: like_statuses.get(&post.id).copied().unwrap_or(false),
                         is_bookmarked: false, // TODO: implement bookmark status
+                        author_account_type: post.author_account_type.clone(),
                     }
                 })
                 .collect(),
@@ -715,6 +717,11 @@ impl RecommendationServiceImpl {
                     media_urls,
                     media_type,
                     thumbnail_urls,
+                    author_account_type: if post.author_account_type.is_empty() {
+                        "primary".to_string()
+                    } else {
+                        post.author_account_type
+                    },
                 }
             })
             .collect();
@@ -888,6 +895,11 @@ impl RecommendationServiceImpl {
                     media_urls,
                     media_type,
                     thumbnail_urls,
+                    author_account_type: if post.author_account_type.is_empty() {
+                        "primary".to_string()
+                    } else {
+                        post.author_account_type
+                    },
                 }
             })
             .collect();

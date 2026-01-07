@@ -65,6 +65,7 @@ fn convert_post_to_proto(post: &DbPost) -> Post {
         media_urls,
         media_type: post.media_type.clone(),
         thumbnail_urls: thumbnails,
+        author_account_type: post.author_account_type.clone().unwrap_or_else(|| "primary".to_string()),
     }
 }
 
@@ -154,6 +155,13 @@ impl ContentService for ContentServiceImpl {
             format!("text-content-{}", Uuid::new_v4())
         };
 
+        // Extract account_type from request, default to "primary" for backward compatibility
+        let account_type = if req.author_account_type.is_empty() {
+            "primary"
+        } else {
+            &req.author_account_type
+        };
+
         let post = post_service
             .create_post_with_urls_and_channels(
                 author_id,
@@ -162,6 +170,7 @@ impl ContentService for ContentServiceImpl {
                 &media_type,
                 &req.media_urls,
                 &resolved_channel_ids,
+                Some(account_type),
             )
             .await
             .map_err(|e| {
@@ -266,7 +275,7 @@ impl ContentService for ContentServiceImpl {
         let mut db_posts = Vec::new();
         if !cache_misses.is_empty() {
             db_posts = sqlx::query_as::<_, DbPost>(
-                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete::text AS soft_delete \
+                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete::text AS soft_delete, author_account_type \
                  FROM posts WHERE deleted_at IS NULL AND id = ANY($1::uuid[])",
             )
             .bind(&cache_misses)
@@ -376,6 +385,7 @@ impl ContentService for ContentServiceImpl {
                         media_urls,
                         media_type: post.media_type.clone(),
                         thumbnail_urls,
+                        author_account_type: post.author_account_type.clone().unwrap_or_else(|| "primary".to_string()),
                     }
                 })
             })
@@ -408,7 +418,7 @@ impl ContentService for ContentServiceImpl {
         let (posts, total): (Vec<DbPost>, i64) = if req.status == ContentStatus::Unspecified as i32
         {
             let posts = sqlx::query_as::<_, DbPost>(
-                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete::text AS soft_delete \
+                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete::text AS soft_delete, author_account_type \
                  FROM posts WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT $2 OFFSET $3",
             )
             .bind(user_id)
@@ -437,7 +447,7 @@ impl ContentService for ContentServiceImpl {
             };
 
             let posts = sqlx::query_as::<_, DbPost>(
-                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete::text AS soft_delete \
+                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete::text AS soft_delete, author_account_type \
                  FROM posts WHERE user_id = $1 AND status = $2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT $3 OFFSET $4",
             )
             .bind(user_id)
@@ -942,7 +952,7 @@ impl ContentService for ContentServiceImpl {
             r#"
             SELECT p.id, p.user_id, p.content, p.caption, p.media_key, p.media_type,
                    p.media_urls, p.status, p.created_at, p.updated_at, p.deleted_at,
-                   p.soft_delete::text AS soft_delete
+                   p.soft_delete::text AS soft_delete, p.author_account_type
             FROM posts p
             INNER JOIN likes l ON p.id = l.post_id
             WHERE l.user_id = $1 AND p.deleted_at IS NULL
@@ -1008,7 +1018,7 @@ impl ContentService for ContentServiceImpl {
             r#"
             SELECT p.id, p.user_id, p.content, p.caption, p.media_key, p.media_type,
                    p.media_urls, p.status, p.created_at, p.updated_at, p.deleted_at,
-                   p.soft_delete::text AS soft_delete
+                   p.soft_delete::text AS soft_delete, p.author_account_type
             FROM posts p
             INNER JOIN bookmarks b ON p.id = b.post_id
             WHERE b.user_id = $1 AND p.deleted_at IS NULL

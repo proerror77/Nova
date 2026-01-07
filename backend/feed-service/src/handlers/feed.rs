@@ -455,6 +455,11 @@ async fn fetch_full_posts(
                 author_username,
                 author_display_name,
                 author_avatar,
+                author_account_type: if post.author_account_type.is_empty() {
+                    "primary".to_string()
+                } else {
+                    post.author_account_type.clone()
+                },
             }
         })
         .collect();
