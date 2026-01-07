@@ -244,6 +244,7 @@ struct PostDetailView: View {
     @State private var isPostSaved = false
     @State private var postLikeCount: Int = 0
     @State private var postSaveCount: Int = 0
+    @State private var likeAnimationTrigger = false
 
     // MARK: - Social Actions Handler (reuse same logic as Home feed)
     /// Reuse the same debounce handler as Home feed for consistent behavior
@@ -715,12 +716,16 @@ struct PostDetailView: View {
                             .resizable()
                             .scaledToFit()
                             .frame(width: 20, height: 20)
+                            .scaleEffect(likeAnimationTrigger ? 1.18 : 1.0)
+                            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: likeAnimationTrigger)
                         Text("\(postLikeCount)")
                             .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
                             .monospacedDigit()
                             .contentTransition(.numericText())
+                            .frame(minWidth: 28, alignment: .leading)
+                            .animation(.easeOut(duration: 0.5), value: postLikeCount)
                     }
                     .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPostLiked)
                 }
@@ -847,6 +852,7 @@ struct PostDetailView: View {
     /// Toggle like - synchronous to prevent race conditions from async interleaving
     private func toggleLike() {
         guard let handler = socialActionsHandler else { return }
+        animateLikeIcon()
 
         // Create current post state for handler
         let currentPost = post.copying(
@@ -857,6 +863,17 @@ struct PostDetailView: View {
         )
 
         _ = handler.toggleLike(postId: post.id, currentPost: currentPost)
+    }
+
+    private func animateLikeIcon() {
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+            likeAnimationTrigger = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+                likeAnimationTrigger = false
+            }
+        }
     }
 
     // MARK: - Bookmark Actions (delegate to FeedSocialActionsHandler)

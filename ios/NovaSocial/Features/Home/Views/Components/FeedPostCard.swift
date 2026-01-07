@@ -139,7 +139,7 @@ struct FeedPostCard: View {
                 HStack(spacing: 20) {
                     // Like button
                     Button {
-                        likeAnimationTrigger.toggle()
+                        animateLikeIcon()
                         onLike()
                     } label: {
                         HStack(spacing: 8) {
@@ -147,12 +147,16 @@ struct FeedPostCard: View {
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 20, height: 20)
+                                .scaleEffect(likeAnimationTrigger ? 1.18 : 1.0)
+                                .animation(.spring(response: 0.25, dampingFraction: 0.6), value: likeAnimationTrigger)
                             Text(post.likeCount.abbreviated)
                                 .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                                 .tracking(0.28)
                                 .foregroundColor(.black)
                                 .monospacedDigit()
                                 .contentTransition(.numericText())
+                                .frame(minWidth: 28, alignment: .leading)
+                                .animation(.easeOut(duration: 0.5), value: post.likeCount)
                         }
                         .contentShape(Rectangle())
                         .animation(.spring(response: 0.3, dampingFraction: 0.6), value: post.isLiked)
@@ -472,7 +476,7 @@ struct FeedPostCard: View {
 
         // 如果還沒點讚，執行點讚
         if !post.isLiked {
-            likeAnimationTrigger.toggle()
+            animateLikeIcon()
             onLike()
         }
 
@@ -480,6 +484,17 @@ struct FeedPostCard: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
             withAnimation(.easeOut(duration: 0.2)) {
                 showDoubleTapHeart = false
+            }
+        }
+    }
+
+    private func animateLikeIcon() {
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+            likeAnimationTrigger = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+                likeAnimationTrigger = false
             }
         }
     }
