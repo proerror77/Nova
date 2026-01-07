@@ -97,7 +97,7 @@ struct CreateAccountView: View {
                 }
                 .padding(.leading, 27.w)
 
-                Text("Use Phone number")
+                Text("Use phone number")
                     .font(Font.custom("SFProDisplay-Heavy", size: 16.f))
                     .tracking(0.32)
                     .foregroundColor(.black)

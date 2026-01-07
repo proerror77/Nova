@@ -294,22 +294,22 @@ struct HomeView: View {
 
     var homeContent: some View {
         ZStack(alignment: .bottom) {
-            // 整体内容区域（使用统一的 ignoresSafeArea 避免间隙）
+            // 整体内容区域
             VStack(spacing: 0) {
-                // MARK: - 导航栏内容区域（98pt 高度）
+                // MARK: - 导航栏内容区域
                 ZStack {
-                    // 导航图标 - 左: 搜索, 中: ICERED logo, 右: 通知
-                    // 距离顶部 56pt，距离底部 18pt（与 MessageView title 一致）
-                    VStack {
+                    VStack(spacing: 0) {
+                        // 安全区域留白
                         Spacer()
                             .frame(height: 56.h)
                         
+                        // 内容区域：上下 padding 15，左右 padding 16，图标 24x24
                         HStack {
                             Button(action: { showSearch = true }) {
                                 Image("search(black)")
                                     .resizable()
                                     .scaledToFit()
-                                    .frame(width: 24.s, height: 24.s)
+                                    .frame(width: 22.s, height: 22.s)
                                     .contentShape(Rectangle())
                             }
                             
@@ -327,31 +327,29 @@ struct HomeView: View {
                                 Image("bell")
                                     .resizable()
                                     .scaledToFit()
-                                    .frame(width: 24.s, height: 24.s)
+                                    .frame(width: 22.s, height: 22.s)
                                     .contentShape(Rectangle())
                             }
                         }
-                        .frame(width: 343.w, height: 24.s)
-                        
-                        Spacer()
-                            .frame(height: 18.h)
+                        .padding(EdgeInsets(top: 15.h, leading: 16.w, bottom: 15.h, trailing: 16.w))
                     }
                     
-                    // 顶部分隔线 - 在底部
+                    // 底部分隔线
                     VStack {
                         Spacer()
                         Rectangle()
-                            .fill(DesignTokens.borderColor)
+                            .fill(Color(red: 0.75, green: 0.75, blue: 0.75))
                             .frame(height: 0.5)
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: 98.h)
+                .frame(height: 110.h)
+                .background(.white)
                 
                 // MARK: - Channel 栏（紧贴导航栏底部）
                 channelBar
                     .offset(y: channelBarOffset)
-                    .frame(height: max(0, 30.h + channelBarOffset))
+                    .frame(height: max(0, 37.h + channelBarOffset))
                     .clipped()
 
                 // MARK: - 内容区域（白色背景）
@@ -476,7 +474,7 @@ struct HomeView: View {
                                 // 使用较大阈值 (15pt) 避免与 ScrollView 滚动冲突
                                 if delta < -15 && channelBarOffset == 0 {
                                     withAnimation(.easeOut(duration: 0.15)) {
-                                        channelBarOffset = -30.h  // 隐藏
+                                        channelBarOffset = -37.h  // 隐藏
                                     }
                                 } else if delta > 15 && channelBarOffset < 0 {
                                     withAnimation(.easeOut(duration: 0.15)) {
@@ -488,45 +486,35 @@ struct HomeView: View {
                                 lastDragValue = 0
                             }
                     )
-            }
+                }
             .background(Color.white)
-            .ignoresSafeArea(edges: .top)
 
             // MARK: - 底部导航栏（覆盖在内容上方）
             BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)
         }
-        .ignoresSafeArea(edges: .bottom)
+        .background(Color.white)
+        .ignoresSafeArea(edges: [.top, .bottom])
     }
 
     // MARK: - Channel Bar
     private var channelBar: some View {
-        // Channel 栏 - 响应式布局，保留 tab 切换功能
-        ZStack {
-            // 白色背景
-            Rectangle()
-                .foregroundColor(.clear)
-                .frame(maxWidth: .infinity)
-                .frame(height: 30.h)
-                .background(.white)
-
-            // 可滚动的 Tab 列表
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 20.w) {
-                    ForEach(allTabs) { tab in
-                        Button(action: {
-                            selectTab(tab)
-                        }) {
-                            Text(tab.displayName)
-                                .font(Font.custom("SFProDisplay-Regular", size: 10.f))
-                                .foregroundColor(selectedTab == tab ? .black : Color(red: 0.53, green: 0.53, blue: 0.53))
-                        }
+        // Channel 栏 - 可滚动标签
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 28.w) {
+                ForEach(allTabs) { tab in
+                    Button(action: {
+                        selectTab(tab)
+                    }) {
+                        Text(tab.displayName)
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                            .tracking(0.28)
+                            .foregroundColor(selectedTab == tab ? .black : Color(red: 0.53, green: 0.53, blue: 0.53))
                     }
                 }
-                .padding(.horizontal, 16.w)
             }
+            .padding(EdgeInsets(top: 10.h, leading: 15.w, bottom: 10.h, trailing: 15.w))
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 30.h)
         .background(.white)
     }
 
