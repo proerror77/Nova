@@ -443,7 +443,7 @@ impl PostService {
             FROM posts p
             INNER JOIN bookmarks b ON p.id = b.post_id
             WHERE b.user_id = $1 AND p.deleted_at IS NULL
-            ORDER BY b.created_at DESC
+            ORDER BY b.bookmarked_at DESC
             LIMIT $2 OFFSET $3
             "#,
         )
