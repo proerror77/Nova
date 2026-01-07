@@ -89,7 +89,7 @@ final class NewPostViewModel {
 
     var displayedName: String {
         if selectedNameType == .realName {
-            return authManager?.currentUser?.displayName ?? authManager?.currentUser?.username ?? "User"
+            return authManager?.currentUser?.fullName ?? "User"
         } else {
             return "Dreamer"
         }

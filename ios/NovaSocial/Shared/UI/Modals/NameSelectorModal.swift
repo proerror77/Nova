@@ -78,7 +78,7 @@ struct NameSelectorModal: View {
                             avatarView(isSelected: selectedNameType == .realName)
 
                             VStack(alignment: .leading, spacing: 5) {
-                                Text(authManager.currentUser?.displayName ?? authManager.currentUser?.username ?? "User")
+                                Text(authManager.currentUser?.fullName ?? "User")
                                     .font(Font.custom("SFProDisplay-Bold", size: 19.f))
                                     .foregroundColor(.black)
 

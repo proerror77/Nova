@@ -68,7 +68,7 @@ struct NewChatView: View {
         init(from profile: UserProfile) {
             self.id = profile.id
             self.username = profile.username
-            self.displayName = profile.displayName ?? profile.username
+            self.displayName = profile.fullName
             self.avatarUrl = profile.avatarUrl
         }
 

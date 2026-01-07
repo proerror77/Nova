@@ -17,7 +17,7 @@ struct MyQRCodeView: View {
     }
 
     private var displayName: String {
-        authManager.currentUser?.displayName ?? username
+        authManager.currentUser?.fullName ?? "User"
     }
 
     var body: some View {

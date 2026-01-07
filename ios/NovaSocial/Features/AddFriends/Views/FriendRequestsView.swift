@@ -423,7 +423,7 @@ struct FriendRequestCardView: View {
 
             // User Info
             VStack(alignment: .leading, spacing: 2) {
-                Text(request.user.displayName ?? request.user.username)
+                Text(request.user.fullName)
                     .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                     .foregroundColor(.black)
 

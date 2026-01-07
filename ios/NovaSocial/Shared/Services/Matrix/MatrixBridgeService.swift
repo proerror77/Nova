@@ -714,7 +714,7 @@ final class MatrixBridgeService: @unchecked Sendable {
 
         #if DEBUG
         print("[MatrixBridge] 🔄 Syncing profile to Matrix... (attempt \(attempt)/\(maxAttempts))")
-        print("[MatrixBridge]   Display name: \(currentUser.displayName ?? currentUser.username)")
+        print("[MatrixBridge]   Display name: \(currentUser.fullName)")
         print("[MatrixBridge]   Avatar URL: \(currentUser.avatarUrl ?? "none")")
         #endif
 
@@ -723,7 +723,7 @@ final class MatrixBridgeService: @unchecked Sendable {
         var needsRetry = false
 
         // Sync display name
-        let displayName = currentUser.displayName ?? currentUser.username
+        let displayName = currentUser.fullName
         do {
             try await matrixService.setDisplayName(displayName)
             displayNameSynced = true
@@ -1286,13 +1286,13 @@ extension MatrixBridgeService {
                                         do {
                                             let userProfile = try await UserService.shared.getUser(userId: novaUserId)
                                             if stillNeedsNameEnrichment {
-                                                displayName = userProfile.displayName ?? userProfile.username
+                                                displayName = userProfile.fullName
                                             }
                                             if stillNeedsAvatarEnrichment, let profileAvatar = userProfile.avatarUrl, !profileAvatar.isEmpty {
                                                 avatarURL = profileAvatar
                                             }
                                             #if DEBUG
-                                            print("[MatrixBridge]   ✅ Found user: \(userProfile.displayName ?? userProfile.username)")
+                                            print("[MatrixBridge]   ✅ Found user: \(userProfile.fullName)")
                                             #endif
                                         } catch {
                                             #if DEBUG
@@ -1361,7 +1361,7 @@ extension MatrixBridgeService {
                                 // Try to convert Matrix sender ID to Nova user ID and look up
                                 if let novaUserId = senderNovaId {
                                     if let userProfile = try? await UserService.shared.getUser(userId: novaUserId) {
-                                        displayName = userProfile.displayName ?? userProfile.username
+                                        displayName = userProfile.fullName
                                         if avatarURL == nil || avatarURL?.isEmpty == true {
                                             avatarURL = userProfile.avatarUrl
                                         }

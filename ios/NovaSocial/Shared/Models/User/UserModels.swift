@@ -37,6 +37,14 @@ struct UserProfile: Codable, Identifiable {
     var safeFollowingCount: Int { followingCount ?? 0 }
     var safePostCount: Int { postCount ?? 0 }
 
+    /// Full name for display, with fallback priority: firstName+lastName > username
+    var fullName: String {
+        let first = firstName ?? ""
+        let last = lastName ?? ""
+        let combined = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+        return combined.isEmpty ? username : combined
+    }
+
     // Note: No CodingKeys needed - APIClient uses .convertFromSnakeCase automatically
     // All property names are already in camelCase which matches the automatic conversion
 }

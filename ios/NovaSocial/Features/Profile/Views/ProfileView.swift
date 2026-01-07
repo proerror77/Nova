@@ -129,7 +129,7 @@ struct ProfileView: View {
     private var displayUsername: String {
         switch selectedAccountType {
         case .primary:
-            return displayUser?.displayName ?? displayUser?.username ?? "User"
+            return displayUser?.fullName ?? "User"
         case .alias:
             return "Dreamer"
         }
@@ -562,7 +562,7 @@ struct ProfileView: View {
                             image: avatarManager.pendingAvatar ?? localAvatarImage,
                             url: displayUser?.avatarUrl,
                             size: 100.s,
-                            name: displayUser?.displayName ?? displayUser?.username
+                            name: displayUser?.fullName
                         )
                     }
                     .padding(4.s)
@@ -586,7 +586,7 @@ struct ProfileView: View {
             
             // 用户名 + 位置
             VStack(spacing: 8.h) {
-                Text(displayUser?.displayName ?? displayUser?.username ?? "User")
+                Text(displayUser?.fullName ?? "User")
                     .font(.custom("SFProDisplay-Regular", size: 16.f).weight(.semibold))
                     .foregroundColor(.white)
                 
@@ -730,7 +730,7 @@ struct ProfileView: View {
                                     image: avatarManager.pendingAvatar ?? localAvatarImage,
                                     url: displayUser?.avatarUrl,
                                     size: 100.s,
-                                    name: displayUser?.displayName ?? displayUser?.username
+                                    name: displayUser?.fullName
                                 )
                             }
                             .padding(4.s)
@@ -754,7 +754,7 @@ struct ProfileView: View {
                     
                     // 用户名 + 位置
                     VStack(spacing: 8.h) {
-                        Text(displayUser?.displayName ?? displayUser?.username ?? "User")
+                        Text(displayUser?.fullName ?? "User")
                             .font(.custom("SFProDisplay-Regular", size: 16.f).weight(.semibold))
                             .foregroundColor(.white)
                         
@@ -943,7 +943,7 @@ struct ProfileView: View {
                                 // Saved/Liked tabs: 使用帖子的作者信息（带后备）
                                 let isOwnPost = profileData.selectedTab == .posts
                                 let authorName = isOwnPost
-                                    ? (displayUser?.displayName ?? displayUser?.username ?? "Me")
+                                    ? (displayUser?.fullName ?? "Me")
                                     : post.displayAuthorName
                                 let authorAvatar = isOwnPost
                                     ? displayUser?.avatarUrl
