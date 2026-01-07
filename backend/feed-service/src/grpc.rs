@@ -1408,6 +1408,7 @@ mod tests {
                 thumbnail_urls: vec![],
                 is_liked: post.is_liked,
                 is_bookmarked: post.is_bookmarked,
+                author_account_type: "primary".to_string(),
             };
         }
         let elapsed = start.elapsed();
@@ -1496,6 +1497,7 @@ mod tests {
                 thumbnail_urls: vec![],
                 is_liked: i % 2 == 0,
                 is_bookmarked: i % 3 == 0,
+                author_account_type: "primary".to_string(),
             })
             .collect();
 
