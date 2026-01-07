@@ -114,7 +114,7 @@ struct GmailEnterCodeView: View {
                 .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
                 .foregroundColor(.white)
             
-            Text("An SMS was sent to \(maskedEmail).")
+            Text("A verification code was sent to \(maskedEmail).")
                 .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .tracking(0.28)
                 .foregroundColor(Color(red: 0.75, green: 0.75, blue: 0.75))
@@ -280,11 +280,30 @@ struct GmailEnterCodeView: View {
                 errorMessage = response.message ?? "Verification failed"
                 verificationCode = ""
             }
+        } catch let emailError as EmailAuthError {
+            #if DEBUG
+            print("[GmailEnterCodeView] Verification error: \(emailError)")
+            #endif
+            switch emailError {
+            case .invalidCode:
+                errorMessage = "Invalid code. Please check and try again."
+            case .codeExpired:
+                errorMessage = "Code has expired. Please request a new code."
+            case .rateLimited:
+                errorMessage = "Too many attempts. Please wait before trying again."
+            case .networkError:
+                errorMessage = "Unable to connect. Please check your internet connection."
+            case .serverError(let message):
+                errorMessage = message
+            default:
+                errorMessage = emailError.localizedDescription
+            }
+            verificationCode = ""
         } catch {
             #if DEBUG
-            print("[GmailEnterCodeView] Verification error: \(error)")
+            print("[GmailEnterCodeView] Unexpected error: \(error)")
             #endif
-            errorMessage = "Verification failed. Please try again."
+            errorMessage = "An unexpected error occurred. Please try again."
             verificationCode = ""
         }
         
@@ -308,9 +327,21 @@ struct GmailEnterCodeView: View {
             } else {
                 errorMessage = response.message ?? "Failed to resend code"
             }
+        } catch let emailError as EmailAuthError {
+            #if DEBUG
+            print("[GmailEnterCodeView] Resend error: \(emailError)")
+            #endif
+            switch emailError {
+            case .rateLimited:
+                errorMessage = "Too many attempts. Please wait before trying again."
+            case .networkError:
+                errorMessage = "Unable to connect. Please check your internet connection."
+            default:
+                errorMessage = emailError.localizedDescription
+            }
         } catch {
             #if DEBUG
-            print("[GmailEnterCodeView] Resend error: \(error)")
+            print("[GmailEnterCodeView] Unexpected resend error: \(error)")
             #endif
             errorMessage = "Failed to resend code. Please try again."
         }

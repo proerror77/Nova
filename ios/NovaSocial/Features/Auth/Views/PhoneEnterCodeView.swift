@@ -280,11 +280,30 @@ struct PhoneEnterCodeView: View {
                 errorMessage = response.message ?? "Verification failed"
                 verificationCode = ""
             }
+        } catch let phoneError as PhoneAuthError {
+            #if DEBUG
+            print("[PNEnterCodeView] Verification error: \(phoneError)")
+            #endif
+            switch phoneError {
+            case .invalidCode:
+                errorMessage = "Invalid code. Please check and try again."
+            case .codeExpired:
+                errorMessage = "Code has expired. Please request a new code."
+            case .rateLimited:
+                errorMessage = "Too many attempts. Please wait before trying again."
+            case .networkError:
+                errorMessage = "Unable to connect. Please check your internet connection."
+            case .serverError(let message):
+                errorMessage = message
+            default:
+                errorMessage = phoneError.localizedDescription
+            }
+            verificationCode = ""
         } catch {
             #if DEBUG
-            print("[PNEnterCodeView] Verification error: \(error)")
+            print("[PNEnterCodeView] Unexpected error: \(error)")
             #endif
-            errorMessage = "Verification failed. Please try again."
+            errorMessage = "An unexpected error occurred. Please try again."
             verificationCode = ""
         }
         
@@ -308,9 +327,21 @@ struct PhoneEnterCodeView: View {
             } else {
                 errorMessage = response.message ?? "Failed to resend code"
             }
+        } catch let phoneError as PhoneAuthError {
+            #if DEBUG
+            print("[PNEnterCodeView] Resend error: \(phoneError)")
+            #endif
+            switch phoneError {
+            case .rateLimited:
+                errorMessage = "Too many attempts. Please wait before trying again."
+            case .networkError:
+                errorMessage = "Unable to connect. Please check your internet connection."
+            default:
+                errorMessage = phoneError.localizedDescription
+            }
         } catch {
             #if DEBUG
-            print("[PNEnterCodeView] Resend error: \(error)")
+            print("[PNEnterCodeView] Unexpected resend error: \(error)")
             #endif
             errorMessage = "Failed to resend code. Please try again."
         }

@@ -137,10 +137,33 @@ struct CAProfileSettingView: View {
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoPickerItem, matching: .images)
         .onChange(of: photoPickerItem) { _, newItem in
             Task {
-                if let data = try? await newItem?.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
+                guard let photoItem = newItem else { return }
+
+                do {
+                    guard let data = try await photoItem.loadTransferable(type: Data.self) else {
+                        await MainActor.run {
+                            errorMessage = "Unable to load the selected photo"
+                        }
+                        return
+                    }
+
+                    guard let image = UIImage(data: data) else {
+                        await MainActor.run {
+                            errorMessage = "The selected image format is not supported"
+                        }
+                        return
+                    }
+
                     await MainActor.run {
                         selectedImage = image
+                        errorMessage = nil
+                    }
+                } catch {
+                    #if DEBUG
+                    print("[CAProfileSettingView] Photo loading error: \(error)")
+                    #endif
+                    await MainActor.run {
+                        errorMessage = "Failed to load photo. Please try a different image."
                     }
                 }
             }
