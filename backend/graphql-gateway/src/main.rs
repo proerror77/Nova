@@ -350,6 +350,23 @@ async fn main() -> std::io::Result<()> {
                 "/api/v2/auth/phone/login",
                 web::post().to(rest_api::phone_auth::phone_login),
             )
+            // ✅ Email Authentication API (public endpoints - no auth required)
+            .route(
+                "/api/v2/auth/email/send-code",
+                web::post().to(rest_api::email_auth::send_email_code),
+            )
+            .route(
+                "/api/v2/auth/email/verify",
+                web::post().to(rest_api::email_auth::verify_email_code),
+            )
+            .route(
+                "/api/v2/auth/email/register",
+                web::post().to(rest_api::email_auth::email_register),
+            )
+            .route(
+                "/api/v2/auth/email/login",
+                web::post().to(rest_api::email_auth::email_login),
+            )
             // ✅ OAuth Authentication API (Google, Apple)
             .route(
                 "/api/v2/auth/oauth/google/start",

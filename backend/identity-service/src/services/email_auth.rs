@@ -185,21 +185,16 @@ impl EmailAuthService {
             ));
         }
 
-        // Validate invite code if provided (optional for email OTP)
+        // Note: Invite code validation removed for email OTP
+        // Email OTP can be used without invite codes
+        // If invite code support is needed, uncomment the validation below
+        /*
         if let Some(code) = invite_code {
             if !code.is_empty() {
-                let invite_valid = db::invite_codes::validate_and_consume_code(&self.db, code)
-                    .await
-                    .map_err(|e| {
-                        warn!(code = code, error = %e, "Invalid invite code");
-                        IdentityError::InvalidInviteCode
-                    })?;
-
-                if !invite_valid {
-                    return Err(IdentityError::InvalidInviteCode);
-                }
+                // Validate invite code logic here
             }
         }
+        */
 
         // Check if email already registered
         if db::users::find_by_email(&self.db, email).await?.is_some() {
@@ -220,12 +215,13 @@ impl EmailAuthService {
         let password_hash = hash_password(password)?;
 
         // Create user
+        let display = display_name.unwrap_or(username);
         let user = db::users::create_user(
             &self.db,
             email,
             username,
             &password_hash,
-            display_name.unwrap_or(username),
+            display,
         )
         .await?;
 

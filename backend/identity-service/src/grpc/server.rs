@@ -103,6 +103,7 @@ impl IdentityServiceServer {
             invite_delivery,
             oauth,
             phone_auth,
+            email_auth,
             passkey: std::sync::Arc::new(passkey),
         })
     }
@@ -2045,6 +2046,185 @@ impl AuthService for IdentityServiceServer {
             username: result.username,
         }))
     }
+
+    // ========== Email Authentication (Email OTP) ==========
+
+    /// Send OTP code to email address
+    async fn send_email_code(
+        &self,
+        request: Request<SendEmailCodeRequest>,
+    ) -> std::result::Result<Response<SendEmailCodeResponse>, Status> {
+        let req = request.into_inner();
+
+        // Validate email format
+        if req.email.is_empty() || !req.email.contains('@') {
+            return Err(Status::invalid_argument("Invalid email address format"));
+        }
+
+        // Send verification code via EmailAuthService
+        match self.email_auth.send_code(&req.email).await {
+            Ok(expires_in) => {
+                // Mask email for logging
+                let masked = if let Some(at_pos) = req.email.find('@') {
+                    let local = &req.email[..at_pos];
+                    let domain = &req.email[at_pos..];
+                    if local.len() <= 2 {
+                        format!("**{}", domain)
+                    } else {
+                        format!("{}***{}", &local[..1], domain)
+                    }
+                } else {
+                    "***@***".to_string()
+                };
+                info!(email = %masked, "Email verification code sent");
+
+                Ok(Response::new(SendEmailCodeResponse {
+                    success: true,
+                    message: Some("Verification code sent to your email".to_string()),
+                    expires_in,
+                }))
+            }
+            Err(IdentityError::RateLimited(msg)) => {
+                warn!(email = "masked", error = %msg, "Email code rate limited");
+                Ok(Response::new(SendEmailCodeResponse {
+                    success: false,
+                    message: Some(msg),
+                    expires_in: 0,
+                }))
+            }
+            Err(e) => {
+                error!(error = %e, "Failed to send email verification code");
+                Err(to_status(e))
+            }
+        }
+    }
+
+    /// Verify email OTP code and return verification token
+    async fn verify_email_code(
+        &self,
+        request: Request<VerifyEmailCodeRequest>,
+    ) -> std::result::Result<Response<VerifyEmailCodeResponse>, Status> {
+        let req = request.into_inner();
+
+        // Validate inputs
+        if req.email.is_empty() || req.code.is_empty() {
+            return Err(Status::invalid_argument(
+                "Email and code are required",
+            ));
+        }
+
+        // Verify code via EmailAuthService
+        match self
+            .email_auth
+            .verify_code(&req.email, &req.code)
+            .await
+        {
+            Ok(verification_token) => {
+                info!(email = "masked", "Email verification successful");
+                Ok(Response::new(VerifyEmailCodeResponse {
+                    success: true,
+                    verification_token: Some(verification_token),
+                    message: Some("Email verified successfully".to_string()),
+                }))
+            }
+            Err(IdentityError::Validation(_)) => Ok(Response::new(VerifyEmailCodeResponse {
+                success: false,
+                verification_token: None,
+                message: Some("Invalid or expired verification code".to_string()),
+            })),
+            Err(e) => {
+                error!(error = %e, "Email verification failed");
+                Err(to_status(e))
+            }
+        }
+    }
+
+    /// Register new user with verified email
+    async fn email_register(
+        &self,
+        request: Request<EmailRegisterRequest>,
+    ) -> std::result::Result<Response<EmailRegisterResponse>, Status> {
+        let req = request.into_inner();
+
+        // Validate inputs
+        if req.email.is_empty() || req.verification_token.is_empty() {
+            return Err(Status::invalid_argument(
+                "Email and verification token are required",
+            ));
+        }
+        if req.username.is_empty() || req.password.is_empty() {
+            return Err(Status::invalid_argument(
+                "Username and password are required",
+            ));
+        }
+
+        // Register user via EmailAuthService
+        let result = self
+            .email_auth
+            .register(
+                &req.email,
+                &req.verification_token,
+                &req.username,
+                &req.password,
+                req.display_name.as_deref(),
+                req.invite_code.as_deref(),
+            )
+            .await
+            .map_err(to_status)?;
+
+        info!(
+            user_id = %result.user_id,
+            username = %result.username,
+            "User registered successfully via email OTP"
+        );
+
+        Ok(Response::new(EmailRegisterResponse {
+            user_id: result.user_id.to_string(),
+            token: result.access_token,
+            refresh_token: result.refresh_token,
+            expires_in: result.expires_in,
+            username: result.username,
+            is_new_user: result.is_new_user,
+        }))
+    }
+
+    /// Login with verified email
+    async fn email_login(
+        &self,
+        request: Request<EmailLoginRequest>,
+    ) -> std::result::Result<Response<EmailLoginResponse>, Status> {
+        let req = request.into_inner();
+
+        // Validate inputs
+        if req.email.is_empty() || req.verification_token.is_empty() {
+            return Err(Status::invalid_argument(
+                "Email and verification token are required",
+            ));
+        }
+
+        // Login via EmailAuthService
+        let result = self
+            .email_auth
+            .login(&req.email, &req.verification_token)
+            .await
+            .map_err(to_status)?;
+
+        info!(
+            user_id = %result.user_id,
+            username = %result.username,
+            "User logged in successfully via email OTP"
+        );
+
+        Ok(Response::new(EmailLoginResponse {
+            user_id: result.user_id.to_string(),
+            token: result.access_token,
+            refresh_token: result.refresh_token,
+            expires_in: result.expires_in,
+            username: result.username,
+        }))
+    }
+
+    // ========== Account Management (Multi-account & Alias) ==========
 
     // ========== Account Management (Multi-account & Alias) ==========
 
