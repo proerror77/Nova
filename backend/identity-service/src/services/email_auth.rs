@@ -221,7 +221,7 @@ impl EmailAuthService {
             email,
             username,
             &password_hash,
-            display,
+            Some(display),
         )
         .await?;
 
