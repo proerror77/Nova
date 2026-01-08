@@ -51,7 +51,7 @@ struct CreateAccountView: View {
             // Back Button - Top Left
             VStack {
                 HStack {
-                    Button(action: { currentPage = .inviteCode }) {
+                    Button(action: { currentPage = .login }) {
                         Image("back-white")
                             .resizable()
                             .scaledToFit()
