@@ -158,6 +158,8 @@ patches:
       - op: add
         path: /data/PASSKEY_ORIGIN
         value: "https://aasa.icered.com"
+  # Identity service AWS SNS configuration for Phone OTP
+  - path: identity-service-sns-patch.yaml
 
 # Staging image tags - use full GAR registry path
 images:

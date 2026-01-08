@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nova-backend-config
+  namespace: nova-staging
+data:
+  # AWS SNS Configuration (Phone SMS OTP)
+  # Used by identity-service for phone authentication
+  AWS_REGION: "ap-northeast-1"
+
+  # SNS SMS Type: Transactional (higher priority, better deliverability)
+  # This is set via SDK in the Rust code, not via environment variable
+  # See: backend/identity-service/src/services/phone_auth.rs
