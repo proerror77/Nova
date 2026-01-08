@@ -38,64 +38,83 @@ struct InviteCodeView: View {
                 endPoint: .bottom
             )
 
-            // Content
+            // Content - 响应式垂直布局
+            // 基准设计: iPhone 13 Mini (375 x 812)
+            // 适配: iPhone SE (375 x 667) 到 iPhone 14 Pro Max (430 x 932)
             VStack(spacing: 0) {
-                Spacer().frame(height: 167.h)
+                Spacer().frame(height: 120.h)  // 顶部间距
                 logoSection
-                Spacer().frame(height: 20.h)  // 167 + 52 + 20 = 239
+                Spacer().frame(height: 20.h)
                 titleSection
-                Spacer().frame(height: 30.h)  // 351 - 287 - 34(副标题高度) ≈ 30
+                Spacer().frame(height: 30.h)
                 inviteCodeInput.padding(.horizontal, 37.w)
                 errorMessageView
-                Spacer().frame(height: 24.h)  // 423 - 351 - 48 = 24
-                doneButton.padding(.horizontal, 37.w)
-                Spacer()
+                Spacer().frame(height: 24.h)
+                doneButton  // 按钮有固定宽度 301.w，自动居中
+                Spacer(minLength: 100.h)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Back Button - 左上角
-            VStack {
-                HStack {
+            // Back Button Header - Figma: 375x64, padding 8
+            VStack(spacing: 0) {
+                Spacer().frame(height: 44.h)  // Status bar safe area
+                HStack(spacing: 8.s) {
                     Button(action: {
                         // Clear pending SSO state when going back
                         authManager.clearPendingSSOState()
                         currentPage = .login
                     }) {
-                        Image("back-white")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 24.s, height: 24.s)
+                        ZStack {
+                            Circle()
+                                .fill(Color.clear)
+                                .frame(width: 40.s, height: 40.s)
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 24.f, weight: .medium))
+                                .foregroundColor(.white)
+                                .frame(width: 24.s, height: 24.s)
+                        }
+                        .frame(width: 48.s, height: 48.s)
                     }
-                    .padding(.leading, 16.w)
-                    .padding(.top, 56.h)
                     Spacer()
                 }
+                .padding(8.s)
+                .frame(height: 64.h)
                 Spacer()
             }
 
-            // Bottom Notice - "Don't have an invite?" link
-            VStack {
-                Spacer()
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        showWaitlistForm = true
-                        waitlistError = nil
-                        waitlistSuccess = false
-                    }
-                }) {
-                    HStack(spacing: 6.s) {
-                        Image("NoticeW")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 12.s, height: 12.s)
-                        Text("Don't have an invite? Join the waitlist")
-                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
-                            .tracking(0.24)
-                            .foregroundColor(Color(red: 0.64, green: 0.64, blue: 0.64))
+            // Bottom Notice - "Don't have an invite?" section
+            // Figma: Y位置 = 812 - 308 = 504pt (从顶部算)
+            // 使用绝对定位确保位置精确
+            GeometryReader { geometry in
+                VStack(spacing: 8.h) {
+                    // "Don't have an invite?" link - Figma: semibold, size 14, tracking 0.28
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            showWaitlistForm = true
+                            waitlistError = nil
+                            waitlistSuccess = false
+                        }
+                    }) {
+                        Text("Don't have an invite?")
+                            .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
+                            .tracking(0.28)
+                            .foregroundColor(.white)
                             .underline()
                     }
+
+                    // Waitlist description - Figma: size 14, tracking 0.28, color (0.75, 0.75, 0.75)
+                    HStack(spacing: 6.s) {
+                        Image(systemName: "bell")
+                            .font(.system(size: 14.f))
+                            .foregroundColor(Color(red: 0.75, green: 0.75, blue: 0.75))
+                        Text("Join the waitlist and get notified when access opens.")
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                            .tracking(0.28)
+                            .foregroundColor(Color(red: 0.75, green: 0.75, blue: 0.75))
+                    }
                 }
-                .padding(.bottom, 35.h)
+                .frame(maxWidth: .infinity)
+                .position(x: geometry.size.width / 2, y: geometry.size.height - 308.h)
             }
 
             // Waitlist Email Collection Sheet
@@ -112,12 +131,11 @@ struct InviteCodeView: View {
     // MARK: - Components
 
     private var logoSection: some View {
-        ZStack {
-            Image("Login-Icon")
-                .resizable()
-                .scaledToFit()
-        }
-        .frame(width: 84.w, height: 52.h)
+        // Login-Icon 图片已包含 ICERED 文字
+        Image("Login-Icon")
+            .resizable()
+            .scaledToFit()
+            .frame(width: 84.w, height: 70.h)  // 增加高度以包含图标+文字
     }
 
     private var titleSection: some View {
@@ -126,7 +144,7 @@ struct InviteCodeView: View {
                 .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
                 .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
 
-            Text("lf you have an invite code\nEnter it below.")
+            Text("If you have an invite code\nEnter it below.")
                 .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .tracking(0.28)
                 .multilineTextAlignment(.center)
@@ -142,44 +160,60 @@ struct InviteCodeView: View {
                 .foregroundColor(.clear)
                 .accentColor(.clear)
                 .multilineTextAlignment(.center)
-                .keyboardType(.numberPad)
+                .keyboardType(.default)  // Changed from .numberPad for better Simulator support
+                .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
                 .focused($isInputFocused)
                 .onChange(of: inviteCode) { _, newValue in
-                    // 只允許數字，最多 6 位
-                    let filtered = newValue.filter { $0.isNumber }
+                    // 只允許數字和字母，最多 6 位（支援 ICERED 這樣的字母邀請碼）
+                    let filtered = newValue.filter { $0.isLetter || $0.isNumber }.uppercased()
                     inviteCode = String(filtered.prefix(6))
                 }
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
 
-            // 显示的文字 - 6 位數字邀請碼 (Fix #246: 減少 tracking 和 padding 防止文字截斷)
-            HStack(spacing: 4.s) {
-                Text(inviteCode.isEmpty ? "— — — — — —" : formatInviteCode(inviteCode))
-                    .font(Font.custom("SFProDisplay-Light", size: 20.f))
-                    .tracking(2)
-                    .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
-                    .minimumScaleFactor(0.8)
-                    .lineLimit(1)
+            // 6 个独立的输入框 - 自适应间距
+            // Figma 基准: 6个框 × 40pt + 5个间距 × 10pt = 290pt
+            // 可用宽度: 375 - 37*2 = 301pt
+            GeometryReader { geometry in
+                let boxWidth: CGFloat = 40.s
+                let totalBoxWidth = boxWidth * 6
+                let availableSpacing = geometry.size.width - totalBoxWidth
+                let spacing = max(availableSpacing / 5, 8.s)
+
+                HStack(spacing: spacing) {
+                    ForEach(0..<6, id: \.self) { index in
+                        inviteCodeBox(at: index)
+                    }
+                }
+                .frame(width: geometry.size.width, height: 49.s)
             }
-            .allowsHitTesting(false)
+            .frame(height: 49.s)
         }
-        .padding(EdgeInsets(top: 13.h, leading: 24.w, bottom: 13.h, trailing: 24.w))
-        .frame(width: 300.w, height: 48.h)
-        .background(Color(red: 0.85, green: 0.85, blue: 0.85).opacity(0.25))
-        .cornerRadius(43.s)
-        .overlay(
-            RoundedRectangle(cornerRadius: 43.s)
-                .inset(by: 0.50)
-                .stroke(.white, lineWidth: 0.50)
-        )
         .onTapGesture { isInputFocused = true }
     }
 
-    /// 格式化邀請碼顯示，用空格分隔每個字符
-    private func formatInviteCode(_ code: String) -> String {
-        let chars = Array(code)
-        let dashes = Array(repeating: "—", count: max(0, 6 - chars.count))
-        let combined = chars.map { String($0) } + dashes
-        return combined.joined(separator: " ")
+    /// 单个邀请码输入框 - Figma: 40.14×49, cornerRadius 12, stroke 0.5
+    private func inviteCodeBox(at index: Int) -> some View {
+        let characters = Array(inviteCode)
+        let character = index < characters.count ? String(characters[index]) : ""
+        let isCurrentIndex = index == inviteCode.count && isInputFocused
+
+        return ZStack {
+            // 显示输入的字符
+            Text(character)
+                .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
+                .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
+        }
+        .frame(width: 40.s, height: 49.s)
+        .cornerRadius(12.s)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12.s)
+                .stroke(
+                    isCurrentIndex ? Color.white : Color(red: 0.41, green: 0.41, blue: 0.41),
+                    lineWidth: 0.5
+                )
+        )
     }
 
     @ViewBuilder
@@ -196,22 +230,22 @@ struct InviteCodeView: View {
 
     private var doneButton: some View {
         Button(action: { Task { await validateInviteCode() } }) {
-            HStack(spacing: 8.s) {
+            HStack(spacing: 10.s) {
                 if isLoading {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                        .progressViewStyle(CircularProgressViewStyle(tint: Color(red: 0.03, green: 0.11, blue: 0.21)))
                         .scaleEffect(0.9)
                 }
                 Text("Submit")
-                    .font(Font.custom("SFProDisplay-Heavy", size: 16.f))
-                    .tracking(0.32)
-                    .foregroundColor(.black)
+                    .font(Font.custom("SF Pro Display", size: 16.f).weight(.bold))
+                    .foregroundColor(Color(red: 0.03, green: 0.11, blue: 0.21))
             }
-            .frame(width: 300.w, height: 48.h)
-            .background(Color.white.opacity(isInviteCodeValid ? 1 : 0.5))
-            .cornerRadius(43.s)
+            .frame(width: 301.w, height: 48.h)
+            .background(Color(red: 1, green: 1, blue: 1))
+            .cornerRadius(50.s)
         }
-        .disabled(!isInviteCodeValid || isLoading)
+        .buttonStyle(.plain)
+        .allowsHitTesting(isInviteCodeValid && !isLoading)
     }
 
     // MARK: - Waitlist Components

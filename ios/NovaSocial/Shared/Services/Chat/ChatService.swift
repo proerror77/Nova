@@ -180,53 +180,47 @@ final class ChatService {
         limit: Int = 50,
         cursor: String? = nil
     ) async throws -> GetMessagesResponse {
-        // 優先使用 Matrix SDK
+        // 優先使用 Matrix SDK（Nova 後端只存 metadata + matrix_event_id，REST fallback 不再保證有內容）
         if MatrixBridgeService.shared.isInitialized {
-            do {
-                let matrixMessages = try await MatrixBridgeService.shared.getMessages(
-                    conversationId: conversationId,
-                    limit: limit
-                )
+            let matrixMessages = try await MatrixBridgeService.shared.getMessages(
+                conversationId: conversationId,
+                limit: limit
+            )
 
-                // 轉換 MatrixMessage 到 Message
-                let messages = matrixMessages.map { matrixMsg -> Message in
-                    let msgType: ChatMessageType
-                    switch matrixMsg.type {
-                    case .text: msgType = .text
-                    case .image: msgType = .image
-                    case .video: msgType = .video
-                    case .audio: msgType = .audio
-                    case .file: msgType = .file
-                    case .location: msgType = .location
-                    default: msgType = .text
-                    }
-
-                    return Message(
-                        id: matrixMsg.id,
-                        conversationId: conversationId,
-                        senderId: matrixMsg.senderId,
-                        content: matrixMsg.content,
-                        type: msgType,
-                        createdAt: matrixMsg.timestamp,
-                        status: .delivered,
-                        encryptionVersion: 3  // Matrix E2EE
-                    )
+            // 轉換 MatrixMessage 到 Message
+            let messages = matrixMessages.map { matrixMsg -> Message in
+                let msgType: ChatMessageType
+                switch matrixMsg.type {
+                case .text: msgType = .text
+                case .image: msgType = .image
+                case .video: msgType = .video
+                case .audio: msgType = .audio
+                case .file: msgType = .file
+                case .location: msgType = .location
+                default: msgType = .text
                 }
 
-                #if DEBUG
-                print("[ChatService] ✅ Fetched \(messages.count) messages via Matrix SDK")
-                #endif
-
-                return GetMessagesResponse(
-                    messages: messages,
-                    hasMore: messages.count >= limit,
-                    nextCursor: messages.last?.id
+                return Message(
+                    id: matrixMsg.id,
+                    conversationId: conversationId,
+                    senderId: matrixMsg.senderId,
+                    content: matrixMsg.content,
+                    type: msgType,
+                    createdAt: matrixMsg.timestamp,
+                    status: .delivered,
+                    encryptionVersion: 3  // Matrix E2EE
                 )
-            } catch {
-                #if DEBUG
-                print("[ChatService] Matrix getMessages failed, falling back to REST API: \(error)")
-                #endif
             }
+
+            #if DEBUG
+            print("[ChatService] ✅ Fetched \(messages.count) messages via Matrix SDK")
+            #endif
+
+            return GetMessagesResponse(
+                messages: messages,
+                hasMore: messages.count >= limit,
+                nextCursor: messages.last?.id
+            )
         }
 
         // Fallback: REST API
@@ -1522,4 +1516,3 @@ final class ChatService {
         // If needed, call disconnectWebSocket() explicitly before releasing ChatService
     }
 }
-

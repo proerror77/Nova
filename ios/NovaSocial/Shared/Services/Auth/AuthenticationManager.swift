@@ -16,6 +16,29 @@ class AuthenticationManager: ObservableObject, @unchecked Sendable {
     /// Validated invite code stored after successful validation in InviteCodeView
     /// Used by CreateAccountEmailView for registration
     @Published var validatedInviteCode: String?
+    
+    /// Phone verification token from successful OTP verification
+    /// Used by ProfileSetupView for phone-based registration
+    @Published var phoneVerificationToken: String?
+
+    /// Verified phone number (with country code) from phone registration flow
+    @Published var verifiedPhoneNumber: String?
+
+    /// Email verification token from successful OTP verification
+    /// Used by ProfileSetupView for email-based registration
+    @Published var emailVerificationToken: String?
+
+    /// Verified email address from email registration flow
+    @Published var verifiedEmail: String?
+
+    /// Timestamp when phone verification token was received
+    @Published var phoneVerificationTokenTimestamp: Date?
+
+    /// Timestamp when email verification token was received
+    @Published var emailVerificationTokenTimestamp: Date?
+
+    /// Verification token expiration time (10 minutes)
+    private let verificationTokenExpirationSeconds: TimeInterval = 10 * 60
 
     private let identityService = IdentityService()
     private let keychain = KeychainService.shared
@@ -863,6 +886,78 @@ class AuthenticationManager: ObservableObject, @unchecked Sendable {
         }
 
         return isAuthenticated
+    }
+
+    // MARK: - Verification Token Management
+
+    /// Set phone verification token with timestamp
+    func setPhoneVerificationToken(_ token: String, phoneNumber: String) {
+        phoneVerificationToken = token
+        verifiedPhoneNumber = phoneNumber
+        phoneVerificationTokenTimestamp = Date()
+        #if DEBUG
+        print("[Auth] Phone verification token set at \(Date())")
+        #endif
+    }
+
+    /// Set email verification token with timestamp
+    func setEmailVerificationToken(_ token: String, email: String) {
+        emailVerificationToken = token
+        verifiedEmail = email
+        emailVerificationTokenTimestamp = Date()
+        #if DEBUG
+        print("[Auth] Email verification token set at \(Date())")
+        #endif
+    }
+
+    /// Check if phone verification token is valid (exists and not expired)
+    var isPhoneVerificationTokenValid: Bool {
+        guard phoneVerificationToken != nil,
+              let timestamp = phoneVerificationTokenTimestamp else {
+            return false
+        }
+        let elapsed = Date().timeIntervalSince(timestamp)
+        let isValid = elapsed < verificationTokenExpirationSeconds
+        #if DEBUG
+        if !isValid && phoneVerificationToken != nil {
+            print("[Auth] Phone verification token expired (elapsed: \(Int(elapsed))s)")
+        }
+        #endif
+        return isValid
+    }
+
+    /// Check if email verification token is valid (exists and not expired)
+    var isEmailVerificationTokenValid: Bool {
+        guard emailVerificationToken != nil,
+              let timestamp = emailVerificationTokenTimestamp else {
+            return false
+        }
+        let elapsed = Date().timeIntervalSince(timestamp)
+        let isValid = elapsed < verificationTokenExpirationSeconds
+        #if DEBUG
+        if !isValid && emailVerificationToken != nil {
+            print("[Auth] Email verification token expired (elapsed: \(Int(elapsed))s)")
+        }
+        #endif
+        return isValid
+    }
+
+    /// Check if any valid verification token exists for profile setup
+    var hasValidVerificationToken: Bool {
+        isPhoneVerificationTokenValid || isEmailVerificationTokenValid
+    }
+
+    /// Clear all verification tokens
+    func clearVerificationTokens() {
+        phoneVerificationToken = nil
+        verifiedPhoneNumber = nil
+        phoneVerificationTokenTimestamp = nil
+        emailVerificationToken = nil
+        verifiedEmail = nil
+        emailVerificationTokenTimestamp = nil
+        #if DEBUG
+        print("[Auth] Verification tokens cleared")
+        #endif
     }
 
     // MARK: - Private Helpers

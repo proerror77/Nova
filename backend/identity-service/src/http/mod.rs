@@ -36,7 +36,7 @@ pub fn build_router(state: HttpServerState) -> Router {
     Router::new()
         .route("/health", get(health_check))
         .route(
-            "/internal/zitadel/user-claims/:user_id",
+            "/internal/zitadel/user-claims/{user_id}",
             get(zitadel::get_user_claims),
         )
         .layer(middleware::from_fn_with_state(

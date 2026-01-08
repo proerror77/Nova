@@ -41,3 +41,6 @@ fastlane/AuthKey*.p8
 *.dSYM.zip
 *.app.dSYM.zip
 fastlane/api_key.json
+
+# Serena MCP server cache
+.serena/

@@ -437,6 +437,13 @@ class APIClient {
         case 200...299:
             return data
         case 401:
+            // IMPORTANT: Never attempt token refresh when the refresh request itself fails.
+            // Otherwise APIClient will call AuthenticationManager.attemptTokenRefresh(), which calls IdentityService.refreshToken(),
+            // which will hit this same 401 path again and can deadlock by awaiting the in-flight refreshTask.
+            if let path = request.url?.path, path.hasSuffix(APIConfig.Auth.refresh) {
+                throw APIError.unauthorized
+            }
+
             // Parse error response for more details
             let errorBody = String(data: data, encoding: .utf8) ?? "No body"
             

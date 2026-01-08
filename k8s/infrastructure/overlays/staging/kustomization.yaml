@@ -218,6 +218,46 @@ patches:
 
     version: v1
 - patch: |-
+    - op: add
+      path: /spec/template/spec/initContainers
+      value:
+        - name: realtime-chat-db-index
+          image: postgres:15-alpine
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nova-db-credentials
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nova-db-credentials
+                  key: DB_PASSWORD
+            - name: DB_NAME
+              value: nova_realtime_chat
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              echo "🛠️  Ensuring ux_messages_matrix_event_id exists..."
+              for i in $(seq 1 60); do
+                if PGPASSWORD="$DB_PASSWORD" pg_isready -h postgres -p 5432 -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1; then
+                  break
+                fi
+                echo "waiting for postgres..."
+                sleep 2
+              done
+              PGPASSWORD="$DB_PASSWORD" psql -h postgres -p 5432 -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -c "CREATE UNIQUE INDEX IF NOT EXISTS ux_messages_matrix_event_id ON messages(matrix_event_id) WHERE matrix_event_id IS NOT NULL;"
+              echo "✓ realtime-chat DB index ensured"
+  target:
+    group: apps
+    kind: Deployment
+    name: realtime-chat-service
+
+    version: v1
+- patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always

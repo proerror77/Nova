@@ -87,6 +87,7 @@ message SendMessageResponse {
   string message_id = 1;
   int64 timestamp = 2;
   string status = 3;
+  Message message = 4; // Optional full message payload (backward compatible)
 }
 
 message GetConversationRequest {
@@ -102,6 +103,7 @@ message GetMessageHistoryRequest {
   string conversation_id = 1;
   int32 limit = 2;
   string before_message_id = 3;
+  string user_id = 4; // Required for membership validation (gateway should inject)
 }
 
 message GetMessageHistoryResponse {
@@ -202,6 +204,14 @@ message Message {
   string encrypted_content = 11;
   string ephemeral_public_key = 12;
   string reply_to_message_id = 13;
+  int64 sequence_number = 14; // Monotonic per-conversation ordering
+  int64 edited_at = 15;       // 0 if not edited
+  int64 deleted_at = 16;      // 0 if not deleted
+  int64 recalled_at = 17;     // 0 if not recalled
+  int32 version_number = 18;  // Optimistic locking for edits
+  int32 reaction_count = 19;
+  string idempotency_key = 20;
+  string matrix_event_id = 21; // Matrix event ID (content lives in Matrix)
 }
 
 message Conversation {

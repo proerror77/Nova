@@ -723,7 +723,7 @@ struct FeedPost: Identifiable, Codable, Equatable {
 
         #if DEBUG
         // Always log every post creation to trace ID flow
-        print("[Feed] Created post \(raw.id.prefix(8)): mediaUrls=\(raw.mediaUrls?.count ?? -1), isLiked=\(raw.isLiked?.description ?? "nil")/\(raw.likeCount ?? 0)")
+        print("[Feed] Created post \(raw.id.prefix(8)): mediaUrls=\(raw.mediaUrls?.count ?? -1), isLiked=\(raw.isLiked?.description ?? "nil")/\(raw.likeCount ?? 0), authorAccountType=\(raw.authorAccountType ?? "NIL")")
         #endif
         self.thumbnailUrls = raw.thumbnailUrls ?? self.mediaUrls
         // Determine media type from backend or infer from URLs

@@ -52,8 +52,7 @@ pub struct Bookmark {
     pub id: Uuid,
     pub user_id: Uuid,
     pub post_id: Uuid,
-    #[sqlx(rename = "created_at")]
-    pub bookmarked_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
     #[sqlx(skip)]
     pub collection_id: Option<Uuid>,
 }

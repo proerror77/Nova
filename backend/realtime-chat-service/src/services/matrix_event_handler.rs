@@ -6,6 +6,7 @@ use crate::redis_client::RedisClient;
 use crate::websocket::events::{broadcast_event, WebSocketEvent};
 use crate::websocket::ConnectionRegistry;
 use deadpool_postgres::Pool;
+use matrix_sdk::ruma::events::room::encrypted::SyncRoomEncryptedEvent;
 use matrix_sdk::ruma::events::room::message::{
     MessageType, RoomMessageEventContent, SyncRoomMessageEvent,
 };
@@ -101,23 +102,13 @@ pub async fn handle_matrix_message_event(
         return Ok(());
     }
 
-    // 4. Extract message content based on message type
-    let content_text = match original_event.content.msgtype {
-        MessageType::Text(text_content) => text_content.body,
-        MessageType::Audio(audio_content) => {
-            // For audio messages, we'd need to download from Matrix and upload to our storage
-            // For now, just store the Matrix URL/reference
-            format!("[Audio message: {}]", audio_content.body)
-        }
-        MessageType::Image(image_content) => {
-            format!("[Image: {}]", image_content.body)
-        }
-        MessageType::File(file_content) => {
-            format!("[File: {}]", file_content.body)
-        }
-        MessageType::Video(video_content) => {
-            format!("[Video: {}]", video_content.body)
-        }
+    // 4. Validate message type (we still persist metadata-only for supported message types)
+    match original_event.content.msgtype {
+        MessageType::Text(_)
+        | MessageType::Audio(_)
+        | MessageType::Image(_)
+        | MessageType::File(_)
+        | MessageType::Video(_) => {}
         _ => {
             debug!(
                 event_id = %event_id,
@@ -125,22 +116,21 @@ pub async fn handle_matrix_message_event(
             );
             return Ok(());
         }
-    };
+    }
 
-    // 5. Insert message into our DB
-    // Use send_message_db to maintain consistency, but skip Matrix send
-    let message = crate::services::message_service::MessageService::send_message_db(
+    // 5. Persist metadata-only row in Nova DB with matrix_event_id (atomic)
+    let message = crate::services::message_service::MessageService::store_matrix_message_metadata_db(
         db,
-        &crate::services::encryption::EncryptionService::new([0u8; 32]), // Placeholder - won't encrypt
         conversation_id,
         user_id,
-        content_text.as_bytes(),
-        None, // No idempotency key
+        event_id.as_str(),
     )
     .await?;
 
-    // 6. Update message with Matrix event_id to link them
-    super::matrix_db::update_message_matrix_event_id(db, message.id, event_id.as_str()).await?;
+    let Some(message) = message else {
+        debug!(event_id = %event_id, "Message already exists (by matrix_event_id), skipping");
+        return Ok(());
+    };
 
     info!(
         message_id = %message.id,
@@ -162,6 +152,109 @@ pub async fn handle_matrix_message_event(
             error = %e,
             message_id = %message.id,
             "Failed to broadcast Matrix message via WebSocket"
+        );
+    }
+
+    Ok(())
+}
+
+/// Handle incoming Matrix encrypted events (m.room.encrypted)
+///
+/// This persists **metadata-only** using `matrix_event_id` even when the service user cannot
+/// decrypt the message content (E2EE rooms).
+pub async fn handle_matrix_encrypted_event(
+    db: &Pool,
+    registry: &Arc<ConnectionRegistry>,
+    redis: &Arc<RedisClient>,
+    matrix_first: bool,
+    room: Room,
+    event: SyncRoomEncryptedEvent,
+) -> Result<(), AppError> {
+    let original_event = match event {
+        SyncRoomEncryptedEvent::Original(ev) => ev,
+        SyncRoomEncryptedEvent::Redacted(_) => return Ok(()),
+    };
+
+    let room_id = room.room_id();
+    let sender = &original_event.sender;
+    let event_id = &original_event.event_id;
+
+    debug!(
+        room_id = %room_id,
+        sender = %sender,
+        event_id = %event_id,
+        "Received Matrix encrypted event"
+    );
+
+    if matrix_first {
+        debug!(
+            room_id = %room_id,
+            sender = %sender,
+            event_id = %event_id,
+            "Matrix-first mode enabled; skipping Nova DB persistence and WebSocket broadcast"
+        );
+        return Ok(());
+    }
+
+    // 1. Look up conversation_id from Matrix room_id
+    let conversation_id =
+        match super::matrix_db::lookup_conversation_by_room_id(db, room_id.as_str()).await? {
+            Some(id) => id,
+            None => {
+                warn!(
+                    room_id = %room_id,
+                    "Received encrypted event for unknown Matrix room, ignoring"
+                );
+                return Ok(());
+            }
+        };
+
+    // 2. Extract Nova user_id from Matrix user_id
+    let user_id = match extract_user_id_from_matrix(sender) {
+        Some(id) => id,
+        None => {
+            warn!(
+                sender = %sender,
+                "Failed to extract Nova user_id from Matrix sender (encrypted), ignoring"
+            );
+            return Ok(());
+        }
+    };
+
+    // 3. Persist metadata-only row in Nova DB with matrix_event_id (atomic + dedup via unique index)
+    let message = crate::services::message_service::MessageService::store_matrix_message_metadata_db(
+        db,
+        conversation_id,
+        user_id,
+        event_id.as_str(),
+    )
+    .await?;
+
+    let Some(message) = message else {
+        debug!(event_id = %event_id, "Encrypted event already exists (by matrix_event_id), skipping");
+        return Ok(());
+    };
+
+    info!(
+        message_id = %message.id,
+        conversation_id = %conversation_id,
+        event_id = %event_id,
+        "Matrix encrypted event saved to DB (metadata-only)"
+    );
+
+    // 4. Broadcast to WebSocket clients (no content; clients fetch from Matrix)
+    let ws_event = WebSocketEvent::MessageNew {
+        id: message.id,
+        sender_id: user_id,
+        sequence_number: message.sequence_number,
+        conversation_id,
+    };
+
+    if let Err(e) = broadcast_event(registry, redis, conversation_id, user_id, ws_event).await {
+        error!(
+            error = %e,
+            message_id = %message.id,
+            "Failed to broadcast Matrix encrypted event via WebSocket"
         );
     }
 

@@ -369,6 +369,7 @@ pub async fn create_post(
             }
         }),
         channel_ids,
+        author_account_type: String::new(), // Default to primary (Issue #259)
     });
 
     // Retry config for transient failures (503 Service Unavailable)

@@ -9,6 +9,7 @@
 /// - Invite delivery (SMS via AWS SNS, Email, Dynamic Links)
 /// - Phone authentication (SMS OTP via AWS SNS)
 pub mod email;
+pub mod email_auth;
 pub mod invite_delivery;
 pub mod kafka_events;
 pub mod oauth;
@@ -19,6 +20,7 @@ pub mod two_fa;
 pub mod zitadel;
 
 pub use email::EmailService;
+pub use email_auth::{EmailAuthService, EmailLoginResult, EmailRegisterResult};
 pub use invite_delivery::{InviteDeliveryConfig, InviteDeliveryService, SendInviteResult};
 pub use kafka_events::KafkaEventProducer;
 pub use oauth::{OAuthAuthorizationUrl, OAuthCallbackResult, OAuthProvider, OAuthService};

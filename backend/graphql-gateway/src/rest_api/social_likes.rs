@@ -195,6 +195,7 @@ pub async fn create_comment(
         post_id: b.post_id,
         content: b.content,
         parent_comment_id: b.parent_comment_id.unwrap_or_default(),
+        author_account_type: String::new(), // Default to primary (Issue #259)
     };
     match clients
         .call_social(|| {

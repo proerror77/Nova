@@ -888,11 +888,9 @@ struct UserRowView: View {
     }
 
     private var defaultAvatar: some View {
-        Ellipse()
-            .foregroundColor(.clear)
+        Circle()
+            .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.5))
             .frame(width: 50.s, height: 50.s)
-            .background(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.5))
-            .clipShape(Circle())
     }
 }
 

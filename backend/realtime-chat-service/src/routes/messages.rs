@@ -74,7 +74,8 @@ pub async fn send_message(
         let db = state.db.clone();
         let sender_id = user.id;
         let message_id = message.id;
-        let message_preview = body.plaintext.clone();
+        // Matrix-first architecture: do not include message content in notifications from Nova DB.
+        let message_preview = String::new();
 
         tokio::spawn(async move {
             // Get all conversation participants except sender

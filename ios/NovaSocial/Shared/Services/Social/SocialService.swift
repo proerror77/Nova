@@ -73,8 +73,9 @@ class SocialService {
         }
 
         let response: Response = try await client.get(
-            endpoint: APIConfig.Social.getLikes(postId),
+            endpoint: APIConfig.Social.getLikes,
             queryParams: [
+                "post_id": postId,
                 "limit": String(limit),
                 "offset": String(offset)
             ]
@@ -89,7 +90,10 @@ class SocialService {
         }
 
         let response: Response = try await client.get(
-            endpoint: APIConfig.Social.checkLiked(postId)
+            endpoint: APIConfig.Social.checkLiked,
+            queryParams: [
+                "post_id": postId
+            ]
         )
 
         return response.liked

@@ -215,7 +215,8 @@ fn test_extract_claims_from_valid_token() {
     let email = "user@example.com";
     let username = "john_doe";
 
-    let token = generate_access_token(user_id, email, username, None, None).expect("Failed to generate token");
+    let token = generate_access_token(user_id, email, username, None, None)
+        .expect("Failed to generate token");
 
     let token_data = validate_token(&token).expect("Failed to validate token");
 
@@ -232,10 +233,10 @@ fn test_refresh_token_has_longer_expiry() {
     let email = "test@example.com";
     let username = "testuser";
 
-    let access =
-        generate_access_token(user_id, email, username, None, None).expect("Failed to generate access token");
-    let refresh =
-        generate_refresh_token(user_id, email, username, None, None).expect("Failed to generate refresh token");
+    let access = generate_access_token(user_id, email, username, None, None)
+        .expect("Failed to generate access token");
+    let refresh = generate_refresh_token(user_id, email, username, None, None)
+        .expect("Failed to generate refresh token");
 
     let access_claims = validate_token(&access).unwrap().claims;
     let refresh_claims = validate_token(&refresh).unwrap().claims;
@@ -283,8 +284,8 @@ fn test_complete_token_lifecycle() {
     let username = "integration_user";
 
     // 1. Generate token pair
-    let token_pair =
-        generate_token_pair(user_id, email, username, None, None).expect("Failed to generate token pair");
+    let token_pair = generate_token_pair(user_id, email, username, None, None)
+        .expect("Failed to generate token pair");
 
     // 2. Validate access token
     let access_data =

@@ -21,6 +21,7 @@ pub struct Message {
     pub reaction_count: i32,
     pub version_number: i32,
     pub recalled_at: Option<DateTime<Utc>>,
+    pub matrix_event_id: Option<String>,
 }
 
 /// Envelope used for realtime fanout and Redis Streams persistence.

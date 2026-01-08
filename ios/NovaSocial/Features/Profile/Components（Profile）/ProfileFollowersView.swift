@@ -799,3 +799,73 @@ struct FollowerRow: View {
         .environmentObject(AuthenticationManager.shared)
         .preferredColorScheme(.dark)
 }
+
+// MARK: - Mock Data Previews
+
+#Preview("FollowerRow - With Users") {
+    let mockUsers = [
+        FollowerUser(id: "1", name: "Alice Chen", avatarUrl: nil, isVerified: true, isFollowingYou: true, youAreFollowing: true),
+        FollowerUser(id: "2", name: "Bob Smith", avatarUrl: nil, isVerified: false, isFollowingYou: true, youAreFollowing: false),
+        FollowerUser(id: "3", name: "Charlie Wang", avatarUrl: nil, isVerified: true, isFollowingYou: false, youAreFollowing: true),
+        FollowerUser(id: "4", name: "Diana Lee", avatarUrl: nil, isVerified: false, isFollowingYou: false, youAreFollowing: false),
+    ]
+    
+    ScrollView {
+        VStack(spacing: 0) {
+            ForEach(mockUsers) { user in
+                let buttonType: FollowerRow.ButtonType = {
+                    if user.youAreFollowing && user.isFollowingYou {
+                        return .friend
+                    } else if user.youAreFollowing {
+                        return .following
+                    } else if user.isFollowingYou {
+                        return .followBack
+                    } else {
+                        return .follow
+                    }
+                }()
+                
+                FollowerRow(
+                    user: user,
+                    buttonType: buttonType,
+                    onFollowTapped: {}
+                )
+                
+                Divider()
+                    .padding(.leading, 79)
+            }
+        }
+    }
+    .background(Color.white)
+}
+
+#Preview("FollowerRow - Button States") {
+    VStack(spacing: 16) {
+        Text("Button States").font(.headline).padding(.top)
+        
+        FollowerRow(
+            user: FollowerUser(id: "1", name: "Friend User", isVerified: true, isFollowingYou: true, youAreFollowing: true),
+            buttonType: .friend,
+            onFollowTapped: {}
+        )
+        
+        FollowerRow(
+            user: FollowerUser(id: "2", name: "Following User", isVerified: false, isFollowingYou: false, youAreFollowing: true),
+            buttonType: .following,
+            onFollowTapped: {}
+        )
+        
+        FollowerRow(
+            user: FollowerUser(id: "3", name: "Follow Back User", isVerified: true, isFollowingYou: true, youAreFollowing: false),
+            buttonType: .followBack,
+            onFollowTapped: {}
+        )
+        
+        FollowerRow(
+            user: FollowerUser(id: "4", name: "New User", isVerified: false, isFollowingYou: false, youAreFollowing: false),
+            buttonType: .follow,
+            onFollowTapped: {}
+        )
+    }
+    .background(Color.white)
+}

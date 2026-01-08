@@ -88,8 +88,8 @@ struct APIConfig {
     struct Social {
         static let createLike = "/api/v2/social/like"
         static func deleteLike(_ postId: String) -> String { "/api/v2/social/unlike/\(postId)" }
-        static func getLikes(_ postId: String) -> String { "/api/v2/social/likes/\(postId)" }
-        static func checkLiked(_ postId: String) -> String { "/api/v2/social/check-liked/\(postId)" }
+        static let getLikes = "/api/v2/social/likes"
+        static let checkLiked = "/api/v2/social/check-liked"
         /// POST /api/v2/social/batch-check-liked - 批量檢查帖子點讚狀態（修復刷新後狀態不一致）
         static let batchCheckLiked = "/api/v2/social/batch-check-liked"
         /// GET /api/v2/social/users/{user_id}/liked-posts 獲取用戶點讚的帖子

@@ -133,13 +133,15 @@ class PhoneAuthService {
     ///   - username: Desired username
     ///   - password: Password for the account
     ///   - displayName: Optional display name
+    ///   - inviteCode: Required invite code for registration
     /// - Returns: Registration response with auth tokens
     func registerWithPhone(
         phoneNumber: String,
         verificationToken: String,
         username: String,
         password: String,
-        displayName: String? = nil
+        displayName: String? = nil,
+        inviteCode: String? = nil
     ) async throws -> PhoneRegisterResponse {
         let url = URL(string: "\(APIConfig.current.baseURL)/api/v2/auth/phone/register")!
         var request = URLRequest(url: url)
@@ -155,6 +157,10 @@ class PhoneAuthService {
 
         if let displayName = displayName, !displayName.isEmpty {
             body["display_name"] = displayName
+        }
+
+        if let inviteCode = inviteCode, !inviteCode.isEmpty {
+            body["invite_code"] = inviteCode
         }
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -231,6 +237,7 @@ enum PhoneAuthError: LocalizedError {
     case loginFailed
     case phoneAlreadyRegistered
     case phoneNotRegistered
+    case invalidPhoneNumber
     case rateLimited
     case networkError(String)
     case serverError(String)
@@ -253,6 +260,8 @@ enum PhoneAuthError: LocalizedError {
             return "This phone number is already registered"
         case .phoneNotRegistered:
             return "No account found with this phone number"
+        case .invalidPhoneNumber:
+            return "Invalid phone number"
         case .rateLimited:
             return "Too many attempts. Please try again later"
         case .networkError(let message):

@@ -754,6 +754,66 @@ message PhoneLoginResponse {
 }
 
 // ============================================================================
+// Email Authentication (Email OTP)
+// ============================================================================
+
+// Request to send email verification code
+message SendEmailCodeRequest {
+  string email = 1;  // Email address to send verification code to
+}
+
+message SendEmailCodeResponse {
+  bool success = 1;
+  optional string message = 2;
+  int32 expires_in = 3;  // Seconds until code expires (default: 300)
+}
+
+// Request to verify email code
+message VerifyEmailCodeRequest {
+  string email = 1;  // Email address
+  string code = 2;   // 6-digit verification code
+}
+
+message VerifyEmailCodeResponse {
+  bool success = 1;
+  optional string verification_token = 2;  // Token to use for registration/login
+  optional string message = 3;
+}
+
+// Request to register with verified email
+message EmailRegisterRequest {
+  string email = 1;               // Verified email
+  string verification_token = 2;  // Token from VerifyEmailCodeResponse
+  string username = 3;            // Desired username
+  string password = 4;            // Account password
+  optional string display_name = 5;
+  optional string invite_code = 6;  // Optional invite code
+}
+
+message EmailRegisterResponse {
+  string user_id = 1;
+  string token = 2;
+  string refresh_token = 3;
+  int64 expires_in = 4;
+  string username = 5;
+  bool is_new_user = 6;
+}
+
+// Request to login with verified email
+message EmailLoginRequest {
+  string email = 1;               // Email address
+  string verification_token = 2;  // Token from VerifyEmailCodeResponse
+}
+
+message EmailLoginResponse {
+  string user_id = 1;
+  string token = 2;
+  string refresh_token = 3;
+  int64 expires_in = 4;
+  string username = 5;
+}
+
+// ============================================================================
 // Password Reset
 // ============================================================================
 
@@ -1109,6 +1169,39 @@ service AuthService {
   rpc PhoneLogin(PhoneLoginRequest) returns (PhoneLoginResponse) {
     option (google.api.http) = {
       post: "/api/v2/auth/phone/login"
+      body: "*"
+    };
+  }
+
+  // ========== Email Authentication (Email OTP) ==========
+  // Send verification code to email (public - no auth required)
+  rpc SendEmailCode(SendEmailCodeRequest) returns (SendEmailCodeResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/email/send-code"
+      body: "*"
+    };
+  }
+
+  // Verify email code (public - no auth required)
+  rpc VerifyEmailCode(VerifyEmailCodeRequest) returns (VerifyEmailCodeResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/email/verify"
+      body: "*"
+    };
+  }
+
+  // Register new user with verified email (public - no auth required)
+  rpc EmailRegister(EmailRegisterRequest) returns (EmailRegisterResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/email/register"
+      body: "*"
+    };
+  }
+
+  // Login with verified email (public - no auth required)
+  rpc EmailLogin(EmailLoginRequest) returns (EmailLoginResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/email/login"
       body: "*"
     };
   }

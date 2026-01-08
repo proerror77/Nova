@@ -119,6 +119,24 @@ class SearchService {
         }
     }
 
+    /// Search for posts containing a specific hashtag
+    /// - Parameters:
+    ///   - hashtag: The hashtag to search for (without # prefix)
+    ///   - limit: Maximum number of results
+    ///   - offset: Pagination offset
+    /// - Returns: Array of PostSearchResult
+    func searchPostsByHashtag(_ hashtag: String, limit: Int = 20, offset: Int = 0) async throws -> [PostSearchResult] {
+        let response: SearchContentResponse = try await client.get(
+            endpoint: APIConfig.Search.searchContent,
+            queryParams: [
+                "q": "#\(hashtag)",
+                "limit": String(limit),
+                "offset": String(offset)
+            ]
+        )
+        return response.posts
+    }
+
     /// Search for hashtags only
     /// - Parameters:
     ///   - query: Search query string

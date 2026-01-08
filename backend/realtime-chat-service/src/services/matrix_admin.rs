@@ -64,6 +64,13 @@ struct UpdateAvatarRequest {
     avatar_url: String,
 }
 
+/// Request body for Synapse admin join room endpoint
+/// POST /_synapse/admin/v1/join/{room_id_or_alias}
+#[derive(Debug, Serialize)]
+struct JoinRoomRequest {
+    user_id: String,
+}
+
 /// Request body for creating/updating a Matrix user via Admin API
 /// PUT /_synapse/admin/v2/users/{user_id}
 #[derive(Debug, Serialize)]
@@ -985,6 +992,58 @@ impl MatrixAdminClient {
         );
 
         Ok((mxid, access_token, expires_at))
+    }
+
+    /// Force-join a user to a room via Synapse Admin API.
+    ///
+    /// This is used to ensure the Nova service user can observe room events for metadata sync,
+    /// even when rooms are created by clients directly via Matrix SDK.
+    ///
+    /// API: POST /_synapse/admin/v1/join/{room_id_or_alias}
+    pub async fn join_room_as_user(&self, room_id_or_alias: &str, user_id: &str) -> Result<(), AppError> {
+        self.ensure_token_valid().await?;
+
+        let url = format!(
+            "{}/_synapse/admin/v1/join/{}",
+            self.homeserver_url,
+            urlencoding::encode(room_id_or_alias)
+        );
+
+        let request_body = JoinRoomRequest {
+            user_id: user_id.to_string(),
+        };
+        let token = self.get_token().await;
+
+        let response = self
+            .client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| {
+                error!("Failed to send join room request to Synapse: {}", e);
+                AppError::ServiceUnavailable(format!("Synapse API request failed: {}", e))
+            })?;
+
+        let status = response.status();
+        if status.is_success() {
+            info!(
+                "Force-joined user to room via admin API: user_id={}, room_id_or_alias={}",
+                user_id, room_id_or_alias
+            );
+            Ok(())
+        } else {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            warn!(
+                "Synapse join room API returned error: status={}, body={}, user_id={}, room_id_or_alias={}",
+                status, error_text, user_id, room_id_or_alias
+            );
+            Err(AppError::ServiceUnavailable(format!(
+                "Synapse join room failed ({}): {}",
+                status, error_text
+            )))
+        }
     }
 }
 

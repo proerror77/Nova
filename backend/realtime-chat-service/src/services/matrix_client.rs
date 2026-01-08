@@ -14,6 +14,7 @@ use matrix_sdk::{
             },
             room::{
                 encryption::RoomEncryptionEventContent,
+                encrypted::SyncRoomEncryptedEvent,
                 message::{
                     ReplacementMetadata, RoomMessageEventContent, SyncRoomMessageEvent,
                 },
@@ -496,13 +497,25 @@ impl MatrixClient {
     /// This should be spawned as a background task
     pub async fn start_sync(
         &self,
-        event_handler: impl Fn(SyncRoomMessageEvent, Room) + Send + Sync + 'static,
+        message_handler: impl Fn(SyncRoomMessageEvent, Room) + Send + Sync + 'static,
+        encrypted_handler: impl Fn(SyncRoomEncryptedEvent, Room) + Send + Sync + 'static,
     ) -> Result<(), AppError> {
-        let event_handler = Arc::new(event_handler);
+        let message_handler = Arc::new(message_handler);
+        let encrypted_handler = Arc::new(encrypted_handler);
 
         self.client.add_event_handler({
-            let handler = event_handler.clone();
+            let handler = message_handler.clone();
             move |ev: SyncRoomMessageEvent, room: Room| {
+                let handler = handler.clone();
+                async move {
+                    handler(ev, room);
+                }
+            }
+        });
+
+        self.client.add_event_handler({
+            let handler = encrypted_handler.clone();
+            move |ev: SyncRoomEncryptedEvent, room: Room| {
                 let handler = handler.clone();
                 async move {
                     handler(ev, room);

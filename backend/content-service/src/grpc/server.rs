@@ -65,7 +65,10 @@ fn convert_post_to_proto(post: &DbPost) -> Post {
         media_urls,
         media_type: post.media_type.clone(),
         thumbnail_urls: thumbnails,
-        author_account_type: post.author_account_type.clone().unwrap_or_else(|| "primary".to_string()),
+        author_account_type: post
+            .author_account_type
+            .clone()
+            .unwrap_or_else(|| "primary".to_string()),
     }
 }
 
@@ -385,7 +388,10 @@ impl ContentService for ContentServiceImpl {
                         media_urls,
                         media_type: post.media_type.clone(),
                         thumbnail_urls,
-                        author_account_type: post.author_account_type.clone().unwrap_or_else(|| "primary".to_string()),
+                        author_account_type: post
+                            .author_account_type
+                            .clone()
+                            .unwrap_or_else(|| "primary".to_string()),
                     }
                 })
             })
