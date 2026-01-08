@@ -29,7 +29,7 @@ final class GroupChatMessageSender {
     /// Get current user info for message display
     var getCurrentUserInfo: () -> (id: String, name: String, avatarUrl: String?) = {
         let userId = KeychainService.shared.get(.userId) ?? "unknown"
-        let name = AuthenticationManager.shared.currentUser?.username ?? "Me"
+        let name = AuthenticationManager.shared.currentUser?.fullName ?? "Me"
         let avatarUrl = AuthenticationManager.shared.currentUser?.avatarUrl
         return (id: userId, name: name, avatarUrl: avatarUrl)
     }

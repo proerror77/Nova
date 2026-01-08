@@ -146,8 +146,7 @@ struct ProfileFollowingView: View {
         if !username.isEmpty && username != "User" {
             return username
         }
-        return authManager.currentUser?.displayName
-            ?? authManager.currentUser?.username
+        return authManager.currentUser?.fullName
             ?? "User"
     }
 
@@ -192,7 +191,7 @@ struct ProfileFollowingView: View {
                     return FollowUser(
                         id: user.id,
                         username: user.username,
-                        displayName: user.displayName ?? user.username,
+                        displayName: user.fullName,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
                         isFollowedByMe: isFollowingThem,  // 当前登录用户是否关注了他们
@@ -250,7 +249,7 @@ struct ProfileFollowingView: View {
                     return FollowUser(
                         id: user.id,
                         username: user.username,
-                        displayName: user.displayName ?? user.username,
+                        displayName: user.fullName,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
                         isFollowedByMe: isFollowingThem,  // 当前登录用户是否关注了他们

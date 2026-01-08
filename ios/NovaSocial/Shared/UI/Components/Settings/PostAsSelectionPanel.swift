@@ -69,7 +69,7 @@ struct AccountDisplayData: Identifiable {
     /// Create from user profile (for primary account fallback)
     init(fromUser user: UserProfile) {
         self.id = user.id
-        self.displayName = user.displayName ?? user.username
+        self.displayName = user.fullName
         self.subtitle = "@\(user.username)"
         self.avatarUrl = user.avatarUrl
         self.isAlias = false
@@ -123,24 +123,23 @@ struct PostAsSelectionPanel: View {
     var isLoading: Bool = false
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 24) {
             if isLoading {
                 HStack {
                     ProgressView()
                         .scaleEffect(0.8)
                     Text("Loading accounts...")
-                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                        .foregroundColor(DesignTokens.textSecondary)
+                        .font(Font.custom("SF Pro Display", size: 14.f))
+                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                 }
                 .padding(.vertical, 20)
             } else if accounts.isEmpty {
-                // Empty state - show placeholder
                 Text("No accounts available")
-                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                    .foregroundColor(DesignTokens.textSecondary)
+                    .font(Font.custom("SF Pro Display", size: 14.f))
+                    .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                     .padding(.vertical, 20)
             } else {
-                ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
+                ForEach(accounts) { account in
                     PostAsOptionRow(
                         avatarUrl: account.avatarUrl,
                         displayName: account.displayName,
@@ -148,28 +147,23 @@ struct PostAsSelectionPanel: View {
                         isSelected: account.id == selectedAccountId,
                         isAlias: account.isAlias,
                         borderColor: account.isAlias
-                            ? Color(red: 0.37, green: 0.37, blue: 0.37)
-                            : Color(red: 0.82, green: 0.11, blue: 0.26),
+                            ? Color(red: 0.75, green: 0.75, blue: 0.75)
+                            : Color(red: 0.87, green: 0.11, blue: 0.26),
                         action: { onAccountTap(account) },
                         pendingAvatar: account.isPrimary ? pendingPrimaryAvatar : nil
                     )
-
-                    // Add divider between items (not after the last one)
-                    if index < accounts.count - 1 {
-                        Divider()
-                            .padding(.leading, 80)
-                    }
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color(red: 0.77, green: 0.77, blue: 0.77).opacity(0.3), lineWidth: 0.5)
+        .padding(.horizontal, 17)
+        .padding(.vertical, 16)
+        .frame(width: 313)
+        .cornerRadius(6)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .inset(by: 0.25)
+                .stroke(Color(red: 0.90, green: 0.90, blue: 0.90), lineWidth: 0.25)
         )
-        .padding(.horizontal, 20)
-        .padding(.bottom, 12)
     }
 }
 
@@ -246,15 +240,14 @@ struct PostAsOptionRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 14) {
-                // Avatar - 56x56
-                // Priority: pendingAvatar > avatarUrl > default avatar
+            HStack(spacing: 8) {
+                // Avatar - 35x35 with 30x30 inner content
                 ZStack {
                     if let pendingAvatar = pendingAvatar {
                         Image(uiImage: pendingAvatar)
                             .resizable()
                             .scaledToFill()
-                            .frame(width: 56, height: 56)
+                            .frame(width: 30, height: 30)
                             .clipShape(Circle())
                     } else if let avatarUrl = avatarUrl, let url = URL(string: avatarUrl) {
                         AsyncImage(url: url) { image in
@@ -262,57 +255,42 @@ struct PostAsOptionRow: View {
                                 .resizable()
                                 .scaledToFill()
                         } placeholder: {
-                            DefaultAvatarView(size: 56)
+                            DefaultAvatarView(size: 30)
                         }
-                        .frame(width: 56, height: 56)
+                        .frame(width: 30, height: 30)
                         .clipShape(Circle())
                     } else {
-                        DefaultAvatarView(size: 56)
+                        DefaultAvatarView(size: 30)
                     }
                 }
+                .frame(width: 35, height: 35)
+                .cornerRadius(28)
                 .overlay(
-                    Circle()
-                        .stroke(borderColor, lineWidth: 1.5)
+                    RoundedRectangle(cornerRadius: 28)
+                        .inset(by: 0.5)
+                        .stroke(borderColor, lineWidth: 0.5)
                 )
 
                 // Name and subtitle
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Text(displayName)
-                            .font(Font.custom("SFProDisplay-Bold", size: 16.f))
-                            .foregroundColor(DesignTokens.textPrimary)
-
-                        // Show "Alias" badge for alias accounts
-                        if isAlias && displayName != "Create Alias" {
-                            Text("Alias")
-                                .font(Font.custom("SFProDisplay-Medium", size: 10.f))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color(red: 0.37, green: 0.37, blue: 0.37))
-                                .cornerRadius(4)
-                        }
-                    }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(displayName)
+                        .font(Font.custom("SF Pro Display", size: 14.f).weight(.semibold))
+                        .tracking(0.28)
+                        .foregroundColor(.black)
 
                     Text(subtitle)
-                        .font(Font.custom("SFProDisplay-Regular", size: 13.f))
-                        .foregroundColor(DesignTokens.textSecondary)
+                        .font(Font.custom("SF Pro Display", size: 10.f))
+                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                 }
 
                 Spacer()
 
-                // Checkmark for selected account or chevron for navigation
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14.f))
-                        .foregroundColor(DesignTokens.accentColor)
-                } else {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12.f))
-                        .foregroundColor(DesignTokens.textSecondary)
-                }
+                // Chevron
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12.f))
+                    .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                    .frame(width: 24, height: 24)
             }
-            .padding(.vertical, 16)
         }
     }
 }

@@ -79,7 +79,12 @@ final class ProfileSettingViewModel {
     }
 
     func loadProfile() async {
-        guard let userId = authManager.currentUser?.id else { return }
+        guard let userId = authManager.currentUser?.id else { 
+            #if DEBUG
+            print("[ProfileSettingViewModel] loadProfile: currentUser is nil, returning early")
+            #endif
+            return 
+        }
 
         isLoading = true
         errorMessage = nil

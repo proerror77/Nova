@@ -280,6 +280,7 @@
 		E0C9B10249EB1D48342F73EC /* InvitationsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D56505A31DF6E37481758188 /* InvitationsService.swift */; };
 		E1833D1271B616C18890DAD3 /* SF-Pro-Display-Medium.otf in Resources */ = {isa = PBXBuildFile; fileRef = F1C20A348338E7549F2C7F15 /* SF-Pro-Display-Medium.otf */; };
 		E1A8B4C3D2F5E6A7B8C9D0E1 /* EmailAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B9C5D4E3F6A7B8C9D0E1F2 /* EmailAuthService.swift */; };
+		E1A8B4C3D2F5E6A7B8C9D0E2 /* ProfileSetupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B9C5D4E3F6A7B8C9D0E1F3 /* ProfileSetupService.swift */; };
 		E1E08EAE40CCE72F24509180 /* GetVerifiedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7382F96F698E0CDC89B99912 /* GetVerifiedView.swift */; };
 		E35833BF57E564C083624F78 /* PromoBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ACC5B924429B273F34A32C0 /* PromoBannerView.swift */; };
 		E3C3EA86F619CE1A0DDF83AF /* AuthenticationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69B449484719B1691927E1D6 /* AuthenticationManager.swift */; };
@@ -654,6 +655,7 @@
 		E257A6FF9F1656C0A3C66D12 /* AISessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AISessionManager.swift; sourceTree = "<group>"; };
 		E26FCF7308D047749F56999C /* NameSelectorModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NameSelectorModal.swift; sourceTree = "<group>"; };
 		E2B9C5D4E3F6A7B8C9D0E1F2 /* EmailAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailAuthService.swift; sourceTree = "<group>"; };
+		E2B9C5D4E3F6A7B8C9D0E1F3 /* ProfileSetupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSetupService.swift; sourceTree = "<group>"; };
 		E35DC62777A5472A407CC9A8 /* DateExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateExtension.swift; sourceTree = "<group>"; };
 		E3737976AD8AA33408751C99 /* PhotoAnalysisService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoAnalysisService.swift; sourceTree = "<group>"; };
 		E41413B297CCF9C221A61D53 /* VoiceRecordButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecordButton.swift; sourceTree = "<group>"; };
@@ -1772,6 +1774,7 @@
 				C4D1D77C525B03021C70AE0D /* PasskeyService.swift */,
 				C2CAD3284489FA543E721ABA /* PhoneAuthService.swift */,
 				E2B9C5D4E3F6A7B8C9D0E1F2 /* EmailAuthService.swift */,
+				E2B9C5D4E3F6A7B8C9D0E1F3 /* ProfileSetupService.swift */,
 				3F6DA12382DD5127654CD4C0 /* RegionDetectionService.swift */,
 			);
 			path = Auth;
@@ -2336,6 +2339,7 @@
 				D217E0394E638B83821B40C4 /* PasskeySettingsView.swift in Sources */,
 				9127641952A87D2E4677B311 /* PhoneAuthService.swift in Sources */,
 				E1A8B4C3D2F5E6A7B8C9D0E1 /* EmailAuthService.swift in Sources */,
+				E1A8B4C3D2F5E6A7B8C9D0E2 /* ProfileSetupService.swift in Sources */,
 				FD4C5DDD8A3C9BA4399AA522 /* PhotoAnalysisService.swift in Sources */,
 				872EE38FD80234144C2CC601 /* PhotoOptionsModal.swift in Sources */,
 				124E367C3D6397C95405BDAF /* PostAsSelectionPanel.swift in Sources */,

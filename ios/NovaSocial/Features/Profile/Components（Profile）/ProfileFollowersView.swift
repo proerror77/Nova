@@ -148,7 +148,7 @@ struct ProfileFollowersView: View {
                     let status = result.relationshipStatus(for: user.id)
                     return FollowerUser(
                         id: user.id,
-                        name: user.displayName ?? user.username,
+                        name: user.fullName,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
                         isFollowingYou: true, // 他们关注了你（这是 followers 列表）
@@ -202,7 +202,7 @@ struct ProfileFollowersView: View {
                     let status = result.relationshipStatus(for: user.id)
                     return FollowerUser(
                         id: user.id,
-                        name: user.displayName ?? user.username,
+                        name: user.fullName,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
                         isFollowingYou: status?.followsYou ?? false, // 他们是否关注你
@@ -355,8 +355,7 @@ struct ProfileFollowersView: View {
 
     // MARK: - 用戶顯示名稱
     private var displayUsername: String {
-        authManager.currentUser?.displayName
-            ?? authManager.currentUser?.username
+        authManager.currentUser?.fullName
             ?? "User"
     }
 

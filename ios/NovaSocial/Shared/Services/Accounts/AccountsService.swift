@@ -230,12 +230,20 @@ struct Account: Codable, Identifiable {
     let profession: String?
     let location: String?
 
+    /// Full name for display (displayName > username)
+    var fullName: String {
+        if let display = displayName?.trimmingCharacters(in: .whitespacesAndNewlines), !display.isEmpty {
+            return display
+        }
+        return username
+    }
+
     /// Effective display name - uses aliasName for alias accounts
     var effectiveDisplayName: String {
         if isAlias {
-            return aliasName ?? displayName ?? username
+            return aliasName ?? fullName
         }
-        return displayName ?? username
+        return fullName
     }
 
     enum CodingKeys: String, CodingKey {

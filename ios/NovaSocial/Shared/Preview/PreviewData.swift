@@ -208,7 +208,7 @@ enum PreviewData {
             FeedPost(
                 id: "feed-001",
                 authorId: Users.currentUser.id,
-                authorName: Users.currentUser.displayName ?? Users.currentUser.username,
+                authorName: Users.currentUser.fullName,
                 authorAvatar: Users.currentUser.avatarUrl,
                 content: "Beautiful sunset at the beach! 🌅 #sunset #beach",
                 mediaUrls: ["https://picsum.photos/600/400"],
@@ -225,7 +225,7 @@ enum PreviewData {
             FeedPost(
                 id: "feed-002",
                 authorId: Users.regularUser.id,
-                authorName: Users.regularUser.displayName ?? Users.regularUser.username,
+                authorName: Users.regularUser.fullName,
                 authorAvatar: Users.regularUser.avatarUrl,
                 content: "Just launched my new app! Check it out 🚀",
                 mediaUrls: ["https://picsum.photos/601/400"],
@@ -438,7 +438,7 @@ enum PreviewData {
 
     enum Search {
         static let sampleResults: [SearchResult] = [
-            .user(id: Users.regularUser.id, username: Users.regularUser.username, displayName: Users.regularUser.displayName ?? Users.regularUser.username, avatarUrl: Users.regularUser.avatarUrl, isVerified: Users.regularUser.safeIsVerified),
+            .user(id: Users.regularUser.id, username: Users.regularUser.username, displayName: Users.regularUser.fullName, avatarUrl: Users.regularUser.avatarUrl, isVerified: Users.regularUser.safeIsVerified),
             .user(id: "preview-user-004", username: "alice_wonder", displayName: "Alice Wonder", avatarUrl: "https://picsum.photos/203", isVerified: true),
             .post(id: Posts.imagePost.id, content: Posts.imagePost.content, author: Posts.imagePost.authorId, createdAt: Posts.imagePost.createdDate, likeCount: Posts.imagePost.likeCount ?? 0),
             .hashtag(tag: "sunset", postCount: 15234),
