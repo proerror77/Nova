@@ -268,10 +268,9 @@ struct PhoneEnterCodeView: View {
             
             if response.success, let token = response.verificationToken {
                 verificationToken = token
-                // Store verification token for next step
-                authManager.phoneVerificationToken = token
-                authManager.verifiedPhoneNumber = phoneNumber
-                
+                // Store verification token with timestamp for next step
+                authManager.setPhoneVerificationToken(token, phoneNumber: phoneNumber)
+
                 // Navigate to profile setup
                 await MainActor.run {
                     currentPage = .profileSetup

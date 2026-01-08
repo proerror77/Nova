@@ -268,10 +268,9 @@ struct GmailEnterCodeView: View {
             
             if response.success, let token = response.verificationToken {
                 verificationToken = token
-                // Store verification token for next step
-                authManager.emailVerificationToken = token
-                authManager.verifiedEmail = email
-                
+                // Store verification token with timestamp for next step
+                authManager.setEmailVerificationToken(token, email: email)
+
                 // Navigate to profile setup
                 await MainActor.run {
                     currentPage = .profileSetup

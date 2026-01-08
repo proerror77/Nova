@@ -168,6 +168,34 @@ struct CAProfileSettingView: View {
                 }
             }
         }
+        .onAppear {
+            validateVerificationTokens()
+        }
+    }
+
+    // MARK: - Token Validation
+
+    private func validateVerificationTokens() {
+        // If user is already authenticated (came from old email registration flow),
+        // they can still complete their profile
+        if authManager.isAuthenticated {
+            #if DEBUG
+            print("[CAProfileSettingView] User already authenticated, allowing profile completion")
+            #endif
+            return
+        }
+
+        // For verification flow, check if tokens are valid
+        if !authManager.hasValidVerificationToken {
+            #if DEBUG
+            print("[CAProfileSettingView] No valid verification token found, redirecting")
+            #endif
+            errorMessage = "Verification expired. Please verify your email or phone again."
+            // Navigate back to create account
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                currentPage = .createAccount
+            }
+        }
     }
 
     // MARK: - Profile Image Section
@@ -570,20 +598,31 @@ struct CAProfileSettingView: View {
 
     // MARK: - Actions
 
+    private let identityService = IdentityService()
+    private let mediaService = MediaService()
+
     private func submitProfile() async {
         guard isFormValid else { return }
 
         isLoading = true
         errorMessage = nil
 
-        let profileService = ProfileSetupService.shared
-
         do {
+            // Check if user is already authenticated (came from old email registration)
+            if authManager.isAuthenticated, let userId = authManager.currentUser?.id {
+                // Use profile UPDATE flow for already authenticated users
+                try await updateExistingProfile(userId: userId)
+                return
+            }
+
+            // Use profile SETUP flow for verification-based registration
+            let profileService = ProfileSetupService.shared
             let response: ProfileSetupService.ProfileSetupResponse
 
             // Determine which flow (email or phone) based on what's verified
             if let email = authManager.verifiedEmail,
-               let verificationToken = authManager.emailVerificationToken {
+               let verificationToken = authManager.emailVerificationToken,
+               authManager.isEmailVerificationTokenValid {
                 // Email-based registration
                 response = try await profileService.completeEmailProfileSetup(
                     email: email,
@@ -592,12 +631,13 @@ struct CAProfileSettingView: View {
                     firstName: firstName.isEmpty ? nil : firstName,
                     lastName: lastName.isEmpty ? nil : lastName,
                     dateOfBirth: dateOfBirth,
-                    location: selectedLocation,
+                    location: location.isEmpty ? nil : location,
                     avatarImage: selectedImage,
                     inviteCode: authManager.validatedInviteCode
                 )
             } else if let phoneNumber = authManager.verifiedPhoneNumber,
-                      let verificationToken = authManager.phoneVerificationToken {
+                      let verificationToken = authManager.phoneVerificationToken,
+                      authManager.isPhoneVerificationTokenValid {
                 // Phone-based registration
                 response = try await profileService.completePhoneProfileSetup(
                     phoneNumber: phoneNumber,
@@ -606,7 +646,7 @@ struct CAProfileSettingView: View {
                     firstName: firstName.isEmpty ? nil : firstName,
                     lastName: lastName.isEmpty ? nil : lastName,
                     dateOfBirth: dateOfBirth,
-                    location: selectedLocation,
+                    location: location.isEmpty ? nil : location,
                     avatarImage: selectedImage,
                     inviteCode: authManager.validatedInviteCode
                 )
@@ -621,12 +661,7 @@ struct CAProfileSettingView: View {
             await MainActor.run {
                 authManager.updateCurrentUser(response.user)
                 authManager.isAuthenticated = true
-
-                // Clear verification tokens
-                authManager.emailVerificationToken = nil
-                authManager.verifiedEmail = nil
-                authManager.phoneVerificationToken = nil
-                authManager.verifiedPhoneNumber = nil
+                authManager.clearVerificationTokens()
                 authManager.validatedInviteCode = nil
 
                 // Navigate to home
@@ -656,6 +691,55 @@ struct CAProfileSettingView: View {
         await MainActor.run {
             isLoading = false
         }
+    }
+
+    /// Update profile for already authenticated users (from old email registration flow)
+    private func updateExistingProfile(userId: String) async throws {
+        #if DEBUG
+        print("[CAProfileSettingView] Updating existing profile for user: \(userId)")
+        #endif
+
+        // Upload avatar if provided
+        var avatarUrl: String? = nil
+        if let image = selectedImage,
+           let imageData = image.jpegData(compressionQuality: 0.8) {
+            avatarUrl = try await mediaService.uploadImage(
+                imageData: imageData,
+                filename: "avatar_\(UUID().uuidString).jpg"
+            )
+        }
+
+        // Build display name from first + last name
+        let displayName: String?
+        if !firstName.isEmpty || !lastName.isEmpty {
+            displayName = [firstName, lastName]
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+        } else {
+            displayName = nil
+        }
+
+        // Update user profile
+        let updates = UserProfileUpdate(
+            displayName: displayName,
+            bio: nil,
+            avatarUrl: avatarUrl,
+            coverUrl: nil,
+            website: nil,
+            location: location.isEmpty ? nil : location
+        )
+
+        let updatedUser = try await identityService.updateUser(userId: userId, updates: updates)
+
+        await MainActor.run {
+            authManager.updateCurrentUser(updatedUser)
+            isLoading = false
+            currentPage = .home
+        }
+
+        #if DEBUG
+        print("[CAProfileSettingView] Profile updated successfully for: \(userId)")
+        #endif
     }
 }
 
