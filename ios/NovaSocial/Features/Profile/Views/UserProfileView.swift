@@ -825,18 +825,29 @@ struct UserProfileView: View {
         #endif
 
         do {
-            let response = try await contentService.getUserLikedPosts(userId: userId, limit: 50, offset: 0)
+            // Fetch liked post IDs from social-service, then hydrate via content-service
+            let (postIds, _) = try await socialService.getUserLikedPosts(userId: userId, limit: 50, offset: 0)
 
-            // 将 Post 转换为 UserProfilePostData
-            let likedPosts = response.posts.map { post in
-                UserProfilePostData(
-                    id: post.id,
-                    avatarUrl: post.authorAvatarUrl,
-                    username: post.displayAuthorName,
-                    likeCount: post.likeCount ?? 0,
-                    imageUrl: post.displayThumbnailUrl,
-                    content: post.content
-                )
+            #if DEBUG
+            print("[UserProfile] ❤️ Fetched \(postIds.count) liked post IDs from social-service")
+            #endif
+
+            var likedPosts: [UserProfilePostData] = []
+
+            if !postIds.isEmpty {
+                let posts = try await contentService.getPostsByIds(postIds)
+
+                // 将 Post 转换为 UserProfilePostData
+                likedPosts = posts.map { post in
+                    UserProfilePostData(
+                        id: post.id,
+                        avatarUrl: post.authorAvatarUrl,
+                        username: post.displayAuthorName,
+                        likeCount: post.likeCount ?? 0,
+                        imageUrl: post.displayThumbnailUrl,
+                        content: post.content
+                    )
+                }
             }
 
             await MainActor.run {
