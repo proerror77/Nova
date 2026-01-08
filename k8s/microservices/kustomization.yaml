@@ -89,7 +89,7 @@ resources:
   - alice-voice-service-secret.yaml
   - alice-voice-nginx-configmap.yaml
   - alice-voice-service-backendconfig.yaml
-  - alice-voice-service-ingress.yaml
+  # alice-voice-service ingress is defined in environment overlays (e.g., staging GKE ingress)
 
   # API Gateway: DEPRECATED - now using GKE ELB directly via graphql-gateway
   # api-gateway/deployment.yaml, service.yaml, configmap-nginx.yaml are archived
