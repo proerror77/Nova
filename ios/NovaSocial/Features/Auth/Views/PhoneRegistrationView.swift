@@ -490,7 +490,8 @@ struct PhoneRegistrationView: View {
                 verificationToken: verificationToken,
                 username: username,
                 password: password,
-                displayName: displayName.isEmpty ? nil : displayName
+                displayName: displayName.isEmpty ? nil : displayName,
+                inviteCode: authManager.validatedInviteCode
             )
 
             // Save auth tokens
@@ -567,73 +568,6 @@ struct PhoneRegistrationView: View {
 }
 
 // MARK: - OTP Input View
-
-struct OTPInputView: View {
-    @Binding var code: String
-    let codeLength: Int
-
-    @FocusState private var isFocused: Bool
-
-    var body: some View {
-        ZStack {
-            // Hidden text field for input
-            TextField("", text: $code)
-                .keyboardType(.numberPad)
-                .textContentType(.oneTimeCode)
-                .focused($isFocused)
-                .opacity(0)
-                .onChange(of: code) { _, newValue in
-                    // Limit to codeLength digits
-                    if newValue.count > codeLength {
-                        code = String(newValue.prefix(codeLength))
-                    }
-                    // Only allow digits
-                    code = code.filter { $0.isNumber }
-                }
-
-            // Display boxes
-            HStack(spacing: 10) {
-                ForEach(0..<codeLength, id: \.self) { index in
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(boxBorderColor(at: index), lineWidth: 1)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.white.opacity(0.1))
-                            )
-                            .frame(width: 45, height: 55)
-
-                        Text(digit(at: index))
-                            .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
-                            .foregroundColor(.white)
-                    }
-                }
-            }
-            .onTapGesture {
-                isFocused = true
-            }
-        }
-        .onAppear {
-            isFocused = true
-        }
-    }
-
-    private func digit(at index: Int) -> String {
-        guard index < code.count else { return "" }
-        let stringIndex = code.index(code.startIndex, offsetBy: index)
-        return String(code[stringIndex])
-    }
-
-    private func boxBorderColor(at index: Int) -> Color {
-        if index < code.count {
-            return Color(red: 0.87, green: 0.11, blue: 0.26)
-        } else if index == code.count && isFocused {
-            return .white
-        } else {
-            return .gray.opacity(0.5)
-        }
-    }
-}
 
 // MARK: - Preview
 

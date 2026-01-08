@@ -1158,6 +1158,7 @@ mod tests {
             thumbnail_urls: vec![],
             is_liked: false,
             is_bookmarked: false,
+            author_account_type: "primary".to_string(),
         };
 
         // Verify all proto fields are set correctly
@@ -1190,6 +1191,7 @@ mod tests {
                 thumbnail_urls: vec![],
                 is_liked: false,
                 is_bookmarked: false,
+                author_account_type: "primary".to_string(),
             },
             FeedPost {
                 id: "post-2".to_string(),
@@ -1206,6 +1208,7 @@ mod tests {
                 thumbnail_urls: vec![],
                 is_liked: true,
                 is_bookmarked: false,
+                author_account_type: "primary".to_string(),
             },
         ];
 
@@ -1384,6 +1387,7 @@ mod tests {
             thumbnail_urls: vec![],
             is_liked: false,
             is_bookmarked: false,
+        author_account_type: "primary".to_string(),
         };
 
         // Measure construction time
@@ -1404,6 +1408,7 @@ mod tests {
                 thumbnail_urls: vec![],
                 is_liked: post.is_liked,
                 is_bookmarked: post.is_bookmarked,
+                author_account_type: "primary".to_string(),
             };
         }
         let elapsed = start.elapsed();
@@ -1492,6 +1497,7 @@ mod tests {
                 thumbnail_urls: vec![],
                 is_liked: i % 2 == 0,
                 is_bookmarked: i % 3 == 0,
+                author_account_type: "primary".to_string(),
             })
             .collect();
 
@@ -1560,6 +1566,7 @@ mod tests {
                         thumbnail_urls: vec![],
                         is_liked: false,
                         is_bookmarked: false,
+                        author_account_type: "primary".to_string(),
                     })
                     .collect(),
                 next_cursor: cursor.clone(),

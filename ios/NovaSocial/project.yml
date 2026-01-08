@@ -34,12 +34,17 @@ targets:
           - "*.xcodeproj"
           - "*.xcworkspace"
           - "*.yml"
-          - "Info.plist"
-          - "build"
-          - "Archive"
-          - "*.md"
-          - "*.txt"
+          - "*.yaml"
+          - "*.sh"
           - "*.py"
+          - "*.md"
+          - "**/*.md"
+          - "*.txt"
+          - "Info.plist"
+          - "ExportOptions.plist"
+          - "build"
+          - "build_test"
+          - "Archive"
           - "Tests"
           - "ICEREDUITests"
           - "ICEREDWidgets"
@@ -48,13 +53,13 @@ targets:
           - "fastlane"
           - "Gemfile"
           - "Gemfile.lock"
-          - "build_test"
           - "Docs"
+          - ".serena"
+          - "backend"
+          - "ios"
           - "Features/Settings/Views/DeviceVerificationView.swift"
           - "Features/Settings/Views/KeyBackupSettingsView.swift"
           - "Features/Auth/Views/ResetPasswordView.swift"
-          - "Features/Auth/Views/PhoneRegistrationView.swift"
-          - "Features/Auth/Views/PhoneLoginView.swift"
           - "Features/Auth/Views/ForgotPasswordView.swift"
           - "Features/Auth/Views/EmailSentConfirmationView.swift"
     dependencies:
@@ -102,6 +107,7 @@ targets:
         com.apple.developer.applesignin:
           - Default
         com.apple.developer.associated-domains:
+          - webcredentials:staging.gcp.icered.com?mode=developer
           - webcredentials:aasa.icered.com?mode=developer
         com.apple.security.application-groups:
           - group.com.app.icered.pro
@@ -114,6 +120,7 @@ targets:
       - path: Tests
         excludes:
           - "**/*.md"
+          - "**/CLAUDE.md"
           - "**/Info.plist"
     dependencies:
       - target: ICERED

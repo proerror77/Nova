@@ -110,7 +110,13 @@ pub async fn create_post(
     );
 
     let post = service
-        .create_post(user_id.0, req.caption.as_deref(), image_key, content_type, Some(&account_type.0))
+        .create_post(
+            user_id.0,
+            req.caption.as_deref(),
+            image_key,
+            content_type,
+            Some(&account_type.0),
+        )
         .await?;
 
     Ok(HttpResponse::Created().json(post))

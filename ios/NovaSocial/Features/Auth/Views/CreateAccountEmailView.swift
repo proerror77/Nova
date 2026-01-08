@@ -446,16 +446,13 @@ struct CreateAccountEmailView: View {
                 inviteCode: validatedInviteCode
             )
 
-            // Clear the validated invite code after successful registration
-            authManager.validatedInviteCode = nil
-
             await uploadAvatarIfNeeded(userId: user.id)
             #if DEBUG
             print("[CreateAccountEmailView] Registration successful!")
             #endif
-            // Success - Navigate to home page
+            // Success - Navigate to profile setup to complete profile
             await MainActor.run {
-                currentPage = .home
+                currentPage = .profileSetup
             }
         } catch {
             #if DEBUG
@@ -580,7 +577,8 @@ struct CreateAccountEmailView: View {
         do {
             let _ = try await authManager.loginWithGoogle()
             await MainActor.run {
-                currentPage = .home
+                // Navigate to profile setup to complete profile
+                currentPage = .profileSetup
             }
         } catch {
             #if DEBUG
@@ -600,7 +598,8 @@ struct CreateAccountEmailView: View {
         do {
             let _ = try await authManager.loginWithApple()
             await MainActor.run {
-                currentPage = .home
+                // Navigate to profile setup to complete profile
+                currentPage = .profileSetup
             }
         } catch {
             #if DEBUG

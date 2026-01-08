@@ -51,13 +51,12 @@ pub async fn add_to_waitlist(
     let source = source.unwrap_or("invite_page");
 
     // Check if email already exists
-    let existing: Option<(Uuid,)> = sqlx::query_as(
-        "SELECT id FROM waitlist_emails WHERE email = $1"
-    )
-    .bind(&email_lower)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| IdentityError::Database(e.to_string()))?;
+    let existing: Option<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM waitlist_emails WHERE email = $1")
+            .bind(&email_lower)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| IdentityError::Database(e.to_string()))?;
 
     if let Some((id,)) = existing {
         return Ok((false, id));
@@ -94,7 +93,17 @@ pub async fn list_waitlist(
     offset: i64,
 ) -> Result<(Vec<WaitlistEntry>, i64)> {
     let (entries, total): (Vec<WaitlistEntry>, i64) = if let Some(status) = status {
-        let entries = sqlx::query_as::<_, (Uuid, String, String, String, DateTime<Utc>, Option<DateTime<Utc>>)>(
+        let entries = sqlx::query_as::<
+            _,
+            (
+                Uuid,
+                String,
+                String,
+                String,
+                DateTime<Utc>,
+                Option<DateTime<Utc>>,
+            ),
+        >(
             r#"
             SELECT id, email, status, source, created_at, invited_at
             FROM waitlist_emails
@@ -110,27 +119,38 @@ pub async fn list_waitlist(
         .await
         .map_err(|e| IdentityError::Database(e.to_string()))?
         .into_iter()
-        .map(|(id, email, status, source, created_at, invited_at)| WaitlistEntry {
-            id,
-            email,
-            status,
-            source,
-            created_at,
-            invited_at,
-        })
+        .map(
+            |(id, email, status, source, created_at, invited_at)| WaitlistEntry {
+                id,
+                email,
+                status,
+                source,
+                created_at,
+                invited_at,
+            },
+        )
         .collect();
 
-        let total: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM waitlist_emails WHERE status = $1"
-        )
-        .bind(status)
-        .fetch_one(pool)
-        .await
-        .map_err(|e| IdentityError::Database(e.to_string()))?;
+        let total: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM waitlist_emails WHERE status = $1")
+                .bind(status)
+                .fetch_one(pool)
+                .await
+                .map_err(|e| IdentityError::Database(e.to_string()))?;
 
         (entries, total.0)
     } else {
-        let entries = sqlx::query_as::<_, (Uuid, String, String, String, DateTime<Utc>, Option<DateTime<Utc>>)>(
+        let entries = sqlx::query_as::<
+            _,
+            (
+                Uuid,
+                String,
+                String,
+                String,
+                DateTime<Utc>,
+                Option<DateTime<Utc>>,
+            ),
+        >(
             r#"
             SELECT id, email, status, source, created_at, invited_at
             FROM waitlist_emails
@@ -144,22 +164,22 @@ pub async fn list_waitlist(
         .await
         .map_err(|e| IdentityError::Database(e.to_string()))?
         .into_iter()
-        .map(|(id, email, status, source, created_at, invited_at)| WaitlistEntry {
-            id,
-            email,
-            status,
-            source,
-            created_at,
-            invited_at,
-        })
+        .map(
+            |(id, email, status, source, created_at, invited_at)| WaitlistEntry {
+                id,
+                email,
+                status,
+                source,
+                created_at,
+                invited_at,
+            },
+        )
         .collect();
 
-        let total: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM waitlist_emails"
-        )
-        .fetch_one(pool)
-        .await
-        .map_err(|e| IdentityError::Database(e.to_string()))?;
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM waitlist_emails")
+            .fetch_one(pool)
+            .await
+            .map_err(|e| IdentityError::Database(e.to_string()))?;
 
         (entries, total.0)
     };
@@ -222,13 +242,12 @@ pub async fn update_waitlist_status(
 pub async fn is_email_in_waitlist(pool: &PgPool, email: &str) -> Result<bool> {
     let email_lower = email.to_lowercase().trim().to_string();
 
-    let exists: (bool,) = sqlx::query_as(
-        "SELECT EXISTS(SELECT 1 FROM waitlist_emails WHERE email = $1)"
-    )
-    .bind(&email_lower)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| IdentityError::Database(e.to_string()))?;
+    let exists: (bool,) =
+        sqlx::query_as("SELECT EXISTS(SELECT 1 FROM waitlist_emails WHERE email = $1)")
+            .bind(&email_lower)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| IdentityError::Database(e.to_string()))?;
 
     Ok(exists.0)
 }

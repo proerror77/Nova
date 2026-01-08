@@ -4,7 +4,7 @@ use crate::nova::realtime_chat::v1::{
     ExchangeKeysResponse, GetConversationRequest, GetConversationResponse,
     GetMessageHistoryRequest, GetMessageHistoryResponse, GetMessagesRequest, GetMessagesResponse,
     GetPublicKeyRequest, GetPublicKeyResponse, ListConversationsRequest, ListConversationsResponse,
-    Message, MessageEvent, MessageType, SendMessageRequest, SendMessageResponse, StartCallRequest,
+    Message as ProtoMessage, MessageEvent, MessageType, SendMessageRequest, SendMessageResponse, StartCallRequest,
     StartCallResponse, StreamMessagesRequest, TypingIndicatorRequest, TypingIndicatorResponse,
     UpdateCallStatusRequest, UpdateCallStatusResponse,
 };
@@ -20,6 +20,40 @@ pub struct RealtimeChatServiceImpl {
 impl RealtimeChatServiceImpl {
     pub fn new(state: AppState) -> Self {
         Self { state }
+    }
+
+    fn row_to_proto_message(row: crate::models::message::Message) -> ProtoMessage {
+        let created_at = row.created_at.timestamp();
+        let edited_at = row.edited_at.map(|t| t.timestamp()).unwrap_or(0);
+        let deleted_at = row.deleted_at.map(|t| t.timestamp()).unwrap_or(0);
+        let recalled_at = row.recalled_at.map(|t| t.timestamp()).unwrap_or(0);
+        let updated_at = row
+            .edited_at
+            .unwrap_or(row.created_at)
+            .timestamp();
+
+        ProtoMessage {
+            id: row.id.to_string(),
+            conversation_id: row.conversation_id.to_string(),
+            sender_id: row.sender_id.to_string(),
+            content: row.content,
+            message_type: MessageType::Text as i32,
+            media_url: String::new(),
+            location: None,
+            created_at,
+            updated_at,
+            status: "sent".to_string(),
+            encrypted_content: String::new(),
+            ephemeral_public_key: String::new(),
+            reply_to_message_id: String::new(),
+            sequence_number: row.sequence_number,
+            edited_at,
+            deleted_at,
+            recalled_at,
+            version_number: row.version_number,
+            reaction_count: row.reaction_count,
+            idempotency_key: row.idempotency_key.unwrap_or_default(),
+        }
     }
 }
 
@@ -158,20 +192,24 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
         };
 
         let content_bytes = body.as_bytes();
-        let message_id = crate::services::message_service::MessageService::send_message(
+        let row = crate::services::message_service::MessageService::send_message_db(
             &self.state.db,
             &self.state.encryption,
             conversation_id,
             sender_id,
             content_bytes,
+            None,
         )
         .await
         .map_err(|e| Status::internal(format!("failed to send message: {e}")))?;
 
+        let message = Self::row_to_proto_message(row.clone());
+
         Ok(Response::new(SendMessageResponse {
-            message_id: message_id.to_string(),
-            timestamp: chrono::Utc::now().timestamp(),
+            message_id: row.id.to_string(),
+            timestamp: row.created_at.timestamp(),
             status: "sent".to_string(),
+            message: Some(message),
         }))
     }
 
@@ -389,11 +427,10 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
             ts_row.map(|r| r.get::<_, chrono::DateTime<chrono::Utc>>("created_at"))
         };
 
-        // Schema note: Use only columns from migrations 0004 (base) and 0005 (content)
-        // Other columns may not exist due to migration inconsistencies
+        // Schema note: Align with crate::models::message::Message.
         let rows = client
             .query(
-                "SELECT id, sender_id, content, created_at, COALESCE(edited_at, created_at) as updated_at FROM messages WHERE conversation_id = $1 AND ($2::timestamptz IS NULL OR created_at < $2) ORDER BY created_at DESC LIMIT $3",
+                "SELECT id, conversation_id, sender_id, content, sequence_number, idempotency_key, created_at, edited_at, deleted_at, recalled_at, reaction_count, version_number FROM messages WHERE conversation_id = $1 AND deleted_at IS NULL AND recalled_at IS NULL AND ($2::timestamptz IS NULL OR created_at < $2) ORDER BY created_at DESC LIMIT $3",
                 &[&conversation_id, &before_ts, &((limit + 1) as i64)],
             )
             .await
@@ -402,29 +439,27 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
         let has_more = rows.len() > limit;
         let rows = rows.into_iter().take(limit).collect::<Vec<_>>();
 
-        let mut messages: Vec<Message> = Vec::with_capacity(rows.len());
+        let mut messages: Vec<ProtoMessage> = Vec::with_capacity(rows.len());
         for row in rows {
-            let mid: Uuid = row.get("id");
-            let sender: Uuid = row.get("sender_id");
-            let content: String = row.get("content");
-            let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
-            let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
+            let row = crate::models::message::Message {
+                id: row.get("id"),
+                conversation_id: row.get("conversation_id"),
+                sender_id: row.get("sender_id"),
+                content: row.get("content"),
+                sequence_number: row.get("sequence_number"),
+                idempotency_key: row.get("idempotency_key"),
+                created_at: row.get("created_at"),
+                edited_at: row.get("edited_at"),
+                deleted_at: row.get("deleted_at"),
+                reaction_count: row.get("reaction_count"),
+                version_number: {
+                    let v: i64 = row.get("version_number");
+                    v as i32
+                },
+                recalled_at: row.get("recalled_at"),
+            };
 
-            messages.push(Message {
-                id: mid.to_string(),
-                conversation_id: conversation_id.to_string(),
-                sender_id: sender.to_string(),
-                content,
-                message_type: MessageType::Text as i32, // Default to text
-                media_url: String::new(),
-                location: None,
-                created_at: created_at.timestamp(),
-                updated_at: updated_at.timestamp(),
-                status: "sent".into(),
-                encrypted_content: String::new(),
-                ephemeral_public_key: String::new(),
-                reply_to_message_id: String::new(),
-            });
+            messages.push(Self::row_to_proto_message(row));
         }
 
         Ok(Response::new(GetMessagesResponse { messages, has_more }))
@@ -434,11 +469,91 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
         &self,
         request: Request<GetMessageHistoryRequest>,
     ) -> Result<Response<GetMessageHistoryResponse>, Status> {
-        let _req = request.into_inner();
-        // TODO: Implement get_message_history logic
-        Err(Status::unimplemented(
-            "get_message_history not yet implemented",
-        ))
+        let req = request.into_inner();
+
+        let conversation_id = Uuid::parse_str(&req.conversation_id)
+            .map_err(|_| Status::invalid_argument("invalid conversation id"))?;
+        let limit = req.limit.clamp(1, 100) as usize;
+
+        // NOTE: user_id is required for authorization; gateway should inject it.
+        if req.user_id.is_empty() {
+            return Err(Status::invalid_argument("user_id is required"));
+        }
+        let user_id =
+            Uuid::parse_str(&req.user_id).map_err(|_| Status::invalid_argument("invalid user id"))?;
+
+        // Authorization: requester must be a member (cached)
+        let is_member = ConversationService::is_member_cached(
+            &self.state.db,
+            &self.state.redis,
+            conversation_id,
+            user_id,
+        )
+        .await
+        .map_err(|e| Status::internal(format!("membership check failed: {e}")))?;
+
+        if !is_member {
+            return Err(Status::permission_denied(
+                "not a member of this conversation",
+            ));
+        }
+
+        let client = self
+            .state
+            .db
+            .get()
+            .await
+            .map_err(|e| Status::internal(format!("db pool error: {e}")))?;
+
+        let before_ts = if req.before_message_id.is_empty() {
+            None
+        } else {
+            let mid = Uuid::parse_str(&req.before_message_id)
+                .map_err(|_| Status::invalid_argument("invalid before_message_id"))?;
+
+            let ts_row = client
+                .query_opt("SELECT created_at FROM messages WHERE id = $1", &[&mid])
+                .await
+                .map_err(|e| Status::internal(format!("lookup message failed: {e}")))?;
+
+            ts_row.map(|r| r.get::<_, chrono::DateTime<chrono::Utc>>("created_at"))
+        };
+
+        let rows = client
+            .query(
+                "SELECT id, conversation_id, sender_id, content, sequence_number, idempotency_key, created_at, edited_at, deleted_at, recalled_at, reaction_count, version_number FROM messages WHERE conversation_id = $1 AND deleted_at IS NULL AND recalled_at IS NULL AND ($2::timestamptz IS NULL OR created_at < $2) ORDER BY created_at DESC LIMIT $3",
+                &[&conversation_id, &before_ts, &((limit + 1) as i64)],
+            )
+            .await
+            .map_err(|e| Status::internal(format!("fetch messages failed: {e}")))?;
+
+        let has_more = rows.len() > limit;
+        let rows = rows.into_iter().take(limit).collect::<Vec<_>>();
+
+        let mut messages: Vec<ProtoMessage> = Vec::with_capacity(rows.len());
+        for row in rows {
+            let row = crate::models::message::Message {
+                id: row.get("id"),
+                conversation_id: row.get("conversation_id"),
+                sender_id: row.get("sender_id"),
+                content: row.get("content"),
+                sequence_number: row.get("sequence_number"),
+                idempotency_key: row.get("idempotency_key"),
+                created_at: row.get("created_at"),
+                edited_at: row.get("edited_at"),
+                deleted_at: row.get("deleted_at"),
+                reaction_count: row.get("reaction_count"),
+                version_number: {
+                    let v: i64 = row.get("version_number");
+                    v as i32
+                },
+                recalled_at: row.get("recalled_at"),
+            };
+
+            messages.push(Self::row_to_proto_message(row));
+        }
+
+        Ok(Response::new(GetMessageHistoryResponse { messages, has_more }))
     }
 
     type StreamMessagesStream =

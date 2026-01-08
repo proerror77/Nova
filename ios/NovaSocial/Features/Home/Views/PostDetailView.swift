@@ -1,45 +1,6 @@
 import SwiftUI
 import Photos
 
-// MARK: - Text Parsing Helper
-/// Parse comment text and highlight @mentions with accent color
-private func parseCommentText(_ text: String) -> Text {
-    let pattern = try? NSRegularExpression(pattern: "@[\\w\\u4e00-\\u9fff]+", options: [])
-    guard let regex = pattern else {
-        return Text(text)
-    }
-
-    let nsString = text as NSString
-    let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsString.length))
-
-    if matches.isEmpty {
-        return Text(text)
-    }
-
-    var result = Text("")
-    var lastEnd = 0
-
-    for match in matches {
-        if match.range.location > lastEnd {
-            let beforeRange = NSRange(location: lastEnd, length: match.range.location - lastEnd)
-            let beforeText = nsString.substring(with: beforeRange)
-            result = result + Text(beforeText)
-        }
-        let mentionText = nsString.substring(with: match.range)
-        result = result + Text(mentionText)
-            .foregroundColor(DesignTokens.accentColor)
-            .fontWeight(.medium)
-        lastEnd = match.range.location + match.range.length
-    }
-
-    if lastEnd < nsString.length {
-        let afterText = nsString.substring(from: lastEnd)
-        result = result + Text(afterText)
-    }
-
-    return result
-}
-
 // MARK: - Comment ViewModel
 
 /// ViewModel for managing comments on a post
@@ -228,6 +189,7 @@ struct PostDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var authManager: AuthenticationManager
     @State private var currentImageIndex = 0
+    @State private var isTextExpanded = false
     @State private var isFollowing = false
     @State private var isFollowLoading = false
 
@@ -244,10 +206,8 @@ struct PostDetailView: View {
     @State private var isPostSaved = false
     @State private var postLikeCount: Int = 0
     @State private var postSaveCount: Int = 0
-
-    // MARK: - Social Actions Handler (reuse same logic as Home feed)
-    /// Reuse the same debounce handler as Home feed for consistent behavior
-    @State private var socialActionsHandler: FeedSocialActionsHandler?
+    @State private var isLikeLoading = false
+    @State private var isBookmarkLoading = false
 
     // MARK: - Post Actions State (作者操作)
     @State private var showingActionSheet = false
@@ -258,6 +218,13 @@ struct PostDetailView: View {
     @State private var saveErrorMessage = ""
     @State private var showingDeleteError = false
     @State private var deleteErrorMessage = ""
+    @State private var showingSocialError = false
+    @State private var socialErrorMessage = ""
+
+    private var currentUserId: String? {
+        guard !authManager.isGuestMode else { return nil }
+        return authManager.currentUser?.id ?? KeychainService.shared.get(.userId)
+    }
 
     /// 是否是自己的帖子
     private var isOwnPost: Bool {
@@ -277,10 +244,6 @@ struct PostDetailView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            // Background
-            DesignTokens.backgroundColor
-                .ignoresSafeArea()
-
             // Main Content
             VStack(spacing: 0) {
                 // MARK: - Top Navigation Bar
@@ -301,15 +264,18 @@ struct PostDetailView: View {
                         // Bottom padding for action bar
                         Color.clear.frame(height: 100)
                     }
+                    .background(.white)
                 }
             }
 
             // MARK: - Bottom Action Bar
             bottomActionBar
         }
+        .background(.white)
+        .ignoresSafeArea(edges: .bottom)
         .navigationBarBackButtonHidden(true)
         .task {
-            await commentViewModel.loadComments(postId: post.id, userId: authManager.currentUser?.id)
+            await commentViewModel.loadComments(postId: post.id, userId: currentUserId)
             await checkFollowStatus()
         }
         .onAppear {
@@ -318,13 +284,10 @@ struct PostDetailView: View {
             postSaveCount = post.bookmarkCount  // 修复: 应该使用 bookmarkCount 而非 shareCount
             isPostLiked = post.isLiked
             isPostSaved = post.isBookmarked
-
-            // Initialize social actions handler (reuse same logic as Home feed)
-            setupSocialActionsHandler()
         }
         // MARK: - Action Sheet (作者操作菜单)
         .confirmationDialog("Post Options", isPresented: $showingActionSheet, titleVisibility: .visible) {
-            if !post.fullResolutionMediaUrls.isEmpty {
+            if !post.displayMediaUrls.isEmpty {
                 Button("Save Image") {
                     Task {
                         await saveCurrentImageToPhotos()
@@ -365,6 +328,11 @@ struct PostDetailView: View {
         } message: {
             Text(deleteErrorMessage)
         }
+        .alert("Action Unavailable", isPresented: $showingSocialError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(socialErrorMessage)
+        }
         // MARK: - Deleting Overlay
         .overlay {
             if isDeleting {
@@ -400,8 +368,6 @@ struct PostDetailView: View {
                     onCommentCountUpdated?(postId, actualCount)
                 }
             )
-            .presentationDetents([.fraction(2.0/3.0), .large])
-            .presentationDragIndicator(.visible)
         }
     }
 
@@ -409,91 +375,102 @@ struct PostDetailView: View {
 
     private var topNavigationBar: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                // Back Button
-                Button(action: {
-                    if let onDismiss = onDismiss {
-                        onDismiss()
-                    } else {
-                        dismiss()
-                    }
-                }) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 20.f))
-                        .foregroundColor(DesignTokens.textPrimary)
-                        .frame(width: 24, height: 24)
-                }
-
-                // User Info (点击头像或用户名跳转用户主页)
-                HStack(spacing: 10) {
-                    AvatarView(image: nil, url: post.authorAvatar, size: 36, accountType: post.authorAccountType)
-                        .onTapGesture {
-                            onAvatarTapped?(post.authorId)
-                        }
-
-                    Text(post.authorName)
-                        .font(Font.custom("SFProDisplay-Medium", size: 16.f))
-                        .foregroundColor(DesignTokens.textPrimary)
-                        .onTapGesture {
-                            onAvatarTapped?(post.authorId)
-                        }
-
-                    // Verified Badge
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 12.f))
-                        .foregroundColor(Color(red: 0.20, green: 0.60, blue: 1.0))
-                }
-
-                Spacer()
-
-                // 根据是否是自己的帖子显示不同按钮
-                if isOwnPost {
-                    // 作者视角: 显示 "..." 按钮
+            HStack {
+                // Left Section: Back + Avatar + Name + Verified
+                HStack(spacing: 8.w) {
+                    // Back Button (48x48 点击区域，图标24x24居中)
                     Button(action: {
-                        showingActionSheet = true
-                    }) {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 20.f))
-                            .foregroundColor(DesignTokens.textPrimary)
-                            .frame(width: 24, height: 24)
-                    }
-                } else {
-                    // 其他用户视角: 显示 Follow + Share 按钮
-                    // Follow Button
-                    Button(action: {
-                        Task {
-                            await toggleFollow()
-                        }
-                    }) {
-                        if isFollowLoading {
-                            ProgressView()
-                                .frame(width: 60, height: 24)
+                        if let onDismiss = onDismiss {
+                            onDismiss()
                         } else {
-                            Text(isFollowing ? "Following" : "Follow")
-                                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
-                                .foregroundColor(isFollowing ? DesignTokens.textSecondary : DesignTokens.accentColor)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 6)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 100)
-                                        .stroke(isFollowing ? DesignTokens.textSecondary : DesignTokens.accentColor, lineWidth: 0.5)
-                                )
+                            dismiss()
                         }
-                    }
-                    .disabled(isFollowLoading)
-
-                    // Share Button
-                    Button(action: {}) {
-                        Image("Share-black")
+                    }) {
+                        Image("back-black")
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 18, height: 18)
+                            .frame(width: 24.s, height: 24.s)
+                            .frame(width: 40.w, height: 40.h)
+                    }
+                    .frame(width: 48.w, height: 48.h)
+                    
+                    // User Info (点击头像或用户名跳转用户主页)
+                    AvatarView(image: nil, url: post.authorAvatar, size: 30)
+                        .onTapGesture {
+                            onAvatarTapped?(post.authorId)
+                        }
+                    
+                    HStack(spacing: 3.w) {
+                        Text(post.authorName)
+                            .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
+                            .tracking(0.28)
+                            .foregroundColor(.black)
+                            .onTapGesture {
+                                onAvatarTapped?(post.authorId)
+                            }
+                        
+                        // Verified Badge
+                        Image("Blue-v")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 12.s, height: 12.s)
+                    }
+                }
+                
+                Spacer()
+                
+                // Right Section: Follow + Share (或作者的 ... 按钮)
+                HStack(spacing: 12.w) {
+                    // 根据是否是自己的帖子显示不同按钮
+                    if isOwnPost {
+                        // 作者视角: 显示 "..." 按钮
+                        Button(action: {
+                            showingActionSheet = true
+                        }) {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 20.f))
+                                .foregroundColor(DesignTokens.textPrimary)
+                                .frame(width: 24.s, height: 24.s)
+                        }
+                    } else {
+                        // 其他用户视角: 显示 Follow + Share 按钮
+                        // Follow Button
+                        Button(action: {
+                            Task {
+                                await toggleFollow()
+                            }
+                        }) {
+                            if isFollowLoading {
+                                ProgressView()
+                                    .frame(width: 85.w, height: 24.h)
+                            } else {
+                                Text(isFollowing ? "Following" : "Follow")
+                                    .font(Font.custom("HelveticaNeue", size: 12.f))
+                                    .foregroundColor(isFollowing ? DesignTokens.textSecondary : Color(red: 0.87, green: 0.11, blue: 0.26))
+                                    .frame(width: 85.w, height: 24.h)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 100)
+                                            .stroke(isFollowing ? DesignTokens.textSecondary : Color(red: 0.87, green: 0.11, blue: 0.26), lineWidth: 0.5)
+                                    )
+                            }
+                        }
+                        .disabled(isFollowLoading)
+                        
+                        // Share Button (24x24 图标，间距 12pt)
+                        Button(action: {}) {
+                            Image("Share-black")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 24.s, height: 24.s)
+                        }
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .frame(height: 56)
-            .background(DesignTokens.surface)
+            .padding(.leading, 4.w)  // 4 + (48-24)/2 = 4 + 12 = 16pt 到返回图标
+            .padding(.trailing, 16.w)
+            .padding(.vertical, 10.h)
+            .frame(width: 375.w, height: 50.h)
+            .background(.white)
 
             // Divider
             Divider()
@@ -505,13 +482,12 @@ struct PostDetailView: View {
     // MARK: - Image Carousel Section
 
     private var imageCarouselSection: some View {
-        VStack(spacing: 8) {
-            // Use fullResolutionMediaUrls for detail view (original images, not 600px thumbnails)
-            if !post.fullResolutionMediaUrls.isEmpty {
+        VStack(spacing: 10.h) {
+            if !post.displayMediaUrls.isEmpty {
                 GeometryReader { geometry in
                     // Image/Video Carousel with caching for better performance
                     TabView(selection: $currentImageIndex) {
-                        ForEach(Array(post.fullResolutionMediaUrls.enumerated()), id: \.element) { index, mediaUrl in
+                        ForEach(Array(post.displayMediaUrls.enumerated()), id: \.element) { index, mediaUrl in
                             Group {
                                 if isVideoUrl(mediaUrl), let videoUrl = URL(string: mediaUrl) {
                                     // Video content - use FeedVideoPlayer
@@ -552,146 +528,345 @@ struct PostDetailView: View {
                 }
                 .aspectRatio(3/4, contentMode: .fit)  // Provide aspect ratio instead of fixed height
 
-                // Page Indicators
-                if post.fullResolutionMediaUrls.count > 1 {
-                    HStack(spacing: 11) {
-                        ForEach(0..<post.fullResolutionMediaUrls.count, id: \.self) { index in
+                // Page Indicators (与 FeedPostCard 一致)
+                if post.displayMediaUrls.count > 1 {
+                    HStack(spacing: 4.w) {
+                        ForEach(0..<post.displayMediaUrls.count, id: \.self) { index in
                             Circle()
                                 .fill(index == currentImageIndex ?
-                                      Color(red: 0.81, green: 0.13, blue: 0.25) :
-                                      Color(red: 0.85, green: 0.85, blue: 0.85))
-                                .frame(width: 6, height: 6)
+                                      Color(red: 0.87, green: 0.11, blue: 0.26) :
+                                      Color(red: 0.90, green: 0.90, blue: 0.90))
+                                .frame(width: 6.s, height: 6.s)
                         }
                     }
-                    .padding(.top, 4)
                 }
             } else {
                 // Placeholder for empty image
                 Rectangle()
                     .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
                     .frame(height: 332)
-                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                    .clipShape(RoundedRectangle(cornerRadius: 0))
             }
         }
     }
 
-    // MARK: - Content Section
+    // MARK: - Content Section (与 FeedPostCard 样式一致)
 
     private var contentSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Title (from backend or VLM analysis)
-            if let title = post.title, !title.isEmpty {
-                Text(title)
-                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
-                    .foregroundColor(DesignTokens.textPrimary)
+        VStack(alignment: .leading, spacing: 10.h) {
+            // Post Content Text (与 FeedPostCard 一致的 ExpandableTextView)
+            if !post.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                ExpandableTextView(
+                    text: post.content,
+                    isExpanded: $isTextExpanded,
+                    lineLimit: 2
+                )
             }
 
-            // Description
-            if !post.content.isEmpty {
-                Text(post.content)
-                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
-                    .lineSpacing(6)
-                    .foregroundColor(DesignTokens.textPrimary)
-            }
-
-            // Tags (from AI analysis or user input)
+            // Channel Tags (与 FeedPostCard 一致)
             if let formattedTags = post.formattedTags {
                 Text(formattedTags)
-                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
-                    .foregroundColor(DesignTokens.accentColor)
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                    .tracking(0.28)
+                    .foregroundColor(Color(red: 0.91, green: 0.20, blue: 0.34))
             }
 
             // Time and Location
-            HStack(spacing: 5) {
+            HStack(spacing: 5.w) {
                 Text(post.createdAt.timeAgoDisplay())
                     .font(Font.custom("SFProDisplay-Regular", size: 10.f))
-                    .foregroundColor(DesignTokens.textSecondary)
-
-                if let location = post.location {
+                    .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                if let location = post.location, !location.isEmpty {
                     Text(location)
                         .font(Font.custom("SFProDisplay-Regular", size: 10.f))
-                        .foregroundColor(DesignTokens.textSecondary)
+                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
                 }
+                Spacer()
             }
-
-            // Divider
-            Divider()
+            .padding(.bottom, 10.h)
+            
+            // Divider (分割线)
+            Rectangle()
+                .fill(Color(red: 0.75, green: 0.75, blue: 0.75))
                 .frame(height: 0.2)
-                .background(Color(red: 0.77, green: 0.77, blue: 0.77))
+                .padding(.bottom, 10.h)
+            
+            // Comments Count
+            HStack {
+                Text("\(displayCommentCount) comments")
+                    .font(Font.custom("SFProDisplay-Bold", size: 12.f))
+                    .tracking(0.24)
+                    .foregroundColor(.black)
+                Spacer()
+            }
+            .padding(.bottom, 10.h)
+            
+            // MARK: - Comment Preview (预览用静态数据)
+            VStack(alignment: .leading, spacing: 10.h) {
+                // Main Comment (Alice)
+                HStack(alignment: .top, spacing: 10.w) {
+                    // Avatar
+                    Circle()
+                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                        .frame(width: 30.s, height: 30.s)
+                    
+                    VStack(alignment: .leading, spacing: 2.h) {
+                        // Username + AI agent tag
+                        HStack(spacing: 6.w) {
+                            Text("Alice")
+                                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                                .tracking(0.28)
+                                .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                            
+                            Text("AI agent")
+                                .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                                .foregroundColor(.black)
+                                .padding(EdgeInsets(top: 3.h, leading: 6.w, bottom: 5.h, trailing: 6.w))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(.black, lineWidth: 0.5)
+                                )
+                        }
+                        
+                        // Comment content
+                        Text("Let's give it a thumbs up together.")
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                            .tracking(0.28)
+                            .foregroundColor(.black)
+                        
+                        // Time, Location, Reply + Like/Save
+                        HStack {
+                            HStack(spacing: 8.w) {
+                                HStack(spacing: 5.w) {
+                                    Text("2d ago")
+                                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                                    Text("Beijing")
+                                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                                }
+                                Text("Reply")
+                                    .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                                    .foregroundColor(Color(red: 0.16, green: 0.16, blue: 0.16))
+                            }
+                            
+                            Spacer()
+                            
+                            HStack(spacing: 6.w) {
+                                // Like
+                                HStack(spacing: 3.w) {
+                                    Image("Heart-Little")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 12.s, height: 12.s)
+                                    Text("12")
+                                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                                        .foregroundColor(Color(red: 0.16, green: 0.16, blue: 0.16))
+                                }
+                                // Save
+                                HStack(spacing: 3.w) {
+                                    Image("Save-Little")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 12.s, height: 12.s)
+                                    Text("10")
+                                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                                        .foregroundColor(Color(red: 0.16, green: 0.16, blue: 0.16))
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Reply Comment (Lusin) - indented
+                VStack(alignment: .leading, spacing: 6.h) {
+                    HStack(alignment: .top, spacing: 10.w) {
+                        // Avatar (smaller)
+                        Circle()
+                            .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                            .frame(width: 20.s, height: 20.s)
+                        
+                        VStack(alignment: .leading, spacing: 2.h) {
+                            // Username
+                            Text("Lusin")
+                                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                                .tracking(0.28)
+                                .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                            
+                            // Comment content
+                            Text("Haha,this is alice who was bribed")
+                                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                                .tracking(0.28)
+                                .foregroundColor(.black)
+                            
+                            // Time, Location, Reply + Like/Save
+                            HStack {
+                                HStack(spacing: 8.w) {
+                                    HStack(spacing: 5.w) {
+                                        Text("2d ago")
+                                            .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                                        Text("Beijing")
+                                            .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                                    }
+                                    Text("Reply")
+                                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                                        .foregroundColor(Color(red: 0.16, green: 0.16, blue: 0.16))
+                                }
+                                
+                                Spacer()
+                                
+                                HStack(spacing: 6.w) {
+                                    // Like
+                                    HStack(spacing: 3.w) {
+                                        Image("Heart-Little")
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 12.s, height: 12.s)
+                                        Text("12")
+                                            .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                                            .foregroundColor(Color(red: 0.16, green: 0.16, blue: 0.16))
+                                    }
+                                    // Save
+                                    HStack(spacing: 3.w) {
+                                        Image("Save-Little")
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 12.s, height: 12.s)
+                                        Text("10")
+                                            .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                                            .foregroundColor(Color(red: 0.16, green: 0.16, blue: 0.16))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(.leading, 40.w)  // 54 - 14 = 40 (缩进)
+                    
+                    // View replies
+                    HStack(spacing: 10.w) {
+                        Rectangle()
+                            .fill(Color(red: 0.75, green: 0.75, blue: 0.75))
+                            .frame(width: 20.w, height: 0.2)
+                        Text("View 3 replies")
+                            .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                            .foregroundColor(Color(red: 0.16, green: 0.16, blue: 0.16))
+                    }
+                    .padding(.leading, 40.w)
+                }
+                
+                // Second Comment (Alice without AI agent tag)
+                HStack(alignment: .top, spacing: 10.w) {
+                    // Avatar
+                    Circle()
+                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                        .frame(width: 30.s, height: 30.s)
+                    
+                    VStack(alignment: .leading, spacing: 2.h) {
+                        // Username (no AI agent tag)
+                        Text("Alice")
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                            .tracking(0.28)
+                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                        
+                        // Comment content
+                        Text("Let's give it a thumbs up together.")
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                            .tracking(0.28)
+                            .foregroundColor(.black)
+                        
+                        // Time, Location, Reply + Like/Save
+                        HStack {
+                            HStack(spacing: 8.w) {
+                                HStack(spacing: 5.w) {
+                                    Text("2d ago")
+                                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                                    Text("Beijing")
+                                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                                }
+                                Text("Reply")
+                                    .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                                    .foregroundColor(Color(red: 0.16, green: 0.16, blue: 0.16))
+                            }
+                            
+                            Spacer()
+                            
+                            HStack(spacing: 6.w) {
+                                // Like
+                                HStack(spacing: 3.w) {
+                                    Image("Heart-Little")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 12.s, height: 12.s)
+                                    Text("12")
+                                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                                        .foregroundColor(Color(red: 0.16, green: 0.16, blue: 0.16))
+                                }
+                                // Save
+                                HStack(spacing: 3.w) {
+                                    Image("Save-Little")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 12.s, height: 12.s)
+                                    Text("10")
+                                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                                        .foregroundColor(Color(red: 0.16, green: 0.16, blue: 0.16))
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.vertical, 20.h)
+            }
         }
-        .padding(.horizontal, 17)
-        .padding(.top, 16)
+        .padding(EdgeInsets(top: 10.h, leading: 14.w, bottom: 10.h, trailing: 14.w))
     }
 
     // MARK: - Comments Section
 
     private var commentsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Comments Count
-            HStack {
-                Text("\(displayCommentCount) comments")
-                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                    .foregroundColor(DesignTokens.textPrimary)
-
-                if commentViewModel.isLoading {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                }
+            // Comment List (从API加载的真实评论)
+            ForEach(displayComments) { comment in
+                SocialCommentItemView(
+                    comment: comment,
+                    initialLikedStatus: commentViewModel.commentLikeStatus[comment.id],
+                    onReplyTapped: {
+                        showComments = true
+                    },
+                    onAvatarTapped: onAvatarTapped,
+                    onLikeStatusChanged: { commentId, isLiked in
+                        commentViewModel.updateCommentLikeStatus(commentId: commentId, isLiked: isLiked)
+                    }
+                )
             }
-            .padding(.horizontal, 17)
-            .padding(.top, 12)
 
-            // Comment List
-            if commentViewModel.isLoading {
-                // Skeleton loading state
-                ForEach(0..<3, id: \.self) { _ in
-                    CommentSkeleton()
-                }
-            } else if displayComments.isEmpty {
-                Text("No comments yet. Be the first to comment!")
-                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
-                    .foregroundColor(DesignTokens.textSecondary)
-                    .padding(.horizontal, 17)
-                    .padding(.vertical, 20)
-            } else {
-                ForEach(displayComments) { comment in
-                    SocialCommentItemView(
-                        comment: comment,
-                        initialLikedStatus: commentViewModel.commentLikeStatus[comment.id],
-                        onReplyTapped: {
-                            showComments = true
-                        },
-                        onAvatarTapped: onAvatarTapped,
-                        onLikeStatusChanged: { commentId, isLiked in
-                            commentViewModel.updateCommentLikeStatus(commentId: commentId, isLiked: isLiked)
-                        }
-                    )
-                }
-
-                // Load More Button
-                if commentViewModel.hasMore && !commentViewModel.isLoadingMore {
-                    Button(action: {
-                        Task {
-                            await commentViewModel.loadMore()
-                        }
-                    }) {
-                        Text("Load more comments...")
-                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
-                            .foregroundColor(DesignTokens.accentColor)
+            // Load More Button
+            if commentViewModel.hasMore && !commentViewModel.isLoadingMore {
+                Button(action: {
+                    Task {
+                        await commentViewModel.loadMore()
                     }
-                    .padding(.horizontal, 17)
-                    .padding(.vertical, 8)
+                }) {
+                    Text("Load more comments...")
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                        .foregroundColor(DesignTokens.accentColor)
                 }
+                .padding(.horizontal, 17)
+                .padding(.vertical, 8)
+            }
 
-                if commentViewModel.isLoadingMore {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                            .scaleEffect(0.8)
-                        Spacer()
-                    }
-                    .padding(.vertical, 8)
+            if commentViewModel.isLoadingMore {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Spacer()
                 }
+                .padding(.vertical, 8)
             }
         }
     }
@@ -700,79 +875,103 @@ struct PostDetailView: View {
 
     private var bottomActionBar: some View {
         VStack(spacing: 0) {
-            Divider()
+            // Top border
+            Rectangle()
+                .fill(Color(red: 0.75, green: 0.75, blue: 0.75))
                 .frame(height: 0.25)
-                .background(Color(red: 0.77, green: 0.77, blue: 0.77))
-
-            // Stats Row
-            HStack(spacing: 16) {
-                // Like Button (Xiaohongshu-style - no loading state, instant feedback)
-                Button(action: {
-                    toggleLike()
-                }) {
-                    HStack(spacing: 6) {
-                        Image(isPostLiked ? "card-heart-icon-filled" : "card-heart-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
-                            .id("detail-like-icon-\(isPostLiked)")  // Force SwiftUI re-render
-                            .transition(.scale.combined(with: .opacity))
-                        Text("\(postLikeCount)")
-                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                            .lineSpacing(20)
-                            .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
-                            .contentTransition(.numericText())
+            
+            // Content Row (aligned to top)
+            HStack(spacing: 10.w) {
+                // Stats Group (Like, Comment, Save)
+                HStack(spacing: 8.w) {
+                    // Like Button
+                    Button(action: {
+                        Task { await toggleLike() }
+                    }) {
+                        HStack(spacing: 4.w) {
+                            if isLikeLoading {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                                    .frame(width: 24.s, height: 24.s)
+                            } else {
+                                Image(isPostLiked ? "card-heart-icon-filled" : "card-heart-icon")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 24.s, height: 24.s)
+                            }
+                            Text("\(postLikeCount.abbreviated)")
+                                .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
+                                .tracking(0.24)
+                                .foregroundColor(.black)
+                        }
                     }
-                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPostLiked)
+                    .disabled(isLikeLoading)
+                    
+                    // Comment Button
+                    Button(action: {
+                        showComments = true
+                    }) {
+                        HStack(spacing: 4.w) {
+                            Image("card-comment-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 24.s, height: 24.s)
+                            Text("\(displayCommentCount.abbreviated)")
+                                .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
+                                .tracking(0.24)
+                                .foregroundColor(.black)
+                        }
+                    }
+                    
+                    // Save Button
+                    Button(action: {
+                        Task { await toggleBookmark() }
+                    }) {
+                        HStack(spacing: 4.w) {
+                            if isBookmarkLoading {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                                    .frame(width: 24.s, height: 24.s)
+                            } else {
+                                Image(isPostSaved ? "collect-fill" : "collect")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 24.s, height: 24.s)
+                            }
+                            Text("\(postSaveCount.abbreviated)")
+                                .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
+                                .tracking(0.24)
+                                .foregroundColor(.black)
+                        }
+                    }
+                    .disabled(isBookmarkLoading)
                 }
-                .buttonStyle(.plain)
-
-                // Comment Button (打开评论弹窗，与 Home 统一)
+                
+                // Input Field
                 Button(action: {
                     showComments = true
                 }) {
-                    HStack(spacing: 6) {
-                        Image("card-comment-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
-                        Text("\(displayCommentCount)")
+                    HStack {
+                        Text("Enter text...")
                             .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                            .lineSpacing(20)
-                            .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                            .tracking(0.28)
+                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                        Spacer()
                     }
+                    .padding(.horizontal, 12.w)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 28.h)
+                    .background(Color(red: 0.90, green: 0.90, blue: 0.90))
+                    .cornerRadius(28)
                 }
-
-                // Bookmark Button (Xiaohongshu-style - no loading state, instant feedback)
-                Button(action: {
-                    toggleBookmark()
-                }) {
-                    HStack(spacing: 6) {
-                        Image(isPostSaved ? "collect-fill" : "collect")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
-                            .id("detail-bookmark-icon-\(isPostSaved)")  // Force SwiftUI re-render
-                            .transition(.scale.combined(with: .opacity))
-                        Text("\(postSaveCount)")
-                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                            .lineSpacing(20)
-                            .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
-                            .contentTransition(.numericText())
-                    }
-                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPostSaved)
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
             }
-            .padding(.horizontal, 17)
-            .padding(.top, 20)
-            .padding(.bottom, 16)
-            .background(DesignTokens.surface)
-
+            .padding(.horizontal, 14.w)
+            .frame(height: 44.h)
+            
+            Spacer()
         }
-        .background(DesignTokens.surface)
+        .frame(height: 78.h)
+        .background(.white)
     }
 
     // MARK: - Follow Actions
@@ -811,70 +1010,93 @@ struct PostDetailView: View {
         }
     }
 
-    // MARK: - Social Actions Handler Setup (reuse Home feed logic)
+    // MARK: - Like Actions
 
-    private func setupSocialActionsHandler() {
-        let handler = FeedSocialActionsHandler()
-
-        // Configure callback to update local state (same pattern as Home feed)
-        handler.onPostUpdate = { [self] postId, transform in
-            guard postId == post.id else { return }
-
-            // Create a temporary post to apply the transform
-            var tempPost = post.copying(
-                likeCount: postLikeCount,
-                bookmarkCount: postSaveCount,
-                isLiked: isPostLiked,
-                isBookmarked: isPostSaved
-            )
-            tempPost = transform(tempPost)
-
-            // Update local state
-            isPostLiked = tempPost.isLiked
-            postLikeCount = tempPost.likeCount
-            isPostSaved = tempPost.isBookmarked
-            postSaveCount = tempPost.bookmarkCount
-
-            // Notify parent to sync state
-            onLikeChanged?(tempPost.isLiked, tempPost.likeCount)
-            onBookmarkChanged?(tempPost.isBookmarked, tempPost.bookmarkCount)
+    private func toggleLike() async {
+        guard !isLikeLoading else { return }
+        guard let userId = currentUserId else {
+            showSocialError("Please sign in to like posts.")
+            return
         }
 
-        socialActionsHandler = handler
+        isLikeLoading = true
+        let wasLiked = isPostLiked
+
+        // Optimistic update
+        isPostLiked.toggle()
+        postLikeCount = max(0, postLikeCount + (isPostLiked ? 1 : -1))
+
+        do {
+            let response: SocialService.LikeResponse
+            if wasLiked {
+                response = try await socialService.deleteLike(postId: post.id, userId: userId)
+            } else {
+                response = try await socialService.createLike(postId: post.id, userId: userId)
+            }
+
+            // Sync with server's accurate count
+            postLikeCount = Int(response.likeCount)
+
+            // Notify parent to sync state
+            onLikeChanged?(isPostLiked, postLikeCount)
+
+            // Invalidate feed cache
+            await FeedCacheService.shared.invalidateCache()
+        } catch {
+            // Revert on failure
+            isPostLiked = wasLiked
+            postLikeCount = max(0, postLikeCount + (wasLiked ? 1 : -1))
+            #if DEBUG
+            print("[PostDetailView] Toggle like error: \(error)")
+            #endif
+        }
+
+        isLikeLoading = false
     }
 
-    // MARK: - Like Actions (delegate to FeedSocialActionsHandler)
+    // MARK: - Bookmark Actions
 
-    /// Toggle like - synchronous to prevent race conditions from async interleaving
-    private func toggleLike() {
-        guard let handler = socialActionsHandler else { return }
+    private func toggleBookmark() async {
+        guard !isBookmarkLoading else { return }
+        guard let userId = currentUserId else {
+            showSocialError("Please sign in to save posts.")
+            return
+        }
 
-        // Create current post state for handler
-        let currentPost = post.copying(
-            likeCount: postLikeCount,
-            bookmarkCount: postSaveCount,
-            isLiked: isPostLiked,
-            isBookmarked: isPostSaved
-        )
+        isBookmarkLoading = true
+        let wasBookmarked = isPostSaved
 
-        _ = handler.toggleLike(postId: post.id, currentPost: currentPost)
+        // Optimistic update
+        isPostSaved.toggle()
+        postSaveCount = max(0, postSaveCount + (isPostSaved ? 1 : -1))
+
+        do {
+            if wasBookmarked {
+                try await socialService.deleteBookmark(postId: post.id)
+            } else {
+                try await socialService.createBookmark(postId: post.id, userId: userId)
+            }
+
+            // Notify parent to sync state
+            onBookmarkChanged?(isPostSaved, postSaveCount)
+
+            // Invalidate feed cache
+            await FeedCacheService.shared.invalidateCache()
+        } catch {
+            // Revert on failure
+            isPostSaved = wasBookmarked
+            postSaveCount = max(0, postSaveCount + (wasBookmarked ? 1 : -1))
+            #if DEBUG
+            print("[PostDetailView] Toggle bookmark error: \(error)")
+            #endif
+        }
+
+        isBookmarkLoading = false
     }
 
-    // MARK: - Bookmark Actions (delegate to FeedSocialActionsHandler)
-
-    /// Toggle bookmark - synchronous to prevent race conditions from async interleaving
-    private func toggleBookmark() {
-        guard let handler = socialActionsHandler else { return }
-
-        // Create current post state for handler
-        let currentPost = post.copying(
-            likeCount: postLikeCount,
-            bookmarkCount: postSaveCount,
-            isLiked: isPostLiked,
-            isBookmarked: isPostSaved
-        )
-
-        _ = handler.toggleBookmark(postId: post.id, currentPost: currentPost)
+    private func showSocialError(_ message: String) {
+        socialErrorMessage = message
+        showingSocialError = true
     }
 
     /// Check if URL points to a video file
@@ -923,14 +1145,14 @@ struct PostDetailView: View {
     // MARK: - Save Image to Photos
 
     private func saveCurrentImageToPhotos() async {
-        // 获取当前显示的图片 URL (使用原图 URL，不是縮圖)
-        guard currentImageIndex < post.fullResolutionMediaUrls.count else {
+        // 获取当前显示的图片 URL
+        guard currentImageIndex < post.displayMediaUrls.count else {
             saveErrorMessage = "No image to save"
             showingSaveError = true
             return
         }
 
-        let imageUrlString = post.fullResolutionMediaUrls[currentImageIndex]
+        let imageUrlString = post.displayMediaUrls[currentImageIndex]
 
         // Skip videos
         guard !isVideoUrl(imageUrlString) else {
@@ -1002,7 +1224,7 @@ struct SocialCommentItemView: View {
             // Main Comment
             HStack(alignment: .top, spacing: 10) {
                 // Avatar (点击跳转用户主页)
-                AvatarView(image: nil, url: comment.authorAvatarUrl, size: 30, accountType: comment.authorAccountType)
+                AvatarView(image: nil, url: comment.authorAvatarUrl, size: 30)
                     .onTapGesture {
                         onAvatarTapped?(comment.userId)
                     }

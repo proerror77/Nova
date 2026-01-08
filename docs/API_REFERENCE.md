@@ -1,7 +1,7 @@
 # Nova API Reference
 
 **Version**: 2.0
-**Last Updated**: 2025-12-16
+**Last Updated**: 2026-01-08
 **Base URL**: `https://api.nova.social` (Production) | Staging ELB
 
 ---
@@ -215,8 +215,28 @@
 | POST | `/api/v2/social/comments` | Create comment | JWT |
 | DELETE | `/api/v2/social/comments/{id}` | Delete comment | JWT |
 | GET | `/api/v2/social/comments/{post_id}` | Get comments | JWT |
+| POST | `/api/v2/social/comment/like` | Like a comment (IG/XHS style) | JWT |
+| DELETE | `/api/v2/social/comment/unlike/{comment_id}` | Unlike a comment | JWT |
+| GET | `/api/v2/social/comment/likes/{comment_id}` | Get comment like count | JWT |
+| GET | `/api/v2/social/comment/check-liked/{comment_id}` | Check if comment is liked | JWT |
 | POST | `/api/v2/social/shares` | Share post | JWT |
 | GET | `/api/v2/social/shares/{post_id}/count` | Share count | JWT |
+
+**Comment Like Request (Instagram/Xiaohongshu style):**
+```json
+{
+  "user_id": "uuid",
+  "comment_id": "comment_uuid"
+}
+```
+
+**Comment Like Response:**
+```json
+{
+  "success": true,
+  "like_count": 42
+}
+```
 
 ---
 
@@ -463,7 +483,35 @@
 
 ---
 
-## 17. Health & Monitoring
+## 17. Matrix Integration
+
+### Profile Synchronization (Client-Side)
+
+Nova automatically synchronizes user profiles to Matrix for seamless chat integration:
+
+**Auto-Sync Triggers:**
+- After successful login/registration
+- When user updates profile (display name or avatar)
+- After Matrix bridge initialization
+
+**Synced Data:**
+- Display name → Matrix display name
+- Avatar → Matrix avatar (via media upload)
+
+**iOS Implementation:**
+```swift
+// Automatic sync on profile update
+await MatrixBridgeService.shared.syncProfileToMatrix()
+```
+
+**Features:**
+- Non-blocking background sync
+- Automatic retry on failure (up to 3 attempts)
+- Graceful degradation if Matrix is unavailable
+
+---
+
+## 18. Health & Monitoring
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

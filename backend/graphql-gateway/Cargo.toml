@@ -28,7 +28,7 @@ actix-multipart = "0.7"
 # gRPC clients (to call backend services)
 tonic = { workspace = true }
 prost = { workspace = true }
-pbjson-types = "0.9"  # For google.protobuf.Timestamp support
+pbjson-types = "0.7"  # For google.protobuf.Timestamp support (0.7 uses prost 0.13)
 rustls = { version = "0.23", features = ["ring"] }  # TLS crypto provider
 
 # Tracing

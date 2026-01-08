@@ -2,45 +2,6 @@ import SwiftUI
 
 // MARK: - Comment Sheet View
 
-// MARK: - Text Parsing Helper
-/// Parse comment text and highlight @mentions with accent color
-private func parseCommentText(_ text: String) -> Text {
-    let pattern = try? NSRegularExpression(pattern: "@[\\w\\u4e00-\\u9fff]+", options: [])
-    guard let regex = pattern else {
-        return Text(text)
-    }
-
-    let nsString = text as NSString
-    let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsString.length))
-
-    if matches.isEmpty {
-        return Text(text)
-    }
-
-    var result = Text("")
-    var lastEnd = 0
-
-    for match in matches {
-        if match.range.location > lastEnd {
-            let beforeRange = NSRange(location: lastEnd, length: match.range.location - lastEnd)
-            let beforeText = nsString.substring(with: beforeRange)
-            result = result + Text(beforeText)
-        }
-        let mentionText = nsString.substring(with: match.range)
-        result = result + Text(mentionText)
-            .foregroundColor(DesignTokens.accentColor)
-            .fontWeight(.medium)
-        lastEnd = match.range.location + match.range.length
-    }
-
-    if lastEnd < nsString.length {
-        let afterText = nsString.substring(from: lastEnd)
-        result = result + Text(afterText)
-    }
-
-    return result
-}
-
 struct CommentSheetView: View {
     let post: FeedPost
     @Binding var isPresented: Bool

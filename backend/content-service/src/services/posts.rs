@@ -115,8 +115,15 @@ impl PostService {
         media_type: &str,
         author_account_type: Option<&str>,
     ) -> Result<Post> {
-        self.create_post_with_urls(user_id, caption, media_key, media_type, &[], author_account_type)
-            .await
+        self.create_post_with_urls(
+            user_id,
+            caption,
+            media_key,
+            media_type,
+            &[],
+            author_account_type,
+        )
+        .await
     }
 
     /// Create a new post with explicit media URLs

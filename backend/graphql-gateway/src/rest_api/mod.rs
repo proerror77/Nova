@@ -19,6 +19,7 @@ pub mod channels;
 pub mod chat;
 pub mod content;
 pub mod devices;
+pub mod email_auth;
 pub mod feed;
 pub mod graph;
 pub mod identity;

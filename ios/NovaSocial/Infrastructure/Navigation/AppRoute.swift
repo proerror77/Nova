@@ -8,10 +8,13 @@ enum AppRoute: Hashable, Codable {
     case login
     case phoneLogin
     case phoneRegistration
+    case phoneEnterCode(phoneNumber: String)
+    case gmailEnterCode(email: String)
     case forgotPassword
     case emailSentConfirmation(email: String)
     case resetPassword(token: String)
     case createAccount
+    case profileSetup
 
     // MARK: - Main Tab Routes
     case home
@@ -61,6 +64,7 @@ enum AppRoute: Hashable, Codable {
         case roomId
         case postId
         case query
+        case phoneNumber
     }
 
     init(from decoder: Decoder) throws {
@@ -73,6 +77,12 @@ enum AppRoute: Hashable, Codable {
         case "login": self = .login
         case "phoneLogin": self = .phoneLogin
         case "phoneRegistration": self = .phoneRegistration
+        case "phoneEnterCode":
+            let phoneNumber = try container.decode(String.self, forKey: .phoneNumber)
+            self = .phoneEnterCode(phoneNumber: phoneNumber)
+        case "gmailEnterCode":
+            let email = try container.decode(String.self, forKey: .email)
+            self = .gmailEnterCode(email: email)
         case "forgotPassword": self = .forgotPassword
         case "emailSentConfirmation":
             let email = try container.decode(String.self, forKey: .email)
@@ -131,6 +141,12 @@ enum AppRoute: Hashable, Codable {
         case .login: try container.encode("login", forKey: .type)
         case .phoneLogin: try container.encode("phoneLogin", forKey: .type)
         case .phoneRegistration: try container.encode("phoneRegistration", forKey: .type)
+        case .phoneEnterCode(let phoneNumber):
+            try container.encode("phoneEnterCode", forKey: .type)
+            try container.encode(phoneNumber, forKey: .phoneNumber)
+        case .gmailEnterCode(let email):
+            try container.encode("gmailEnterCode", forKey: .type)
+            try container.encode(email, forKey: .email)
         case .forgotPassword: try container.encode("forgotPassword", forKey: .type)
         case .emailSentConfirmation(let email):
             try container.encode("emailSentConfirmation", forKey: .type)
@@ -139,6 +155,7 @@ enum AppRoute: Hashable, Codable {
             try container.encode("resetPassword", forKey: .type)
             try container.encode(token, forKey: .token)
         case .createAccount: try container.encode("createAccount", forKey: .type)
+        case .profileSetup: try container.encode("profileSetup", forKey: .type)
         case .home: try container.encode("home", forKey: .type)
         case .message: try container.encode("message", forKey: .type)
         case .alice: try container.encode("alice", forKey: .type)
@@ -193,10 +210,13 @@ extension AppRoute {
         case .login: return .login
         case .phoneLogin: return .phoneLogin
         case .phoneRegistration: return .phoneRegistration
+        case .phoneEnterCode(let phoneNumber): return .phoneEnterCode(phoneNumber: phoneNumber)
+        case .gmailEnterCode(let email): return .gmailEnterCode(email: email)
         case .forgotPassword: return .forgotPassword
         case .emailSentConfirmation(let email): return .emailSentConfirmation(email: email)
         case .resetPassword(let token): return .resetPassword(token: token)
         case .createAccount: return .createAccount
+        case .profileSetup: return .profileSetup
         case .home: return .home
         case .message: return .message
         case .alice: return .alice

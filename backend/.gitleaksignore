@@ -1,2 +1,0 @@
-# Ignore test keys in integration tests (not real secrets)
-backend/libs/crypto-core/tests/jwt_integration_tests.rs:private-key:17

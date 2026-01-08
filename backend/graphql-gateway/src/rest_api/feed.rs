@@ -94,6 +94,12 @@ async fn enrich_posts_with_authors(
                 author_username: profile.map(|p| p.username.clone()),
                 author_display_name,
                 author_avatar: profile.and_then(|p| p.avatar_url.clone()),
+                // Account type for avatar border (Issue #259)
+                author_account_type: if post.author_account_type.is_empty() {
+                    "primary".to_string()
+                } else {
+                    post.author_account_type
+                },
             }
         })
         .collect()

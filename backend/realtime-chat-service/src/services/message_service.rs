@@ -200,37 +200,53 @@ impl MessageService {
 
         let client = Self::get_db_client(db, "send message").await?;
 
-        let row = client.query_one(
-            r#"
-            WITH next AS (
-                INSERT INTO conversation_counters (conversation_id, last_seq)
-                VALUES ($2, 1)
-                ON CONFLICT (conversation_id)
-                DO UPDATE SET last_seq = conversation_counters.last_seq + 1
-                RETURNING last_seq
+        // Keep conversations.updated_at and conversations.last_message_id in sync with message writes.
+        // Without this, conversation listings and "last message" previews drift from reality.
+        let row = client
+            .query_one(
+                r#"
+                WITH next AS (
+                    INSERT INTO conversation_counters (conversation_id, last_seq)
+                    VALUES ($2, 1)
+                    ON CONFLICT (conversation_id)
+                    DO UPDATE SET last_seq = conversation_counters.last_seq + 1
+                    RETURNING last_seq
+                ),
+                ins AS (
+                    INSERT INTO messages (
+                        id,
+                        conversation_id,
+                        sender_id,
+                        content,
+                        idempotency_key,
+                        sequence_number
+                    )
+                    SELECT
+                        $1,
+                        $2,
+                        $3,
+                        $4,
+                        $5,
+                        next.last_seq
+                    FROM next
+                    RETURNING id, conversation_id, sender_id, content, sequence_number, idempotency_key, created_at
+                ),
+                upd AS (
+                    UPDATE conversations c
+                    SET
+                        updated_at = ins.created_at,
+                        last_message_id = ins.id
+                    FROM ins
+                    WHERE c.id = ins.conversation_id
+                      AND c.deleted_at IS NULL
+                )
+                SELECT id, conversation_id, sender_id, content, sequence_number, idempotency_key, created_at
+                FROM ins
+                "#,
+                &[&id, &conversation_id, &sender_id, &content, &idempotency_key],
             )
-            INSERT INTO messages (
-                id,
-                conversation_id,
-                sender_id,
-                content,
-                idempotency_key,
-                sequence_number
-            )
-            SELECT
-                $1,
-                $2,
-                $3,
-                $4,
-                $5,
-                next.last_seq
-            FROM next
-            RETURNING id, conversation_id, sender_id, content, sequence_number, idempotency_key, created_at
-            "#,
-            &[&id, &conversation_id, &sender_id, &content, &idempotency_key]
-        )
-        .await
-        .map_err(|e| AppError::StartServer(format!("insert msg: {e}")))?;
+            .await
+            .map_err(|e| AppError::StartServer(format!("insert msg: {e}")))?;
 
         Ok(MessageRow {
             id: row.get(0),
@@ -313,38 +329,52 @@ impl MessageService {
 
         let client = Self::get_db_client(db, "send audio message").await?;
 
-        let seq: i64 = client.query_one(
-            r#"
-            WITH next AS (
-                INSERT INTO conversation_counters (conversation_id, last_seq)
-                VALUES ($2, 1)
-                ON CONFLICT (conversation_id)
-                DO UPDATE SET last_seq = conversation_counters.last_seq + 1
-                RETURNING last_seq
+        let row = client
+            .query_one(
+                r#"
+                WITH next AS (
+                    INSERT INTO conversation_counters (conversation_id, last_seq)
+                    VALUES ($2, 1)
+                    ON CONFLICT (conversation_id)
+                    DO UPDATE SET last_seq = conversation_counters.last_seq + 1
+                    RETURNING last_seq
+                ),
+                ins AS (
+                    INSERT INTO messages (
+                        id,
+                        conversation_id,
+                        sender_id,
+                        content,
+                        idempotency_key,
+                        sequence_number
+                    )
+                    SELECT
+                        $1,
+                        $2,
+                        $3,
+                        $4,
+                        $5,
+                        next.last_seq
+                    FROM next
+                    RETURNING sequence_number, created_at
+                ),
+                upd AS (
+                    UPDATE conversations c
+                    SET
+                        updated_at = ins.created_at,
+                        last_message_id = $1
+                    FROM ins
+                    WHERE c.id = $2
+                      AND c.deleted_at IS NULL
+                )
+                SELECT sequence_number, created_at FROM ins
+                "#,
+                &[&id, &conversation_id, &sender_id, &content, &idempotency_key],
             )
-            INSERT INTO messages (
-                id,
-                conversation_id,
-                sender_id,
-                content,
-                idempotency_key,
-                sequence_number
-            )
-            SELECT
-                $1,
-                $2,
-                $3,
-                $4,
-                $5,
-                next.last_seq
-            FROM next
-            RETURNING sequence_number
-            "#,
-            &[&id, &conversation_id, &sender_id, &content, &idempotency_key]
-        )
-        .await
-        .map_err(|e| AppError::StartServer(format!("insert audio msg: {e}")))?
-        .get(0);
+            .await
+            .map_err(|e| AppError::StartServer(format!("insert audio msg: {e}")))?;
+
+        let seq: i64 = row.get(0);
 
         Ok((id, seq))
     }

@@ -1,24 +1,6 @@
 {
-  "originHash" : "f9f0ad18a095c2c36f12b2daf6b56dcda298d86acec02f5ed11fec62249bfade",
+  "originHash" : "75b27d629a86c5628ee31e3eac8d277bca8fccdb2c9722b589afd493c24e1492",
   "pins" : [
-    {
-      "identity" : "client-sdk-swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/livekit/client-sdk-swift",
-      "state" : {
-        "revision" : "ddef539811647331775338ff4faf1b5309f56e8f",
-        "version" : "2.10.2"
-      }
-    },
-    {
-      "identity" : "jwt-kit",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/vapor/jwt-kit.git",
-      "state" : {
-        "revision" : "13e7513b3ba0afa13967daf77af2fb4ad087306c",
-        "version" : "4.13.5"
-      }
-    },
     {
       "identity" : "matrix-rust-components-swift",
       "kind" : "remoteSourceControl",
@@ -26,51 +8,6 @@
       "state" : {
         "revision" : "bc1acbc8ee7e8271465a724e3b3f2339cd12d20b",
         "version" : "25.12.19"
-      }
-    },
-    {
-      "identity" : "swift-asn1",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-asn1.git",
-      "state" : {
-        "revision" : "810496cf121e525d660cd0ea89a758740476b85f",
-        "version" : "1.5.1"
-      }
-    },
-    {
-      "identity" : "swift-collections",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-collections.git",
-      "state" : {
-        "revision" : "8c0c0a8b49e080e54e5e328cc552821ff07cd341",
-        "version" : "1.2.1"
-      }
-    },
-    {
-      "identity" : "swift-crypto",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-crypto.git",
-      "state" : {
-        "revision" : "95ba0316a9b733e92bb6b071255ff46263bbe7dc",
-        "version" : "3.15.1"
-      }
-    },
-    {
-      "identity" : "swift-protobuf",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-protobuf.git",
-      "state" : {
-        "revision" : "c169a5744230951031770e27e475ff6eefe51f9d",
-        "version" : "1.33.3"
-      }
-    },
-    {
-      "identity" : "webrtc-xcframework",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/livekit/webrtc-xcframework.git",
-      "state" : {
-        "revision" : "5b40f56c637369064b9c82e8f9cfa820f942658f",
-        "version" : "137.7151.10"
       }
     }
   ],

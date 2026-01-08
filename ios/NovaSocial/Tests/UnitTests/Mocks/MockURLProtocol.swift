@@ -52,8 +52,17 @@ final class MockURLProtocol: URLProtocol {
         MockURLProtocol.requestHistory.append(request)
         MockURLProtocol.historyLock.unlock()
 
-        guard let handler = MockURLProtocol.requestHandler else {
-            fatalError("MockURLProtocol: requestHandler not set")
+        // Unit tests run inside a host app process; the app may issue background/network
+        // requests before a specific test's setUp() has installed a requestHandler.
+        // Default to a safe 200-empty response instead of crashing the entire test run.
+        let handler = MockURLProtocol.requestHandler ?? { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, nil)
         }
 
         // Simulate network delay

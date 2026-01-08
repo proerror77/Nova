@@ -214,8 +214,9 @@ impl PhoneAuthService {
         .await?;
 
         // Generate token pair
-        let tokens = generate_token_pair(user.id, &user.email, &user.username, Some("primary"), None)
-            .map_err(|e| IdentityError::Internal(e.to_string()))?;
+        let tokens =
+            generate_token_pair(user.id, &user.email, &user.username, Some("primary"), None)
+                .map_err(|e| IdentityError::Internal(e.to_string()))?;
 
         info!(
             user_id = %user.id,
@@ -253,8 +254,9 @@ impl PhoneAuthService {
             })?;
 
         // Generate token pair
-        let tokens = generate_token_pair(user.id, &user.email, &user.username, Some("primary"), None)
-            .map_err(|e| IdentityError::Internal(e.to_string()))?;
+        let tokens =
+            generate_token_pair(user.id, &user.email, &user.username, Some("primary"), None)
+                .map_err(|e| IdentityError::Internal(e.to_string()))?;
 
         // Update last login
         if let Err(err) = db::users::record_successful_login(&self.db, user.id).await {
