@@ -634,22 +634,22 @@ impl SocialService for SocialServiceImpl {
         let user_id = parse_uuid(&req.user_id, "user_id")?;
 
         let repo = self.comment_repo();
-        let deleted = repo
+        let post_id = repo
             .delete_comment(comment_id, user_id)
             .await
             .map_err(|e| Status::internal(format!("Failed to delete comment: {}", e)))?;
 
-        if deleted {
-            if let Ok(Some(comment)) = repo.get_comment(comment_id).await {
-                let _ = self
-                    .state
-                    .counter_service
-                    .decrement_comment_count(comment.post_id)
-                    .await;
-            }
+        if let Some(post_id) = post_id {
+            let _ = self
+                .state
+                .counter_service
+                .decrement_comment_count(post_id)
+                .await;
         }
 
-        Ok(Response::new(DeleteCommentResponse { success: deleted }))
+        Ok(Response::new(DeleteCommentResponse {
+            success: post_id.is_some(),
+        }))
     }
 
     async fn get_comments(
