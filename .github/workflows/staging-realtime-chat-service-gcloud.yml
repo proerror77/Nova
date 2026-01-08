@@ -67,6 +67,11 @@ jobs:
           location: ${{ env.GCP_REGION }}
           project_id: ${{ env.GCP_PROJECT_ID }}
 
+      - name: Apply staging ConfigMap
+        run: |
+          set -euo pipefail
+          kubectl -n "${NAMESPACE}" apply -f k8s/microservices/realtime-chat-service-configmap.yaml
+
       - name: Deploy to GKE
         env:
           IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
