@@ -259,7 +259,7 @@ pub async fn send_message(
 
     // Build OpenAI chat completion request
     let openai_request = OpenAIChatRequest {
-        model: "grok-3".to_string(),
+        model: "grok-4-0709".to_string(),
         messages: vec![OpenAIChatMessage {
             role: "user".to_string(),
             content: Some(req.message.clone()),
@@ -384,9 +384,9 @@ pub async fn enhance_post(
     // Build vision request with image
     let image_url = format!("data:image/jpeg;base64,{}", req.image_base64);
 
-    // Use gpt-4o-mini for faster response (typically < 3 seconds)
+    // Use grok-2-vision-1212 for image analysis
     let vision_request = OpenAIVisionRequest {
-        model: "gpt-4o-mini".to_string(),
+        model: "grok-2-vision-1212".to_string(),
         messages: vec![OpenAIVisionMessage {
             role: "user".to_string(),
             content: vec![
