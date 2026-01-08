@@ -2,7 +2,7 @@ use crate::config::MatrixConfig;
 use crate::error::AppError;
 use matrix_sdk::{
     authentication::{matrix::MatrixSession, AuthSession, SessionTokens},
-    config::SyncSettings,
+    config::{RequestConfig, SyncSettings},
     room::Room,
     ruma::{
         events::{
@@ -28,6 +28,7 @@ use matrix_sdk::{
 use matrix_sdk::ruma::events::{AnySyncMessageLikeEvent, AnySyncTimelineEvent};
 use matrix_sdk::ruma::serde::Raw;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::RwLock;
 use tracing::{error, info};
@@ -90,9 +91,15 @@ impl MatrixClient {
             config.homeserver_url
         );
 
+        // matrix-sdk defaults to a 30s request timeout, which conflicts with `/sync?timeout=30000`:
+        // any small overhead will cause the request to time out and the whole sync loop to exit.
+        // Give long-polling sync enough headroom.
+        let request_config = RequestConfig::new().timeout(Duration::from_secs(70));
+
         // Build Matrix SDK client
         let client = Client::builder()
             .homeserver_url(&config.homeserver_url)
+            .request_config(request_config)
             .build()
             .await
             .map_err(|e| AppError::StartServer(format!("Matrix client build failed: {e}")))?;
@@ -592,14 +599,20 @@ impl MatrixClient {
 
         info!("Starting Matrix sync loop...");
 
-        let settings = SyncSettings::default().timeout(std::time::Duration::from_secs(30));
+        let sync_timeout = Duration::from_secs(25);
 
-        self.client
-            .sync(settings)
-            .await
-            .map_err(|e| AppError::StartServer(format!("Matrix sync failed: {e}")))?;
+        // Keep the sync loop running even if we hit transient network timeouts.
+        loop {
+            let settings = SyncSettings::default().timeout(sync_timeout);
 
-        Ok(())
+            if let Err(e) = self.client.sync(settings).await {
+                error!(error = %e, "Matrix sync failed; retrying in 5s");
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                continue;
+            }
+
+            return Ok(());
+        }
     }
 
     /// Register VoIP event handler for Matrix sync loop

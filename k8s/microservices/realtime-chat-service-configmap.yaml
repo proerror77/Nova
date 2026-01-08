@@ -25,7 +25,9 @@ data:
   RTC_STUN_URLS: "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302"
   # Matrix E2EE Integration
   MATRIX_ENABLED: "true"
-  MATRIX_HOMESERVER_URL: "http://matrix-synapse.nova-staging.svc.cluster.local:8008"
+  # IMPORTANT: This must point to the same Synapse instance that clients use (MATRIX_PUBLIC_URL),
+  # otherwise the sync loop will never see client rooms/events.
+  MATRIX_HOMESERVER_URL: "https://matrix.staging.gcp.icered.com"
   MATRIX_PUBLIC_URL: "https://matrix.staging.gcp.icered.com"
   MATRIX_SERVER_NAME: "staging.gcp.icered.com"
   MATRIX_SERVICE_USER: "@nova-service:staging.gcp.icered.com"
