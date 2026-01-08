@@ -12,8 +12,6 @@ use matrix_sdk::{
                 hangup::SyncCallHangupEvent,
                 invite::SyncCallInviteEvent,
             },
-            AnySyncMessageLikeEvent,
-            AnySyncTimelineEvent,
             room::{
                 encryption::RoomEncryptionEventContent,
                 encrypted::SyncRoomEncryptedEvent,
@@ -23,12 +21,14 @@ use matrix_sdk::{
             },
             InitialStateEvent,
         },
-        serde::Raw,
         OwnedDeviceId, OwnedRoomId, OwnedUserId, RoomId, UserId,
     },
     Client, SessionMeta,
 };
+use matrix_sdk::ruma::events::{AnySyncMessageLikeEvent, AnySyncTimelineEvent};
+use matrix_sdk::ruma::serde::Raw;
 use std::sync::Arc;
+use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::RwLock;
 use tracing::{error, info};
 use uuid::Uuid;
@@ -68,6 +68,8 @@ pub struct MatrixClient {
     config: MatrixConfig,
     /// Maps conversation_id -> matrix_room_id
     room_mapping: Arc<RwLock<std::collections::HashMap<Uuid, OwnedRoomId>>>,
+    /// Room IDs where we've attached a raw encrypted timeline handler.
+    raw_encrypted_rooms: Arc<RwLock<std::collections::HashSet<OwnedRoomId>>>,
 }
 
 impl MatrixClient {
@@ -131,6 +133,7 @@ impl MatrixClient {
             client,
             config,
             room_mapping: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            raw_encrypted_rooms: Arc::new(RwLock::new(std::collections::HashSet::new())),
         })
     }
 
@@ -516,28 +519,63 @@ impl MatrixClient {
             }
         });
 
-        // Some SDK paths may only surface encrypted timeline events as raw timeline events (before / without
-        // decryption). Register a raw handler as a fallback so we can still persist metadata-only rows.
-        self.client.add_event_handler({
-            let handler = encrypted_handler.clone();
-            move |raw: Raw<AnySyncTimelineEvent>, room: Room| {
-                let handler = handler.clone();
-                async move {
-                    match raw.get_field::<String>("type") {
-                        Ok(Some(t)) if t == "m.room.encrypted" => match raw.deserialize() {
-                            Ok(AnySyncTimelineEvent::MessageLike(AnySyncMessageLikeEvent::RoomEncrypted(ev))) => {
-                                handler(ev, room)
-                            }
-                            Ok(_) => {}
-                            Err(e) => {
-                                error!(error = %e, "Failed to deserialize raw m.room.encrypted event");
-                            }
-                        },
-                        Ok(_) => {}
-                        Err(e) => {
-                            error!(error = %e, "Failed to read raw event type");
+        // Encrypted rooms deliver message content as `m.room.encrypted`. In practice, the SDK does not
+        // reliably dispatch `SyncRoomEncryptedEvent` via client-level handlers. The most robust option is
+        // to attach a per-room raw timeline handler (see matrix-sdk's widget driver).
+        //
+        // We subscribe to all room updates so we can attach the handler as soon as a room becomes known
+        // to the client (including rooms discovered after startup).
+        let mut updates = self.client.subscribe_to_all_room_updates();
+        let client = self.client.clone();
+        let raw_rooms = self.raw_encrypted_rooms.clone();
+        let encrypted_handler_for_raw = encrypted_handler.clone();
+        tokio::spawn(async move {
+            loop {
+                let room_updates = match updates.recv().await {
+                    Ok(u) => u,
+                    Err(RecvError::Closed) => break,
+                    Err(RecvError::Lagged(_)) => continue,
+                };
+
+                for room_id in room_updates.joined.keys() {
+                    let Some(room) = client.get_room(room_id) else {
+                        continue;
+                    };
+
+                    // Only attach once per room.
+                    {
+                        let mut attached = raw_rooms.write().await;
+                        if !attached.insert(room_id.clone()) {
+                            continue;
                         }
                     }
+
+                    let room_for_handler = room.clone();
+                    let handler = encrypted_handler_for_raw.clone();
+
+                    room.add_event_handler(move |raw: Raw<AnySyncTimelineEvent>| {
+                        let room = room_for_handler.clone();
+                        let handler = handler.clone();
+                        async move {
+                            if raw.get_field::<String>("type").ok().flatten().as_deref()
+                                != Some("m.room.encrypted")
+                            {
+                                return;
+                            }
+
+                            match raw.deserialize() {
+                                Ok(AnySyncTimelineEvent::MessageLike(
+                                    AnySyncMessageLikeEvent::RoomEncrypted(ev),
+                                )) => {
+                                    handler(ev, room);
+                                }
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(error = %e, "Failed to deserialize room raw event");
+                                }
+                            }
+                        }
+                    });
                 }
             }
         });
@@ -849,6 +887,7 @@ mod tests {
                 .unwrap(),
             config: config.clone(),
             room_mapping: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            raw_encrypted_rooms: Arc::new(RwLock::new(std::collections::HashSet::new())),
         };
 
         assert_eq!(client.extract_server_name(), "staging.nova.internal");
