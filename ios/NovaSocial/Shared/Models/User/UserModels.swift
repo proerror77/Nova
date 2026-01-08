@@ -37,12 +37,16 @@ struct UserProfile: Codable, Identifiable {
     var safeFollowingCount: Int { followingCount ?? 0 }
     var safePostCount: Int { postCount ?? 0 }
 
-    /// Full name for display, with fallback priority: firstName+lastName > username
+    /// Full name for display, with fallback priority: firstName+lastName > displayName > username
     var fullName: String {
-        let first = firstName ?? ""
-        let last = lastName ?? ""
+        let first = (firstName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let last = (lastName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let combined = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
-        return combined.isEmpty ? username : combined
+        if !combined.isEmpty { return combined }
+        if let display = displayName?.trimmingCharacters(in: .whitespacesAndNewlines), !display.isEmpty {
+            return display
+        }
+        return username
     }
 
     // Note: No CodingKeys needed - APIClient uses .convertFromSnakeCase automatically
