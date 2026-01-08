@@ -518,8 +518,8 @@ pub struct BookmarksQuery {
     pub offset: Option<u32>,
 }
 
-/// Create a bookmark for a post
-#[post("/api/v2/social/bookmark")]
+/// Create a bookmark for a post (save a post)
+#[post("/api/v2/social/save")]
 pub async fn create_bookmark(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
@@ -555,8 +555,8 @@ pub async fn create_bookmark(
     }
 }
 
-/// Delete a bookmark from a post
-#[delete("/api/v2/social/bookmark/{post_id}")]
+/// Delete a bookmark from a post (unsave a post)
+#[delete("/api/v2/social/save/{post_id}")]
 pub async fn delete_bookmark(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
@@ -586,8 +586,8 @@ pub async fn delete_bookmark(
     }
 }
 
-/// Get user's bookmarked posts
-#[get("/api/v2/social/bookmarks")]
+/// Get user's saved posts
+#[get("/api/v2/social/saved-posts")]
 pub async fn get_bookmarks(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
@@ -625,8 +625,8 @@ pub async fn get_bookmarks(
     }
 }
 
-/// Check if user has bookmarked a post
-#[get("/api/v2/social/check-bookmarked/{post_id}")]
+/// Check if user has saved a post
+#[get("/api/v2/social/saved-posts/{post_id}/check")]
 pub async fn check_bookmarked(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
@@ -656,8 +656,8 @@ pub async fn check_bookmarked(
     }
 }
 
-/// Batch check if user has bookmarked multiple posts
-#[post("/api/v2/social/bookmarks/batch-check")]
+/// Batch check if user has saved multiple posts
+#[post("/api/v2/social/saved-posts/batch-check")]
 pub async fn batch_check_bookmarked(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
