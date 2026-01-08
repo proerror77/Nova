@@ -14,8 +14,9 @@ use crate::db;
 use crate::error::IdentityError;
 use crate::security::{generate_token_pair, hash_password, validate_token, verify_password};
 use crate::services::{
-    EmailService, InviteDeliveryConfig, InviteDeliveryService, KafkaEventProducer, OAuthService,
-    PasskeyService, PhoneAuthService, TwoFaService, ZitadelService,
+    EmailAuthService, EmailService, InviteDeliveryConfig, InviteDeliveryService,
+    KafkaEventProducer, OAuthService, PasskeyService, PhoneAuthService, TwoFaService,
+    ZitadelService,
 };
 use chrono::{TimeZone, Utc};
 use redis_utils::SharedConnectionManager;
@@ -59,6 +60,7 @@ pub struct IdentityServiceServer {
     invite_delivery: std::sync::Arc<InviteDeliveryService>,
     oauth: OAuthService,
     phone_auth: PhoneAuthService,
+    email_auth: EmailAuthService,
     passkey: std::sync::Arc<PasskeyService>,
 }
 
@@ -81,6 +83,7 @@ impl IdentityServiceServer {
         ));
         let oauth = OAuthService::new(oauth_settings, db.clone(), redis.clone(), kafka.clone());
         let phone_auth = PhoneAuthService::new(db.clone(), redis.clone(), sns_client);
+        let email_auth = EmailAuthService::new(db.clone(), redis.clone(), email.clone());
 
         // Initialize PasskeyService
         let passkey = PasskeyService::new(
