@@ -15,6 +15,7 @@ enum AppPage: Equatable {
     case resetPassword(token: String)
     case createAccount
     case createAccountEmail
+    case createAccountPhoneNumber
     case profileSetup
     case home
     case rankingList

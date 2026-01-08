@@ -379,6 +379,7 @@ extension AppCoordinator {
         case .resetPassword(let token): return .resetPassword(token: token)
         case .createAccount: return .createAccount
         case .createAccountEmail: return .createAccount  // Use same route as createAccount
+        case .createAccountPhoneNumber: return .createAccount  // Use same route as createAccount
         case .profileSetup: return .profileSetup
         case .home: return .home
         case .rankingList: return .rankingList

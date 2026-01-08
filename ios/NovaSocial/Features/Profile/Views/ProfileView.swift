@@ -610,64 +610,62 @@ struct ProfileView: View {
             }
             
             // Following / Followers / Halo 统计区域
-            HStack(spacing: 29.s) {
+            HStack {
                 // Following
                 Button(action: { activeSheet = .following }) {
                     VStack(spacing: 0) {
                         Text("\(displayUser?.safeFollowingCount ?? 0)")
-                            .font(.custom("SFProDisplay-Regular", size: 16.f).weight(.semibold))
+                            .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                             .foregroundColor(.white)
                         Text("Following")
-                            .font(.custom("SFProDisplay-Regular", size: 14.f).weight(.light))
+                            .font(Font.custom("SFProDisplay-Light", size: 14.f))
                             .foregroundColor(.white)
                     }
                 }
                 
-                // 分隔线
+                Spacer()
+                
+                // 第一条分隔线 (距左124pt, 距右251pt)
                 Rectangle()
-                    .foregroundColor(.clear)
-                    .frame(width: 24.s, height: 0)
-                    .overlay(
-                        Rectangle()
-                            .stroke(.white, lineWidth: 0.5)
-                            .frame(width: 0.5, height: 24.h)
-                    )
+                    .fill(.white)
+                    .frame(width: 0.5, height: 24.h)
+                
+                Spacer()
                 
                 // Followers
                 Button(action: { activeSheet = .followers }) {
                     VStack(spacing: 0) {
                         Text("\(displayUser?.safeFollowerCount ?? 0)")
-                            .font(.custom("SFProDisplay-Regular", size: 16.f).weight(.semibold))
+                            .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                             .foregroundColor(.white)
                         Text("Followers")
-                            .font(.custom("SFProDisplay-Regular", size: 14.f).weight(.light))
+                            .font(Font.custom("SFProDisplay-Light", size: 14.f))
                             .foregroundColor(.white)
                     }
                 }
                 
-                // 分隔线
+                Spacer()
+                
+                // 第二条分隔线 (距左251pt, 距右124pt)
                 Rectangle()
-                    .foregroundColor(.clear)
-                    .frame(width: 24.s, height: 0)
-                    .overlay(
-                        Rectangle()
-                            .stroke(.white, lineWidth: 0.5)
-                            .frame(width: 0.5, height: 24.h)
-                    )
+                    .fill(.white)
+                    .frame(width: 0.5, height: 24.h)
+                
+                Spacer()
                 
                 // Halo
                 VStack(spacing: 0) {
                     Text("\(displayUser?.safePostCount ?? 0)")
-                        .font(.custom("SFProDisplay-Regular", size: 16.f).weight(.semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                         .foregroundColor(.white)
                     Text("Halo")
-                        .font(.custom("SFProDisplay-Regular", size: 14.f).weight(.light))
+                        .font(Font.custom("SFProDisplay-Light", size: 14.f))
                         .foregroundColor(.white)
                 }
             }
+            .padding(EdgeInsets(top: 0, leading: 34.w, bottom: 16.h, trailing: 61.w))
         }
         .frame(maxWidth: .infinity)
-        .padding(.bottom, 16.h)
     }
 
     // MARK: - 用户信息头部区域
@@ -778,64 +776,62 @@ struct ProfileView: View {
                     }
                     
                     // Following / Followers / Halo 统计区域
-                    HStack(spacing: 29.s) {
+                    HStack {
                         // Following
                         Button(action: { activeSheet = .following }) {
                             VStack(spacing: 0) {
                                 Text("\(displayUser?.safeFollowingCount ?? 0)")
-                                    .font(.custom("SFProDisplay-Regular", size: 16.f).weight(.semibold))
+                                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                                     .foregroundColor(.white)
                                 Text("Following")
-                                    .font(.custom("SFProDisplay-Regular", size: 14.f).weight(.light))
+                                    .font(Font.custom("SFProDisplay-Light", size: 14.f))
                                     .foregroundColor(.white)
                             }
                         }
                         
-                        // 分隔线
+                        Spacer()
+                        
+                        // 第一条分隔线 (距左124pt, 距右251pt)
                         Rectangle()
-                            .foregroundColor(.clear)
-                            .frame(width: 24.s, height: 0)
-                            .overlay(
-                                Rectangle()
-                                    .stroke(.white, lineWidth: 0.5)
-                                    .frame(width: 0.5, height: 24.h)
-                            )
+                            .fill(.white)
+                            .frame(width: 0.5, height: 24.h)
+                        
+                        Spacer()
                         
                         // Followers
                         Button(action: { activeSheet = .followers }) {
                             VStack(spacing: 0) {
                                 Text("\(displayUser?.safeFollowerCount ?? 0)")
-                                    .font(.custom("SFProDisplay-Regular", size: 16.f).weight(.semibold))
+                                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                                     .foregroundColor(.white)
                                 Text("Followers")
-                                    .font(.custom("SFProDisplay-Regular", size: 14.f).weight(.light))
+                                    .font(Font.custom("SFProDisplay-Light", size: 14.f))
                                     .foregroundColor(.white)
                             }
                         }
                         
-                        // 分隔线
+                        Spacer()
+                        
+                        // 第二条分隔线 (距左251pt, 距右124pt)
                         Rectangle()
-                            .foregroundColor(.clear)
-                            .frame(width: 24.s, height: 0)
-                            .overlay(
-                                Rectangle()
-                                    .stroke(.white, lineWidth: 0.5)
-                                    .frame(width: 0.5, height: 24.h)
-                            )
+                            .fill(.white)
+                            .frame(width: 0.5, height: 24.h)
+                        
+                        Spacer()
                         
                         // Halo
                         VStack(spacing: 0) {
                             Text("\(userPostsManager.postCount)")
-                                .font(.custom("SFProDisplay-Regular", size: 16.f).weight(.semibold))
+                                .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                                 .foregroundColor(.white)
                             Text("Halo")
-                                .font(.custom("SFProDisplay-Regular", size: 14.f).weight(.light))
+                                .font(Font.custom("SFProDisplay-Light", size: 14.f))
                                 .foregroundColor(.white)
                         }
                     }
+                    .padding(EdgeInsets(top: 0, leading: 34.w, bottom: 16.h, trailing: 61.w))
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.bottom, 16.h)
         }
         .frame(maxWidth: .infinity)
         .background(
@@ -1263,15 +1259,11 @@ struct PostGridCard: View {
 // MARK: - Previews
 
 #Preview("Profile") {
-    // 创建预览专用的 AuthManager 实例
+    // 在 Preview 渲染前设置 mock 数据
     let previewAuthManager = AuthenticationManager.shared
+    previewAuthManager.currentUser = PreviewData.Users.currentUser
+    previewAuthManager.isAuthenticated = true
     
     return ProfileView(currentPage: .constant(.account))
         .environmentObject(previewAuthManager)
-        .onAppear {
-            // 在预览中设置 mock 用户数据
-            if previewAuthManager.currentUser == nil {
-                previewAuthManager.currentUser = PreviewData.Users.currentUser
-            }
-        }
 }

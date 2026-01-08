@@ -102,8 +102,8 @@ struct ProfileFollowingView: View {
 
             // MARK: - Search Bar
             searchBar
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 16.w)
+                .padding(.vertical, 12.h)
 
             // MARK: - User List
             ScrollView {
@@ -356,7 +356,7 @@ struct ProfileFollowingView: View {
                     .font(.system(size: 18.f))
                     .foregroundColor(.black)
             }
-            .frame(width: 24, height: 24)
+            .frame(width: 24.s, height: 24.s)
 
             Spacer()
 
@@ -368,10 +368,10 @@ struct ProfileFollowingView: View {
 
             // Placeholder for symmetry
             Color.clear
-                .frame(width: 24, height: 24)
+                .frame(width: 24.s, height: 24.s)
         }
-        .padding(.horizontal, 16)
-        .frame(height: 56)
+        .padding(.horizontal, 16.w)
+        .frame(height: 56.h)
         .background(Color.white)
     }
 
@@ -384,14 +384,14 @@ struct ProfileFollowingView: View {
                     selectedTab = .following
                 }
             }) {
-                VStack(spacing: 8) {
+                VStack(spacing: 8.h) {
                     Text("Following")
                         .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                         .foregroundColor(selectedTab == .following ? .black : Color(red: 0.51, green: 0.51, blue: 0.51))
 
                     Rectangle()
                         .fill(selectedTab == .following ? Color(red: 0.81, green: 0.13, blue: 0.25) : Color.clear)
-                        .frame(height: 2)
+                        .frame(height: 2.h)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -402,24 +402,24 @@ struct ProfileFollowingView: View {
                     selectedTab = .followers
                 }
             }) {
-                VStack(spacing: 8) {
+                VStack(spacing: 8.h) {
                     Text("Followers")
                         .font(Font.custom("SFProDisplay-Medium", size: 18.f))
                         .foregroundColor(selectedTab == .followers ? .black : Color(red: 0.51, green: 0.51, blue: 0.51))
 
                     Rectangle()
                         .fill(selectedTab == .followers ? Color(red: 0.81, green: 0.13, blue: 0.25) : Color.clear)
-                        .frame(height: 2)
+                        .frame(height: 2.h)
                 }
             }
             .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 16.w)
     }
 
     // MARK: - Search Bar
     private var searchBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 10.w) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14.f))
                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
@@ -428,10 +428,10 @@ struct ProfileFollowingView: View {
                 .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 12.w)
+        .padding(.vertical, 6.h)
         .background(Color(red: 0.91, green: 0.91, blue: 0.91))
-        .cornerRadius(32)
+        .cornerRadius(32.s)
     }
 
     // MARK: - Following Content
@@ -443,7 +443,7 @@ struct ProfileFollowingView: View {
                 }
             } else if let error = followingError {
                 // 錯誤狀態
-                VStack(spacing: 16) {
+                VStack(spacing: 16.h) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: 48.f))
                         .foregroundColor(.orange)
@@ -457,17 +457,17 @@ struct ProfileFollowingView: View {
                         Text("Retry")
                             .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                             .foregroundColor(.white)
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 24.w)
+                            .padding(.vertical, 8.h)
                             .background(Color(red: 0.87, green: 0.11, blue: 0.26))
-                            .cornerRadius(20)
+                            .cornerRadius(20.s)
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 60)
+                .padding(.top, 60.h)
             } else if filteredFollowing.isEmpty {
                 // 空状态
-                VStack(spacing: 12) {
+                VStack(spacing: 12.h) {
                     Image(systemName: "person.badge.plus")
                         .font(.system(size: 48.f))
                         .foregroundColor(.gray.opacity(0.5))
@@ -476,7 +476,7 @@ struct ProfileFollowingView: View {
                         .foregroundColor(.gray)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 60)
+                .padding(.top, 60.h)
             } else {
                 ForEach(filteredFollowing) { user in
                     UserRowView(
@@ -494,8 +494,8 @@ struct ProfileFollowingView: View {
                             }
                         }
                     )
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 16.w)
+                    .padding(.vertical, 10.h)
                 }
             }
         }
@@ -510,7 +510,7 @@ struct ProfileFollowingView: View {
                 }
             } else if let error = followersError {
                 // 錯誤狀態
-                VStack(spacing: 16) {
+                VStack(spacing: 16.h) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: 48.f))
                         .foregroundColor(.orange)
@@ -524,17 +524,17 @@ struct ProfileFollowingView: View {
                         Text("Retry")
                             .font(Font.custom("SFProDisplay-Medium", size: 14.f))
                             .foregroundColor(.white)
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 24.w)
+                            .padding(.vertical, 8.h)
                             .background(Color(red: 0.87, green: 0.11, blue: 0.26))
-                            .cornerRadius(20)
+                            .cornerRadius(20.s)
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 60)
+                .padding(.top, 60.h)
             } else if filteredFollowers.isEmpty {
                 // 空状态
-                VStack(spacing: 12) {
+                VStack(spacing: 12.h) {
                     Image(systemName: "person.2")
                         .font(.system(size: 48.f))
                         .foregroundColor(.gray.opacity(0.5))
@@ -543,7 +543,7 @@ struct ProfileFollowingView: View {
                         .foregroundColor(.gray)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 60)
+                .padding(.top, 60.h)
             } else {
                 ForEach(filteredFollowers) { user in
                     UserRowView(
@@ -561,8 +561,8 @@ struct ProfileFollowingView: View {
                             }
                         }
                     )
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 16.w)
+                    .padding(.vertical, 10.h)
                 }
             }
         }
@@ -577,7 +577,7 @@ struct UserRowView: View {
     var onFollowTap: () -> Void = {}
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 12.w) {
             // Avatar - 使用 CachedAsyncImage 优化性能，點擊可跳轉到用戶 profile
             Button(action: onAvatarTap) {
                 if let avatarUrl = user.avatarUrl, let url = URL(string: avatarUrl) {
@@ -593,7 +593,7 @@ struct UserRowView: View {
                     } placeholder: {
                         defaultAvatar
                     }
-                    .frame(width: 50, height: 50)
+                    .frame(width: 50.s, height: 50.s)
                     .clipShape(Circle())
                 } else {
                     defaultAvatar
@@ -602,10 +602,11 @@ struct UserRowView: View {
 
             // Name and Verified Badge - 點擊可跳轉到用戶 profile
             Button(action: onAvatarTap) {
-                HStack(spacing: 6) {
+                HStack(spacing: 6.w) {
                     Text(user.displayName)
                         .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                         .foregroundColor(.black)
+                        .lineLimit(1)
 
                     if user.isVerified {
                         Image(systemName: "checkmark.seal.fill")
@@ -624,14 +625,14 @@ struct UserRowView: View {
                     Text("Following")
                         .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                         .foregroundColor(.black)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16.w)
+                        .padding(.vertical, 8.h)
                         .background(Color.white)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 66)
+                            RoundedRectangle(cornerRadius: 66.s)
                                 .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.66)
                         )
-                        .cornerRadius(66)
+                        .cornerRadius(66.s)
                 }
                 .buttonStyle(.plain)
             } else {
@@ -640,10 +641,10 @@ struct UserRowView: View {
                     Text("Follow")
                         .font(Font.custom("SFProDisplay-Medium", size: 12.f))
                         .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16.w)
+                        .padding(.vertical, 8.h)
                         .background(Color(red: 0.87, green: 0.11, blue: 0.26))
-                        .cornerRadius(46)
+                        .cornerRadius(46.s)
                 }
                 .buttonStyle(.plain)
             }
@@ -653,7 +654,7 @@ struct UserRowView: View {
     private var defaultAvatar: some View {
         Circle()
             .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.5))
-            .frame(width: 50, height: 50)
+            .frame(width: 50.s, height: 50.s)
     }
 }
 
