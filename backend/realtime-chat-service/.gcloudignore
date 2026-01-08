@@ -1,0 +1,16 @@
+# Keep Cloud Build context small
+.git/
+.gitignore
+.gcloudignore
+.DS_Store
+**/.DS_Store
+
+# Rust build artifacts
+/target/
+**/target/
+
+# Logs
+**/*.log
+
+# Node
+**/node_modules/

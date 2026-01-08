@@ -1,0 +1,77 @@
+name: Staging Deploy (realtime-chat-service via gcloud)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/realtime-chat-service/**"
+      - "k8s/microservices/realtime-chat-service-configmap.yaml"
+      - ".github/workflows/staging-realtime-chat-service-gcloud.yml"
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (defaults to github.sha)"
+        required: false
+        type: string
+
+concurrency:
+  group: staging-realtime-chat-service-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  SERVICE: realtime-chat-service
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'banded-pad-479802-k9' }}
+  GCP_REGION: ${{ vars.GCP_REGION || 'asia-northeast1' }}
+  GKE_CLUSTER: ${{ vars.GKE_CLUSTER || 'nova-staging-gke' }}
+  NAMESPACE: ${{ vars.K8S_NAMESPACE || 'nova-staging' }}
+  GAR_REGISTRY: ${{ vars.GCP_REGION || 'asia-northeast1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID || 'banded-pad-479802-k9' }}/nova
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and push image (Cloud Build)
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
+        run: |
+          set -euo pipefail
+          IMAGE="${GAR_REGISTRY}/${SERVICE}:${IMAGE_TAG}"
+          echo "Building ${IMAGE}..."
+          gcloud builds submit ./backend/realtime-chat-service \
+            --tag "${IMAGE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}"
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GCP_REGION }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Deploy to GKE
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
+        run: |
+          set -euo pipefail
+          IMAGE="${GAR_REGISTRY}/${SERVICE}:${IMAGE_TAG}"
+          kubectl -n "${NAMESPACE}" set image deployment/"${SERVICE}" "${SERVICE}=${IMAGE}"
+          kubectl -n "${NAMESPACE}" rollout status deployment/"${SERVICE}" --timeout=5m
