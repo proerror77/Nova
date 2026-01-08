@@ -229,7 +229,7 @@ struct ProfileFollowingView: View {
                     return FollowUser(
                         id: user.id,
                         username: user.username,
-                        displayName: user.fullName,
+                        displayName: user.displayName ?? user.username,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
                         isFollowedByMe: isFollowingThem,  // 当前登录用户是否关注了他们
@@ -287,7 +287,7 @@ struct ProfileFollowingView: View {
                     return FollowUser(
                         id: user.id,
                         username: user.username,
-                        displayName: user.fullName,
+                        displayName: user.displayName ?? user.username,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
                         isFollowedByMe: isFollowingThem,  // 当前登录用户是否关注了他们

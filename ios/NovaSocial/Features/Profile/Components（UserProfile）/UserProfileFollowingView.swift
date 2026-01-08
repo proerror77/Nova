@@ -157,7 +157,7 @@ struct UserProfileFollowingView: View {
                     return UserProfileFollowUser(
                         id: user.id,
                         username: user.username,
-                        displayName: user.fullName,
+                        displayName: user.displayName ?? user.username,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
                         isFollowedByMe: isFollowingThem
@@ -208,7 +208,7 @@ struct UserProfileFollowingView: View {
                     return UserProfileFollowUser(
                         id: user.id,
                         username: user.username,
-                        displayName: user.fullName,
+                        displayName: user.displayName ?? user.username,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
                         isFollowedByMe: isFollowingThem

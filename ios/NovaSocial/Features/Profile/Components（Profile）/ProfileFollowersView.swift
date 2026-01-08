@@ -167,7 +167,7 @@ struct ProfileFollowersView: View {
                     let status = result.relationshipStatus(for: user.id)
                     return FollowerUser(
                         id: user.id,
-                        name: user.fullName,
+                        name: user.displayName ?? user.username,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
                         isFollowingYou: true, // 他们关注了你（这是 followers 列表）
@@ -221,7 +221,7 @@ struct ProfileFollowersView: View {
                     let status = result.relationshipStatus(for: user.id)
                     return FollowerUser(
                         id: user.id,
-                        name: user.fullName,
+                        name: user.displayName ?? user.username,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
                         isFollowingYou: status?.followsYou ?? false, // 他们是否关注你
