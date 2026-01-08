@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: nova-backend-config
+  name: identity-service-configmap
   namespace: nova-staging
 data:
   # AWS SNS Configuration (Phone SMS OTP)
