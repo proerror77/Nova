@@ -371,7 +371,7 @@ struct LoginView: View {
                 .foregroundColor(.white)
 
             Button(action: {
-                currentPage = .inviteCode
+                currentPage = .createAccount
             }) {
                 Text("Create New Account")
                     .font(Typography.semibold14)

@@ -221,9 +221,9 @@ struct PhoneEnterCodeView: View {
                 // Store verification token with timestamp for next step
                 authManager.setPhoneVerificationToken(token, phoneNumber: phoneNumber)
 
-                // Navigate to profile setup
+                // Navigate to invite code page
                 await MainActor.run {
-                    currentPage = .profileSetup
+                    currentPage = .inviteCode
                 }
             } else {
                 errorMessage = response.message ?? "Verification failed"

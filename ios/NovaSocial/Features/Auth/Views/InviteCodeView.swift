@@ -454,8 +454,8 @@ struct InviteCodeView: View {
                 if isPendingSSO {
                     await retrySSOWithInviteCode()
                 } else {
-                    // Normal flow - go to create account
-                    await MainActor.run { currentPage = .createAccount }
+                    // Normal flow - go to profile setup
+                    await MainActor.run { currentPage = .profileSetup }
                 }
             } else {
                 errorMessage = response.error ?? "Invalid_invite_code_generic"
