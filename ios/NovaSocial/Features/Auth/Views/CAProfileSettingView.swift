@@ -22,6 +22,7 @@ struct CAProfileSettingView: View {
     @State private var errorMessage: String?
     @State private var showDatePicker = false
     @State private var showLocationPicker = false
+    @State private var showTokenExpiredAlert = false
     @FocusState private var focusedField: Field?
 
     private enum Field {
@@ -171,6 +172,13 @@ struct CAProfileSettingView: View {
         .onAppear {
             validateVerificationTokens()
         }
+        .alert("Verification Expired", isPresented: $showTokenExpiredAlert) {
+            Button("OK") {
+                currentPage = .createAccount
+            }
+        } message: {
+            Text("Your verification has expired. Please verify your email or phone again.")
+        }
     }
 
     // MARK: - Token Validation
@@ -188,13 +196,9 @@ struct CAProfileSettingView: View {
         // For verification flow, check if tokens are valid
         if !authManager.hasValidVerificationToken {
             #if DEBUG
-            print("[CAProfileSettingView] No valid verification token found, redirecting")
+            print("[CAProfileSettingView] No valid verification token found, showing alert")
             #endif
-            errorMessage = "Verification expired. Please verify your email or phone again."
-            // Navigate back to create account
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                currentPage = .createAccount
-            }
+            showTokenExpiredAlert = true
         }
     }
 

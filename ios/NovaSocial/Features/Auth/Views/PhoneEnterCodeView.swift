@@ -59,8 +59,8 @@ struct PhoneEnterCodeView: View {
                 Spacer().frame(height: 44.h)  // Status bar safe area
                 HStack(spacing: 8.s) {
                     Button(action: {
-                        // Navigate back to phone registration
-                        currentPage = .phoneRegistration
+                        // Navigate back to phone number input
+                        currentPage = .createAccountPhoneNumber
                     }) {
                         ZStack {
                             Circle()
@@ -122,64 +122,14 @@ struct PhoneEnterCodeView: View {
     }
     
     private var codeInputSection: some View {
-        ZStack {
-            // Hidden text field for input - 6 digit code
-            TextField("", text: $verificationCode)
-                .font(Font.custom("SFProDisplay-Regular", size: 16.f))
-                .foregroundColor(.clear)
-                .accentColor(.clear)
-                .multilineTextAlignment(.center)
-                .keyboardType(.numberPad)
-                .textContentType(.oneTimeCode)
-                .autocorrectionDisabled()
-                .focused($isInputFocused)
-                .onChange(of: verificationCode) { _, newValue in
-                    // Only allow digits, max 6
-                    let filtered = newValue.filter { $0.isNumber }
-                    verificationCode = String(filtered.prefix(6))
-                    
-                    // Auto-verify when 6 digits entered
-                    if verificationCode.count == 6 {
-                        Task { await verifyCode() }
-                    }
-                }
-                .frame(width: 1, height: 1)
-                .opacity(0.01)
-            
-            // 6 individual input boxes - matching Figma design
-            HStack(spacing: 10.s) {
-                ForEach(0..<6, id: \.self) { index in
-                    codeBox(at: index)
+        OTPInputView(code: $verificationCode, codeLength: 6)
+            .onChange(of: verificationCode) { _, newValue in
+                // Auto-verify when 6 digits entered
+                if newValue.count == 6 {
+                    Task { await verifyCode() }
                 }
             }
-        }
-        .onTapGesture { isInputFocused = true }
     }
-    
-    /// Single code input box
-    private func codeBox(at index: Int) -> some View {
-        let characters = Array(verificationCode)
-        let character = index < characters.count ? String(characters[index]) : ""
-        let isCurrentIndex = index == verificationCode.count && isInputFocused
-        
-        return ZStack {
-            // Display entered character
-            Text(character)
-                .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
-                .foregroundColor(.white)
-        }
-        .frame(width: 40.w, height: 49.h)
-        .cornerRadius(12.s)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12.s)
-                .inset(by: 0.5)
-                .stroke(
-                    isCurrentIndex ? Color.white : Color(red: 0.41, green: 0.41, blue: 0.41),
-                    lineWidth: 0.5
-                )
-        )
-    }
-    
     @ViewBuilder
     private var errorMessageView: some View {
         if let errorMessage {

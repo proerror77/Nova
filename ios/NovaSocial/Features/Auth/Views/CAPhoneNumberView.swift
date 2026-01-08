@@ -183,22 +183,37 @@ struct CAPhoneNumberView: View {
     }
 
     private var continueButton: some View {
-        Button(action: { Task { await sendVerificationCode() } }) {
-            HStack {
-                if isLoading {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .black))
-                        .scaleEffect(0.9)
+        VStack(spacing: 8.h) {
+            Button(action: { Task { await sendVerificationCode() } }) {
+                HStack {
+                    if isLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                            .scaleEffect(0.9)
+                    }
+                    Text("Next")
+                        .font(Font.custom("SFProDisplay-Bold", size: 16.f))
+                        .foregroundColor(.black)
                 }
-                Text("Next")
-                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
-                    .foregroundColor(.black)
+                .frame(width: 301.w, height: 47.h)
+                .background(.white)
+                .cornerRadius(50.s)
             }
-            .frame(width: 301.w, height: 47.h)
-            .background(.white)
-            .cornerRadius(50.s)
+            .disabled(!isPhoneValid || isLoading || isDetectingRegion)
+
+            // Loading hint when detecting region
+            if isDetectingRegion {
+                HStack(spacing: 6.s) {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(0.6)
+                    Text("Detecting your region...")
+                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .padding(.top, 4.h)
+            }
         }
-        .disabled(!isPhoneValid || isLoading || isDetectingRegion)
     }
 
     // MARK: - Actions

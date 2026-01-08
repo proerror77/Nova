@@ -532,20 +532,22 @@ struct LoginView: View {
     private func validateLogin() -> Bool {
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            if trimmedEmail.isEmpty {
-                errorMessage = "Please_enter_your_email"
+        if trimmedEmail.isEmpty {
+            errorMessage = "Please_enter_your_email"
             return false
         }
 
-            if !isValidEmail(trimmedEmail) {
-                errorMessage = "Please_enter_a_valid_email"
+        if !isValidEmail(trimmedEmail) {
+            errorMessage = "Please_enter_a_valid_email"
             return false
         }
 
-            if password.isEmpty {
-                errorMessage = "Please_enter_your_password"
-            return false
-        }
+        // Password validation removed - password field is currently disabled
+        // TODO: Re-enable password validation when password field is re-enabled
+        // if password.isEmpty {
+        //     errorMessage = "Please_enter_your_password"
+        //     return false
+        // }
 
         return true
     }
