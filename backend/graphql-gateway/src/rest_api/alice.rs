@@ -259,7 +259,7 @@ pub async fn send_message(
 
     // Build OpenAI chat completion request
     let openai_request = OpenAIChatRequest {
-        model: "gpt-4o-all".to_string(),
+        model: "grok-2-latest".to_string(),
         messages: vec![OpenAIChatMessage {
             role: "user".to_string(),
             content: Some(req.message.clone()),
