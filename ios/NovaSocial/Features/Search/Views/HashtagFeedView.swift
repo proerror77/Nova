@@ -15,7 +15,7 @@ struct HashtagFeedView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                DesignTokens.background
+                DesignTokens.backgroundColor
                     .ignoresSafeArea()
 
                 if viewModel.isLoading && viewModel.posts.isEmpty {
@@ -89,17 +89,17 @@ struct HashtagFeedView: View {
                 headerView
 
                 // Posts
-                ForEach(viewModel.posts) { post in
+                ForEach(Array(viewModel.posts), id: \.id) { (post: PostSearchResult) in
                     HashtagPostRow(
                         post: post,
                         onAuthorTap: {
-                            selectedUserId = post.authorId
-                            showUserProfile = true
+                            self.selectedUserId = post.authorId
+                            self.showUserProfile = true
                         }
                     )
 
                     Divider()
-                        .background(DesignTokens.divider)
+                        .background(DesignTokens.dividerColor)
                 }
 
                 // Load more indicator

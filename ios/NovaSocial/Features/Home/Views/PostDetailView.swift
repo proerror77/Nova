@@ -1,40 +1,6 @@
 import SwiftUI
 import Photos
 
-// MARK: - Text Parsing Helper
-/// Parse comment text and highlight @mentions with accent color
-private func parseCommentText(_ text: String) -> Text {
-    let pattern = try? NSRegularExpression(pattern: "@[\\w\\u4e00-\\u9fff]+", options: [])
-    guard let regex = pattern else {
-        return Text(text)
-    }
-
-    let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: text.utf16.count))
-
-    if matches.isEmpty {
-        return Text(text)
-    }
-
-    // Use AttributedString to avoid deprecated Text '+' operator in iOS 26
-    var attributedString = AttributedString(text)
-    
-    for match in matches {
-        guard let range = Range(match.range, in: text) else { continue }
-        
-        // Find the corresponding range in AttributedString
-        let startOffset = text.distance(from: text.startIndex, to: range.lowerBound)
-        let endOffset = text.distance(from: text.startIndex, to: range.upperBound)
-        
-        let attrStart = attributedString.index(attributedString.startIndex, offsetByCharacters: startOffset)
-        let attrEnd = attributedString.index(attributedString.startIndex, offsetByCharacters: endOffset)
-        
-        attributedString[attrStart..<attrEnd].foregroundColor = DesignTokens.accentColor
-        attributedString[attrStart..<attrEnd].font = .body.weight(.medium)
-    }
-
-    return Text(attributedString)
-}
-
 // MARK: - Comment ViewModel
 
 /// ViewModel for managing comments on a post

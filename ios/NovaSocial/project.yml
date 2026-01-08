@@ -53,8 +53,6 @@ targets:
           - "Features/Settings/Views/DeviceVerificationView.swift"
           - "Features/Settings/Views/KeyBackupSettingsView.swift"
           - "Features/Auth/Views/ResetPasswordView.swift"
-          - "Features/Auth/Views/PhoneRegistrationView.swift"
-          - "Features/Auth/Views/PhoneLoginView.swift"
           - "Features/Auth/Views/ForgotPasswordView.swift"
           - "Features/Auth/Views/EmailSentConfirmationView.swift"
     dependencies:
