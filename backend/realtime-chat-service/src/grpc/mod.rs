@@ -53,6 +53,7 @@ impl RealtimeChatServiceImpl {
             version_number: row.version_number,
             reaction_count: row.reaction_count,
             idempotency_key: row.idempotency_key.unwrap_or_default(),
+            matrix_event_id: row.matrix_event_id.unwrap_or_default(),
         }
     }
 }
@@ -191,13 +192,14 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
             ));
         };
 
-        let content_bytes = body.as_bytes();
-        let row = crate::services::message_service::MessageService::send_message_db(
+        // Matrix-first: send via Matrix, persist metadata-only in Nova DB.
+        let row = crate::services::message_service::MessageService::send_message_with_matrix(
             &self.state.db,
             &self.state.encryption,
+            self.state.matrix_client.clone(),
             conversation_id,
             sender_id,
-            content_bytes,
+            body.as_bytes(),
             None,
         )
         .await
@@ -430,7 +432,7 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
         // Schema note: Align with crate::models::message::Message.
         let rows = client
             .query(
-                "SELECT id, conversation_id, sender_id, content, sequence_number, idempotency_key, created_at, edited_at, deleted_at, recalled_at, reaction_count, version_number FROM messages WHERE conversation_id = $1 AND deleted_at IS NULL AND recalled_at IS NULL AND ($2::timestamptz IS NULL OR created_at < $2) ORDER BY created_at DESC LIMIT $3",
+                "SELECT id, conversation_id, sender_id, content, sequence_number, idempotency_key, created_at, edited_at, deleted_at, recalled_at, reaction_count, version_number, matrix_event_id FROM messages WHERE conversation_id = $1 AND deleted_at IS NULL AND recalled_at IS NULL AND ($2::timestamptz IS NULL OR created_at < $2) ORDER BY created_at DESC LIMIT $3",
                 &[&conversation_id, &before_ts, &((limit + 1) as i64)],
             )
             .await
@@ -457,6 +459,7 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
                     v as i32
                 },
                 recalled_at: row.get("recalled_at"),
+                matrix_event_id: row.get("matrix_event_id"),
             };
 
             messages.push(Self::row_to_proto_message(row));
@@ -521,7 +524,7 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
 
         let rows = client
             .query(
-                "SELECT id, conversation_id, sender_id, content, sequence_number, idempotency_key, created_at, edited_at, deleted_at, recalled_at, reaction_count, version_number FROM messages WHERE conversation_id = $1 AND deleted_at IS NULL AND recalled_at IS NULL AND ($2::timestamptz IS NULL OR created_at < $2) ORDER BY created_at DESC LIMIT $3",
+                "SELECT id, conversation_id, sender_id, content, sequence_number, idempotency_key, created_at, edited_at, deleted_at, recalled_at, reaction_count, version_number, matrix_event_id FROM messages WHERE conversation_id = $1 AND deleted_at IS NULL AND recalled_at IS NULL AND ($2::timestamptz IS NULL OR created_at < $2) ORDER BY created_at DESC LIMIT $3",
                 &[&conversation_id, &before_ts, &((limit + 1) as i64)],
             )
             .await
@@ -548,6 +551,7 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
                     v as i32
                 },
                 recalled_at: row.get("recalled_at"),
+                matrix_event_id: row.get("matrix_event_id"),
             };
 
             messages.push(Self::row_to_proto_message(row));

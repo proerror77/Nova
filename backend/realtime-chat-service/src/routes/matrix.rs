@@ -345,6 +345,7 @@ pub async fn save_room_mapping(
     req: HttpRequest,
     body: web::Json<SaveRoomMappingRequest>,
     db: web::Data<PgPool>,
+    state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
     // Validate X-User-Id header exists (authentication already done by graphql-gateway)
     let _user_id = extract_user_id_from_header(&req)
@@ -358,6 +359,29 @@ pub async fn save_room_mapping(
 
     // Save mapping to database
     matrix_db::save_room_mapping(db.get_ref(), conversation_id, room_id).await?;
+
+    // Ensure the service user can observe the room so server-side sync can persist metadata-only
+    // (especially important for clients that create rooms directly via Matrix SDK).
+    if state.config.matrix.enabled {
+        if let Some(admin) = state.matrix_admin_client.clone() {
+            let service_user = state.config.matrix.service_user.clone();
+            let room_id_str = body.room_id.clone();
+            tokio::spawn(async move {
+                if let Err(e) = admin.join_room_as_user(&room_id_str, &service_user).await {
+                    tracing::warn!(
+                        error = %e,
+                        room_id = %room_id_str,
+                        service_user = %service_user,
+                        "Failed to force-join service user to room (non-fatal)"
+                    );
+                }
+            });
+        } else {
+            tracing::warn!(
+                "Matrix Admin client not configured; service user may miss events for rooms created by clients"
+            );
+        }
+    }
 
     Ok(HttpResponse::Created().json(serde_json::json!({
         "message": "Room mapping saved successfully"

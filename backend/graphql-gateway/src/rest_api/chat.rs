@@ -136,6 +136,9 @@ pub async fn send_chat_message(
                 status: resp.status.clone(),
                 created_at: created_iso.clone(),
                 updated_at: created_iso,
+                matrix_event_id: resp
+                    .message
+                    .and_then(|m| (!m.matrix_event_id.is_empty()).then_some(m.matrix_event_id)),
             };
 
             #[derive(Serialize)]
@@ -408,6 +411,8 @@ pub struct RestMessage {
     pub status: String,
     pub created_at: String, // ISO8601
     pub updated_at: String, // ISO8601
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matrix_event_id: Option<String>,
 }
 
 /// Helper to convert Unix epoch timestamp (i64 seconds) to ISO8601 string
@@ -461,7 +466,11 @@ impl RestConversation {
         };
 
         let last_message = conv.last_message.map(|msg| RestLastMessage {
-            content: msg.content,
+            content: if msg.content.is_empty() && !msg.matrix_event_id.is_empty() {
+                "[Encrypted message]".to_string()
+            } else {
+                msg.content
+            },
             sender_id: msg.sender_id,
             timestamp: timestamp_to_iso8601(msg.created_at),
         });
@@ -564,6 +573,11 @@ impl From<crate::clients::proto::chat::Message> for RestMessage {
             status: msg.status,
             created_at: timestamp_to_iso8601(created_ts),
             updated_at: timestamp_to_iso8601(updated_ts),
+            matrix_event_id: if msg.matrix_event_id.is_empty() {
+                None
+            } else {
+                Some(msg.matrix_event_id)
+            },
         }
     }
 }

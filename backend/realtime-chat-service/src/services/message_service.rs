@@ -188,15 +188,14 @@ impl MessageService {
         _encryption: &EncryptionService, // Encryption handled by PostgreSQL TDE
         conversation_id: Uuid,
         sender_id: Uuid,
-        plaintext: &[u8],
+        _plaintext: &[u8],
         idempotency_key: Option<&str>,
     ) -> Result<MessageRow, AppError> {
         let id = Uuid::new_v4();
 
-        // Note: E2E encryption columns removed in migration 0009
-        // Using PostgreSQL TDE for at-rest encryption instead
-        let content = String::from_utf8(plaintext.to_vec())
-            .map_err(|e| AppError::Config(format!("invalid utf8: {e}")))?;
+        // Matrix-first architecture: Nova DB stores metadata only.
+        // Do NOT persist message plaintext in Nova DB.
+        let content = "";
 
         let client = Self::get_db_client(db, "send message").await?;
 
@@ -229,7 +228,7 @@ impl MessageService {
                         $5,
                         next.last_seq
                     FROM next
-                    RETURNING id, conversation_id, sender_id, content, sequence_number, idempotency_key, created_at
+                    RETURNING id, conversation_id, sender_id, content, sequence_number, idempotency_key, created_at, matrix_event_id
                 ),
                 upd AS (
                     UPDATE conversations c
@@ -240,7 +239,7 @@ impl MessageService {
                     WHERE c.id = ins.conversation_id
                       AND c.deleted_at IS NULL
                 )
-                SELECT id, conversation_id, sender_id, content, sequence_number, idempotency_key, created_at
+                SELECT id, conversation_id, sender_id, content, sequence_number, idempotency_key, created_at, matrix_event_id
                 FROM ins
                 "#,
                 &[&id, &conversation_id, &sender_id, &content, &idempotency_key],
@@ -261,7 +260,91 @@ impl MessageService {
             reaction_count: 0,
             version_number: 1,
             recalled_at: None,
+            matrix_event_id: row.get(7),
         })
+    }
+
+    /// Store an inbound Matrix event as a Nova DB metadata row.
+    /// Returns Ok(None) if a row with the same matrix_event_id already exists.
+    pub async fn store_matrix_message_metadata_db(
+        db: &Pool,
+        conversation_id: Uuid,
+        sender_id: Uuid,
+        matrix_event_id: &str,
+    ) -> Result<Option<MessageRow>, AppError> {
+        let id = Uuid::new_v4();
+        let content = "";
+
+        let client = Self::get_db_client(db, "store matrix message metadata").await?;
+
+        let row = client
+            .query_opt(
+                r#"
+                WITH next AS (
+                    INSERT INTO conversation_counters (conversation_id, last_seq)
+                    VALUES ($2, 1)
+                    ON CONFLICT (conversation_id)
+                    DO UPDATE SET last_seq = conversation_counters.last_seq + 1
+                    RETURNING last_seq
+                ),
+                ins AS (
+                    INSERT INTO messages (
+                        id,
+                        conversation_id,
+                        sender_id,
+                        content,
+                        idempotency_key,
+                        sequence_number,
+                        matrix_event_id
+                    )
+                    SELECT
+                        $1,
+                        $2,
+                        $3,
+                        $4,
+                        NULL,
+                        next.last_seq,
+                        $5
+                    FROM next
+                    ON CONFLICT (matrix_event_id) WHERE matrix_event_id IS NOT NULL DO NOTHING
+                    RETURNING id, conversation_id, sender_id, content, sequence_number, created_at, matrix_event_id
+                ),
+                upd AS (
+                    UPDATE conversations c
+                    SET
+                        updated_at = ins.created_at,
+                        last_message_id = ins.id
+                    FROM ins
+                    WHERE c.id = ins.conversation_id
+                      AND c.deleted_at IS NULL
+                )
+                SELECT id, conversation_id, sender_id, content, sequence_number, created_at, matrix_event_id
+                FROM ins
+                "#,
+                &[&id, &conversation_id, &sender_id, &content, &matrix_event_id],
+            )
+            .await
+            .map_err(|e| AppError::StartServer(format!("insert matrix msg: {e}")))?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        Ok(Some(MessageRow {
+            id: row.get(0),
+            conversation_id: row.get(1),
+            sender_id: row.get(2),
+            content: row.get(3),
+            sequence_number: row.get(4),
+            idempotency_key: None,
+            created_at: row.get(5),
+            edited_at: None,
+            deleted_at: None,
+            reaction_count: 0,
+            version_number: 1,
+            recalled_at: None,
+            matrix_event_id: row.get(6),
+        }))
     }
     /// Send a message to a conversation (wrapper for send_message_db)
     /// Note: This is a simplified version. Use send_message_db directly for full control.
@@ -318,14 +401,10 @@ impl MessageService {
     ) -> Result<(Uuid, i64), AppError> {
         let id = Uuid::new_v4();
 
-        // Store audio metadata as JSON for client parsing
-        // Schema note: Using content field for structured audio data
-        let content = serde_json::json!({
-            "type": "audio",
-            "url": audio_url,
-            "duration_ms": duration_ms,
-            "codec": audio_codec
-        }).to_string();
+        // Matrix-first architecture: Nova DB stores metadata only.
+        // Do NOT persist audio URL or payload in Nova DB.
+        let _ = (audio_url, duration_ms, audio_codec); // keep signature stable for now
+        let content = "";
 
         let client = Self::get_db_client(db, "send audio message").await?;
 
@@ -392,7 +471,7 @@ impl MessageService {
         idempotency_key: Option<&str>,
     ) -> Result<MessageRow, AppError> {
         // 1. Insert into Nova DB first (primary storage)
-        let message =
+        let mut message =
             Self::send_message_db(db, encryption, conversation_id, sender_id, plaintext, idempotency_key)
                 .await?;
 
@@ -410,6 +489,7 @@ impl MessageService {
                             "Message sent to Matrix"
                         );
                         Self::save_matrix_event_id(db, message.id, &event_id).await;
+                        message.matrix_event_id = Some(event_id);
                     }
                     Err(e) => {
                         tracing::error!(
@@ -765,18 +845,15 @@ impl MessageService {
         db: &Pool,
         _encryption: &EncryptionService, // Encryption handled by PostgreSQL TDE
         message_id: Uuid,
-        plaintext: &[u8],
+        _plaintext: &[u8],
     ) -> Result<(), AppError> {
-        let content_plain = String::from_utf8(plaintext.to_vec())
-            .map_err(|e| AppError::Config(format!("invalid utf8: {e}")))?;
-
         let client = Self::get_db_client(db, "update message").await?;
 
-        // Schema note: Use only columns from migrations 0004 (base) and 0005 (content)
-        // E2E encryption handled by PostgreSQL TDE - no separate encrypted columns
+        // Matrix-first architecture: message content lives in Matrix.
+        // Keep only metadata (edited_at + version_number) in Nova DB.
         client.execute(
-            "UPDATE messages SET content = $1, version_number = version_number + 1, edited_at = NOW() WHERE id = $2",
-            &[&content_plain, &message_id]
+            "UPDATE messages SET version_number = version_number + 1, edited_at = NOW() WHERE id = $1",
+            &[&message_id],
         )
         .await
         .map_err(|e| AppError::StartServer(format!("update msg: {e}")))?;
@@ -808,7 +885,7 @@ impl MessageService {
     /// * `offset` - Number of results to skip for pagination
     /// * `sort_by` - Sort order: 'recent' (default), 'oldest', 'relevance'
     pub async fn search_messages(
-        db: &Pool,
+        _db: &Pool,
         conversation_id: Uuid,
         query: &str,
         limit: i64,
@@ -816,66 +893,8 @@ impl MessageService {
         sort_by: Option<&str>,
     ) -> Result<(Vec<MessageDto>, i64), AppError>
     {
-        let limit = limit.min(500); // Cap at 500 to prevent memory issues
-        let sort_by = sort_by.unwrap_or("recent");
-
-        let privacy_mode = Self::fetch_conversation_privacy(db, conversation_id).await?;
-        if matches!(privacy_mode, PrivacyMode::StrictE2e) {
-            // Strict E2E conversations are not searchable on plaintext content.
-            return Ok((Vec::new(), 0));
-        }
-
-        // ARCHITECTURE NOTE (2025-10-26):
-        // Using PostgreSQL's native full-text search directly on messages.content
-        // Requires GIN index on content_tsv (generated column with to_tsvector)
-        // See: backend/messaging-service/migrations/0011_add_search_index.sql
-
-        let client = Self::get_db_client(db, "search messages").await?;
-
-        // Get total count for pagination metadata
-        let count_result = client.query_one(
-            "SELECT COUNT(*) as total FROM messages m
-             WHERE m.conversation_id = $1
-               AND m.deleted_at IS NULL
-               AND m.content IS NOT NULL
-               AND m.content_tsv @@ plainto_tsquery('english', $2)",
-            &[&conversation_id, &query]
-        )
-        .await
-        .map_err(|e| AppError::StartServer(format!("count search results: {e}")))?;
-        let total: i64 = count_result.get("total");
-
-        // Build sort clause based on sort_by parameter
-        let search_condition = "m.content IS NOT NULL AND m.content_tsv @@ plainto_tsquery('english', $2)";
-        let sort_clause = match sort_by {
-            "oldest" => "m.created_at ASC",
-            "relevance" => "ts_rank(m.content_tsv, plainto_tsquery('english', $2)) DESC, m.created_at DESC",
-            _ => "m.created_at DESC", // "recent" or default
-        };
-
-        // Build the query with proper sorting - include all message fields
-        // Schema note: Use only columns from migrations 0004 (base) and 0005 (content)
-        let query_sql = format!(
-            "SELECT m.id, m.sender_id, \
-                    m.sequence_number AS sequence_number, \
-                    m.created_at, m.content, m.recalled_at, m.edited_at, m.version_number \
-             FROM messages m \
-             WHERE m.conversation_id = $1 \
-               AND m.deleted_at IS NULL \
-               AND {} \
-             ORDER BY {} \
-             LIMIT $3 OFFSET $4",
-            search_condition, sort_clause
-        );
-
-        let rows = client.query(&query_sql, &[&conversation_id, &query, &limit, &offset])
-            .await
-            .map_err(|e| AppError::StartServer(format!("search: {e}")))?;
-
-        let out = rows
-            .iter()
-            .map(|r| Self::row_to_message_dto(r, Vec::new(), Vec::new(), false))
-            .collect();
-        Ok((out, total))
+        let _ = (conversation_id, query, limit, offset, sort_by);
+        // Matrix-first architecture: Nova DB does not store plaintext content, so search is not supported.
+        Ok((Vec::new(), 0))
     }
 }
