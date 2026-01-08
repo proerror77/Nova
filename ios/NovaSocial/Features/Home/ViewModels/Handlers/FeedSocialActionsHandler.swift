@@ -42,6 +42,15 @@ final class FeedSocialActionsHandler {
     /// Track pending UI state for bookmarks (isBookmarked, bookmarkCount)
     private var pendingBookmarkUIState: [String: (isBookmarked: Bool, count: Int)] = [:]
 
+    // MARK: - Sequence Baseline (compare & revert correctly)
+
+    /// Baseline post state captured at the start of a debounced click sequence.
+    /// This prevents incorrect API calls / reverts when users tap rapidly (e.g., like then unlike within debounce).
+    private var likeSequenceOriginalPost: [String: FeedPost] = [:]
+
+    /// Baseline post state for bookmark sequences.
+    private var bookmarkSequenceOriginalPost: [String: FeedPost] = [:]
+
     // MARK: - Generation Tracking (prevent stale API responses)
 
     /// Generation number for like operations per post - increments on each new operation
@@ -93,9 +102,17 @@ final class FeedSocialActionsHandler {
         let entryPendingState = pendingLikeUIState[postId]
         socialActionsLogger.info("❤️ toggleLike ENTRY | handler=\(self.instanceId) | postId=\(postId.prefix(8)) | pendingState=\(entryPendingState.map { "(\($0.isLiked),\($0.count))" } ?? "nil") | viewPost=(\(currentPost.isLiked),\(currentPost.likeCount))")
 
-        guard currentUserId != nil else {
-            socialActionsLogger.warning("toggleLike early return - userId is nil")
+        guard isAuthenticated, currentUserId != nil else {
+            onError?("Please sign in to like posts.")
+            socialActionsLogger.warning("toggleLike early return - userId is nil or guest")
             return false
+        }
+
+        let debounceDelayNs = UInt64(debounceDelay * 1_000_000_000)
+
+        // Capture baseline state for this debounced sequence (first tap wins)
+        if likeSequenceOriginalPost[postId] == nil {
+            likeSequenceOriginalPost[postId] = currentPost
         }
 
         // Cancel any pending like API task for this post
@@ -141,7 +158,7 @@ final class FeedSocialActionsHandler {
         // Use @MainActor to ensure Task runs on main actor (Swift 6 compatibility)
         let task = Task { @MainActor [weak self] in
             // Wait for debounce delay
-            try? await Task.sleep(nanoseconds: UInt64(self?.debounceDelay ?? 0.3) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: debounceDelayNs)
 
             // Check if task was cancelled (newer click arrived)
             guard !Task.isCancelled else { return }
@@ -151,19 +168,24 @@ final class FeedSocialActionsHandler {
             guard self.likeGeneration[postId] == currentGen else { return }
             guard let finalState = self.pendingLikeUIState[postId] else {
                 self.pendingLikeTasks.removeValue(forKey: postId)
+                self.likeSequenceOriginalPost.removeValue(forKey: postId)
                 return
             }
+
+            // Baseline state captured at sequence start (for correct diff + revert)
+            let baselinePost = self.likeSequenceOriginalPost[postId] ?? originalPost
 
             // Clean up pending state before calling API to allow server response updates
             socialActionsLogger.info("❤️ Clearing pendingLikeUIState for postId: \(postId)")
             self.pendingLikeUIState.removeValue(forKey: postId)
             self.pendingLikeTasks.removeValue(forKey: postId)
+            self.likeSequenceOriginalPost.removeValue(forKey: postId)
 
             // Only send API if target state differs from original state
-            if finalState.isLiked != originalPost.isLiked {
+            if finalState.isLiked != baselinePost.isLiked {
                 await self.performLikeOperation(
                     postId: postId,
-                    originalPost: originalPost,
+                    originalPost: baselinePost,
                     targetLikedState: finalState.isLiked,
                     generation: currentGen
                 )
@@ -234,9 +256,17 @@ final class FeedSocialActionsHandler {
     /// - Uses internal state tracking to handle rapid clicks correctly
     /// - Note: This is intentionally synchronous to prevent race conditions from async interleaving
     func toggleBookmark(postId: String, currentPost: FeedPost) -> Bool {
-        guard currentUserId != nil else {
-            socialActionsLogger.warning("toggleBookmark early return - userId is nil")
+        guard isAuthenticated, currentUserId != nil else {
+            onError?("Please sign in to save posts.")
+            socialActionsLogger.warning("toggleBookmark early return - userId is nil or guest")
             return false
+        }
+
+        let debounceDelayNs = UInt64(debounceDelay * 1_000_000_000)
+
+        // Capture baseline state for this debounced sequence (first tap wins)
+        if bookmarkSequenceOriginalPost[postId] == nil {
+            bookmarkSequenceOriginalPost[postId] = currentPost
         }
 
         // Cancel any pending bookmark API task for this post
@@ -282,29 +312,38 @@ final class FeedSocialActionsHandler {
         // Use @MainActor to ensure Task runs on main actor (Swift 6 compatibility)
         let task = Task { @MainActor [weak self] in
             // Wait for debounce delay
-            try? await Task.sleep(nanoseconds: UInt64(self?.debounceDelay ?? 0.3) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: debounceDelayNs)
 
             // Check if task was cancelled (newer click arrived)
             guard !Task.isCancelled else { return }
 
             // Get the final target state after all clicks settled
-            guard let self = self,
-                  let finalState = self.pendingBookmarkUIState[postId] else { return }
+            guard let self = self else { return }
+            guard self.bookmarkGeneration[postId] == currentGen else { return }
+            guard let finalState = self.pendingBookmarkUIState[postId] else {
+                self.pendingBookmarkTasks.removeValue(forKey: postId)
+                self.bookmarkSequenceOriginalPost.removeValue(forKey: postId)
+                return
+            }
+
+            // Baseline state captured at sequence start (for correct diff + revert)
+            let baselinePost = self.bookmarkSequenceOriginalPost[postId] ?? originalPost
+
+            // Clean up pending state before calling API to avoid cancelling in-flight requests on new taps
+            socialActionsLogger.info("🔖 Clearing pendingBookmarkUIState for postId: \(postId)")
+            self.pendingBookmarkUIState.removeValue(forKey: postId)
+            self.pendingBookmarkTasks.removeValue(forKey: postId)
+            self.bookmarkSequenceOriginalPost.removeValue(forKey: postId)
 
             // Only send API if target state differs from original state
-            if finalState.isBookmarked != originalPost.isBookmarked {
+            if finalState.isBookmarked != baselinePost.isBookmarked {
                 await self.performBookmarkOperation(
                     postId: postId,
-                    originalPost: originalPost,
+                    originalPost: baselinePost,
                     targetBookmarkedState: finalState.isBookmarked,
                     generation: currentGen
                 )
             }
-
-            // Clean up pending state
-            socialActionsLogger.info("🔖 Clearing pendingBookmarkUIState for postId: \(postId)")
-            self.pendingBookmarkUIState.removeValue(forKey: postId)
-            self.pendingBookmarkTasks.removeValue(forKey: postId)
         }
 
         pendingBookmarkTasks[postId] = task

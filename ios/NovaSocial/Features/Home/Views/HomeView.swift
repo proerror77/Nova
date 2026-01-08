@@ -171,6 +171,22 @@ struct HomeView: View {
                     }
                 )
             }
+
+            if let toast = feedViewModel.toastError {
+                VStack {
+                    Spacer()
+                    Text(toast)
+                        .font(Font.custom("SFProDisplay-Medium", size: 14.f))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(Color.black.opacity(0.8))
+                        .cornerRadius(20)
+                        .padding(.bottom, 100)
+                }
+                .transition(.opacity)
+                .animation(.easeInOut, value: feedViewModel.toastError)
+            }
         }
         .animation(.none, value: showNotification)
         .animation(.none, value: showSearch)
@@ -244,6 +260,15 @@ struct HomeView: View {
         }
         .onChange(of: coordinator.homePath) { _, newPath in
             handlePendingNavigation()
+        }
+        .onChange(of: feedViewModel.toastError) { _, newValue in
+            guard let newValue else { return }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                if feedViewModel.toastError == newValue {
+                    feedViewModel.toastError = nil
+                }
+            }
         }
     }
 

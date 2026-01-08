@@ -218,6 +218,13 @@ struct PostDetailView: View {
     @State private var saveErrorMessage = ""
     @State private var showingDeleteError = false
     @State private var deleteErrorMessage = ""
+    @State private var showingSocialError = false
+    @State private var socialErrorMessage = ""
+
+    private var currentUserId: String? {
+        guard !authManager.isGuestMode else { return nil }
+        return authManager.currentUser?.id ?? KeychainService.shared.get(.userId)
+    }
 
     /// 是否是自己的帖子
     private var isOwnPost: Bool {
@@ -268,7 +275,7 @@ struct PostDetailView: View {
         .ignoresSafeArea(edges: .bottom)
         .navigationBarBackButtonHidden(true)
         .task {
-            await commentViewModel.loadComments(postId: post.id, userId: authManager.currentUser?.id)
+            await commentViewModel.loadComments(postId: post.id, userId: currentUserId)
             await checkFollowStatus()
         }
         .onAppear {
@@ -320,6 +327,11 @@ struct PostDetailView: View {
             Button("OK", role: .cancel) { }
         } message: {
             Text(deleteErrorMessage)
+        }
+        .alert("Action Unavailable", isPresented: $showingSocialError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(socialErrorMessage)
         }
         // MARK: - Deleting Overlay
         .overlay {
@@ -1001,8 +1013,11 @@ struct PostDetailView: View {
     // MARK: - Like Actions
 
     private func toggleLike() async {
-        guard let userId = authManager.currentUser?.id else { return }
         guard !isLikeLoading else { return }
+        guard let userId = currentUserId else {
+            showSocialError("Please sign in to like posts.")
+            return
+        }
 
         isLikeLoading = true
         let wasLiked = isPostLiked
@@ -1042,8 +1057,11 @@ struct PostDetailView: View {
     // MARK: - Bookmark Actions
 
     private func toggleBookmark() async {
-        guard let userId = authManager.currentUser?.id else { return }
         guard !isBookmarkLoading else { return }
+        guard let userId = currentUserId else {
+            showSocialError("Please sign in to save posts.")
+            return
+        }
 
         isBookmarkLoading = true
         let wasBookmarked = isPostSaved
@@ -1074,6 +1092,11 @@ struct PostDetailView: View {
         }
 
         isBookmarkLoading = false
+    }
+
+    private func showSocialError(_ message: String) {
+        socialErrorMessage = message
+        showingSocialError = true
     }
 
     /// Check if URL points to a video file
