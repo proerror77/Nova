@@ -57,6 +57,11 @@ This document outlines the cleanup steps needed after consolidating social inter
 - [ ] Test on both own profile and other users' profiles
 - [ ] Verify no crashes or errors
 
+**Testing Resources**:
+- 📖 Full Guide: `IOS_TESTING_GUIDE.md` - Comprehensive testing scenarios and debugging tips
+- ⚡ Quick Test: `QUICK_TEST_CHECKLIST.md` - 5-minute smoke test for rapid validation
+- 📋 Summary: `IMPLEMENTATION_SUMMARY.md` - Complete overview of changes and timeline
+
 **Backend Monitoring**:
 - [ ] Monitor staging logs for any errors
 - [ ] Check if deprecated endpoints are still being called
@@ -201,6 +206,9 @@ If issues are discovered after migration:
 
 ## 📚 Related Documentation
 
+- `IMPLEMENTATION_SUMMARY.md` - Complete overview of changes, timeline, and team responsibilities
+- `IOS_TESTING_GUIDE.md` - Comprehensive iOS testing guide for social data consolidation
+- `QUICK_TEST_CHECKLIST.md` - 5-minute smoke test checklist
 - `BOOKMARK_API_MIGRATION.md` - Bookmark API migration plan
 - `BOOKMARK_API_TEST_RESULTS.md` - Staging test results
 - Backend migrations: `backend/content-service/migrations/`
