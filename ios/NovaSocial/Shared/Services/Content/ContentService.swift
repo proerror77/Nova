@@ -20,7 +20,15 @@ class ContentService {
         )
     }
 
-    func createPost(creatorId: String, content: String, mediaUrls: [String]? = nil, channelIds: [String]? = nil, location: String? = nil) async throws -> Post {
+    /// Create a new post with media
+    /// - Parameters:
+    ///   - creatorId: The user ID creating the post
+    ///   - content: Post text content
+    ///   - mediaUrls: CDN URLs for attached media
+    ///   - mediaType: Type of media: "image", "video", "live_photo", "mixed", or nil for text-only
+    ///   - channelIds: Optional channel IDs to tag the post with
+    ///   - location: Optional location string
+    func createPost(creatorId: String, content: String, mediaUrls: [String]? = nil, mediaType: String? = nil, channelIds: [String]? = nil, location: String? = nil) async throws -> Post {
         // The graphql-gateway now accepts media_urls as a separate field
         // It extracts user_id from the JWT token (AuthenticatedUser)
         struct Request: Codable {
@@ -43,9 +51,11 @@ class ContentService {
             let post: Post
         }
 
-        // Determine media type based on URLs
-        let mediaType: String? = if let urls = mediaUrls, !urls.isEmpty {
-            "image"
+        // Use provided mediaType, or default to "image" if media URLs exist but no type specified
+        let resolvedMediaType: String? = if let type = mediaType {
+            type
+        } else if let urls = mediaUrls, !urls.isEmpty {
+            "image"  // Fallback for backward compatibility
         } else {
             nil
         }
@@ -53,7 +63,7 @@ class ContentService {
         let request = Request(
             content: content,
             mediaUrls: mediaUrls,
-            mediaType: mediaType,
+            mediaType: resolvedMediaType,
             channelIds: channelIds,
             location: location
         )

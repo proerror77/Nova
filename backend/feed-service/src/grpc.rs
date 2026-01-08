@@ -36,8 +36,10 @@ pub use clients::ContentServiceClient;
 use crate::cache::{CachedFeed, CachedFeedPost, FeedCache};
 use base64::{engine::general_purpose, Engine};
 use chrono::Utc;
+use grpc_clients::nova::social_service::v2::{
+    BatchGetCountsRequest, BatchGetLikeStatusRequest, PostCounts,
+};
 use grpc_clients::{config::GrpcConfig, GrpcClientPool};
-use grpc_clients::nova::social_service::v2::{BatchGetCountsRequest, BatchGetLikeStatusRequest, PostCounts};
 use grpc_metrics::layer::RequestGuard;
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -197,15 +199,24 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
                                     created_at: post.created_at,
                                     ranking_score: post.ranking_score,
                                     // Use real-time counts, fallback to cached
-                                    like_count: counts.map(|c| c.like_count as u32).unwrap_or(post.like_count),
-                                    comment_count: counts.map(|c| c.comment_count as u32).unwrap_or(post.comment_count),
-                                    share_count: counts.map(|c| c.share_count as u32).unwrap_or(post.share_count),
-                                    bookmark_count: counts.map(|c| c.bookmark_count as u32).unwrap_or(post.bookmark_count),
+                                    like_count: counts
+                                        .map(|c| c.like_count as u32)
+                                        .unwrap_or(post.like_count),
+                                    comment_count: counts
+                                        .map(|c| c.comment_count as u32)
+                                        .unwrap_or(post.comment_count),
+                                    share_count: counts
+                                        .map(|c| c.share_count as u32)
+                                        .unwrap_or(post.share_count),
+                                    bookmark_count: counts
+                                        .map(|c| c.bookmark_count as u32)
+                                        .unwrap_or(post.bookmark_count),
                                     media_urls: post.media_urls.clone(),
                                     media_type: post.media_type.clone(),
                                     thumbnail_urls: post.thumbnail_urls.clone(),
                                     is_liked: like_statuses.get(&post.id).copied().unwrap_or(false),
                                     is_bookmarked: false, // TODO: implement bookmark status
+                                    author_account_type: post.author_account_type.clone(),
                                 }
                             })
                             .collect(),
@@ -328,15 +339,24 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
                         created_at: post.created_at,
                         ranking_score: post.ranking_score,
                         // Use real-time counts from social-service, fallback to post's original count
-                        like_count: counts.map(|c| c.like_count as u32).unwrap_or(post.like_count),
-                        comment_count: counts.map(|c| c.comment_count as u32).unwrap_or(post.comment_count),
-                        share_count: counts.map(|c| c.share_count as u32).unwrap_or(post.share_count),
-                        bookmark_count: counts.map(|c| c.bookmark_count as u32).unwrap_or(post.bookmark_count),
+                        like_count: counts
+                            .map(|c| c.like_count as u32)
+                            .unwrap_or(post.like_count),
+                        comment_count: counts
+                            .map(|c| c.comment_count as u32)
+                            .unwrap_or(post.comment_count),
+                        share_count: counts
+                            .map(|c| c.share_count as u32)
+                            .unwrap_or(post.share_count),
+                        bookmark_count: counts
+                            .map(|c| c.bookmark_count as u32)
+                            .unwrap_or(post.bookmark_count),
                         media_urls: post.media_urls.clone(),
                         media_type: post.media_type.clone(),
                         thumbnail_urls: post.thumbnail_urls.clone(),
                         is_liked: like_statuses.get(&post.id).copied().unwrap_or(false),
                         is_bookmarked: false, // TODO: implement bookmark status
+                        author_account_type: post.author_account_type.clone(),
                     }
                 })
                 .collect(),
@@ -697,6 +717,11 @@ impl RecommendationServiceImpl {
                     media_urls,
                     media_type,
                     thumbnail_urls,
+                    author_account_type: if post.author_account_type.is_empty() {
+                        "primary".to_string()
+                    } else {
+                        post.author_account_type
+                    },
                 }
             })
             .collect();
@@ -870,6 +895,11 @@ impl RecommendationServiceImpl {
                     media_urls,
                     media_type,
                     thumbnail_urls,
+                    author_account_type: if post.author_account_type.is_empty() {
+                        "primary".to_string()
+                    } else {
+                        post.author_account_type
+                    },
                 }
             })
             .collect();
@@ -937,7 +967,10 @@ async fn fetch_social_counts(
             counts
         }
         Err(e) => {
-            warn!("Failed to fetch social counts (continuing with cached): {}", e);
+            warn!(
+                "Failed to fetch social counts (continuing with cached): {}",
+                e
+            );
             HashMap::new()
         }
     }
@@ -1123,6 +1156,9 @@ mod tests {
             media_urls: vec![],
             media_type: String::new(),
             thumbnail_urls: vec![],
+            is_liked: false,
+            is_bookmarked: false,
+            author_account_type: "primary".to_string(),
         };
 
         // Verify all proto fields are set correctly
@@ -1153,6 +1189,9 @@ mod tests {
                 media_urls: vec![],
                 media_type: String::new(),
                 thumbnail_urls: vec![],
+                is_liked: false,
+                is_bookmarked: false,
+                author_account_type: "primary".to_string(),
             },
             FeedPost {
                 id: "post-2".to_string(),
@@ -1167,6 +1206,9 @@ mod tests {
                 media_urls: vec![],
                 media_type: String::new(),
                 thumbnail_urls: vec![],
+                is_liked: true,
+                is_bookmarked: false,
+                author_account_type: "primary".to_string(),
             },
         ];
 
@@ -1343,6 +1385,9 @@ mod tests {
             media_urls: vec![],
             media_type: String::new(),
             thumbnail_urls: vec![],
+            is_liked: false,
+            is_bookmarked: false,
+        author_account_type: "primary".to_string(),
         };
 
         // Measure construction time
@@ -1361,6 +1406,9 @@ mod tests {
                 media_urls: vec![],
                 media_type: String::new(),
                 thumbnail_urls: vec![],
+                is_liked: post.is_liked,
+                is_bookmarked: post.is_bookmarked,
+                author_account_type: "primary".to_string(),
             };
         }
         let elapsed = start.elapsed();
@@ -1447,6 +1495,9 @@ mod tests {
                 media_urls: vec![],
                 media_type: String::new(),
                 thumbnail_urls: vec![],
+                is_liked: i % 2 == 0,
+                is_bookmarked: i % 3 == 0,
+                author_account_type: "primary".to_string(),
             })
             .collect();
 
@@ -1513,6 +1564,9 @@ mod tests {
                         media_urls: vec![],
                         media_type: String::new(),
                         thumbnail_urls: vec![],
+                        is_liked: false,
+                        is_bookmarked: false,
+                        author_account_type: "primary".to_string(),
                     })
                     .collect(),
                 next_cursor: cursor.clone(),

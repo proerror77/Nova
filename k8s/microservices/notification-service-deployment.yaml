@@ -109,13 +109,32 @@ spec:
                 secretKeyRef:
                   name: nova-db-credentials
                   key: notification-db-url
+            # APNs Push Notification Configuration
+            - name: APNS_KEY_PATH
+              value: "/etc/apns/apns-key.p8"
+            - name: APNS_BUNDLE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: apns-credentials
+                  key: bundle-id
+            - name: APNS_PRODUCTION
+              value: "false"
           volumeMounts:
             - name: tmp
               mountPath: /tmp
             - name: var-tmp
               mountPath: /var/tmp
+            - name: apns-credentials
+              mountPath: /etc/apns
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
         - name: var-tmp
           emptyDir: {}
+        - name: apns-credentials
+          secret:
+            secretName: apns-credentials
+            items:
+              - key: apns-key.p8
+                path: apns-key.p8

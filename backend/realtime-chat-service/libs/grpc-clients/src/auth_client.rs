@@ -12,7 +12,7 @@
 use crate::config::GrpcConfig;
 use crate::nova::identity_service::v2::{
     auth_service_client::AuthServiceClient as TonicAuthServiceClient, CheckUserExistsRequest,
-    GetUserRequest, GetUsersByIdsRequest,
+    GetUserProfilesByIdsRequest, GetUserRequest, GetUsersByIdsRequest,
 };
 use crate::GrpcClientPool;
 use anyhow::{Context, Result};
@@ -190,6 +190,58 @@ impl AuthClient {
         }
 
         Ok(result)
+    }
+
+    /// Get user display name for Matrix provisioning
+    ///
+    /// Uses GetUserProfilesByIds RPC which returns the full UserProfile including display_name.
+    /// Returns display_name if set, otherwise falls back to username.
+    /// This ensures Matrix users get their proper display name.
+    ///
+    /// # Returns
+    /// - Ok(Some(display_name_or_username)) - user found
+    /// - Ok(None) - user not found
+    /// - Err - gRPC communication failure
+    pub async fn get_user_display_name(&self, user_id: Uuid) -> Result<Option<String>> {
+        let mut client = self.client.clone();
+        let request = GetUserProfilesByIdsRequest {
+            user_ids: vec![user_id.to_string()],
+        };
+
+        let mut tonic_request = tonic::Request::new(request);
+        tonic_request.set_timeout(self.request_timeout);
+
+        match client.get_user_profiles_by_ids(tonic_request).await {
+            Ok(response) => {
+                let profiles = response.into_inner().profiles;
+                if let Some(profile) = profiles.into_iter().next() {
+                    // Return display_name if set and non-empty, otherwise fall back to username
+                    let name = if let Some(display_name) = profile.display_name {
+                        if display_name.is_empty() {
+                            profile.username
+                        } else {
+                            display_name
+                        }
+                    } else {
+                        profile.username
+                    };
+                    Ok(Some(name))
+                } else {
+                    Ok(None)
+                }
+            }
+            Err(status) => {
+                // NotFound is not an error - return None
+                if status.code() == tonic::Code::NotFound {
+                    Ok(None)
+                } else {
+                    Err(anyhow::anyhow!(
+                        "auth-service get_user_profiles_by_ids failed: {}",
+                        status.message()
+                    ))
+                }
+            }
+        }
     }
 }
 

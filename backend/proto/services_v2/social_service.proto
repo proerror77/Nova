@@ -285,6 +285,7 @@ message CreateCommentRequest {
   string post_id = 2;
   string content = 3;
   string parent_comment_id = 4;
+  string author_account_type = 5;  // Account type: "primary" or "alias" (Issue #259)
 }
 message CreateCommentResponse { Comment comment = 1; }
 message DeleteCommentRequest { string user_id = 1; string comment_id = 2; }
@@ -422,6 +423,7 @@ message Comment {
   // Engagement data (populated when viewer_user_id is provided)
   int64 like_count = 7;           // Total likes on this comment
   bool is_liked_by_viewer = 8;    // Whether the viewer has liked this comment
+  string author_account_type = 9; // Account type when comment was created: "primary" or "alias"
 }
 
 message FeedItem {

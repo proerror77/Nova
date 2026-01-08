@@ -689,8 +689,6 @@ impl MegolmService {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // TODO: Add integration tests with test database
     // Test scenarios:
     // 1. Create outbound session

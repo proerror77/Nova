@@ -151,8 +151,14 @@ impl AuthService for IdentityServiceServer {
             // If password matches an existing account, treat this as idempotent
             // registration and simply return a fresh token pair instead of an error.
             if verify_password(&req.password, &existing.password_hash).map_err(to_status)? {
-                let tokens = generate_token_pair(existing.id, &existing.email, &existing.username)
-                    .map_err(anyhow_to_status)?;
+                let tokens = generate_token_pair(
+                    existing.id,
+                    &existing.email,
+                    &existing.username,
+                    Some("primary"),
+                    None,
+                )
+                .map_err(anyhow_to_status)?;
 
                 info!(
                     user_id = %existing.id,
@@ -210,7 +216,8 @@ impl AuthService for IdentityServiceServer {
 
         // 7. Generate token pair
         let tokens =
-            generate_token_pair(user.id, &user.email, &user.username).map_err(anyhow_to_status)?;
+            generate_token_pair(user.id, &user.email, &user.username, Some("primary"), None)
+                .map_err(anyhow_to_status)?;
 
         info!(
             user_id = %user.id,
@@ -270,7 +277,8 @@ impl AuthService for IdentityServiceServer {
 
         // Generate token pair
         let tokens =
-            generate_token_pair(user.id, &user.email, &user.username).map_err(anyhow_to_status)?;
+            generate_token_pair(user.id, &user.email, &user.username, Some("primary"), None)
+                .map_err(anyhow_to_status)?;
 
         // Create session for device tracking (if device_id is provided)
         if !req.device_id.is_empty() {
@@ -370,7 +378,8 @@ impl AuthService for IdentityServiceServer {
 
         // Generate new token pair
         let tokens =
-            generate_token_pair(user.id, &user.email, &user.username).map_err(anyhow_to_status)?;
+            generate_token_pair(user.id, &user.email, &user.username, Some("primary"), None)
+                .map_err(anyhow_to_status)?;
 
         Ok(Response::new(RefreshTokenResponse {
             token: tokens.access_token,
@@ -608,6 +617,96 @@ impl AuthService for IdentityServiceServer {
             issuer_username: validation.issuer_username,
             expires_at: validation.expires_at.map(|dt| dt.timestamp()),
             error: validation.error,
+        }))
+    }
+
+    /// Add email to waitlist (public - no auth required)
+    /// Issue #255: "Don't have an invite?" email collection
+    async fn add_to_waitlist(
+        &self,
+        request: Request<AddToWaitlistRequest>,
+    ) -> std::result::Result<Response<AddToWaitlistResponse>, Status> {
+        let req = request.into_inner();
+
+        if req.email.is_empty() {
+            return Err(Status::invalid_argument("Email is required"));
+        }
+
+        // Basic email validation
+        if !req.email.contains('@') || !req.email.contains('.') {
+            return Err(Status::invalid_argument("Invalid email format"));
+        }
+
+        let (is_new, _id) = db::waitlist::add_to_waitlist(
+            &self.db,
+            &req.email,
+            req.ip_address.as_deref(),
+            req.user_agent.as_deref(),
+            req.source.as_deref(),
+        )
+        .await
+        .map_err(to_status)?;
+
+        let message = if is_new {
+            Some("Successfully added to waitlist".to_string())
+        } else {
+            Some("Email already on waitlist".to_string())
+        };
+
+        Ok(Response::new(AddToWaitlistResponse {
+            success: true,
+            is_new,
+            message,
+        }))
+    }
+
+    /// List waitlist entries (admin only)
+    async fn list_waitlist(
+        &self,
+        request: Request<ListWaitlistRequest>,
+    ) -> std::result::Result<Response<ListWaitlistResponse>, Status> {
+        let req = request.into_inner();
+
+        let limit = if req.limit > 0 { req.limit as i64 } else { 50 };
+        let offset = req.offset as i64;
+
+        let (entries, total) =
+            db::waitlist::list_waitlist(&self.db, req.status.as_deref(), limit, offset)
+                .await
+                .map_err(to_status)?;
+
+        let proto_entries: Vec<WaitlistEntry> = entries
+            .into_iter()
+            .map(|e| WaitlistEntry {
+                id: e.id.to_string(),
+                email: e.email,
+                status: e.status,
+                source: e.source,
+                created_at: e.created_at.timestamp(),
+                invited_at: e.invited_at.map(|dt| dt.timestamp()),
+            })
+            .collect();
+
+        Ok(Response::new(ListWaitlistResponse {
+            entries: proto_entries,
+            total,
+        }))
+    }
+
+    /// Get waitlist statistics (admin only)
+    async fn get_waitlist_stats(
+        &self,
+        _request: Request<GetWaitlistStatsRequest>,
+    ) -> std::result::Result<Response<GetWaitlistStatsResponse>, Status> {
+        let stats = db::waitlist::get_waitlist_stats(&self.db)
+            .await
+            .map_err(to_status)?;
+
+        Ok(Response::new(GetWaitlistStatsResponse {
+            total: stats.total,
+            pending: stats.pending,
+            invited: stats.invited,
+            registered: stats.registered,
         }))
     }
 
@@ -1299,9 +1398,22 @@ impl AuthService for IdentityServiceServer {
         let provider = proto_provider_to_oauth(req.provider())
             .ok_or_else(|| Status::invalid_argument("Invalid or unsupported OAuth provider"))?;
 
+        // Extract device info for session tracking (stored with OAuth state)
+        let device_info = if req.device_id.is_some() || req.device_name.is_some() {
+            Some(crate::services::oauth::OAuthDeviceInfo {
+                device_id: req.device_id,
+                device_name: req.device_name,
+                device_type: req.device_type,
+                os_version: req.os_version,
+                user_agent: req.user_agent,
+            })
+        } else {
+            None
+        };
+
         let result = self
             .oauth
-            .start_flow(provider, &req.redirect_uri)
+            .start_flow(provider, &req.redirect_uri, device_info)
             .await
             .map_err(to_status)?;
 
@@ -1331,8 +1443,76 @@ impl AuthService for IdentityServiceServer {
             .map_err(to_status)?;
 
         // Generate token pair for the user
-        let tokens = generate_token_pair(result.user.id, &result.user.email, &result.user.username)
-            .map_err(anyhow_to_status)?;
+        let tokens = generate_token_pair(
+            result.user.id,
+            &result.user.email,
+            &result.user.username,
+            Some("primary"),
+            None,
+        )
+        .map_err(anyhow_to_status)?;
+
+        // Create session for device tracking (if device_id was provided during start_flow)
+        if let Some(ref device_info) = result.device_info {
+            if let Some(ref device_id) = device_info.device_id {
+                if !device_id.is_empty() {
+                    // Determine device type
+                    let device_type = device_info.device_type.as_deref();
+
+                    // Parse OS name and version from os_version field (e.g., "iOS 18.0" -> "iOS", "18.0")
+                    let (os_name, os_version) = if let Some(ref os_ver) = device_info.os_version {
+                        if !os_ver.is_empty() {
+                            let parts: Vec<&str> = os_ver.splitn(2, ' ').collect();
+                            if parts.len() == 2 {
+                                (Some(parts[0]), Some(parts[1]))
+                            } else {
+                                (Some(os_ver.as_str()), None)
+                            }
+                        } else {
+                            (None, None)
+                        }
+                    } else {
+                        (None, None)
+                    };
+
+                    match db::sessions::create_session(
+                        &self.db,
+                        result.user.id,
+                        device_id,
+                        device_info.device_name.as_deref(),
+                        device_type,
+                        os_name,
+                        os_version,
+                        None, // browser_name (not applicable for mobile)
+                        None, // browser_version
+                        None, // ip_address (could be extracted from request metadata)
+                        device_info.user_agent.as_deref(),
+                        None, // location_country
+                        None, // location_city
+                    )
+                    .await
+                    {
+                        Ok(session) => {
+                            info!(
+                                user_id = %result.user.id,
+                                session_id = %session.id,
+                                device_id = %device_id,
+                                "Session created for OAuth device"
+                            );
+                        }
+                        Err(e) => {
+                            // Log error but don't fail the sign-in
+                            tracing::warn!(
+                                user_id = %result.user.id,
+                                device_id = %device_id,
+                                error = %e,
+                                "Failed to create session for OAuth device"
+                            );
+                        }
+                    }
+                }
+            }
+        }
 
         info!(
             user_id = %result.user.id,
@@ -1470,8 +1650,74 @@ impl AuthService for IdentityServiceServer {
             .map_err(to_status)?;
 
         // Generate token pair for the user
-        let tokens = generate_token_pair(result.user.id, &result.user.email, &result.user.username)
-            .map_err(anyhow_to_status)?;
+        let tokens = generate_token_pair(
+            result.user.id,
+            &result.user.email,
+            &result.user.username,
+            Some("primary"),
+            None,
+        )
+        .map_err(anyhow_to_status)?;
+
+        // Create session for device tracking (if device_id is provided)
+        if let Some(device_id) = &req.device_id {
+            if !device_id.is_empty() {
+                // Determine device type
+                let device_type = req.device_type.as_deref();
+
+                // Parse OS name and version from os_version field (e.g., "iOS 18.0" -> "iOS", "18.0")
+                let (os_name, os_version) = if let Some(os_ver) = &req.os_version {
+                    if !os_ver.is_empty() {
+                        let parts: Vec<&str> = os_ver.splitn(2, ' ').collect();
+                        if parts.len() == 2 {
+                            (Some(parts[0]), Some(parts[1]))
+                        } else {
+                            (Some(os_ver.as_str()), None)
+                        }
+                    } else {
+                        (None, None)
+                    }
+                } else {
+                    (None, None)
+                };
+
+                match db::sessions::create_session(
+                    &self.db,
+                    result.user.id,
+                    device_id,
+                    req.device_name.as_deref(),
+                    device_type,
+                    os_name,
+                    os_version,
+                    None, // browser_name (not applicable for mobile)
+                    None, // browser_version
+                    None, // ip_address (could be extracted from request metadata)
+                    req.user_agent.as_deref(),
+                    None, // location_country
+                    None, // location_city
+                )
+                .await
+                {
+                    Ok(session) => {
+                        info!(
+                            user_id = %result.user.id,
+                            session_id = %session.id,
+                            device_id = %device_id,
+                            "Session created for Apple Sign-In device"
+                        );
+                    }
+                    Err(e) => {
+                        // Log error but don't fail the sign-in
+                        tracing::warn!(
+                            user_id = %result.user.id,
+                            device_id = %device_id,
+                            error = %e,
+                            "Failed to create session for Apple Sign-In device"
+                        );
+                    }
+                }
+            }
+        }
 
         info!(
             user_id = %result.user.id,
@@ -1892,8 +2138,9 @@ impl AuthService for IdentityServiceServer {
                 .map_err(to_status)?;
 
             // Generate new tokens
-            let tokens = generate_token_pair(user.id, &user.email, &user.username)
-                .map_err(anyhow_to_status)?;
+            let tokens =
+                generate_token_pair(user.id, &user.email, &user.username, Some("primary"), None)
+                    .map_err(anyhow_to_status)?;
 
             info!(user_id = %user_id, "Switched to primary account");
 
@@ -1940,9 +2187,15 @@ impl AuthService for IdentityServiceServer {
         .await
         .map_err(to_status)?;
 
-        // Generate new tokens (still using primary user credentials)
-        let tokens =
-            generate_token_pair(user.id, &user.email, &user.username).map_err(anyhow_to_status)?;
+        // Generate new tokens with alias account info
+        let tokens = generate_token_pair(
+            user.id,
+            &user.email,
+            &user.username,
+            Some("alias"),
+            Some(target_account_id),
+        )
+        .map_err(anyhow_to_status)?;
 
         info!(
             user_id = %user_id,
@@ -2285,8 +2538,14 @@ impl AuthService for IdentityServiceServer {
             .map_err(to_status)?;
 
         // Generate tokens for the authenticated user
-        let tokens = generate_token_pair(result.user.id, &result.user.email, &result.user.username)
-            .map_err(anyhow_to_status)?;
+        let tokens = generate_token_pair(
+            result.user.id,
+            &result.user.email,
+            &result.user.username,
+            Some("primary"),
+            None,
+        )
+        .map_err(anyhow_to_status)?;
 
         Ok(Response::new(CompletePasskeyAuthenticationResponse {
             user_id: result.user.id.to_string(),
@@ -2381,6 +2640,42 @@ impl AuthService for IdentityServiceServer {
 
         Ok(Response::new(()))
     }
+
+    async fn batch_resolve_usernames(
+        &self,
+        request: Request<BatchResolveUsernamesRequest>,
+    ) -> std::result::Result<Response<BatchResolveUsernamesResponse>, Status> {
+        let req = request.into_inner();
+
+        // Validate input - limit to 100 usernames
+        if req.usernames.len() > 100 {
+            return Err(Status::invalid_argument(
+                "Maximum 100 usernames allowed per request",
+            ));
+        }
+
+        let username_map = db::users::find_by_usernames(&self.db, &req.usernames)
+            .await
+            .map_err(to_status)?;
+
+        let users: Vec<ResolvedUser> = req
+            .usernames
+            .iter()
+            .map(|username| {
+                let lower_username = username.to_lowercase();
+                ResolvedUser {
+                    username: username.clone(),
+                    user_id: username_map
+                        .get(&lower_username)
+                        .map(|id| id.to_string())
+                        .unwrap_or_default(),
+                    found: username_map.contains_key(&lower_username),
+                }
+            })
+            .collect();
+
+        Ok(Response::new(BatchResolveUsernamesResponse { users }))
+    }
 }
 
 // ===== Helper Functions =====
@@ -2451,9 +2746,7 @@ fn to_status(err: IdentityError) -> Status {
         // Zitadel errors
         IdentityError::ZitadelError(msg) => Status::internal(format!("Zitadel error: {}", msg)),
         // OAuth invite code errors
-        IdentityError::InviteCodeRequired => {
-            Status::failed_precondition("INVITE_CODE_REQUIRED")
-        }
+        IdentityError::InviteCodeRequired => Status::failed_precondition("INVITE_CODE_REQUIRED"),
         IdentityError::InvalidInviteCode(msg) => {
             Status::invalid_argument(format!("Invalid invite code: {}", msg))
         }

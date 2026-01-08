@@ -6,6 +6,14 @@ struct SearchView: View {
     @FocusState private var isSearchFocused: Bool
     @State private var showUserProfile = false
     @State private var selectedUserId: String?
+    @State private var showHashtagFeed = false
+    @State private var selectedHashtag: String?
+    @State private var selectedHashtagPostCount: Int = 0
+    @State private var showPostDetail = false
+    @State private var selectedPost: FeedPost?
+    @State private var isLoadingPost = false
+    private let userService = UserService.shared  // For cache invalidation on profile navigation
+    private let contentService = ContentService()
 
     var body: some View {
         ZStack {
@@ -93,6 +101,17 @@ struct SearchView: View {
                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                 }
             }
+
+            // Loading overlay for post detail
+            if isLoadingPost {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                    .overlay {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(.white)
+                    }
+            }
         }
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -110,6 +129,59 @@ struct SearchView: View {
                 Color.clear
                     .onAppear {
                         showUserProfile = false
+                    }
+            }
+        }
+        .fullScreenCover(isPresented: $showHashtagFeed) {
+            if let hashtag = selectedHashtag {
+                HashtagFeedView(
+                    isPresented: $showHashtagFeed,
+                    hashtag: hashtag,
+                    postCount: selectedHashtagPostCount
+                )
+            } else {
+                Color.clear
+                    .onAppear {
+                        showHashtagFeed = false
+                    }
+            }
+        }
+        .fullScreenCover(isPresented: $showPostDetail) {
+            if let post = selectedPost {
+                NavigationView {
+                    PostDetailView(
+                        post: post,
+                        onDismiss: {
+                            showPostDetail = false
+                            selectedPost = nil
+                        },
+                        onAvatarTapped: { authorId in
+                            showPostDetail = false
+                            selectedPost = nil
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                selectedUserId = authorId
+                                showUserProfile = true
+                            }
+                        }
+                    )
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button(action: {
+                                showPostDetail = false
+                                selectedPost = nil
+                            }) {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(DesignTokens.textPrimary)
+                            }
+                        }
+                    }
+                }
+                .environmentObject(AuthenticationManager.shared)
+            } else {
+                Color.clear
+                    .onAppear {
+                        showPostDetail = false
                     }
             }
         }
@@ -211,16 +283,13 @@ struct SearchView: View {
 
     // MARK: - Loading View
     private var loadingView: some View {
-        VStack {
-            ProgressView()
-                .scaleEffect(1.2)
-            Text("Searching...")
-                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                .foregroundColor(DesignTokens.textSecondary)
-                .padding(.top, 12)
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(0..<5, id: \.self) { _ in
+                    SearchResultSkeleton()
+                }
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 60)
     }
 
     // MARK: - Empty Results
@@ -262,6 +331,8 @@ struct SearchView: View {
                 avatarUrl: avatarUrl,
                 isVerified: isVerified,
                 onTap: {
+                    // Invalidate cache before navigating to ensure fresh profile data (Issue #166)
+                    userService.invalidateCache(userId: id)
                     selectedUserId = id
                     showUserProfile = true
                 }
@@ -273,14 +344,60 @@ struct SearchView: View {
                 content: content,
                 author: author,
                 createdAt: createdAt,
-                likeCount: likeCount
+                likeCount: likeCount,
+                onTap: {
+                    loadAndShowPost(postId: id, authorName: author)
+                }
             )
 
         case .hashtag(let tag, let postCount):
             HashtagSearchResultRow(
                 tag: tag,
-                postCount: postCount
+                postCount: postCount,
+                onTap: {
+                    selectedHashtag = tag
+                    selectedHashtagPostCount = postCount
+                    showHashtagFeed = true
+                }
             )
+        }
+    }
+
+    // MARK: - Post Loading
+
+    private func loadAndShowPost(postId: String, authorName: String) {
+        guard !isLoadingPost else { return }
+
+        isLoadingPost = true
+
+        Task {
+            do {
+                if let post = try await contentService.getPost(postId: postId) {
+                    await MainActor.run {
+                        selectedPost = FeedPost(
+                            from: post,
+                            authorName: authorName,
+                            authorAvatar: nil
+                        )
+                        isLoadingPost = false
+                        showPostDetail = true
+                    }
+                } else {
+                    await MainActor.run {
+                        isLoadingPost = false
+                    }
+                    #if DEBUG
+                    print("[Search] Post not found: \(postId)")
+                    #endif
+                }
+            } catch {
+                await MainActor.run {
+                    isLoadingPost = false
+                }
+                #if DEBUG
+                print("[Search] Error loading post: \(error)")
+                #endif
+            }
         }
     }
 }
@@ -334,7 +451,9 @@ struct UserSearchResultRow: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .background(DesignTokens.surface)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 }
 
@@ -346,39 +465,51 @@ struct PostSearchResultRow: View {
     let author: String
     let createdAt: Date
     let likeCount: Int
+    var onTap: () -> Void = {}
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(author)
-                    .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
-                    .foregroundColor(DesignTokens.textPrimary)
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(author)
+                        .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
+                        .foregroundColor(DesignTokens.textPrimary)
 
-                Spacer()
+                    Spacer()
 
-                Text(relativeTime)
-                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
-                    .foregroundColor(DesignTokens.textSecondary)
-            }
-
-            Text(content)
-                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                .foregroundColor(DesignTokens.textPrimary)
-                .lineLimit(3)
-
-            HStack(spacing: 12) {
-                HStack(spacing: 4) {
-                    Image(systemName: "heart")
-                        .font(.system(size: 12.f))
-                    Text(likeCount.abbreviated)
+                    Text(relativeTime)
                         .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                        .foregroundColor(DesignTokens.textSecondary)
                 }
-                .foregroundColor(DesignTokens.textSecondary)
+
+                Text(content)
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                    .foregroundColor(DesignTokens.textPrimary)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+
+                HStack(spacing: 12) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "heart")
+                            .font(.system(size: 12.f))
+                        Text(likeCount.abbreviated)
+                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                    }
+                    .foregroundColor(DesignTokens.textSecondary)
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12.f))
+                        .foregroundColor(DesignTokens.textMuted)
+                }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(DesignTokens.surface)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(DesignTokens.surface)
+        .buttonStyle(.plain)
     }
 
     private var relativeTime: String {
@@ -399,38 +530,43 @@ struct PostSearchResultRow: View {
 struct HashtagSearchResultRow: View {
     let tag: String
     let postCount: Int
+    var onTap: () -> Void = {}
 
     var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(DesignTokens.inputBackground)
-                    .frame(width: 48, height: 48)
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(DesignTokens.inputBackground)
+                        .frame(width: 48, height: 48)
 
-                Text("#")
-                    .font(Font.custom("SFProDisplay-Bold", size: 20.f))
-                    .foregroundColor(DesignTokens.textSecondary)
+                    Text("#")
+                        .font(Font.custom("SFProDisplay-Bold", size: 20.f))
+                        .foregroundColor(DesignTokens.textSecondary)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("#\(tag)")
+                        .font(Font.custom("SFProDisplay-Semibold", size: 15.f))
+                        .foregroundColor(DesignTokens.textPrimary)
+
+                    Text("\(postCount) posts")
+                        .font(Font.custom("SFProDisplay-Regular", size: 13.f))
+                        .foregroundColor(DesignTokens.textSecondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14.f))
+                    .foregroundColor(DesignTokens.textMuted)
             }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("#\(tag)")
-                    .font(Font.custom("SFProDisplay-Semibold", size: 15.f))
-                    .foregroundColor(DesignTokens.textPrimary)
-
-                Text("\(postCount) posts")
-                    .font(Font.custom("SFProDisplay-Regular", size: 13.f))
-                    .foregroundColor(DesignTokens.textSecondary)
-            }
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 14.f))
-                .foregroundColor(DesignTokens.textMuted)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(DesignTokens.surface)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(DesignTokens.surface)
+        .buttonStyle(.plain)
     }
 }
 

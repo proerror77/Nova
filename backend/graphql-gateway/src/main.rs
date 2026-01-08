@@ -1,3 +1,4 @@
+use crate::rest_api::devices::{get_current_device, list_devices, logout_device};
 use crate::rest_api::graph::{
     check_is_following, follow_user, get_my_followers, get_my_following, get_user_followers,
     get_user_following, unfollow_user,
@@ -18,11 +19,11 @@ use crate::rest_api::search::{
 };
 use crate::rest_api::settings::{get_settings, update_settings};
 use crate::rest_api::social_likes::{
-    batch_check_bookmarked, batch_check_comment_liked, check_bookmarked, check_comment_liked,
-    check_liked, create_bookmark, create_comment, create_comment_like, create_like, create_share,
-    delete_bookmark, delete_comment, delete_comment_like, delete_comment_v2, delete_like,
-    delete_like_legacy, get_bookmarks, get_comment_like_count, get_comments, get_likes,
-    get_share_count, get_share_count_legacy, get_user_liked_posts,
+    batch_check_bookmarked, batch_check_comment_liked, batch_check_liked, check_bookmarked,
+    check_comment_liked, check_liked, create_bookmark, create_comment, create_comment_like,
+    create_like, create_share, delete_bookmark, delete_comment, delete_comment_like,
+    delete_comment_v2, delete_like, delete_like_legacy, get_bookmarks, get_comment_like_count,
+    get_comments, get_likes, get_share_count, get_share_count_legacy, get_user_liked_posts,
 };
 use actix_web::{middleware::Logger, web, App, HttpServer};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
@@ -327,6 +328,11 @@ async fn main() -> std::io::Result<()> {
                 "/api/v2/auth/invites/validate",
                 web::get().to(rest_api::validate_invite_code),
             )
+            // Waitlist signup (public endpoint - no auth required)
+            .route(
+                "/api/v2/auth/waitlist",
+                web::post().to(rest_api::add_to_waitlist),
+            )
             // ✅ Phone Authentication API (public endpoints - no auth required)
             .route(
                 "/api/v2/auth/phone/send-code",
@@ -616,6 +622,7 @@ async fn main() -> std::io::Result<()> {
             .service(delete_like_legacy)
             .service(get_likes)
             .service(check_liked)
+            .service(batch_check_liked)
             .service(create_comment)
             .service(delete_comment)
             .service(delete_comment_v2)
@@ -774,6 +781,10 @@ async fn main() -> std::io::Result<()> {
             // ✅ User Settings API
             .route("/api/v2/settings", web::get().to(get_settings))
             .route("/api/v2/settings", web::put().to(update_settings))
+            // ✅ Device Management API
+            .route("/api/v2/devices", web::get().to(list_devices))
+            .route("/api/v2/devices/current", web::get().to(get_current_device))
+            .route("/api/v2/devices/logout", web::post().to(logout_device))
             // ✅ Account Management API (Multi-account & Alias)
             .route(
                 "/api/v2/accounts",

@@ -4,8 +4,13 @@ struct CreateAccountView: View {
     @Binding var currentPage: AppPage
     @State private var email = ""
     @State private var isLoading = false
+    @State private var isGoogleLoading = false
+    @State private var isAppleLoading = false
     @State private var errorMessage: String?
     @FocusState private var isInputFocused: Bool
+
+    // Access global AuthenticationManager
+    @EnvironmentObject private var authManager: AuthenticationManager
 
     private var isEmailValid: Bool {
         let emailRegex = #"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"#
@@ -14,7 +19,7 @@ struct CreateAccountView: View {
 
     var body: some View {
         ZStack {
-            // Background - Linear Gradient (same as InviteCodeView)
+            // Background - Linear Gradient (same as CAPhoneNumberView)
             LinearGradient(
                 colors: [
                     Color(red: 0.027, green: 0.106, blue: 0.212),  // #071B36
@@ -23,24 +28,23 @@ struct CreateAccountView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
+            .ignoresSafeArea()
 
             // Content
             VStack(spacing: 0) {
-                Spacer().frame(height: 167.h)
+                Spacer().frame(height: 114.h)
                 logoSection
-                Spacer().frame(height: 20.h)
+                Spacer().frame(height: 43.h)
                 titleSection
-                Spacer().frame(height: 24.h)
+                Spacer().frame(height: 55.h)
                 phoneButton.padding(.horizontal, 37.w)
                 Spacer().frame(height: 15.h)
                 orText
                 Spacer().frame(height: 15.h)
                 googleButton.padding(.horizontal, 37.w)
-                Spacer().frame(height: 16.h)
+                Spacer().frame(height: 24.h)
                 appleButton.padding(.horizontal, 37.w)
-                Spacer().frame(height: 16.h)
-                emailButton.padding(.horizontal, 37.w)
-                Spacer()
+                Spacer().frame(height: 293.h)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -53,10 +57,11 @@ struct CreateAccountView: View {
                             .scaledToFit()
                             .frame(width: 24.s, height: 24.s)
                     }
-                    .padding(.leading, 16.w)
-                    .padding(.top, 56.h)
                     Spacer()
                 }
+                .padding(.leading, 20.w)
+                .padding(.top, 64.h)
+                
                 Spacer()
             }
         }
@@ -78,32 +83,31 @@ struct CreateAccountView: View {
     }
 
     private var titleSection: some View {
-        Text("Create Account")
+        Text("Create New Account")
             .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
             .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
     }
 
     private var phoneButton: some View {
         Button(action: {
-            // TODO: Navigate to phone number input
+            currentPage = .createAccountPhoneNumber
         }) {
-            ZStack {
-                HStack {
-                    Image("Phone-2")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 18.s, height: 18.s)
-                    Spacer()
-                }
-                .padding(.leading, 27.w)
-
-                Text("Use phone number")
-                    .font(Font.custom("SFProDisplay-Heavy", size: 16.f))
-                    .tracking(0.32)
+            HStack(spacing: 0) {
+                Spacer().frame(width: 18.w)
+                Image("Phone-2")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 18.s, height: 18.s)
+                Spacer().frame(width: 45.w)
+                Text("Use Mobile Number")
+                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                     .foregroundColor(.black)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 18.w)
             }
+            .frame(height: 47.h)
             .frame(maxWidth: .infinity)
-            .frame(height: 48.h)
             .background(.white)
             .cornerRadius(65.s)
         }
@@ -117,80 +121,68 @@ struct CreateAccountView: View {
 
     private var googleButton: some View {
         Button(action: {
-            // TODO: Google sign in
+            Task { await handleGoogleSignIn() }
         }) {
-            ZStack {
-                HStack {
+            HStack(spacing: 0) {
+                Spacer().frame(width: 18.w)
+                if isGoogleLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                        .scaleEffect(0.8)
+                        .frame(width: 18.s, height: 18.s)
+                } else {
                     Image("Google（B）")
                         .resizable()
                         .scaledToFit()
                         .frame(width: 18.s, height: 18.s)
-                    Spacer()
                 }
-                .padding(.leading, 27.w)
-
+                Spacer().frame(width: 45.w)
                 Text("Continue with Google")
-                    .font(Font.custom("SFProDisplay-Heavy", size: 16.f))
-                    .tracking(0.32)
+                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                     .foregroundColor(.black)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 18.w)
             }
+            .frame(height: 47.h)
             .frame(maxWidth: .infinity)
-            .frame(height: 48.h)
             .background(.white)
             .cornerRadius(65.s)
         }
+        .disabled(isGoogleLoading || isAppleLoading)
     }
 
     private var appleButton: some View {
         Button(action: {
-            // TODO: Apple sign in
+            Task { await handleAppleSignIn() }
         }) {
-            ZStack {
-                HStack {
+            HStack(spacing: 0) {
+                Spacer().frame(width: 18.w)
+                if isAppleLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                        .scaleEffect(0.8)
+                        .frame(width: 18.s, height: 18.s)
+                } else {
                     Image("Apple（B）")
                         .resizable()
                         .scaledToFit()
                         .frame(width: 18.s, height: 18.s)
-                    Spacer()
                 }
-                .padding(.leading, 27.w)
-
+                Spacer().frame(width: 45.w)
                 Text("Continue with Apple")
-                    .font(Font.custom("SFProDisplay-Heavy", size: 16.f))
-                    .tracking(0.32)
+                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                     .foregroundColor(.black)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 18.w)
             }
+            .frame(height: 47.h)
             .frame(maxWidth: .infinity)
-            .frame(height: 48.h)
             .background(.white)
             .cornerRadius(65.s)
         }
-    }
-
-    private var emailButton: some View {
-        Button(action: {
-            currentPage = .createAccountEmail
-        }) {
-            ZStack {
-                HStack {
-                    Image("Email")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 18.s, height: 18.s)
-                    Spacer()
-                }
-                .padding(.leading, 27.w)
-
-                Text("Continue with Email")
-                    .font(Font.custom("SFProDisplay-Heavy", size: 16.f))
-                    .tracking(0.32)
-                    .foregroundColor(.black)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 48.h)
-            .background(.white)
-            .cornerRadius(65.s)
-        }
+        .disabled(isGoogleLoading || isAppleLoading)
     }
 
     private var emailInput: some View {
@@ -261,8 +253,77 @@ struct CreateAccountView: View {
 
         isLoading = false
     }
+
+    // MARK: - OAuth Sign-In
+
+    private func handleGoogleSignIn() async {
+        isGoogleLoading = true
+        errorMessage = nil
+
+        do {
+            // Use the validated invite code from the registration flow
+            let _ = try await authManager.loginWithGoogle(inviteCode: authManager.validatedInviteCode)
+            // Success - AuthenticationManager will update isAuthenticated
+            // Clear the invite code after successful registration
+            await MainActor.run {
+                authManager.validatedInviteCode = nil
+            }
+        } catch let error as OAuthError {
+            if case .userCancelled = error {
+                // User cancelled, no error message needed
+            } else if case .invalidInviteCode(let message) = error {
+                errorMessage = message
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        } catch {
+            let errorDesc = error.localizedDescription.lowercased()
+            if !errorDesc.contains("cancel") {
+                errorMessage = "Google sign in failed. Please try again."
+                #if DEBUG
+                print("[CreateAccountView] Google sign in error: \(error)")
+                #endif
+            }
+        }
+
+        isGoogleLoading = false
+    }
+
+    private func handleAppleSignIn() async {
+        isAppleLoading = true
+        errorMessage = nil
+
+        do {
+            // Use the validated invite code from the registration flow
+            let _ = try await authManager.loginWithApple(inviteCode: authManager.validatedInviteCode)
+            // Success - AuthenticationManager will update isAuthenticated
+            // Clear the invite code after successful registration
+            await MainActor.run {
+                authManager.validatedInviteCode = nil
+            }
+        } catch let error as OAuthError {
+            if case .userCancelled = error {
+                // User cancelled, no error message needed
+            } else if case .invalidInviteCode(let message) = error {
+                errorMessage = message
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        } catch {
+            let errorDesc = error.localizedDescription.lowercased()
+            if !errorDesc.contains("cancel") {
+                errorMessage = "Apple sign in failed. Please try again."
+                #if DEBUG
+                print("[CreateAccountView] Apple sign in error: \(error)")
+                #endif
+            }
+        }
+
+        isAppleLoading = false
+    }
 }
 
 #Preview {
     CreateAccountView(currentPage: .constant(.createAccount))
+        .environmentObject(AuthenticationManager.shared)
 }

@@ -162,6 +162,7 @@ struct MessageView: View {
     // Services
     private let friendsService = FriendsService()
     private let matrixBridge = MatrixBridgeService.shared
+    private let userService = UserService.shared  // For cache invalidation on profile navigation
 
     // Deep link navigation support
     private let coordinator = AppCoordinator.shared
@@ -239,8 +240,11 @@ struct MessageView: View {
     }
 
     // MARK: - 從 Matrix 載入對話列表
-    private func loadConversationsFromMatrix() async {
-        print("🚀 [MessageView] loadConversationsFromMatrix() starting...")
+    private func loadConversationsFromMatrix(retryCount: Int = 0) async {
+        let maxRetries = 3
+        let retryDelayMs: UInt64 = 1500  // 1.5 秒重試間隔
+
+        print("🚀 [MessageView] loadConversationsFromMatrix() starting... (retry: \(retryCount)/\(maxRetries))")
 
         await MainActor.run {
             self.isLoading = true
@@ -252,6 +256,15 @@ struct MessageView: View {
             let matrixConversations = try await matrixBridge.getConversationsFromMatrix()
 
             print("✅ [MessageView] Loaded \(matrixConversations.count) conversations from Matrix")
+
+            // 如果沒有對話且還有重試次數，等待後重試
+            // 這處理了 sync 還沒完成的情況
+            if matrixConversations.isEmpty && retryCount < maxRetries {
+                print("⏳ [MessageView] No conversations found, waiting \(retryDelayMs)ms before retry...")
+                try? await Task.sleep(nanoseconds: retryDelayMs * 1_000_000)
+                await loadConversationsFromMatrix(retryCount: retryCount + 1)
+                return
+            }
 
             // Convert to UI model
             let previews = matrixConversations.map { conv -> ConversationPreview in
@@ -619,7 +632,8 @@ struct MessageView: View {
                 return false
             }
         case .profile(let userId):
-            // Navigate to user profile from message context
+            // Navigate to user profile from message context (with cache invalidation for Issue #166)
+            userService.invalidateCache(userId: userId)
             selectedUserId = userId
             showUserProfile = true
             coordinator.messagePath.removeAll { $0 == route }
@@ -775,17 +789,15 @@ struct MessageView: View {
                 } else {
                 // MARK: - 消息列表
                 if isLoading {
-                    // 加载状态
-                    VStack(spacing: 16) {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle())
-                            .scaleEffect(1.2)
-                        Text(LocalizedStringKey("Loading messages..."))
-                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                            .foregroundColor(DesignTokens.textSecondary)
+                    // Skeleton loading state
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(0..<6, id: \.self) { _ in
+                                ConversationRowSkeleton()
+                            }
+                        }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.top, 60)
+                    .padding(.top, 8)
                 } else if let error = errorMessage {
                     // 错误状态
                     VStack(spacing: 16) {
@@ -855,7 +867,10 @@ struct MessageView: View {
                                     memberAvatars: convo.memberAvatars,
                                     memberNames: convo.memberNames,
                                     onAvatarTapped: { userId in
+                                        // Skip profile navigation for Alice AI assistant
                                         if convo.userName.lowercased() != "alice" {
+                                            // Invalidate cache for fresh profile data (Issue #166)
+                                            userService.invalidateCache(userId: userId)
                                             selectedUserId = userId
                                             showUserProfile = true
                                         }

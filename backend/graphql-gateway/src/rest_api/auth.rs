@@ -4,7 +4,7 @@
 /// POST /api/v2/auth/login - Login user
 /// POST /api/v2/auth/refresh - Refresh access token
 /// POST /api/v2/auth/logout - Logout user
-use actix_web::{web, HttpResponse, Result};
+use actix_web::{web, HttpRequest, HttpResponse, Result};
 use tracing::{error, info};
 
 use super::models::{
@@ -346,4 +346,84 @@ pub struct InviteValidationResponse {
     pub expires_at: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+}
+
+/// Request body for waitlist signup
+#[derive(Debug, serde::Deserialize)]
+pub struct WaitlistRequest {
+    pub email: String,
+}
+
+/// Response for waitlist signup
+#[derive(Debug, serde::Serialize)]
+pub struct WaitlistResponse {
+    pub success: bool,
+    pub is_new: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+/// POST /api/v2/auth/waitlist
+/// Add email to waitlist (public endpoint - no auth required)
+/// Used by mobile clients when user doesn't have an invite code
+pub async fn add_to_waitlist(
+    req: HttpRequest,
+    body: web::Json<WaitlistRequest>,
+    clients: web::Data<ServiceClients>,
+) -> Result<HttpResponse> {
+    info!(email = %body.email, "POST /api/v2/auth/waitlist");
+
+    // Extract IP address and user agent from request
+    let ip_address = req
+        .connection_info()
+        .realip_remote_addr()
+        .map(|s| s.to_string());
+    let user_agent = req
+        .headers()
+        .get("user-agent")
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string());
+
+    let mut auth_client = clients.auth_client();
+
+    let request = tonic::Request::new(crate::clients::proto::auth::AddToWaitlistRequest {
+        email: body.email.clone(),
+        ip_address,
+        user_agent,
+        source: Some("ios_app".to_string()),
+    });
+
+    match auth_client.add_to_waitlist(request).await {
+        Ok(response) => {
+            let result = response.into_inner();
+            info!(
+                email = %body.email,
+                is_new = result.is_new,
+                "Waitlist signup completed"
+            );
+
+            Ok(HttpResponse::Ok().json(WaitlistResponse {
+                success: result.success,
+                is_new: result.is_new,
+                message: if result.is_new {
+                    Some("You've been added to the waitlist!".to_string())
+                } else {
+                    Some("You're already on the waitlist.".to_string())
+                },
+            }))
+        }
+        Err(status) => {
+            error!(
+                email = %body.email,
+                error = %status,
+                "Waitlist signup failed"
+            );
+
+            Ok(HttpResponse::BadRequest().json(WaitlistResponse {
+                success: false,
+                is_new: false,
+                message: Some(status.message().to_string()),
+            }))
+        }
+    }
 }

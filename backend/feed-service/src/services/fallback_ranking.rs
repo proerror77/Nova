@@ -101,6 +101,7 @@ mod tests {
             media_urls: vec![],
             media_type: String::new(),
             thumbnail_urls: vec![],
+            author_account_type: "primary".to_string(),
         }
     }
 

@@ -90,6 +90,8 @@ struct APIConfig {
         static func deleteLike(_ postId: String) -> String { "/api/v2/social/unlike/\(postId)" }
         static func getLikes(_ postId: String) -> String { "/api/v2/social/likes/\(postId)" }
         static func checkLiked(_ postId: String) -> String { "/api/v2/social/check-liked/\(postId)" }
+        /// POST /api/v2/social/batch-check-liked - 批量檢查帖子點讚狀態（修復刷新後狀態不一致）
+        static let batchCheckLiked = "/api/v2/social/batch-check-liked"
         /// GET /api/v2/social/users/{user_id}/liked-posts 獲取用戶點讚的帖子
         static func getUserLikedPosts(_ userId: String) -> String { "/api/v2/social/users/\(userId)/liked-posts" }
         static let createComment = "/api/v2/social/comment"
@@ -413,6 +415,8 @@ struct APIConfig {
         static let validate = "/api/v2/auth/invites/validate"  // GET ?code=XXXXX
         // 推薦資訊
         static let referrals = "/api/v2/auth/referrals"  // GET 獲取推薦人和被推薦人列表
+        // Waitlist - 收集無邀請碼用戶的郵箱 (無需認證)
+        static let waitlist = "/api/v2/auth/waitlist"  // POST {email: string}
     }
 
     // MARK: - Notifications API

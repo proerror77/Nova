@@ -9,7 +9,7 @@ import FoundationModels
 @available(iOS 26.0, *)
 @Generable
 struct SearchPostsArguments: Sendable {
-    @Guide(description: "Search query keywords to find posts on ICERED")
+    @Guide(description: "Search query keywords to find posts on Icered")
     var query: String
 
     @Guide(description: "Maximum number of posts to return, between 1 and 20. Default is 10.")
@@ -21,7 +21,7 @@ struct SearchPostsArguments: Sendable {
 
 // MARK: - Search Posts Tool
 
-/// Tool for searching posts on the ICERED platform
+/// Tool for searching posts on the Icered platform
 @available(iOS 26.0, *)
 struct SearchPostsTool: Tool {
 
@@ -29,7 +29,7 @@ struct SearchPostsTool: Tool {
 
     let name = "search_posts"
     let description = """
-        Search for posts on the ICERED social platform by keywords or topics.
+        Search for posts on the Icered social platform by keywords or topics.
         Use this tool when the user asks about specific content, wants to find posts about a topic,
         or needs to discover what people are posting about something.
         Returns a list of matching posts with their content, author, and engagement metrics.

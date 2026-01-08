@@ -71,7 +71,7 @@ fn test_generate_access_token_success() {
     init_test_keys();
 
     let user_id = Uuid::new_v4();
-    let result = generate_access_token(user_id, "test@example.com", "testuser");
+    let result = generate_access_token(user_id, "test@example.com", "testuser", None, None);
 
     assert!(result.is_ok(), "Should generate access token successfully");
     let token = result.unwrap();
@@ -88,7 +88,7 @@ fn test_generate_refresh_token_success() {
     init_test_keys();
 
     let user_id = Uuid::new_v4();
-    let result = generate_refresh_token(user_id, "test@example.com", "testuser");
+    let result = generate_refresh_token(user_id, "test@example.com", "testuser", None, None);
 
     assert!(result.is_ok(), "Should generate refresh token successfully");
     let token = result.unwrap();
@@ -105,7 +105,7 @@ fn test_generate_token_pair_success() {
     init_test_keys();
 
     let user_id = Uuid::new_v4();
-    let result = generate_token_pair(user_id, "test@example.com", "testuser");
+    let result = generate_token_pair(user_id, "test@example.com", "testuser", None, None);
 
     assert!(result.is_ok(), "Should generate token pair successfully");
     let tokens = result.unwrap();
@@ -129,7 +129,7 @@ fn test_validate_valid_token() {
     init_test_keys();
 
     let user_id = Uuid::new_v4();
-    let token = generate_access_token(user_id, "test@example.com", "testuser")
+    let token = generate_access_token(user_id, "test@example.com", "testuser", None, None)
         .expect("Failed to generate token");
 
     let validation = validate_token(&token);
@@ -158,7 +158,7 @@ fn test_validate_tampered_token() {
     init_test_keys();
 
     let user_id = Uuid::new_v4();
-    let token = generate_access_token(user_id, "test@example.com", "testuser")
+    let token = generate_access_token(user_id, "test@example.com", "testuser", None, None)
         .expect("Failed to generate token");
 
     // Tamper with the token by replacing a character in the signature
@@ -192,7 +192,7 @@ fn test_newly_generated_token_not_expired() {
     init_test_keys();
 
     let user_id = Uuid::new_v4();
-    let token = generate_access_token(user_id, "test@example.com", "testuser")
+    let token = generate_access_token(user_id, "test@example.com", "testuser", None, None)
         .expect("Failed to generate token");
 
     let is_expired = is_token_expired(&token);
@@ -215,7 +215,8 @@ fn test_extract_claims_from_valid_token() {
     let email = "user@example.com";
     let username = "john_doe";
 
-    let token = generate_access_token(user_id, email, username).expect("Failed to generate token");
+    let token = generate_access_token(user_id, email, username, None, None)
+        .expect("Failed to generate token");
 
     let token_data = validate_token(&token).expect("Failed to validate token");
 
@@ -232,10 +233,10 @@ fn test_refresh_token_has_longer_expiry() {
     let email = "test@example.com";
     let username = "testuser";
 
-    let access =
-        generate_access_token(user_id, email, username).expect("Failed to generate access token");
-    let refresh =
-        generate_refresh_token(user_id, email, username).expect("Failed to generate refresh token");
+    let access = generate_access_token(user_id, email, username, None, None)
+        .expect("Failed to generate access token");
+    let refresh = generate_refresh_token(user_id, email, username, None, None)
+        .expect("Failed to generate refresh token");
 
     let access_claims = validate_token(&access).unwrap().claims;
     let refresh_claims = validate_token(&refresh).unwrap().claims;
@@ -251,7 +252,7 @@ fn test_access_token_type() {
     init_test_keys();
 
     let user_id = Uuid::new_v4();
-    let token = generate_access_token(user_id, "test@example.com", "testuser")
+    let token = generate_access_token(user_id, "test@example.com", "testuser", None, None)
         .expect("Failed to generate token");
 
     let token_data = validate_token(&token).expect("Failed to validate token");
@@ -263,7 +264,7 @@ fn test_refresh_token_type() {
     init_test_keys();
 
     let user_id = Uuid::new_v4();
-    let token = generate_refresh_token(user_id, "test@example.com", "testuser")
+    let token = generate_refresh_token(user_id, "test@example.com", "testuser", None, None)
         .expect("Failed to generate token");
 
     let token_data = validate_token(&token).expect("Failed to validate token");
@@ -283,8 +284,8 @@ fn test_complete_token_lifecycle() {
     let username = "integration_user";
 
     // 1. Generate token pair
-    let token_pair =
-        generate_token_pair(user_id, email, username).expect("Failed to generate token pair");
+    let token_pair = generate_token_pair(user_id, email, username, None, None)
+        .expect("Failed to generate token pair");
 
     // 2. Validate access token
     let access_data =

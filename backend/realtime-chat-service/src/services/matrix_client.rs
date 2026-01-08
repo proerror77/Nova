@@ -788,11 +788,14 @@ mod tests {
         let config = MatrixConfig {
             enabled: true,
             homeserver_url: "http://matrix-synapse:8008".to_string(),
+            public_url: None,
             service_user: "@nova-service:staging.nova.internal".to_string(),
             access_token: Some("test_token".to_string()),
             device_name: "test_device".to_string(),
             recovery_key: None,
             admin_token: None,
+            admin_username: None,
+            admin_password: None,
             server_name: "staging.nova.internal".to_string(),
         };
 

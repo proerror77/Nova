@@ -12,6 +12,8 @@ struct UserProfileData {
     var likesCount: Int
     var isVerified: Bool
     var posts: [UserProfilePostData]
+    var savedPosts: [UserProfilePostData]
+    var likedPosts: [UserProfilePostData]
 
     // Alias account support
     var isAlias: Bool = false
@@ -29,7 +31,9 @@ struct UserProfileData {
         followersCount: 1449,
         likesCount: 452,
         isVerified: true,
-        posts: []
+        posts: [],
+        savedPosts: [],
+        likedPosts: []
     )
 
     /// 预览用示例数据
@@ -43,8 +47,59 @@ struct UserProfileData {
         followersCount: 1449,
         likesCount: 452,
         isVerified: true,
-        posts: []
+        posts: [],
+        savedPosts: [],
+        likedPosts: []
     )
+
+    /// Memberwise init（保留 Swift 默認行為）
+    init(
+        userId: String,
+        username: String,
+        avatarUrl: String? = nil,
+        location: String? = nil,
+        profession: String? = nil,
+        followingCount: Int,
+        followersCount: Int,
+        likesCount: Int,
+        isVerified: Bool,
+        posts: [UserProfilePostData],
+        savedPosts: [UserProfilePostData] = [],
+        likedPosts: [UserProfilePostData] = [],
+        isAlias: Bool = false,
+        aliasName: String? = nil
+    ) {
+        self.userId = userId
+        self.username = username
+        self.avatarUrl = avatarUrl
+        self.location = location
+        self.profession = profession
+        self.followingCount = followingCount
+        self.followersCount = followersCount
+        self.likesCount = likesCount
+        self.isVerified = isVerified
+        self.posts = posts
+        self.savedPosts = savedPosts
+        self.likedPosts = likedPosts
+        self.isAlias = isAlias
+        self.aliasName = aliasName
+    }
+
+    /// 從 UserProfile 快取創建（用於快取優先載入，防止抖動）
+    init(from profile: UserProfile, posts: [UserProfilePostData] = [], savedPosts: [UserProfilePostData] = [], likedPosts: [UserProfilePostData] = []) {
+        self.userId = profile.id
+        self.username = profile.displayName ?? profile.username
+        self.avatarUrl = profile.avatarUrl
+        self.location = profile.location
+        self.profession = profile.bio
+        self.followingCount = profile.safeFollowingCount
+        self.followersCount = profile.safeFollowerCount
+        self.likesCount = profile.safePostCount
+        self.isVerified = profile.safeIsVerified
+        self.posts = posts
+        self.savedPosts = savedPosts
+        self.likedPosts = likedPosts
+    }
 }
 
 // MARK: - UserProfileView
@@ -54,12 +109,19 @@ struct UserProfileView: View {
 
     // MARK: - 用户数据
     let userId: String  // 要显示的用户ID
-    @State private var userData: UserProfileData = .placeholder
-    @State private var isLoading = true
+    @State private var userData: UserProfileData? = nil  // 快取優先：初始為 nil，不使用佔位數據
+    @State private var isLoading = false  // 初始不顯示載入狀態，等檢查快取後決定
+    @State private var isLoadingPosts = false  // 單獨追蹤帖子載入狀態
 
     @State private var selectedTab: ProfileTab = .posts
     @State private var isFollowing = true
     @State private var showBlockReportSheet = false
+
+    // 標記是否已載入過 Saved/Liked 數據（防止空數組時重複請求）
+    @State private var hasLoadedSaved = false
+    @State private var hasLoadedLiked = false
+    @State private var isLoadingSaved = false
+    @State private var isLoadingLiked = false
 
     // MARK: - Services
     private let userService = UserService.shared
@@ -67,6 +129,8 @@ struct UserProfileView: View {
 
     enum ProfileTab {
         case posts
+        case saved
+        case liked
     }
 
     // MARK: - 便捷初始化器（兼容旧代码）
@@ -128,6 +192,70 @@ struct UserProfileView: View {
     // 与 Profile 页面对齐：用户信息区结束于 300pt 处，下方内容占据剩余空间
     private var postsContentHeight: CGFloat { 424.h }
 
+    // MARK: - 顯示數據（快取優先，無數據時顯示空白而非佔位）
+    private var displayUsername: String { userData?.username ?? "" }
+    private var displayLocation: String? { userData?.location }
+    private var displayProfession: String? { userData?.profession }
+    private var displayAvatarUrl: String? { userData?.avatarUrl }
+    private var displayFollowingCount: Int { userData?.followingCount ?? 0 }
+    private var displayFollowersCount: Int { userData?.followersCount ?? 0 }
+    private var displayLikesCount: Int { userData?.likesCount ?? 0 }
+    private var displayIsVerified: Bool { userData?.isVerified ?? false }
+    private var displayPosts: [UserProfilePostData] { userData?.posts ?? [] }
+    private var displaySavedPosts: [UserProfilePostData] { userData?.savedPosts ?? [] }
+    private var displayLikedPosts: [UserProfilePostData] { userData?.likedPosts ?? [] }
+
+    /// 是否有用戶數據可顯示（快取或已載入）
+    private var hasUserData: Bool { userData != nil }
+
+    /// 根据当前选中的标签返回对应的帖子数组
+    private var currentTabPosts: [UserProfilePostData] {
+        switch selectedTab {
+        case .posts:
+            return displayPosts
+        case .saved:
+            return displaySavedPosts
+        case .liked:
+            return displayLikedPosts
+        }
+    }
+
+    /// 當前 tab 是否正在載入
+    private var isCurrentTabLoading: Bool {
+        switch selectedTab {
+        case .posts:
+            return isLoadingPosts
+        case .saved:
+            return isLoadingSaved
+        case .liked:
+            return isLoadingLiked
+        }
+    }
+
+    /// 當前 tab 的空狀態提示文字
+    private var emptyStateMessage: String {
+        switch selectedTab {
+        case .posts:
+            return "No posts yet"
+        case .saved:
+            return "No saved posts"
+        case .liked:
+            return "No liked posts"
+        }
+    }
+
+    /// 當前 tab 的空狀態圖標
+    private var emptyStateIcon: String {
+        switch selectedTab {
+        case .posts:
+            return "photo.on.rectangle.angled"
+        case .saved:
+            return "bookmark"
+        case .liked:
+            return "heart"
+        }
+    }
+
     var body: some View {
         GeometryReader { geometry in
             // 计算 Posts 背景板距离顶部的距离
@@ -177,130 +305,179 @@ struct UserProfileView: View {
                 .frame(width: geometry.size.width, height: geometry.size.height)
 
                 // MARK: - 用户信息层（距离按钮栏12pt）
-                VStack {
-                    Spacer()
-                    VStack(spacing: 8.h) {
-                        // 头像和基本信息
+                // 只有當有用戶數據時才顯示，否則顯示骨架屏
+                if hasUserData {
+                    VStack {
+                        Spacer()
                         VStack(spacing: 8.h) {
-                            // 头像
-                            HStack(spacing: 8.s) {
-                                if let avatarUrl = userData.avatarUrl, let url = URL(string: avatarUrl) {
-                                    AsyncImage(url: url) { image in
-                                        image
-                                            .resizable()
-                                            .scaledToFill()
-                                    } placeholder: {
+                            // 头像和基本信息
+                            VStack(spacing: 8.h) {
+                                // 头像
+                                HStack(spacing: 8.s) {
+                                    if let avatarUrl = displayAvatarUrl, let url = URL(string: avatarUrl) {
+                                        CachedAsyncImage(url: url) { image in
+                                            image
+                                                .resizable()
+                                                .scaledToFill()
+                                        } placeholder: {
+                                            Ellipse()
+                                                .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                        }
+                                        .frame(width: 100.s, height: 100.s)
+                                        .clipShape(Ellipse())
+                                    } else {
                                         Ellipse()
                                             .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                            .frame(width: 100.s, height: 100.s)
                                     }
-                                    .frame(width: 100.s, height: 100.s)
-                                    .clipShape(Ellipse())
-                                } else {
-                                    Ellipse()
-                                        .foregroundColor(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                        .frame(width: 100.s, height: 100.s)
+                                }
+                                .padding(4.s)
+                                .frame(width: 108.s, height: 108.s)
+                                .cornerRadius(54.s)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 54.s)
+                                        .inset(by: 1)
+                                        .stroke(.white, lineWidth: 1)
+                                )
+
+                                // 用户名
+                                Text(displayUsername)
+                                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
+                                    .foregroundColor(.white)
+
+                                // 地区（保留固定位置）
+                                Text(displayLocation ?? " ")
+                                    .font(Font.custom("SFProDisplay-Light", size: 14.f))
+                                    .foregroundColor(.white)
+                                    .frame(height: 17.h) // 固定高度
+                            }
+                            .frame(width: 130.w, height: 158.h)
+
+                            // 职业（保留固定位置，带蓝标认证图标在文字后面）
+                            HStack(spacing: 4.s) {
+                                Text(displayProfession ?? " ")
+                                    .font(Font.custom("SFProDisplay-Light", size: 14.f))
+                                    .foregroundColor(.white)
+                                if displayProfession != nil {
+                                    Image("Blue-v")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 14.s, height: 14.s)
                                 }
                             }
-                            .padding(4.s)
-                            .frame(width: 108.s, height: 108.s)
-                            .cornerRadius(54.s)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 54.s)
-                                    .inset(by: 1)
-                                    .stroke(.white, lineWidth: 1)
-                            )
+                            .frame(height: 17.h) // 固定高度
 
-                            // 用户名
-                            Text(userData.username)
-                                .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
-                                .foregroundColor(.white)
+                            // 统计数据
+                            HStack(spacing: -24) {
+                                // Following
+                                VStack(spacing: 1.h) {
+                                    Text("\(displayFollowingCount)")
+                                        .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
+                                        .foregroundColor(.white)
+                                    Text("Following")
+                                        .font(Font.custom("SFProDisplay-Light", size: 14.f))
+                                        .foregroundColor(.white)
+                                }
+                                .frame(width: 125.w, height: 40.h)
 
-                            // 地区（保留固定位置）
-                            Text(userData.location ?? " ")
-                                .font(Font.custom("SFProDisplay-Light", size: 14.f))
-                                .foregroundColor(.white)
-                                .frame(height: 17.h) // 固定高度
+                                // 分隔线
+                                Rectangle()
+                                    .foregroundColor(.clear)
+                                    .frame(width: 24.s, height: 0)
+                                    .overlay(
+                                        Rectangle()
+                                            .stroke(.white, lineWidth: 0.5)
+                                            .frame(width: 0.5, height: 24.h)
+                                    )
+
+                                // Followers
+                                VStack(spacing: 1.h) {
+                                    Text("\(displayFollowersCount)")
+                                        .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
+                                        .foregroundColor(.white)
+                                    Text("Followers")
+                                        .font(Font.custom("SFProDisplay-Light", size: 14.f))
+                                        .foregroundColor(.white)
+                                }
+                                .frame(width: 132.w, height: 40.h)
+
+                                // 分隔线
+                                Rectangle()
+                                    .foregroundColor(.clear)
+                                    .frame(width: 24.s, height: 0)
+                                    .overlay(
+                                        Rectangle()
+                                            .stroke(.white, lineWidth: 0.5)
+                                            .frame(width: 0.5, height: 24.h)
+                                    )
+
+                                // Halo
+                                VStack(spacing: 1.h) {
+                                    Text("\(displayLikesCount)")
+                                        .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
+                                        .foregroundColor(.white)
+                                    Text("Halo")
+                                        .font(Font.custom("SFProDisplay-Light", size: 14.f))
+                                        .foregroundColor(.white)
+                                }
+                                .frame(width: 118.w, height: 40.h)
+                            }
+                            .frame(height: 40.h)
                         }
-                        .frame(width: 130.w, height: 158.h)
+                        .frame(width: 375.w, height: 240.h)
 
-                        // 职业（保留固定位置，带蓝标认证图标在文字后面）
-                        HStack(spacing: 4.s) {
-                            Text(userData.profession ?? " ")
-                                .font(Font.custom("SFProDisplay-Light", size: 14.f))
-                                .foregroundColor(.white)
-                            if userData.profession != nil {
-                                Image("Blue-v")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 14.s, height: 14.s)
-                            }
-                        }
-                        .frame(height: 17.h) // 固定高度
-
-                        // 统计数据
-                        HStack(spacing: -24) {
-                            // Following
-                            VStack(spacing: 1.h) {
-                                Text("\(userData.followingCount)")
-                                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
-                                    .foregroundColor(.white)
-                                Text("Following")
-                                    .font(Font.custom("SFProDisplay-Light", size: 14.f))
-                                    .foregroundColor(.white)
-                            }
-                            .frame(width: 125.w, height: 40.h)
-
-                            // 分隔线
-                            Rectangle()
-                                .foregroundColor(.clear)
-                                .frame(width: 24.s, height: 0)
-                                .overlay(
-                                    Rectangle()
-                                        .stroke(.white, lineWidth: 0.5)
-                                        .frame(width: 0.5, height: 24.h)
-                                )
-
-                            // Followers
-                            VStack(spacing: 1.h) {
-                                Text("\(userData.followersCount)")
-                                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
-                                    .foregroundColor(.white)
-                                Text("Followers")
-                                    .font(Font.custom("SFProDisplay-Light", size: 14.f))
-                                    .foregroundColor(.white)
-                            }
-                            .frame(width: 132.w, height: 40.h)
-
-                            // 分隔线
-                            Rectangle()
-                                .foregroundColor(.clear)
-                                .frame(width: 24.s, height: 0)
-                                .overlay(
-                                    Rectangle()
-                                        .stroke(.white, lineWidth: 0.5)
-                                        .frame(width: 0.5, height: 24.h)
-                                )
-
-                            // Halo
-                            VStack(spacing: 1.h) {
-                                Text("\(userData.likesCount)")
-                                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
-                                    .foregroundColor(.white)
-                                Text("Halo")
-                                    .font(Font.custom("SFProDisplay-Light", size: 14.f))
-                                    .foregroundColor(.white)
-                            }
-                            .frame(width: 118.w, height: 40.h)
-                        }
-                        .frame(height: 40.h)
+                        Spacer()
+                            .frame(height: 493.h) // 让头像顶部距离屏幕顶部 79pt（812 - 79 - 240 = 493）
                     }
-                    .frame(width: 375.w, height: 240.h)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .zIndex(4)
+                } else if isLoading {
+                    // 骨架屏：用戶信息區載入中
+                    VStack {
+                        Spacer()
+                        VStack(spacing: 8.h) {
+                            // 頭像骨架
+                            Circle()
+                                .fill(Color.white.opacity(0.3))
+                                .frame(width: 108.s, height: 108.s)
+                                .overlay(ShimmerEffect())
+                                .clipShape(Circle())
 
-                    Spacer()
-                        .frame(height: 493.h) // 让头像顶部距离屏幕顶部 79pt（812 - 79 - 240 = 493）
+                            // 用戶名骨架
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.white.opacity(0.3))
+                                .frame(width: 100.w, height: 20.h)
+                                .overlay(ShimmerEffect())
+
+                            // 位置骨架
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.white.opacity(0.2))
+                                .frame(width: 60.w, height: 14.h)
+                                .overlay(ShimmerEffect())
+
+                            // 統計數據骨架
+                            HStack(spacing: 40.w) {
+                                ForEach(0..<3, id: \.self) { _ in
+                                    VStack(spacing: 4.h) {
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .fill(Color.white.opacity(0.3))
+                                            .frame(width: 40.w, height: 18.h)
+                                        RoundedRectangle(cornerRadius: 3)
+                                            .fill(Color.white.opacity(0.2))
+                                            .frame(width: 60.w, height: 12.h)
+                                    }
+                                }
+                            }
+                            .padding(.top, 16.h)
+                        }
+                        .frame(width: 375.w, height: 240.h)
+
+                        Spacer()
+                            .frame(height: 493.h)
+                    }
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .zIndex(4)
                 }
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .zIndex(4)
 
                 // MARK: - 操作按钮层（距离白色背景顶部12pt）
                 VStack {
@@ -377,19 +554,21 @@ struct UserProfileView: View {
                             }
 
                             Button(action: {
-                                // Saved tab action
+                                selectedTab = .saved
+                                Task { await loadSavedPosts() }
                             }) {
                                 Text("Saved")
                                     .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
-                                    .foregroundColor(.black)
+                                    .foregroundColor(selectedTab == .saved ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
                             }
 
                             Button(action: {
-                                // Liked tab action
+                                selectedTab = .liked
+                                Task { await loadLikedPosts() }
                             }) {
                                 Text("Liked")
                                     .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
-                                    .foregroundColor(.black)
+                                    .foregroundColor(selectedTab == .liked ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
                             }
                         }
                         .frame(height: 24.h)
@@ -404,31 +583,50 @@ struct UserProfileView: View {
                         
                         // 帖子网格
                         ScrollView(.vertical, showsIndicators: false) {
-                            LazyVGrid(
-                                columns: [
-                                    GridItem(.flexible(), spacing: 5.w),
-                                    GridItem(.flexible(), spacing: 5.w)
-                                ],
-                                spacing: 5.h
-                            ) {
-                                // 使用真实帖子数据
-                                ForEach(userData.posts) { post in
-                                    PostCard(
-                                        imageUrl: post.imageUrl,
-                                        imageName: "PostCardImage",
-                                        title: "\(post.username) \(post.content)",
-                                        authorName: post.username,
-                                        authorAvatarUrl: post.avatarUrl,
-                                        likeCount: post.likeCount,
-                                        onTap: {
-                                            // 点击帖子
-                                        }
-                                    )
+                            if isCurrentTabLoading && currentTabPosts.isEmpty {
+                                // 骨架屏加载状态（只在沒有快取帖子時顯示）
+                                ProfilePostsGridSkeleton(itemCount: 6)
+                                    .padding(.horizontal, 5.w)
+                                    .padding(.top, 5.h)
+                            } else if currentTabPosts.isEmpty {
+                                // 空狀態（根據當前 tab 顯示對應文字和圖標）
+                                VStack(spacing: 12.h) {
+                                    Image(systemName: emptyStateIcon)
+                                        .font(.system(size: 40.f))
+                                        .foregroundColor(.gray)
+                                    Text(emptyStateMessage)
+                                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                                        .foregroundColor(.gray)
                                 }
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 60.h)
+                            } else {
+                                LazyVGrid(
+                                    columns: [
+                                        GridItem(.flexible(), spacing: 5.w),
+                                        GridItem(.flexible(), spacing: 5.w)
+                                    ],
+                                    spacing: 5.h
+                                ) {
+                                    // 根据选中的标签显示对应内容
+                                    ForEach(currentTabPosts) { post in
+                                        PostCard(
+                                            imageUrl: post.imageUrl,
+                                            imageName: "PostCardImage",
+                                            title: "\(post.username) \(post.content)",
+                                            authorName: post.username,
+                                            authorAvatarUrl: post.avatarUrl,
+                                            likeCount: post.likeCount,
+                                            onTap: {
+                                                // 点击帖子
+                                            }
+                                        )
+                                    }
+                                }
+                                .padding(.horizontal, 5.w)
+                                .padding(.top, 5.h)
+                                .padding(.bottom, 100.h)
                             }
-                            .padding(.horizontal, 5.w)
-                            .padding(.top, 5.h)
-                            .padding(.bottom, 100.h)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .clipped()  // 裁剪超出内容，防止截断效果
@@ -443,7 +641,7 @@ struct UserProfileView: View {
             VStack(spacing: 0) {
                 // 顶部导航栏（使用组件）
                 UserProfileTopNavigationBar(
-                    isVerified: userData.isVerified,
+                    isVerified: userData?.isVerified ?? false,
                     layout: navBarLayout,
                     onBackTapped: {
                         showUserProfile = false
@@ -467,7 +665,7 @@ struct UserProfileView: View {
         .sheet(isPresented: $showBlockReportSheet) {
             BlockReportSheet(
                 userId: userId,
-                username: userData.username,
+                username: userData?.username ?? "",
                 onBlocked: {
                     // 封鎖後關閉個人資料頁面
                     showUserProfile = false
@@ -481,14 +679,30 @@ struct UserProfileView: View {
 
     // MARK: - 加载用户数据
     private func loadUserData() async {
-        isLoading = true
-
         #if DEBUG
         print("[UserProfile] 🔍 Loading profile for userId: \(userId)")
         #endif
 
+        // 🔑 快取優先：先檢查快取，立即顯示已有數據，防止抖動
+        if let cached = userService.getCachedUser(userId: userId) {
+            await MainActor.run {
+                userData = UserProfileData(from: cached)
+            }
+            #if DEBUG
+            print("[UserProfile] ✅ Using cached profile for: \(cached.username)")
+            #endif
+        }
+
+        // 只有沒有快取時才顯示載入狀態
+        if userData == nil {
+            await MainActor.run { isLoading = true }
+        }
+
+        // 標記正在載入帖子
+        await MainActor.run { isLoadingPosts = true }
+
         do {
-            // 1. 加载用户资料
+            // 1. 加载用户资料（會自動使用快取或從網路獲取）
             let userProfile = try await userService.getUser(userId: userId)
 
             #if DEBUG
@@ -505,12 +719,12 @@ struct UserProfileView: View {
                     avatarUrl: userProfile.avatarUrl,
                     username: userProfile.displayName ?? userProfile.username,
                     likeCount: post.likeCount ?? 0,
-                    imageUrl: post.mediaUrls?.first,
+                    imageUrl: post.displayThumbnailUrl,
                     content: post.content
                 )
             }
 
-            // 4. 更新 UI
+            // 4. 更新 UI（靜默刷新，不會閃爍）
             await MainActor.run {
                 userData = UserProfileData(
                     userId: userProfile.id,
@@ -522,9 +736,12 @@ struct UserProfileView: View {
                     followersCount: userProfile.safeFollowerCount,
                     likesCount: userProfile.safePostCount,
                     isVerified: userProfile.safeIsVerified,
-                    posts: userPosts
+                    posts: userPosts,
+                    savedPosts: [],
+                    likedPosts: []
                 )
                 isLoading = false
+                isLoadingPosts = false
             }
 
             #if DEBUG
@@ -536,11 +753,106 @@ struct UserProfileView: View {
             print("[UserProfile] Failed to load user data: \(error)")
             #endif
 
-            // 加载失败时使用占位数据
+            // 加载失败时使用占位数据（僅當完全沒有數據時）
             await MainActor.run {
-                userData = .placeholder
+                if userData == nil {
+                    userData = .placeholder
+                }
                 isLoading = false
+                isLoadingPosts = false
             }
+        }
+    }
+
+    // MARK: - 加载收藏的帖子
+    private func loadSavedPosts() async {
+        // 如果已经加载过，跳过（使用 flag 而非 isEmpty，防止空數組時重複請求）
+        guard !hasLoadedSaved else { return }
+
+        await MainActor.run {
+            hasLoadedSaved = true
+            isLoadingSaved = true
+        }
+
+        #if DEBUG
+        print("[UserProfile] 🔖 Loading saved posts for userId: \(userId)")
+        #endif
+
+        do {
+            let response = try await contentService.getUserSavedPosts(userId: userId, limit: 50, offset: 0)
+
+            // 将 Post 转换为 UserProfilePostData
+            let savedPosts = response.posts.map { post in
+                UserProfilePostData(
+                    id: post.id,
+                    avatarUrl: post.authorAvatarUrl,
+                    username: post.displayAuthorName,
+                    likeCount: post.likeCount ?? 0,
+                    imageUrl: post.displayThumbnailUrl,
+                    content: post.content
+                )
+            }
+
+            await MainActor.run {
+                userData?.savedPosts = savedPosts
+                isLoadingSaved = false
+            }
+
+            #if DEBUG
+            print("[UserProfile] ✅ Loaded \(savedPosts.count) saved posts")
+            #endif
+
+        } catch {
+            await MainActor.run { isLoadingSaved = false }
+            #if DEBUG
+            print("[UserProfile] ❌ Failed to load saved posts: \(error)")
+            #endif
+        }
+    }
+
+    // MARK: - 加载点赞的帖子
+    private func loadLikedPosts() async {
+        // 如果已经加载过，跳过（使用 flag 而非 isEmpty，防止空數組時重複請求）
+        guard !hasLoadedLiked else { return }
+
+        await MainActor.run {
+            hasLoadedLiked = true
+            isLoadingLiked = true
+        }
+
+        #if DEBUG
+        print("[UserProfile] ❤️ Loading liked posts for userId: \(userId)")
+        #endif
+
+        do {
+            let response = try await contentService.getUserLikedPosts(userId: userId, limit: 50, offset: 0)
+
+            // 将 Post 转换为 UserProfilePostData
+            let likedPosts = response.posts.map { post in
+                UserProfilePostData(
+                    id: post.id,
+                    avatarUrl: post.authorAvatarUrl,
+                    username: post.displayAuthorName,
+                    likeCount: post.likeCount ?? 0,
+                    imageUrl: post.displayThumbnailUrl,
+                    content: post.content
+                )
+            }
+
+            await MainActor.run {
+                userData?.likedPosts = likedPosts
+                isLoadingLiked = false
+            }
+
+            #if DEBUG
+            print("[UserProfile] ✅ Loaded \(likedPosts.count) liked posts")
+            #endif
+
+        } catch {
+            await MainActor.run { isLoadingLiked = false }
+            #if DEBUG
+            print("[UserProfile] ❌ Failed to load liked posts: \(error)")
+            #endif
         }
     }
 }

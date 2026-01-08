@@ -190,7 +190,11 @@ final class FeedViewModel {
         let loadStartTime = Date()
         let signpostState = performanceMonitor.beginFeedLoad(source: .initial, fromCache: false)
 
-        isLoading = true
+        // Only show loading indicator if no cached posts (prevents blank screen during refresh)
+        let showLoadingIndicator = posts.isEmpty
+        if showLoadingIndicator {
+            isLoading = true
+        }
         error = nil
         currentAlgorithm = algorithm
         currentCursor = nil
@@ -370,14 +374,16 @@ final class FeedViewModel {
 
     // MARK: - Social Actions (Delegated)
 
-    func toggleLike(postId: String) async {
+    /// Toggle like - synchronous to prevent race conditions from async interleaving
+    func toggleLike(postId: String) {
         guard let post = posts.first(where: { $0.id == postId }) else { return }
-        await socialActionsHandler.toggleLike(postId: postId, currentPost: post)
+        _ = socialActionsHandler.toggleLike(postId: postId, currentPost: post)
     }
 
-    func toggleBookmark(postId: String) async {
+    /// Toggle bookmark - synchronous to prevent race conditions from async interleaving
+    func toggleBookmark(postId: String) {
         guard let post = posts.first(where: { $0.id == postId }) else { return }
-        await socialActionsHandler.toggleBookmark(postId: postId, currentPost: post)
+        _ = socialActionsHandler.toggleBookmark(postId: postId, currentPost: post)
     }
 
     func sharePost(postId: String) async -> FeedPost? {
@@ -547,6 +553,26 @@ final class FeedViewModel {
         _cachedFeedItems = nil
         #if DEBUG
         print("[Feed] ✅ updateBookmarkState - state updated successfully, cache invalidated")
+        #endif
+    }
+
+    /// Remove a post from the feed (called when post is deleted)
+    /// Issue #243: Ensures UI updates immediately after post deletion
+    func removePost(postId: String) {
+        #if DEBUG
+        print("[Feed] 🗑️ removePost called - postId: \(postId)")
+        #endif
+        guard let index = posts.firstIndex(where: { $0.id == postId }) else {
+            #if DEBUG
+            print("[Feed] ❌ removePost - post not found in array")
+            #endif
+            return
+        }
+        posts.remove(at: index)
+        // Clear cache since array was modified
+        _cachedFeedItems = nil
+        #if DEBUG
+        print("[Feed] ✅ removePost - post removed successfully, cache invalidated")
         #endif
     }
 

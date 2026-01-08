@@ -212,9 +212,16 @@ impl SocialService for SocialServiceImpl {
             )
         };
 
+        // Extract author_account_type from request, default to "primary" (Issue #259)
+        let author_account_type = if req.author_account_type.is_empty() {
+            None
+        } else {
+            Some(req.author_account_type.as_str())
+        };
+
         let comment = self
             .comment_repo
-            .create_comment(post_id, user_id, req.content, parent_comment_id)
+            .create_comment(post_id, user_id, req.content, parent_comment_id, author_account_type)
             .await
             .map_err(|e| Status::internal(format!("Failed to create comment: {}", e)))?;
 
@@ -229,6 +236,7 @@ impl SocialService for SocialServiceImpl {
             parent_comment_id: comment.parent_comment_id.map(|id| id.to_string()).unwrap_or_default(),
             created_at: comment.created_at.to_rfc3339(),
             updated_at: comment.updated_at.to_rfc3339(),
+            author_account_type: comment.author_account_type.unwrap_or_else(|| "primary".to_string()),
         };
 
         Ok(Response::new(CreateCommentResponse {
@@ -299,6 +307,7 @@ impl SocialService for SocialServiceImpl {
             parent_comment_id: comment.parent_comment_id.map(|id| id.to_string()).unwrap_or_default(),
             created_at: comment.created_at.to_rfc3339(),
             updated_at: comment.updated_at.to_rfc3339(),
+            author_account_type: comment.author_account_type.unwrap_or_else(|| "primary".to_string()),
         };
 
         Ok(Response::new(UpdateCommentResponse {
@@ -354,6 +363,7 @@ impl SocialService for SocialServiceImpl {
                 parent_comment_id: comment.parent_comment_id.map(|id| id.to_string()).unwrap_or_default(),
                 created_at: comment.created_at.to_rfc3339(),
                 updated_at: comment.updated_at.to_rfc3339(),
+                author_account_type: comment.author_account_type.unwrap_or_else(|| "primary".to_string()),
             })
             .collect();
 
@@ -389,6 +399,7 @@ impl SocialService for SocialServiceImpl {
             parent_comment_id: comment.parent_comment_id.map(|id| id.to_string()).unwrap_or_default(),
             created_at: comment.created_at.to_rfc3339(),
             updated_at: comment.updated_at.to_rfc3339(),
+            author_account_type: comment.author_account_type.unwrap_or_else(|| "primary".to_string()),
         };
 
         Ok(Response::new(GetCommentResponse {
@@ -547,8 +558,8 @@ impl SocialService for SocialServiceImpl {
             post_id: bookmark.post_id.to_string(),
             collection_id: bookmark.collection_id.map(|id| id.to_string()).unwrap_or_default(),
             bookmarked_at: Some(prost_types::Timestamp {
-                seconds: bookmark.bookmarked_at.timestamp(),
-                nanos: bookmark.bookmarked_at.timestamp_subsec_nanos() as i32,
+                seconds: bookmark.created_at.timestamp(),
+                nanos: bookmark.created_at.timestamp_subsec_nanos() as i32,
             }),
         };
 

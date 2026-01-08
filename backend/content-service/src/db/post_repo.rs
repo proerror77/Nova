@@ -194,7 +194,7 @@ pub async fn get_post_with_images(
         r#"
         SELECT
             p.id, p.user_id, p.content, p.caption, p.media_key, p.media_type, p.media_urls, p.status,
-            p.created_at, p.updated_at, p.deleted_at, p.soft_delete::text AS soft_delete,
+            p.created_at, p.updated_at, p.deleted_at, p.soft_delete::text AS soft_delete, p.author_account_type,
             COALESCE(pm.like_count, 0) as like_count,
             COALESCE(pm.comment_count, 0) as comment_count,
             COALESCE(pm.view_count, 0) as view_count,
@@ -225,6 +225,7 @@ pub async fn get_post_with_images(
             updated_at: r.get("updated_at"),
             deleted_at: r.get("deleted_at"),
             soft_delete: r.get("soft_delete"),
+            author_account_type: r.get("author_account_type"),
         };
 
         let metadata = PostMetadata {

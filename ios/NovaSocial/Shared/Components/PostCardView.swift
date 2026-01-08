@@ -247,7 +247,8 @@ struct PostCardView: View, Equatable {
             authorDisplayName: "Simone Carter",
             authorAvatarUrl: nil,
             location: nil,
-            tags: nil
+            tags: nil,
+            authorAccountType: "primary"
         ),
         isOwnPost: true
     )

@@ -40,6 +40,10 @@ pub struct MatrixConfig {
     pub recovery_key: Option<String>,
     /// Admin access token for Synapse Admin API
     pub admin_token: Option<String>,
+    /// Admin username for Synapse (for automatic token refresh)
+    pub admin_username: Option<String>,
+    /// Admin password for Synapse (for automatic token refresh)
+    pub admin_password: Option<String>,
     /// Server name for Matrix User IDs (e.g., "staging.nova.app")
     pub server_name: String,
 }
@@ -50,6 +54,8 @@ pub struct KafkaConfig {
     pub brokers: String,
     pub identity_events_topic: String,
     pub consumer_group_id: String,
+    /// Topic for publishing message notifications to notification-service
+    pub message_notifications_topic: String,
 }
 
 /// VoIP configuration combining ICE servers and Matrix settings
@@ -288,6 +294,8 @@ impl Config {
                 .unwrap_or_else(|_| "nova-realtime-chat-service".to_string()),
             recovery_key: env::var("MATRIX_RECOVERY_KEY").ok(),
             admin_token: env::var("MATRIX_ADMIN_TOKEN").ok(),
+            admin_username: env::var("MATRIX_ADMIN_USERNAME").ok(),
+            admin_password: env::var("MATRIX_ADMIN_PASSWORD").ok(),
             server_name,
         };
 
@@ -309,6 +317,8 @@ impl Config {
                 .unwrap_or_else(|_| "nova.identity.events".to_string()),
             consumer_group_id: env::var("KAFKA_CONSUMER_GROUP_ID")
                 .unwrap_or_else(|_| "realtime-chat-service".to_string()),
+            message_notifications_topic: env::var("KAFKA_MESSAGE_NOTIFICATIONS_TOPIC")
+                .unwrap_or_else(|_| "MessageCreated".to_string()),
         };
 
         Ok(Self {
@@ -362,6 +372,8 @@ mod tests {
                 device_name: "test".to_string(),
                 recovery_key: None,
                 admin_token: None,
+                admin_username: None,
+                admin_password: None,
                 server_name: "example.com".to_string(),
             },
         };
@@ -419,6 +431,8 @@ mod tests {
                 device_name: "test-device".to_string(),
                 recovery_key: None,
                 admin_token: None,
+                admin_username: None,
+                admin_password: None,
                 server_name: "test.com".to_string(),
             },
             matrix_first: false,
@@ -427,6 +441,7 @@ mod tests {
                 brokers: "localhost:9092".to_string(),
                 identity_events_topic: "nova.identity.events".to_string(),
                 consumer_group_id: "test-group".to_string(),
+                message_notifications_topic: "MessageCreated".to_string(),
             },
         };
 

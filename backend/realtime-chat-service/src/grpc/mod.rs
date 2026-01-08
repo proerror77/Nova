@@ -130,10 +130,15 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
         let sender_id = Uuid::parse_str(&req.sender_id)
             .map_err(|_| Status::invalid_argument("invalid sender id"))?;
 
-        // Authorization: sender must be a member
-        let is_member = ConversationService::is_member(&self.state.db, conversation_id, sender_id)
-            .await
-            .map_err(|e| Status::internal(format!("membership check failed: {e}")))?;
+        // Authorization: sender must be a member (cached to reduce N+1 queries)
+        let is_member = ConversationService::is_member_cached(
+            &self.state.db,
+            &self.state.redis,
+            conversation_id,
+            sender_id,
+        )
+        .await
+        .map_err(|e| Status::internal(format!("membership check failed: {e}")))?;
 
         if !is_member {
             return Err(Status::permission_denied(
@@ -181,10 +186,15 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
         let user_id = Uuid::parse_str(&req.user_id)
             .map_err(|_| Status::invalid_argument("invalid user id"))?;
 
-        // Authorization: requester must be a member
-        let is_member = ConversationService::is_member(&self.state.db, conversation_id, user_id)
-            .await
-            .map_err(|e| Status::internal(format!("membership check failed: {e}")))?;
+        // Authorization: requester must be a member (cached to reduce N+1 queries)
+        let is_member = ConversationService::is_member_cached(
+            &self.state.db,
+            &self.state.redis,
+            conversation_id,
+            user_id,
+        )
+        .await
+        .map_err(|e| Status::internal(format!("membership check failed: {e}")))?;
 
         if !is_member {
             return Err(Status::permission_denied(
@@ -346,10 +356,15 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
         let user_id = Uuid::parse_str(&req.user_id)
             .map_err(|_| Status::invalid_argument("invalid user id"))?;
 
-        // Authorization: requester must be a member
-        let is_member = ConversationService::is_member(&self.state.db, conversation_id, user_id)
-            .await
-            .map_err(|e| Status::internal(format!("membership check failed: {e}")))?;
+        // Authorization: requester must be a member (cached to reduce N+1 queries)
+        let is_member = ConversationService::is_member_cached(
+            &self.state.db,
+            &self.state.redis,
+            conversation_id,
+            user_id,
+        )
+        .await
+        .map_err(|e| Status::internal(format!("membership check failed: {e}")))?;
 
         if !is_member {
             return Err(Status::permission_denied(

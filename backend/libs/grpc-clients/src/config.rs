@@ -499,14 +499,24 @@ impl GrpcConfig {
         match &self.tls {
             TlsConfig::Disabled => Ok(ep),
             TlsConfig::Enabled {
-                domain_name,
+                domain_name: _,
                 ca_cert_path,
                 client_identity,
             } => {
+                // Extract domain from URL for TLS verification instead of using hardcoded domain
+                // This allows connecting to multiple services with the same wildcard certificate
+                let tls_domain = Self::extract_host_from_url(url).unwrap_or_else(|| {
+                    tracing::warn!(
+                        "Could not extract host from URL {}, using URL as domain",
+                        url
+                    );
+                    url.to_string()
+                });
+
                 let ca_pem = fs::read(ca_cert_path)?;
                 let mut tls = ClientTlsConfig::new()
                     .ca_certificate(Certificate::from_pem(ca_pem))
-                    .domain_name(domain_name);
+                    .domain_name(&tls_domain);
 
                 // Add mTLS identity if provided
                 if let Some(identity) = client_identity {
@@ -517,6 +527,27 @@ impl GrpcConfig {
 
                 Ok(ep.tls_config(tls)?)
             }
+        }
+    }
+
+    /// Extract the host (domain) from a URL string
+    fn extract_host_from_url(url: &str) -> Option<String> {
+        // Remove scheme prefix
+        let without_scheme = url
+            .strip_prefix("https://")
+            .or_else(|| url.strip_prefix("http://"))
+            .unwrap_or(url);
+
+        // Extract host (everything before the port or path)
+        let host = without_scheme
+            .split(':')
+            .next()
+            .or_else(|| without_scheme.split('/').next())?;
+
+        if host.is_empty() {
+            None
+        } else {
+            Some(host.to_string())
         }
     }
 

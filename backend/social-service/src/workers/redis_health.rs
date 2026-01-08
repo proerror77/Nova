@@ -37,7 +37,10 @@ impl Default for RedisHealthConfig {
 /// 1. Keep TCP connections alive (prevents broken pipe errors)
 /// 2. Detect connection issues early (before user-facing operations fail)
 /// 3. Trigger ConnectionManager's automatic reconnection if needed
-pub async fn start_redis_health_check(counter_service: Arc<CounterService>, config: RedisHealthConfig) {
+pub async fn start_redis_health_check(
+    counter_service: Arc<CounterService>,
+    config: RedisHealthConfig,
+) {
     if !config.enabled {
         tracing::info!("Redis health check disabled by configuration");
         return;

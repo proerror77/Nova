@@ -149,7 +149,7 @@ struct ToolResultFormatter {
             return "No trending topics at the moment."
         }
 
-        var output = "Current trending topics on ICERED:\n"
+        var output = "Current trending topics on Icered:\n"
 
         for (index, topic) in topics.prefix(limit).enumerated() {
             if case .hashtag(let tag, let postCount) = topic {

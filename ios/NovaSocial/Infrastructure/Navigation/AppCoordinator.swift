@@ -289,8 +289,8 @@ final class AppCoordinator: @unchecked Sendable {
     /// Check if a route requires authentication
     private func requiresAuthentication(_ route: AppRoute) -> Bool {
         switch route {
-        case .splash, .inviteCode, .login, .phoneLogin, .phoneRegistration,
-             .forgotPassword, .emailSentConfirmation, .resetPassword, .createAccount:
+        case .splash, .inviteCode, .login, .phoneLogin, .phoneRegistration, .phoneEnterCode,
+             .gmailEnterCode, .forgotPassword, .emailSentConfirmation, .resetPassword, .createAccount:
             return false
         default:
             return true
@@ -372,11 +372,15 @@ extension AppCoordinator {
         case .login: return .login
         case .phoneLogin: return .phoneLogin
         case .phoneRegistration: return .phoneRegistration
+        case .phoneEnterCode(let phoneNumber): return .phoneEnterCode(phoneNumber: phoneNumber)
+        case .gmailEnterCode(let email): return .gmailEnterCode(email: email)
         case .forgotPassword: return .forgotPassword
         case .emailSentConfirmation(let email): return .emailSentConfirmation(email: email)
         case .resetPassword(let token): return .resetPassword(token: token)
         case .createAccount: return .createAccount
         case .createAccountEmail: return .createAccount  // Use same route as createAccount
+        case .createAccountPhoneNumber: return .createAccount  // Use same route as createAccount
+        case .profileSetup: return .profileSetup
         case .home: return .home
         case .rankingList: return .rankingList
         case .search: return .search(query: nil)

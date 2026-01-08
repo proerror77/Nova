@@ -62,7 +62,7 @@ impl PostService {
         let post = sqlx::query_as::<_, Post>(
             r#"
             SELECT id, user_id, content, caption, media_key, media_type, media_urls, status,
-                   created_at, updated_at, deleted_at, soft_delete::text AS soft_delete
+                   created_at, updated_at, deleted_at, soft_delete::text AS soft_delete, author_account_type
             FROM posts
             WHERE id = $1 AND deleted_at IS NULL
             "#,
@@ -90,7 +90,7 @@ impl PostService {
         let posts = sqlx::query_as::<_, Post>(
             r#"
             SELECT id, user_id, content, caption, media_key, media_type, media_urls, status,
-                   created_at, updated_at, deleted_at, soft_delete::text AS soft_delete
+                   created_at, updated_at, deleted_at, soft_delete::text AS soft_delete, author_account_type
             FROM posts
             WHERE user_id = $1 AND deleted_at IS NULL
             ORDER BY created_at DESC
@@ -113,9 +113,17 @@ impl PostService {
         caption: Option<&str>,
         media_key: &str,
         media_type: &str,
+        author_account_type: Option<&str>,
     ) -> Result<Post> {
-        self.create_post_with_urls(user_id, caption, media_key, media_type, &[])
-            .await
+        self.create_post_with_urls(
+            user_id,
+            caption,
+            media_key,
+            media_type,
+            &[],
+            author_account_type,
+        )
+        .await
     }
 
     /// Create a new post with explicit media URLs
@@ -126,6 +134,7 @@ impl PostService {
         media_key: &str,
         media_type: &str,
         media_urls: &[String],
+        author_account_type: Option<&str>,
     ) -> Result<Post> {
         // Validate: posts must have either media or non-empty content
         // This prevents "empty posts" that have no content and no images
@@ -144,19 +153,21 @@ impl PostService {
         let media_urls_json = serde_json::to_value(media_urls).unwrap_or_default();
 
         // Note: media_urls fallback to media_key only when media_type is NOT 'text'
+        let account_type = author_account_type.unwrap_or("primary");
         let post = sqlx::query_as::<_, Post>(
             r#"
-            INSERT INTO posts (user_id, caption, media_key, media_type, media_urls, status)
+            INSERT INTO posts (user_id, caption, media_key, media_type, media_urls, status, author_account_type)
             VALUES (
                 $1,
                 $2,
                 $3,
                 $4,
                 CASE WHEN $5::jsonb = '[]'::jsonb AND $4 <> 'text' THEN jsonb_build_array($3) ELSE $5::jsonb END,
-                'published'
+                'published',
+                $6
             )
             RETURNING id, user_id, content, caption, media_key, media_type, media_urls, status,
-                      created_at, updated_at, deleted_at, soft_delete::text AS soft_delete
+                      created_at, updated_at, deleted_at, soft_delete::text AS soft_delete, author_account_type
             "#,
         )
         .bind(user_id)
@@ -164,6 +175,7 @@ impl PostService {
         .bind(media_key)
         .bind(media_type)
         .bind(media_urls_json)
+        .bind(account_type)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -205,6 +217,7 @@ impl PostService {
         media_type: &str,
         media_urls: &[String],
         channel_ids: &[Uuid],
+        author_account_type: Option<&str>,
     ) -> Result<Post> {
         // Validate: posts must have either media or non-empty content
         // This prevents "empty posts" that have no content and no images
@@ -226,19 +239,21 @@ impl PostService {
         // Note: media_urls should only be populated with media_key as fallback when:
         //   - media_urls is empty AND media_type is NOT 'text' (text-only posts)
         // For text-only posts (media_type='text'), media_urls should remain empty
+        let account_type = author_account_type.unwrap_or("primary");
         let post = sqlx::query_as::<_, Post>(
             r#"
-            INSERT INTO posts (user_id, caption, media_key, media_type, media_urls, status)
+            INSERT INTO posts (user_id, caption, media_key, media_type, media_urls, status, author_account_type)
             VALUES (
                 $1,
                 $2,
                 $3,
                 $4,
                 CASE WHEN $5::jsonb = '[]'::jsonb AND $4 <> 'text' THEN jsonb_build_array($3) ELSE $5::jsonb END,
-                'published'
+                'published',
+                $6
             )
             RETURNING id, user_id, content, caption, media_key, media_type, media_urls, status,
-                      created_at, updated_at, deleted_at, soft_delete::text AS soft_delete
+                      created_at, updated_at, deleted_at, soft_delete::text AS soft_delete, author_account_type
             "#,
         )
         .bind(user_id)
@@ -246,6 +261,7 @@ impl PostService {
         .bind(media_key)
         .bind(media_type)
         .bind(media_urls_json)
+        .bind(account_type)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -373,7 +389,7 @@ impl PostService {
         let posts = sqlx::query_as::<_, Post>(
             r#"
             SELECT p.id, p.user_id, p.content, p.caption, p.media_key, p.media_type, p.media_urls, p.status,
-                   p.created_at, p.updated_at, p.deleted_at, p.soft_delete::text AS soft_delete
+                   p.created_at, p.updated_at, p.deleted_at, p.soft_delete::text AS soft_delete, p.author_account_type
             FROM posts p
             INNER JOIN likes l ON p.id = l.post_id
             WHERE l.user_id = $1 AND p.deleted_at IS NULL
@@ -423,7 +439,7 @@ impl PostService {
         let posts = sqlx::query_as::<_, Post>(
             r#"
             SELECT p.id, p.user_id, p.content, p.caption, p.media_key, p.media_type, p.media_urls, p.status,
-                   p.created_at, p.updated_at, p.deleted_at, p.soft_delete::text AS soft_delete
+                   p.created_at, p.updated_at, p.deleted_at, p.soft_delete::text AS soft_delete, p.author_account_type
             FROM posts p
             INNER JOIN bookmarks b ON p.id = b.post_id
             WHERE b.user_id = $1 AND p.deleted_at IS NULL
@@ -508,7 +524,7 @@ impl PostService {
             let posts = sqlx::query_as::<_, Post>(
                 r#"
                 SELECT id, user_id, content, caption, media_key, media_type, media_urls, status,
-                       created_at, updated_at, deleted_at, soft_delete::text AS soft_delete
+                       created_at, updated_at, deleted_at, soft_delete::text AS soft_delete, author_account_type
                 FROM posts
                 WHERE id = ANY($1) AND deleted_at IS NULL
                 "#,
