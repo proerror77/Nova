@@ -89,12 +89,12 @@ struct HashtagFeedView: View {
                 headerView
 
                 // Posts
-                ForEach(Array(viewModel.posts), id: \.id) { (post: PostSearchResult) in
+                ForEach(viewModel.posts, id: \.id) { (post: PostSearchResult) in
                     HashtagPostRow(
                         post: post,
                         onAuthorTap: {
-                            self.selectedUserId = post.authorId
-                            self.showUserProfile = true
+                            selectedUserId = post.authorId
+                            showUserProfile = true
                         }
                     )
 
