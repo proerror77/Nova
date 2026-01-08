@@ -12,6 +12,8 @@ use matrix_sdk::{
                 hangup::SyncCallHangupEvent,
                 invite::SyncCallInviteEvent,
             },
+            AnySyncMessageLikeEvent,
+            AnySyncTimelineEvent,
             room::{
                 encryption::RoomEncryptionEventContent,
                 encrypted::SyncRoomEncryptedEvent,
@@ -21,6 +23,7 @@ use matrix_sdk::{
             },
             InitialStateEvent,
         },
+        serde::Raw,
         OwnedDeviceId, OwnedRoomId, OwnedUserId, RoomId, UserId,
     },
     Client, SessionMeta,
@@ -509,6 +512,32 @@ impl MatrixClient {
                 let handler = handler.clone();
                 async move {
                     handler(ev, room);
+                }
+            }
+        });
+
+        // Some SDK paths may only surface encrypted timeline events as raw timeline events (before / without
+        // decryption). Register a raw handler as a fallback so we can still persist metadata-only rows.
+        self.client.add_event_handler({
+            let handler = encrypted_handler.clone();
+            move |raw: Raw<AnySyncTimelineEvent>, room: Room| {
+                let handler = handler.clone();
+                async move {
+                    match raw.get_field::<String>("type") {
+                        Ok(Some(t)) if t == "m.room.encrypted" => match raw.deserialize() {
+                            Ok(AnySyncTimelineEvent::MessageLike(AnySyncMessageLikeEvent::RoomEncrypted(ev))) => {
+                                handler(ev, room)
+                            }
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(error = %e, "Failed to deserialize raw m.room.encrypted event");
+                            }
+                        },
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(error = %e, "Failed to read raw event type");
+                        }
+                    }
                 }
             }
         });

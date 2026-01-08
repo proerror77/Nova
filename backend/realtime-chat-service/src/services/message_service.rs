@@ -275,75 +275,103 @@ impl MessageService {
         let id = Uuid::new_v4();
         let content = "";
 
-        let client = Self::get_db_client(db, "store matrix message metadata").await?;
+        let mut client = Self::get_db_client(db, "store matrix message metadata").await?;
 
-        let row = client
+        // IMPORTANT: This must be idempotent on matrix_event_id and must NOT bump
+        // conversation_counters if the message already exists (even under concurrency).
+        // We achieve this by inserting the message first (with a placeholder sequence),
+        // then bumping counters only if the insert succeeded, all within a transaction.
+        let tx = client
+            .transaction()
+            .await
+            .map_err(|e| AppError::StartServer(format!("begin tx (matrix msg): {e}")))?;
+
+        // 1) Insert message row (metadata-only) with placeholder sequence_number=0.
+        let inserted = tx
             .query_opt(
                 r#"
-                WITH next AS (
-                    INSERT INTO conversation_counters (conversation_id, last_seq)
-                    VALUES ($2, 1)
-                    ON CONFLICT (conversation_id)
-                    DO UPDATE SET last_seq = conversation_counters.last_seq + 1
-                    RETURNING last_seq
-                ),
-                ins AS (
-                    INSERT INTO messages (
-                        id,
-                        conversation_id,
-                        sender_id,
-                        content,
-                        idempotency_key,
-                        sequence_number,
-                        matrix_event_id
-                    )
-                    SELECT
-                        $1,
-                        $2,
-                        $3,
-                        $4,
-                        NULL,
-                        next.last_seq,
-                        $5
-                    FROM next
-                    ON CONFLICT (matrix_event_id) WHERE matrix_event_id IS NOT NULL DO NOTHING
-                    RETURNING id, conversation_id, sender_id, content, sequence_number, created_at, matrix_event_id
-                ),
-                upd AS (
-                    UPDATE conversations c
-                    SET
-                        updated_at = ins.created_at,
-                        last_message_id = ins.id
-                    FROM ins
-                    WHERE c.id = ins.conversation_id
-                      AND c.deleted_at IS NULL
+                INSERT INTO messages (
+                    id,
+                    conversation_id,
+                    sender_id,
+                    content,
+                    idempotency_key,
+                    sequence_number,
+                    matrix_event_id
                 )
-                SELECT id, conversation_id, sender_id, content, sequence_number, created_at, matrix_event_id
-                FROM ins
+                VALUES ($1, $2, $3, $4, NULL, 0, $5)
+                ON CONFLICT (matrix_event_id) WHERE matrix_event_id IS NOT NULL DO NOTHING
+                RETURNING created_at
                 "#,
                 &[&id, &conversation_id, &sender_id, &content, &matrix_event_id],
             )
             .await
             .map_err(|e| AppError::StartServer(format!("insert matrix msg: {e}")))?;
 
-        let Some(row) = row else {
+        let Some(inserted_row) = inserted else {
+            tx.rollback()
+                .await
+                .map_err(|e| AppError::StartServer(format!("rollback tx (matrix msg): {e}")))?;
             return Ok(None);
         };
 
+        let created_at = inserted_row.get(0);
+
+        // 2) Bump per-conversation counter (only after insert succeeded).
+        let seq_row = tx
+            .query_one(
+                r#"
+                INSERT INTO conversation_counters (conversation_id, last_seq)
+                VALUES ($1, 1)
+                ON CONFLICT (conversation_id)
+                DO UPDATE SET last_seq = conversation_counters.last_seq + 1
+                RETURNING last_seq
+                "#,
+                &[&conversation_id],
+            )
+            .await
+            .map_err(|e| AppError::StartServer(format!("bump counters (matrix msg): {e}")))?;
+
+        let sequence_number: i64 = seq_row.get(0);
+
+        // 3) Set the real sequence number on the inserted message row.
+        tx.execute(
+            "UPDATE messages SET sequence_number = $1 WHERE id = $2",
+            &[&sequence_number, &id],
+        )
+        .await
+        .map_err(|e| AppError::StartServer(format!("set seq (matrix msg): {e}")))?;
+
+        // 4) Keep conversation listing state in sync.
+        tx.execute(
+            r#"
+            UPDATE conversations
+            SET updated_at = $1, last_message_id = $2
+            WHERE id = $3 AND deleted_at IS NULL
+            "#,
+            &[&created_at, &id, &conversation_id],
+        )
+        .await
+        .map_err(|e| AppError::StartServer(format!("update conversation (matrix msg): {e}")))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| AppError::StartServer(format!("commit tx (matrix msg): {e}")))?;
+
         Ok(Some(MessageRow {
-            id: row.get(0),
-            conversation_id: row.get(1),
-            sender_id: row.get(2),
-            content: row.get(3),
-            sequence_number: row.get(4),
+            id,
+            conversation_id,
+            sender_id,
+            content: content.to_string(),
+            sequence_number,
             idempotency_key: None,
-            created_at: row.get(5),
+            created_at,
             edited_at: None,
             deleted_at: None,
             reaction_count: 0,
             version_number: 1,
             recalled_at: None,
-            matrix_event_id: row.get(6),
+            matrix_event_id: Some(matrix_event_id.to_string()),
         }))
     }
     /// Send a message to a conversation (wrapper for send_message_db)

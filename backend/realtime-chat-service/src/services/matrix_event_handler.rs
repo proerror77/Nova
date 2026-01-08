@@ -221,7 +221,27 @@ pub async fn handle_matrix_encrypted_event(
         }
     };
 
-    // 3. Persist metadata-only row in Nova DB with matrix_event_id (atomic + dedup via unique index)
+    // 3. Check if this event already exists in our DB (by matrix_event_id)
+    // This prevents duplicate processing and avoids bumping conversation_counters on conflicts.
+    let client = db.get().await.map_err(|e| AppError::StartServer(format!("handle encrypted pool: {e}")))?;
+    let existing: Option<Uuid> = client
+        .query_opt(
+            "SELECT id FROM messages WHERE matrix_event_id = $1",
+            &[&event_id.as_str()],
+        )
+        .await
+        .map_err(|e| AppError::StartServer(format!("check existing encrypted message: {e}")))?
+        .map(|row| row.get(0));
+
+    if existing.is_some() {
+        debug!(
+            event_id = %event_id,
+            "Encrypted event already exists in DB, skipping"
+        );
+        return Ok(());
+    }
+
+    // 4. Persist metadata-only row in Nova DB with matrix_event_id (atomic + dedup via unique index)
     let message = crate::services::message_service::MessageService::store_matrix_message_metadata_db(
         db,
         conversation_id,
@@ -242,7 +262,7 @@ pub async fn handle_matrix_encrypted_event(
         "Matrix encrypted event saved to DB (metadata-only)"
     );
 
-    // 4. Broadcast to WebSocket clients (no content; clients fetch from Matrix)
+    // 5. Broadcast to WebSocket clients (no content; clients fetch from Matrix)
     let ws_event = WebSocketEvent::MessageNew {
         id: message.id,
         sender_id: user_id,
