@@ -386,29 +386,6 @@ struct UserProfileFollowingView: View {
     // MARK: - Following Content
     private var followingContent: some View {
         LazyVStack(spacing: 0) {
-            // All 按钮（仅当关注数 > 7 时显示）
-            if shouldShowFollowingAllButton {
-                HStack {
-                    Spacer()
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isFollowingExpanded.toggle()
-                        }
-                    }) {
-                        HStack(spacing: 4.w) {
-                            Text("All")
-                                .font(Font.custom("SF Pro Display", size: 14.f).weight(.medium))
-                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                            Image(systemName: isFollowingExpanded ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 12.f))
-                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                        }
-                    }
-                }
-                .padding(.horizontal, 16.w)
-                .padding(.bottom, 8.h)
-            }
-
             if isLoadingFollowing {
                 SkeletonListLoader(itemCount: 5) {
                     UserRowSkeleton()
@@ -435,6 +412,29 @@ struct UserProfileFollowingView: View {
                         }
                     )
                 }
+
+                // All 按钮（仅当关注数 > 7 时显示）- 放在列表下方
+                if shouldShowFollowingAllButton {
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isFollowingExpanded.toggle()
+                            }
+                        }) {
+                            HStack(spacing: 4.w) {
+                                Text("All")
+                                    .font(Font.custom("SF Pro Display", size: 14.f).weight(.medium))
+                                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                                Image(systemName: isFollowingExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 12.f))
+                                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                            }
+                        }
+                        Spacer()
+                    }
+                    .padding(.top, 8.h)
+                }
             }
         }
     }
@@ -442,29 +442,6 @@ struct UserProfileFollowingView: View {
     // MARK: - Followers Content
     private var followersContent: some View {
         LazyVStack(spacing: 0) {
-            // All 按钮（仅当粉丝数 > 7 时显示）
-            if shouldShowFollowersAllButton {
-                HStack {
-                    Spacer()
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isFollowersExpanded.toggle()
-                        }
-                    }) {
-                        HStack(spacing: 4.w) {
-                            Text("All")
-                                .font(Font.custom("SF Pro Display", size: 14.f).weight(.medium))
-                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                            Image(systemName: isFollowersExpanded ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 12.f))
-                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                        }
-                    }
-                }
-                .padding(.horizontal, 16.w)
-                .padding(.bottom, 8.h)
-            }
-
             if isLoadingFollowers {
                 SkeletonListLoader(itemCount: 5) {
                     UserRowSkeleton()
@@ -490,6 +467,29 @@ struct UserProfileFollowingView: View {
                             }
                         }
                     )
+                }
+
+                // All 按钮（仅当粉丝数 > 7 时显示）- 放在列表下方
+                if shouldShowFollowersAllButton {
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isFollowersExpanded.toggle()
+                            }
+                        }) {
+                            HStack(spacing: 4.w) {
+                                Text("All")
+                                    .font(Font.custom("SF Pro Display", size: 14.f).weight(.medium))
+                                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                                Image(systemName: isFollowersExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 12.f))
+                                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                            }
+                        }
+                        Spacer()
+                    }
+                    .padding(.top, 8.h)
                 }
             }
         }
