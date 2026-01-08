@@ -561,12 +561,14 @@ struct PostDetailView: View {
 
             // Time and Location
             HStack(spacing: 5.w) {
-                Text("1d30m")
+                Text(post.createdAt.timeAgoDisplay())
                     .font(Font.custom("SFProDisplay-Regular", size: 10.f))
                     .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
-                Text("English")
-                    .font(Font.custom("SFProDisplay-Regular", size: 10.f))
-                    .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                if let location = post.location, !location.isEmpty {
+                    Text(location)
+                        .font(Font.custom("SFProDisplay-Regular", size: 10.f))
+                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                }
                 Spacer()
             }
             .padding(.bottom, 10.h)
@@ -579,7 +581,7 @@ struct PostDetailView: View {
             
             // Comments Count
             HStack {
-                Text("109 comments")
+                Text("\(displayCommentCount) comments")
                     .font(Font.custom("SFProDisplay-Bold", size: 12.f))
                     .tracking(0.24)
                     .foregroundColor(.black)

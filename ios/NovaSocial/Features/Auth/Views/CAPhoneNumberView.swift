@@ -56,6 +56,7 @@ struct CAPhoneNumberView: View {
                 titleSection
                 Spacer().frame(height: 55.h)
                 phoneInputSection
+                errorMessageView
                 Spacer().frame(height: 24.h)
                 continueButton
                 Spacer()
@@ -110,21 +111,58 @@ struct CAPhoneNumberView: View {
 
     private var titleSection: some View {
         Text("Enter your mobile number")
-            .font(Font.custom("SF Pro Display", size: 24.f).weight(.semibold))
+            .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
             .foregroundColor(.white)
     }
 
     private var phoneInputSection: some View {
-        HStack(spacing: 10) {
-            Text("US +1   Mobile number ")
-                .font(Font.custom("SF Pro Display", size: 14.f))
-                .tracking(0.28)
+        HStack(spacing: 12.s) {
+            // Country code picker with flag
+            Button(action: { showCountryPicker = true }) {
+                HStack(spacing: 6.s) {
+                    if isDetectingRegion {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.8)
+                    } else if let country = selectedCountry {
+                        Text(country.flag)
+                            .font(.system(size: 20.f))
+                        Text(country.dialCode)
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                            .foregroundColor(.white)
+                    } else {
+                        Text("🌍")
+                            .font(.system(size: 20.f))
+                        Text("+1")
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                            .foregroundColor(.white)
+                    }
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10.f))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                .padding(.horizontal, 12.s)
+                .padding(.vertical, 14.s)
+            }
+
+            // Phone number TextField
+            TextField("", text: $phoneNumber, prompt: Text("Mobile number").foregroundColor(.white.opacity(0.5)))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(.white)
-            Spacer()
+                .keyboardType(.phonePad)
+                .textContentType(.telephoneNumber)
+                .autocorrectionDisabled()
+                .focused($isInputFocused)
+                .onChange(of: phoneNumber) { _, newValue in
+                    applyPhoneFormatting(newValue)
+                }
+                .onChange(of: selectedCountry) { _, _ in
+                    applyPhoneFormatting(phoneNumber)
+                }
         }
-        .padding(16.s)
-        .frame(width: 301.w)
-        .background(Color(red: 1, green: 1, blue: 1).opacity(0.20))
+        .padding(.horizontal, 16.s)
+        .frame(width: 301.w, height: 52.h)
+        .background(Color.white.opacity(0.20))
         .cornerRadius(5.s)
         .overlay(
             RoundedRectangle(cornerRadius: 5.s)
@@ -153,7 +191,7 @@ struct CAPhoneNumberView: View {
                         .scaleEffect(0.9)
                 }
                 Text("Next")
-                    .font(Font.custom("SF Pro Display", size: 16.f).weight(.bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                     .foregroundColor(.black)
             }
             .frame(width: 301.w, height: 47.h)
@@ -178,21 +216,49 @@ struct CAPhoneNumberView: View {
     }
 
     private func sendVerificationCode() async {
-        // ⚠️ TODO: 这里需要调用后端 API 发送验证码
-        // 如需实现，请告知我后端接口的详细信息
+        guard isPhoneValid else { return }
+
         isLoading = true
         errorMessage = nil
 
-        // 保存用户选择的国家
+        // Save user's selected country
         if let country = selectedCountry {
             regionService.savePreferredCountry(country)
         }
 
-        // 模拟延迟 - 实际实现需要调用后端
-        try? await Task.sleep(for: .milliseconds(500))
+        do {
+            let response = try await PhoneAuthService.shared.sendVerificationCode(phoneNumber: fullPhoneNumber)
 
-        // TODO: 导航到验证码输入页面
-        // currentPage = .phoneVerification
+            if response.success {
+                // Navigate to verification code entry page
+                await MainActor.run {
+                    currentPage = .phoneEnterCode(phoneNumber: fullPhoneNumber)
+                }
+            } else {
+                errorMessage = response.message ?? "Failed to send verification code"
+            }
+        } catch let phoneError as PhoneAuthError {
+            #if DEBUG
+            print("[CAPhoneNumberView] Send code error: \(phoneError)")
+            #endif
+            switch phoneError {
+            case .rateLimited:
+                errorMessage = "Too many attempts. Please wait before trying again."
+            case .invalidPhoneNumber:
+                errorMessage = "Invalid phone number. Please check and try again."
+            case .networkError:
+                errorMessage = "Unable to connect. Please check your internet connection."
+            case .serverError(let message):
+                errorMessage = message
+            default:
+                errorMessage = phoneError.localizedDescription
+            }
+        } catch {
+            #if DEBUG
+            print("[CAPhoneNumberView] Unexpected error: \(error)")
+            #endif
+            errorMessage = "An unexpected error occurred. Please try again."
+        }
 
         isLoading = false
     }
