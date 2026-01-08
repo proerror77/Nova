@@ -109,6 +109,8 @@ where
             "/api/v2/auth/waitlist",
             // Phone authentication (SMS OTP - public endpoints for registration/login)
             "/api/v2/auth/phone",
+            // Email authentication (Email OTP - public endpoints for registration/login)
+            "/api/v2/auth/email",
             // Comments API (public read access for viewing comments)
             "/api/v2/social/comments",
             // Alice AI Assistant API (public access for chat and voice)
