@@ -160,12 +160,13 @@ struct InviteCodeView: View {
                 .foregroundColor(.clear)
                 .accentColor(.clear)
                 .multilineTextAlignment(.center)
-                .keyboardType(.numberPad)
+                .keyboardType(.default)  // Changed from .numberPad for better Simulator support
+                .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
                 .focused($isInputFocused)
                 .onChange(of: inviteCode) { _, newValue in
-                    // 只允許數字，最多 6 位
-                    let filtered = newValue.filter { $0.isNumber }
+                    // 只允許數字和字母，最多 6 位（支援 ICERED 這樣的字母邀請碼）
+                    let filtered = newValue.filter { $0.isLetter || $0.isNumber }.uppercased()
                     inviteCode = String(filtered.prefix(6))
                 }
                 .frame(width: 1, height: 1)

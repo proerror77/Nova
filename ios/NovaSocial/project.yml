@@ -38,6 +38,7 @@ targets:
           - "build"
           - "Archive"
           - "*.md"
+          - "**/*.md"
           - "*.txt"
           - "*.py"
           - "Tests"
@@ -100,6 +101,7 @@ targets:
         com.apple.developer.applesignin:
           - Default
         com.apple.developer.associated-domains:
+          - webcredentials:staging.gcp.icered.com?mode=developer
           - webcredentials:aasa.icered.com?mode=developer
         com.apple.security.application-groups:
           - group.com.app.icered.pro
@@ -112,6 +114,7 @@ targets:
       - path: Tests
         excludes:
           - "**/*.md"
+          - "**/CLAUDE.md"
           - "**/Info.plist"
     dependencies:
       - target: ICERED

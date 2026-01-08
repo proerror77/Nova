@@ -1,5 +1,6 @@
 import Foundation
 import AuthenticationServices
+import UIKit
 import os
 
 // MARK: - Passkey Service
@@ -14,8 +15,16 @@ class PasskeyService: NSObject {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "NovaSocial", category: "PasskeyService")
 
     // WebAuthn Relying Party ID - must match backend configuration and AASA domain
-    // AASA file hosted at aasa.icered.com/.well-known/apple-app-site-association
-    private let relyingPartyIdentifier = "aasa.icered.com"
+    // Staging: AASA file hosted at staging.gcp.icered.com/.well-known/apple-app-site-association
+    // Production: AASA file hosted at aasa.icered.com/.well-known/apple-app-site-association
+    private var relyingPartyIdentifier: String {
+        switch APIConfig.current {
+        case .staging, .development:
+            return "staging.gcp.icered.com"
+        case .production:
+            return "aasa.icered.com"
+        }
+    }
 
     // Continuations for async/await bridge
     private var registrationContinuation: CheckedContinuation<ASAuthorizationPlatformPublicKeyCredentialRegistration, Error>?
