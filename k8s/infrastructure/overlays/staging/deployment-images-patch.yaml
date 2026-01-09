@@ -85,7 +85,7 @@ spec:
     spec:
       containers:
       - name: graphql-gateway
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/graphql-gateway@sha256:8ae8f23a8abc34c09686d7d23aaa0d885e7247f460e38bfcc3da530c7c5c9c85
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/graphql-gateway@sha256:7f9133c9b6498a4ddaab329e8b0168df2eac4eb91f3183d6a514173bce3d9451
 ---
 apiVersion: apps/v1
 kind: Deployment
