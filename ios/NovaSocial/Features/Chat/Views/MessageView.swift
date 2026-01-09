@@ -5,6 +5,7 @@ import AVFoundation
 struct ConversationPreview: Identifiable {
     let id: String
     let userName: String
+    let otherUserId: String?
     let lastMessage: String
     let time: String
     let unreadCount: Int
@@ -12,12 +13,14 @@ struct ConversationPreview: Identifiable {
     let isEncrypted: Bool  // E2EE status indicator
     let avatarUrl: String?  // 头像URL（可选）
     let isGroup: Bool       // 是否為群組聊天
+    let memberCount: Int    // 群組成員數（DM 通常為 2）
     let memberAvatars: [String?]  // 群組成員頭像URLs (用於堆疊頭像)
     let memberNames: [String]     // 群組成員名稱 (用於首字母占位符)
 
-    init(id: String, userName: String, lastMessage: String, time: String, unreadCount: Int, hasUnread: Bool, isEncrypted: Bool, avatarUrl: String? = nil, isGroup: Bool = false, memberAvatars: [String?] = [], memberNames: [String] = []) {
+    init(id: String, userName: String, otherUserId: String? = nil, lastMessage: String, time: String, unreadCount: Int, hasUnread: Bool, isEncrypted: Bool, avatarUrl: String? = nil, isGroup: Bool = false, memberCount: Int = 0, memberAvatars: [String?] = [], memberNames: [String] = []) {
         self.id = id
         self.userName = userName
+        self.otherUserId = otherUserId
         self.lastMessage = lastMessage
         self.time = time
         self.unreadCount = unreadCount
@@ -25,6 +28,7 @@ struct ConversationPreview: Identifiable {
         self.isEncrypted = isEncrypted
         self.avatarUrl = avatarUrl
         self.isGroup = isGroup
+        self.memberCount = memberCount
         self.memberAvatars = memberAvatars
         self.memberNames = memberNames
     }
@@ -115,12 +119,17 @@ struct MessageView: View {
     @Binding var currentPage: AppPage
     @State private var showNewPost = false
     @State private var showChat = false
+    @State private var showGroupChat = false
     @State private var showPhotoOptions = false
     @State private var showAddOptionsMenu = false
     @State private var showQRScanner = false
     @State private var selectedUserName = "User"
     @State private var selectedConversationId = ""
     @State private var selectedAvatarUrl: String? = nil  // 選中對話的頭像URL
+    @State private var selectedOtherUserId: String? = nil
+    @State private var selectedGroupId: String = ""
+    @State private var selectedGroupName: String = ""
+    @State private var selectedGroupMemberCount: Int = 0
     @State private var showImagePicker = false
     @State private var showCamera = false
     @State private var showCameraPermissionAlert = false
@@ -170,6 +179,7 @@ struct MessageView: View {
     // MARK: - Matrix State
     @State private var isMatrixInitializing = false
     @State private var matrixInitError: String?
+    @State private var roomListObserverToken: UUID?
 
     init(currentPage: Binding<AppPage>) {
         self._currentPage = currentPage
@@ -278,6 +288,7 @@ struct MessageView: View {
                 return ConversationPreview(
                     id: conv.id,
                     userName: conv.displayName,
+                    otherUserId: conv.otherUserId,
                     lastMessage: conv.lastMessage ?? "開始聊天吧！",
                     time: timeStr,
                     unreadCount: conv.unreadCount,
@@ -285,6 +296,7 @@ struct MessageView: View {
                     isEncrypted: conv.isEncrypted,
                     avatarUrl: conv.avatarURL,
                     isGroup: !conv.isDirect,
+                    memberCount: conv.memberCount,
                     memberAvatars: conv.memberAvatars,
                     memberNames: conv.memberNames
                 )
@@ -307,11 +319,19 @@ struct MessageView: View {
 
     // MARK: - 設置 Matrix 房間更新監聽
     private func setupMatrixRoomListObserver() {
-        matrixBridge.onRoomListUpdated = { [self] _ in
+        guard roomListObserverToken == nil else { return }
+        roomListObserverToken = matrixBridge.addRoomListObserver { _ in
             Task {
                 await loadConversationsFromMatrix()
             }
         }
+    }
+
+    private func teardownMatrixRoomListObserver() {
+        if let token = roomListObserverToken {
+            matrixBridge.removeRoomListObserver(token)
+        }
+        roomListObserverToken = nil
     }
 
     // MARK: - Static DateFormatters (性能優化：避免重複創建)
@@ -422,6 +442,9 @@ struct MessageView: View {
                 await MainActor.run {
                     selectedConversationId = conversation.id
                     selectedUserName = user.displayName ?? user.username
+                    selectedAvatarUrl = user.avatarUrl
+                    selectedOtherUserId = user.id
+                    showGroupChat = false
                     searchText = ""
                     isSearching = false
                     searchResults = []
@@ -497,8 +520,8 @@ struct MessageView: View {
     private func deleteConversation(_ conversation: ConversationPreview) {
         Task {
             do {
-                // Leave the Matrix room
-                try await matrixBridge.leaveConversation(conversationId: conversation.id)
+                // Forget = permanently hide + leave the Matrix room
+                try await matrixBridge.forgetConversation(conversationOrRoomId: conversation.id)
 
                 // Remove from local list
                 await MainActor.run {
@@ -524,7 +547,16 @@ struct MessageView: View {
                     showChat: $showChat,
                     conversationId: selectedConversationId,
                     userName: selectedUserName,
+                    otherUserId: selectedOtherUserId,
                     otherUserAvatarUrl: selectedAvatarUrl
+                )
+                .transition(.identity)
+            } else if showGroupChat {
+                GroupChatView(
+                    showGroupChat: $showGroupChat,
+                    conversationId: selectedGroupId,
+                    groupName: selectedGroupName,
+                    memberCount: selectedGroupMemberCount
                 )
                 .transition(.identity)
             } else if showNewPost {
@@ -611,6 +643,9 @@ struct MessageView: View {
             // Check for pending deep link navigation
             handlePendingChatNavigation()
         }
+        .onDisappear {
+            teardownMatrixRoomListObserver()
+        }
         .onChange(of: coordinator.messagePath) { _, _ in
             handlePendingChatNavigation()
         }
@@ -635,6 +670,8 @@ struct MessageView: View {
             // Navigate to user profile from message context (with cache invalidation for Issue #166)
             userService.invalidateCache(userId: userId)
             selectedUserId = userId
+            showChat = false
+            showGroupChat = false
             showUserProfile = true
             coordinator.messagePath.removeAll { $0 == route }
         default:
@@ -644,17 +681,32 @@ struct MessageView: View {
 
     /// Navigate to a specific chat room
     private func navigateToChat(roomId: String) {
+        // Rejoin handling: if this room was previously forgotten, make it visible again.
+        matrixBridge.unhideRoom(roomId: roomId)
+
         // Find the conversation in the list
         if let conversation = conversations.first(where: { $0.id == roomId }) {
-            selectedConversationId = conversation.id
-            selectedUserName = conversation.userName
-            selectedAvatarUrl = conversation.avatarUrl
-            showChat = true
+            if conversation.isGroup {
+                selectedGroupId = conversation.id
+                selectedGroupName = conversation.userName
+                selectedGroupMemberCount = conversation.memberCount
+                showChat = false
+                showGroupChat = true
+            } else {
+                selectedConversationId = conversation.id
+                selectedUserName = conversation.userName
+                selectedAvatarUrl = conversation.avatarUrl
+                selectedOtherUserId = conversation.otherUserId
+                showGroupChat = false
+                showChat = true
+            }
         } else {
             // If conversation not in list, try to open it directly
             selectedConversationId = roomId
             selectedUserName = "Chat"
             selectedAvatarUrl = nil
+            selectedOtherUserId = nil
+            showGroupChat = false
             showChat = true
             #if DEBUG
             print("[MessageView] Opening chat room directly: \(roomId)")
@@ -846,10 +898,18 @@ struct MessageView: View {
                                 // 點擊動作
                                 if convo.userName.lowercased() == "alice" {
                                     currentPage = .alice
+                                } else if convo.isGroup {
+                                    selectedGroupId = convo.id
+                                    selectedGroupName = convo.userName
+                                    selectedGroupMemberCount = convo.memberCount
+                                    showChat = false
+                                    showGroupChat = true
                                 } else {
                                     selectedConversationId = convo.id
                                     selectedUserName = convo.userName
                                     selectedAvatarUrl = convo.avatarUrl
+                                    selectedOtherUserId = convo.otherUserId
+                                    showGroupChat = false
                                     showChat = true
                                 }
                             } label: {
@@ -859,16 +919,27 @@ struct MessageView: View {
                                     time: convo.time,
                                     unreadCount: convo.unreadCount,
                                     showMessagePreview: true,
-                                    showTimeAndBadge: convo.hasUnread,
-                                    isEncrypted: convo.isEncrypted,
-                                    userId: convo.id,
-                                    avatarUrl: convo.avatarUrl,
-                                    isGroup: convo.isGroup,
-                                    memberAvatars: convo.memberAvatars,
+	                                    showTimeAndBadge: convo.hasUnread,
+	                                    isEncrypted: convo.isEncrypted,
+	                                    userId: convo.otherUserId ?? "",
+	                                    avatarUrl: convo.avatarUrl,
+	                                    isGroup: convo.isGroup,
+	                                    memberAvatars: convo.memberAvatars,
                                     memberNames: convo.memberNames,
                                     onAvatarTapped: { userId in
                                         // Skip profile navigation for Alice AI assistant
                                         if convo.userName.lowercased() != "alice" {
+                                            guard !convo.isGroup else { return }
+                                            if userId.isEmpty {
+                                                Task {
+                                                    if let resolved = await matrixBridge.resolveOtherUserIdForDirectRoom(roomId: convo.id) {
+                                                        userService.invalidateCache(userId: resolved)
+                                                        selectedUserId = resolved
+                                                        showUserProfile = true
+                                                    }
+                                                }
+                                                return
+                                            }
                                             // Invalidate cache for fresh profile data (Issue #166)
                                             userService.invalidateCache(userId: userId)
                                             selectedUserId = userId

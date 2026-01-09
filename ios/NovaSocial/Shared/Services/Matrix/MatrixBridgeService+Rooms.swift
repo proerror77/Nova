@@ -152,6 +152,42 @@ extension MatrixBridgeService {
         #endif
     }
 
+    // MARK: - Room Metadata
+
+    func setRoomName(conversationOrRoomId: String, name: String) async throws {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        let roomId = try await resolveRoomId(for: conversationOrRoomId)
+        try await matrixService.setRoomName(roomId: roomId, name: name)
+
+        // Best-effort: sync to backend conversation record if available.
+        if let conversationId = try? await getConversationId(for: roomId),
+           !conversationId.isEmpty {
+            _ = try? await chatService.updateConversation(conversationId: conversationId, name: name, avatarUrl: nil)
+        }
+    }
+
+    /// - Returns: A normalized HTTP(S) avatar URL if available.
+    func setRoomAvatar(conversationOrRoomId: String, imageData: Data, mimeType: String) async throws -> String? {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        let roomId = try await resolveRoomId(for: conversationOrRoomId)
+        let contentUri = try await matrixService.setRoomAvatar(roomId: roomId, imageData: imageData, mimeType: mimeType)
+        let normalized = matrixService.normalizeMediaURL(contentUri)
+
+        // Best-effort: sync to backend conversation record if available.
+        if let conversationId = try? await getConversationId(for: roomId),
+           !conversationId.isEmpty {
+            _ = try? await chatService.updateConversation(conversationId: conversationId, name: nil, avatarUrl: normalized)
+        }
+
+        return normalized
+    }
+
     // MARK: - Room Queries
 
     /// Get all Matrix rooms as conversations
@@ -166,27 +202,75 @@ extension MatrixBridgeService {
     // MARK: - Leave Room
 
     /// Leave/delete a conversation (leave the Matrix room)
-    func leaveConversation(conversationId: String) async throws {
+    func leaveConversation(conversationOrRoomId: String) async throws {
         guard isInitialized else {
             throw MatrixBridgeError.notInitialized
         }
 
-        // Get the Matrix room ID for this conversation
-        let roomId = try await getRoomId(for: conversationId)
+        // Matrix-first: the input may already be a Matrix roomId (!room:server).
+        let roomId = try await resolveRoomId(for: conversationOrRoomId)
 
         #if DEBUG
-        print("[MatrixBridgeService] Leaving conversation: \(conversationId), roomId: \(roomId)")
+        print("[MatrixBridgeService] Leaving conversationOrRoomId: \(conversationOrRoomId), roomId: \(roomId)")
         #endif
 
         // Leave the Matrix room
         try await matrixService.leaveRoom(roomId: roomId)
 
-        // Clear the mapping cache
-        clearMapping(conversationId: conversationId, roomId: roomId)
+        // Workaround: temporarily hide this room to avoid SDK room-list cache delay.
+        markRoomRecentlyLeft(roomId: roomId)
+
+        // Clear the mapping cache (best-effort)
+        if conversationOrRoomId.hasPrefix("!") {
+            if let conversationId = try? await getConversationId(for: roomId) {
+                clearMapping(conversationId: conversationId, roomId: roomId)
+            } else {
+                roomToConversationMap.removeValue(forKey: roomId)
+            }
+        } else {
+            clearMapping(conversationId: conversationOrRoomId, roomId: roomId)
+        }
 
         #if DEBUG
-        print("[MatrixBridgeService] Successfully left conversation: \(conversationId)")
+        print("[MatrixBridgeService] Successfully left room: \(roomId)")
         #endif
+    }
+
+    /// Forget a conversation: permanently hide it in the UI and leave the Matrix room.
+    /// This implements "delete chat" semantics that won't reappear due to SDK cache delay.
+    func forgetConversation(conversationOrRoomId: String) async throws {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        let roomId = try await resolveRoomId(for: conversationOrRoomId)
+
+        #if DEBUG
+        print("[MatrixBridgeService] Forgetting conversationOrRoomId: \(conversationOrRoomId), roomId: \(roomId)")
+        #endif
+
+        // Permanently hide immediately so refresh won't bring it back.
+        hideRoomPermanently(roomId: roomId)
+
+        // Stop timeline listeners (best-effort)
+        matrixService.unsubscribeFromRoomTimeline(roomId: roomId)
+
+        // Leave the Matrix room
+        try await matrixService.leaveRoom(roomId: roomId)
+
+        // Workaround: temporarily hide this room to avoid SDK room-list cache delay.
+        markRoomRecentlyLeft(roomId: roomId)
+
+        // Clear the mapping cache (best-effort)
+        if conversationOrRoomId.hasPrefix("!") {
+            if let conversationId = try? await getConversationId(for: roomId) {
+                clearMapping(conversationId: conversationId, roomId: roomId)
+            } else {
+                roomToConversationMap.removeValue(forKey: roomId)
+            }
+        } else {
+            clearMapping(conversationId: conversationOrRoomId, roomId: roomId)
+        }
     }
 
     /// Leave a room by room ID directly
@@ -290,6 +374,40 @@ extension MatrixBridgeService {
 
             return members
         }
+    }
+
+    /// Best-effort: resolve the other participant's Nova userId for a DM room.
+    /// Returns nil for group rooms or if the other user can't be resolved.
+    func resolveOtherUserIdForDirectRoom(roomId: String) async -> String? {
+        guard isInitialized else { return nil }
+
+        let currentNovaUserId = keychain.get(.userId) ?? AuthenticationManager.shared.currentUser?.id ?? ""
+
+        // Prefer backend mapping (gives canonical Nova UUID).
+        if let conversationId = try? await queryConversationMapping(roomId: roomId),
+           let conversation = try? await chatService.getConversation(conversationId: conversationId),
+           let other = conversation.members.first(where: { $0.userId != currentNovaUserId }) {
+            return other.userId
+        }
+
+        // Fallback: use Matrix room members and convert Matrix userId -> Nova identifier.
+        if let members = try? await matrixService.getRoomMembers(roomId: roomId) {
+            if let currentMatrixUserId = matrixService.userId,
+               let otherMember = members.first(where: { $0.userId != currentMatrixUserId }),
+               let novaId = matrixService.convertToNovaUserId(matrixUserId: otherMember.userId) {
+                return novaId
+            }
+
+            for member in members {
+                if let novaId = matrixService.convertToNovaUserId(matrixUserId: member.userId),
+                   !currentNovaUserId.isEmpty,
+                   novaId != currentNovaUserId {
+                    return novaId
+                }
+            }
+        }
+
+        return nil
     }
 
     /// Get members of a conversation by conversation ID

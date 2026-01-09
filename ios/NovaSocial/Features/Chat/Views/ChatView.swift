@@ -13,12 +13,15 @@ struct ChatView: View {
     @Binding var showChat: Bool
     let conversationId: String
     var userName: String = "User"
+    var otherUserId: String?
     var otherUserAvatarUrl: String?
+    @State private var resolvedOtherUserId: String? = nil
 
     // MARK: - ViewModel
 
     @State private var viewModel = ChatViewModel()
     private let userService = UserService.shared  // For cache invalidation on profile navigation
+    private let matrixBridge = MatrixBridgeService.shared
     @State private var showMessageSearch = false
 
     // MARK: - View Models & Handlers
@@ -38,10 +41,11 @@ struct ChatView: View {
 
     // MARK: - Initializer
 
-    init(showChat: Binding<Bool>, conversationId: String, userName: String = "User", otherUserAvatarUrl: String? = nil) {
+    init(showChat: Binding<Bool>, conversationId: String, userName: String = "User", otherUserId: String? = nil, otherUserAvatarUrl: String? = nil) {
         self._showChat = showChat
         self.conversationId = conversationId
         self.userName = userName
+        self.otherUserId = otherUserId
         self.otherUserAvatarUrl = otherUserAvatarUrl
 
         // Initialize typing handler
@@ -80,9 +84,22 @@ struct ChatView: View {
                         
                         // 头像 - 可点击查看个人资料
                         Button {
-                            // Invalidate cache for fresh profile data (Issue #166)
-                            userService.invalidateCache(userId: conversationId)
-                            viewModel.showUserProfile = true
+                            Task {
+                                let targetUserId: String?
+                                if let otherUserId {
+                                    targetUserId = otherUserId
+                                } else if let resolvedOtherUserId {
+                                    targetUserId = resolvedOtherUserId
+                                } else {
+                                    targetUserId = await matrixBridge.resolveOtherUserIdForDirectRoom(roomId: conversationId)
+                                }
+                                await MainActor.run {
+                                    resolvedOtherUserId = targetUserId
+                                    guard let targetUserId else { return }
+                                    userService.invalidateCache(userId: targetUserId)
+                                    viewModel.showUserProfile = true
+                                }
+                            }
                         } label: {
                             AvatarView(
                                 image: nil,
@@ -90,6 +107,7 @@ struct ChatView: View {
                                 size: 36.s
                             )
                         }
+                        .disabled(otherUserId == nil && resolvedOtherUserId == nil)
                         .accessibilityLabel("\(userName)'s profile picture")
                         .accessibilityHint("Double tap to view profile")
                         
@@ -182,10 +200,22 @@ struct ChatView: View {
             }
         }
         .fullScreenCover(isPresented: $viewModel.showUserProfile) {
-            UserProfileView(
-                showUserProfile: $viewModel.showUserProfile,
-                userId: conversationId
-            )
+            if let otherUserId = (otherUserId ?? resolvedOtherUserId) {
+                UserProfileView(
+                    showUserProfile: $viewModel.showUserProfile,
+                    userId: otherUserId
+                )
+            } else {
+                VStack(spacing: 16) {
+                    Text("Profile unavailable")
+                        .font(.headline)
+                    Button("Close") {
+                        viewModel.showUserProfile = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding()
+            }
         }
         .fullScreenCover(isPresented: $viewModel.showCamera) {
             CameraView(image: $viewModel.cameraImage)

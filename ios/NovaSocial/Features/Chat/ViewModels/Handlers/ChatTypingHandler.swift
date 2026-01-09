@@ -49,22 +49,6 @@ final class ChatTypingHandler: ObservableObject {
         chatService.sendTypingStop(conversationId: conversationId)
     }
 
-    // MARK: - Incoming Typing Indicators
-
-    /// Handle incoming typing indicator from WebSocket
-    /// - Parameter typingData: The typing data received
-    func handleTypingIndicator(_ typingData: WebSocketTypingData) {
-        // Only show if it's for this conversation and not from me
-        guard typingData.conversationId == conversationId,
-              typingData.userId != currentUserId else { return }
-
-        if typingData.isTyping {
-            startTypingIndicator(userName: typingData.username)
-        } else {
-            stopTypingIndicator()
-        }
-    }
-
     /// Handle incoming typing indicator from Matrix
     /// - Parameter userIds: Array of user IDs who are typing
     func handleMatrixTypingIndicator(userIds: [String]) {

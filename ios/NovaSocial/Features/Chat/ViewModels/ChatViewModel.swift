@@ -115,6 +115,8 @@ final class ChatViewModel {
     // MARK: - Internal State
 
     private var matrixMessageHandlerSetup = false
+    private var matrixMessageObserverToken: UUID?
+    private var typingIndicatorObserverToken: UUID?
 
     // MARK: - Callbacks
 
@@ -360,7 +362,7 @@ final class ChatViewModel {
 
         matrixMessageHandlerSetup = true
 
-        MatrixBridgeService.shared.onMatrixMessage = { [weak self] conversationId, matrixMessage in
+        matrixMessageObserverToken = MatrixBridgeService.shared.addMatrixMessageObserver { [weak self] conversationId, matrixMessage in
             Task { @MainActor in
                 guard let self = self else { return }
                 guard conversationId == self.conversationId else { return }
@@ -416,7 +418,7 @@ final class ChatViewModel {
         }
 
         // Matrix typing indicator
-        MatrixBridgeService.shared.onTypingIndicator = { [weak self] conversationId, userIds in
+        typingIndicatorObserverToken = MatrixBridgeService.shared.addTypingIndicatorObserver { [weak self] conversationId, userIds in
             Task { @MainActor in
                 guard let self = self else { return }
                 guard conversationId == self.conversationId else { return }
@@ -1081,8 +1083,15 @@ final class ChatViewModel {
     // MARK: - Cleanup
 
     func cleanup() {
-        MatrixBridgeService.shared.onMatrixMessage = nil
-        MatrixBridgeService.shared.onTypingIndicator = nil
+        if let token = matrixMessageObserverToken {
+            MatrixBridgeService.shared.removeMatrixMessageObserver(token)
+        }
+        matrixMessageObserverToken = nil
+
+        if let token = typingIndicatorObserverToken {
+            MatrixBridgeService.shared.removeTypingIndicatorObserver(token)
+        }
+        typingIndicatorObserverToken = nil
         matrixMessageHandlerSetup = false
 
         Task {

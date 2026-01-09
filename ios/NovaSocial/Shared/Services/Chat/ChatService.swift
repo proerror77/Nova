@@ -27,7 +27,6 @@ enum ChatServiceError: LocalizedError {
 /// Chat Service - 聊天消息服务
 /// 职责：
 /// - 发送/接收消息（REST API）
-/// - 实时消息推送（WebSocket）
 /// - 消息历史管理
 /// - 会话管理
 /// - Matrix E2EE integration (when enabled)
@@ -41,16 +40,6 @@ final class ChatService {
     // MARK: - Properties
 
     private let client = APIClient.shared
-
-    // Thread-safe WebSocket state manager
-    private let wsStateManager = WebSocketStateManager()
-
-    /// WebSocket消息接收回调
-    /// 当收到新消息时，会调用这个闭包
-    @MainActor var onMessageReceived: ((Message) -> Void)?
-
-    /// WebSocket连接状态变化回调
-    @MainActor var onConnectionStatusChanged: ((Bool) -> Void)?
 
     /// E2EE Service for client-side encryption
     /// Note: Optional because E2EE may not be initialized (requires device registration)
@@ -1092,264 +1081,23 @@ final class ChatService {
         return identity.deviceId
     }
 
-    // MARK: - WebSocket - Real-time Messaging
-
-    /// 连接WebSocket以接收实时消息
-    /// ⚠️ 注意：需要先登录获取JWT token
-    func connectWebSocket(conversationId: String, userId: String) {
-        guard let token = client.getAuthToken() else {
-            #if DEBUG
-            print("[ChatService] WebSocket connection failed: No auth token")
-            #endif
-            return
-        }
-
-        guard UUID(uuidString: conversationId) != nil else {
-            #if DEBUG
-            print("[ChatService] WebSocket connection failed: Invalid conversationId: \(conversationId)")
-            #endif
-            return
-        }
-
-        guard UUID(uuidString: userId) != nil else {
-            #if DEBUG
-            print("[ChatService] WebSocket connection failed: Invalid userId: \(userId)")
-            #endif
-            return
-        }
-
-        // 构建WebSocket URL
-        let baseURL = APIConfig.current.baseURL.replacingOccurrences(of: "https://", with: "wss://")
-                                                .replacingOccurrences(of: "http://", with: "ws://")
-        guard var components = URLComponents(string: "\(baseURL)\(APIConfig.Chat.websocket)") else {
-            #if DEBUG
-            print("[ChatService] WebSocket URL invalid")
-            #endif
-            return
-        }
-
-        components.queryItems = [
-            URLQueryItem(name: "conversation_id", value: conversationId),
-            URLQueryItem(name: "user_id", value: userId),
-        ]
-
-        guard let url = components.url else {
-            #if DEBUG
-            print("[ChatService] WebSocket URL invalid after adding query params")
-            #endif
-            return
-        }
-
-        // 创建WebSocket请求
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
-        // 创建WebSocket任务
-        let task = URLSession.shared.webSocketTask(with: request)
-        task.resume()
-
-        Task {
-            await wsStateManager.setTask(task)
-            await wsStateManager.setIsConnected(true)
-        }
-
-        Task { @MainActor in
-            self.onConnectionStatusChanged?(true)
-        }
-
-        #if DEBUG
-        print("[ChatService] WebSocket connected to \(url)")
-        #endif
-
-        // 开始接收消息
-        receiveMessage(task: task)
-    }
-
-    /// 断开WebSocket连接
-    func disconnectWebSocket() {
-        Task {
-            await wsStateManager.cancelTask()
-        }
-
-        Task { @MainActor in
-            self.onConnectionStatusChanged?(false)
-        }
-
-        #if DEBUG
-        print("[ChatService] WebSocket disconnected")
-        #endif
-    }
-
-    /// 接收WebSocket消息（递归调用）
-    private func receiveMessage(task: URLSessionWebSocketTask) {
-        task.receive { [weak self] result in
-            guard let self = self else { return }
-
-            switch result {
-            case .success(let message):
-                switch message {
-                case .string(let text):
-                    Task { await self.handleWebSocketMessage(text) }
-                case .data(let data):
-                    if let text = String(data: data, encoding: .utf8) {
-                        Task { await self.handleWebSocketMessage(text) }
-                    }
-                @unknown default:
-                    break
-                }
-
-                // 继续接收下一条消息
-                self.receiveMessage(task: task)
-
-            case .failure(let error):
-                #if DEBUG
-                print("[ChatService] WebSocket receive error: \(error)")
-                #endif
-
-                // 连接断开
-                Task {
-                    await self.wsStateManager.setIsConnected(false)
-                }
-                Task { @MainActor in
-                    self.onConnectionStatusChanged?(false)
-                }
-            }
-        }
-    }
-
-    /// WebSocket typing indicator callback
-    @MainActor var onTypingIndicator: ((WebSocketTypingData) -> Void)?
-    
-    /// WebSocket read receipt callback
-    @MainActor var onReadReceipt: ((WebSocketReadReceiptData) -> Void)?
-    
-    /// Handle incoming WebSocket message
-    /// Supports events: message.new, typing.indicator, message.read, connection.established
-    private func handleWebSocketMessage(_ text: String) async {
-        #if DEBUG
-        print("[ChatService] WebSocket message received: \(text.prefix(200))")
-        #endif
-
-        guard let data = text.data(using: .utf8) else { return }
-
-        do {
-            let decoder = JSONDecoder()
-            decoder.keyDecodingStrategy = .convertFromSnakeCase
-            decoder.dateDecodingStrategy = .iso8601
-
-            // First, try to decode as a typed event with "type" field
-            struct EventWrapper: Codable {
-                let type: String
-            }
-            
-            if let wrapper = try? decoder.decode(EventWrapper.self, from: data) {
-                switch wrapper.type {
-                case "message.new":
-                    // New message event
-                    struct NewMessageEvent: Codable {
-                        let type: String
-                        let data: WebSocketNewMessageData
-                    }
-                    let event = try decoder.decode(NewMessageEvent.self, from: data)
-                    let message = Message(
-                        id: event.data.id,
-                        conversationId: event.data.conversationId,
-                        senderId: event.data.senderId,
-                        content: "", // Encrypted content needs decryption
-                        type: ChatMessageType(rawValue: event.data.messageType) ?? .text,
-                        createdAt: event.data.createdAt,
-                        status: .delivered,
-                        encryptedContent: event.data.encryptedContent,
-                        nonce: event.data.nonce
-                    )
-                    await MainActor.run {
-                        self.onMessageReceived?(message)
-                    }
-                    
-                case "typing.indicator":
-                    // Typing indicator event
-                    struct TypingEvent: Codable {
-                        let type: String
-                        let data: WebSocketTypingData
-                    }
-                    let event = try decoder.decode(TypingEvent.self, from: data)
-                    await MainActor.run {
-                        self.onTypingIndicator?(event.data)
-                    }
-                    
-                case "message.read":
-                    // Read receipt event
-                    struct ReadEvent: Codable {
-                        let type: String
-                        let data: WebSocketReadReceiptData
-                    }
-                    let event = try decoder.decode(ReadEvent.self, from: data)
-                    await MainActor.run {
-                        self.onReadReceipt?(event.data)
-                    }
-                    
-                case "connection.established":
-                    // Connection established - no action needed
-                    #if DEBUG
-                    print("[ChatService] WebSocket connection established")
-                    #endif
-                    
-                default:
-                    #if DEBUG
-                    print("[ChatService] Unknown WebSocket event type: \(wrapper.type)")
-                    #endif
-                }
-            } else {
-                // Fallback: try to decode as a Message directly (legacy format)
-                let message = try decoder.decode(Message.self, from: data)
-                await MainActor.run {
-                    self.onMessageReceived?(message)
-                }
-            }
-        } catch {
-            #if DEBUG
-            print("[ChatService] Failed to decode WebSocket message: \(error)")
-            #endif
-        }
-    }
-    
     // MARK: - Matrix SDK - Typing Indicators
 
     /// 發送打字開始指示器 - 優先使用 Matrix SDK
     /// - Parameter conversationId: 會話 ID
     func sendTypingStart(conversationId: String) {
         Task {
-            // 優先使用 Matrix SDK
-            if await MainActor.run(body: { MatrixBridgeService.shared.isInitialized }) {
-                do {
-                    try await MatrixBridgeService.shared.setTyping(conversationId: conversationId, isTyping: true)
-                    #if DEBUG
-                    print("[ChatService] ✅ Typing start sent via Matrix SDK")
-                    #endif
-                    return
-                } catch {
-                    #if DEBUG
-                    print("[ChatService] Matrix typing start failed, falling back to WebSocket: \(error)")
-                    #endif
-                }
+            guard await MainActor.run(body: { MatrixBridgeService.shared.isInitialized }) else {
+                return
             }
-
-            // Fallback: WebSocket
-            guard await wsStateManager.getIsConnected(),
-                  let task = await wsStateManager.getTask() else { return }
-
-            let event = TypingStartEvent(data: TypingEventData(conversationId: conversationId))
-
             do {
-                let encoder = JSONEncoder()
-                encoder.keyEncodingStrategy = .convertToSnakeCase
-                let data = try encoder.encode(event)
-                if let text = String(data: data, encoding: .utf8) {
-                    try await task.send(.string(text))
-                }
+                try await MatrixBridgeService.shared.setTyping(conversationId: conversationId, isTyping: true)
+                #if DEBUG
+                print("[ChatService] ✅ Typing start sent via Matrix SDK")
+                #endif
             } catch {
                 #if DEBUG
-                print("[ChatService] Failed to send typing.start via WebSocket: \(error)")
+                print("[ChatService] Matrix typing start failed: \(error)")
                 #endif
             }
         }
@@ -1359,37 +1107,17 @@ final class ChatService {
     /// - Parameter conversationId: 會話 ID
     func sendTypingStop(conversationId: String) {
         Task {
-            // 優先使用 Matrix SDK
-            if await MainActor.run(body: { MatrixBridgeService.shared.isInitialized }) {
-                do {
-                    try await MatrixBridgeService.shared.setTyping(conversationId: conversationId, isTyping: false)
-                    #if DEBUG
-                    print("[ChatService] ✅ Typing stop sent via Matrix SDK")
-                    #endif
-                    return
-                } catch {
-                    #if DEBUG
-                    print("[ChatService] Matrix typing stop failed, falling back to WebSocket: \(error)")
-                    #endif
-                }
+            guard await MainActor.run(body: { MatrixBridgeService.shared.isInitialized }) else {
+                return
             }
-
-            // Fallback: WebSocket
-            guard await wsStateManager.getIsConnected(),
-                  let task = await wsStateManager.getTask() else { return }
-
-            let event = TypingStopEvent(data: TypingEventData(conversationId: conversationId))
-
             do {
-                let encoder = JSONEncoder()
-                encoder.keyEncodingStrategy = .convertToSnakeCase
-                let data = try encoder.encode(event)
-                if let text = String(data: data, encoding: .utf8) {
-                    try await task.send(.string(text))
-                }
+                try await MatrixBridgeService.shared.setTyping(conversationId: conversationId, isTyping: false)
+                #if DEBUG
+                print("[ChatService] ✅ Typing stop sent via Matrix SDK")
+                #endif
             } catch {
                 #if DEBUG
-                print("[ChatService] Failed to send typing.stop via WebSocket: \(error)")
+                print("[ChatService] Matrix typing stop failed: \(error)")
                 #endif
             }
         }
@@ -1515,8 +1243,5 @@ final class ChatService {
     // MARK: - Cleanup
 
     deinit {
-        // Actor-based cleanup handled asynchronously
-        // Note: Cannot await in deinit, but disconnectWebSocket() will handle cleanup
-        // If needed, call disconnectWebSocket() explicitly before releasing ChatService
     }
 }

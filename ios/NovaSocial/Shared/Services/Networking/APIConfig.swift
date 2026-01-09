@@ -556,9 +556,6 @@ struct APIConfig {
         }
         /// GET /nearby-users 獲取附近用戶
         static let getNearbyUsers = "/nearby-users"
-
-        /// WebSocket 連接端點
-        static let websocket = "/ws/chat"
     }
 
     // MARK: - Relationships & Privacy API (realtime-chat-service)

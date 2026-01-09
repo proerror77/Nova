@@ -112,6 +112,8 @@ struct UserProfileView: View {
     @State private var userData: UserProfileData? = nil  // 快取優先：初始為 nil，不使用佔位數據
     @State private var isLoading = false  // 初始不顯示載入狀態，等檢查快取後決定
     @State private var isLoadingPosts = false  // 單獨追蹤帖子載入狀態
+    @State private var resolvedUserId: String? = nil
+    @State private var loadErrorMessage: String? = nil
 
     @State private var selectedTab: ProfileTab = .posts
     @State private var isFollowing = true
@@ -665,7 +667,7 @@ struct UserProfileView: View {
         }
         .sheet(isPresented: $showBlockReportSheet) {
             BlockReportSheet(
-                userId: userId,
+                userId: resolvedUserId ?? userData?.userId ?? userId,
                 username: userData?.username ?? "",
                 onBlocked: {
                     // 封鎖後關閉個人資料頁面
@@ -676,6 +678,16 @@ struct UserProfileView: View {
                 }
             )
         }
+        .alert("Unable to load profile", isPresented: Binding(
+            get: { loadErrorMessage != nil },
+            set: { if !$0 { loadErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {
+                loadErrorMessage = nil
+            }
+        } message: {
+            Text(loadErrorMessage ?? "Unknown error")
+        }
     }
 
     // MARK: - 加载用户数据
@@ -684,10 +696,15 @@ struct UserProfileView: View {
         print("[UserProfile] 🔍 Loading profile for userId: \(userId)")
         #endif
 
+        loadErrorMessage = nil
+
+        let isUUID = UUID(uuidString: userId) != nil
+
         // 🔑 快取優先：先檢查快取，立即顯示已有數據，防止抖動
-        if let cached = userService.getCachedUser(userId: userId) {
+        if let cached = (isUUID ? userService.getCachedUser(userId: userId) : userService.getCachedUserByUsername(userId)) {
             await MainActor.run {
                 userData = UserProfileData(from: cached)
+                resolvedUserId = cached.id
             }
             #if DEBUG
             print("[UserProfile] ✅ Using cached profile for: \(cached.username)")
@@ -704,14 +721,15 @@ struct UserProfileView: View {
 
         do {
             // 1. 加载用户资料（會自動使用快取或從網路獲取）
-            let userProfile = try await userService.getUser(userId: userId)
+            let userProfile = try await (isUUID ? userService.getUser(userId: userId) : userService.getUserByUsername(userId))
+            resolvedUserId = userProfile.id
 
             #if DEBUG
             print("[UserProfile] ✅ API returned user: id=\(userProfile.id), username=\(userProfile.username), displayName=\(userProfile.displayName ?? "nil")")
             #endif
 
             // 2. 加载用户发布的帖子
-            let postsResponse = try await contentService.getPostsByAuthor(authorId: userId, limit: 50, offset: 0)
+            let postsResponse = try await contentService.getPostsByAuthor(authorId: userProfile.id, limit: 50, offset: 0)
 
             // 3. 将 Post 转换为 UserProfilePostData
             let userPosts = postsResponse.posts.map { post in
@@ -754,11 +772,8 @@ struct UserProfileView: View {
             print("[UserProfile] Failed to load user data: \(error)")
             #endif
 
-            // 加载失败时使用占位数据（僅當完全沒有數據時）
             await MainActor.run {
-                if userData == nil {
-                    userData = .placeholder
-                }
+                loadErrorMessage = error.localizedDescription
                 isLoading = false
                 isLoadingPosts = false
             }
@@ -776,11 +791,15 @@ struct UserProfileView: View {
         }
 
         #if DEBUG
-        print("[UserProfile] 🔖 Loading saved posts for userId: \(userId)")
+        print("[UserProfile] 🔖 Loading saved posts for userId: \(resolvedUserId ?? userData?.userId ?? userId)")
         #endif
 
         do {
-            let response = try await contentService.getUserSavedPosts(userId: userId, limit: 50, offset: 0)
+            let response = try await contentService.getUserSavedPosts(
+                userId: resolvedUserId ?? userData?.userId ?? userId,
+                limit: 50,
+                offset: 0
+            )
 
             // 将 Post 转换为 UserProfilePostData
             let savedPosts = response.posts.map { post in
@@ -822,12 +841,13 @@ struct UserProfileView: View {
         }
 
         #if DEBUG
-        print("[UserProfile] ❤️ Loading liked posts for userId: \(userId)")
+        print("[UserProfile] ❤️ Loading liked posts for userId: \(resolvedUserId ?? userData?.userId ?? userId)")
         #endif
 
         do {
             // Fetch liked post IDs from social-service, then hydrate via content-service
-            let (postIds, _) = try await socialService.getUserLikedPosts(userId: userId, limit: 50, offset: 0)
+            let idForRequests = resolvedUserId ?? userData?.userId ?? userId
+            let (postIds, _) = try await socialService.getUserLikedPosts(userId: idForRequests, limit: 50, offset: 0)
 
             #if DEBUG
             print("[UserProfile] ❤️ Fetched \(postIds.count) liked post IDs from social-service")

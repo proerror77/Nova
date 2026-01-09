@@ -54,6 +54,21 @@ final class MatrixBridgeService: @unchecked Sendable {
     /// Used as fallback when Matrix SDK hasn't synced member info yet
     private var dmDisplayNameCache: [String: String] = [:]
 
+    // MARK: - Recently Left Rooms (SDK Cache Workaround)
+
+    /// Workaround for Matrix SDK room-list cache delay after leaving a room.
+    /// We temporarily hide rooms that were just left so they don't "reappear" on refresh.
+    @ObservationIgnored private var recentlyLeftRoomExpiryById: [String: TimeInterval] = [:]
+    private static let recentlyLeftRoomsDefaultsKey = "MatrixBridgeService.recentlyLeftRooms.expiry.v1"
+    private static let recentlyLeftRoomTTL: TimeInterval = 600
+
+    // MARK: - Hidden Rooms (Forget / Permanent Hide)
+
+    /// Permanent client-side hide for rooms the user "deleted".
+    /// This avoids Matrix SDK cache delays and matches "Forget" semantics.
+    @ObservationIgnored private var hiddenRoomHiddenAtById: [String: TimeInterval] = [:]
+    private static let hiddenRoomsDefaultsKey = "MatrixBridgeService.hiddenRooms.hiddenAt.v1"
+
     // MARK: - Callbacks
 
     /// Called when a new message arrives via Matrix
@@ -64,6 +79,46 @@ final class MatrixBridgeService: @unchecked Sendable {
 
     /// Called when room list updates
     var onRoomListUpdated: (([MatrixRoom]) -> Void)?
+
+    // MARK: - Multi-subscriber Observers
+
+    typealias MatrixMessageObserver = (String, MatrixMessage) -> Void
+    typealias TypingIndicatorObserver = (String, [String]) -> Void
+    typealias RoomListObserver = ([MatrixRoom]) -> Void
+
+    @ObservationIgnored private var matrixMessageObservers: [UUID: MatrixMessageObserver] = [:]
+    @ObservationIgnored private var typingIndicatorObservers: [UUID: TypingIndicatorObserver] = [:]
+    @ObservationIgnored private var roomListObservers: [UUID: RoomListObserver] = [:]
+
+    func addMatrixMessageObserver(_ handler: @escaping MatrixMessageObserver) -> UUID {
+        let token = UUID()
+        matrixMessageObservers[token] = handler
+        return token
+    }
+
+    func removeMatrixMessageObserver(_ token: UUID) {
+        matrixMessageObservers.removeValue(forKey: token)
+    }
+
+    func addTypingIndicatorObserver(_ handler: @escaping TypingIndicatorObserver) -> UUID {
+        let token = UUID()
+        typingIndicatorObservers[token] = handler
+        return token
+    }
+
+    func removeTypingIndicatorObserver(_ token: UUID) {
+        typingIndicatorObservers.removeValue(forKey: token)
+    }
+
+    func addRoomListObserver(_ handler: @escaping RoomListObserver) -> UUID {
+        let token = UUID()
+        roomListObservers[token] = handler
+        return token
+    }
+
+    func removeRoomListObserver(_ token: UUID) {
+        roomListObservers.removeValue(forKey: token)
+    }
 
     // MARK: - Cancellables
 
@@ -76,6 +131,8 @@ final class MatrixBridgeService: @unchecked Sendable {
         print("[MatrixBridge] Initialized")
         #endif
 
+        loadRecentlyLeftRooms()
+        loadHiddenRooms()
         setupMessageHandlers()
         observeConnectionState()
     }
@@ -964,6 +1021,10 @@ final class MatrixBridgeService: @unchecked Sendable {
         // Matrix-first: treat roomId as the conversationId if no Nova mapping exists.
         let conversationId = (try? await getConversationId(for: message.roomId)) ?? message.roomId
         onMatrixMessage?(conversationId, message)
+        let observers = matrixMessageObservers.values
+        for handler in observers {
+            handler(conversationId, message)
+        }
     }
 
     private func handleTypingIndicator(roomId: String, userIds: [String]) async {
@@ -972,6 +1033,10 @@ final class MatrixBridgeService: @unchecked Sendable {
         // Convert Matrix user IDs to Nova user IDs
         let novaUserIds = userIds.compactMap { matrixService.convertToNovaUserId(matrixUserId: $0) }
         onTypingIndicator?(conversationId, novaUserIds)
+        let observers = typingIndicatorObservers.values
+        for handler in observers {
+            handler(conversationId, novaUserIds)
+        }
     }
 
     private func handleRoomUpdated(_ room: MatrixRoom) {
@@ -979,6 +1044,10 @@ final class MatrixBridgeService: @unchecked Sendable {
         Task {
             if let rooms = try? await matrixService.getJoinedRooms() {
                 onRoomListUpdated?(rooms)
+                let observers = roomListObservers.values
+                for handler in observers {
+                    handler(rooms)
+                }
             }
         }
     }
@@ -991,6 +1060,80 @@ final class MatrixBridgeService: @unchecked Sendable {
     func clearMapping(conversationId: String, roomId: String) {
         conversationToRoomMap.removeValue(forKey: conversationId)
         roomToConversationMap.removeValue(forKey: roomId)
+    }
+
+    // MARK: - Recently Left Rooms Helpers
+
+    private func loadRecentlyLeftRooms() {
+        guard let stored = UserDefaults.standard.dictionary(forKey: Self.recentlyLeftRoomsDefaultsKey) as? [String: Double] else {
+            recentlyLeftRoomExpiryById = [:]
+            return
+        }
+        recentlyLeftRoomExpiryById = stored
+        pruneRecentlyLeftRoomsIfNeeded()
+    }
+
+    private func persistRecentlyLeftRooms() {
+        UserDefaults.standard.set(recentlyLeftRoomExpiryById, forKey: Self.recentlyLeftRoomsDefaultsKey)
+    }
+
+    private func pruneRecentlyLeftRoomsIfNeeded(now: TimeInterval = Date().timeIntervalSince1970) {
+        let before = recentlyLeftRoomExpiryById.count
+        recentlyLeftRoomExpiryById = recentlyLeftRoomExpiryById.filter { _, expiry in expiry > now }
+        if recentlyLeftRoomExpiryById.count != before {
+            persistRecentlyLeftRooms()
+        }
+    }
+
+    private func reconcileRecentlyLeftRooms(joinedRoomIds: Set<String>) {
+        // If a room is no longer returned by getJoinedRooms(), leaving has taken effect; drop tombstone early.
+        let before = recentlyLeftRoomExpiryById.count
+        recentlyLeftRoomExpiryById = recentlyLeftRoomExpiryById.filter { roomId, _ in
+            joinedRoomIds.contains(roomId)
+        }
+        if recentlyLeftRoomExpiryById.count != before {
+            persistRecentlyLeftRooms()
+        }
+    }
+
+    func markRoomRecentlyLeft(roomId: String, ttl: TimeInterval? = nil) {
+        let expiry = Date().timeIntervalSince1970 + (ttl ?? MatrixBridgeService.recentlyLeftRoomTTL)
+        recentlyLeftRoomExpiryById[roomId] = expiry
+        persistRecentlyLeftRooms()
+    }
+
+    func isRoomRecentlyLeft(roomId: String, now: TimeInterval = Date().timeIntervalSince1970) -> Bool {
+        pruneRecentlyLeftRoomsIfNeeded(now: now)
+        guard let expiry = recentlyLeftRoomExpiryById[roomId] else { return false }
+        return expiry > now
+    }
+
+    // MARK: - Hidden Rooms Helpers
+
+    private func loadHiddenRooms() {
+        guard let stored = UserDefaults.standard.dictionary(forKey: Self.hiddenRoomsDefaultsKey) as? [String: Double] else {
+            hiddenRoomHiddenAtById = [:]
+            return
+        }
+        hiddenRoomHiddenAtById = stored
+    }
+
+    private func persistHiddenRooms() {
+        UserDefaults.standard.set(hiddenRoomHiddenAtById, forKey: Self.hiddenRoomsDefaultsKey)
+    }
+
+    func hideRoomPermanently(roomId: String) {
+        hiddenRoomHiddenAtById[roomId] = Date().timeIntervalSince1970
+        persistHiddenRooms()
+    }
+
+    func unhideRoom(roomId: String) {
+        guard hiddenRoomHiddenAtById.removeValue(forKey: roomId) != nil else { return }
+        persistHiddenRooms()
+    }
+
+    func isRoomHidden(roomId: String) -> Bool {
+        hiddenRoomHiddenAtById[roomId] != nil
     }
 
     // MARK: - Backend API Calls (moved to MatrixBridgeService+API.swift)
@@ -1121,6 +1264,7 @@ extension MatrixBridgeService {
         let unreadCount: Int        // Unread message count
         let isEncrypted: Bool       // E2EE status
         let isDirect: Bool          // 1:1 vs group
+        let otherUserId: String?    // Nova userId for DM (nil for groups)
         let avatarURL: String?      // Avatar URL
         let memberCount: Int        // Number of members
         let memberAvatars: [String?]  // Member avatar URLs (for stacked avatars in groups)
@@ -1140,9 +1284,13 @@ extension MatrixBridgeService {
         #endif
 
         let rooms = try await matrixService.getJoinedRooms()
+        reconcileRecentlyLeftRooms(joinedRoomIds: Set(rooms.map { $0.id }))
+        let visibleRooms = rooms.filter { room in
+            !isRoomRecentlyLeft(roomId: room.id) && !isRoomHidden(roomId: room.id)
+        }
 
         #if DEBUG
-        print("[MatrixBridge] Found \(rooms.count) Matrix rooms")
+        print("[MatrixBridge] Found \(rooms.count) Matrix rooms (\(visibleRooms.count) visible)")
         #endif
 
         // Convert MatrixRoom to MatrixConversationInfo (with optional Nova profile enrichment)
@@ -1150,14 +1298,14 @@ extension MatrixBridgeService {
 
         // Process rooms in PARALLEL for much faster loading
         let conversations: [MatrixConversationInfo] = await withTaskGroup(of: MatrixConversationInfo?.self) { group in
-            for room in rooms {
+            for room in visibleRooms {
                 group.addTask {
                     await self.enrichRoom(room, currentUserId: currentUserId)
                 }
             }
 
             var results: [MatrixConversationInfo] = []
-            results.reserveCapacity(rooms.count)
+            results.reserveCapacity(visibleRooms.count)
             for await result in group {
                 if let conversation = result {
                     results.append(conversation)
@@ -1186,6 +1334,7 @@ extension MatrixBridgeService {
     private func enrichRoom(_ room: MatrixRoom, currentUserId: String) async -> MatrixConversationInfo? {
             var displayName: String
             var avatarURL: String?
+            var otherUserId: String?
 
             // Helper function to check if a string looks like a Matrix room ID
             func looksLikeRoomId(_ name: String) -> Bool {
@@ -1270,9 +1419,11 @@ extension MatrixBridgeService {
                             displayName = name
                         }
                         // Fall back to other user's username
-                        else if let other = conversation.members.first(where: { $0.userId != currentUserId }),
-                                  !other.username.isEmpty {
-                            displayName = other.username
+                        else if let other = conversation.members.first(where: { $0.userId != currentUserId }) {
+                            otherUserId = other.userId
+                            if !other.username.isEmpty {
+                                displayName = other.username
+                            }
                         }
 
                         // Get avatar from conversation
@@ -1302,6 +1453,9 @@ extension MatrixBridgeService {
                                 }
                                 return !member.userId.contains(currentUserId)
                             }) {
+                                if otherUserId == nil {
+                                    otherUserId = matrixService.convertToNovaUserId(matrixUserId: otherMember.userId)
+                                }
                                 #if DEBUG
                                 print("[MatrixBridge]   👤 Found other member: \(otherMember.userId), displayName: \(otherMember.displayName ?? "nil"), avatar: \(otherMember.avatarUrl ?? "nil")")
                                 #endif
@@ -1337,6 +1491,9 @@ extension MatrixBridgeService {
                                     // Matrix member has no displayName, try to look up via Nova UserService
                                     // But only update displayName if we actually need name enrichment
                                     if let novaIdentifier = matrixService.convertToNovaUserId(matrixUserId: otherMember.userId) {
+                                        if otherUserId == nil {
+                                            otherUserId = novaIdentifier
+                                        }
                                         #if DEBUG
                                         print("[MatrixBridge]   🔍 Looking up user profile for: \(novaIdentifier)")
                                         #endif
@@ -1425,15 +1582,18 @@ extension MatrixBridgeService {
                             print("[MatrixBridge]   📨 lastMessage sender: \(senderId), isOtherUser: \(isOtherUser)")
                             #endif
 
-                            // Only use sender info if it's the other user (not current user)
-                            if isOtherUser {
-                                // Try to convert Matrix sender ID to Nova user ID and look up
-                                if let novaIdentifier = senderNovaId {
-                                    // Check if identifier is UUID or username
-                                    let isUUID = novaIdentifier.count == 36 && novaIdentifier.contains("-")
-                                    let userProfile: UserProfile? = try? await (isUUID
-                                        ? UserService.shared.getUser(userId: novaIdentifier)
-                                        : UserService.shared.getUserByUsername(novaIdentifier))
+	                            // Only use sender info if it's the other user (not current user)
+	                            if isOtherUser {
+	                                // Try to convert Matrix sender ID to Nova user ID and look up
+	                                if let novaIdentifier = senderNovaId {
+	                                    if otherUserId == nil {
+	                                        otherUserId = novaIdentifier
+	                                    }
+	                                    // Check if identifier is UUID or username
+	                                    let isUUID = novaIdentifier.count == 36 && novaIdentifier.contains("-")
+	                                    let userProfile: UserProfile? = try? await (isUUID
+	                                        ? UserService.shared.getUser(userId: novaIdentifier)
+	                                        : UserService.shared.getUserByUsername(novaIdentifier))
 
                                     if let userProfile = userProfile {
                                         displayName = userProfile.displayName ?? userProfile.username
@@ -1455,12 +1615,15 @@ extension MatrixBridgeService {
                                     let withoutAt = String(senderId.dropFirst())
                                     if let colonIdx = withoutAt.firstIndex(of: ":") {
                                         let localpart = String(withoutAt.prefix(upTo: colonIdx))
-                                        if localpart.hasPrefix("nova-") {
-                                            let identifier = String(localpart.dropFirst(5))
-                                            // Check if it's a UUID (36 chars with hyphens)
-                                            if identifier.count == 36 && identifier.contains("-") {
-                                                // UUID - use generic fallback
-                                                displayName = "Chat"
+	                                        if localpart.hasPrefix("nova-") {
+	                                            let identifier = String(localpart.dropFirst(5))
+	                                            if otherUserId == nil {
+	                                                otherUserId = identifier
+	                                            }
+	                                            // Check if it's a UUID (36 chars with hyphens)
+	                                            if identifier.count == 36 && identifier.contains("-") {
+	                                                // UUID - use generic fallback
+	                                                displayName = "Chat"
                                             } else {
                                                 // Username - show it
                                                 displayName = identifier
@@ -1507,7 +1670,13 @@ extension MatrixBridgeService {
                 // For groups, fetch first 3 members (excluding current user) for stacked avatars
                 do {
                     let members = try await matrixService.getRoomMembers(roomId: room.id)
-                    let otherMembers = members.filter { $0.userId != currentUserId }.prefix(3)
+                    let currentMatrixUserId = matrixService.userId
+                    let otherMembers = members.filter { member in
+                        if let currentMatrixUserId {
+                            return member.userId != currentMatrixUserId
+                        }
+                        return true
+                    }.prefix(3)
                     for member in otherMembers {
                         memberAvatars.append(member.avatarUrl)
                         memberNames.append(member.displayName ?? member.userId)
@@ -1527,6 +1696,7 @@ extension MatrixBridgeService {
             unreadCount: room.unreadCount,
             isEncrypted: room.isEncrypted,
             isDirect: isLikelyDirect,  // Use corrected detection, not just room.isDirect
+            otherUserId: otherUserId,
             avatarURL: avatarURL,
             memberCount: room.memberCount,
             memberAvatars: memberAvatars,
@@ -1602,6 +1772,7 @@ extension MatrixBridgeService {
                         unreadCount: room.unreadCount,
                         isEncrypted: room.isEncrypted,
                         isDirect: true,
+                        otherUserId: userId,
                         avatarURL: room.avatarURL,
                         memberCount: room.memberCount,
                         memberAvatars: [],
@@ -1644,6 +1815,7 @@ extension MatrixBridgeService {
                             unreadCount: room.unreadCount,
                             isEncrypted: room.isEncrypted,
                             isDirect: true,
+                            otherUserId: userId,
                             avatarURL: room.avatarURL,
                             memberCount: room.memberCount,
                             memberAvatars: [],
@@ -1684,6 +1856,7 @@ extension MatrixBridgeService {
                             unreadCount: room.unreadCount,
                             isEncrypted: room.isEncrypted,
                             isDirect: true,
+                            otherUserId: userId,
                             avatarURL: room.avatarURL,
                             memberCount: room.memberCount,
                             memberAvatars: [],
@@ -1762,6 +1935,9 @@ extension MatrixBridgeService {
             print("[MatrixBridge] ✅ Found existing DM room: \(existingRoom.id)")
             #endif
 
+            // Rejoin handling: if the user previously "forgot" this chat, make it visible again.
+            unhideRoom(roomId: existingRoom.id)
+
             await ensureNovaConversationMappingIfNeeded(
                 roomId: existingRoom.id,
                 participantIds: [userId],
@@ -1806,6 +1982,9 @@ extension MatrixBridgeService {
         print("[MatrixBridge] Created \(isPrivate ? "private" : "regular") Matrix room: \(roomId)")
         #endif
 
+        // Ensure newly-created chat isn't stuck hidden from a previous delete.
+        unhideRoom(roomId: roomId)
+
         await ensureNovaConversationMappingIfNeeded(
             roomId: roomId,
             participantIds: [userId],
@@ -1830,6 +2009,7 @@ extension MatrixBridgeService {
             unreadCount: 0,
             isEncrypted: isPrivate,
             isDirect: true,
+            otherUserId: userId,
             avatarURL: nil,
             memberCount: 2,
             memberAvatars: [],
@@ -1883,6 +2063,9 @@ extension MatrixBridgeService {
             isDirect: false
         )
 
+        // Ensure newly-created group isn't hidden.
+        unhideRoom(roomId: roomId)
+
         return MatrixConversationInfo(
             id: roomId,
             displayName: name,
@@ -1891,6 +2074,7 @@ extension MatrixBridgeService {
             unreadCount: 0,
             isEncrypted: isPrivate,
             isDirect: false,
+            otherUserId: nil,
             avatarURL: nil,
             memberCount: userIds.count + 1,  // Including current user
             memberAvatars: [],  // Will be populated on next refresh

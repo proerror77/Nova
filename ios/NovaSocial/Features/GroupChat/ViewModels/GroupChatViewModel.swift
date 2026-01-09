@@ -199,6 +199,8 @@ final class GroupChatViewModel {
     // MARK: - Internal State
 
     private var matrixMessageHandlerSetup = false
+    private var matrixMessageObserverToken: UUID?
+    private var hasLoadedMemberInfo = false
 
     // MARK: - Computed Properties
 
@@ -315,6 +317,9 @@ final class GroupChatViewModel {
                 try await matrixBridge.initialize()
             }
 
+            // Load member info (display names + avatars) before rendering messages
+            await loadMemberInfoIfNeeded()
+
             // Setup real-time message handler
             setupMatrixMessageHandler()
 
@@ -360,6 +365,40 @@ final class GroupChatViewModel {
         }
 
         isLoading = false
+    }
+
+    private func loadMemberInfoIfNeeded() async {
+        guard !hasLoadedMemberInfo else { return }
+        hasLoadedMemberInfo = true
+
+        do {
+            let members = try await matrixBridge.getRoomMembers(roomId: conversationId)
+            var updated: [String: GroupMemberInfo] = [:]
+            updated.reserveCapacity(members.count)
+            for member in members {
+                let display = member.displayName?.isEmpty == false ? member.displayName! : extractDisplayName(from: member.userId)
+                updated[member.userId] = GroupMemberInfo(
+                    userId: member.userId,
+                    displayName: display,
+                    avatarUrl: member.avatarUrl
+                )
+            }
+            memberInfo = updated
+        } catch {
+            #if DEBUG
+            print("[GroupChatViewModel] ⚠️ Failed to load room members for \(conversationId): \(error)")
+            #endif
+        }
+    }
+
+    private func extractDisplayName(from matrixUserId: String) -> String {
+        if matrixUserId.hasPrefix("@") {
+            let parts = matrixUserId.dropFirst().split(separator: ":")
+            if let localpart = parts.first {
+                return String(localpart)
+            }
+        }
+        return matrixUserId
     }
 
     private func resolveMatrixMediaForLoadedMessages() {
@@ -423,7 +462,7 @@ final class GroupChatViewModel {
 
         matrixMessageHandlerSetup = true
 
-        MatrixBridgeService.shared.onMatrixMessage = { [weak self] conversationId, matrixMessage in
+        matrixMessageObserverToken = MatrixBridgeService.shared.addMatrixMessageObserver { [weak self] conversationId, matrixMessage in
             Task { @MainActor in
                 guard let self = self else { return }
                 guard conversationId == self.conversationId else { return }
@@ -475,6 +514,24 @@ final class GroupChatViewModel {
 
         #if DEBUG
         print("[GroupChatViewModel] Matrix message handler setup complete")
+        #endif
+    }
+
+    func cleanup() {
+        if let token = matrixMessageObserverToken {
+            MatrixBridgeService.shared.removeMatrixMessageObserver(token)
+        }
+        matrixMessageObserverToken = nil
+        matrixMessageHandlerSetup = false
+
+        Task {
+            await matrixBridge.stopListening(conversationId: conversationId)
+        }
+
+        audioRecorder.cleanupTempFiles()
+
+        #if DEBUG
+        print("[GroupChatViewModel] Cleanup completed for conversation \(conversationId)")
         #endif
     }
 

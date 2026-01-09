@@ -317,7 +317,7 @@ Use ViewModel preview helper:
 - [ ] Add offline caching and retry logic
 - [ ] Implement pagination for posts
 - [ ] Add image caching for avatars and post images
-- [ ] Implement WebSocket for real-time updates
+- [x] Real-time updates via Matrix (MatrixBridgeService)
 - [ ] Add analytics tracking
 - [ ] Implement proper error recovery strategies
 - [ ] Add unit tests for API service layer
