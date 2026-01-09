@@ -297,16 +297,6 @@ impl SocialService for SocialServiceImpl {
             .await
             .map_err(|e| Status::internal(format!("Failed to create like: {}", e)))?;
 
-        // Read accurate count from PostgreSQL (source of truth)
-        // PostgreSQL trigger already updated post_counters
-        // Use rate-limited refresh to prevent thundering herd on hot posts
-        let like_count = self
-            .state
-            .counter_service
-            .refresh_like_count_rate_limited(post_id)
-            .await
-            .unwrap_or(0);
-
         // Emit Kafka events asynchronously (fire-and-forget for analytics/notifications)
         if was_created {
             if let Some(producer) = &self.state.event_producer {
@@ -366,7 +356,6 @@ impl SocialService for SocialServiceImpl {
 
         Ok(Response::new(CreateLikeResponse {
             success: true,
-            like_count,
         }))
     }
 
@@ -384,16 +373,6 @@ impl SocialService for SocialServiceImpl {
             .await
             .map_err(|e| Status::internal(format!("Failed to delete like: {}", e)))?;
 
-        // Read accurate count from PostgreSQL (source of truth)
-        // PostgreSQL trigger already updated post_counters
-        // Use rate-limited refresh to prevent thundering herd on hot posts
-        let like_count = self
-            .state
-            .counter_service
-            .refresh_like_count_rate_limited(post_id)
-            .await
-            .unwrap_or(0);
-
         // Emit Kafka event asynchronously (fire-and-forget for analytics/notifications)
         if was_deleted {
             if let Some(producer) = &self.state.event_producer {
@@ -410,7 +389,6 @@ impl SocialService for SocialServiceImpl {
 
         Ok(Response::new(DeleteLikeResponse {
             success: true,
-            like_count,
         }))
     }
 
