@@ -384,13 +384,14 @@ struct ChatView: View {
 
                     // Message list
                     ForEach(viewModel.messages) { message in
+                        let myName = AuthenticationManager.shared.currentUser?.displayName ?? AuthenticationManager.shared.currentUser?.username ?? "Me"
                         MessageBubbleView(
                             message: message,
                             audioPlayer: viewModel.audioPlayer,
                             senderAvatarUrl: otherUserAvatarUrl,
                             senderName: userName,
                             myAvatarUrl: viewModel.currentUserAvatarUrl,
-                            myName: viewModel.currentUserDisplayName,
+                            myName: myName,
                             onLongPress: { msg in
                                 viewModel.handleMessageLongPress(msg)
                             },
