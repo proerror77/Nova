@@ -463,8 +463,12 @@ struct PhoneRegistrationView: View {
             )
             if response.success, let token = response.verificationToken {
                 verificationToken = token
+                // Store verification token for later use
+                authManager.setPhoneVerificationToken(token, phoneNumber: fullPhoneNumber)
+
                 await MainActor.run {
-                    currentStep = .profileSetup
+                    // Navigate to invite code page first
+                    currentPage = .inviteCode
                 }
             } else {
                 errorMessage = response.message ?? "Verification failed"

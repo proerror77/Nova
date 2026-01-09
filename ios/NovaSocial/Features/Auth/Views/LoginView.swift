@@ -187,7 +187,7 @@ struct LoginView: View {
                             .stroke(emailError != nil ? Color.red : Color.white, lineWidth: 0.5)
                     )
 
-                TextField("", text: $email, prompt: Text("Email or mobile number")
+                TextField("", text: $email, prompt: Text("Email address")
                     .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .foregroundColor(.white))
                     .foregroundColor(.white)

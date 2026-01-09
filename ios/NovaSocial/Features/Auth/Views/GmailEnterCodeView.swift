@@ -67,8 +67,12 @@ struct GmailEnterCodeView: View {
                 Spacer().frame(height: 44.h)  // Status bar safe area
                 HStack(spacing: 8.s) {
                     Button(action: {
-                        // Navigate back to email registration
-                        currentPage = .createAccountEmail
+                        // Navigate back based on mode
+                        if mode == .login {
+                            currentPage = .login
+                        } else {
+                            currentPage = .createAccountPhoneNumber
+                        }
                     }) {
                         ZStack {
                             Circle()

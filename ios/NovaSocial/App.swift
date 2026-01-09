@@ -92,6 +92,9 @@ struct IceredApp: App {
                     case .phoneRegistration:
                         PhoneRegistrationView(currentPage: $currentPage)
                             .transition(.identity)
+                    case .phoneProfileSetup:
+                        PhoneProfileSetupView(currentPage: $currentPage)
+                            .transition(.identity)
                     case .phoneEnterCode(let phoneNumber):
                         PhoneEnterCodeView(currentPage: $currentPage, phoneNumber: phoneNumber)
                             .transition(.identity)
