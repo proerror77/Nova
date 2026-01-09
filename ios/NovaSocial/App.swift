@@ -98,6 +98,9 @@ struct IceredApp: App {
                     case .gmailEnterCode(let email):
                         GmailEnterCodeView(currentPage: $currentPage, email: email)
                             .transition(.identity)
+                    case .gmailEnterCodeLogin(let email):
+                        GmailEnterCodeView(currentPage: $currentPage, email: email, mode: .login)
+                            .transition(.identity)
                     case .phoneLogin:
                         PhoneLoginView(currentPage: $currentPage)
                             .transition(.identity)

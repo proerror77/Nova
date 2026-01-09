@@ -10,6 +10,7 @@ enum AppPage: Equatable {
     case phoneRegistration
     case phoneEnterCode(phoneNumber: String)
     case gmailEnterCode(email: String)
+    case gmailEnterCodeLogin(email: String)  // For login flow
     case forgotPassword
     case emailSentConfirmation(email: String)
     case resetPassword(token: String)
