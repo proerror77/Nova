@@ -126,6 +126,7 @@ struct UserProfileView: View {
     // MARK: - Services
     private let userService = UserService.shared
     private let contentService = ContentService()
+    private let socialService = SocialService()
 
     enum ProfileTab {
         case posts
