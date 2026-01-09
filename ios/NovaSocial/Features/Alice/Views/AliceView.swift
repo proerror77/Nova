@@ -1,4 +1,4 @@
-import SwiftUI
+ import SwiftUI
 
 // MARK: - Alice Model Data Structure
 struct AliceModel: Identifiable {
@@ -49,7 +49,7 @@ struct AliceView: View {
     @State private var showNewPost = false
     @State private var showWrite = false
     @State private var selectedModel = "grok-4"  // 預設使用 Grok 4
-    
+
     // MARK: - Voice Chat States
     @State private var showVoiceChat = false
 
@@ -58,6 +58,9 @@ struct AliceView: View {
     @State private var inputText = ""
     @State private var isWaitingForResponse = false
     @State private var errorMessage: String?
+
+    // MARK: - Keyboard State
+    @State private var keyboardHeight: CGFloat = 0
 
     // MARK: - AI Service
     private let aliceService = AliceService.shared
@@ -72,7 +75,7 @@ struct AliceView: View {
         // Grok 4 - X.AI 最新模型（推薦）
         models.append(AliceModel(
             name: "grok-4",  // 功能：使用 Grok API
-            displayName: "alice AI",  // UI 显示
+            displayName: "Alice",  // UI 显示
             description: "最新模型 ⭐️ 推薦"
         ))
 
@@ -177,258 +180,193 @@ struct AliceView: View {
 
     // MARK: - Alice 主内容
     private var aliceContent: some View {
-        ZStack(alignment: .bottom) {
-            // 内容区域
+        GeometryReader { geometry in
             ZStack {
-                // 背景色
-                DesignTokens.backgroundColor
+                // 背景
+                Color.white
                     .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                // MARK: - 顶部导航栏
                 VStack(spacing: 0) {
-                    Spacer()
-                    
-                    HStack {
-                        // 清除對話按鈕（左侧）- 固定宽度以平衡右侧
-                        Button(action: clearChat) {
-                            Image(systemName: "trash")
-                                .font(.system(size: 18.f))
-                                .foregroundColor(messages.isEmpty ? DesignTokens.textSecondary : DesignTokens.textPrimary)
-                        }
-                        .disabled(messages.isEmpty)
-                        .frame(width: 34.w, height: 18.h)
-                        .padding(.leading, 16.w)
-
+                    // MARK: - 顶部导航栏（绝对固定）
+                    VStack(spacing: 0) {
                         Spacer()
 
-                        // 模型名稱（中间）
-                        Text(aliceModels.first { $0.name == selectedModel }?.displayName ?? "alice")
-                            .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
-                            .foregroundColor(DesignTokens.textPrimary)
-                            .lineLimit(1)
-
-                        Spacer()
-
-                        // 右侧占位符保持对称
-                        Color.clear
-                            .frame(width: 34.w, height: 18.h)
-                            .padding(.trailing, 16.w)
-                    }
-                    .frame(height: 24.h)
-                    
-                    Spacer()
-                        .frame(height: 18.h)
-                    
-                    Rectangle()
-                        .fill(DesignTokens.borderColor)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 0.5)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 98.h)
-
-                // MARK: - 聊天消息区域
-                if messages.isEmpty {
-                    // 空状态 - 显示中间图标和建议问题
-                    ScrollView {
-                        VStack(spacing: 24) {
+                        HStack {
                             Spacer()
-                                .frame(height: 40)
 
-                            // Alice 图标
-                            Image("alice-center-icon")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 80, height: 80)
-
-                            // 欢迎文字
-                            VStack(spacing: 8) {
-                                Text("嗨！我是 Alice")
-                                    .font(Font.custom("SFProDisplay-Semibold", size: 20.f))
-                                    .foregroundColor(DesignTokens.textPrimary)
-
-                                Text("有什麼我可以幫你的嗎？")
-                                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                                    .foregroundColor(DesignTokens.textSecondary)
-                            }
-
-                            // 建議問題
-                            VStack(spacing: 12) {
-                                suggestionButton("今天有什麼熱門話題？", icon: "flame.fill")
-                                suggestionButton("幫我寫一篇貼文", icon: "pencil.line")
-                                suggestionButton("推薦一些有趣的內容", icon: "sparkles")
-                                suggestionButton("解釋一下這個功能", icon: "questionmark.circle")
-                            }
-                            .padding(.horizontal, 24)
+                            // 模型名稱（中间）
+                            Text(aliceModels.first { $0.name == selectedModel }?.displayName ?? "alice")
+                                .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
+                                .foregroundColor(DesignTokens.textPrimary)
+                                .lineLimit(1)
 
                             Spacer()
                         }
-                        .frame(maxWidth: .infinity)
+                        .frame(height: 24.h)
+
+                        Spacer()
+                            .frame(height: 18.h)
+
+                        Rectangle()
+                            .fill(DesignTokens.borderColor)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 0.5)
                     }
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        hideKeyboard()
-                    }
-                } else {
-                    // 聊天消息列表
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(spacing: 16) {
-                                ForEach(messages) { message in
-                                    AliceStreamingMessageView(message: message)
-                                        .id(message.id)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 98.h)
+                    .background(DesignTokens.surface)
+
+                    // MARK: - 聊天消息区域
+                    ZStack {
+                        Color.white
+
+                        if messages.isEmpty {
+                            // 空状态 - 显示中间图标
+                            VStack {
+                                Spacer()
+
+                                HStack(alignment: .center, spacing: 0) {
+                                    Spacer()
+
+                                    Image("alice-center-icon")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 120, height: 120)
+
+                                    Spacer()
                                 }
 
-                                if isWaitingForResponse {
-                                    HStack {
-                                        StreamingIndicator(
-                                            style: .thinking,
-                                            color: DesignTokens.accentColor,
-                                            size: 8
-                                        )
-                                        .padding(.leading, 16)
-                                        Spacer()
+                                Spacer()
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                hideKeyboard()
+                            }
+                        } else {
+                            // 聊天消息列表
+                            ScrollViewReader { proxy in
+                                ScrollView {
+                                    LazyVStack(spacing: 16) {
+                                        ForEach(messages) { message in
+                                            AliceStreamingMessageView(message: message)
+                                                .id(message.id)
+                                        }
+
+                                        if isWaitingForResponse {
+                                            HStack {
+                                                StreamingIndicator(
+                                                    style: .thinking,
+                                                    color: DesignTokens.accentColor,
+                                                    size: 8
+                                                )
+                                                .padding(.leading, 16)
+                                                Spacer()
+                                            }
+                                        }
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.top, 16)
+                                    .padding(.bottom, 16)
+                                }
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    hideKeyboard()
+                                }
+                                .onChange(of: messages.count) { _, _ in
+                                    if let lastMessage = messages.last {
+                                        withAnimation {
+                                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                                        }
+                                    }
+                                }
+                                .onChange(of: messages.last?.content) { _, _ in
+                                    if let lastMessage = messages.last, lastMessage.isStreaming {
+                                        withAnimation(.easeOut(duration: 0.1)) {
+                                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                                        }
                                     }
                                 }
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.top, 16)
-                            .padding(.bottom, 16)
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            hideKeyboard()
-                        }
-                        .onChange(of: messages.count) { _, _ in
-                            if let lastMessage = messages.last {
-                                withAnimation {
-                                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                                }
-                            }
-                        }
-                        // Auto-scroll when streaming content updates
-                        .onChange(of: messages.last?.content) { _, _ in
-                            if let lastMessage = messages.last, lastMessage.isStreaming {
-                                withAnimation(.easeOut(duration: 0.1)) {
-                                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                                }
-                            }
                         }
                     }
-                }
 
-                // MARK: - 底部固定区域（按钮组 + 输入框）
-                VStack(spacing: 10.h) {
-                    // 功能按钮组
-                    HStack(spacing: 10.s) {
-                        // Get Super alice 按钮
-                        HStack(spacing: 10.s) {
-                            Image(systemName: "sparkles")
+                    Spacer()
+                        .frame(minHeight: 0)
+                }
+                .ignoresSafeArea(edges: .top)
+
+                // MARK: - 底部输入区域（浮动在最上层）
+                VStack {
+                    Spacer()
+
+                    VStack(spacing: 10.h) {
+                        // 输入框
+                        HStack(alignment: .center, spacing: 10.s) {
+                            Image(systemName: "plus")
                                 .font(.system(size: 16.f))
                                 .foregroundColor(DesignTokens.textPrimary)
-                            Text("Get Super alice")
+                                .frame(width: 24.s, height: 24.s)
+
+                            TextField("Ask any questions", text: $inputText)
                                 .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                 .tracking(0.24)
-                                .foregroundColor(DesignTokens.textPrimary)
+                                .foregroundColor(DesignTokens.textSecondary)
+                                .submitLabel(.send)
+                                .onSubmit {
+                                    sendMessage()
+                                }
+
+                            Spacer()
+
+                            if !inputText.isEmpty {
+                                Button(action: sendMessage) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color(red: 0.87, green: 0.11, blue: 0.26))
+                                            .frame(width: 30.s, height: 30.s)
+
+                                        Image(systemName: "arrow.up")
+                                            .font(.system(size: 14.f, weight: .semibold))
+                                            .foregroundColor(.white)
+                                    }
+                                }
+                            } else {
+                                // Voice Mode Button
+                                Button(action: {
+                                    showVoiceChat = true
+                                }) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color(red: 0.87, green: 0.11, blue: 0.26))
+                                            .frame(width: 30.s, height: 30.s)
+
+                                        Image(systemName: "waveform")
+                                            .font(.system(size: 14.f, weight: .semibold))
+                                            .foregroundColor(.white)
+                                    }
+                                }
+                            }
                         }
-                        .padding(EdgeInsets(top: 10.h, leading: 16.w, bottom: 10.h, trailing: 16.w))
+                        .padding(.horizontal, 16.w)
+                        .padding(.vertical, 12.h)
+                        .frame(width: 343.w, height: 54.h)
                         .background(DesignTokens.surface)
-                        .cornerRadius(21.s)
+                        .cornerRadius(45.s)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 21.s)
+                            RoundedRectangle(cornerRadius: 45.s)
                                 .inset(by: 0.20)
-                                .stroke(DesignTokens.borderColor, lineWidth: 0.20)
+                                .stroke(DesignTokens.borderColor, lineWidth: 0.40)
                         )
-
-                        // Voice Mode 按钮
-                        Button(action: {
-                            showVoiceChat = true
-                        }) {
-                            HStack(spacing: 10.s) {
-                                Image(systemName: "waveform")
-                                    .font(.system(size: 16.f))
-                                    .foregroundColor(DesignTokens.textPrimary)
-                                Text("Voice Mode")
-                                    .font(Font.custom("SFProDisplay-Regular", size: 12.f))
-                                    .tracking(0.24)
-                                    .foregroundColor(DesignTokens.textPrimary)
-                            }
-                            .padding(EdgeInsets(top: 10.h, leading: 16.w, bottom: 10.h, trailing: 16.w))
-                            .background(
-                                LinearGradient(
-                                    colors: [
-                                        Color(red: 0.86, green: 0.56, blue: 0.84).opacity(0.76),
-                                        Color(red: 0.73, green: 0.58, blue: 0.87).opacity(0.52),
-                                        Color(red: 0.45, green: 0.79, blue: 0.91).opacity(0.60)
-                                    ],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .cornerRadius(21.s)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 21.s)
-                                    .inset(by: 0.20)
-                                    .stroke(
-                                        LinearGradient(
-                                            colors: [
-                                                Color(red: 0.82, green: 0.33, blue: 0.80),
-                                                Color(red: 0.38, green: 0.71, blue: 0.84)
-                                            ],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        ),
-                                        lineWidth: 0.20
-                                    )
-                            )
-                        }
+                        .padding(.horizontal, 16.w)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16.w)
-
-                    // 输入框区域
-                    HStack(spacing: 10.s) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 16.f))
-                            .foregroundColor(DesignTokens.textPrimary)
-
-                        TextField("Ask any questions", text: $inputText)
-                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
-                            .tracking(0.24)
-                            .foregroundColor(DesignTokens.textSecondary)
-                            .submitLabel(.send)
-                            .onSubmit {
-                                sendMessage()
-                            }
-
-                        if !inputText.isEmpty {
-                            Button(action: sendMessage) {
-                                Image("Send-Icon")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 24.s, height: 24.s)
-                            }
-                        }
-                    }
-                    .padding(EdgeInsets(top: 12.h, leading: 16.w, bottom: 12.h, trailing: 16.w))
-                    .frame(maxWidth: .infinity)
-                    .background(DesignTokens.surface)
-                    .cornerRadius(45.s)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 45.s)
-                            .inset(by: 0.20)
-                            .stroke(DesignTokens.borderColor, lineWidth: 0.20)
-                    )
-                    .padding(.horizontal, 16.w)
+                    .padding(.top, 10.h)
+                    .padding(.bottom, keyboardHeight > 0 ? keyboardHeight + 10 : 100.h)
+                    .background(Color.white)
+                    .animation(.easeOut(duration: 0.25), value: keyboardHeight)
                 }
-                .padding(.bottom, 82.h)  // 距离手机底部边缘 82pt
             }
-            .background(DesignTokens.surface)
-            .ignoresSafeArea(edges: .top)  // 统一处理顶部安全区域
-            .ignoresSafeArea(.keyboard, edges: .bottom)
-            .ignoresSafeArea(edges: .bottom)
-
+        }
+        .overlay(alignment: .bottom) {
             // MARK: - 照片选项弹窗
             if showPhotoOptions {
                 PhotoOptionsModal(
@@ -447,12 +385,18 @@ struct AliceView: View {
                     }
                 )
             }
-            }
-
+        }
+        .overlay(alignment: .bottom) {
             // MARK: - 底部导航栏（覆盖在内容上方）
             BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)
         }
-        .ignoresSafeArea(edges: .bottom)
+        .ignoresSafeArea(edges: [.top, .bottom])
+        .onAppear {
+            subscribeToKeyboardEvents()
+        }
+        .onDisappear {
+            unsubscribeFromKeyboardEvents()
+        }
     }
 
     // MARK: - Send Message Function
@@ -681,6 +625,32 @@ struct AliceView: View {
                     .stroke(DesignTokens.borderColor, lineWidth: 0.5)
             )
         }
+    }
+
+    // MARK: - Keyboard Handling
+
+    private func subscribeToKeyboardEvents() {
+        NotificationCenter.default.addObserver(
+            forName: UIResponder.keyboardWillShowNotification,
+            object: nil,
+            queue: .main
+        ) { notification in
+            guard let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+            keyboardHeight = keyboardFrame.height
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: UIResponder.keyboardWillHideNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            keyboardHeight = 0
+        }
+    }
+
+    private func unsubscribeFromKeyboardEvents() {
+        NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardWillShowNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardWillHideNotification, object: nil)
     }
 
 }

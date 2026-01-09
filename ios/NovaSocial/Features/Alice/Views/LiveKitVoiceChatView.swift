@@ -102,16 +102,8 @@ struct LiveKitVoiceChatView: View {
 
     // MARK: - Background
     private var backgroundGradient: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.05, green: 0.05, blue: 0.15),
-                Color(red: 0.1, green: 0.1, blue: 0.25),
-                Color(red: 0.05, green: 0.05, blue: 0.15)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea()
+        Color.white
+            .ignoresSafeArea()
     }
 
     // MARK: - Top Bar
@@ -120,7 +112,7 @@ struct LiveKitVoiceChatView: View {
             Button(action: { showEndConfirmation = true }) {
                 Image(systemName: "xmark")
                     .font(.system(size: 20.f))
-                    .foregroundColor(.white.opacity(0.8))
+                    .foregroundColor(.black.opacity(0.8))
                     .frame(width: 44, height: 44)
             }
 
@@ -133,7 +125,7 @@ struct LiveKitVoiceChatView: View {
                     .frame(width: 8, height: 8)
                 Text(state.description)
                     .font(Font.custom("SFProDisplay-Medium", size: 14.f))
-                    .foregroundColor(.white.opacity(0.8))
+                    .foregroundColor(.black.opacity(0.8))
 
                 Text("LiveKit")
                     .font(Font.custom("SFProDisplay-Bold", size: 10.f))
@@ -146,21 +138,9 @@ struct LiveKitVoiceChatView: View {
 
             Spacer()
 
-            // 切換文字/語音模式
-            Button(action: {
-                withAnimation(.spring(response: 0.3)) {
-                    isTextInputMode.toggle()
-                    if isTextInputMode {
-                        isTextFieldFocused = true
-                    }
-                }
-                triggerHaptic(.light)
-            }) {
-                Image(systemName: isTextInputMode ? "waveform" : "keyboard")
-                    .font(Font.custom("SFProDisplay-Medium", size: 18.f))
-                    .foregroundColor(.white.opacity(0.8))
-                    .frame(width: 44, height: 44)
-            }
+            // 空白占位，保持布局对称
+            Color.clear
+                .frame(width: 44, height: 44)
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
@@ -218,7 +198,7 @@ struct LiveKitVoiceChatView: View {
 
                 Text(message.text)
                     .font(Font.custom("SFProDisplay-Regular", size: 15.f))
-                    .foregroundColor(.white.opacity(0.95))
+                    .foregroundColor(.black.opacity(0.95))
                     .multilineTextAlignment(message.role == .user ? .trailing : .leading)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
@@ -251,12 +231,12 @@ struct LiveKitVoiceChatView: View {
                     // 打字指示器
                     Text("...")
                         .font(Font.custom("SFProDisplay-Medium", size: 11.f))
-                        .foregroundColor(.white.opacity(0.4))
+                        .foregroundColor(.black.opacity(0.4))
                 }
 
                 Text(text)
                     .font(Font.custom("SFProDisplay-Regular", size: 15.f))
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(.black.opacity(0.7))
                     .italic()
                     .multilineTextAlignment(isUser ? .trailing : .leading)
                     .padding(.horizontal, 14)
@@ -275,7 +255,7 @@ struct LiveKitVoiceChatView: View {
             TextField("Type a message...", text: $textInput)
                 .textFieldStyle(.plain)
                 .font(Font.custom("SFProDisplay-Regular", size: 16.f))
-                .foregroundColor(.white)
+                .foregroundColor(.black)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(Color.white.opacity(0.1))
@@ -288,7 +268,7 @@ struct LiveKitVoiceChatView: View {
             Button(action: sendTextMessage) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 36.f))
-                    .foregroundColor(textInput.isEmpty ? .white.opacity(0.3) : .purple)
+                    .foregroundColor(textInput.isEmpty ? .black.opacity(0.3) : .purple)
             }
             .disabled(textInput.isEmpty)
         }
@@ -320,10 +300,10 @@ struct LiveKitVoiceChatView: View {
                         Text("View \(messages.count) messages")
                             .font(Font.custom("SFProDisplay-Medium", size: 13.f))
                     }
-                    .foregroundColor(.white.opacity(0.6))
+                    .foregroundColor(.black.opacity(0.6))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
-                    .background(Color.white.opacity(0.1))
+                    .background(Color.black.opacity(0.1))
                     .cornerRadius(20)
                 }
             }
@@ -366,23 +346,10 @@ struct LiveKitVoiceChatView: View {
             }
 
             // Alice 頭像
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [.purple, .blue],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 120, height: 120)
-
-                Image("alice-center-icon")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 85, height: 85)
-            }
-            .shadow(color: .purple.opacity(0.5), radius: 20, x: 0, y: 10)
+            Image("alice-center-icon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 85, height: 85)
         }
         .frame(height: 240)
         .onAppear {
@@ -427,12 +394,12 @@ struct LiveKitVoiceChatView: View {
         VStack(spacing: 6) {
             Text(stateTitle)
                 .font(Font.custom("SFProDisplay-Semibold", size: 22.f))
-                .foregroundColor(.white)
+                .foregroundColor(.black)
                 .multilineTextAlignment(.center)
 
             Text(stateSubtitle)
                 .font(Font.custom("SFProDisplay-Regular", size: 13.f))
-                .foregroundColor(.white.opacity(0.6))
+                .foregroundColor(.black.opacity(0.6))
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -469,7 +436,7 @@ struct LiveKitVoiceChatView: View {
                 HStack {
                     Text(pendingUserText.isEmpty ? transcript : pendingUserText)
                         .font(Font.custom("SFProDisplay-Regular", size: 15.f))
-                        .foregroundColor(.white.opacity(0.85))
+                        .foregroundColor(.black.opacity(0.85))
                         .lineLimit(2)
                         .multilineTextAlignment(.center)
                 }
@@ -483,7 +450,7 @@ struct LiveKitVoiceChatView: View {
                 HStack {
                     Text(pendingAIText.isEmpty ? aiResponse : pendingAIText)
                         .font(Font.custom("SFProDisplay-Regular", size: 15.f))
-                        .foregroundColor(.white.opacity(0.85))
+                        .foregroundColor(.black.opacity(0.85))
                         .lineLimit(3)
                         .multilineTextAlignment(.center)
                 }
@@ -507,12 +474,20 @@ struct LiveKitVoiceChatView: View {
         VStack(spacing: 20) {
             HStack(spacing: 50) {
                 // 靜音
-                controlButton(
-                    icon: isMuted ? "mic.slash.fill" : "mic.fill",
-                    isActive: !isMuted,
-                    color: isMuted ? .red : .white,
-                    action: toggleMute
-                )
+                Button(action: {
+                    toggleMute()
+                    triggerHaptic(.light)
+                }) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.gray.opacity(0.1))
+                            .frame(width: 52, height: 52)
+
+                        Image(systemName: isMuted ? "mic.slash.fill" : "mic.fill")
+                            .font(.system(size: 22.f))
+                            .foregroundColor(isMuted ? .red : .black)
+                    }
+                }
 
                 // 結束
                 Button(action: { showEndConfirmation = true }) {
@@ -528,35 +503,38 @@ struct LiveKitVoiceChatView: View {
                 }
                 .shadow(color: .red.opacity(0.4), radius: 10, x: 0, y: 5)
 
-                // 鍵盤切換
-                controlButton(
-                    icon: "keyboard",
-                    isActive: true,
-                    color: .white,
-                    action: {
-                        withAnimation(.spring(response: 0.3)) {
-                            isTextInputMode = true
-                            isTextFieldFocused = true
-                        }
+                // 轉文字
+                Button(action: {
+                    withAnimation(.spring(response: 0.3)) {
+                        isTextInputMode = true
+                        isTextFieldFocused = true
                     }
-                )
+                    triggerHaptic(.light)
+                }) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.gray.opacity(0.1))
+                            .frame(width: 52, height: 52)
+
+                        Image(systemName: "text.alignleft")
+                            .font(.system(size: 20.f, weight: .medium))
+                            .foregroundColor(.black)
+                    }
+                }
             }
 
-            Text("LiveKit WebRTC • Voice interruption supported")
-                .font(Font.custom("SFProDisplay-Regular", size: 11.f))
-                .foregroundColor(.white.opacity(0.4))
         }
         .padding(.bottom, 40)
     }
 
-    private func controlButton(icon: String, isActive: Bool, color: Color = .white, action: @escaping () -> Void) -> some View {
+    private func controlButton(icon: String, isActive: Bool, color: Color = .black, action: @escaping () -> Void) -> some View {
         Button(action: {
             action()
             triggerHaptic(.light)
         }) {
             ZStack {
                 Circle()
-                    .fill(Color.white.opacity(isActive ? 0.2 : 0.1))
+                    .fill(Color.black.opacity(isActive ? 0.2 : 0.1))
                     .frame(width: 52, height: 52)
 
                 Image(systemName: icon)
