@@ -24,13 +24,19 @@ use crate::models::message::Message as MessageRow;
 use crate::routes::messages::{MessageAttachment, MessageDto, MessageReaction};
 use crate::services::conversation_service::PrivacyMode;
 use crate::services::encryption::EncryptionService;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use deadpool_postgres::{Object, Pool};
 use matrix_sdk::ruma::OwnedRoomId;
 use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct MessageService;
+
+pub struct MatrixMessageMetadata {
+    pub sender_id: Uuid,
+    pub matrix_event_id: String,
+    pub created_at: DateTime<Utc>,
+}
 
 /// Result of preparing a Matrix room for message sending
 struct MatrixRoomContext {
@@ -271,6 +277,7 @@ impl MessageService {
         conversation_id: Uuid,
         sender_id: Uuid,
         matrix_event_id: &str,
+        created_at: DateTime<Utc>,
     ) -> Result<Option<MessageRow>, AppError> {
         let id = Uuid::new_v4();
         let content = "";
@@ -297,13 +304,14 @@ impl MessageService {
                     content,
                     idempotency_key,
                     sequence_number,
-                    matrix_event_id
+                    matrix_event_id,
+                    created_at
                 )
-                VALUES ($1, $2, $3, $4, NULL, 0, $5)
+                VALUES ($1, $2, $3, $4, NULL, 0, $5, $6)
                 ON CONFLICT (matrix_event_id) WHERE matrix_event_id IS NOT NULL DO NOTHING
                 RETURNING created_at
                 "#,
-                &[&id, &conversation_id, &sender_id, &content, &matrix_event_id],
+                &[&id, &conversation_id, &sender_id, &content, &matrix_event_id, &created_at],
             )
             .await
             .map_err(|e| AppError::StartServer(format!("insert matrix msg: {e}")))?;
@@ -315,7 +323,7 @@ impl MessageService {
             return Ok(None);
         };
 
-        let created_at = inserted_row.get(0);
+        let created_at: DateTime<Utc> = inserted_row.get(0);
 
         // 2) Bump per-conversation counter (only after insert succeeded).
         let seq_row = tx
@@ -346,7 +354,12 @@ impl MessageService {
         tx.execute(
             r#"
             UPDATE conversations
-            SET updated_at = $1, last_message_id = $2
+            SET
+                updated_at = GREATEST(updated_at, $1),
+                last_message_id = CASE
+                    WHEN updated_at IS NULL OR $1 >= updated_at THEN $2
+                    ELSE last_message_id
+                END
             WHERE id = $3 AND deleted_at IS NULL
             "#,
             &[&created_at, &id, &conversation_id],
@@ -373,6 +386,142 @@ impl MessageService {
             recalled_at: None,
             matrix_event_id: Some(matrix_event_id.to_string()),
         }))
+    }
+
+    /// Batch insert inbound Matrix events as metadata-only rows (for history backfill).
+    ///
+    /// Inserts with `sequence_number=0` and does not update conversation counters / last_message_id.
+    /// Call `resequence_conversation_messages_db` afterwards to align sequence numbers and pointers.
+    pub async fn store_matrix_message_metadata_batch_db(
+        db: &Pool,
+        conversation_id: Uuid,
+        batch: &[MatrixMessageMetadata],
+    ) -> Result<u64, AppError> {
+        if batch.is_empty() {
+            return Ok(0);
+        }
+
+        let ids: Vec<Uuid> = batch.iter().map(|_| Uuid::new_v4()).collect();
+        let sender_ids: Vec<Uuid> = batch.iter().map(|m| m.sender_id).collect();
+        let event_ids: Vec<String> = batch.iter().map(|m| m.matrix_event_id.clone()).collect();
+        let created_ats: Vec<DateTime<Utc>> = batch.iter().map(|m| m.created_at).collect();
+
+        let client = Self::get_db_client(db, "store matrix message metadata batch").await?;
+
+        let inserted = client
+            .execute(
+                r#"
+                INSERT INTO messages (
+                    id,
+                    conversation_id,
+                    sender_id,
+                    content,
+                    idempotency_key,
+                    sequence_number,
+                    matrix_event_id,
+                    created_at
+                )
+                SELECT
+                    t.id,
+                    $1,
+                    t.sender_id,
+                    '',
+                    NULL,
+                    0,
+                    t.matrix_event_id,
+                    t.created_at
+                FROM UNNEST($2::uuid[], $3::uuid[], $4::text[], $5::timestamptz[])
+                    AS t(id, sender_id, matrix_event_id, created_at)
+                ON CONFLICT (matrix_event_id) WHERE matrix_event_id IS NOT NULL DO NOTHING
+                "#,
+                &[&conversation_id, &ids, &sender_ids, &event_ids, &created_ats],
+            )
+            .await
+            .map_err(|e| AppError::StartServer(format!("insert matrix msg batch: {e}")))?;
+
+        Ok(inserted)
+    }
+
+    pub async fn resequence_conversation_messages_db(
+        db: &Pool,
+        conversation_id: Uuid,
+    ) -> Result<(), AppError> {
+        let mut client = Self::get_db_client(db, "resequence conversation messages").await?;
+        let tx = client
+            .transaction()
+            .await
+            .map_err(|e| AppError::StartServer(format!("begin tx (resequence): {e}")))?;
+
+        tx.execute(
+            "SELECT 1 FROM conversations WHERE id = $1 FOR UPDATE",
+            &[&conversation_id],
+        )
+        .await
+        .map_err(|e| AppError::StartServer(format!("lock conversation (resequence): {e}")))?;
+
+        tx.execute(
+            r#"
+            WITH ordered AS (
+                SELECT id, ROW_NUMBER() OVER (ORDER BY created_at, id) AS seq
+                FROM messages
+                WHERE conversation_id = $1
+            )
+            UPDATE messages m
+            SET sequence_number = ordered.seq
+            FROM ordered
+            WHERE m.id = ordered.id
+            "#,
+            &[&conversation_id],
+        )
+        .await
+        .map_err(|e| AppError::StartServer(format!("resequence messages: {e}")))?;
+
+        let max_seq: i64 = tx
+            .query_one(
+                "SELECT COALESCE(MAX(sequence_number), 0)::bigint FROM messages WHERE conversation_id = $1",
+                &[&conversation_id],
+            )
+            .await
+            .map_err(|e| AppError::StartServer(format!("max seq: {e}")))?
+            .get(0);
+
+        tx.execute(
+            r#"
+            INSERT INTO conversation_counters (conversation_id, last_seq)
+            VALUES ($1, $2)
+            ON CONFLICT (conversation_id) DO UPDATE SET last_seq = EXCLUDED.last_seq
+            "#,
+            &[&conversation_id, &max_seq],
+        )
+        .await
+        .map_err(|e| AppError::StartServer(format!("update counters (resequence): {e}")))?;
+
+        tx.execute(
+            r#"
+            UPDATE conversations
+            SET
+                updated_at = COALESCE(
+                    (SELECT MAX(created_at) FROM messages WHERE conversation_id = $1),
+                    updated_at
+                ),
+                last_message_id = (
+                    SELECT id FROM messages
+                    WHERE conversation_id = $1
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT 1
+                )
+            WHERE id = $1 AND deleted_at IS NULL
+            "#,
+            &[&conversation_id],
+        )
+        .await
+        .map_err(|e| AppError::StartServer(format!("update conversation (resequence): {e}")))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| AppError::StartServer(format!("commit tx (resequence): {e}")))?;
+
+        Ok(())
     }
     /// Send a message to a conversation (wrapper for send_message_db)
     /// Note: This is a simplified version. Use send_message_db directly for full control.

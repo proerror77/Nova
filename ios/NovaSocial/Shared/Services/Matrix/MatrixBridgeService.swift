@@ -1698,6 +1698,47 @@ extension MatrixBridgeService {
         return nil
     }
 
+    /// Best-effort: ensure this Matrix room is mapped to a Nova conversation (so backend can sync metadata).
+    /// This should not block chat UX if the backend is temporarily unavailable.
+    private func ensureNovaConversationMappingIfNeeded(
+        roomId: String,
+        participantIds: [String],
+        name: String?,
+        isEncrypted: Bool,
+        isDirect: Bool
+    ) async {
+        if let conversationId = try? await queryConversationMapping(roomId: roomId),
+           let conversationId,
+           !conversationId.isEmpty {
+            cacheMapping(conversationId: conversationId, roomId: roomId)
+            return
+        }
+
+        guard let currentUserId = AuthenticationManager.shared.currentUser?.id else {
+            return
+        }
+
+        do {
+            let conversation = try await chatService.createConversation(
+                type: isDirect ? .direct : .group,
+                participantIds: [currentUserId] + participantIds,
+                name: name,
+                isEncrypted: isEncrypted
+            )
+
+            cacheMapping(conversationId: conversation.id, roomId: roomId)
+            try await saveRoomMapping(conversationId: conversation.id, roomId: roomId)
+
+            #if DEBUG
+            print("[MatrixBridge] ✅ Created Nova conversation mapping: \(conversation.id) -> \(roomId)")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[MatrixBridge] ⚠️ Failed to create Nova conversation mapping for room \(roomId): \(error)")
+            #endif
+        }
+    }
+
     /// Create a new direct conversation with a user via Matrix
     /// This creates a Matrix room and returns the conversation info
     /// - Parameters:
@@ -1718,6 +1759,14 @@ extension MatrixBridgeService {
             #if DEBUG
             print("[MatrixBridge] ✅ Found existing DM room: \(existingRoom.id)")
             #endif
+
+            await ensureNovaConversationMappingIfNeeded(
+                roomId: existingRoom.id,
+                participantIds: [userId],
+                name: nil,
+                isEncrypted: isPrivate,
+                isDirect: true
+            )
             return existingRoom
         }
 
@@ -1754,6 +1803,14 @@ extension MatrixBridgeService {
         #if DEBUG
         print("[MatrixBridge] Created \(isPrivate ? "private" : "regular") Matrix room: \(roomId)")
         #endif
+
+        await ensureNovaConversationMappingIfNeeded(
+            roomId: roomId,
+            participantIds: [userId],
+            name: nil,
+            isEncrypted: isPrivate,
+            isDirect: true
+        )
 
         // Cache the display name for this DM so it shows correctly before sync completes
         if let name = displayName, !name.isEmpty {
@@ -1815,6 +1872,14 @@ extension MatrixBridgeService {
             }
             throw error
         }
+
+        await ensureNovaConversationMappingIfNeeded(
+            roomId: roomId,
+            participantIds: userIds,
+            name: name,
+            isEncrypted: isPrivate,
+            isDirect: false
+        )
 
         return MatrixConversationInfo(
             id: roomId,

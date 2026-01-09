@@ -186,6 +186,7 @@ once_cell = { workspace = true }
 chrono = { workspace = true }
 bytes = "1.5"
 env_logger = "0.11"
+anyhow = { workspace = true }
 
 # Metrics
 prometheus = { workspace = true }
@@ -221,6 +222,10 @@ lto = true
 [[bin]]
 name = "migrate-matrix-displaynames"
 path = "src/bin/migrate_matrix_displaynames.rs"
+
+[[bin]]
+name = "matrix-backfill"
+path = "src/bin/matrix_backfill.rs"
 
 [build-dependencies]
 tonic-build = "0.12"

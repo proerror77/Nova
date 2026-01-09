@@ -222,6 +222,18 @@ impl MatrixClient {
         Ok(room_id)
     }
 
+    /// Get a `Room` if known, or attempt to join it by room ID.
+    pub async fn get_or_join_room(&self, room_id: &RoomId) -> Result<Room, AppError> {
+        if let Some(room) = self.client.get_room(room_id) {
+            return Ok(room);
+        }
+
+        self.client
+            .join_room_by_id(room_id)
+            .await
+            .map_err(|e| AppError::StartServer(format!("Matrix join room failed: {e}")))
+    }
+
     /// Send a text message to a Matrix room
     ///
     /// Messages are automatically encrypted by the Matrix SDK if the room has encryption enabled.
