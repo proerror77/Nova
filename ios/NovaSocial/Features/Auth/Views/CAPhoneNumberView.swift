@@ -63,22 +63,25 @@ struct CAPhoneNumberView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Back Button - 左上角
-            VStack {
-                HStack {
-                    Button(action: {
-                        currentPage = .createAccount
-                    }) {
-                        Image("back-white")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 24.s, height: 24.s)
+            // Back Button Header - Figma: 距顶部44pt, padding 8pt, 高度64pt
+            VStack(spacing: 0) {
+                Spacer().frame(height: 44.h)  // 状态栏高度
+                HStack(spacing: 8.s) {
+                    Button(action: { currentPage = .createAccount }) {
+                        ZStack {
+                            Image("back-white")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 24.s, height: 24.s)
+                        }
+                        .frame(width: 40.s, height: 40.s)
+                        .cornerRadius(100.s)
                     }
+                    .frame(width: 48.s, height: 48.s)
                     Spacer()
                 }
-                .padding(.leading, 20.w)
-                .padding(.top, 64.h)
-                
+                .padding(.horizontal, 8.s)
+                .frame(height: 64.h)
                 Spacer()
             }
         }
@@ -141,7 +144,6 @@ struct CAPhoneNumberView: View {
                         .font(.system(size: 10.f))
                         .foregroundColor(.white.opacity(0.6))
                 }
-                .padding(.horizontal, 12.s)
                 .padding(.vertical, 14.s)
             }
 
@@ -160,7 +162,8 @@ struct CAPhoneNumberView: View {
                     applyPhoneFormatting(phoneNumber)
                 }
         }
-        .padding(.horizontal, 16.s)
+        .padding(.leading, 16.s)
+        .padding(.trailing, 16.s)
         .frame(width: 301.w, height: 52.h)
         .background(Color.white.opacity(0.20))
         .cornerRadius(5.s)

@@ -44,24 +44,29 @@ struct CreateAccountView: View {
                 googleButton.padding(.horizontal, 37.w)
                 Spacer().frame(height: 24.h)
                 appleButton.padding(.horizontal, 37.w)
-                Spacer().frame(height: 293.h)
+                Spacer()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Back Button - Top Left
-            VStack {
-                HStack {
+            // Back Button - 左上角 (Figma: 距顶部44pt, padding 8pt, 高度64pt)
+            VStack(spacing: 0) {
+                Spacer().frame(height: 44.h)  // 状态栏高度
+                HStack(spacing: 8.s) {
                     Button(action: { currentPage = .login }) {
-                        Image("back-white")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 24.s, height: 24.s)
+                        ZStack {
+                            Image("back-white")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 24.s, height: 24.s)
+                        }
+                        .frame(width: 40.s, height: 40.s)
+                        .cornerRadius(100.s)
                     }
+                    .frame(width: 48.s, height: 48.s)
                     Spacer()
                 }
-                .padding(.leading, 20.w)
-                .padding(.top, 64.h)
-                
+                .padding(.horizontal, 8.s)
+                .frame(height: 64.h)
                 Spacer()
             }
         }

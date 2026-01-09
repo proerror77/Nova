@@ -40,31 +40,34 @@ struct GmailEnterCodeView: View {
     
     var body: some View {
         ZStack {
-            // Background - Solid color per Figma
-            Color(red: 0.03, green: 0.11, blue: 0.21)
-            
-            // Content
+            // Background - Linear Gradient
+            LinearGradient(
+                colors: [
+                    Color(red: 0.027, green: 0.106, blue: 0.212),  // #071B36
+                    Color(red: 0.271, green: 0.310, blue: 0.388)   // #454F63
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            // Content - 响应式垂直布局
             VStack(spacing: 0) {
-                Spacer().frame(height: 120.h)  // 统一顶部间距 (44 status + 64 header + 12 buffer)
+                Spacer().frame(height: 114.h)  // 顶部间距
                 logoSection
-                Spacer().frame(height: 30.h)
+                Spacer().frame(height: 43.h)
                 titleSection
-                Spacer().frame(height: 40.h)
-                codeInputSection
-                    .padding(.horizontal, 37.w)
+                Spacer().frame(height: 30.h)
+                codeInputSection.padding(.horizontal, 37.w)
                 errorMessageView
                 Spacer().frame(height: 24.h)
-                verifyButton
-                    .padding(.horizontal, 37.w)
-                Spacer().frame(height: 40.h)
-                resendSection
-                Spacer()
+                verifyButton  // 按钮有固定宽度 301.w，自动居中
+                Spacer(minLength: 100.h)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
-            // Back Button Header - Figma: 375x64, padding 8
+
+            // Back Button Header - Figma: 距顶部44pt, padding 8pt, 高度64pt
             VStack(spacing: 0) {
-                Spacer().frame(height: 44.h)  // Status bar safe area
+                Spacer().frame(height: 44.h)  // 状态栏高度
                 HStack(spacing: 8.s) {
                     Button(action: {
                         // Navigate back based on mode
@@ -75,26 +78,51 @@ struct GmailEnterCodeView: View {
                         }
                     }) {
                         ZStack {
-                            Circle()
-                                .fill(Color.clear)
-                                .frame(width: 40.s, height: 40.s)
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 24.f, weight: .medium))
-                                .foregroundColor(.white)
+                            Image("back-white")
+                                .resizable()
+                                .scaledToFit()
                                 .frame(width: 24.s, height: 24.s)
                         }
-                        .frame(width: 48.s, height: 48.s)
+                        .frame(width: 40.s, height: 40.s)
+                        .cornerRadius(100.s)
                     }
+                    .frame(width: 48.s, height: 48.s)
                     Spacer()
                 }
-                .padding(8.s)
+                .padding(.horizontal, 8.s)
                 .frame(height: 64.h)
                 Spacer()
             }
+
+            // Bottom Notice - Resend code section
+            GeometryReader { geometry in
+                VStack(spacing: 8.h) {
+                    Button(action: {
+                        Task { await resendCode() }
+                    }) {
+                        Text("Resend code")
+                            .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
+                            .tracking(0.28)
+                            .foregroundColor(.white)
+                            .underline()
+                    }
+                    .disabled(!canResend || isLoading)
+
+                    if !canResend {
+                        Text("You can request a new code in \(countdown) seconds.")
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                            .tracking(0.28)
+                            .foregroundColor(Color(red: 0.75, green: 0.75, blue: 0.75))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .position(x: geometry.size.width / 2, y: geometry.size.height - 308.h)
+            }
         }
-        .ignoresSafeArea()
         .contentShape(Rectangle())
         .onTapGesture { isInputFocused = false }
+        .ignoresSafeArea()
+        .ignoresSafeArea(.keyboard)
         .onAppear {
             startCountdown()
             isInputFocused = true
@@ -221,30 +249,6 @@ struct GmailEnterCodeView: View {
             .cornerRadius(50.s)
         }
         .disabled(!isCodeValid || isLoading)
-    }
-    
-    private var resendSection: some View {
-        VStack(spacing: 8.h) {
-            // Resend code button
-            Button(action: {
-                Task { await resendCode() }
-            }) {
-                Text("Resend code")
-                    .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
-                    .tracking(0.28)
-                    .underline()
-                    .foregroundColor(.white)
-            }
-            .disabled(!canResend || isLoading)
-            
-            // Countdown timer text
-            if !canResend {
-                Text("You can request a new code in \(countdown) seconds.")
-                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                    .tracking(0.28)
-                    .foregroundColor(Color(red: 0.75, green: 0.75, blue: 0.75))
-            }
-        }
     }
     
     // MARK: - Timer
