@@ -137,6 +137,11 @@ jobs:
           location: ${{ env.GCP_REGION }}
           project_id: ${{ env.GCP_PROJECT_ID }}
 
+      - name: Validate migrations
+        run: |
+          echo "🔍 Validating database migrations before deployment..."
+          bash .github/scripts/validate-migrations.sh ${{ inputs.service }} ${{ env.NAMESPACE }}
+
       - name: Update deployment image
         run: |
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
