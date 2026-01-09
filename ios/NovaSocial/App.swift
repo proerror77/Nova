@@ -53,7 +53,11 @@ struct IceredApp: App {
             // Start directly on login page for UI tests
             _currentPage = State(initialValue: .login)
         } else {
-            _currentPage = State(initialValue: .splash)
+            // DEMO MODE: Skip login and go directly to Alice page
+            MainActor.assumeIsolated {
+                AuthenticationManager.shared.isAuthenticated = true
+            }
+            _currentPage = State(initialValue: .alice)
         }
     }
 
@@ -63,12 +67,10 @@ struct IceredApp: App {
                 // Splash Screen 优先显示（无论是否已登录）
                 if currentPage == .splash {
                     SplashScreenView(currentPage: $currentPage)
-                        .transition(.identity)
                 }
                 // Welcome Screen（在 Splash 之后显示）
                 else if currentPage == .welcome {
                     WelcomeView(currentPage: $currentPage)
-                        .transition(.identity)
                 }
                 // Check authentication state
                 else if !authManager.isAuthenticated {
@@ -76,44 +78,31 @@ struct IceredApp: App {
                     switch currentPage {
                     case .inviteCode:
                         InviteCodeView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .login:
                         LoginView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .createAccount:
                         CreateAccountView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .createAccountPhoneNumber:
                         CAPhoneNumberView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .profileSetup:
                         CAProfileSettingView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .phoneRegistration:
                         PhoneRegistrationView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .phoneProfileSetup:
                         PhoneProfileSetupView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .phoneEnterCode(let phoneNumber):
                         PhoneEnterCodeView(currentPage: $currentPage, phoneNumber: phoneNumber)
-                            .transition(.identity)
                     case .gmailEnterCode(let email):
                         GmailEnterCodeView(currentPage: $currentPage, email: email)
-                            .transition(.identity)
                     case .gmailEnterCodeLogin(let email):
                         GmailEnterCodeView(currentPage: $currentPage, email: email, mode: .login)
-                            .transition(.identity)
                     case .phoneLogin:
                         PhoneLoginView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .home:
                         // Skip 跳过登录直接进入Home
                         HomeView(currentPage: $currentPage)
-                            .transition(.identity)
                     default:
                         LoginView(currentPage: $currentPage)
-                            .transition(.identity)
                     }
                 } else {
                     // 已登录后的页面切换
@@ -121,71 +110,50 @@ struct IceredApp: App {
                     case .login, .createAccount, .createAccountPhoneNumber, .profileSetup, .inviteCode:
                         // 登录成功后跳转到首页
                         HomeView(currentPage: $currentPage)
-                            .transition(.identity)
                             .onAppear { currentPage = .home }
                     case .home:
                         HomeView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .rankingList:
                         RankingListView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .message:
                         MessageView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .account:
                         ProfileView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .alice:
                         AliceView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .setting:
                         SettingsView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .profileSetting:
                         ProfileSettingView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .aliasName:
                         AliasNameView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .devices:
                         DevicesView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .inviteFriends:
                         InviteFriendsView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .myChannels:
                         MyChannelsView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .addFriends:
                         AddFriendsView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .friendRequests:
                         FriendRequestsView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .newChat:
                         NewChatView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .getVerified:
                         GetVerifiedView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .passkeys:
                         if #available(iOS 16.0, *) {
                             PasskeySettingsView(currentPage: $currentPage)
-                                .transition(.identity)
                         } else {
                             // Fallback for older iOS versions
                             Text("Passkeys require iOS 16 or later")
-                                .transition(.identity)
                         }
                     case .chatBackup:
                         ChatBackupView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .callRecordings:
                         CallRecordingsView(currentPage: $currentPage)
-                            .transition(.identity)
                     default:
                         HomeView(currentPage: $currentPage)
-                            .transition(.identity)
                     }
                 }
 

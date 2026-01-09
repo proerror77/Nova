@@ -33,6 +33,7 @@
 		1136A7E6A4ADD2A1E5282DB1 /* LiveKitVoiceChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73777E10DC01BFFD9AA4796F /* LiveKitVoiceChatView.swift */; };
 		115D33FC7B1BF22671C00A09 /* SF-Pro-Display-BoldItalic.otf in Resources */ = {isa = PBXBuildFile; fileRef = 2C5EDC88237423759AC8AD49 /* SF-Pro-Display-BoldItalic.otf */; };
 		1183B659832CB30303FC0564 /* PhoneRegistrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F413929E863DA61C476F44D6 /* PhoneRegistrationView.swift */; };
+		93890606BACE4A3FA34F5C2F /* PhoneProfileSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E05B3EC60B84CC0B34C6E79 /* PhoneProfileSetupView.swift */; };
 		124E367C3D6397C95405BDAF /* PostAsSelectionPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24CEFEAC014290526A9CD69E /* PostAsSelectionPanel.swift */; };
 		138B3EFA93634D473AAB220C /* NoAutoFillTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D3E0975CAFF4B896D8B4BC7 /* NoAutoFillTextView.swift */; };
 		15DFD4FE6AFA8B520708C91F /* MatrixBridgeService+Messages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6880BCFC7A2CF872F2D6E4C0 /* MatrixBridgeService+Messages.swift */; };
@@ -678,6 +679,7 @@
 		F20C285F38EB2939BF1DBFE5 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		F2E22DEBFE0108B868D6EE87 /* VideoCacheService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoCacheService.swift; sourceTree = "<group>"; };
 		F413929E863DA61C476F44D6 /* PhoneRegistrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneRegistrationView.swift; sourceTree = "<group>"; };
+		6E05B3EC60B84CC0B34C6E79 /* PhoneProfileSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneProfileSetupView.swift; sourceTree = "<group>"; };
 		F49BDC924F2780626F9D2CBA /* ProfileSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSettingView.swift; sourceTree = "<group>"; };
 		F5E70390640C08938059D9CF /* UserService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserService.swift; sourceTree = "<group>"; };
 		F70BC6A3050D5012743A06F7 /* ChatWebSocketHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatWebSocketHandler.swift; sourceTree = "<group>"; };
@@ -1704,6 +1706,7 @@
 				69BD9E1EBDF7781805A1AF2E /* PhoneEnterCodeView.swift */,
 				6C5BE636943F22AD8A945C23 /* PhoneLoginView.swift */,
 				F413929E863DA61C476F44D6 /* PhoneRegistrationView.swift */,
+				6E05B3EC60B84CC0B34C6E79 /* PhoneProfileSetupView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -2333,6 +2336,7 @@
 				6FEBDB8BED7A35025139688C /* PhoneEnterCodeView.swift in Sources */,
 				404699925C2A11E8F5275F7C /* PhoneLoginView.swift in Sources */,
 				1183B659832CB30303FC0564 /* PhoneRegistrationView.swift in Sources */,
+				93890606BACE4A3FA34F5C2F /* PhoneProfileSetupView.swift in Sources */,
 				FD4C5DDD8A3C9BA4399AA522 /* PhotoAnalysisService.swift in Sources */,
 				872EE38FD80234144C2CC601 /* PhotoOptionsModal.swift in Sources */,
 				124E367C3D6397C95405BDAF /* PostAsSelectionPanel.swift in Sources */,
