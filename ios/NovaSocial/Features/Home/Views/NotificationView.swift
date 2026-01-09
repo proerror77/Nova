@@ -7,20 +7,59 @@ struct NotificationView: View {
     @State private var selectedUserName = ""
     @State private var selectedConversationId = ""
     @State private var showPostDetail = false
-    @State private var selectedPostId: String?
+    @State private var selectedPost: FeedPost?
     @State private var showUserProfile = false
     @State private var selectedUserId: String?
+    @State private var isLoadingPost = false
+    @State private var showPostLoadError = false
+    @State private var postLoadErrorMessage = ""
+
+    private let contentService = ContentService()
 
     var body: some View {
         ZStack {
             if showChat {
                 ChatView(showChat: $showChat, conversationId: selectedConversationId, userName: selectedUserName)
                     .transition(.identity)
+            } else if showPostDetail, let post = selectedPost {
+                PostDetailView(
+                    post: post,
+                    onDismiss: {
+                        showPostDetail = false
+                        selectedPost = nil
+                    },
+                    onAvatarTapped: { userId in
+                        selectedUserId = userId
+                        showPostDetail = false
+                        showUserProfile = true
+                    }
+                )
+                .transition(.identity)
             } else {
                 notificationContent
             }
+
+            // Loading overlay for post fetch
+            if isLoadingPost {
+                ZStack {
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(.white)
+                        Text("Loading post...")
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                            .foregroundColor(.white)
+                    }
+                    .padding(24)
+                    .background(Color.black.opacity(0.7))
+                    .cornerRadius(12)
+                }
+            }
         }
         .animation(.none, value: showChat)
+        .animation(.none, value: showPostDetail)
         .fullScreenCover(isPresented: $showUserProfile) {
             if let userId = selectedUserId {
                 UserProfileView(showUserProfile: $showUserProfile, userId: userId)
@@ -29,13 +68,12 @@ struct NotificationView: View {
                     }
             }
         }
-        .alert("Feature Coming Soon", isPresented: $showPostDetail) {
+        .alert("Failed to Load Post", isPresented: $showPostLoadError) {
             Button("OK", role: .cancel) {
-                showPostDetail = false
-                selectedPostId = nil
+                postLoadErrorMessage = ""
             }
         } message: {
-            Text("Post detail view will be available soon. Post ID: \(selectedPostId ?? "unknown")")
+            Text(postLoadErrorMessage)
         }
         .task {
             await viewModel.loadNotifications()
@@ -229,34 +267,23 @@ struct NotificationView: View {
                     notification: notification,
                     onTap: {
                         // Navigate based on notification type
-                        switch notification.type {
-                        case .like, .comment, .share:
-                            // Navigate to post detail
-                            if let postId = notification.relatedPostId {
-                                selectedPostId = postId
-                                showPostDetail = true
+                        Task {
+                            switch notification.type {
+                            case .like, .comment, .share, .reply, .mention:
+                                // Navigate to post detail - fetch post first
+                                if let postId = notification.relatedPostId {
+                                    await loadAndShowPost(postId: postId)
+                                }
+                            case .follow, .friendRequest, .friendAccepted:
+                                // Navigate to user profile
+                                if let userId = notification.relatedUserId {
+                                    selectedUserId = userId
+                                    showUserProfile = true
+                                }
+                            case .system:
+                                // System notifications don't navigate
+                                break
                             }
-                        case .reply:
-                            // Navigate to post detail (comment is in the post)
-                            if let postId = notification.relatedPostId {
-                                selectedPostId = postId
-                                showPostDetail = true
-                            }
-                        case .follow, .friendRequest, .friendAccepted:
-                            // Navigate to user profile
-                            if let userId = notification.relatedUserId {
-                                selectedUserId = userId
-                                showUserProfile = true
-                            }
-                        case .mention:
-                            // Navigate to post where mentioned
-                            if let postId = notification.relatedPostId {
-                                selectedPostId = postId
-                                showPostDetail = true
-                            }
-                        case .system:
-                            // System notifications don't navigate
-                            break
                         }
                     },
                     onMessageTap: {
@@ -302,6 +329,31 @@ struct NotificationView: View {
                     }
                 )
             }
+        }
+    }
+
+    // MARK: - Helper Methods
+
+    /// Load post data and show post detail view
+    private func loadAndShowPost(postId: String) async {
+        isLoadingPost = true
+
+        do {
+            let post = try await contentService.getPost(postId: postId)
+            await MainActor.run {
+                selectedPost = post
+                isLoadingPost = false
+                showPostDetail = true
+            }
+        } catch {
+            await MainActor.run {
+                isLoadingPost = false
+                postLoadErrorMessage = "Failed to load post. Please try again."
+                showPostLoadError = true
+            }
+            #if DEBUG
+            print("[NotificationView] Failed to load post \(postId): \(error)")
+            #endif
         }
     }
 }
