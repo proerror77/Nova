@@ -1,21 +1,13 @@
 import SwiftUI
 
 /// Gmail Enter Code View - Email Verification
-/// Verification code entry screen for email registration and login flow
+/// Verification code entry screen for email registration flow
 struct GmailEnterCodeView: View {
     @Binding var currentPage: AppPage
     @EnvironmentObject private var authManager: AuthenticationManager
-
+    
     /// The email address for verification
     let email: String
-
-    /// Mode: registration or login (default: registration for backward compatibility)
-    var mode: Mode = .registration
-
-    enum Mode {
-        case registration
-        case login
-    }
     
     // MARK: - State
     @State private var verificationCode = ""
@@ -51,6 +43,8 @@ struct GmailEnterCodeView: View {
             )
 
             // Content - 响应式垂直布局
+            // 基准设计: iPhone 13 Mini (375 x 812)
+            // 适配: iPhone SE (375 x 667) 到 iPhone 14 Pro Max (430 x 932)
             VStack(spacing: 0) {
                 Spacer().frame(height: 114.h)  // 顶部间距
                 logoSection
@@ -69,14 +63,7 @@ struct GmailEnterCodeView: View {
             VStack(spacing: 0) {
                 Spacer().frame(height: 44.h)  // 状态栏高度
                 HStack(spacing: 8.s) {
-                    Button(action: {
-                        // Navigate back based on mode
-                        if mode == .login {
-                            currentPage = .login
-                        } else {
-                            currentPage = .createAccountPhoneNumber
-                        }
-                    }) {
+                    Button(action: { currentPage = .createAccountEmail }) {
                         ZStack {
                             Image("back-white")
                                 .resizable()
@@ -95,8 +82,11 @@ struct GmailEnterCodeView: View {
             }
 
             // Bottom Notice - Resend code section
+            // Figma: Y位置 = 812 - 308 = 504pt (从顶部算)
+            // 使用绝对定位确保位置精确
             GeometryReader { geometry in
                 VStack(spacing: 8.h) {
+                    // "Resend code" link - Figma: semibold, size 14, tracking 0.28
                     Button(action: {
                         Task { await resendCode() }
                     }) {
@@ -108,6 +98,7 @@ struct GmailEnterCodeView: View {
                     }
                     .disabled(!canResend || isLoading)
 
+                    // Countdown timer text - Figma: size 14, tracking 0.28, color (0.75, 0.75, 0.75)
                     if !canResend {
                         Text("You can request a new code in \(countdown) seconds.")
                             .font(Font.custom("SFProDisplay-Regular", size: 14.f))
@@ -131,9 +122,9 @@ struct GmailEnterCodeView: View {
             timer?.invalidate()
         }
     }
-    
+
     // MARK: - Components
-    
+
     private var logoSection: some View {
         ZStack {
             Image("Login-Icon")
@@ -142,25 +133,26 @@ struct GmailEnterCodeView: View {
         }
         .frame(width: 84.w, height: 52.h)
     }
-    
+
     private var titleSection: some View {
-        VStack(spacing: 12.h) {
+        VStack(spacing: 19.h) {  // 287 - 239 - 29(标题高度) ≈ 19
             Text("Enter your confirmation code")
                 .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
-                .foregroundColor(.white)
-            
-            Text("A verification code was sent to \(maskedEmail).")
+                .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
+
+            Text("An SMS was sent to \(maskedEmail)")
                 .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .tracking(0.28)
+                .multilineTextAlignment(.center)
                 .foregroundColor(Color(red: 0.75, green: 0.75, blue: 0.75))
         }
     }
-    
+
     private var codeInputSection: some View {
         ZStack {
-            // Hidden text field for input - 6 digit code
+            // 隐藏的输入框 - 6 位数字验证码
             TextField("", text: $verificationCode)
-                .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                .font(Font.custom("SFProDisplay-Light", size: 16.f))
                 .foregroundColor(.clear)
                 .accentColor(.clear)
                 .multilineTextAlignment(.center)
@@ -169,7 +161,7 @@ struct GmailEnterCodeView: View {
                 .autocorrectionDisabled()
                 .focused($isInputFocused)
                 .onChange(of: verificationCode) { _, newValue in
-                    // Only allow digits, max 6
+                    // 只允许数字，最多 6 位
                     let filtered = newValue.filter { $0.isNumber }
                     verificationCode = String(filtered.prefix(6))
                     
@@ -180,70 +172,81 @@ struct GmailEnterCodeView: View {
                 }
                 .frame(width: 1, height: 1)
                 .opacity(0.01)
-            
-            // 6 individual input boxes - matching Figma design
-            HStack(spacing: 10.s) {
-                ForEach(0..<6, id: \.self) { index in
-                    codeBox(at: index)
+
+            // 6 个独立的输入框 - 自适应间距
+            // Figma 基准: 6个框 × 40pt + 5个间距 × 10pt = 290pt
+            // 可用宽度: 375 - 37*2 = 301pt
+            GeometryReader { geometry in
+                let boxWidth: CGFloat = 40.s
+                let totalBoxWidth = boxWidth * 6
+                let availableSpacing = geometry.size.width - totalBoxWidth
+                let spacing = max(availableSpacing / 5, 8.s)
+
+                HStack(spacing: spacing) {
+                    ForEach(0..<6, id: \.self) { index in
+                        codeBox(at: index)
+                    }
                 }
+                .frame(width: geometry.size.width, height: 49.s)
             }
+            .frame(height: 49.s)
         }
         .onTapGesture { isInputFocused = true }
     }
-    
-    /// Single code input box
+
+    /// 单个验证码输入框 - Figma: 40.14×49, cornerRadius 12, stroke 0.5
     private func codeBox(at index: Int) -> some View {
         let characters = Array(verificationCode)
         let character = index < characters.count ? String(characters[index]) : ""
-        let isCurrentIndex = index == verificationCode.count && isInputFocused
-        
+        let hasCharacter = index < characters.count  // 已输入字符 -> 白色边框
+
         return ZStack {
-            // Display entered character
+            // 显示输入的字符
             Text(character)
                 .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
-                .foregroundColor(.white)
+                .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
         }
-        .frame(width: 40.w, height: 49.h)
+        .frame(width: 40.s, height: 49.s)
         .cornerRadius(12.s)
         .overlay(
             RoundedRectangle(cornerRadius: 12.s)
-                .inset(by: 0.5)
                 .stroke(
-                    isCurrentIndex ? Color.white : Color(red: 0.41, green: 0.41, blue: 0.41),
+                    hasCharacter ? Color.white : Color(red: 0.41, green: 0.41, blue: 0.41),
                     lineWidth: 0.5
                 )
         )
     }
-    
+
     @ViewBuilder
     private var errorMessageView: some View {
         if let errorMessage {
             Text(LocalizedStringKey(errorMessage))
-                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                .font(Typography.regular12)
                 .foregroundColor(.red)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40.w)
                 .padding(.top, 12.h)
         }
     }
-    
+
     private var verifyButton: some View {
         Button(action: { Task { await verifyCode() } }) {
             HStack(spacing: 10.s) {
                 if isLoading {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                        .progressViewStyle(CircularProgressViewStyle(tint: Color(red: 0.03, green: 0.11, blue: 0.21)))
                         .scaleEffect(0.9)
                 }
                 Text("Verify")
-                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
-                    .foregroundColor(.black)
+                    .font(Font.custom("SF Pro Display", size: 16.f).weight(.bold))
+                    .foregroundColor(Color(red: 0.03, green: 0.11, blue: 0.21))
             }
             .frame(width: 301.w, height: 48.h)
-            .background(Color.white)
+            .background(Color(red: 1, green: 1, blue: 1))
             .cornerRadius(50.s)
         }
-        .disabled(!isCodeValid || isLoading)
+        .buttonStyle(.plain)
+        .allowsHitTesting(isCodeValid && !isLoading)
     }
     
     // MARK: - Timer
@@ -282,15 +285,9 @@ struct GmailEnterCodeView: View {
                 // Store verification token with timestamp for next step
                 authManager.setEmailVerificationToken(token, email: email)
 
-                // Handle based on mode
-                if mode == .login {
-                    // Login flow: call loginWithEmail API
-                    await performLogin(verificationToken: token)
-                } else {
-                    // Registration flow: navigate to invite code page
-                    await MainActor.run {
-                        currentPage = .inviteCode
-                    }
+                // Navigate to invite code page
+                await MainActor.run {
+                    currentPage = .inviteCode
                 }
             } else {
                 errorMessage = response.message ?? "Verification failed"
@@ -361,89 +358,7 @@ struct GmailEnterCodeView: View {
             #endif
             errorMessage = "Failed to resend code. Please try again."
         }
-
-        isLoading = false
-    }
-
-    /// Perform login with verified email
-    private func performLogin(verificationToken: String) async {
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            let response = try await EmailAuthService.shared.loginWithEmail(
-                email: email,
-                verificationToken: verificationToken
-            )
-
-            #if DEBUG
-            print("[GmailEnterCodeView] Login successful: userId=\(response.userId)")
-            #endif
-
-            // Create user profile from response
-            let user = response.user ?? UserProfile(
-                id: response.userId,
-                username: "user_\(response.userId.prefix(8))",
-                email: email,
-                displayName: nil,
-                bio: nil,
-                avatarUrl: nil,
-                coverUrl: nil,
-                website: nil,
-                location: nil,
-                isVerified: false,
-                isPrivate: false,
-                isBanned: false,
-                followerCount: 0,
-                followingCount: 0,
-                postCount: 0,
-                createdAt: nil,
-                updatedAt: nil,
-                deletedAt: nil,
-                firstName: nil,
-                lastName: nil,
-                dateOfBirth: nil,
-                gender: nil
-            )
-
-            // Save authentication
-            await MainActor.run {
-                authManager.authToken = response.token
-                authManager.currentUser = user
-                authManager.isAuthenticated = true
-                APIClient.shared.setAuthToken(response.token)
-
-                // Save to keychain
-                _ = KeychainService.shared.save(response.token, for: .authToken)
-                _ = KeychainService.shared.save(user.id, for: .userId)
-                if let refreshToken = response.refreshToken {
-                    _ = KeychainService.shared.save(refreshToken, for: .refreshToken)
-                }
-            }
-
-            // Login successful - AuthenticationManager will trigger navigation
-
-        } catch EmailAuthError.emailNotRegistered {
-            errorMessage = "No account found with this email. Please sign up first."
-        } catch let emailError as EmailAuthError {
-            #if DEBUG
-            print("[GmailEnterCodeView] Login error: \(emailError)")
-            #endif
-            switch emailError {
-            case .networkError:
-                errorMessage = "Unable to connect. Please check your internet connection."
-            case .serverError(let message):
-                errorMessage = message
-            default:
-                errorMessage = emailError.localizedDescription
-            }
-        } catch {
-            #if DEBUG
-            print("[GmailEnterCodeView] Unexpected login error: \(error)")
-            #endif
-            errorMessage = "Login failed. Please try again."
-        }
-
+        
         isLoading = false
     }
 }
