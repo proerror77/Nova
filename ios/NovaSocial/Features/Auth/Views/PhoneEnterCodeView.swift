@@ -100,15 +100,10 @@ struct PhoneEnterCodeView: View {
 
                     // Countdown timer text - Figma: size 14, tracking 0.28, color (0.75, 0.75, 0.75)
                     if !canResend {
-                        HStack(spacing: 6.s) {
-                            Image(systemName: "clock")
-                                .font(.system(size: 14.f))
-                                .foregroundColor(Color(red: 0.75, green: 0.75, blue: 0.75))
-                            Text("You can request a new code in \(countdown) seconds.")
-                                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                                .tracking(0.28)
-                                .foregroundColor(Color(red: 0.75, green: 0.75, blue: 0.75))
-                        }
+                        Text("You can request a new code in \(countdown) seconds.")
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                            .tracking(0.28)
+                            .foregroundColor(Color(red: 0.75, green: 0.75, blue: 0.75))
                     }
                 }
                 .frame(maxWidth: .infinity)
