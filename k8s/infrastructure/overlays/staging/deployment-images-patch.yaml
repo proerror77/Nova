@@ -118,7 +118,7 @@ spec:
     spec:
       containers:
       - name: social-service
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/social-service@sha256:3196904269f65e5759de5e845d0f99e67e78583486c2e7316b2252f91e99defe
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/social-service@sha256:35603947f9aa047c935bdb882de818c2ee605133b02e84fcfea208ce865f0351
 ---
 apiVersion: apps/v1
 kind: Deployment
