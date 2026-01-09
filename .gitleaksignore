@@ -1,2 +1,13 @@
 # Ignore test keys in integration tests (not real secrets)
 backend/libs/crypto-core/tests/jwt_integration_tests.rs:private-key:17
+
+# Ignore example tokens in documentation (not real secrets)
+docs/ICERED-Admin-技术方案.md:generic-api-key:821
+docs/DOCUMENTATION_COMPLETENESS_REVIEW.md:generic-api-key:160
+docs/DOCUMENTATION_COMPLETENESS_REVIEW.md:generic-api-key:161
+docs/DOCUMENTATION_COMPLETENESS_REVIEW_2025-12-16.md:generic-api-key:214
+docs/DOCUMENTATION_COMPLETENESS_REVIEW_2025-12-16.md:generic-api-key:215
+
+# Ignore test JWT tokens in security tests (not real secrets)
+backend/graphql-gateway/tests/security_logging_tests.rs:generic-api-key:91
+backend/graphql-gateway/tests/security_logging_tests.rs:jwt:90
