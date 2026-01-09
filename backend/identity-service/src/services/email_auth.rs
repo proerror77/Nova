@@ -498,9 +498,9 @@ impl EmailAuthService {
 
     /// Send OTP email
     async fn send_otp_email(&self, email: &str, otp: &str) -> Result<()> {
-        let subject = "ICERED Verification Code";
+        let subject = "Icered Verification Code";
         let text_body = format!(
-            "Your ICERED verification code is: {}\n\nThis code will expire in 5 minutes.\n\nIf you did not request this code, please ignore this email.",
+            "Your Icered verification code is: {}\n\nThis code will expire in 5 minutes.\n\nIf you did not request this code, please ignore this email.",
             otp
         );
 
@@ -512,7 +512,7 @@ impl EmailAuthService {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px; color: #333;">
-    <h2>ICERED Verification Code</h2>
+    <h2>Icered Verification Code</h2>
     <p>Your verification code is:</p>
     <p style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #000; margin: 30px 0;">{}</p>
     <p style="color: #666; font-size: 14px;">This code will expire in <strong>5 minutes</strong>.</p>

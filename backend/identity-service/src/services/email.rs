@@ -75,9 +75,9 @@ impl EmailService {
     /// * `token` - Verification token (opaque string)
     pub async fn send_verification_email(&self, recipient: &str, token: &str) -> Result<()> {
         let link = self.build_verification_link(token);
-        let subject = "Verify your ICERED account";
+        let subject = "Verify your Icered account";
         let body = format!(
-            "Welcome to ICERED!\n\nPlease click the following link to complete your email verification:\n{}\n\nIf you did not request this, please ignore this email.",
+            "Welcome to Icered!\n\nPlease click the following link to complete your email verification:\n{}\n\nIf you did not request this, please ignore this email.",
             link
         );
         self.send_mail(recipient, subject, &body).await
@@ -92,7 +92,7 @@ impl EmailService {
     pub async fn send_password_reset_email(&self, recipient: &str, token: &str) -> Result<()> {
         let web_link = self.build_password_reset_link(token);
         let ios_link = format!("nova://reset-password?token={}", token);
-        let subject = "ICERED Password Reset";
+        let subject = "Icered Password Reset";
 
         // HTML email with both web and iOS deep links
         let html_body = format!(
