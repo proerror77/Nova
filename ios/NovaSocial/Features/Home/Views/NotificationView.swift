@@ -339,9 +339,17 @@ struct NotificationView: View {
         isLoadingPost = true
 
         do {
-            let post = try await contentService.getPost(postId: postId)
+            guard let post = try await contentService.getPost(postId: postId) else {
+                throw NSError(domain: "NotificationView", code: 404, userInfo: [NSLocalizedDescriptionKey: "Post not found"])
+            }
+            
+            // Convert Post to FeedPost
+            let authorName = post.displayAuthorName
+            let authorAvatar = post.authorAvatarUrl
+            let feedPost = FeedPost(from: post, authorName: authorName, authorAvatar: authorAvatar)
+            
             await MainActor.run {
-                selectedPost = post
+                selectedPost = feedPost
                 isLoadingPost = false
                 showPostDetail = true
             }
