@@ -167,7 +167,7 @@ struct XAIStreamDelta {
 
 // MARK: - Default System Prompt
 
-const ALICE_SYSTEM_PROMPT: &str = r#"You are Alice, the AI assistant for ICERED social platform.
+const ALICE_SYSTEM_PROMPT: &str = r#"You are Alice, the AI assistant for Icered social platform.
 
 Your characteristics:
 - Friendly, helpful, and professional

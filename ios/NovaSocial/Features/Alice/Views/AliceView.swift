@@ -552,8 +552,14 @@ struct AliceView: View {
 
                     // Check for quota error and provide helpful message
                     let displayMessage: String
-                    if let xaiError = error as? XAIError, xaiError.isQuotaError {
-                        displayMessage = "AI 服務配額已用完，請稍後再試。\n\n此錯誤通常是暫時的，請稍等幾分鐘後重試。"
+                    if let xaiError = error as? XAIError {
+                        if xaiError.isQuotaError {
+                            displayMessage = "AI 服務配額已用完，請稍後再試。\n\n此錯誤通常是暫時的，請稍等幾分鐘後重試。"
+                        } else if case .authError(let message) = xaiError {
+                            displayMessage = "🔐 \(message)\n\n請先登入您的帳號以使用 AI 聊天功能。"
+                        } else {
+                            displayMessage = "抱歉，發生錯誤：\(error.localizedDescription)"
+                        }
                     } else {
                         displayMessage = "抱歉，發生錯誤：\(error.localizedDescription)"
                     }
