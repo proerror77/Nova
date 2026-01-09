@@ -46,8 +46,8 @@ if [ ! -d "$MIGRATIONS_DIR" ]; then
     exit 0
 fi
 
-# Count migrations in codebase (excluding .down.sql and non-sql files)
-CODE_MIGRATIONS=$(find "$MIGRATIONS_DIR" -name "*.sql" ! -name "*.down.sql" -type f | wc -l | tr -d ' ')
+# Count migrations in codebase (excluding .down.sql, non-sql files, and subdirectories)
+CODE_MIGRATIONS=$(find "$MIGRATIONS_DIR" -maxdepth 1 -name "*.sql" ! -name "*.down.sql" -type f | wc -l | tr -d ' ')
 echo "📁 Migrations in codebase: $CODE_MIGRATIONS"
 
 # Get migrations from database (requires kubectl access)
