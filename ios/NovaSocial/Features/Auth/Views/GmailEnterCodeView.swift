@@ -135,17 +135,12 @@ struct GmailEnterCodeView: View {
     // MARK: - Components
     
     private var logoSection: some View {
-        VStack(spacing: 8.h) {
+        ZStack {
             Image("Login-Icon")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 84.w, height: 52.h)
-            
-            Text("ICERED")
-                .font(Font.custom("SFProDisplay-Bold", size: 16.f))
-                .tracking(4)
-                .foregroundColor(.white)
         }
+        .frame(width: 84.w, height: 52.h)
     }
     
     private var titleSection: some View {
