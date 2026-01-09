@@ -124,6 +124,39 @@ jobs:
           echo "📊 Current pods in ${{ env.NAMESPACE }}:"
           kubectl get pods -n ${{ env.NAMESPACE }} -o wide
 
+      - name: Verify Passkey AASA (staging)
+        run: |
+          set -euo pipefail
+          echo "🔍 Verifying https://staging.gcp.icered.com/.well-known/apple-app-site-association ..."
+          curl -fsSL https://staging.gcp.icered.com/.well-known/apple-app-site-association > /tmp/aasa.json
+          python3 - <<'PY'
+          import json
+          with open("/tmp/aasa.json", "rb") as f:
+              data = json.load(f)
+          apps = (((data.get("webcredentials") or {}).get("apps")) or [])
+          if "2C77AZCA8W.com.app.icered.pro" not in apps:
+              raise SystemExit(f"Missing webcredentials appID: 2C77AZCA8W.com.app.icered.pro (found {apps})")
+          print("✅ AASA webcredentials.apps includes 2C77AZCA8W.com.app.icered.pro")
+          PY
+
+      - name: Verify Passkey RP config (staging)
+        run: |
+          set -euo pipefail
+          NS=${{ env.NAMESPACE }}
+          RP_ID="$(kubectl -n "$NS" get cm identity-service-configmap -o jsonpath='{.data.passkey-rp-id}')"
+          ORIGIN="$(kubectl -n "$NS" get cm identity-service-configmap -o jsonpath='{.data.passkey-origin}')"
+          echo "passkey-rp-id=$RP_ID"
+          echo "passkey-origin=$ORIGIN"
+          test "$RP_ID" = "staging.gcp.icered.com"
+          test "$ORIGIN" = "https://staging.gcp.icered.com"
+          echo "✅ identity-service-configmap Passkey RP config is correct"
+
+      - name: Restart identity-service (pick up ConfigMap)
+        run: |
+          set -euo pipefail
+          NS=${{ env.NAMESPACE }}
+          kubectl -n "$NS" rollout restart deploy/identity-service
+
       - name: Wait for deployments
         run: |
           set -e

@@ -35,6 +35,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Validate Associated Domains (Passkeys)
+        run: |
+          set -euo pipefail
+          if grep -n "\\?mode=developer" ios/NovaSocial/ICERED.entitlements ios/NovaSocial/project.yml; then
+            echo "::error::Remove '?mode=developer' from webcredentials associated domains (breaks Passkeys)."
+            exit 1
+          fi
+
       - name: Install SwiftLint
         run: |
           brew install swiftlint
