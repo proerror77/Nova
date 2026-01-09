@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
       - name: content-service
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/content-service@sha256:ed7155fce0f6583d30790308c3330da09b1b7285186a30a47ddd7a98d070d74d
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/content-service@sha256:317a506e1980296b7593dde7e10c73e955dabe3ac8859cbbdd7c3ddce1ba930e
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -30,7 +30,7 @@ spec:
     spec:
       containers:
       - name: identity-service
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/identity-service@sha256:8f4193f0fdff785c0616bc450feead3aa463cf7fd35225aadab1808dfa997c17
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/identity-service@sha256:4739feb1f2818e24b775b0bd2ba224b59c0458382b0c3f227f8bdb29e2b1fe07
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -118,7 +118,7 @@ spec:
     spec:
       containers:
       - name: social-service
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/social-service@sha256:01fd12e945285d50125b0347dac014571a967144a6502d49729300d904b02a6f
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/social-service@sha256:3196904269f65e5759de5e845d0f99e67e78583486c2e7316b2252f91e99defe
 ---
 apiVersion: apps/v1
 kind: Deployment
