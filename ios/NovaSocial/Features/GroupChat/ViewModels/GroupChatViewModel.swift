@@ -17,6 +17,9 @@ struct GroupChatUIMessage: Identifiable, Equatable {
 
     // Media fields
     var mediaUrl: String?
+    var matrixMediaSourceJson: String?
+    var matrixMediaMimeType: String?
+    var matrixMediaFilename: String?
     var image: UIImage?
     var audioData: Data?
     var audioDuration: TimeInterval?
@@ -42,6 +45,9 @@ struct GroupChatUIMessage: Identifiable, Equatable {
         self.messageType = Self.mapMessageType(matrixMessage.type.rawValue)
         self.status = .sent
         self.mediaUrl = matrixMessage.mediaURL
+        self.matrixMediaSourceJson = matrixMessage.mediaSourceJson
+        self.matrixMediaMimeType = matrixMessage.mediaInfo?.mimeType
+        self.matrixMediaFilename = matrixMessage.mediaFilename
 
         // Determine if message is from current user
         self.isFromMe = matrixMessage.senderId == myMatrixId || matrixMessage.senderId == currentUserId
@@ -83,6 +89,9 @@ struct GroupChatUIMessage: Identifiable, Equatable {
         self.audioDuration = audioDuration
         self.audioUrl = audioUrl
         self.location = location
+        self.matrixMediaSourceJson = nil
+        self.matrixMediaMimeType = nil
+        self.matrixMediaFilename = nil
 
         // Determine message type from content
         if image != nil {
@@ -177,6 +186,10 @@ final class GroupChatViewModel {
     // MARK: - Error State
 
     var error: String?
+
+    // MARK: - Matrix Media Resolution
+
+    private var resolvingMediaMessageIds = Set<String>()
 
     // MARK: - Voice Recording
 
@@ -326,6 +339,10 @@ final class GroupChatViewModel {
                 )
             }
 
+            resolveMatrixMediaForLoadedMessages()
+
+            resolveMatrixMediaForLoadedMessages()
+
             hasMoreMessages = matrixMessages.count >= 50
 
             // Mark as read
@@ -343,6 +360,55 @@ final class GroupChatViewModel {
         }
 
         isLoading = false
+    }
+
+    private func resolveMatrixMediaForLoadedMessages() {
+        for idx in messages.indices {
+            resolveMatrixMediaIfNeeded(messageIndex: idx)
+        }
+    }
+
+    private func resolveMatrixMediaIfNeeded(messageIndex: Int) {
+        guard messages.indices.contains(messageIndex) else { return }
+
+        let message = messages[messageIndex]
+        guard message.mediaUrl == nil else { return }
+
+        switch message.messageType {
+        case .image, .video, .audio, .file:
+            break
+        default:
+            return
+        }
+
+        guard let mediaSourceJson = message.matrixMediaSourceJson else { return }
+
+        if resolvingMediaMessageIds.contains(message.id) { return }
+        resolvingMediaMessageIds.insert(message.id)
+
+        Task {
+            defer { resolvingMediaMessageIds.remove(message.id) }
+
+            do {
+                let urlString = try await matrixBridge.resolveMediaURL(
+                    mediaSourceJson: mediaSourceJson,
+                    mimeType: message.matrixMediaMimeType,
+                    filename: message.matrixMediaFilename,
+                    cacheKey: message.id
+                )
+
+                if let idx = messages.firstIndex(where: { $0.id == message.id }) {
+                    messages[idx].mediaUrl = urlString
+                    if messages[idx].messageType == .audio, let url = URL(string: urlString) {
+                        messages[idx].audioUrl = url
+                    }
+                }
+            } catch {
+                #if DEBUG
+                print("[GroupChatViewModel] ⚠️ Failed to resolve Matrix media for message \(message.id): \(error)")
+                #endif
+            }
+        }
     }
 
     // MARK: - Matrix Message Handler
@@ -393,6 +459,10 @@ final class GroupChatViewModel {
                 }
 
                 self.messages.append(newMessage)
+
+                if let idx = self.messages.firstIndex(where: { $0.id == newMessage.id }) {
+                    self.resolveMatrixMediaIfNeeded(messageIndex: idx)
+                }
 
                 #if DEBUG
                 print("[GroupChatViewModel] ✅ Message added - ID: \(newMessage.id), Total: \(self.messages.count)")

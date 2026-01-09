@@ -549,20 +549,32 @@ struct GroupMessageBubbleView: View {
                     .frame(maxWidth: 200, maxHeight: 200)
                     .cornerRadius(10)
             } else if let mediaUrl = message.mediaUrl, let url = URL(string: mediaUrl) {
-                AsyncImage(url: url) { image in
+                CachedAsyncImage(
+                    url: url,
+                    targetSize: CGSize(width: 400, height: 400),
+                    enableProgressiveLoading: true,
+                    priority: .normal
+                ) { image in
                     image
                         .resizable()
                         .scaledToFit()
+                        .frame(maxWidth: 200, maxHeight: 200)
+                        .cornerRadius(10)
                 } placeholder: {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(width: 150, height: 150)
+                        ProgressView()
+                    }
+                }
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 150, height: 150)
                     ProgressView()
                 }
-                .frame(maxWidth: 200, maxHeight: 200)
-                .cornerRadius(10)
-            } else {
-                Text("[Image]")
-                    .font(Font.custom("Helvetica Neue", size: 16))
-                    .foregroundColor(message.isFromMe ? .white : otherTextColor)
-                    .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
             }
 
         case .audio:
@@ -603,6 +615,21 @@ struct GroupMessageBubbleView: View {
                     .lineLimit(2)
             }
             .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
+
+        case .video:
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.black.opacity(0.8))
+                    .frame(width: 200, height: 150)
+
+                if message.mediaUrl != nil {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 44.f))
+                        .foregroundColor(.white.opacity(0.9))
+                } else {
+                    ProgressView()
+                }
+            }
 
         default:
             // Text message

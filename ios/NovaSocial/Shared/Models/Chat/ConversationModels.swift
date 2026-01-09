@@ -186,6 +186,11 @@ struct Message: Identifiable, Codable, Sendable {
     var mediaUrl: String?
     var replyToId: String?
 
+    // Matrix-first: local-only media resolution hints (not part of backend schema)
+    var matrixMediaSourceJson: String? = nil
+    var matrixMediaMimeType: String? = nil
+    var matrixMediaFilename: String? = nil
+
     // E2EE fields
     var encryptionVersion: Int?
     var encryptedContent: String?  // Base64-encoded ciphertext (includes tag)
@@ -262,6 +267,10 @@ struct Message: Identifiable, Codable, Sendable {
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
         pinnedAt = try container.decodeIfPresent(Date.self, forKey: .pinnedAt)
         pinnedBy = try container.decodeIfPresent(String.self, forKey: .pinnedBy)
+
+        matrixMediaSourceJson = nil
+        matrixMediaMimeType = nil
+        matrixMediaFilename = nil
     }
 
     func encode(to encoder: Encoder) throws {
@@ -298,6 +307,9 @@ struct Message: Identifiable, Codable, Sendable {
         status: MessageStatus = .sent,
         mediaUrl: String? = nil,
         replyToId: String? = nil,
+        matrixMediaSourceJson: String? = nil,
+        matrixMediaMimeType: String? = nil,
+        matrixMediaFilename: String? = nil,
         encryptedContent: String? = nil,
         nonce: String? = nil,
         sessionId: String? = nil,
@@ -319,6 +331,9 @@ struct Message: Identifiable, Codable, Sendable {
         self.status = status
         self.mediaUrl = mediaUrl
         self.replyToId = replyToId
+        self.matrixMediaSourceJson = matrixMediaSourceJson
+        self.matrixMediaMimeType = matrixMediaMimeType
+        self.matrixMediaFilename = matrixMediaFilename
         self.encryptedContent = encryptedContent
         self.nonce = nonce
         self.sessionId = sessionId

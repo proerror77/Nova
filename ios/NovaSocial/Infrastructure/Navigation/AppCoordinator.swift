@@ -290,7 +290,7 @@ final class AppCoordinator: @unchecked Sendable {
     private func requiresAuthentication(_ route: AppRoute) -> Bool {
         switch route {
         case .splash, .inviteCode, .login, .phoneLogin, .phoneRegistration, .phoneEnterCode,
-             .gmailEnterCode, .gmailEnterCodeLogin, .forgotPassword, .emailSentConfirmation, .resetPassword, .createAccount:
+             .gmailEnterCode, .forgotPassword, .emailSentConfirmation, .resetPassword, .createAccount:
             return false
         default:
             return true

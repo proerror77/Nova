@@ -1072,7 +1072,10 @@ extension MatrixBridgeService {
             type: chatType,
             createdAt: matrixMessage.timestamp,
             status: .delivered,
-            mediaUrl: matrixMessage.mediaURL
+            mediaUrl: matrixMessage.mediaURL,
+            matrixMediaSourceJson: matrixMessage.mediaSourceJson,
+            matrixMediaMimeType: matrixMessage.mediaInfo?.mimeType,
+            matrixMediaFilename: matrixMessage.mediaFilename
         )
     }
 
@@ -1707,8 +1710,7 @@ extension MatrixBridgeService {
         isEncrypted: Bool,
         isDirect: Bool
     ) async {
-        if let conversationId = try? await queryConversationMapping(roomId: roomId),
-           let conversationId,
+        if let conversationId = (try? await queryConversationMapping(roomId: roomId)) ?? nil,
            !conversationId.isEmpty {
             cacheMapping(conversationId: conversationId, roomId: roomId)
             return

@@ -99,6 +99,28 @@ extension MatrixBridgeService {
         matrixService.unsubscribeFromRoomTimeline(roomId: roomId)
     }
 
+    /// Resolve (download + decrypt) a Matrix media attachment into a stable local file URL.
+    /// Returns a `file://` URL string that can be fed into image/audio/video/file renderers.
+    func resolveMediaURL(
+        mediaSourceJson: String,
+        mimeType: String?,
+        filename: String?,
+        cacheKey: String
+    ) async throws -> String {
+        guard isInitialized else {
+            throw MatrixBridgeError.notInitialized
+        }
+
+        let url = try await matrixService.getOrDownloadMediaFileURL(
+            mediaSourceJson: mediaSourceJson,
+            suggestedFilename: filename,
+            mimeType: mimeType,
+            cacheKey: cacheKey
+        )
+
+        return url.absoluteString
+    }
+
     // MARK: - Typing & Read Status
 
     /// Set typing indicator for a conversation

@@ -208,6 +208,10 @@ final class ChatService {
                     type: msgType,
                     createdAt: matrixMsg.timestamp,
                     status: .delivered,
+                    mediaUrl: matrixMsg.mediaURL,
+                    matrixMediaSourceJson: matrixMsg.mediaSourceJson,
+                    matrixMediaMimeType: matrixMsg.mediaInfo?.mimeType,
+                    matrixMediaFilename: matrixMsg.mediaFilename,
                     encryptionVersion: 3  // Matrix E2EE
                 )
             }

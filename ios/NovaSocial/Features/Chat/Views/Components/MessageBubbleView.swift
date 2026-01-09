@@ -302,6 +302,15 @@ struct MessageBubbleView: View {
                 }
             }
         }
+        // 2.1 圖片尚在解密/下載（Matrix E2EE media）
+        else if message.messageType == .image {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: 150, height: 150)
+                ProgressView()
+            }
+        }
         // 3. 位置消息
         else if let location = message.location {
             LocationMessageView(location: location)
@@ -331,6 +340,10 @@ struct MessageBubbleView: View {
         // 6. 視頻消息
         else if message.messageType == .video, let urlString = message.mediaUrl {
             videoThumbnailView(urlString: urlString, isFromMe: isFromMe)
+        }
+        // 6.1 視頻尚在解密/下載（Matrix E2EE media）
+        else if message.messageType == .video {
+            videoThumbnailView(urlString: "", isFromMe: isFromMe)
         }
         // 7. 文字消息
         else {

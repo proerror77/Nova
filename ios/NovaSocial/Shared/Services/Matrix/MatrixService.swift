@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import UIKit  // For UIDevice
+import CryptoKit
 
 // MARK: - MatrixRustSDK Import
 // Import the Matrix Rust SDK Swift components
@@ -613,6 +614,41 @@ struct MatrixMessage: Identifiable, Equatable {
     /// Media info for image/file messages
     let mediaURL: String?
     let mediaInfo: MediaInfo?
+
+    /// Serialized MatrixRustSDK `MediaSource` for E2EE-safe media download/decryption.
+    /// When present, callers should use `Client.getMediaFile(mediaSource:...)` rather than raw URLs.
+    let mediaSourceJson: String?
+
+    /// Best-effort filename for downloaded media (from Matrix message content).
+    let mediaFilename: String?
+
+    init(
+        id: String,
+        roomId: String,
+        senderId: String,
+        content: String,
+        type: MatrixMessageType,
+        timestamp: Date,
+        isEdited: Bool,
+        replyTo: String?,
+        mediaURL: String?,
+        mediaInfo: MediaInfo?,
+        mediaSourceJson: String? = nil,
+        mediaFilename: String? = nil
+    ) {
+        self.id = id
+        self.roomId = roomId
+        self.senderId = senderId
+        self.content = content
+        self.type = type
+        self.timestamp = timestamp
+        self.isEdited = isEdited
+        self.replyTo = replyTo
+        self.mediaURL = mediaURL
+        self.mediaInfo = mediaInfo
+        self.mediaSourceJson = mediaSourceJson
+        self.mediaFilename = mediaFilename
+    }
 
     struct MediaInfo: Equatable {
         let mimeType: String
@@ -3081,40 +3117,22 @@ final class MatrixService: MatrixServiceProtocol {
             case .message(let messageContent):
                 let body = messageContent.body
                 let isEdited = messageContent.isEdited
-                let msgType: MatrixMessageType
 
-                switch messageContent.msgType {
-                case .text:
-                    msgType = .text
-                case .image:
-                    msgType = .image
-                case .video:
-                    msgType = .video
-                case .audio:
-                    msgType = .audio
-                case .file:
-                    msgType = .file
-                case .location:
-                    msgType = .location
-                case .notice:
-                    msgType = .notice
-                case .emote:
-                    msgType = .emote
-                case .gallery, .other:
-                    msgType = .text
-                }
+                let parsed = parseMedia(messageContent.msgType)
 
                 return MatrixMessage(
                     id: eventId,
                     roomId: roomId,
                     senderId: senderId,
                     content: body,
-                    type: msgType,
+                    type: parsed.type,
                     timestamp: timestamp,
                     isEdited: isEdited,
                     replyTo: nil,
                     mediaURL: nil,
-                    mediaInfo: nil
+                    mediaInfo: parsed.mediaInfo,
+                    mediaSourceJson: parsed.mediaSourceJson,
+                    mediaFilename: parsed.mediaFilename
                 )
             case .sticker, .poll, .redacted, .unableToDecrypt, .other:
                 return nil
@@ -3122,6 +3140,171 @@ final class MatrixService: MatrixServiceProtocol {
         case .callInvite, .rtcNotification, .roomMembership, .profileChange, .state, .failedToParseMessageLike, .failedToParseState:
             return nil
         }
+    }
+
+    private struct ParsedMedia {
+        let type: MatrixMessageType
+        let mediaSourceJson: String?
+        let mediaFilename: String?
+        let mediaInfo: MatrixMessage.MediaInfo?
+    }
+
+    private func parseMedia(_ msgType: MatrixRustSDK.MessageType) -> ParsedMedia {
+        switch msgType {
+        case .text:
+            return ParsedMedia(type: .text, mediaSourceJson: nil, mediaFilename: nil, mediaInfo: nil)
+        case .notice:
+            return ParsedMedia(type: .notice, mediaSourceJson: nil, mediaFilename: nil, mediaInfo: nil)
+        case .emote:
+            return ParsedMedia(type: .emote, mediaSourceJson: nil, mediaFilename: nil, mediaInfo: nil)
+        case .location:
+            return ParsedMedia(type: .location, mediaSourceJson: nil, mediaFilename: nil, mediaInfo: nil)
+        case .gallery, .other:
+            return ParsedMedia(type: .text, mediaSourceJson: nil, mediaFilename: nil, mediaInfo: nil)
+        case .image(let content):
+            return ParsedMedia(
+                type: .image,
+                mediaSourceJson: content.source.toJson(),
+                mediaFilename: content.filename,
+                mediaInfo: MatrixMessage.MediaInfo(
+                    mimeType: content.info?.mimetype ?? "image/*",
+                    size: Int64(content.info?.size ?? 0),
+                    width: content.info?.width.map { Int($0) },
+                    height: content.info?.height.map { Int($0) },
+                    thumbnailURL: content.info?.thumbnailSource?.url()
+                )
+            )
+        case .video(let content):
+            return ParsedMedia(
+                type: .video,
+                mediaSourceJson: content.source.toJson(),
+                mediaFilename: content.filename,
+                mediaInfo: MatrixMessage.MediaInfo(
+                    mimeType: content.info?.mimetype ?? "video/*",
+                    size: Int64(content.info?.size ?? 0),
+                    width: content.info?.width.map { Int($0) },
+                    height: content.info?.height.map { Int($0) },
+                    thumbnailURL: content.info?.thumbnailSource?.url()
+                )
+            )
+        case .audio(let content):
+            return ParsedMedia(
+                type: .audio,
+                mediaSourceJson: content.source.toJson(),
+                mediaFilename: content.filename,
+                mediaInfo: MatrixMessage.MediaInfo(
+                    mimeType: content.info?.mimetype ?? "audio/*",
+                    size: Int64(content.info?.size ?? 0),
+                    width: nil,
+                    height: nil,
+                    thumbnailURL: nil
+                )
+            )
+        case .file(let content):
+            return ParsedMedia(
+                type: .file,
+                mediaSourceJson: content.source.toJson(),
+                mediaFilename: content.filename,
+                mediaInfo: MatrixMessage.MediaInfo(
+                    mimeType: content.info?.mimetype ?? "application/octet-stream",
+                    size: Int64(content.info?.size ?? 0),
+                    width: nil,
+                    height: nil,
+                    thumbnailURL: content.info?.thumbnailSource?.url()
+                )
+            )
+        }
+    }
+
+    /// Download + decrypt a Matrix media attachment to a stable local cache file.
+    /// Returns a `file://` URL that UI components can render/play directly.
+    func getOrDownloadMediaFileURL(
+        mediaSourceJson: String,
+        suggestedFilename: String?,
+        mimeType: String?,
+        cacheKey: String
+    ) async throws -> URL {
+        guard let client = client, userId != nil else {
+            throw MatrixError.notLoggedIn
+        }
+
+        let cacheDir = try mediaCacheDirectory()
+        let safeName = sanitizeFilename(suggestedFilename)
+        let ext = fileExtension(for: safeName, mimeType: mimeType)
+        let keyHash = sha256Hex(cacheKey + "\n" + mediaSourceJson)
+        let filename = [keyHash, safeName].filter { !$0.isEmpty }.joined(separator: "_")
+        let destination = cacheDir.appendingPathComponent("\(filename).\(ext)")
+
+        if FileManager.default.fileExists(atPath: destination.path) {
+            return destination
+        }
+
+        let mediaSource = try MediaSource.fromJson(json: mediaSourceJson)
+        let handle = try await client.getMediaFile(
+            mediaSource: mediaSource,
+            filename: suggestedFilename,
+            mimeType: mimeType ?? "application/octet-stream",
+            useCache: true,
+            tempDir: nil
+        )
+
+        let persisted = try handle.persist(path: destination.path)
+        if !persisted && !FileManager.default.fileExists(atPath: destination.path) {
+            let tempPath = try handle.path()
+            try? FileManager.default.copyItem(
+                at: URL(fileURLWithPath: tempPath),
+                to: destination
+            )
+        }
+        return destination
+    }
+
+    private func mediaCacheDirectory() throws -> URL {
+        let fm = FileManager.default
+        guard let base = fm.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+            throw MatrixError.sdkError("No cachesDirectory available")
+        }
+        let dir = base.appendingPathComponent("MatrixMedia", isDirectory: true)
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private func sanitizeFilename(_ filename: String?) -> String {
+        let name = (filename ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty { return "" }
+        let sanitized = name
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "\\\\", with: "_")
+            .replacingOccurrences(of: ":", with: "_")
+
+        if sanitized.count > 80 {
+            return String(sanitized.prefix(80))
+        }
+        return sanitized
+    }
+
+    private func fileExtension(for filename: String, mimeType: String?) -> String {
+        let ext = URL(fileURLWithPath: filename).pathExtension.lowercased()
+        if !ext.isEmpty { return ext }
+
+        switch (mimeType ?? "").lowercased() {
+        case "image/jpeg", "image/jpg": return "jpg"
+        case "image/png": return "png"
+        case "image/gif": return "gif"
+        case "image/webp": return "webp"
+        case "video/mp4": return "mp4"
+        case "video/quicktime": return "mov"
+        case "audio/mpeg": return "mp3"
+        case "audio/mp4", "audio/aac": return "m4a"
+        case "audio/ogg", "audio/opus": return "ogg"
+        case "application/pdf": return "pdf"
+        default: return "dat"
+        }
+    }
+
+    private func sha256Hex(_ s: String) -> String {
+        let digest = SHA256.hash(data: Data(s.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 
     // MARK: - Session Storage
