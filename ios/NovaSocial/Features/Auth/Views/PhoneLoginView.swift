@@ -422,14 +422,25 @@ struct PhoneLoginView: View {
             )
 
             // Save auth tokens and update user
-            if let user = loginResponse.user {
-                authManager.updateCurrentUser(user)
+            await MainActor.run {
+                authManager.authToken = loginResponse.token
+                authManager.isAuthenticated = true
+                APIClient.shared.setAuthToken(loginResponse.token)
+
+                // Save to keychain
+                _ = KeychainService.shared.save(loginResponse.token, for: .authToken)
+                _ = KeychainService.shared.save(loginResponse.userId, for: .userId)
+                if let refreshToken = loginResponse.refreshToken {
+                    _ = KeychainService.shared.save(refreshToken, for: .refreshToken)
+                }
+
+                // Update user profile
+                if let user = loginResponse.user {
+                    authManager.updateCurrentUser(user)
+                }
             }
 
-            // Navigate to home
-            await MainActor.run {
-                currentPage = .home
-            }
+            // Login successful - AuthenticationManager will trigger navigation
 
         } catch let error as PhoneAuthError {
             switch error {
