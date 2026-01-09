@@ -6,17 +6,45 @@ struct NotificationView: View {
     @State private var showChat = false
     @State private var selectedUserName = ""
     @State private var selectedConversationId = ""
+    @State private var showPostDetail = false
+    @State private var selectedPostId: String?
+    @State private var showUserProfile = false
+    @State private var selectedUserId: String?
 
     var body: some View {
         ZStack {
             if showChat {
                 ChatView(showChat: $showChat, conversationId: selectedConversationId, userName: selectedUserName)
                     .transition(.identity)
+            } else if showPostDetail, let postId = selectedPostId {
+                PostDetailView(
+                    post: nil,
+                    postId: postId,
+                    onDismiss: {
+                        showPostDetail = false
+                        selectedPostId = nil
+                    },
+                    onUserTap: { userId in
+                        selectedUserId = userId
+                        showPostDetail = false
+                        showUserProfile = true
+                    }
+                )
+                .transition(.identity)
             } else {
                 notificationContent
             }
         }
         .animation(.none, value: showChat)
+        .animation(.none, value: showPostDetail)
+        .fullScreenCover(isPresented: $showUserProfile) {
+            if let userId = selectedUserId {
+                UserProfileView(showUserProfile: $showUserProfile, userId: userId)
+                    .onDisappear {
+                        selectedUserId = nil
+                    }
+            }
+        }
         .task {
             await viewModel.loadNotifications()
         }
@@ -207,6 +235,38 @@ struct NotificationView: View {
             ForEach(notifications) { notification in
                 NotificationListItem(
                     notification: notification,
+                    onTap: {
+                        // Navigate based on notification type
+                        switch notification.type {
+                        case .like, .comment, .share:
+                            // Navigate to post detail
+                            if let postId = notification.relatedPostId {
+                                selectedPostId = postId
+                                showPostDetail = true
+                            }
+                        case .reply:
+                            // Navigate to post detail (comment is in the post)
+                            if let postId = notification.relatedPostId {
+                                selectedPostId = postId
+                                showPostDetail = true
+                            }
+                        case .follow, .friendRequest, .friendAccepted:
+                            // Navigate to user profile
+                            if let userId = notification.relatedUserId {
+                                selectedUserId = userId
+                                showUserProfile = true
+                            }
+                        case .mention:
+                            // Navigate to post where mentioned
+                            if let postId = notification.relatedPostId {
+                                selectedPostId = postId
+                                showPostDetail = true
+                            }
+                        case .system:
+                            // System notifications don't navigate
+                            break
+                        }
+                    },
                     onMessageTap: {
                         guard let userId = notification.relatedUserId else { return }
                         selectedUserName = notification.userName ?? "User"
@@ -258,11 +318,18 @@ struct NotificationView: View {
 
 struct NotificationListItem: View {
     let notification: NotificationItem
+    var onTap: (() -> Void)?
     var onMessageTap: (() -> Void)?
     var onFollowTap: ((Bool) -> Void)?
     var onAppear: (() -> Void)?
 
     @State private var isFollowing = false
+    @State private var isLoadingFollowStatus = false
+
+    private let graphService = GraphService()
+    private var currentUserId: String? {
+        KeychainService.shared.get(.userId)
+    }
 
     var body: some View {
         HStack(spacing: 13) {
@@ -271,6 +338,7 @@ struct NotificationListItem: View {
                 image: nil,
                 url: notification.userAvatarUrl,
                 size: 42,
+                name: notification.userName,
                 backgroundColor: Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50)
             )
 
@@ -306,8 +374,51 @@ struct NotificationListItem: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(notification.isRead ? DesignTokens.surface : DesignTokens.surface.opacity(0.95))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onTap?()
+        }
         .onAppear {
             onAppear?()
+
+            // Load follow status for follow-related notifications
+            if notification.buttonType == .follow || notification.buttonType == .followBack {
+                Task {
+                    await loadFollowStatus()
+                }
+            }
+        }
+    }
+
+    // MARK: - Helper Methods
+
+    private func loadFollowStatus() async {
+        guard let currentUserId = currentUserId,
+              let targetUserId = notification.relatedUserId,
+              !isLoadingFollowStatus else {
+            return
+        }
+
+        isLoadingFollowStatus = true
+
+        do {
+            let following = try await graphService.isFollowing(
+                followerId: currentUserId,
+                followeeId: targetUserId
+            )
+
+            await MainActor.run {
+                self.isFollowing = following
+                self.isLoadingFollowStatus = false
+            }
+        } catch {
+            #if DEBUG
+            print("[NotificationListItem] Failed to load follow status: \(error)")
+            #endif
+
+            await MainActor.run {
+                self.isLoadingFollowStatus = false
+            }
         }
     }
 
