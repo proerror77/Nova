@@ -377,19 +377,26 @@ class SocialService {
     }
 
     /// Get user's bookmarked posts
-    func getBookmarks(limit: Int = 20, offset: Int = 0) async throws -> (postIds: [String], totalCount: Int) {
+    func getBookmarks(userId: String? = nil, limit: Int = 20, offset: Int = 0) async throws -> (postIds: [String], totalCount: Int) {
         struct Response: Codable {
             let postIds: [String]
             let totalCount: Int
             // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase
         }
 
+        var queryParams: [String: String] = [
+            "limit": String(limit),
+            "offset": String(offset)
+        ]
+
+        // Add user_id if provided (for viewing other users' saved posts)
+        if let userId = userId {
+            queryParams["user_id"] = userId
+        }
+
         let response: Response = try await client.get(
             endpoint: APIConfig.Social.getBookmarks,
-            queryParams: [
-                "limit": String(limit),
-                "offset": String(offset)
-            ]
+            queryParams: queryParams
         )
 
         return (response.postIds, response.totalCount)

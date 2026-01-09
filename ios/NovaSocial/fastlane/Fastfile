@@ -125,6 +125,7 @@ platform :ios do
       export_method: "app-store",
       skip_build_archive: false,
       include_bitcode: false,
+      sdk: "iphoneos",
       export_options: {
         provisioningProfiles: {
           APP_IDENTIFIER => "match AppStore #{APP_IDENTIFIER}",

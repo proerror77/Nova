@@ -104,7 +104,8 @@ struct ChatView: View {
                             AvatarView(
                                 image: nil,
                                 url: otherUserAvatarUrl,
-                                size: 36.s
+                                size: 36.s,
+                                name: userName
                             )
                         }
                         .disabled(otherUserId == nil && resolvedOtherUserId == nil)
@@ -387,7 +388,9 @@ struct ChatView: View {
                             message: message,
                             audioPlayer: viewModel.audioPlayer,
                             senderAvatarUrl: otherUserAvatarUrl,
+                            senderName: userName,
                             myAvatarUrl: viewModel.currentUserAvatarUrl,
+                            myName: viewModel.currentUserDisplayName,
                             onLongPress: { msg in
                                 viewModel.handleMessageLongPress(msg)
                             },
@@ -436,7 +439,7 @@ struct ChatView: View {
                     // Typing indicator
                     if typingHandler.isOtherUserTyping {
                         HStack(spacing: 6.w) {
-                            AvatarView(image: nil, url: otherUserAvatarUrl, size: 30.s)
+                            AvatarView(image: nil, url: otherUserAvatarUrl, size: 30.s, name: userName)
 
                             HStack(spacing: 4.w) {
                                 Text("\(typingHandler.typingUserName.isEmpty ? userName : typingHandler.typingUserName) is typing")
