@@ -154,7 +154,7 @@ struct SettingsView: View {
                         .cornerRadius(8.s)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8.s)
-                                .stroke(Color(red: 0.68, green: 0.68, blue: 0.68).opacity(0.3), lineWidth: 0.5)
+                                .stroke(DesignTokens.cardBorderColor, lineWidth: 0.5)
                         )
                         .shadow(color: Color.black.opacity(0.05), radius: 4.s, x: 0, y: 2.s)
                     }
@@ -194,7 +194,7 @@ struct SettingsView: View {
                         .cornerRadius(8.s)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8.s)
-                                .stroke(Color(red: 0.68, green: 0.68, blue: 0.68).opacity(0.3), lineWidth: 0.5)
+                                .stroke(DesignTokens.cardBorderColor, lineWidth: 0.5)
                         )
                         .shadow(color: Color.black.opacity(0.05), radius: 4.s, x: 0, y: 2.s)
                         .contentShape(Rectangle())
@@ -248,7 +248,7 @@ struct SettingsView: View {
                         .cornerRadius(8.s)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8.s)
-                                .stroke(Color(red: 0.68, green: 0.68, blue: 0.68).opacity(0.3), lineWidth: 0.5)
+                                .stroke(DesignTokens.cardBorderColor, lineWidth: 0.5)
                         )
                         .shadow(color: Color.black.opacity(0.05), radius: 4.s, x: 0, y: 2.s)
                         .contentShape(Rectangle())
@@ -297,7 +297,7 @@ struct SettingsView: View {
                         .cornerRadius(8.s)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8.s)
-                                .stroke(Color(red: 0.68, green: 0.68, blue: 0.68).opacity(0.3), lineWidth: 0.5)
+                                .stroke(DesignTokens.cardBorderColor, lineWidth: 0.5)
                         )
                         .shadow(color: Color.black.opacity(0.05), radius: 4.s, x: 0, y: 2.s)
                     }
@@ -329,7 +329,7 @@ struct SettingsView: View {
                         .cornerRadius(8.s)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8.s)
-                                .stroke(Color(red: 0.68, green: 0.68, blue: 0.68).opacity(0.3), lineWidth: 0.5)
+                                .stroke(DesignTokens.cardBorderColor, lineWidth: 0.5)
                         )
                         .shadow(color: Color.black.opacity(0.05), radius: 4.s, x: 0, y: 2.s)
                         .accessibilityLabel("Sign Out")

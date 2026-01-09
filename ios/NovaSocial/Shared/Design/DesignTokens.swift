@@ -248,6 +248,7 @@ struct DesignTokens {
         light: UIColor(red: 0.74, green: 0.74, blue: 0.74, alpha: 1.0),
         dark: UIColor(red: 0.32, green: 0.32, blue: 0.33, alpha: 1.0)
     )
+    static let cardBorderColor = Color(red: 0.68, green: 0.68, blue: 0.68).opacity(0.3)
     static let dividerColor = Color.dynamic(
         light: UIColor(red: 0.93, green: 0.93, blue: 0.93, alpha: 1.0),
         dark: UIColor(red: 0.24, green: 0.24, blue: 0.25, alpha: 1.0)
