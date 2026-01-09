@@ -466,7 +466,7 @@ impl PhoneAuthService {
     /// Send SMS via AWS SNS
     async fn send_sms(&self, phone_number: &str, otp: &str) -> Result<()> {
         let message = format!(
-            "Your Nova verification code is: {}. This code expires in 5 minutes.",
+            "Your ICERED verification code is: {}. This code expires in 5 minutes.",
             otp
         );
 

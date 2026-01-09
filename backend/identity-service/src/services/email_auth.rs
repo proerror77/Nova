@@ -498,9 +498,9 @@ impl EmailAuthService {
 
     /// Send OTP email
     async fn send_otp_email(&self, email: &str, otp: &str) -> Result<()> {
-        let subject = "ICERED 驗證碼";
+        let subject = "ICERED Verification Code";
         let text_body = format!(
-            "您的 ICERED 驗證碼是：{}\n\n此驗證碼將在 5 分鐘後過期。\n\n如果這不是您本人的操作，請忽略此郵件。",
+            "Your ICERED verification code is: {}\n\nThis code will expire in 5 minutes.\n\nIf you did not request this code, please ignore this email.",
             otp
         );
 
@@ -512,12 +512,12 @@ impl EmailAuthService {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px; color: #333;">
-    <h2>ICERED 驗證碼</h2>
-    <p>您的驗證碼是：</p>
+    <h2>ICERED Verification Code</h2>
+    <p>Your verification code is:</p>
     <p style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #000; margin: 30px 0;">{}</p>
-    <p style="color: #666; font-size: 14px;">此驗證碼將在 <strong>5 分鐘</strong>後過期。</p>
+    <p style="color: #666; font-size: 14px;">This code will expire in <strong>5 minutes</strong>.</p>
     <p style="color: #999; font-size: 12px; margin-top: 30px;">
-        如果這不是您本人的操作，請忽略此郵件。
+        If you did not request this code, please ignore this email.
     </p>
 </body>
 </html>"#,
