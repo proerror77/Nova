@@ -90,7 +90,7 @@
 		395113E5360AAA3CF258875A /* OAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18618EED114C808B5657EFBD /* OAuthService.swift */; };
 		395C493B4D5D56E70D9296BA /* IdentityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D698C2C572807945955A6AF6 /* IdentityService.swift */; };
 		39DDB3B77C8506DE813E64B8 /* GetUserProfileTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A9ADAC480D9C913679582CB /* GetUserProfileTool.swift */; };
-		3A56D519170D400BE27C22B0 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = "TEMP_D4E7C200-96EF-4497-A170-06D375AFECF2" /* PrivacyInfo.xcprivacy */; };
+		3A56D519170D400BE27C22B0 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = TEMP_D4E7C200-96EF-4497-A170-06D375AFECF2 /* PrivacyInfo.xcprivacy */; };
 		3ABA7A6CE67B96280BA5AFAB /* AliceShortcutsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2BE951CF5C06FD72C8A45A /* AliceShortcutsProvider.swift */; };
 		3BD04552B959F7C2E2DA6491 /* UserProfileContentSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8004BC62C5CC7FD11C83896A /* UserProfileContentSection.swift */; };
 		3C22F69479F15CCD5EB1E585 /* CameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EC248FD24BCF6177F84307C /* CameraView.swift */; };
@@ -100,7 +100,7 @@
 		3EB383CEAC141B90B188A5B0 /* PostImagePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AF95A00AD8B9277B3AF3EBE /* PostImagePicker.swift */; };
 		3EF3D586D4A23148DC5B284F /* SearchPostsTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA4B93FC1A25F54DB11DE8A3 /* SearchPostsTool.swift */; };
 		3FB9C714A2619A756C2B34C4 /* ProfileTopNavigationBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B5562B92D2E08A01B36A58 /* ProfileTopNavigationBar.swift */; };
-		3FD5169574CBE156D3A061F7 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = "TEMP_AD34D170-CFC3-48D4-902E-DED7994A6D5B" /* Localizable.strings */; };
+		3FD5169574CBE156D3A061F7 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = TEMP_AD34D170-CFC3-48D4-902E-DED7994A6D5B /* Localizable.strings */; };
 		404699925C2A11E8F5275F7C /* PhoneLoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C5BE636943F22AD8A945C23 /* PhoneLoginView.swift */; };
 		40F7B0C0D310B81BAD1AE67D /* FeedPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 706CF6489A01C5EA02A4547E /* FeedPostProcessor.swift */; };
 		41F6B4399375507FD4982497 /* GenderPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 469C59BDF0390BCAF3E4BA32 /* GenderPickerView.swift */; };
@@ -114,7 +114,7 @@
 		4A472B18A7404DEC9E449AF9 /* ReplyPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C33B458F9652CCE51592682 /* ReplyPreviewView.swift */; };
 		4C722130FF631EA3ED07E08E /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31C506816FBC6DA8C0428370 /* LoginView.swift */; };
 		4CDCF12D671ED706F990A390 /* AvatarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 794A593F2F3DCDAA921653F5 /* AvatarManager.swift */; };
-		4CFD72128BB022D1549E0407 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = "TEMP_E65B6B55-363E-4633-B859-A1781EFF0522" /* AppDelegate.swift */; };
+		4CFD72128BB022D1549E0407 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEMP_E65B6B55-363E-4633-B859-A1781EFF0522 /* AppDelegate.swift */; };
 		4E9050A05F22518EA27D339E /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20C285F38EB2939BF1DBFE5 /* NotificationService.swift */; };
 		4F1AD2005C8C5210ECF30FD9 /* Fonts in Resources */ = {isa = PBXBuildFile; fileRef = B2EDB4B9ED51EEE1A98DACE8 /* Fonts */; };
 		4F1F6F58F836AF754D6CAE6F /* CachedAsyncImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBA95E0381D84B38FE141817 /* CachedAsyncImage.swift */; };
@@ -180,7 +180,7 @@
 		85CB3A698803E99EA7E73D14 /* FeedCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A210FAEED8AB436394766519 /* FeedCacheService.swift */; };
 		872EE38FD80234144C2CC601 /* PhotoOptionsModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21C58A10ECD63A9AD9BEB6D5 /* PhotoOptionsModal.swift */; };
 		89565569D6BA728940FA5494 /* IdentityServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8986D3064056CEDB3FE2B380 /* IdentityServiceTests.swift */; };
-		898082D77D931D39FBC50401 /* AppPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = "TEMP_1AD7119E-4615-4209-8F6B-31B11788BCDC" /* AppPage.swift */; };
+		898082D77D931D39FBC50401 /* AppPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEMP_1AD7119E-4615-4209-8F6B-31B11788BCDC /* AppPage.swift */; };
 		8A00C127A0411ABC8AE1BFF8 /* FoundationModelsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DE6005F56461CCE6C34EE43 /* FoundationModelsService.swift */; };
 		8B98C3C6CCDB91F0F81F70B4 /* AliceQuickProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D40F7AD31119B8A139662C4 /* AliceQuickProvider.swift */; };
 		8C368314174D9C9842F80006 /* QRCodeScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB630AEE7228BE7CEAE9E794 /* QRCodeScannerView.swift */; };
@@ -240,7 +240,7 @@
 		B3156902D37DCD78DCA3AE24 /* ImageCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BAA081BD695A0ADA562F9F /* ImageCacheService.swift */; };
 		B6DC080940008AD123E9BCB1 /* VoiceRecordButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = E41413B297CCF9C221A61D53 /* VoiceRecordButton.swift */; };
 		B716E2F9A85FF6B0236A7237 /* FeedMemoryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0AA6CD6C7764010FCDE2D4 /* FeedMemoryManager.swift */; };
-		B71D063C282BFF26924E70E6 /* .swiftlint.yml in Resources */ = {isa = PBXBuildFile; fileRef = "TEMP_081755AF-6F58-4FFA-9799-80416341816A" /* .swiftlint.yml */; };
+		B71D063C282BFF26924E70E6 /* .swiftlint.yml in Resources */ = {isa = PBXBuildFile; fileRef = TEMP_081755AF-6F58-4FFA-9799-80416341816A /* .swiftlint.yml */; };
 		B758D4147BCE8D66A7CCF166 /* FriendsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD847153CD7FA68CE04B284E /* FriendsService.swift */; };
 		B89382820C004AFA0B61E86B /* KeyboardExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D7E3C38730CAA90EB8DF00 /* KeyboardExtension.swift */; };
 		B8D76B18B9718D4B1A5EDCBE /* AddFriendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24173BE45B1DC7AA94F7016A /* AddFriendsView.swift */; };
@@ -314,7 +314,7 @@
 		F87C58656F5FD03A8C3345EB /* NotificationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97F7FCDB6FA0CE2782E24A74 /* NotificationViewModel.swift */; };
 		F886790AF26F4580D3B06876 /* SF-Pro-Display-ThinItalic.otf in Resources */ = {isa = PBXBuildFile; fileRef = AA91D18541F3E150D137ACED /* SF-Pro-Display-ThinItalic.otf */; };
 		F992BBA74E2D16A5D14D0A7B /* BackgroundUploadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8AA260CA9BDB4316FCF7B20 /* BackgroundUploadManager.swift */; };
-		F9BC45FB8C2FCF944DEF9052 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = "TEMP_097DE7E9-3F3C-401D-BC4F-94D4DB07F214" /* App.swift */; };
+		F9BC45FB8C2FCF944DEF9052 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEMP_097DE7E9-3F3C-401D-BC4F-94D4DB07F214 /* App.swift */; };
 		F9FF637A44ABB86D98441788 /* UserProfileActionButtons.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB25950EC2AA7F54430283FD /* UserProfileActionButtons.swift */; };
 		FA004D95BD4920F8020A9C2B /* StagingE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 989DB2ACCF3800CD308E6C5B /* StagingE2ETests.swift */; };
 		FA278DB60227697211DAF4A4 /* ElementCallService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29A9E2DD9A8C2CF581BF23F0 /* ElementCallService.swift */; };
@@ -322,7 +322,7 @@
 		FC8B5D4BA6DDB9275D253B00 /* AliasAccountViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04EEEB957E51AC7D1CFCBAC7 /* AliasAccountViewModel.swift */; };
 		FD4C5DDD8A3C9BA4399AA522 /* PhotoAnalysisService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3737976AD8AA33408751C99 /* PhotoAnalysisService.swift */; };
 		FD818F27CF9C6EEC3142F5E2 /* UserProfileFollowingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0170221498A2E6B8DF35A25 /* UserProfileFollowingView.swift */; };
-		FD96A962FDF3F3D648CEB53E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = "TEMP_8602F24E-DDBC-4992-A3A2-F118925BE286" /* Assets.xcassets */; };
+		FD96A962FDF3F3D648CEB53E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = TEMP_8602F24E-DDBC-4992-A3A2-F118925BE286 /* Assets.xcassets */; };
 		FE5A7851F73E4DAE93743284 /* MyChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7716AC8A2A67A629B5AA6D /* MyChannelsView.swift */; };
 /* End PBXBuildFile section */
 
@@ -689,16 +689,13 @@
 		FB2C61556A6B4DAA297DFC3F /* AIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIModels.swift; sourceTree = "<group>"; };
 		FB630AEE7228BE7CEAE9E794 /* QRCodeScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeScannerView.swift; sourceTree = "<group>"; };
 		FBBFF77645A4CF02AAB9B2E4 /* CryptoCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoCore.swift; sourceTree = "<group>"; };
-		"TEMP_081755AF-6F58-4FFA-9799-80416341816A" /* .swiftlint.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = .swiftlint.yml; sourceTree = "<group>"; };
-		"TEMP_097DE7E9-3F3C-401D-BC4F-94D4DB07F214" /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
-		"TEMP_17E6A198-B23A-4D91-9D82-81C144381B2A" /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
-		"TEMP_1885CD7A-186A-44CC-ABDC-C16A4F437EC7" /* .gitattributes */ = {isa = PBXFileReference; path = .gitattributes; sourceTree = "<group>"; };
-		"TEMP_1AD7119E-4615-4209-8F6B-31B11788BCDC" /* AppPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPage.swift; sourceTree = "<group>"; };
-		"TEMP_348E5D4C-527E-48BD-A852-4D0C49D8339D" /* ICERED.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ICERED.entitlements; sourceTree = "<group>"; };
-		"TEMP_8602F24E-DDBC-4992-A3A2-F118925BE286" /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		"TEMP_D4E7C200-96EF-4497-A170-06D375AFECF2" /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		"TEMP_DAFBAC45-9385-4F8A-A4E1-A38A98822BEB" /* .gitignore */ = {isa = PBXFileReference; path = .gitignore; sourceTree = "<group>"; };
-		"TEMP_E65B6B55-363E-4633-B859-A1781EFF0522" /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		TEMP_081755AF-6F58-4FFA-9799-80416341816A /* .swiftlint.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = .swiftlint.yml; sourceTree = "<group>"; };
+		TEMP_097DE7E9-3F3C-401D-BC4F-94D4DB07F214 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
+		TEMP_17E6A198-B23A-4D91-9D82-81C144381B2A /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		TEMP_1AD7119E-4615-4209-8F6B-31B11788BCDC /* AppPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPage.swift; sourceTree = "<group>"; };
+		TEMP_8602F24E-DDBC-4992-A3A2-F118925BE286 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		TEMP_D4E7C200-96EF-4497-A170-06D375AFECF2 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		TEMP_E65B6B55-363E-4633-B859-A1781EFF0522 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1944,26 +1941,6 @@
 			path = Networking;
 			sourceTree = "<group>";
 		};
-		"TEMP_F28BF04D-E93A-4413-AA94-531023991DE0" /* NovaSocial */ = {
-			isa = PBXGroup;
-			children = (
-				"TEMP_348E5D4C-527E-48BD-A852-4D0C49D8339D" /* ICERED.entitlements */,
-				"TEMP_081755AF-6F58-4FFA-9799-80416341816A" /* .swiftlint.yml */,
-				"TEMP_8602F24E-DDBC-4992-A3A2-F118925BE286" /* Assets.xcassets */,
-				"TEMP_DAFBAC45-9385-4F8A-A4E1-A38A98822BEB" /* .gitignore */,
-				"TEMP_D4E7C200-96EF-4497-A170-06D375AFECF2" /* PrivacyInfo.xcprivacy */,
-				"TEMP_1885CD7A-186A-44CC-ABDC-C16A4F437EC7" /* .gitattributes */,
-				"TEMP_1AD7119E-4615-4209-8F6B-31B11788BCDC" /* AppPage.swift */,
-				"TEMP_E65B6B55-363E-4633-B859-A1781EFF0522" /* AppDelegate.swift */,
-				"TEMP_097DE7E9-3F3C-401D-BC4F-94D4DB07F214" /* App.swift */,
-				3A2A516A81467921E0E7441B /* Features */,
-				B5C695DC3E63B0D8F4D8BEDA /* Shared */,
-				6E7717AD84CE7D95370C8D86 /* Infrastructure */,
-				"TEMP_AD34D170-CFC3-48D4-902E-DED7994A6D5B" /* Localizable.strings */,
-			);
-			path = NovaSocial;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -1979,8 +1956,6 @@
 				AAE38BBC22D8DB31082E6EE8 /* PBXTargetDependency */,
 			);
 			name = ICEREDUITests;
-			packageProductDependencies = (
-			);
 			productName = ICEREDUITests;
 			productReference = CE645708E87093F3BFFD2B7A /* ICEREDUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -2020,8 +1995,6 @@
 				64D03D6C0A63862A6DAB507D /* PBXTargetDependency */,
 			);
 			name = ICEREDTests;
-			packageProductDependencies = (
-			);
 			productName = ICEREDTests;
 			productReference = C0EA50630D77D92A96116E71 /* ICEREDTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -2037,8 +2010,6 @@
 			dependencies = (
 			);
 			name = ICEREDWidgets;
-			packageProductDependencies = (
-			);
 			productName = ICEREDWidgets;
 			productReference = 4D39F35A0F59326A1235BEF7 /* ICEREDWidgets.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -2085,6 +2056,7 @@
 				51265FCDDB4D71991880F8D2 /* XCRemoteSwiftPackageReference "matrix-rust-components-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
+			productRefGroup = A8928B707E71735FE0470B84 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -2470,10 +2442,10 @@
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
-		"TEMP_AD34D170-CFC3-48D4-902E-DED7994A6D5B" /* Localizable.strings */ = {
+		TEMP_AD34D170-CFC3-48D4-902E-DED7994A6D5B /* Localizable.strings */ = {
 			isa = PBXVariantGroup;
 			children = (
-				"TEMP_17E6A198-B23A-4D91-9D82-81C144381B2A" /* en */,
+				TEMP_17E6A198-B23A-4D91-9D82-81C144381B2A /* en */,
 			);
 			name = Localizable.strings;
 			sourceTree = "<group>";
@@ -2485,8 +2457,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ICEREDWidgets/ICEREDWidgets.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = 2C77AZCA8W;
 				INFOPLIST_FILE = ICEREDWidgets/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -2496,11 +2469,10 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.app.icered.pro.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "match AppStore com.app.icered.pro.widgets";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
-					DEBUG,
-				);
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.9;
@@ -2542,7 +2514,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 62;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 2C77AZCA8W;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -2571,9 +2543,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = ICERED.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 2C77AZCA8W;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
@@ -2582,15 +2555,11 @@
 					"@executable_path/Frameworks",
 				);
 				NSMicrophoneUsageDescription = "Alice needs microphone access for voice chat";
-				OTHER_LDFLAGS = (
-					"-ObjC",
-				);
+				OTHER_LDFLAGS = "-ObjC";
 				PRODUCT_BUNDLE_IDENTIFIER = com.app.icered.pro;
+				PROVISIONING_PROFILE_SPECIFIER = "match AppStore com.app.icered.pro";
 				SDKROOT = iphoneos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
-					DEBUG,
-					MATRIX_SDK_ENABLED,
-				);
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG MATRIX_SDK_ENABLED";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -2612,10 +2581,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.app.icered.pro.tests;
 				SDKROOT = iphoneos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
-					DEBUG,
-					MATRIX_SDK_ENABLED,
-				);
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG MATRIX_SDK_ENABLED";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ICERED.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ICERED";
@@ -2627,9 +2593,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = ICERED.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 2C77AZCA8W;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
@@ -2638,14 +2605,11 @@
 					"@executable_path/Frameworks",
 				);
 				NSMicrophoneUsageDescription = "Alice needs microphone access for voice chat";
-				OTHER_LDFLAGS = (
-					"-ObjC",
-				);
+				OTHER_LDFLAGS = "-ObjC";
 				PRODUCT_BUNDLE_IDENTIFIER = com.app.icered.pro;
+				PROVISIONING_PROFILE_SPECIFIER = "match AppStore com.app.icered.pro";
 				SDKROOT = iphoneos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
-					MATRIX_SDK_ENABLED,
-				);
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = MATRIX_SDK_ENABLED;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -2686,7 +2650,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 62;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 2C77AZCA8W;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -2732,8 +2696,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.app.icered.pro.uitests;
 				SDKROOT = iphoneos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
-				);
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = ICERED;
@@ -2755,9 +2718,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.app.icered.pro.tests;
 				SDKROOT = iphoneos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
-					MATRIX_SDK_ENABLED,
-				);
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = MATRIX_SDK_ENABLED;
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ICERED.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ICERED";
@@ -2768,8 +2729,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ICEREDWidgets/ICEREDWidgets.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = 2C77AZCA8W;
 				INFOPLIST_FILE = ICEREDWidgets/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -2779,6 +2741,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.app.icered.pro.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "match AppStore com.app.icered.pro.widgets";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -2803,9 +2766,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.app.icered.pro.uitests;
 				SDKROOT = iphoneos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
-					DEBUG,
-				);
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = ICERED;
