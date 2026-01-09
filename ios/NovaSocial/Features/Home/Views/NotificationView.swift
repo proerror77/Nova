@@ -16,27 +16,11 @@ struct NotificationView: View {
             if showChat {
                 ChatView(showChat: $showChat, conversationId: selectedConversationId, userName: selectedUserName)
                     .transition(.identity)
-            } else if showPostDetail, let postId = selectedPostId {
-                PostDetailView(
-                    post: nil,
-                    postId: postId,
-                    onDismiss: {
-                        showPostDetail = false
-                        selectedPostId = nil
-                    },
-                    onUserTap: { userId in
-                        selectedUserId = userId
-                        showPostDetail = false
-                        showUserProfile = true
-                    }
-                )
-                .transition(.identity)
             } else {
                 notificationContent
             }
         }
         .animation(.none, value: showChat)
-        .animation(.none, value: showPostDetail)
         .fullScreenCover(isPresented: $showUserProfile) {
             if let userId = selectedUserId {
                 UserProfileView(showUserProfile: $showUserProfile, userId: userId)
@@ -44,6 +28,14 @@ struct NotificationView: View {
                         selectedUserId = nil
                     }
             }
+        }
+        .alert("Feature Coming Soon", isPresented: $showPostDetail) {
+            Button("OK", role: .cancel) {
+                showPostDetail = false
+                selectedPostId = nil
+            }
+        } message: {
+            Text("Post detail view will be available soon. Post ID: \(selectedPostId ?? "unknown")")
         }
         .task {
             await viewModel.loadNotifications()
