@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: identity-service-configmap
+data:
+  passkey-rp-id: "staging.gcp.icered.com"
+  passkey-rp-name: "ICERED"
+  passkey-origin: "https://staging.gcp.icered.com"
