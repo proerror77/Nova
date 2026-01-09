@@ -249,10 +249,10 @@ struct CAProfileSettingView: View {
             // First Name
             HStack(spacing: 10) {
                 TextField("", text: $firstName, prompt: Text("First name")
-                    .font(Font.custom("SF Pro Display", size: 14.f))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .tracking(0.28)
                     .foregroundColor(placeholderColor))
-                    .font(Font.custom("SF Pro Display", size: 14.f))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .tracking(0.28)
                     .foregroundColor(.white)
                     .focused($focusedField, equals: .firstName)
@@ -274,10 +274,10 @@ struct CAProfileSettingView: View {
             // Last Name
             HStack(spacing: 10) {
                 TextField("", text: $lastName, prompt: Text("Last name")
-                    .font(Font.custom("SF Pro Display", size: 14.f))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .tracking(0.28)
                     .foregroundColor(placeholderColor))
-                    .font(Font.custom("SF Pro Display", size: 14.f))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .tracking(0.28)
                     .foregroundColor(.white)
                     .focused($focusedField, equals: .lastName)
@@ -304,10 +304,10 @@ struct CAProfileSettingView: View {
         VStack(alignment: .leading, spacing: 8.h) {
             HStack(spacing: 10) {
                 TextField("", text: $username, prompt: Text("Username")
-                    .font(Font.custom("SF Pro Display", size: 14.f))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .tracking(0.28)
                     .foregroundColor(placeholderColor))
-                    .font(Font.custom("SF Pro Display", size: 14.f))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .tracking(0.28)
                     .foregroundColor(.white)
                     .focused($focusedField, equals: .username)
@@ -330,7 +330,7 @@ struct CAProfileSettingView: View {
             )
 
             Text("Choose wisely.  Username may not be changed.")
-                .font(Font.custom("SF Pro Display", size: 12.f))
+                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                 .tracking(0.24)
                 .foregroundColor(placeholderColor)
         }
@@ -347,7 +347,7 @@ struct CAProfileSettingView: View {
         }) {
             HStack(spacing: 10) {
                 Text(dateOfBirth == nil ? "Date of Birth" : formattedDateOfBirth)
-                    .font(Font.custom("SF Pro Display", size: 14.f))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .tracking(0.28)
                     .foregroundColor(dateOfBirth == nil ? placeholderColor : .white)
                 Spacer()
@@ -374,7 +374,7 @@ struct CAProfileSettingView: View {
         }) {
             HStack(spacing: 10) {
                 Text(location.isEmpty ? "Location" : location)
-                    .font(Font.custom("SF Pro Display", size: 14.f))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .tracking(0.28)
                     .foregroundColor(location.isEmpty ? placeholderColor : .white)
                 Spacer()
@@ -400,7 +400,7 @@ struct CAProfileSettingView: View {
     private var errorMessageView: some View {
         if let errorMessage {
             Text(LocalizedStringKey(errorMessage))
-                .font(Font.custom("SF Pro Display", size: 12.f))
+                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                 .tracking(0.24)
                 .foregroundColor(.red)
                 .multilineTextAlignment(.center)
@@ -420,7 +420,7 @@ struct CAProfileSettingView: View {
                         .scaleEffect(0.9)
                 }
                 Text("Submit")
-                    .font(Font.custom("SF Pro Display", size: 16.f).weight(.bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                     .foregroundColor(Color(red: 0.03, green: 0.11, blue: 0.21))
             }
             .frame(width: 301.w, height: 48.h)
@@ -451,13 +451,13 @@ struct CAProfileSettingView: View {
                             showDatePicker = false
                         }
                     }
-                    .font(Font.custom("SF Pro Display", size: 16.f))
+                    .font(Font.custom("SFProDisplay-Regular", size: 16.f))
                     .foregroundColor(.white)
 
                     Spacer()
 
                     Text("Date of Birth")
-                        .font(Font.custom("SF Pro Display", size: 16.f).weight(.semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                         .foregroundColor(.white)
 
                     Spacer()
@@ -470,7 +470,7 @@ struct CAProfileSettingView: View {
                             showDatePicker = false
                         }
                     }
-                    .font(Font.custom("SF Pro Display", size: 16.f).weight(.semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                     .foregroundColor(pinkAccent)
                 }
                 .padding(.horizontal, 16.w)
@@ -528,7 +528,7 @@ struct CAProfileSettingView: View {
                     Spacer()
 
                     Text("Location")
-                        .font(Font.custom("SF Pro Display", size: 16.f).weight(.semibold))
+                        .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                         .foregroundColor(.white)
 
                     Spacer()
@@ -538,7 +538,7 @@ struct CAProfileSettingView: View {
                             showLocationPicker = false
                         }
                     }
-                    .font(Font.custom("SF Pro Display", size: 16.f).weight(.semibold))
+                    .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
                     .foregroundColor(pinkAccent)
                 }
                 .padding(.horizontal, 16.w)
@@ -559,7 +559,7 @@ struct CAProfileSettingView: View {
                             }) {
                                 HStack {
                                     Text(loc)
-                                        .font(Font.custom("SF Pro Display", size: 14.f))
+                                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                         .tracking(0.28)
                                         .foregroundColor(.white)
                                     Spacer()

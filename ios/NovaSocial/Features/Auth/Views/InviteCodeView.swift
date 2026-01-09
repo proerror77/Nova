@@ -237,7 +237,7 @@ struct InviteCodeView: View {
                         .scaleEffect(0.9)
                 }
                 Text("Submit")
-                    .font(Font.custom("SF Pro Display", size: 16.f).weight(.bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                     .foregroundColor(Color(red: 0.03, green: 0.11, blue: 0.21))
             }
             .frame(width: 301.w, height: 48.h)
