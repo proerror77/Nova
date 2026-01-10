@@ -211,6 +211,7 @@ message Message {
   int32 version_number = 18;  // Optimistic locking for edits
   int32 reaction_count = 19;
   string idempotency_key = 20;
+  string matrix_event_id = 21; // Matrix event ID (content lives in Matrix)
 }
 
 message Conversation {

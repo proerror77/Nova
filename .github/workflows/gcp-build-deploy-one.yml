@@ -26,6 +26,10 @@ on:
         description: Deploy after build
         type: boolean
         default: true
+      validate_migrations:
+        description: Validate database migrations (no deploy)
+        type: boolean
+        default: true
 
 env:
   GCP_REGION: asia-northeast1
@@ -110,9 +114,60 @@ jobs:
           echo "- Service: ${{ inputs.service }}" >> $GITHUB_STEP_SUMMARY
           echo "- Image: ${{ env.REGISTRY }}/${{ inputs.service }}:${SHORT_SHA}" >> $GITHUB_STEP_SUMMARY
 
+  validate-migrations:
+    name: Validate Migrations ${{ inputs.service }}
+    if: ${{ inputs.deploy || inputs.validate_migrations }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check service support
+        id: svc
+        run: |
+          case "${{ inputs.service }}" in
+            content-service|social-service|identity-service|notification-service)
+              echo "supported=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "supported=false" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Skip migration validation
+        if: ${{ steps.svc.outputs.supported != 'true' }}
+        run: |
+          echo "ℹ️  Service ${{ inputs.service }} does not use this migration validation (skipping)."
+
+      - name: Authenticate to Google Cloud
+        if: ${{ steps.svc.outputs.supported == 'true' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        if: ${{ steps.svc.outputs.supported == 'true' }}
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: nova-staging-gke
+          location: ${{ env.GCP_REGION }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Validate migrations
+        if: ${{ steps.svc.outputs.supported == 'true' }}
+        run: |
+          echo "🔍 Validating database migrations before deployment..."
+          bash .github/scripts/validate-migrations.sh ${{ inputs.service }} ${{ env.NAMESPACE }}
+
   deploy:
     name: Deploy ${{ inputs.service }}
-    needs: build-push
+    needs: [build-push, validate-migrations]
     if: ${{ inputs.deploy }}
     runs-on: ubuntu-latest
     timeout-minutes: 15

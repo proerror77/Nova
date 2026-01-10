@@ -237,7 +237,7 @@ struct InviteCodeView: View {
                         .scaleEffect(0.9)
                 }
                 Text("Submit")
-                    .font(Font.custom("SF Pro Display", size: 16.f).weight(.bold))
+                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                     .foregroundColor(Color(red: 0.03, green: 0.11, blue: 0.21))
             }
             .frame(width: 301.w, height: 48.h)
@@ -454,8 +454,14 @@ struct InviteCodeView: View {
                 if isPendingSSO {
                     await retrySSOWithInviteCode()
                 } else {
-                    // Normal flow - go to create account
-                    await MainActor.run { currentPage = .createAccount }
+                    // Check if we have phone verification token (phone registration flow)
+                    if authManager.phoneVerificationToken != nil {
+                        // Phone registration flow - go to phone profile setup
+                        await MainActor.run { currentPage = .phoneProfileSetup }
+                    } else {
+                        // Normal flow - go to profile setup
+                        await MainActor.run { currentPage = .profileSetup }
+                    }
                 }
             } else {
                 errorMessage = response.error ?? "Invalid_invite_code_generic"

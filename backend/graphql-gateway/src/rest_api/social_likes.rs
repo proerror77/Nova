@@ -1,6 +1,8 @@
 use actix_web::{delete, get, post, web, HttpMessage, HttpRequest, HttpResponse};
+use crypto_core::jwt::validate_token;
 use std::collections::HashMap;
 use tracing::{error, warn};
+use uuid::Uuid;
 
 use crate::clients::proto::auth::GetUserProfilesByIdsRequest;
 use crate::clients::proto::social::{
@@ -15,6 +17,24 @@ use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
 use crate::rest_api::models::{EnrichedComment, GetCommentsResponse};
 use serde::Deserialize;
+
+fn optional_viewer_user_id(http_req: &HttpRequest) -> Result<Option<Uuid>, HttpResponse> {
+    let Some(auth_header) = http_req.headers().get("Authorization") else {
+        return Ok(None);
+    };
+
+    let auth_str = auth_header
+        .to_str()
+        .map_err(|_| HttpResponse::Unauthorized().finish())?;
+    let token = auth_str
+        .strip_prefix("Bearer ")
+        .ok_or_else(|| HttpResponse::Unauthorized().finish())?;
+
+    let token_data = validate_token(token).map_err(|_| HttpResponse::Unauthorized().finish())?;
+    let user_id =
+        Uuid::parse_str(&token_data.claims.sub).map_err(|_| HttpResponse::Unauthorized().finish())?;
+    Ok(Some(user_id))
+}
 
 #[post("/api/v2/social/like")]
 pub async fn create_like(
@@ -39,8 +59,7 @@ pub async fn create_like(
         .await
     {
         Ok(resp) => HttpResponse::Ok().json(serde_json::json!({
-            "success": resp.success,
-            "likeCount": resp.like_count
+            "success": resp.success
         })),
         Err(e) => {
             error!("create_like failed: {}", e);
@@ -73,8 +92,7 @@ pub async fn delete_like(
         .await
     {
         Ok(resp) => HttpResponse::Ok().json(serde_json::json!({
-            "success": resp.success,
-            "likeCount": resp.like_count
+            "success": resp.success
         })),
         Err(e) => {
             error!("delete_like failed: {}", e);
@@ -109,8 +127,7 @@ pub async fn delete_like_legacy(
         .await
     {
         Ok(resp) => HttpResponse::Ok().json(serde_json::json!({
-            "success": resp.success,
-            "likeCount": resp.like_count
+            "success": resp.success
         })),
         Err(e) => {
             error!("delete_like failed: {}", e);
@@ -253,7 +270,13 @@ async fn delete_comment_inner(
         })
         .await
     {
-        Ok(_) => HttpResponse::Ok().finish(),
+        Ok(resp) => {
+            if resp.success {
+                HttpResponse::Ok().finish()
+            } else {
+                HttpResponse::NotFound().finish()
+            }
+        }
         Err(e) => {
             error!("delete_comment failed: {}", e);
             HttpResponse::ServiceUnavailable().finish()
@@ -263,15 +286,22 @@ async fn delete_comment_inner(
 
 #[get("/api/v2/social/comments")]
 pub async fn get_comments(
+    http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
     query: web::Query<CommentsQuery>,
 ) -> HttpResponse {
+    let viewer_user_id = match optional_viewer_user_id(&http_req) {
+        Ok(Some(id)) => id.to_string(),
+        Ok(None) => String::new(),
+        Err(resp) => return resp,
+    };
+
     let q = query.into_inner();
     let req = GetCommentsRequest {
         post_id: q.post_id,
         limit: q.limit.unwrap_or(50) as i32,
         offset: q.offset.unwrap_or(0) as i32,
-        viewer_user_id: String::new(), // Not authenticated on this endpoint
+        viewer_user_id,
     };
     match clients
         .call_social(|| {
@@ -369,6 +399,9 @@ async fn enrich_comments_with_authors(
                 post_id: comment.post_id,
                 content: comment.content,
                 parent_comment_id: comment.parent_comment_id,
+                like_count: comment.like_count,
+                is_liked_by_viewer: comment.is_liked_by_viewer,
+                author_account_type: comment.author_account_type,
                 created_at,
                 author_username: profile.map(|p| p.username.clone()),
                 author_display_name,
@@ -518,8 +551,8 @@ pub struct BookmarksQuery {
     pub offset: Option<u32>,
 }
 
-/// Create a bookmark for a post
-#[post("/api/v2/social/bookmark")]
+/// Create a bookmark for a post (save a post)
+#[post("/api/v2/social/save")]
 pub async fn create_bookmark(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
@@ -555,8 +588,8 @@ pub async fn create_bookmark(
     }
 }
 
-/// Delete a bookmark from a post
-#[delete("/api/v2/social/bookmark/{post_id}")]
+/// Delete a bookmark from a post (unsave a post)
+#[delete("/api/v2/social/save/{post_id}")]
 pub async fn delete_bookmark(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
@@ -586,8 +619,8 @@ pub async fn delete_bookmark(
     }
 }
 
-/// Get user's bookmarked posts
-#[get("/api/v2/social/bookmarks")]
+/// Get user's saved posts
+#[get("/api/v2/social/saved-posts")]
 pub async fn get_bookmarks(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
@@ -625,8 +658,8 @@ pub async fn get_bookmarks(
     }
 }
 
-/// Check if user has bookmarked a post
-#[get("/api/v2/social/check-bookmarked/{post_id}")]
+/// Check if user has saved a post
+#[get("/api/v2/social/saved-posts/{post_id}/check")]
 pub async fn check_bookmarked(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
@@ -656,8 +689,8 @@ pub async fn check_bookmarked(
     }
 }
 
-/// Batch check if user has bookmarked multiple posts
-#[post("/api/v2/social/bookmarks/batch-check")]
+/// Batch check if user has saved multiple posts
+#[post("/api/v2/social/saved-posts/batch-check")]
 pub async fn batch_check_bookmarked(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,

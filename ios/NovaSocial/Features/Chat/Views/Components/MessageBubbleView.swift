@@ -7,7 +7,9 @@ struct MessageBubbleView: View {
     let message: ChatMessage
     var audioPlayer: AudioPlayerService? = nil
     var senderAvatarUrl: String? = nil  // 發送者頭像URL
+    var senderName: String? = nil  // 發送者名稱（用於顯示首字母占位符）
     var myAvatarUrl: String? = nil  // 當前用戶頭像URL
+    var myName: String? = nil  // 當前用戶名稱（用於顯示首字母占位符）
     var onLongPress: ((ChatMessage) -> Void)? = nil  // 長按回調
     var onRetry: ((ChatMessage) -> Void)? = nil  // 重試回調（發送失敗時）
     var onReply: ((ChatMessage) -> Void)? = nil  // 回覆回調
@@ -65,14 +67,14 @@ struct MessageBubbleView: View {
                     statusIcon
                 }
             }
-            AvatarView(image: nil, url: myAvatarUrl, size: 40.s)
+            AvatarView(image: nil, url: myAvatarUrl, size: 40.s, name: myName)
         }
         .padding(.trailing, 16)
     }
 
     private var otherMessageView: some View {
         HStack(alignment: .top, spacing: 10.w) {
-            AvatarView(image: nil, url: senderAvatarUrl, size: 40.s)
+            AvatarView(image: nil, url: senderAvatarUrl, size: 40.s, name: senderName)
             VStack(alignment: .leading, spacing: 4.h) {
                 otherMessageContent
                     .contextMenu { contextMenuItems }
@@ -302,6 +304,15 @@ struct MessageBubbleView: View {
                 }
             }
         }
+        // 2.1 圖片尚在解密/下載（Matrix E2EE media）
+        else if message.messageType == .image {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: 150, height: 150)
+                ProgressView()
+            }
+        }
         // 3. 位置消息
         else if let location = message.location {
             LocationMessageView(location: location)
@@ -331,6 +342,10 @@ struct MessageBubbleView: View {
         // 6. 視頻消息
         else if message.messageType == .video, let urlString = message.mediaUrl {
             videoThumbnailView(urlString: urlString, isFromMe: isFromMe)
+        }
+        // 6.1 視頻尚在解密/下載（Matrix E2EE media）
+        else if message.messageType == .video {
+            videoThumbnailView(urlString: "", isFromMe: isFromMe)
         }
         // 7. 文字消息
         else {

@@ -51,7 +51,7 @@ struct CreateAccountView: View {
             // Back Button - Top Left
             VStack {
                 HStack {
-                    Button(action: { currentPage = .inviteCode }) {
+                    Button(action: { currentPage = .login }) {
                         Image("back-white")
                             .resizable()
                             .scaledToFit()
@@ -269,11 +269,18 @@ struct CreateAccountView: View {
                 authManager.validatedInviteCode = nil
             }
         } catch let error as OAuthError {
-            if case .userCancelled = error {
-                // User cancelled, no error message needed
-            } else if case .invalidInviteCode(let message) = error {
+            switch error {
+            case .inviteCodeRequired:
+                // New user needs invite code - navigate to invite code page
+                await MainActor.run {
+                    currentPage = .inviteCode
+                }
+            case .invalidInviteCode(let message):
                 errorMessage = message
-            } else {
+            case .userCancelled:
+                // User cancelled, no error message needed
+                break
+            default:
                 errorMessage = error.localizedDescription
             }
         } catch {
@@ -302,11 +309,18 @@ struct CreateAccountView: View {
                 authManager.validatedInviteCode = nil
             }
         } catch let error as OAuthError {
-            if case .userCancelled = error {
-                // User cancelled, no error message needed
-            } else if case .invalidInviteCode(let message) = error {
+            switch error {
+            case .inviteCodeRequired:
+                // New user needs invite code - navigate to invite code page
+                await MainActor.run {
+                    currentPage = .inviteCode
+                }
+            case .invalidInviteCode(let message):
                 errorMessage = message
-            } else {
+            case .userCancelled:
+                // User cancelled, no error message needed
+                break
+            default:
                 errorMessage = error.localizedDescription
             }
         } catch {

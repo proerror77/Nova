@@ -6,17 +6,75 @@ struct NotificationView: View {
     @State private var showChat = false
     @State private var selectedUserName = ""
     @State private var selectedConversationId = ""
+    @State private var showPostDetail = false
+    @State private var selectedPost: FeedPost?
+    @State private var showUserProfile = false
+    @State private var selectedUserId: String?
+    @State private var isLoadingPost = false
+    @State private var showPostLoadError = false
+    @State private var postLoadErrorMessage = ""
+
+    private let contentService = ContentService()
 
     var body: some View {
         ZStack {
             if showChat {
                 ChatView(showChat: $showChat, conversationId: selectedConversationId, userName: selectedUserName)
                     .transition(.identity)
+            } else if showPostDetail, let post = selectedPost {
+                PostDetailView(
+                    post: post,
+                    onDismiss: {
+                        showPostDetail = false
+                        selectedPost = nil
+                    },
+                    onAvatarTapped: { userId in
+                        selectedUserId = userId
+                        showPostDetail = false
+                        showUserProfile = true
+                    }
+                )
+                .transition(.identity)
             } else {
                 notificationContent
             }
+
+            // Loading overlay for post fetch
+            if isLoadingPost {
+                ZStack {
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(.white)
+                        Text("Loading post...")
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                            .foregroundColor(.white)
+                    }
+                    .padding(24)
+                    .background(Color.black.opacity(0.7))
+                    .cornerRadius(12)
+                }
+            }
         }
         .animation(.none, value: showChat)
+        .animation(.none, value: showPostDetail)
+        .fullScreenCover(isPresented: $showUserProfile) {
+            if let userId = selectedUserId {
+                UserProfileView(showUserProfile: $showUserProfile, userId: userId)
+                    .onDisappear {
+                        selectedUserId = nil
+                    }
+            }
+        }
+        .alert("Failed to Load Post", isPresented: $showPostLoadError) {
+            Button("OK", role: .cancel) {
+                postLoadErrorMessage = ""
+            }
+        } message: {
+            Text(postLoadErrorMessage)
+        }
         .task {
             await viewModel.loadNotifications()
         }
@@ -207,6 +265,27 @@ struct NotificationView: View {
             ForEach(notifications) { notification in
                 NotificationListItem(
                     notification: notification,
+                    onTap: {
+                        // Navigate based on notification type
+                        Task {
+                            switch notification.type {
+                            case .like, .comment, .share, .reply, .mention:
+                                // Navigate to post detail - fetch post first
+                                if let postId = notification.relatedPostId {
+                                    await loadAndShowPost(postId: postId)
+                                }
+                            case .follow, .friendRequest, .friendAccepted:
+                                // Navigate to user profile
+                                if let userId = notification.relatedUserId {
+                                    selectedUserId = userId
+                                    showUserProfile = true
+                                }
+                            case .system:
+                                // System notifications don't navigate
+                                break
+                            }
+                        }
+                    },
                     onMessageTap: {
                         guard let userId = notification.relatedUserId else { return }
                         selectedUserName = notification.userName ?? "User"
@@ -252,17 +331,57 @@ struct NotificationView: View {
             }
         }
     }
+
+    // MARK: - Helper Methods
+
+    /// Load post data and show post detail view
+    private func loadAndShowPost(postId: String) async {
+        isLoadingPost = true
+
+        do {
+            guard let post = try await contentService.getPost(postId: postId) else {
+                throw NSError(domain: "NotificationView", code: 404, userInfo: [NSLocalizedDescriptionKey: "Post not found"])
+            }
+            
+            // Convert Post to FeedPost
+            let authorName = post.displayAuthorName
+            let authorAvatar = post.authorAvatarUrl
+            let feedPost = FeedPost(from: post, authorName: authorName, authorAvatar: authorAvatar)
+            
+            await MainActor.run {
+                selectedPost = feedPost
+                isLoadingPost = false
+                showPostDetail = true
+            }
+        } catch {
+            await MainActor.run {
+                isLoadingPost = false
+                postLoadErrorMessage = "Failed to load post. Please try again."
+                showPostLoadError = true
+            }
+            #if DEBUG
+            print("[NotificationView] Failed to load post \(postId): \(error)")
+            #endif
+        }
+    }
 }
 
 // MARK: - Notification List Item Component
 
 struct NotificationListItem: View {
     let notification: NotificationItem
+    var onTap: (() -> Void)?
     var onMessageTap: (() -> Void)?
     var onFollowTap: ((Bool) -> Void)?
     var onAppear: (() -> Void)?
 
     @State private var isFollowing = false
+    @State private var isLoadingFollowStatus = false
+
+    private let graphService = GraphService()
+    private var currentUserId: String? {
+        KeychainService.shared.get(.userId)
+    }
 
     var body: some View {
         HStack(spacing: 13) {
@@ -271,6 +390,7 @@ struct NotificationListItem: View {
                 image: nil,
                 url: notification.userAvatarUrl,
                 size: 42,
+                name: notification.userName,
                 backgroundColor: Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50)
             )
 
@@ -306,8 +426,51 @@ struct NotificationListItem: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(notification.isRead ? DesignTokens.surface : DesignTokens.surface.opacity(0.95))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onTap?()
+        }
         .onAppear {
             onAppear?()
+
+            // Load follow status for follow-related notifications
+            if notification.buttonType == .follow || notification.buttonType == .followBack {
+                Task {
+                    await loadFollowStatus()
+                }
+            }
+        }
+    }
+
+    // MARK: - Helper Methods
+
+    private func loadFollowStatus() async {
+        guard let currentUserId = currentUserId,
+              let targetUserId = notification.relatedUserId,
+              !isLoadingFollowStatus else {
+            return
+        }
+
+        isLoadingFollowStatus = true
+
+        do {
+            let following = try await graphService.isFollowing(
+                followerId: currentUserId,
+                followeeId: targetUserId
+            )
+
+            await MainActor.run {
+                self.isFollowing = following
+                self.isLoadingFollowStatus = false
+            }
+        } catch {
+            #if DEBUG
+            print("[NotificationListItem] Failed to load follow status: \(error)")
+            #endif
+
+            await MainActor.run {
+                self.isLoadingFollowStatus = false
+            }
         }
     }
 

@@ -256,25 +256,19 @@ impl SocialService for SocialServiceImpl {
         let user_id = Uuid::parse_str(&req.user_id)
             .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
 
-        // Get comment first to get post_id for counter decrement
-        let comment = self.comment_repo.get_comment(comment_id).await
-            .map_err(|e| Status::internal(format!("Failed to get comment: {}", e)))?
-            .ok_or_else(|| Status::not_found("Comment not found"))?;
-
-        let deleted = self
+        let post_id = self
             .comment_repo
             .delete_comment(comment_id, user_id)
             .await
             .map_err(|e| Status::internal(format!("Failed to delete comment: {}", e)))?;
 
-        if deleted {
-            // Decrement counter in Redis
-            let _ = self.counter_service.decrement_comment_count(comment.post_id).await;
+        if let Some(post_id) = post_id {
+            let _ = self.counter_service.decrement_comment_count(post_id).await;
         }
 
         Ok(Response::new(DeleteCommentResponse {
-            success: deleted,
-            message: if deleted {
+            success: post_id.is_some(),
+            message: if post_id.is_some() {
                 "Comment deleted successfully".to_string()
             } else {
                 "Comment not found or unauthorized".to_string()

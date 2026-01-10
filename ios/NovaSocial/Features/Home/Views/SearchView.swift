@@ -1,11 +1,15 @@
 import SwiftUI
 
 struct SearchView: View {
+    private struct UserProfileDestination: Identifiable {
+        let userId: String
+        var id: String { userId }
+    }
+
     @Binding var showSearch: Bool
     @State private var viewModel = SearchViewModel()
     @FocusState private var isSearchFocused: Bool
-    @State private var showUserProfile = false
-    @State private var selectedUserId: String?
+    @State private var userProfileDestination: UserProfileDestination?
     @State private var showHashtagFeed = false
     @State private var selectedHashtag: String?
     @State private var selectedHashtagPostCount: Int = 0
@@ -14,6 +18,17 @@ struct SearchView: View {
     @State private var isLoadingPost = false
     private let userService = UserService.shared  // For cache invalidation on profile navigation
     private let contentService = ContentService()
+
+    private var isUserProfilePresented: Binding<Bool> {
+        Binding(
+            get: { userProfileDestination != nil },
+            set: { isPresented in
+                if !isPresented {
+                    userProfileDestination = nil
+                }
+            }
+        )
+    }
 
     var body: some View {
         ZStack {
@@ -97,9 +112,11 @@ struct SearchView: View {
                     .padding(.top, 16)
                 }
                 .contentShape(Rectangle())
-                .onTapGesture {
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                }
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        isSearchFocused = false
+                    }
+                )
             }
 
             // Loading overlay for post detail
@@ -121,16 +138,8 @@ struct SearchView: View {
                 await viewModel.loadRecentSearches()
             }
         }
-        .fullScreenCover(isPresented: $showUserProfile) {
-            if let userId = selectedUserId {
-                UserProfileView(showUserProfile: $showUserProfile, userId: userId)
-            } else {
-                // Fallback: auto-dismiss if userId is nil to prevent blank screen
-                Color.clear
-                    .onAppear {
-                        showUserProfile = false
-                    }
-            }
+        .fullScreenCover(item: $userProfileDestination) { destination in
+            UserProfileView(showUserProfile: isUserProfilePresented, userId: destination.userId)
         }
         .fullScreenCover(isPresented: $showHashtagFeed) {
             if let hashtag = selectedHashtag {
@@ -159,8 +168,8 @@ struct SearchView: View {
                             showPostDetail = false
                             selectedPost = nil
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                selectedUserId = authorId
-                                showUserProfile = true
+                                isSearchFocused = false
+                                userProfileDestination = UserProfileDestination(userId: authorId)
                             }
                         }
                     )
@@ -331,10 +340,16 @@ struct SearchView: View {
                 avatarUrl: avatarUrl,
                 isVerified: isVerified,
                 onTap: {
+                    #if DEBUG
+                    print("[SearchView] 🔍 User search result tapped: id=\(id), username=\(username)")
+                    #endif
                     // Invalidate cache before navigating to ensure fresh profile data (Issue #166)
                     userService.invalidateCache(userId: id)
-                    selectedUserId = id
-                    showUserProfile = true
+                    isSearchFocused = false
+                    userProfileDestination = UserProfileDestination(userId: id)
+                    #if DEBUG
+                    print("[SearchView] 🔍 Navigation state set: userId=\(id)")
+                    #endif
                 }
             )
 
@@ -420,6 +435,7 @@ struct UserSearchResultRow: View {
                     image: nil,
                     url: avatarUrl,
                     size: 48,
+                    name: displayName,
                     backgroundColor: Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50)
                 )
 

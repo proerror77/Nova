@@ -394,6 +394,33 @@ async fn main() -> Result<(), error::AppError> {
                         }
                     });
                 }
+            }, {
+                let db = db_clone.clone();
+                let registry = registry_clone.clone();
+                let redis = redis_clone.clone();
+                let matrix_first = matrix_first;
+
+                move |event, room| {
+                    let db = db.clone();
+                    let registry = registry.clone();
+                    let redis = redis.clone();
+                    let matrix_first = matrix_first;
+
+                    tokio::spawn(async move {
+                        if let Err(e) = realtime_chat_service::services::matrix_event_handler::handle_matrix_encrypted_event(
+                            &db,
+                            &registry,
+                            &redis,
+                            matrix_first,
+                            room,
+                            event,
+                        )
+                        .await
+                        {
+                            tracing::error!(error = %e, "Failed to handle Matrix encrypted event");
+                        }
+                    });
+                }
             }).await {
                 tracing::error!(error = %e, "Matrix sync loop failed");
             }
@@ -611,8 +638,6 @@ async fn main() -> Result<(), error::AppError> {
             .service(routes::locations::share_location)
             .service(routes::locations::stop_sharing_location)
             .service(routes::locations::get_nearby_users)
-            .service(routes::wsroute::ws_handler)
-            .service(routes::wsroute::ws_chat_alias)
             // API v2 routes (matches iOS APIConfig)
             .service(
                 web::scope("/api/v2")

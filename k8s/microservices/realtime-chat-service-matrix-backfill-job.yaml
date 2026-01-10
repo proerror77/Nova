@@ -1,0 +1,56 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: realtime-chat-service-matrix-backfill
+  labels:
+    app: realtime-chat-service
+    job: matrix-backfill
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: realtime-chat-service
+        job: matrix-backfill
+    spec:
+      restartPolicy: Never
+      serviceAccountName: realtime-chat-service
+      containers:
+        - name: matrix-backfill
+          image: nova/realtime-chat-service
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-lc"]
+          args: ["exec /app/matrix-backfill ${BACKFILL_ARGS:- --all}"]
+          envFrom:
+            - configMapRef:
+                name: realtime-chat-service-config
+            - secretRef:
+                name: realtime-chat-service-secret
+          env:
+            - name: BACKFILL_ARGS
+              value: "--all"
+            - name: GRPC_SERVER_CERT_PATH
+              value: /etc/grpc/certs/server.crt
+            - name: GRPC_SERVER_KEY_PATH
+              value: /etc/grpc/certs/server.key
+            - name: GRPC_CA_CERT_PATH
+              value: /etc/grpc/certs/ca.crt
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: var-tmp
+              mountPath: /var/tmp
+            - name: grpc-certs
+              mountPath: /etc/grpc/certs
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: var-tmp
+          emptyDir: {}
+        - name: grpc-certs
+          secret:
+            secretName: grpc-mtls-shared
+            defaultMode: 420
+

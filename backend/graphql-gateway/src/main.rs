@@ -18,6 +18,7 @@ use crate::rest_api::search::{
     search_users_full,
 };
 use crate::rest_api::settings::{get_settings, update_settings};
+use crate::rest_api::deprecated_bookmarks;
 use crate::rest_api::social_likes::{
     batch_check_bookmarked, batch_check_comment_liked, batch_check_liked, check_bookmarked,
     check_comment_liked, check_liked, create_bookmark, create_comment, create_comment_like,
@@ -647,12 +648,18 @@ async fn main() -> std::io::Result<()> {
             .service(create_share)
             .service(get_share_count)
             .service(get_share_count_legacy)
-            // ✅ Bookmark API
+            // ✅ Bookmark API (New endpoints: /save and /saved-posts)
             .service(create_bookmark)
             .service(delete_bookmark)
             .service(get_bookmarks)
             .service(check_bookmarked)
             .service(batch_check_bookmarked)
+            // ⚠️ DEPRECATED Bookmark API (backward compatibility - will be removed 2026-04-01)
+            .service(deprecated_bookmarks::create_bookmark_deprecated)
+            .service(deprecated_bookmarks::delete_bookmark_deprecated)
+            .service(deprecated_bookmarks::get_bookmarks_deprecated)
+            .service(deprecated_bookmarks::check_bookmarked_deprecated)
+            .service(deprecated_bookmarks::batch_check_bookmarked_deprecated)
             // ✅ User Liked Posts API
             .service(get_user_liked_posts)
             // ✅ Comment Likes API (IG/小红书风格评论点赞)

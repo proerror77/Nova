@@ -189,19 +189,26 @@ class ProfileData {
                 #endif
 
             case .liked:
-                // Use SQL JOIN optimized endpoint (single query)
+                // Liked tab should reflect `/api/v2/social/like` writes.
+                // Fetch liked post IDs from social-service, then hydrate via content-service.
                 logger.info("Fetching LIKED posts for userId=\(userId)")
                 likedPostsOffset = 0
-                let response = try await contentService.getUserLikedPosts(userId: userId, limit: pageSize, offset: 0)
-                logger.info("LIKED response: \(response.posts.count) posts, totalCount=\(response.totalCount)")
+                let (postIds, totalCount) = try await socialService.getUserLikedPosts(userId: userId, limit: pageSize, offset: 0)
+                totalLikedPosts = totalCount
+                likedPostsOffset = postIds.count
+
+                logger.info("LIKED response: \(postIds.count) post IDs, totalCount=\(totalCount)")
                 #if DEBUG
-                print("[ProfileData] LIKED posts received: \(response.posts.count)")
-                for (i, post) in response.posts.prefix(3).enumerated() {
-                    print("[ProfileData]   [\(i)] id=\(post.id), content=\(post.content.prefix(30))...")
-                }
+                print("[ProfileData] LIKED post IDs received: \(postIds.count)")
                 #endif
-                likedPosts = await enrichPostsWithAuthorInfo(response.posts)
-                totalLikedPosts = response.totalCount
+
+                if postIds.isEmpty {
+                    likedPosts = []
+                } else {
+                    let posts = try await contentService.getPostsByIds(postIds)
+                    likedPosts = await enrichPostsWithAuthorInfo(posts)
+                }
+
                 #if DEBUG
                 print("[ProfileData] likedPosts assigned: \(likedPosts.count)")
                 #endif
@@ -242,12 +249,17 @@ class ProfileData {
                 savedPostsOffset = newOffset
 
             case .liked:
-                // Use SQL JOIN optimized endpoint for pagination
+                // Fetch liked post IDs from social-service for pagination
                 guard hasMoreLikedPosts else { isLoadingMore = false; return }
                 let newOffset = likedPosts.count
-                let response = try await contentService.getUserLikedPosts(userId: userId, limit: pageSize, offset: newOffset)
-                let enrichedPosts = await enrichPostsWithAuthorInfo(response.posts)
-                likedPosts.append(contentsOf: enrichedPosts)
+                let (postIds, _) = try await socialService.getUserLikedPosts(userId: userId, limit: pageSize, offset: newOffset)
+
+                if !postIds.isEmpty {
+                    let posts = try await contentService.getPostsByIds(postIds)
+                    let enrichedPosts = await enrichPostsWithAuthorInfo(posts)
+                    likedPosts.append(contentsOf: enrichedPosts)
+                }
+
                 likedPostsOffset = newOffset
             }
         } catch {

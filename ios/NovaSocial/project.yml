@@ -107,8 +107,8 @@ targets:
         com.apple.developer.applesignin:
           - Default
         com.apple.developer.associated-domains:
-          - webcredentials:staging.gcp.icered.com?mode=developer
-          - webcredentials:aasa.icered.com?mode=developer
+          - webcredentials:staging.gcp.icered.com
+          - webcredentials:aasa.icered.com
         com.apple.security.application-groups:
           - group.com.app.icered.pro
 

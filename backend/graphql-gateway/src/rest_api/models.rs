@@ -170,6 +170,11 @@ pub struct EnrichedComment {
     pub post_id: String,
     pub content: String,
     pub parent_comment_id: String,
+    // Engagement data (from social-service)
+    pub like_count: i64,
+    pub is_liked_by_viewer: bool,
+    /// Account type when comment was created: "primary" or "alias" (Issue #259)
+    pub author_account_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>, // ISO8601 timestamp
     // Author information (enriched from auth-service)

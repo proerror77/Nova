@@ -372,8 +372,10 @@ extension AppCoordinator {
         case .login: return .login
         case .phoneLogin: return .phoneLogin
         case .phoneRegistration: return .phoneRegistration
+        case .phoneProfileSetup: return .phoneRegistration  // Use same route as phoneRegistration
         case .phoneEnterCode(let phoneNumber): return .phoneEnterCode(phoneNumber: phoneNumber)
         case .gmailEnterCode(let email): return .gmailEnterCode(email: email)
+        case .gmailEnterCodeLogin(let email): return .gmailEnterCode(email: email)  // Use same route
         case .forgotPassword: return .forgotPassword
         case .emailSentConfirmation(let email): return .emailSentConfirmation(email: email)
         case .resetPassword(let token): return .resetPassword(token: token)

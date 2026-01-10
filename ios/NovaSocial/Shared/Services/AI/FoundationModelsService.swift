@@ -510,7 +510,7 @@ final class FoundationModelsService {
 
         let prompt = """
             Generate a social media post suggestion about "\(topic)"
-            in a \(style) style for the ICERED platform.
+            in a \(style) style for the Icered platform.
             Make it engaging and include relevant hashtags.
             """
 
@@ -572,7 +572,7 @@ final class FoundationModelsService {
 
         return try await withRetry(maxAttempts: maxRetries) {
             let response = try await session.respond(
-                to: "Recommend hashtags for this social media post on ICERED: \"\(content)\"",
+                to: "Recommend hashtags for this social media post on Icered: \"\(content)\"",
                 generating: HashtagRecommendation.self
             )
             return response.content

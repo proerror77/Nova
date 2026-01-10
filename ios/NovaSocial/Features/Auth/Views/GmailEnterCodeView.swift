@@ -1,13 +1,21 @@
 import SwiftUI
 
 /// Gmail Enter Code View - Email Verification
-/// Verification code entry screen for email registration flow
+/// Verification code entry screen for email registration and login flow
 struct GmailEnterCodeView: View {
     @Binding var currentPage: AppPage
     @EnvironmentObject private var authManager: AuthenticationManager
-    
+
     /// The email address for verification
     let email: String
+
+    /// Mode: registration or login (default: registration for backward compatibility)
+    var mode: Mode = .registration
+
+    enum Mode {
+        case registration
+        case login
+    }
     
     // MARK: - State
     @State private var verificationCode = ""
@@ -59,8 +67,12 @@ struct GmailEnterCodeView: View {
                 Spacer().frame(height: 44.h)  // Status bar safe area
                 HStack(spacing: 8.s) {
                     Button(action: {
-                        // Navigate back to email registration
-                        currentPage = .createAccountEmail
+                        // Navigate back based on mode
+                        if mode == .login {
+                            currentPage = .login
+                        } else {
+                            currentPage = .createAccountPhoneNumber
+                        }
                     }) {
                         ZStack {
                             Circle()
@@ -271,9 +283,15 @@ struct GmailEnterCodeView: View {
                 // Store verification token with timestamp for next step
                 authManager.setEmailVerificationToken(token, email: email)
 
-                // Navigate to profile setup
-                await MainActor.run {
-                    currentPage = .profileSetup
+                // Handle based on mode
+                if mode == .login {
+                    // Login flow: call loginWithEmail API
+                    await performLogin(verificationToken: token)
+                } else {
+                    // Registration flow: navigate to invite code page
+                    await MainActor.run {
+                        currentPage = .inviteCode
+                    }
                 }
             } else {
                 errorMessage = response.message ?? "Verification failed"
@@ -344,7 +362,89 @@ struct GmailEnterCodeView: View {
             #endif
             errorMessage = "Failed to resend code. Please try again."
         }
-        
+
+        isLoading = false
+    }
+
+    /// Perform login with verified email
+    private func performLogin(verificationToken: String) async {
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            let response = try await EmailAuthService.shared.loginWithEmail(
+                email: email,
+                verificationToken: verificationToken
+            )
+
+            #if DEBUG
+            print("[GmailEnterCodeView] Login successful: userId=\(response.userId)")
+            #endif
+
+            // Create user profile from response
+            let user = response.user ?? UserProfile(
+                id: response.userId,
+                username: "user_\(response.userId.prefix(8))",
+                email: email,
+                displayName: nil,
+                bio: nil,
+                avatarUrl: nil,
+                coverUrl: nil,
+                website: nil,
+                location: nil,
+                isVerified: false,
+                isPrivate: false,
+                isBanned: false,
+                followerCount: 0,
+                followingCount: 0,
+                postCount: 0,
+                createdAt: nil,
+                updatedAt: nil,
+                deletedAt: nil,
+                firstName: nil,
+                lastName: nil,
+                dateOfBirth: nil,
+                gender: nil
+            )
+
+            // Save authentication
+            await MainActor.run {
+                authManager.authToken = response.token
+                authManager.currentUser = user
+                authManager.isAuthenticated = true
+                APIClient.shared.setAuthToken(response.token)
+
+                // Save to keychain
+                _ = KeychainService.shared.save(response.token, for: .authToken)
+                _ = KeychainService.shared.save(user.id, for: .userId)
+                if let refreshToken = response.refreshToken {
+                    _ = KeychainService.shared.save(refreshToken, for: .refreshToken)
+                }
+            }
+
+            // Login successful - AuthenticationManager will trigger navigation
+
+        } catch EmailAuthError.emailNotRegistered {
+            errorMessage = "No account found with this email. Please sign up first."
+        } catch let emailError as EmailAuthError {
+            #if DEBUG
+            print("[GmailEnterCodeView] Login error: \(emailError)")
+            #endif
+            switch emailError {
+            case .networkError:
+                errorMessage = "Unable to connect. Please check your internet connection."
+            case .serverError(let message):
+                errorMessage = message
+            default:
+                errorMessage = emailError.localizedDescription
+            }
+        } catch {
+            #if DEBUG
+            print("[GmailEnterCodeView] Unexpected login error: \(error)")
+            #endif
+            errorMessage = "Login failed. Please try again."
+        }
+
         isLoading = false
     }
 }

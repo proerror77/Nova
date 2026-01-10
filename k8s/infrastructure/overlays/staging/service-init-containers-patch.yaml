@@ -239,6 +239,47 @@ spec:
   template:
     spec:
       initContainers:
+      - name: realtime-chat-db-migrate
+        image: postgres:15-alpine
+        command:
+        - sh
+        - -c
+        - |
+          set -euo pipefail
+          echo "⏳ Waiting for postgres:5432..."
+          for i in $(seq 1 60); do
+            if PGPASSWORD="$DB_PASSWORD" psql -h postgres.nova-staging.svc.cluster.local -U "$DB_USER" -d postgres -c "SELECT 1" 2>/dev/null; then
+              echo "✓ postgres is ready"
+              break
+            fi
+            sleep 2
+          done
+
+          echo "🛠️  Ensuring realtime-chat metadata index exists (ux_messages_matrix_event_id)..."
+          PGPASSWORD="$DB_PASSWORD" psql \
+            -h postgres.nova-staging.svc.cluster.local \
+            -U "$DB_USER" \
+            -d nova_realtime_chat \
+            -v ON_ERROR_STOP=1 \
+            -c "DO \\$\\$ BEGIN \
+                  IF to_regclass('public.messages') IS NOT NULL \
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='messages' AND column_name='matrix_event_id') THEN \
+                    EXECUTE 'CREATE UNIQUE INDEX IF NOT EXISTS ux_messages_matrix_event_id ON public.messages(matrix_event_id) WHERE matrix_event_id IS NOT NULL'; \
+                  END IF; \
+                END \\$\\$;"
+
+          echo "✓ realtime-chat DB migration complete"
+        env:
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DB_PASSWORD
       - name: wait-for-redis
         image: busybox:1.35
         command:

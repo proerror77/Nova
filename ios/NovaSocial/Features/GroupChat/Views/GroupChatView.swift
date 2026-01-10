@@ -19,15 +19,20 @@ struct GroupChatView: View {
     // 圖片選擇
     @State private var selectedPhotoItem: PhotosPickerItem?
 
-    // 群組設定
-    @State private var showGroupSettings = false
+	// 群組設定
+	@State private var showGroupSettings = false
+	@State private var showUserProfile = false
+	@State private var selectedUserId: String = ""
+	private let matrixBridge = MatrixBridgeService.shared
+	@State private var currentGroupName: String
 
-    init(showGroupChat: Binding<Bool>, conversationId: String, groupName: String, memberCount: Int) {
-        self._showGroupChat = showGroupChat
-        self.conversationId = conversationId
-        self.groupName = groupName
-        self.memberCount = memberCount
-    }
+	init(showGroupChat: Binding<Bool>, conversationId: String, groupName: String, memberCount: Int) {
+		self._showGroupChat = showGroupChat
+		self.conversationId = conversationId
+		self.groupName = groupName
+		self.memberCount = memberCount
+		self._currentGroupName = State(initialValue: groupName)
+	}
 
     var body: some View {
         ZStack {
@@ -45,30 +50,30 @@ struct GroupChatView: View {
                 inputAreaView
             }
         }
-        .task {
-            viewModel.configure(
-                conversationId: conversationId,
-                groupName: groupName,
-                memberCount: memberCount
-            )
-            await viewModel.loadMessages()
-        }
-        .fullScreenCover(isPresented: $viewModel.showVoiceCall) {
-            CallView(
-                roomId: conversationId,
-                roomName: groupName,
-                isVideoCall: false,
-                intent: .startCall
-            )
-        }
-        .fullScreenCover(isPresented: $viewModel.showVideoCall) {
-            CallView(
-                roomId: conversationId,
-                roomName: groupName,
-                isVideoCall: true,
-                intent: .startCall
-            )
-        }
+		.task {
+			viewModel.configure(
+				conversationId: conversationId,
+				groupName: currentGroupName,
+				memberCount: memberCount
+			)
+			await viewModel.loadMessages()
+		}
+		.fullScreenCover(isPresented: $viewModel.showVoiceCall) {
+			CallView(
+				roomId: conversationId,
+				roomName: currentGroupName,
+				isVideoCall: false,
+				intent: .startCall
+			)
+		}
+		.fullScreenCover(isPresented: $viewModel.showVideoCall) {
+			CallView(
+				roomId: conversationId,
+				roomName: currentGroupName,
+				isVideoCall: true,
+				intent: .startCall
+			)
+		}
         .sheet(isPresented: $viewModel.showFilePicker) {
             DocumentPickerView(
                 onDocumentPicked: { data, filename, mimeType in
@@ -82,16 +87,27 @@ struct GroupChatView: View {
                 }
             )
         }
-        .sheet(isPresented: $showGroupSettings) {
-            GroupSettingsView(
-                isPresented: $showGroupSettings,
-                conversationId: conversationId,
-                groupName: groupName,
-                memberCount: memberCount
+		.sheet(isPresented: $showGroupSettings) {
+			GroupSettingsView(
+				isPresented: $showGroupSettings,
+				conversationId: conversationId,
+				groupName: currentGroupName,
+				memberCount: memberCount
+			) { updatedName, _ in
+				currentGroupName = updatedName
+			}
+		}
+        .fullScreenCover(isPresented: $showUserProfile) {
+            UserProfileView(
+                showUserProfile: $showUserProfile,
+                userId: selectedUserId
             )
         }
         .onChange(of: selectedPhotoItem) { _, newItem in
             handlePhotoSelection(newItem)
+        }
+        .onDisappear {
+            viewModel.cleanup()
         }
         .alert("Error", isPresented: Binding(
             get: { viewModel.error != nil },
@@ -122,9 +138,9 @@ struct GroupChatView: View {
 
             Spacer()
 
-            Text("\(groupName)(\(memberCount))")
-                .font(Font.custom("Helvetica Neue", size: 20).weight(.medium))
-                .foregroundColor(DesignTokens.textPrimary)
+			Text("\(currentGroupName)(\(memberCount))")
+				.font(Font.custom("Helvetica Neue", size: 20).weight(.medium))
+				.foregroundColor(DesignTokens.textPrimary)
 
             Spacer()
 
@@ -176,7 +192,32 @@ struct GroupChatView: View {
 
                         // Messages in this group
                         ForEach(group.messages) { message in
-                            GroupMessageBubbleView(message: message)
+                            GroupMessageBubbleView(
+                                message: message,
+                                onAvatarTapped: { matrixUserId in
+                                    guard !matrixUserId.isEmpty else { return }
+
+                                    let resolved: String? = {
+                                        if let novaId = matrixBridge.matrixService.convertToNovaUserId(matrixUserId: matrixUserId) {
+                                            return novaId
+                                        }
+                                        if matrixUserId.hasPrefix("@") {
+                                            let withoutAt = String(matrixUserId.dropFirst())
+                                            let localpart = withoutAt.split(separator: ":", maxSplits: 1).first.map(String.init)
+                                            if let localpart, localpart.hasPrefix("nova-") {
+                                                return String(localpart.dropFirst(5))
+                                            }
+                                            return localpart
+                                        }
+                                        return nil
+                                    }()
+
+                                    guard let resolved else { return }
+                                    UserService.shared.invalidateCache(userId: resolved)
+                                    selectedUserId = resolved
+                                    showUserProfile = true
+                                }
+                            )
                                 .id(message.id)
                         }
                     }
@@ -487,6 +528,7 @@ struct GroupChatView: View {
 // MARK: - Group Message Bubble View
 struct GroupMessageBubbleView: View {
     let message: GroupChatUIMessage
+    var onAvatarTapped: ((String) -> Void)? = nil
 
     private let myBubbleColor = Color(red: 0.92, green: 0.20, blue: 0.34)
     private let otherBubbleColor = Color(red: 0.92, green: 0.92, blue: 0.92)
@@ -511,6 +553,9 @@ struct GroupMessageBubbleView: View {
                 .frame(maxWidth: 220, alignment: .trailing)
 
             avatarView(url: message.senderAvatarUrl)
+                .onTapGesture {
+                    onAvatarTapped?(message.senderId)
+                }
         }
         .padding(.horizontal, 16)
     }
@@ -519,6 +564,9 @@ struct GroupMessageBubbleView: View {
     private var otherMessageView: some View {
         HStack(alignment: .top, spacing: 10) {
             avatarView(url: message.senderAvatarUrl)
+                .onTapGesture {
+                    onAvatarTapped?(message.senderId)
+                }
 
             VStack(alignment: .leading, spacing: 2) {
                 // Sender name for group messages
@@ -549,20 +597,32 @@ struct GroupMessageBubbleView: View {
                     .frame(maxWidth: 200, maxHeight: 200)
                     .cornerRadius(10)
             } else if let mediaUrl = message.mediaUrl, let url = URL(string: mediaUrl) {
-                AsyncImage(url: url) { image in
+                CachedAsyncImage(
+                    url: url,
+                    targetSize: CGSize(width: 400, height: 400),
+                    enableProgressiveLoading: true,
+                    priority: .normal
+                ) { image in
                     image
                         .resizable()
                         .scaledToFit()
+                        .frame(maxWidth: 200, maxHeight: 200)
+                        .cornerRadius(10)
                 } placeholder: {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(width: 150, height: 150)
+                        ProgressView()
+                    }
+                }
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 150, height: 150)
                     ProgressView()
                 }
-                .frame(maxWidth: 200, maxHeight: 200)
-                .cornerRadius(10)
-            } else {
-                Text("[Image]")
-                    .font(Font.custom("Helvetica Neue", size: 16))
-                    .foregroundColor(message.isFromMe ? .white : otherTextColor)
-                    .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
             }
 
         case .audio:
@@ -603,6 +663,21 @@ struct GroupMessageBubbleView: View {
                     .lineLimit(2)
             }
             .padding(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))
+
+        case .video:
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.black.opacity(0.8))
+                    .frame(width: 200, height: 150)
+
+                if message.mediaUrl != nil {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 44.f))
+                        .foregroundColor(.white.opacity(0.9))
+                } else {
+                    ProgressView()
+                }
+            }
 
         default:
             // Text message

@@ -109,12 +109,13 @@ struct APIConfig {
         static func getShareCount(_ postId: String) -> String { "/api/v2/social/shares/count/\(postId)" }
         static let batchGetStats = "/api/v2/social/stats/batch"
 
-        // Bookmark endpoints
-        static let createBookmark = "/api/v2/social/bookmark"
-        static func deleteBookmark(_ postId: String) -> String { "/api/v2/social/bookmark/\(postId)" }
-        static let getBookmarks = "/api/v2/social/bookmarks"
-        static func checkBookmarked(_ postId: String) -> String { "/api/v2/social/check-bookmarked/\(postId)" }
-        static let batchCheckBookmarked = "/api/v2/social/bookmarks/batch-check"
+        // Save/Bookmark endpoints
+        // Write operations use /save (verb), read operations use /saved-posts (resource)
+        static let createBookmark = "/api/v2/social/save"
+        static func deleteBookmark(_ postId: String) -> String { "/api/v2/social/save/\(postId)" }
+        static let getBookmarks = "/api/v2/social/saved-posts"
+        static func checkBookmarked(_ postId: String) -> String { "/api/v2/social/saved-posts/\(postId)/check" }
+        static let batchCheckBookmarked = "/api/v2/social/saved-posts/batch-check"
     }
 
     struct Content {
@@ -555,9 +556,6 @@ struct APIConfig {
         }
         /// GET /nearby-users 獲取附近用戶
         static let getNearbyUsers = "/nearby-users"
-
-        /// WebSocket 連接端點
-        static let websocket = "/ws/chat"
     }
 
     // MARK: - Relationships & Privacy API (realtime-chat-service)

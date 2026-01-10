@@ -119,7 +119,9 @@ struct UserProfileFollowersView: View {
 
     // MARK: - 加载 Followers 列表（关注目标用户的人）
     private func loadFollowers() async {
-        isLoadingFollowers = true
+        await MainActor.run {
+            isLoadingFollowers = true
+        }
 
         do {
             // 1. 获取关注目标用户的用户 ID 列表（包含关系状态）
@@ -161,7 +163,9 @@ struct UserProfileFollowersView: View {
 
     // MARK: - 加载 Following 列表（目标用户关注的人）
     private func loadFollowing() async {
-        isLoadingFollowing = true
+        await MainActor.run {
+            isLoadingFollowing = true
+        }
 
         do {
             // 1. 获取目标用户关注的用户 ID 列表（包含关系状态）

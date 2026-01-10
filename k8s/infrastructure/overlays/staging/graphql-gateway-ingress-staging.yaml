@@ -63,13 +63,6 @@ spec:
         pathType: Prefix
       - backend:
           service:
-            name: realtime-chat-service
-            port:
-              number: 8080
-        path: /ws/chat
-        pathType: Prefix
-      - backend:
-          service:
             name: alice-voice-service
             port:
               number: 8081
@@ -119,13 +112,6 @@ spec:
             port:
               number: 8080
         path: /ws
-        pathType: Prefix
-      - backend:
-          service:
-            name: realtime-chat-service
-            port:
-              number: 8080
-        path: /ws/chat
         pathType: Prefix
       - backend:
           service:

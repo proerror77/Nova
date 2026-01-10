@@ -18,6 +18,7 @@ pub mod calls; // Video/Voice call proxy to realtime-chat-service
 pub mod channels;
 pub mod chat;
 pub mod content;
+pub mod deprecated_bookmarks; // DEPRECATED: backward compatibility for old bookmark endpoints
 pub mod devices;
 pub mod email_auth;
 pub mod feed;

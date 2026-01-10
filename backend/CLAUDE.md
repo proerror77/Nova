@@ -29,6 +29,17 @@ The Nova backend uses separate databases for each service:
 
 **Important**: Cross-database queries are not possible. Use gRPC calls between services to fetch data from other databases.
 
+### Database Migrations
+
+**CRITICAL**: Read [MIGRATION_BEST_PRACTICES.md](./MIGRATION_BEST_PRACTICES.md) before working with migrations.
+
+Key rules:
+- Never delete migration files that have been applied to any environment
+- Always rebuild images after adding new migrations
+- Use `.down.sql` files for rollbacks, not file deletion
+- Migrations are embedded in binaries at compile time via `sqlx::migrate!()`
+- Old images will crash if deployed after new migrations are applied
+
 ## Kubernetes Namespaces
 
 - `nova-staging` - Staging environment
@@ -83,4 +94,10 @@ kubectl port-forward svc/<service-name> 8080:8080 -n nova-staging
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #32507 | 1:27 PM | 🔵 | CLAUDE.md Files Located in Project | ~201 |
+
+### Jan 9, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #33004 | 1:17 PM | 🔵 | Kubernetes Staging Environment Status Check | ~645 |
 </claude-mem-context>

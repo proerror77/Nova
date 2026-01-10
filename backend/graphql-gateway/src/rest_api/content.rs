@@ -674,8 +674,23 @@ pub async fn delete_post(
 // ============================================================================
 
 /// GET /api/v1/posts/user/{user_id}/liked
+///
+/// ⚠️ DEPRECATED: This endpoint reads from nova_content.likes which is no longer updated.
+/// Use GET /api/v2/social/users/{user_id}/liked-posts instead, which reads from nova_social.likes.
+///
+/// This endpoint will be removed after 2026-04-01.
+///
+/// Background:
+/// - Writes go to nova_social.likes via POST /api/v2/social/like
+/// - This endpoint reads from nova_content.likes (stale data)
+/// - iOS clients have been updated to use social-service endpoints
+///
 /// Get posts liked by a user using SQL JOIN for single-query efficiency
 /// Returns full Post objects with author information (not just IDs)
+#[deprecated(
+    since = "2026-01-09",
+    note = "Use GET /api/v2/social/users/{user_id}/liked-posts instead. This endpoint reads from stale data."
+)]
 pub async fn get_user_liked_posts(
     path: web::Path<String>,
     clients: web::Data<ServiceClients>,
@@ -772,8 +787,23 @@ pub async fn get_user_liked_posts(
 }
 
 /// GET /api/v1/posts/user/{user_id}/saved
+///
+/// ⚠️ DEPRECATED: This endpoint reads from nova_content.bookmarks which is no longer updated.
+/// Use GET /api/v2/social/saved-posts instead, which reads from nova_social.saved_posts.
+///
+/// This endpoint will be removed after 2026-04-01.
+///
+/// Background:
+/// - Writes go to nova_social.saved_posts via POST /api/v2/social/save
+/// - This endpoint reads from nova_content.bookmarks (stale data)
+/// - iOS clients have been updated to use social-service endpoints
+///
 /// Get posts saved/bookmarked by a user using SQL JOIN for single-query efficiency
 /// Returns full Post objects with author information (not just IDs)
+#[deprecated(
+    since = "2026-01-09",
+    note = "Use GET /api/v2/social/saved-posts instead. This endpoint reads from stale data."
+)]
 pub async fn get_user_saved_posts(
     path: web::Path<String>,
     clients: web::Data<ServiceClients>,

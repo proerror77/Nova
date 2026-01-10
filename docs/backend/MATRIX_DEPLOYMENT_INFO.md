@@ -14,10 +14,13 @@
 
 ```bash
 MATRIX_ENABLED=true
-MATRIX_HOMESERVER_URL=http://matrix-synapse:8008
-MATRIX_SERVICE_USER=@nova-service:staging.nova.internal
+
+# IMPORTANT: MATRIX_HOMESERVER_URL 必須與 MATRIX_PUBLIC_URL 指向同一套 Synapse，
+# 否則 sync 會看不到 client 建的 room / event。
+MATRIX_HOMESERVER_URL=https://matrix.staging.gcp.icered.com
+MATRIX_SERVICE_USER=@nova-service:staging.gcp.icered.com
 MATRIX_DEVICE_NAME=nova-realtime-chat-service
-MATRIX_SERVER_NAME=staging.nova.internal
+MATRIX_SERVER_NAME=staging.gcp.icered.com
 MATRIX_ACCESS_TOKEN=syt_bm92YS1zZXJ2aWNl_fvxysrZSJjIkuqsZtmiL_2lTBn4
 ```
 
@@ -26,10 +29,10 @@ MATRIX_ACCESS_TOKEN=syt_bm92YS1zZXJ2aWNl_fvxysrZSJjIkuqsZtmiL_2lTBn4
 已在 `realtime-chat-service-config` ConfigMap 中設置：
 
 - ✅ `MATRIX_ENABLED`: `false` (預設關閉，需手動啟用)
-- ✅ `MATRIX_HOMESERVER_URL`: `http://matrix-synapse:8008`
-- ✅ `MATRIX_SERVICE_USER`: `@nova-service:staging.nova.internal`
+- ✅ `MATRIX_HOMESERVER_URL`: `https://matrix.staging.gcp.icered.com`
+- ✅ `MATRIX_SERVICE_USER`: `@nova-service:staging.gcp.icered.com`
 - ✅ `MATRIX_DEVICE_NAME`: `nova-realtime-chat-service`
-- ✅ `MATRIX_SERVER_NAME`: `staging.nova.internal`
+- ✅ `MATRIX_SERVER_NAME`: `staging.gcp.icered.com`
 
 ### Secret 配置
 
