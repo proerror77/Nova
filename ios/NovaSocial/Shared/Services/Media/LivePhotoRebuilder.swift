@@ -1,6 +1,7 @@
 import Foundation
 import PhotosUI
 import UIKit
+import CryptoKit
 
 // MARK: - Live Photo Rebuild Result
 
@@ -47,6 +48,16 @@ enum LivePhotoRebuilderError: LocalizedError {
 @MainActor
 class LivePhotoRebuilder: ObservableObject {
     static let shared = LivePhotoRebuilder()
+
+    // MARK: - Security
+    
+    /// Generate SHA256 hash for secure cache filename generation
+    /// Prevents hash collisions that could lead to cross-user data leaks
+    private func sha256Hash(of string: String) -> String {
+        let data = Data(string.utf8)
+        let hash = SHA256.hash(data: data)
+        return hash.compactMap { String(format: "%02x", $0) }.joined()
+    }
 
     // MARK: - Cache
 
@@ -198,11 +209,11 @@ class LivePhotoRebuilder: ObservableObject {
         // Download both resources in parallel
         async let photoDownload = downloadResource(
             url: imageUrl,
-            filename: "photo_\(imageUrl.hashValue).heic"
+            filename: "photo_\(sha256Hash(of: imageUrl)).heic"
         )
         async let videoDownload = downloadResource(
             url: videoUrl,
-            filename: "video_\(videoUrl.hashValue).mov"
+            filename: "video_\(sha256Hash(of: videoUrl)).mov"
         )
 
         let (photoURL, videoURL) = try await (photoDownload, videoDownload)
@@ -258,26 +269,52 @@ class LivePhotoRebuilder: ObservableObject {
         videoURL: URL,
         targetSize: CGSize
     ) async throws -> PHLivePhoto {
-        try await withCheckedThrowingContinuation { continuation in
+        var receivedDegraded: PHLivePhoto?
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            var hasResumed = false
+            
             PHLivePhoto.request(
                 withResourceFileURLs: [photoURL, videoURL],
                 placeholderImage: nil,
                 targetSize: targetSize,
                 contentMode: .aspectFit
             ) { livePhoto, info in
+                guard !hasResumed else { return }
+                
                 if let livePhoto = livePhoto {
-                    // Check if this is a degraded version
                     let isDegraded = (info[PHLivePhotoInfoIsDegradedKey] as? Bool) ?? false
-
-                    if !isDegraded {
-                        // Only return the full-quality version
-                        continuation.resume(returning: livePhoto)
+                    let isCancelled = (info[PHLivePhotoInfoCancelledKey] as? Bool) ?? false
+                    
+                    // Handle cancellation
+                    if isCancelled {
+                        hasResumed = true
+                        continuation.resume(throwing: LivePhotoRebuilderError.rebuildFailed)
+                        return
                     }
-                    // If degraded, wait for the full version (callback will be called again)
+                    
+                    if !isDegraded {
+                        // Received full-quality version, return immediately
+                        hasResumed = true
+                        continuation.resume(returning: livePhoto)
+                    } else {
+                        // Save degraded version as fallback
+                        receivedDegraded = livePhoto
+                        
+                        // Timeout fallback: if no full version arrives in 5 seconds, use degraded
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                            if !hasResumed, let degraded = receivedDegraded {
+                                hasResumed = true
+                                continuation.resume(returning: degraded)
+                                #if DEBUG
+                                print("[LivePhotoRebuilder] Using degraded version after timeout")
+                                #endif
+                            }
+                        }
+                    }
                 } else if let error = info[PHLivePhotoInfoErrorKey] as? Error {
+                    hasResumed = true
                     continuation.resume(throwing: error)
-                } else {
-                    continuation.resume(throwing: LivePhotoRebuilderError.rebuildFailed)
                 }
             }
         }
@@ -285,8 +322,8 @@ class LivePhotoRebuilder: ObservableObject {
 
     /// Get cached file URLs if they exist
     private func getCachedFileURLs(imageUrl: String, videoUrl: String) -> (photo: URL, video: URL)? {
-        let photoFilename = "photo_\(imageUrl.hashValue).heic"
-        let videoFilename = "video_\(videoUrl.hashValue).mov"
+        let photoFilename = "photo_\(sha256Hash(of: imageUrl)).heic"
+        let videoFilename = "video_\(sha256Hash(of: videoUrl)).mov"
 
         let photoURL = cacheDirectory.appendingPathComponent(photoFilename)
         let videoURL = cacheDirectory.appendingPathComponent(videoFilename)
