@@ -171,21 +171,13 @@ struct PhoneEnterCodeView: View {
                 .frame(width: 1, height: 1)
                 .opacity(0.01)
 
-            // 6 个独立的输入框 - 自适应间距
+            // 6 个独立的输入框 - 固定间距
             // Figma 基准: 6个框 × 40pt + 5个间距 × 10pt = 290pt
             // 可用宽度: 375 - 37*2 = 301pt
-            GeometryReader { geometry in
-                let boxWidth: CGFloat = 40.s
-                let totalBoxWidth = boxWidth * 6
-                let availableSpacing = geometry.size.width - totalBoxWidth
-                let spacing = max(availableSpacing / 5, 8.s)
-
-                HStack(spacing: spacing) {
-                    ForEach(0..<6, id: \.self) { index in
-                        codeBox(at: index)
-                    }
+            HStack(spacing: 10.s) {
+                ForEach(0..<6, id: \.self) { index in
+                    codeBox(at: index)
                 }
-                .frame(width: geometry.size.width, height: 49.s)
             }
             .frame(height: 49.s)
         }
