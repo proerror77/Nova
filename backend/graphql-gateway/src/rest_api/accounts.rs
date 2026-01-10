@@ -10,7 +10,7 @@ use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
-use crate::clients::proto::identity::{
+use crate::clients::proto::auth::{
     CreateAliasAccountRequest, DeleteAliasAccountRequest, Gender, GetAliasAccountRequest,
     ListAccountsRequest, SwitchAccountRequest, UpdateAliasAccountRequest,
 };
@@ -126,7 +126,7 @@ fn string_to_gender(s: &str) -> Gender {
 }
 
 fn proto_account_to_response(
-    account: &crate::clients::proto::identity::Account,
+    account: &crate::clients::proto::auth::Account,
 ) -> AccountResponse {
     AccountResponse {
         id: account.id.clone(),
@@ -184,13 +184,13 @@ pub async fn list_accounts(
     let user_id = user.0.to_string();
     info!(user_id = %user_id, "GET /api/v2/accounts");
 
-    let mut identity_client = clients.identity_client();
+    let mut auth_client = clients.auth_client();
 
     let grpc_request = tonic::Request::new(ListAccountsRequest {
         user_id: user_id.clone(),
     });
 
-    match identity_client.list_accounts(grpc_request).await {
+    match auth_client.list_accounts(grpc_request).await {
         Ok(response) => {
             let inner = response.into_inner();
             let accounts: Vec<AccountResponse> = inner
@@ -241,14 +241,14 @@ pub async fn switch_account(
         "POST /api/v2/accounts/switch"
     );
 
-    let mut identity_client = clients.identity_client();
+    let mut auth_client = clients.auth_client();
 
     let grpc_request = tonic::Request::new(SwitchAccountRequest {
         user_id: user_id.clone(),
         target_account_id: body.target_account_id.clone(),
     });
 
-    match identity_client.switch_account(grpc_request).await {
+    match auth_client.switch_account(grpc_request).await {
         Ok(response) => {
             let inner = response.into_inner();
 
@@ -322,7 +322,7 @@ pub async fn create_alias_account(
         )));
     }
 
-    let mut identity_client = clients.identity_client();
+    let mut auth_client = clients.auth_client();
 
     let grpc_request = tonic::Request::new(CreateAliasAccountRequest {
         user_id: user_id.clone(),
@@ -339,7 +339,7 @@ pub async fn create_alias_account(
         location: body.location.clone().unwrap_or_default(),
     });
 
-    match identity_client.create_alias_account(grpc_request).await {
+    match auth_client.create_alias_account(grpc_request).await {
         Ok(response) => {
             let inner = response.into_inner();
 
@@ -406,7 +406,7 @@ pub async fn update_alias_account(
         "PUT /api/v2/accounts/alias/{{id}}"
     );
 
-    let mut identity_client = clients.identity_client();
+    let mut auth_client = clients.auth_client();
 
     let grpc_request = tonic::Request::new(UpdateAliasAccountRequest {
         account_id: account_id.clone(),
@@ -424,7 +424,7 @@ pub async fn update_alias_account(
         location: body.location.clone().unwrap_or_default(),
     });
 
-    match identity_client.update_alias_account(grpc_request).await {
+    match auth_client.update_alias_account(grpc_request).await {
         Ok(response) => {
             let inner = response.into_inner();
 
@@ -489,14 +489,14 @@ pub async fn get_alias_account(
         "GET /api/v2/accounts/alias/{{id}}"
     );
 
-    let mut identity_client = clients.identity_client();
+    let mut auth_client = clients.auth_client();
 
     let grpc_request = tonic::Request::new(GetAliasAccountRequest {
         account_id: account_id.clone(),
         user_id: user_id.clone(),
     });
 
-    match identity_client.get_alias_account(grpc_request).await {
+    match auth_client.get_alias_account(grpc_request).await {
         Ok(response) => {
             let inner = response.into_inner();
 
@@ -547,14 +547,14 @@ pub async fn delete_alias_account(
         "DELETE /api/v2/accounts/alias/{{id}}"
     );
 
-    let mut identity_client = clients.identity_client();
+    let mut auth_client = clients.auth_client();
 
     let grpc_request = tonic::Request::new(DeleteAliasAccountRequest {
         account_id: account_id.clone(),
         user_id: user_id.clone(),
     });
 
-    match identity_client.delete_alias_account(grpc_request).await {
+    match auth_client.delete_alias_account(grpc_request).await {
         Ok(_) => {
             info!(
                 user_id = %user_id,
