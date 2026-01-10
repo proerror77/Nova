@@ -10,26 +10,26 @@ struct SettingsRow: View {
         Button(action: {
             action?()
         }) {
-            HStack(spacing: 16) {
+            HStack(spacing: 10.w) {
                 Image(systemName: icon)
-                    .font(Font.custom("SFProDisplay-Regular", size: 18.f))
+                    .font(.system(size: 18.f, weight: .light))
                     .foregroundColor(DesignTokens.accentColor)
-                    .frame(width: 24)
+                    .frame(width: 24.s, height: 24.s)
 
                 Text(title)
-                    .font(Font.custom("SFProDisplay-Medium", size: 14.f))
-                    .foregroundColor(DesignTokens.textPrimary)
+                    .font(Font.custom("SF Pro Display", size: 14.f).weight(.semibold))
+                    .tracking(0.28)
+                    .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
 
                 Spacer()
 
                 if showChevron {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12.f))
-                        .foregroundColor(DesignTokens.textSecondary)
+                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                        .frame(width: 24.s, height: 24.s)
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
         }
     }
 }

@@ -10,9 +10,12 @@ struct SettingsView: View {
     @State private var isPushEnabled = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            // MARK: - Top Navigation Bar
+        ZStack {
+            Color(red: 0.97, green: 0.97, blue: 0.97)
+                .ignoresSafeArea()
+
             VStack(spacing: 0) {
+                // MARK: - Top Navigation Bar
                 HStack {
                     Button(action: {
                         currentPage = .account
@@ -20,7 +23,7 @@ struct SettingsView: View {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 18.f, weight: .medium))
                             .frame(width: 24.s, height: 24.s)
-                            .foregroundColor(DesignTokens.textPrimary)
+                            .foregroundColor(.black)
                     }
                     .accessibilityLabel("Back")
                     .accessibilityHint("Return to account screen")
@@ -28,8 +31,9 @@ struct SettingsView: View {
                     Spacer()
 
                     Text(LocalizedStringKey("Settings"))
-                        .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
-                        .foregroundColor(DesignTokens.textPrimary)
+                        .font(Font.custom("SF Pro Display", size: 18.f).weight(.semibold))
+                        .lineSpacing(20)
+                        .foregroundColor(.black)
 
                     Spacer()
 
@@ -38,49 +42,44 @@ struct SettingsView: View {
                         .frame(width: 24.s)
                 }
                 .padding(EdgeInsets(top: 15.h, leading: 16.w, bottom: 15.h, trailing: 16.w))
-            }
-            .frame(height: 54.h)
-            .padding(.top, 47.h)  // 安全区域顶部距离
-            .background(DesignTokens.surface)
+                .frame(height: 54.h)
 
-            ScrollView {
-                VStack(spacing: 20.h) {
+                ScrollView {
+                    VStack(spacing: 20.h) {
                     // MARK: - Account Settings Group
-                    VStack(alignment: .leading, spacing: 0) {
-                        VStack(spacing: 0) {
+                        VStack(spacing: 24.h) {
                             // MARK: - Choose account (可展开)
                             Button(action: {
                                 withAnimation(.easeInOut(duration: 0.25)) {
                                     isPostAsExpanded.toggle()
                                 }
                             }) {
-                                HStack(spacing: 16.w) {
+                                HStack(spacing: 10.w) {
                                     Image(systemName: "person.crop.square.filled.and.at.rectangle")
-                                        .font(.system(size: 18.f))
+                                        .font(.system(size: 18.f, weight: .light))
                                         .foregroundColor(DesignTokens.accentColor)
-                                        .frame(width: 24.s)
+                                        .frame(width: 24.s, height: 24.s)
 
                                     Text("Choose account")
-                                        .font(Font.custom("SFProDisplay-Medium", size: 14.f))
-                                        .foregroundColor(DesignTokens.textPrimary)
+                                        .font(Font.custom("SF Pro Display", size: 14.f).weight(.semibold))
+                                        .tracking(0.28)
+                                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
 
                                     Spacer()
 
                                     Image(systemName: isPostAsExpanded ? "chevron.down" : "chevron.right")
-                                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
-                                        .foregroundColor(DesignTokens.textSecondary)
+                                        .font(.system(size: 12.f))
+                                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                                        .frame(width: 24.s, height: 24.s)
                                         .animation(.easeInOut(duration: 0.2), value: isPostAsExpanded)
                                 }
-                                .padding(.horizontal, 20.w)
-                                .padding(.vertical, 16.h)
                             }
-                                .accessibilityLabel("Choose account")
-                                .accessibilityHint(isPostAsExpanded ? "Collapse account options" : "Expand to choose which account to post as")
-                                .accessibilityAddTraits(.isButton)
+                            .accessibilityLabel("Choose account")
+                            .accessibilityHint(isPostAsExpanded ? "Collapse account options" : "Expand to choose which account to post as")
+                            .accessibilityAddTraits(.isButton)
 
-                                // 展开的选择面板 - 使用高度动画
-                                // 优化：只有在完全没有数据时才显示 loading
-                                // 否则立即显示 authManager.currentUser 数据
+                            // 展开的选择面板
+                            if isPostAsExpanded {
                                 PostAsSelectionPanel(
                                     accounts: buildAccountDisplayData(),
                                     selectedAccountId: viewModel.currentAccountId ?? authManager.currentUser?.id,
@@ -90,12 +89,7 @@ struct SettingsView: View {
                                     pendingPrimaryAvatar: AvatarManager.shared.pendingAvatar,
                                     isLoading: viewModel.isLoadingAccounts && authManager.currentUser == nil
                                 )
-                                .frame(height: isPostAsExpanded ? nil : 0, alignment: .top)
-                                .clipped()
-                                .opacity(isPostAsExpanded ? 1 : 0)
-
-                            Divider()
-                                .padding(.leading, 60.w)
+                            }
 
                             SettingsRow(
                                 icon: "iphone",
@@ -108,11 +102,8 @@ struct SettingsView: View {
                             .accessibilityLabel("Devices")
                             .accessibilityHint("Manage your connected devices")
 
-                            Divider()
-                                .padding(.leading, 60.w)
-
                             SettingsRow(
-                                icon: "person.badge.key.fill",
+                                icon: "person.badge.key",
                                 title: "Passkeys",
                                 showChevron: true,
                                 action: {
@@ -122,142 +113,125 @@ struct SettingsView: View {
                             .accessibilityLabel("Passkeys")
                             .accessibilityHint("Manage passkeys for passwordless sign-in")
 
-                            Divider()
-                                .padding(.leading, 60.w)
-
                             SettingsRow(
                                 icon: "person.badge.plus",
-                                title: "Invite Friends",
+                                title: "Invite friends",
                                 showChevron: true,
                                 action: {
                                     currentPage = .inviteFriends
                                 }
                             )
-                            .accessibilityLabel("Invite Friends")
+                            .accessibilityLabel("Invite friends")
                             .accessibilityHint("Share Nova Social with your friends")
 
-                            Divider()
-                                .padding(.leading, 60.w)
-
                             SettingsRow(
-                                icon: "tv",
-                                title: "My Channels",
+                                icon: "display",
+                                title: "My channels",
                                 showChevron: true,
                                 action: {
                                     currentPage = .myChannels
                                 }
                             )
-                            .accessibilityLabel("My Channels")
+                            .accessibilityLabel("My channels")
                             .accessibilityHint("View and manage your channels")
                         }
-                        .background(DesignTokens.surface)
-                        .cornerRadius(8.s)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8.s)
-                                .stroke(DesignTokens.cardBorderColor, lineWidth: 0.5)
-                        )
-                        .shadow(color: Color.black.opacity(0.05), radius: 4.s, x: 0, y: 2.s)
-                    }
-                    .padding(.horizontal, 12.w)
+                        .padding(EdgeInsets(top: 16.h, leading: 24.w, bottom: 16.h, trailing: 24.w))
+                        .frame(width: 343.w)
+                        .background(.white)
+                        .cornerRadius(6.s)
 
                     // MARK: - Appearance Settings
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack(spacing: 16.w) {
-                            Image(systemName: "moon.fill")
-                                .font(.system(size: 18.f))
+                        HStack(spacing: 10.w) {
+                            Image(systemName: "moon")
+                                .font(.system(size: 18.f, weight: .light))
                                 .foregroundColor(DesignTokens.accentColor)
-                                .frame(width: 24.s)
+                                .frame(width: 24.s, height: 24.s)
 
-                            Text("Dark Mode")
-                                .font(Font.custom("SFProDisplay-Medium", size: 14.f))
-                                .foregroundColor(DesignTokens.textPrimary)
+                            Text("Dark mode")
+                                .font(Font.custom("SF Pro Display", size: 14.f).weight(.semibold))
+                                .tracking(0.28)
+                                .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
 
                             Spacer()
 
-                            if viewModel.isSavingDarkMode {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                            } else {
-                                Toggle("", isOn: $viewModel.isDarkMode)
-                                    .labelsHidden()
-                                    .tint(DesignTokens.accentColor)
-                                    .onChange(of: viewModel.isDarkMode) { _, newValue in
-                                        Task { await viewModel.updateDarkMode(enabled: newValue) }
-                                    }
-                                    .accessibilityLabel("Dark Mode")
-                                    .accessibilityHint(viewModel.isDarkMode ? "Turn off dark mode" : "Turn on dark mode")
+                            // Custom Toggle matching Figma design
+                            Button(action: {
+                                guard !viewModel.isSavingDarkMode else { return }
+                                viewModel.isDarkMode.toggle()
+                                Task { await viewModel.updateDarkMode(enabled: viewModel.isDarkMode) }
+                            }) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 10.s)
+                                        .fill(viewModel.isDarkMode ? DesignTokens.accentColor : Color(red: 0.77, green: 0.77, blue: 0.77))
+                                        .frame(width: 38.w, height: 20.h)
+                                    Circle()
+                                        .fill(.white)
+                                        .frame(width: 14.s, height: 14.s)
+                                        .offset(x: viewModel.isDarkMode ? 9.w : -9.w)
+                                        .animation(.easeInOut(duration: 0.2), value: viewModel.isDarkMode)
+                                }
+                                .frame(width: 38.w, height: 20.h)
                             }
+                            .accessibilityLabel("Dark mode")
+                            .accessibilityHint(viewModel.isDarkMode ? "Turn off dark mode" : "Turn on dark mode")
                         }
-                        .padding(.horizontal, 20.w)
-                        .padding(.vertical, 16.h)
-                        .background(DesignTokens.surface)
-                        .cornerRadius(8.s)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8.s)
-                                .stroke(DesignTokens.cardBorderColor, lineWidth: 0.5)
-                        )
-                        .shadow(color: Color.black.opacity(0.05), radius: 4.s, x: 0, y: 2.s)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            guard !viewModel.isSavingDarkMode else { return }
-                            viewModel.isDarkMode.toggle()
-                        }
-                        .accessibilityElement(children: .contain)
-                    }
-                    .padding(.horizontal, 12.w)
+                        .padding(.horizontal, 24.w)
+                        .frame(width: 343.w, height: 49.h)
+                        .background(.white)
+                        .cornerRadius(6.s)
 
                     // MARK: - Notification Settings
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack(spacing: 16.w) {
-                            Image(systemName: "bell.fill")
-                                .font(.system(size: 18.f))
+                        HStack(spacing: 10.w) {
+                            Image(systemName: "bell")
+                                .font(.system(size: 18.f, weight: .light))
                                 .foregroundColor(DesignTokens.accentColor)
-                                .frame(width: 24.s)
+                                .frame(width: 24.s, height: 24.s)
 
-                            Text("Push Notifications")
-                                .font(Font.custom("SFProDisplay-Medium", size: 14.f))
-                                .foregroundColor(DesignTokens.textPrimary)
+                            Text("Push notifications")
+                                .font(Font.custom("SF Pro Display", size: 14.f).weight(.semibold))
+                                .tracking(0.28)
+                                .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
 
                             Spacer()
 
-                            Toggle("", isOn: $isPushEnabled)
-                                .labelsHidden()
-                                .tint(DesignTokens.accentColor)
-                                .onChange(of: isPushEnabled) { _, newValue in
-                                    Task {
-                                        if newValue {
-                                            let granted = await pushManager.requestAuthorization()
-                                            if !granted {
-                                                // Open system settings if permission denied
-                                                isPushEnabled = false
-                                                if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
-                                                    await MainActor.run {
-                                                        UIApplication.shared.open(settingsUrl)
-                                                    }
+                            // Custom Toggle matching Figma design
+                            Button(action: {
+                                Task {
+                                    if !isPushEnabled {
+                                        let granted = await pushManager.requestAuthorization()
+                                        if !granted {
+                                            if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+                                                await MainActor.run {
+                                                    UIApplication.shared.open(settingsUrl)
                                                 }
                                             }
+                                        } else {
+                                            isPushEnabled = true
                                         }
+                                    } else {
+                                        isPushEnabled = false
                                     }
                                 }
-                                .accessibilityLabel("Push Notifications")
-                                .accessibilityHint(isPushEnabled ? "Disable push notifications" : "Enable push notifications")
+                            }) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 10.s)
+                                        .fill(isPushEnabled ? DesignTokens.accentColor : Color(red: 0.77, green: 0.77, blue: 0.77))
+                                        .frame(width: 38.w, height: 20.h)
+                                    Circle()
+                                        .fill(.white)
+                                        .frame(width: 14.s, height: 14.s)
+                                        .offset(x: isPushEnabled ? 9.w : -9.w)
+                                        .animation(.easeInOut(duration: 0.2), value: isPushEnabled)
+                                }
+                                .frame(width: 38.w, height: 20.h)
+                            }
+                            .accessibilityLabel("Push notifications")
+                            .accessibilityHint(isPushEnabled ? "Disable push notifications" : "Enable push notifications")
                         }
-                        .padding(.horizontal, 20.w)
-                        .padding(.vertical, 16.h)
-                        .background(DesignTokens.surface)
-                        .cornerRadius(8.s)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8.s)
-                                .stroke(DesignTokens.cardBorderColor, lineWidth: 0.5)
-                        )
-                        .shadow(color: Color.black.opacity(0.05), radius: 4.s, x: 0, y: 2.s)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            isPushEnabled.toggle()
-                        }
-                        .accessibilityElement(children: .contain)
-                    }
-                    .padding(.horizontal, 12.w)
+                        .padding(.horizontal, 24.w)
+                        .frame(width: 343.w, height: 49.h)
+                        .background(.white)
+                        .cornerRadius(6.s)
                         .onAppear {
                             isPushEnabled = pushManager.isAuthorized
                         }
@@ -266,88 +240,71 @@ struct SettingsView: View {
                         }
 
                     // MARK: - Chat & Data Settings
-                    VStack(alignment: .leading, spacing: 0) {
-                        VStack(spacing: 0) {
+                        VStack(spacing: 24.h) {
                             SettingsRow(
                                 icon: "arrow.up.arrow.down.square",
-                                title: "Chat Backup",
+                                title: "Chat backup",
                                 showChevron: true,
                                 action: {
                                     currentPage = .chatBackup
                                 }
                             )
-                            .accessibilityLabel("Chat Backup")
+                            .accessibilityLabel("Chat backup")
                             .accessibilityHint("Export and import your chat conversations")
-
-                            Divider()
-                                .padding(.leading, 60.w)
 
                             SettingsRow(
                                 icon: "waveform.circle",
-                                title: "Call Recordings",
+                                title: "Call recordings",
                                 showChevron: true,
                                 action: {
                                     currentPage = .callRecordings
                                 }
                             )
-                            .accessibilityLabel("Call Recordings")
+                            .accessibilityLabel("Call recordings")
                             .accessibilityHint("View and manage your saved call recordings")
                         }
-                        .background(DesignTokens.surface)
-                        .cornerRadius(8.s)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8.s)
-                                .stroke(DesignTokens.cardBorderColor, lineWidth: 0.5)
-                        )
-                        .shadow(color: Color.black.opacity(0.05), radius: 4.s, x: 0, y: 2.s)
-                    }
-                    .padding(.horizontal, 12.w)
+                        .padding(EdgeInsets(top: 16.h, leading: 24.w, bottom: 16.h, trailing: 24.w))
+                        .frame(width: 343.w)
+                        .background(.white)
+                        .cornerRadius(6.s)
 
-                    // MARK: - Actions
-                    VStack(alignment: .leading, spacing: 0) {
+                        // MARK: - Actions
                         Button(action: {
                             Task {
                                 await viewModel.logout()
                             }
                         }) {
-                            HStack(spacing: 16.w) {
+                            HStack(spacing: 10.w) {
                                 Image(systemName: "rectangle.portrait.and.arrow.right")
-                                    .font(.system(size: 18.f))
+                                    .font(.system(size: 18.f, weight: .light))
                                     .foregroundColor(DesignTokens.accentColor)
-                                    .frame(width: 24.s)
+                                    .frame(width: 24.s, height: 24.s)
 
-                                Text("Sign Out")
-                                    .font(Font.custom("SFProDisplay-Medium", size: 14.f))
-                                    .foregroundColor(DesignTokens.textPrimary)
+                                Text("Sign out")
+                                    .font(Font.custom("Helvetica Neue", size: 14.f).weight(.medium))
+                                    .lineSpacing(19.06)
+                                    .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                                 Spacer()
                             }
-                            .padding(.horizontal, 20.w)
-                            .padding(.vertical, 16.h)
+                            .padding(.leading, 24.w)
                         }
-                        .background(DesignTokens.surface)
-                        .cornerRadius(8.s)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8.s)
-                                .stroke(DesignTokens.cardBorderColor, lineWidth: 0.5)
-                        )
-                        .shadow(color: Color.black.opacity(0.05), radius: 4.s, x: 0, y: 2.s)
-                        .accessibilityLabel("Sign Out")
+                        .frame(width: 343.w, height: 49.h)
+                        .background(.white)
+                        .cornerRadius(6.s)
+                        .accessibilityLabel("Sign out")
                         .accessibilityHint("Sign out of your account")
                     }
-                    .padding(.horizontal, 12.w)
+                    .padding(EdgeInsets(top: 20.h, leading: 0, bottom: 20.h, trailing: 0))
                 }
-                .padding(.top, 20.h)
-            }
 
-            Spacer()
+                Spacer()
+            }
         }
-        .background(DesignTokens.backgroundColor)
-        .ignoresSafeArea(edges: .top)
         .overlay(alignment: .top) {
             if let error = viewModel.errorMessage {
                 Text(LocalizedStringKey(error))
-                    .font(Font.custom("SFProDisplay-Semibold", size: 13.f))
+                    .font(Font.custom("SF Pro Display", size: 13.f).weight(.semibold))
                     .foregroundColor(.white)
                     .padding(.horizontal, 12.w)
                     .padding(.vertical, 8.h)
