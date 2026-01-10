@@ -220,7 +220,12 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
                                 }
                             })
                             .collect(),
-                        next_cursor: cached.cursor.unwrap_or_default(),
+                        next_cursor: if cached.has_more {
+                            // If cache has cursor, use it. Otherwise generate one for pagination.
+                            cached.cursor.unwrap_or_else(|| encode_cursor(cached.posts.len()))
+                        } else {
+                            String::new()
+                        },
                         has_more: cached.has_more,
                     }));
                 }

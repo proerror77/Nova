@@ -75,11 +75,16 @@ final class XAIService {
         let usage: UsageInfo?
     }
 
-    // APIClient uses .convertFromSnakeCase - no CodingKeys needed for responses
     struct UsageInfo: Codable {
         let promptTokens: Int
         let completionTokens: Int
         let totalTokens: Int
+
+        enum CodingKeys: String, CodingKey {
+            case promptTokens = "prompt_tokens"
+            case completionTokens = "completion_tokens"
+            case totalTokens = "total_tokens"
+        }
     }
 
     struct StatusResponse: Codable {
@@ -115,7 +120,14 @@ final class XAIService {
                 isAvailable = false
                 return
             }
-            let (data, response) = try await URLSession.shared.data(from: url)
+
+            // Create request with auth token
+            var request = URLRequest(url: url)
+            if let token = AuthenticationManager.shared.authToken {
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
+
+            let (data, response) = try await URLSession.shared.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else {
@@ -156,6 +168,11 @@ final class XAIService {
         maintainHistory: Bool = true,
         search: SearchConfig = .default
     ) async throws -> String {
+        // Check authentication first
+        guard let token = AuthenticationManager.shared.authToken else {
+            throw XAIError.authError("請先登入以使用 AI 功能")
+        }
+
         guard let url = URL(string: baseURL + APIConfig.XAI.chat) else {
             throw XAIError.invalidURL
         }
@@ -163,11 +180,7 @@ final class XAIService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        // Add auth token if available
-        if let token = AuthenticationManager.shared.authToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
         // Build request body
         let chatRequest = ChatRequest(

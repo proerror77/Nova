@@ -5138,6 +5138,7 @@ dependencies = [
  "actix-web",
  "actix-web-actors",
  "aes-gcm",
+ "anyhow",
  "async-trait",
  "aws-config",
  "aws-sdk-s3",

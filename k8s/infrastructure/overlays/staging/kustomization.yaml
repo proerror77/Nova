@@ -160,6 +160,11 @@ patches:
     name: identity-service
 
     version: v1
+- path: identity-service-passkey-configmap-patch.yaml
+  target:
+    version: v1
+    kind: ConfigMap
+    name: identity-service-configmap
 - patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy

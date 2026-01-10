@@ -32,57 +32,88 @@ struct PhoneEnterCodeView: View {
     
     var body: some View {
         ZStack {
-            // Background - Solid color per Figma
-            Color(red: 0.03, green: 0.11, blue: 0.21)
-            
-            // Content
+            // Background - Linear Gradient
+            LinearGradient(
+                colors: [
+                    Color(red: 0.027, green: 0.106, blue: 0.212),  // #071B36
+                    Color(red: 0.271, green: 0.310, blue: 0.388)   // #454F63
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            // Content - 响应式垂直布局
+            // 基准设计: iPhone 13 Mini (375 x 812)
+            // 适配: iPhone SE (375 x 667) 到 iPhone 14 Pro Max (430 x 932)
             VStack(spacing: 0) {
-                Spacer().frame(height: 120.h)  // 统一顶部间距 (44 status + 64 header + 12 buffer)
+                Spacer().frame(height: 114.h)  // 顶部间距
                 logoSection
-                Spacer().frame(height: 30.h)
+                Spacer().frame(height: 43.h)
                 titleSection
-                Spacer().frame(height: 40.h)
-                codeInputSection
-                    .padding(.horizontal, 37.w)
+                Spacer().frame(height: 30.h)
+                codeInputSection.padding(.horizontal, 37.w)
                 errorMessageView
                 Spacer().frame(height: 24.h)
-                verifyButton
-                    .padding(.horizontal, 37.w)
-                Spacer().frame(height: 40.h)
-                resendSection
-                Spacer()
+                verifyButton  // 按钮有固定宽度 301.w，自动居中
+                Spacer(minLength: 100.h)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
-            // Back Button Header - Figma: 375x64, padding 8
+
+            // Back Button Header - Figma: 距顶部44pt, padding 8pt, 高度64pt
             VStack(spacing: 0) {
-                Spacer().frame(height: 44.h)  // Status bar safe area
+                Spacer().frame(height: 44.h)  // 状态栏高度
                 HStack(spacing: 8.s) {
-                    Button(action: {
-                        // Navigate back to phone number input
-                        currentPage = .createAccountPhoneNumber
-                    }) {
+                    Button(action: { currentPage = .createAccountPhoneNumber }) {
                         ZStack {
-                            Circle()
-                                .fill(Color.clear)
-                                .frame(width: 40.s, height: 40.s)
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 24.f, weight: .medium))
-                                .foregroundColor(.white)
+                            Image("back-white")
+                                .resizable()
+                                .scaledToFit()
                                 .frame(width: 24.s, height: 24.s)
                         }
-                        .frame(width: 48.s, height: 48.s)
+                        .frame(width: 40.s, height: 40.s)
+                        .cornerRadius(100.s)
                     }
+                    .frame(width: 48.s, height: 48.s)
                     Spacer()
                 }
-                .padding(8.s)
+                .padding(.horizontal, 8.s)
                 .frame(height: 64.h)
                 Spacer()
             }
+
+            // Bottom Notice - Resend code section
+            // Figma: Y位置 = 812 - 308 = 504pt (从顶部算)
+            // 使用绝对定位确保位置精确
+            GeometryReader { geometry in
+                VStack(spacing: 8.h) {
+                    // "Resend code" link - Figma: semibold, size 14, tracking 0.28
+                    Button(action: {
+                        Task { await resendCode() }
+                    }) {
+                        Text("Resend code")
+                            .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
+                            .tracking(0.28)
+                            .foregroundColor(.white)
+                            .underline()
+                    }
+                    .disabled(!canResend || isLoading)
+
+                    // Countdown timer text - Figma: size 14, tracking 0.28, color (0.75, 0.75, 0.75)
+                    if !canResend {
+                        Text("You can request a new code in \(countdown) seconds.")
+                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                            .tracking(0.28)
+                            .foregroundColor(Color(red: 0.75, green: 0.75, blue: 0.75))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .position(x: geometry.size.width / 2, y: geometry.size.height - 308.h)
+            }
         }
-        .ignoresSafeArea()
         .contentShape(Rectangle())
         .onTapGesture { isInputFocused = false }
+        .ignoresSafeArea()
+        .ignoresSafeArea(.keyboard)
         .onAppear {
             startCountdown()
             isInputFocused = true
@@ -91,98 +122,131 @@ struct PhoneEnterCodeView: View {
             timer?.invalidate()
         }
     }
-    
+
     // MARK: - Components
-    
+
     private var logoSection: some View {
-        VStack(spacing: 8.h) {
+        ZStack {
             Image("Login-Icon")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 84.w, height: 52.h)
-            
-            Text("ICERED")
-                .font(Font.custom("SFProDisplay-Bold", size: 16.f))
-                .tracking(4)
-                .foregroundColor(.white)
         }
+        .frame(width: 84.w, height: 52.h)
     }
-    
+
     private var titleSection: some View {
-        VStack(spacing: 12.h) {
+        VStack(spacing: 19.h) {  // 287 - 239 - 29(标题高度) ≈ 19
             Text("Enter your confirmation code")
                 .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
-                .foregroundColor(.white)
-            
+                .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
+
             Text("An SMS was sent to \(maskedPhoneNumber).")
                 .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .tracking(0.28)
+                .multilineTextAlignment(.center)
                 .foregroundColor(Color(red: 0.75, green: 0.75, blue: 0.75))
         }
     }
-    
+
     private var codeInputSection: some View {
-        OTPInputView(code: $verificationCode, codeLength: 6)
-            .onChange(of: verificationCode) { _, newValue in
-                // Auto-verify when 6 digits entered
-                if newValue.count == 6 {
-                    Task { await verifyCode() }
+        ZStack {
+            // 隐藏的输入框 - 6 位数字验证码
+            TextField("", text: $verificationCode)
+                .font(Font.custom("SFProDisplay-Light", size: 16.f))
+                .foregroundColor(.clear)
+                .accentColor(.clear)
+                .multilineTextAlignment(.center)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .autocorrectionDisabled()
+                .focused($isInputFocused)
+                .onChange(of: verificationCode) { _, newValue in
+                    // 只允许数字，最多 6 位
+                    let filtered = newValue.filter { $0.isNumber }
+                    verificationCode = String(filtered.prefix(6))
+                    
+                    // Auto-verify when 6 digits entered
+                    if verificationCode.count == 6 {
+                        Task { await verifyCode() }
+                    }
                 }
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+
+            // 6 个独立的输入框 - 自适应间距
+            // Figma 基准: 6个框 × 40pt + 5个间距 × 10pt = 290pt
+            // 可用宽度: 375 - 37*2 = 301pt
+            GeometryReader { geometry in
+                let boxWidth: CGFloat = 40.s
+                let totalBoxWidth = boxWidth * 6
+                let availableSpacing = geometry.size.width - totalBoxWidth
+                let spacing = max(availableSpacing / 5, 8.s)
+
+                HStack(spacing: spacing) {
+                    ForEach(0..<6, id: \.self) { index in
+                        codeBox(at: index)
+                    }
+                }
+                .frame(width: geometry.size.width, height: 49.s)
             }
+            .frame(height: 49.s)
+        }
+        .onTapGesture { isInputFocused = true }
     }
+
+    /// 单个验证码输入框 - Figma: 40.14×49, cornerRadius 12, stroke 0.5
+    private func codeBox(at index: Int) -> some View {
+        let characters = Array(verificationCode)
+        let character = index < characters.count ? String(characters[index]) : ""
+        let hasCharacter = index < characters.count  // 已输入字符 -> 白色边框
+
+        return ZStack {
+            // 显示输入的字符
+            Text(character)
+                .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
+                .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
+        }
+        .frame(width: 40.s, height: 49.s)
+        .cornerRadius(12.s)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12.s)
+                .stroke(
+                    hasCharacter ? Color.white : Color(red: 0.41, green: 0.41, blue: 0.41),
+                    lineWidth: 0.5
+                )
+        )
+    }
+
     @ViewBuilder
     private var errorMessageView: some View {
         if let errorMessage {
             Text(LocalizedStringKey(errorMessage))
-                .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                .font(Typography.regular12)
                 .foregroundColor(.red)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40.w)
                 .padding(.top, 12.h)
         }
     }
-    
+
     private var verifyButton: some View {
         Button(action: { Task { await verifyCode() } }) {
             HStack(spacing: 10.s) {
                 if isLoading {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                        .progressViewStyle(CircularProgressViewStyle(tint: Color(red: 0.03, green: 0.11, blue: 0.21)))
                         .scaleEffect(0.9)
                 }
                 Text("Verify")
-                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
-                    .foregroundColor(.black)
+                    .font(Font.custom("SF Pro Display", size: 16.f).weight(.bold))
+                    .foregroundColor(Color(red: 0.03, green: 0.11, blue: 0.21))
             }
             .frame(width: 301.w, height: 48.h)
-            .background(Color.white)
+            .background(Color(red: 1, green: 1, blue: 1))
             .cornerRadius(50.s)
         }
-        .disabled(!isCodeValid || isLoading)
-    }
-    
-    private var resendSection: some View {
-        VStack(spacing: 8.h) {
-            // Resend code button
-            Button(action: {
-                Task { await resendCode() }
-            }) {
-                Text("Resend code")
-                    .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
-                    .tracking(0.28)
-                    .underline()
-                    .foregroundColor(.white)
-            }
-            .disabled(!canResend || isLoading)
-            
-            // Countdown timer text
-            if !canResend {
-                Text("You can request a new code in \(countdown) seconds.")
-                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                    .tracking(0.28)
-                    .foregroundColor(Color(red: 0.75, green: 0.75, blue: 0.75))
-            }
-        }
+        .buttonStyle(.plain)
+        .allowsHitTesting(isCodeValid && !isLoading)
     }
     
     // MARK: - Timer
@@ -221,9 +285,9 @@ struct PhoneEnterCodeView: View {
                 // Store verification token with timestamp for next step
                 authManager.setPhoneVerificationToken(token, phoneNumber: phoneNumber)
 
-                // Navigate to profile setup
+                // Navigate to invite code page
                 await MainActor.run {
-                    currentPage = .profileSetup
+                    currentPage = .inviteCode
                 }
             } else {
                 errorMessage = response.message ?? "Verification failed"

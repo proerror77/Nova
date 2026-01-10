@@ -137,7 +137,7 @@ impl NotificationService for NotificationServiceImpl {
             notifications.push(Notification {
                 id: id.to_string(),
                 user_id: row
-                    .try_get::<Uuid, _>("user_id")
+                    .try_get::<Uuid, _>("recipient_id")
                     .unwrap_or_default()
                     .to_string(),
                 notification_type: row

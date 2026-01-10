@@ -638,8 +638,6 @@ async fn main() -> Result<(), error::AppError> {
             .service(routes::locations::share_location)
             .service(routes::locations::stop_sharing_location)
             .service(routes::locations::get_nearby_users)
-            .service(routes::wsroute::ws_handler)
-            .service(routes::wsroute::ws_chat_alias)
             // API v2 routes (matches iOS APIConfig)
             .service(
                 web::scope("/api/v2")

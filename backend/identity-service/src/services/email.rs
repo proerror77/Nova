@@ -75,9 +75,9 @@ impl EmailService {
     /// * `token` - Verification token (opaque string)
     pub async fn send_verification_email(&self, recipient: &str, token: &str) -> Result<()> {
         let link = self.build_verification_link(token);
-        let subject = "Verify your Nova account";
+        let subject = "Verify your Icered account";
         let body = format!(
-            "歡迎加入 Nova！\n\n請點擊以下連結完成 Email 驗證：\n{}\n\n若非本人操作，請忽略此郵件。",
+            "Welcome to Icered!\n\nPlease click the following link to complete your email verification:\n{}\n\nIf you did not request this, please ignore this email.",
             link
         );
         self.send_mail(recipient, subject, &body).await
@@ -92,7 +92,7 @@ impl EmailService {
     pub async fn send_password_reset_email(&self, recipient: &str, token: &str) -> Result<()> {
         let web_link = self.build_password_reset_link(token);
         let ios_link = format!("nova://reset-password?token={}", token);
-        let subject = "Nova 密碼重設通知";
+        let subject = "Icered Password Reset";
 
         // HTML email with both web and iOS deep links
         let html_body = format!(
@@ -103,19 +103,19 @@ impl EmailService {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px; color: #333;">
-    <h2>密碼重設申請</h2>
-    <p>我們收到你的密碼重設申請。</p>
-    <p>請點擊以下按鈕完成密碼重設：</p>
+    <h2>Password Reset Request</h2>
+    <p>We received your password reset request.</p>
+    <p>Please click the button below to reset your password:</p>
     <p style="margin: 30px 0;">
-        <a href="{ios_link}" style="background-color: #000; color: #fff; padding: 14px 28px; text-decoration: none; border-radius: 25px; display: inline-block;">在 App 中重設密碼</a>
+        <a href="{ios_link}" style="background-color: #000; color: #fff; padding: 14px 28px; text-decoration: none; border-radius: 25px; display: inline-block;">Reset Password in App</a>
     </p>
     <p style="color: #666; font-size: 14px;">
-        如果按鈕無法使用，請複製以下連結到瀏覽器：<br>
+        If the button doesn't work, please copy the following link to your browser:<br>
         <a href="{web_link}" style="color: #007AFF;">{web_link}</a>
     </p>
     <p style="color: #999; font-size: 12px; margin-top: 30px;">
-        此連結將在 1 小時後失效。<br>
-        若非本人操作，請立即忽略此郵件或聯絡客服協助。
+        This link will expire in 1 hour.<br>
+        If you did not request this, please ignore this email or contact support immediately.
     </p>
 </body>
 </html>"#,
@@ -124,12 +124,12 @@ impl EmailService {
         );
 
         let text_body = format!(
-            "我們收到你的密碼重設申請。\n\n\
-            請點擊以下連結完成密碼重設：\n\
+            "We received your password reset request.\n\n\
+            Please click the following link to reset your password:\n\
             iOS App: {}\n\
-            網頁版: {}\n\n\
-            此連結將在 1 小時後失效。\n\
-            若非本人操作，請立即忽略此郵件或聯絡客服協助。",
+            Web: {}\n\n\
+            This link will expire in 1 hour.\n\
+            If you did not request this, please ignore this email or contact support immediately.",
             ios_link, web_link
         );
 

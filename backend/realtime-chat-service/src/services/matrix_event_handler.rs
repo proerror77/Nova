@@ -3,18 +3,30 @@
 
 use crate::error::AppError;
 use crate::redis_client::RedisClient;
+use crate::services::matrix_user::extract_nova_user_id_from_matrix;
 use crate::websocket::events::{broadcast_event, WebSocketEvent};
 use crate::websocket::ConnectionRegistry;
+use chrono::{DateTime, TimeZone, Utc};
 use deadpool_postgres::Pool;
+use matrix_sdk::ruma::events::room::encrypted::Relation as EncryptedRelation;
 use matrix_sdk::ruma::events::room::encrypted::SyncRoomEncryptedEvent;
 use matrix_sdk::ruma::events::room::message::{
-    MessageType, RoomMessageEventContent, SyncRoomMessageEvent,
+    MessageType, Relation as MessageRelation, RoomMessageEventContent, SyncRoomMessageEvent,
 };
-use matrix_sdk::ruma::{OwnedEventId, OwnedUserId};
+use matrix_sdk::ruma::{MilliSecondsSinceUnixEpoch, OwnedEventId};
 use matrix_sdk::Room;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+
+fn ts_to_utc(ts: Option<MilliSecondsSinceUnixEpoch>) -> DateTime<Utc> {
+    let Some(ts) = ts else {
+        return Utc::now();
+    };
+
+    let ms: i64 = ts.get().into();
+    Utc.timestamp_millis_opt(ms).single().unwrap_or_else(Utc::now)
+}
 
 /// Handle incoming Matrix room message events
 /// This function is called by the Matrix sync loop for each new message
@@ -46,16 +58,6 @@ pub async fn handle_matrix_message_event(
         "Received Matrix message event"
     );
 
-    if matrix_first {
-        debug!(
-            room_id = %room_id,
-            sender = %sender,
-            event_id = %event_id,
-            "Matrix-first mode enabled; skipping Nova DB persistence and WebSocket broadcast"
-        );
-        return Ok(());
-    }
-
     // 1. Look up conversation_id from Matrix room_id
     let conversation_id =
         match super::matrix_db::lookup_conversation_by_room_id(db, room_id.as_str()).await? {
@@ -70,9 +72,7 @@ pub async fn handle_matrix_message_event(
         };
 
     // 2. Extract Nova user_id from Matrix user_id
-    // Matrix user format: @nova-<uuid>:staging.nova.internal
-    // We need to extract the UUID part
-    let user_id = match extract_user_id_from_matrix(sender) {
+    let user_id = match extract_nova_user_id_from_matrix(sender) {
         Some(id) => id,
         None => {
             warn!(
@@ -82,6 +82,15 @@ pub async fn handle_matrix_message_event(
             return Ok(());
         }
     };
+
+    // Ignore replacements (edits). Clients render edits via Matrix relations; Nova stores only canonical messages.
+    if matches!(
+        original_event.content.relates_to,
+        Some(MessageRelation::Replacement(_))
+    ) {
+        debug!(event_id = %event_id, "Replacement (edit) event; skipping metadata insert");
+        return Ok(());
+    }
 
     // 3. Check if this message already exists in our DB (by matrix_event_id)
     // This prevents duplicate processing
@@ -118,12 +127,15 @@ pub async fn handle_matrix_message_event(
         }
     }
 
+    let created_at = ts_to_utc(Some(original_event.origin_server_ts));
+
     // 5. Persist metadata-only row in Nova DB with matrix_event_id (atomic)
     let message = crate::services::message_service::MessageService::store_matrix_message_metadata_db(
         db,
         conversation_id,
         user_id,
         event_id.as_str(),
+        created_at,
     )
     .await?;
 
@@ -138,6 +150,10 @@ pub async fn handle_matrix_message_event(
         event_id = %event_id,
         "Matrix message saved to DB"
     );
+
+    if matrix_first {
+        return Ok(());
+    }
 
     // 7. Broadcast to WebSocket clients (same as normal message flow)
     let ws_event = WebSocketEvent::MessageNew {
@@ -186,16 +202,6 @@ pub async fn handle_matrix_encrypted_event(
         "Received Matrix encrypted event"
     );
 
-    if matrix_first {
-        debug!(
-            room_id = %room_id,
-            sender = %sender,
-            event_id = %event_id,
-            "Matrix-first mode enabled; skipping Nova DB persistence and WebSocket broadcast"
-        );
-        return Ok(());
-    }
-
     // 1. Look up conversation_id from Matrix room_id
     let conversation_id =
         match super::matrix_db::lookup_conversation_by_room_id(db, room_id.as_str()).await? {
@@ -210,7 +216,7 @@ pub async fn handle_matrix_encrypted_event(
         };
 
     // 2. Extract Nova user_id from Matrix user_id
-    let user_id = match extract_user_id_from_matrix(sender) {
+    let user_id = match extract_nova_user_id_from_matrix(sender) {
         Some(id) => id,
         None => {
             warn!(
@@ -221,12 +227,44 @@ pub async fn handle_matrix_encrypted_event(
         }
     };
 
-    // 3. Persist metadata-only row in Nova DB with matrix_event_id (atomic + dedup via unique index)
+    // Skip encrypted replacements (edits).
+    if matches!(
+        original_event.content.relates_to,
+        Some(EncryptedRelation::Replacement(_))
+    ) {
+        debug!(event_id = %event_id, "Encrypted replacement (edit) event; skipping metadata insert");
+        return Ok(());
+    }
+
+    // 3. Check if this event already exists in our DB (by matrix_event_id)
+    // This prevents duplicate processing and avoids bumping conversation_counters on conflicts.
+    let client = db.get().await.map_err(|e| AppError::StartServer(format!("handle encrypted pool: {e}")))?;
+    let existing: Option<Uuid> = client
+        .query_opt(
+            "SELECT id FROM messages WHERE matrix_event_id = $1",
+            &[&event_id.as_str()],
+        )
+        .await
+        .map_err(|e| AppError::StartServer(format!("check existing encrypted message: {e}")))?
+        .map(|row| row.get(0));
+
+    if existing.is_some() {
+        debug!(
+            event_id = %event_id,
+            "Encrypted event already exists in DB, skipping"
+        );
+        return Ok(());
+    }
+
+    let created_at = ts_to_utc(Some(original_event.origin_server_ts));
+
+    // 4. Persist metadata-only row in Nova DB with matrix_event_id (atomic + dedup via unique index)
     let message = crate::services::message_service::MessageService::store_matrix_message_metadata_db(
         db,
         conversation_id,
         user_id,
         event_id.as_str(),
+        created_at,
     )
     .await?;
 
@@ -242,7 +280,11 @@ pub async fn handle_matrix_encrypted_event(
         "Matrix encrypted event saved to DB (metadata-only)"
     );
 
-    // 4. Broadcast to WebSocket clients (no content; clients fetch from Matrix)
+    if matrix_first {
+        return Ok(());
+    }
+
+    // 5. Broadcast to WebSocket clients (no content; clients fetch from Matrix)
     let ws_event = WebSocketEvent::MessageNew {
         id: message.id,
         sender_id: user_id,
@@ -259,24 +301,6 @@ pub async fn handle_matrix_encrypted_event(
     }
 
     Ok(())
-}
-
-/// Extract Nova user UUID from Matrix user_id
-/// Matrix user format: @nova-<uuid>:staging.nova.internal
-/// Returns Some(uuid) if valid, None otherwise
-fn extract_user_id_from_matrix(matrix_user: &OwnedUserId) -> Option<Uuid> {
-    let user_str = matrix_user.as_str();
-
-    // Expected format: @nova-<uuid>:staging.nova.internal
-    // Extract the part between @nova- and :
-    if !user_str.starts_with("@nova-") {
-        return None;
-    }
-
-    let without_prefix = user_str.strip_prefix("@nova-")?;
-    let uuid_part = without_prefix.split(':').next()?;
-
-    Uuid::parse_str(uuid_part).ok()
 }
 
 /// Handle Matrix room redaction events (message deletion)
@@ -452,27 +476,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_extract_user_id_from_matrix() {
-        use matrix_sdk::ruma::UserId;
+    fn test_ts_to_utc() {
+        use matrix_sdk::ruma::UInt;
 
-        // Valid format
-        let user_id = UserId::parse("@nova-550e8400-e29b-41d4-a716-446655440000:staging.nova.internal")
-            .unwrap();
-        let extracted = extract_user_id_from_matrix(&user_id);
-        assert!(extracted.is_some());
+        let ts = MilliSecondsSinceUnixEpoch(UInt::new(1_700_000_000_123u64).unwrap());
+        let dt = ts_to_utc(Some(ts));
         assert_eq!(
-            extracted.unwrap(),
-            Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap()
+            dt,
+            chrono::Utc
+                .timestamp_millis_opt(1_700_000_000_123i64)
+                .single()
+                .unwrap()
         );
-
-        // Invalid format (no nova- prefix)
-        let user_id = UserId::parse("@user:staging.nova.internal").unwrap();
-        let extracted = extract_user_id_from_matrix(&user_id);
-        assert!(extracted.is_none());
-
-        // Invalid UUID
-        let user_id = UserId::parse("@nova-invalid-uuid:staging.nova.internal").unwrap();
-        let extracted = extract_user_id_from_matrix(&user_id);
-        assert!(extracted.is_none());
     }
 }

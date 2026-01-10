@@ -76,6 +76,7 @@ pub mod matrix_admin;
 pub mod matrix_client;
 pub mod matrix_db;
 pub mod matrix_event_handler;
+pub mod matrix_user;
 pub mod matrix_voip_service;
 pub mod megolm_service;
 pub mod message_service;

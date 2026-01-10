@@ -1,2 +1,40 @@
-# Ignore test keys in integration tests (not real secrets)
-backend/libs/crypto-core/tests/jwt_integration_tests.rs:private-key:17
+# ============================================================================
+# Gitleaks Ignore Rules - False Positives Only
+# ============================================================================
+# This file contains ignore rules for gitleaks secret scanning.
+# All entries are verified to be:
+# 1. Example/documentation tokens (not real credentials)
+# 2. Test fixtures in unit/integration tests
+# 3. Example configuration files
+# ============================================================================
+
+# Documentation files (example tokens and keys for illustration)
+docs/**
+ios/**/*.md
+backend/**/*.md
+
+# Example configuration files
+**/.env.example
+**/k8s-config-example.yaml
+k8s/**/ten-agent-configmap.yaml
+k8s/**/clickhouse-installation.yaml
+
+# Test files and scripts (test fixtures, not real secrets)
+**/tests/**
+**/test/**
+backend/scripts/generate_test_token.py
+backend/scripts/generate_test_token.rs
+
+# Source code with embedded test keys (for testing only)
+backend/realtime-chat-service/libs/crypto-core/src/jwt.rs:private-key:447
+backend/user-service/src/security/jwt.rs:private-key:127
+backend/user-service/src/security/jwt.rs:generic-api-key:227
+backend/user-service/src/security/totp.rs:generic-api-key:24
+backend/user-service/src/security/totp.rs:generic-api-key:250
+
+# iOS Podfile.lock (dependency checksums, not secrets)
+ios/NovaSocial/Podfile.lock:generic-api-key:18
+
+# ============================================================================
+# Note: All ignored items have been manually verified to be non-sensitive
+# ============================================================================

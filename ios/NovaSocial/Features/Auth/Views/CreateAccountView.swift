@@ -44,24 +44,29 @@ struct CreateAccountView: View {
                 googleButton.padding(.horizontal, 37.w)
                 Spacer().frame(height: 24.h)
                 appleButton.padding(.horizontal, 37.w)
-                Spacer().frame(height: 293.h)
+                Spacer()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Back Button - Top Left
-            VStack {
-                HStack {
-                    Button(action: { currentPage = .inviteCode }) {
-                        Image("back-white")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 24.s, height: 24.s)
+            // Back Button - 左上角 (Figma: 距顶部44pt, padding 8pt, 高度64pt)
+            VStack(spacing: 0) {
+                Spacer().frame(height: 44.h)  // 状态栏高度
+                HStack(spacing: 8.s) {
+                    Button(action: { currentPage = .login }) {
+                        ZStack {
+                            Image("back-white")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 24.s, height: 24.s)
+                        }
+                        .frame(width: 40.s, height: 40.s)
+                        .cornerRadius(100.s)
                     }
+                    .frame(width: 48.s, height: 48.s)
                     Spacer()
                 }
-                .padding(.leading, 20.w)
-                .padding(.top, 64.h)
-                
+                .padding(.horizontal, 8.s)
+                .frame(height: 64.h)
                 Spacer()
             }
         }
@@ -269,11 +274,18 @@ struct CreateAccountView: View {
                 authManager.validatedInviteCode = nil
             }
         } catch let error as OAuthError {
-            if case .userCancelled = error {
-                // User cancelled, no error message needed
-            } else if case .invalidInviteCode(let message) = error {
+            switch error {
+            case .inviteCodeRequired:
+                // New user needs invite code - navigate to invite code page
+                await MainActor.run {
+                    currentPage = .inviteCode
+                }
+            case .invalidInviteCode(let message):
                 errorMessage = message
-            } else {
+            case .userCancelled:
+                // User cancelled, no error message needed
+                break
+            default:
                 errorMessage = error.localizedDescription
             }
         } catch {
@@ -302,11 +314,18 @@ struct CreateAccountView: View {
                 authManager.validatedInviteCode = nil
             }
         } catch let error as OAuthError {
-            if case .userCancelled = error {
-                // User cancelled, no error message needed
-            } else if case .invalidInviteCode(let message) = error {
+            switch error {
+            case .inviteCodeRequired:
+                // New user needs invite code - navigate to invite code page
+                await MainActor.run {
+                    currentPage = .inviteCode
+                }
+            case .invalidInviteCode(let message):
                 errorMessage = message
-            } else {
+            case .userCancelled:
+                // User cancelled, no error message needed
+                break
+            default:
                 errorMessage = error.localizedDescription
             }
         } catch {

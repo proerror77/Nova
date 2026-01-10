@@ -15,6 +15,8 @@ struct NewChatView: View {
     @State private var showChat = false
     @State private var createdConversationId: String = ""
     @State private var createdConversationName: String = ""
+    @State private var createdOtherUserId: String? = nil
+    @State private var createdOtherUserAvatarUrl: String? = nil
     @State private var isPrivateChat = false  // E2EE encrypted private chat toggle
 
     // Group selection
@@ -68,7 +70,7 @@ struct NewChatView: View {
         init(from profile: UserProfile) {
             self.id = profile.id
             self.username = profile.username
-            self.displayName = profile.displayName ?? profile.username
+            self.displayName = profile.fullName
             self.avatarUrl = profile.avatarUrl
         }
 
@@ -86,7 +88,9 @@ struct NewChatView: View {
                 ChatView(
                     showChat: $showChat,
                     conversationId: createdConversationId,
-                    userName: createdConversationName
+                    userName: createdConversationName,
+                    otherUserId: createdOtherUserId,
+                    otherUserAvatarUrl: createdOtherUserAvatarUrl
                 )
             } else if showGroupChat {
                 GroupChatView(
@@ -484,9 +488,20 @@ struct NewChatView: View {
             createdConversationName = selectedUsers.count == 1
                 ? selectedUsers[0].displayName
                 : (groupName ?? "Group Chat")
+            createdOtherUserId = selectedUsers.count == 1 ? selectedUsers[0].id : nil
+            createdOtherUserAvatarUrl = selectedUsers.count == 1 ? selectedUsers[0].avatarUrl : nil
 
             // Navigate to the chat
-            showChat = true
+            if selectedUsers.count == 1 {
+                showGroupChat = false
+                showChat = true
+            } else {
+                selectedGroupId = room.id
+                selectedGroupName = groupName ?? "Group Chat"
+                selectedGroupMemberCount = selectedUsers.count + 1
+                showChat = false
+                showGroupChat = true
+            }
 
         } catch MatrixBridgeError.sessionExpired {
             // Session expired - clearSessionData() has already been called

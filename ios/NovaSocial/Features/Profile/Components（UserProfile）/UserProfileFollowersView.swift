@@ -21,6 +21,11 @@ struct UserProfileFollowersView: View {
     @State private var followersHasMore = false
     @State private var followingHasMore = false
 
+    // MARK: - 列表展开/收起状态
+    @State private var isFollowersExpanded = false
+    @State private var isFollowingExpanded = false
+    private let displayLimit = 7  // 默认显示数量
+
     // MARK: - Services
     private let graphService = GraphService()
     private let userService = UserService.shared
@@ -46,6 +51,35 @@ struct UserProfileFollowersView: View {
         return following.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
     }
 
+    // MARK: - 展开/收起逻辑
+    // 是否需要显示 Followers 的 All 按钮
+    private var shouldShowFollowersAllButton: Bool {
+        filteredFollowers.count > displayLimit
+    }
+
+    // 是否需要显示 Following 的 All 按钮
+    private var shouldShowFollowingAllButton: Bool {
+        filteredFollowing.count > displayLimit
+    }
+
+    // 当前显示的 Followers 列表
+    private var displayedFollowers: [UserProfileFollowerUser] {
+        if !shouldShowFollowersAllButton || isFollowersExpanded {
+            return filteredFollowers
+        } else {
+            return Array(filteredFollowers.prefix(displayLimit))
+        }
+    }
+
+    // 当前显示的 Following 列表
+    private var displayedFollowing: [UserProfileFollowerUser] {
+        if !shouldShowFollowingAllButton || isFollowingExpanded {
+            return filteredFollowing
+        } else {
+            return Array(filteredFollowing.prefix(displayLimit))
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // MARK: - 顶部导航栏
@@ -59,8 +93,7 @@ struct UserProfileFollowersView: View {
                 VStack(spacing: 0) {
                     // 搜索框
                     searchBar
-                        .padding(.horizontal, 13)
-                        .padding(.top, 12)
+                        .padding(EdgeInsets(top: 14.h, leading: 16.w, bottom: 14.h, trailing: 16.w))
 
                     if selectedTab == .followers {
                         followersContent
@@ -86,7 +119,9 @@ struct UserProfileFollowersView: View {
 
     // MARK: - 加载 Followers 列表（关注目标用户的人）
     private func loadFollowers() async {
-        isLoadingFollowers = true
+        await MainActor.run {
+            isLoadingFollowers = true
+        }
 
         do {
             // 1. 获取关注目标用户的用户 ID 列表（包含关系状态）
@@ -103,7 +138,7 @@ struct UserProfileFollowersView: View {
                     let status = result.relationshipStatus(for: user.id)
                     return UserProfileFollowerUser(
                         id: user.id,
-                        name: user.displayName ?? user.username,
+                        name: user.fullName,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
                         isFollowedByMe: status?.youAreFollowing ?? false
@@ -128,7 +163,9 @@ struct UserProfileFollowersView: View {
 
     // MARK: - 加载 Following 列表（目标用户关注的人）
     private func loadFollowing() async {
-        isLoadingFollowing = true
+        await MainActor.run {
+            isLoadingFollowing = true
+        }
 
         do {
             // 1. 获取目标用户关注的用户 ID 列表（包含关系状态）
@@ -145,7 +182,7 @@ struct UserProfileFollowersView: View {
                     let status = result.relationshipStatus(for: user.id)
                     return UserProfileFollowerUser(
                         id: user.id,
-                        name: user.displayName ?? user.username,
+                        name: user.fullName,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
                         isFollowedByMe: status?.youAreFollowing ?? false
@@ -219,61 +256,80 @@ struct UserProfileFollowersView: View {
     // MARK: - 导航栏
     private var navigationBar: some View {
         ZStack {
-            // 标题
+            // 标题居中
             Text(targetUsername)
-                .font(Font.custom("SFProDisplay-Medium", size: 24.f))
+                .font(Font.custom("SF Pro Display", size: 18.f).weight(.semibold))
                 .foregroundColor(.black)
 
-            // 返回按钮
+            // 返回按钮靠左
             HStack {
                 Button(action: {
                     isPresented = false
                 }) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 20.f))
+                        .font(.system(size: 18.f))
                         .foregroundColor(.black)
                 }
+                .frame(width: 24.s, height: 24.s)
+
                 Spacer()
             }
-            .padding(.horizontal, 16)
         }
-        .frame(height: 56)
+        .padding(.horizontal, 16.w)
+        .frame(height: 54.h)
         .background(Color.white)
     }
 
     // MARK: - 标签栏
     private var tabBar: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 100) {
+            HStack(spacing: 0) {
                 // Following 标签
                 Button(action: {
-                    selectedTab = .following
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedTab = .following
+                    }
                 }) {
-                    Text("Following")
-                        .font(Font.custom("SFProDisplay-Medium", size: 18.f))
-                        .foregroundColor(selectedTab == .following ? .black : Color(red: 0.51, green: 0.51, blue: 0.51))
+                    VStack(spacing: 14.h) {
+                        Text("Following")
+                            .font(Font.custom("SF Pro Display", size: 18.f).weight(.semibold))
+                            .lineSpacing(20.h)
+                            .foregroundColor(selectedTab == .following ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75))
+
+                        Rectangle()
+                            .foregroundColor(.clear)
+                            .frame(height: 0)
+                            .overlay(
+                                Rectangle()
+                                    .stroke(selectedTab == .following ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.5)
+                            )
+                    }
                 }
+                .frame(width: 188.w)
 
                 // Followers 标签
                 Button(action: {
-                    selectedTab = .followers
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedTab = .followers
+                    }
                 }) {
-                    Text("Followers")
-                        .font(Font.custom("SFProDisplay-Medium", size: 18.f))
-                        .foregroundColor(selectedTab == .followers ? .black : Color(red: 0.51, green: 0.51, blue: 0.51))
-                }
-            }
-            .frame(height: 44)
+                    VStack(spacing: 14.h) {
+                        Text("Followers")
+                            .font(Font.custom("SF Pro Display", size: 18.f).weight(.semibold))
+                            .lineSpacing(20.h)
+                            .foregroundColor(selectedTab == .followers ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75))
 
-            // 底部指示线
-            GeometryReader { geometry in
-                Rectangle()
-                    .fill(Color(red: 0.81, green: 0.13, blue: 0.25))
-                    .frame(width: geometry.size.width / 2, height: 2)
-                    .offset(x: selectedTab == .followers ? geometry.size.width / 2 : 0)
-                    .animation(.easeInOut(duration: 0.2), value: selectedTab)
+                        Rectangle()
+                            .foregroundColor(.clear)
+                            .frame(height: 0)
+                            .overlay(
+                                Rectangle()
+                                    .stroke(selectedTab == .followers ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.5)
+                            )
+                    }
+                }
+                .frame(width: 187.w)
             }
-            .frame(height: 2)
 
             // 分隔线
             Rectangle()
@@ -284,40 +340,64 @@ struct UserProfileFollowersView: View {
 
     // MARK: - 搜索框
     private var searchBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 10.w) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14.f))
-                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
 
             TextField("Search", text: $searchText)
-                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                .foregroundColor(.black)
+                .font(Font.custom("SF Pro Display", size: 14.f))
+                .tracking(0.28)
+                .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
         }
-        .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
-        .frame(height: 32)
-        .background(Color(red: 0.91, green: 0.91, blue: 0.91))
-        .cornerRadius(32)
+        .padding(EdgeInsets(top: 6.h, leading: 12.w, bottom: 6.h, trailing: 12.w))
+        .frame(width: 343.w, height: 32.h)
+        .background(Color(red: 0.90, green: 0.90, blue: 0.90))
+        .cornerRadius(32.s)
     }
 
     // MARK: - Followers 内容
     private var followersContent: some View {
         VStack(spacing: 0) {
+            // All 按钮（仅当粉丝数 > 7 时显示）
+            if shouldShowFollowersAllButton {
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isFollowersExpanded.toggle()
+                        }
+                    }) {
+                        HStack(spacing: 4.w) {
+                            Text("All")
+                                .font(Font.custom("SF Pro Display", size: 14.f).weight(.medium))
+                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                            Image(systemName: isFollowersExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 12.f))
+                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                        }
+                    }
+                }
+                .padding(.horizontal, 16.w)
+                .padding(.bottom, 8.h)
+            }
+
             if isLoadingFollowers {
                 SkeletonListLoader(itemCount: 5) {
                     UserRowSkeleton()
                 }
             } else if filteredFollowers.isEmpty {
-                VStack(spacing: 12) {
+                VStack(spacing: 12.h) {
                     Image(systemName: "person.2")
                         .font(.system(size: 48.f))
                         .foregroundColor(.gray.opacity(0.5))
                     Text("No followers yet")
-                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                        .font(Font.custom("SF Pro Display", size: 16.f))
                         .foregroundColor(.gray)
                 }
-                .padding(.top, 60)
+                .padding(.top, 60.h)
             } else {
-                ForEach(filteredFollowers) { user in
+                ForEach(displayedFollowers) { user in
                     UserProfileFollowerRow(
                         user: user,
                         onFollowTapped: {
@@ -334,22 +414,45 @@ struct UserProfileFollowersView: View {
     // MARK: - Following 内容
     private var followingContent: some View {
         VStack(spacing: 0) {
+            // All 按钮（仅当关注数 > 7 时显示）
+            if shouldShowFollowingAllButton {
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isFollowingExpanded.toggle()
+                        }
+                    }) {
+                        HStack(spacing: 4.w) {
+                            Text("All")
+                                .font(Font.custom("SF Pro Display", size: 14.f).weight(.medium))
+                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                            Image(systemName: isFollowingExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 12.f))
+                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                        }
+                    }
+                }
+                .padding(.horizontal, 16.w)
+                .padding(.bottom, 8.h)
+            }
+
             if isLoadingFollowing {
                 SkeletonListLoader(itemCount: 5) {
                     UserRowSkeleton()
                 }
             } else if filteredFollowing.isEmpty {
-                VStack(spacing: 12) {
+                VStack(spacing: 12.h) {
                     Image(systemName: "person.badge.plus")
                         .font(.system(size: 48.f))
                         .foregroundColor(.gray.opacity(0.5))
                     Text("Not following anyone yet")
-                        .font(Font.custom("SFProDisplay-Regular", size: 16.f))
+                        .font(Font.custom("SF Pro Display", size: 16.f))
                         .foregroundColor(.gray)
                 }
-                .padding(.top, 60)
+                .padding(.top, 60.h)
             } else {
-                ForEach(filteredFollowing) { user in
+                ForEach(displayedFollowing) { user in
                     UserProfileFollowerRow(
                         user: user,
                         onFollowTapped: {
@@ -387,7 +490,7 @@ struct UserProfileFollowerRow: View {
     var onFollowTapped: () -> Void = {}
 
     var body: some View {
-        HStack(spacing: 13) {
+        HStack(spacing: 8.w) {
             // 头像
             if let avatarUrl = user.avatarUrl, let url = URL(string: avatarUrl) {
                 AsyncImage(url: url) { image in
@@ -395,59 +498,70 @@ struct UserProfileFollowerRow: View {
                         .resizable()
                         .scaledToFill()
                 } placeholder: {
-                    Circle()
-                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                    defaultAvatar
                 }
-                .frame(width: 50, height: 50)
+                .frame(width: 50.s, height: 50.s)
                 .clipShape(Circle())
             } else {
-                Circle()
-                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                    .frame(width: 50, height: 50)
+                defaultAvatar
             }
 
             // 用户名和认证标记
-            HStack(spacing: 6) {
+            HStack(spacing: 4.w) {
                 Text(user.name)
-                    .font(Font.custom("SFProDisplay-Bold", size: 16.f))
+                    .font(Font.custom("SF Pro Display", size: 16.f).weight(.heavy))
+                    .tracking(0.32)
                     .foregroundColor(.black)
 
                 if user.isVerified {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 14.f))
-                        .foregroundColor(Color(red: 0.20, green: 0.60, blue: 0.86))
+                    ZStack {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 14.f))
+                            .foregroundColor(Color(red: 0.2, green: 0.6, blue: 1.0))
+                    }
+                    .frame(width: 14.s, height: 14.s)
                 }
             }
 
             Spacer()
 
             // 关注按钮
-            Button(action: onFollowTapped) {
-                if user.isFollowedByMe {
-                    Text("Following")
-                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
-                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Color.white)
-                        .cornerRadius(100)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 100)
-                                .stroke(Color(red: 0.53, green: 0.53, blue: 0.53), lineWidth: 0.5)
-                        )
-                } else {
-                    Text("Follow")
-                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 8)
-                        .background(Color(red: 0.87, green: 0.11, blue: 0.26))
-                        .cornerRadius(46)
-                }
+            actionButton
+        }
+        .padding(EdgeInsets(top: 10.h, leading: 16.w, bottom: 10.h, trailing: 16.w))
+    }
+
+    @ViewBuilder
+    private var actionButton: some View {
+        Button(action: onFollowTapped) {
+            if user.isFollowedByMe {
+                Text("Following")
+                    .font(Font.custom("SF Pro Display", size: 12.f))
+                    .tracking(0.24)
+                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+            } else {
+                Text("Follow")
+                    .font(Font.custom("SF Pro Display", size: 12.f))
+                    .tracking(0.24)
+                    .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .buttonStyle(.plain)
+        .frame(width: 105.w, height: 34.h)
+        .background(Color.white)
+        .cornerRadius(57.s)
+        .overlay(
+            RoundedRectangle(cornerRadius: 57.s)
+                .inset(by: 0.5)
+                .stroke(user.isFollowedByMe ? Color(red: 0.53, green: 0.53, blue: 0.53) : Color(red: 0.87, green: 0.11, blue: 0.26), lineWidth: 0.5)
+        )
+        .contentShape(Rectangle())
+    }
+
+    private var defaultAvatar: some View {
+        Circle()
+            .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.5))
+            .frame(width: 50.s, height: 50.s)
     }
 }
 
@@ -460,4 +574,161 @@ struct UserProfileFollowerRow: View {
         targetUsername: "Juliette"
     )
     .environmentObject(AuthenticationManager.shared)
+}
+
+#Preview("With Mock Data") {
+    UserProfileFollowersMockPreview()
+}
+
+// MARK: - Mock Data Preview
+
+/// 用于预览的 Mock 数据包装器
+private struct UserProfileFollowersMockPreview: View {
+    var body: some View {
+        MockUserProfileFollowersView(isPresented: .constant(true))
+            .environmentObject(AuthenticationManager.shared)
+    }
+}
+
+/// 带 Mock 数据的预览视图
+private struct MockUserProfileFollowersView: View {
+    @Binding var isPresented: Bool
+    @State private var selectedTab: UserProfileFollowersView.Tab = .followers
+    @State private var searchText: String = ""
+
+    // Mock 目标用户信息
+    private let targetUsername = "Juliette"
+
+    // Mock 数据 - Followers（关注目标用户的人）
+    private let mockFollowers: [UserProfileFollowerUser] = [
+        UserProfileFollowerUser(id: "1", name: "Emma Wilson", avatarUrl: nil, isVerified: true, isFollowedByMe: true),
+        UserProfileFollowerUser(id: "2", name: "Alex Chen", avatarUrl: nil, isVerified: false, isFollowedByMe: false),
+        UserProfileFollowerUser(id: "3", name: "Sophia Lee", avatarUrl: nil, isVerified: true, isFollowedByMe: true),
+        UserProfileFollowerUser(id: "4", name: "Michael Johnson", avatarUrl: nil, isVerified: false, isFollowedByMe: false),
+        UserProfileFollowerUser(id: "5", name: "Olivia Martinez", avatarUrl: nil, isVerified: true, isFollowedByMe: false),
+        UserProfileFollowerUser(id: "6", name: "David Kim", avatarUrl: nil, isVerified: false, isFollowedByMe: true),
+        UserProfileFollowerUser(id: "7", name: "Isabella Garcia", avatarUrl: nil, isVerified: true, isFollowedByMe: true),
+        UserProfileFollowerUser(id: "8", name: "James Wilson", avatarUrl: nil, isVerified: false, isFollowedByMe: false),
+    ]
+
+    // Mock 数据 - Following（目标用户关注的人）
+    private let mockFollowing: [UserProfileFollowerUser] = [
+        UserProfileFollowerUser(id: "10", name: "Liam Smith", avatarUrl: nil, isVerified: true, isFollowedByMe: true),
+        UserProfileFollowerUser(id: "11", name: "Ava Brown", avatarUrl: nil, isVerified: false, isFollowedByMe: false),
+        UserProfileFollowerUser(id: "12", name: "Noah Davis", avatarUrl: nil, isVerified: false, isFollowedByMe: true),
+        UserProfileFollowerUser(id: "13", name: "Mia Taylor", avatarUrl: nil, isVerified: true, isFollowedByMe: false),
+        UserProfileFollowerUser(id: "14", name: "Ethan Wang", avatarUrl: nil, isVerified: false, isFollowedByMe: false),
+        UserProfileFollowerUser(id: "15", name: "Charlotte Robinson", avatarUrl: nil, isVerified: true, isFollowedByMe: true),
+    ]
+
+    // 过滤后的列表
+    private var filteredFollowers: [UserProfileFollowerUser] {
+        if searchText.isEmpty { return mockFollowers }
+        return mockFollowers.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    }
+
+    private var filteredFollowing: [UserProfileFollowerUser] {
+        if searchText.isEmpty { return mockFollowing }
+        return mockFollowing.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // 导航栏
+            ZStack {
+                Text(targetUsername)
+                    .font(Font.custom("SF Pro Display", size: 18.f).weight(.semibold))
+                    .foregroundColor(.black)
+
+                HStack {
+                    Button(action: { isPresented = false }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 18.f))
+                            .foregroundColor(.black)
+                    }
+                    .frame(width: 24.s, height: 24.s)
+
+                    Spacer()
+                }
+            }
+            .padding(.horizontal, 16.w)
+            .frame(height: 54.h)
+            .background(Color.white)
+
+            // 标签栏
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) { selectedTab = .following }
+                    }) {
+                        VStack(spacing: 14.h) {
+                            Text("Following")
+                                .font(Font.custom("SF Pro Display", size: 18.f).weight(.semibold))
+                                .lineSpacing(20.h)
+                                .foregroundColor(selectedTab == .following ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75))
+                            Rectangle()
+                                .foregroundColor(.clear)
+                                .frame(height: 0)
+                                .overlay(
+                                    Rectangle()
+                                        .stroke(selectedTab == .following ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.5)
+                                )
+                        }
+                    }
+                    .frame(width: 188.w)
+
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) { selectedTab = .followers }
+                    }) {
+                        VStack(spacing: 14.h) {
+                            Text("Followers")
+                                .font(Font.custom("SF Pro Display", size: 18.f).weight(.semibold))
+                                .lineSpacing(20.h)
+                                .foregroundColor(selectedTab == .followers ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75))
+                            Rectangle()
+                                .foregroundColor(.clear)
+                                .frame(height: 0)
+                                .overlay(
+                                    Rectangle()
+                                        .stroke(selectedTab == .followers ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.5)
+                                )
+                        }
+                    }
+                    .frame(width: 187.w)
+                }
+
+                Rectangle()
+                    .fill(DesignTokens.borderColor)
+                    .frame(height: 0.5)
+            }
+
+            // 内容区域
+            ScrollView {
+                VStack(spacing: 0) {
+                    // 搜索框
+                    HStack(spacing: 10.w) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 14.f))
+                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                        TextField("Search", text: $searchText)
+                            .font(Font.custom("SF Pro Display", size: 14.f))
+                            .tracking(0.28)
+                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                    }
+                    .padding(EdgeInsets(top: 6.h, leading: 12.w, bottom: 6.h, trailing: 12.w))
+                    .frame(width: 343.w, height: 32.h)
+                    .background(Color(red: 0.90, green: 0.90, blue: 0.90))
+                    .cornerRadius(32.s)
+                    .padding(EdgeInsets(top: 14.h, leading: 16.w, bottom: 14.h, trailing: 16.w))
+
+                    // 用户列表
+                    let users = selectedTab == .followers ? filteredFollowers : filteredFollowing
+                    ForEach(users) { user in
+                        UserProfileFollowerRow(user: user, onFollowTapped: {})
+                    }
+                }
+            }
+        }
+        .background(Color.white)
+    }
 }

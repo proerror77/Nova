@@ -234,7 +234,14 @@ final class FeedViewModel {
     }
 
     func loadMore() async {
+        #if DEBUG
+        FeedLogger.debug("loadMore called - isLoadingMore: \(isLoadingMore), hasMore: \(hasMore), cursor: \(currentCursor ?? "nil")")
+        #endif
+        
         guard !isLoadingMore, hasMore, currentCursor != nil else {
+            #if DEBUG
+            FeedLogger.debug("loadMore blocked - isLoadingMore: \(isLoadingMore), hasMore: \(hasMore), cursor: \(currentCursor ?? "nil")")
+            #endif
             if currentCursor == nil {
                 hasMore = false
             }
@@ -250,6 +257,10 @@ final class FeedViewModel {
                 cursor: currentCursor,
                 channelId: selectedChannelId
             )
+            
+            #if DEBUG
+            FeedLogger.debug("loadMore response - newPosts: \(response.posts.count), hasMore: \(response.hasMore), newCursor: \(response.cursor ?? "nil")")
+            #endif
 
             postIds.append(contentsOf: response.postIds)
             currentCursor = response.cursor
@@ -260,6 +271,10 @@ final class FeedViewModel {
 
             let existingIds = Set(posts.map { $0.id })
             let uniqueNewPosts = newPosts.filter { !existingIds.contains($0.id) }
+            
+            #if DEBUG
+            FeedLogger.debug("loadMore - uniqueNewPosts: \(uniqueNewPosts.count), totalPosts: \(posts.count + uniqueNewPosts.count)")
+            #endif
 
             if !uniqueNewPosts.isEmpty {
                 posts.append(contentsOf: uniqueNewPosts)
@@ -413,7 +428,7 @@ final class FeedViewModel {
 
     func addNewPost(_ post: Post) {
         let currentUser = authManager.currentUser
-        let authorName = currentUser?.displayName ?? currentUser?.username ?? "User \(post.authorId.prefix(8))"
+        let authorName = currentUser?.fullName ?? "User \(post.authorId.prefix(8))"
         let authorAvatar = currentUser?.avatarUrl
 
         let feedPost = FeedPost(
@@ -590,6 +605,10 @@ final class FeedViewModel {
         postIds = response.postIds
         currentCursor = response.cursor
         hasMore = response.hasMore
+        
+        #if DEBUG
+        FeedLogger.debug("processFeedResponse - posts: \(response.posts.count), hasMore: \(hasMore), cursor: \(currentCursor ?? "nil")")
+        #endif
 
         var allPosts = response.posts.map { FeedPost(from: $0) }
         allPosts = postProcessor.syncCurrentUserProfile(allPosts)

@@ -69,7 +69,7 @@ struct AccountDisplayData: Identifiable {
     /// Create from user profile (for primary account fallback)
     init(fromUser user: UserProfile) {
         self.id = user.id
-        self.displayName = user.displayName ?? user.username
+        self.displayName = user.fullName
         self.subtitle = "@\(user.username)"
         self.avatarUrl = user.avatarUrl
         self.isAlias = false

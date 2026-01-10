@@ -92,11 +92,17 @@ struct IceredApp: App {
                     case .phoneRegistration:
                         PhoneRegistrationView(currentPage: $currentPage)
                             .transition(.identity)
+                    case .phoneProfileSetup:
+                        CAProfileSettingView(currentPage: $currentPage)
+                            .transition(.identity)
                     case .phoneEnterCode(let phoneNumber):
                         PhoneEnterCodeView(currentPage: $currentPage, phoneNumber: phoneNumber)
                             .transition(.identity)
                     case .gmailEnterCode(let email):
                         GmailEnterCodeView(currentPage: $currentPage, email: email)
+                            .transition(.identity)
+                    case .gmailEnterCodeLogin(let email):
+                        GmailEnterCodeView(currentPage: $currentPage, email: email, mode: .login)
                             .transition(.identity)
                     case .phoneLogin:
                         PhoneLoginView(currentPage: $currentPage)

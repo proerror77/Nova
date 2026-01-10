@@ -187,7 +187,7 @@ struct LoginView: View {
                             .stroke(emailError != nil ? Color.red : Color.white, lineWidth: 0.5)
                     )
 
-                TextField("", text: $email, prompt: Text("Email or mobile number")
+                TextField("", text: $email, prompt: Text("Email address")
                     .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .foregroundColor(.white))
                     .foregroundColor(.white)
@@ -371,7 +371,7 @@ struct LoginView: View {
                 .foregroundColor(.white)
 
             Button(action: {
-                currentPage = .inviteCode
+                currentPage = .createAccount
             }) {
                 Text("Create New Account")
                     .font(Typography.semibold14)
@@ -418,25 +418,34 @@ struct LoginView: View {
         showErrorView = false
 
         do {
-            _ = try await authManager.login(
-                username: email.trimmingCharacters(in: .whitespacesAndNewlines),
-                password: password
+            // Send OTP to email
+            let response = try await EmailAuthService.shared.sendVerificationCode(
+                email: email.trimmingCharacters(in: .whitespacesAndNewlines)
             )
-            // Success - AuthenticationManager will update isAuthenticated
-        } catch {
-            // Provide user-friendly error messages
-            if error.localizedDescription.contains("401") || error.localizedDescription.contains("Unauthorized") {
-                errorMessage = "Invalid email or password. Please check your credentials and try again."
-                showErrorView = true
-            } else if error.localizedDescription.contains("network") || error.localizedDescription.contains("connection") {
-                errorMessage = "Unable to connect to the server. Please check your internet connection and try again."
-                showErrorView = true
-            } else {
-                errorMessage = "Login failed. Please try again later."
-                showErrorView = true
-            }
+            
             #if DEBUG
-            print("[LoginView] Login error: \(error)")
+            print("[LoginView] OTP sent successfully, expires in: \(response.expiresIn ?? 0)s")
+            #endif
+            
+            // Navigate to OTP verification page
+            // Store email for OTP verification
+            authManager.verifiedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+            currentPage = .gmailEnterCodeLogin(email: email.trimmingCharacters(in: .whitespacesAndNewlines))
+            
+        } catch EmailAuthError.rateLimited {
+            errorMessage = "Too many attempts. Please try again later."
+            showErrorView = true
+        } catch EmailAuthError.networkError(let message) {
+            errorMessage = "Unable to connect to the server. Please check your internet connection and try again."
+            showErrorView = true
+            #if DEBUG
+            print("[LoginView] Network error: \(message)")
+            #endif
+        } catch {
+            errorMessage = "Failed to send verification code. Please try again later."
+            showErrorView = true
+            #if DEBUG
+            print("[LoginView] Send OTP error: \(error)")
             #endif
         }
 

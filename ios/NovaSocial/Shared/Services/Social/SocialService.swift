@@ -37,29 +37,28 @@ class SocialService {
 
     // MARK: - Likes
 
-    /// Response from like/unlike operations containing accurate count from server
+    /// Response from like/unlike operations
     struct LikeResponse: Codable {
         let success: Bool
-        let likeCount: Int64
     }
 
-    /// Create a like and return the accurate like count from server
-    func createLike(postId: String, userId: String) async throws -> LikeResponse {
+    /// Create a like (count is managed client-side)
+    func createLike(postId: String, userId: String) async throws {
         struct Request: Codable {
             let post_id: String
             let user_id: String
         }
 
         let request = Request(post_id: postId, user_id: userId)
-        return try await client.request(
+        let _: LikeResponse = try await client.request(
             endpoint: APIConfig.Social.createLike,
             body: request
         )
     }
 
-    /// Delete a like and return the accurate like count from server
-    func deleteLike(postId: String, userId: String) async throws -> LikeResponse {
-        return try await client.request(
+    /// Delete a like (count is managed client-side)
+    func deleteLike(postId: String, userId: String) async throws {
+        let _: LikeResponse = try await client.request(
             endpoint: APIConfig.Social.deleteLike(postId),
             method: "DELETE"
         )
@@ -378,19 +377,26 @@ class SocialService {
     }
 
     /// Get user's bookmarked posts
-    func getBookmarks(limit: Int = 20, offset: Int = 0) async throws -> (postIds: [String], totalCount: Int) {
+    func getBookmarks(userId: String? = nil, limit: Int = 20, offset: Int = 0) async throws -> (postIds: [String], totalCount: Int) {
         struct Response: Codable {
             let postIds: [String]
             let totalCount: Int
             // Note: CodingKeys removed - APIClient uses .convertFromSnakeCase
         }
 
+        var queryParams: [String: String] = [
+            "limit": String(limit),
+            "offset": String(offset)
+        ]
+
+        // Add user_id if provided (for viewing other users' saved posts)
+        if let userId = userId {
+            queryParams["user_id"] = userId
+        }
+
         let response: Response = try await client.get(
             endpoint: APIConfig.Social.getBookmarks,
-            queryParams: [
-                "limit": String(limit),
-                "offset": String(offset)
-            ]
+            queryParams: queryParams
         )
 
         return (response.postIds, response.totalCount)

@@ -6,12 +6,14 @@ Authentication: JWT Bearer Token
 
 ## Overview
 
-Private messaging API for 1:1 and group conversations with end-to-end encryption. All message content is encrypted client-side; the server only routes ciphertext.
+Private messaging API for 1:1 and group conversations with end-to-end encryption.
+
+Note: The current iOS client is **Matrix-first** (Synapse + Matrix Rust SDK). Real-time delivery and E2EE are handled via Matrix sync; Nova WebSocket-first real-time endpoints are deprecated.
 
 **Key Features**:
 - Direct (1:1) and group conversations
 - End-to-end encryption (E2E)
-- Real-time delivery via WebSocket
+- Real-time delivery via Matrix (Synapse)
 - Read receipts and typing indicators
 - Cursor-based pagination
 

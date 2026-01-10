@@ -68,19 +68,21 @@ impl CommentRepository {
     }
 
     /// Delete a comment (soft delete by user_id validation)
-    pub async fn delete_comment(&self, comment_id: Uuid, user_id: Uuid) -> Result<bool> {
-        let result = sqlx::query(
+    pub async fn delete_comment(&self, comment_id: Uuid, user_id: Uuid) -> Result<Option<Uuid>> {
+        let post_id: Option<Uuid> = sqlx::query_scalar(
             r#"
-            DELETE FROM comments
-            WHERE id = $1 AND user_id = $2
+            UPDATE comments
+            SET is_deleted = TRUE, updated_at = NOW()
+            WHERE id = $1 AND user_id = $2 AND is_deleted = FALSE
+            RETURNING post_id
             "#,
         )
         .bind(comment_id)
         .bind(user_id)
-        .execute(&self.pool)
+        .fetch_optional(&self.pool)
         .await?;
 
-        Ok(result.rows_affected() > 0)
+        Ok(post_id)
     }
 
     /// Get a single comment by ID
@@ -89,7 +91,7 @@ impl CommentRepository {
             r#"
             SELECT id, post_id, user_id, content, parent_comment_id, created_at, updated_at, author_account_type
             FROM comments
-            WHERE id = $1
+            WHERE id = $1 AND is_deleted = FALSE
             "#,
         )
         .bind(comment_id)
@@ -122,7 +124,7 @@ impl CommentRepository {
             r#"
             SELECT id, post_id, user_id, content, parent_comment_id, created_at, updated_at, author_account_type
             FROM comments
-            WHERE post_id = $1
+            WHERE post_id = $1 AND is_deleted = FALSE
             ORDER BY {} {}
             LIMIT $2 OFFSET $3
             "#,
@@ -144,7 +146,7 @@ impl CommentRepository {
         let count: i64 = sqlx::query_scalar(
             r#"
             SELECT COUNT(*) FROM comments
-            WHERE post_id = $1
+            WHERE post_id = $1 AND is_deleted = FALSE
             "#,
         )
         .bind(post_id)
@@ -160,7 +162,7 @@ impl CommentRepository {
             r#"
             SELECT user_id
             FROM comments
-            WHERE id = $1
+            WHERE id = $1 AND is_deleted = FALSE
             "#,
         )
         .bind(comment_id)

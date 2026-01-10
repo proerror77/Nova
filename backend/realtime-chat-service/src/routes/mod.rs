@@ -10,4 +10,3 @@ pub mod messages;
 pub mod reactions;
 pub mod relationships;
 pub mod rtc;
-pub mod wsroute;

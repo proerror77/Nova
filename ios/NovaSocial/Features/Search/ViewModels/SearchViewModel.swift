@@ -60,7 +60,7 @@ class SearchViewModel {
                     .user(
                         id: user.id,
                         username: user.username,
-                        displayName: user.displayName ?? user.username,
+                        displayName: user.fullName,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.isVerified ?? false
                     )
@@ -122,7 +122,7 @@ class SearchViewModel {
                 .user(
                     id: user.id,
                     username: user.username,
-                    displayName: user.displayName ?? user.username,
+                    displayName: user.fullName,
                     avatarUrl: user.avatarUrl,
                     isVerified: user.isVerified ?? false
                 )
