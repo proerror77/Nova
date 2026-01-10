@@ -152,7 +152,8 @@ impl DualWriteRepository {
         .await
     }
 
-    /// Get followers (Neo4j first, PostgreSQL fallback)
+    /// Get followers (PostgreSQL - source of truth)
+    /// Note: Using PostgreSQL directly due to neo4rs result iteration issues
     pub async fn get_followers(
         &self,
         user_id: Uuid,
@@ -161,30 +162,19 @@ impl DualWriteRepository {
     ) -> Result<(Vec<Uuid>, i32, bool)> {
         let start = std::time::Instant::now();
 
-        match self.neo4j.get_followers(user_id, limit, offset).await {
-            Ok(result) => {
-                let duration = start.elapsed();
-                tracing::debug!(
-                    "neo4j_query_success{{operation=\"get_followers\",duration_ms={}}}",
-                    duration.as_millis()
-                );
-                Ok(result)
-            }
-            Err(e) => {
-                error!(
-                    "Neo4j get_followers failed, falling back to PostgreSQL: {}",
-                    e
-                );
-                tracing::warn!("neo4j_query_failure{{operation=\"get_followers\"}}");
+        let result = self.postgres.get_followers(user_id, limit, offset).await?;
 
-                let result = self.postgres.get_followers(user_id, limit, offset).await?;
-                tracing::warn!("postgres_query_fallback{{operation=\"get_followers\"}}");
-                Ok(result)
-            }
-        }
+        let duration = start.elapsed();
+        tracing::debug!(
+            "postgres_query_success{{operation=\"get_followers\",duration_ms={}}}",
+            duration.as_millis()
+        );
+
+        Ok(result)
     }
 
-    /// Get following (Neo4j first, PostgreSQL fallback)
+    /// Get following (PostgreSQL - source of truth)
+    /// Note: Using PostgreSQL directly due to neo4rs result iteration issues
     pub async fn get_following(
         &self,
         user_id: Uuid,
@@ -193,27 +183,15 @@ impl DualWriteRepository {
     ) -> Result<(Vec<Uuid>, i32, bool)> {
         let start = std::time::Instant::now();
 
-        match self.neo4j.get_following(user_id, limit, offset).await {
-            Ok(result) => {
-                let duration = start.elapsed();
-                tracing::debug!(
-                    "neo4j_query_success{{operation=\"get_following\",duration_ms={}}}",
-                    duration.as_millis()
-                );
-                Ok(result)
-            }
-            Err(e) => {
-                error!(
-                    "Neo4j get_following failed, falling back to PostgreSQL: {}",
-                    e
-                );
-                tracing::warn!("neo4j_query_failure{{operation=\"get_following\"}}");
+        let result = self.postgres.get_following(user_id, limit, offset).await?;
 
-                let result = self.postgres.get_following(user_id, limit, offset).await?;
-                tracing::warn!("postgres_query_fallback{{operation=\"get_following\"}}");
-                Ok(result)
-            }
-        }
+        let duration = start.elapsed();
+        tracing::debug!(
+            "postgres_query_success{{operation=\"get_following\",duration_ms={}}}",
+            duration.as_millis()
+        );
+
+        Ok(result)
     }
 
     /// Check if following (Neo4j first, PostgreSQL fallback)
@@ -264,7 +242,8 @@ impl DualWriteRepository {
         self.neo4j.get_graph_stats(user_id).await
     }
 
-    /// Get blocked users (Neo4j first, PostgreSQL fallback)
+    /// Get blocked users (PostgreSQL - source of truth)
+    /// Note: Using PostgreSQL directly due to neo4rs result iteration issues
     pub async fn get_blocked_users(
         &self,
         user_id: Uuid,
@@ -273,30 +252,18 @@ impl DualWriteRepository {
     ) -> Result<(Vec<Uuid>, i32, bool)> {
         let start = std::time::Instant::now();
 
-        match self.neo4j.get_blocked_users(user_id, limit, offset).await {
-            Ok(result) => {
-                let duration = start.elapsed();
-                tracing::debug!(
-                    "neo4j_query_success{{operation=\"get_blocked_users\",duration_ms={}}}",
-                    duration.as_millis()
-                );
-                Ok(result)
-            }
-            Err(e) => {
-                error!(
-                    "Neo4j get_blocked_users failed, falling back to PostgreSQL: {}",
-                    e
-                );
-                tracing::warn!("neo4j_query_failure{{operation=\"get_blocked_users\"}}");
+        let result = self
+            .postgres
+            .get_blocked_users(user_id, limit, offset)
+            .await?;
 
-                let result = self
-                    .postgres
-                    .get_blocked_users(user_id, limit, offset)
-                    .await?;
-                tracing::warn!("postgres_query_fallback{{operation=\"get_blocked_users\"}}");
-                Ok(result)
-            }
-        }
+        let duration = start.elapsed();
+        tracing::debug!(
+            "postgres_query_success{{operation=\"get_blocked_users\",duration_ms={}}}",
+            duration.as_millis()
+        );
+
+        Ok(result)
     }
 
     /// Get mutual followers / friends (users who both follow each other)
